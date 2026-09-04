@@ -179,11 +179,15 @@ describe("route store kit", () => {
       commands: {},
     } satisfies RouteStateSpec<typeof schema>;
 
-    expect(docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") })).toBe(
-      docAtom({ ...spec }, { documentAddress: address("C:\\Models\\One.rvt") }),
+    expect(
+      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
+    ).toBe(
+      docAtom({ ...spec }, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
     );
-    expect(docAtom(spec, { documentAddress: address("C:\\Models\\Two.rvt") })).not.toBe(
-      docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") }),
+    expect(
+      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\Two.rvt") } }),
+    ).not.toBe(
+      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
     );
   });
 
@@ -226,7 +230,7 @@ describe("route store kit", () => {
     );
     const writer = docWriter(
       spec,
-      { documentAddress: address("C:\\Models\\One.rvt") },
+      { scope: { session: null, document: address("C:\\Models\\One.rvt") } },
       registry,
       slice,
     );
@@ -329,7 +333,7 @@ describe("route store kit", () => {
     );
     const writer = docWriter(
       spec,
-      { documentAddress: address("C:\\Models\\One.rvt") },
+      { scope: { session: null, document: address("C:\\Models\\One.rvt") } },
       registry,
       slice,
     );

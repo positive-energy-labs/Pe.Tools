@@ -2,7 +2,6 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
-  current as currentBind,
   opsRouteState,
   type OpsReceipt,
   type OpsRouteDocument,
@@ -19,6 +18,7 @@ import {
   type Scope,
   type Slice,
   verbFailure,
+  worldOf,
 } from "#/state/route-store";
 import type { BindingPatch } from "#/targeting/kit";
 import type { HostOperationCatalogEntry } from "#/ops/product";
@@ -53,9 +53,8 @@ export function createOpsStore(deps: {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
-  const world = Atom.make(
-    (get) => currentBind(get(document)?.bindings.world, deps.scope.documentAddress)?.id ?? "",
-  ).pipe(owned("binding/world"));
+  // ponytail: the world is the page Scope's session; changing it is a `?target` navigation, not a doc write.
+  const world = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
   const hydrated = Atom.make((get) => {
     const result = get(slice);
     return AsyncResult.isSuccess(result) && result.value.hydrated;
@@ -93,7 +92,7 @@ export function createOpsStore(deps: {
     );
   const persistBinding = async (
     verb: string,
-    world: string,
+    _world: string,
     op: string,
     current: Identity | null,
   ) => {
@@ -105,15 +104,10 @@ export function createOpsStore(deps: {
       if (!AsyncResult.isSuccess(routeSlice) || !routeSlice.value.hydrated) return;
       const doc = registry.get(document);
       const patches: RouteStatePatch[] = [];
-      if (currentBind(doc?.bindings.world, deps.scope.documentAddress)?.id !== (world || null))
-        patches.push({
-          path: ["bindings", "world"],
-          value: world ? { id: world, label: world, at: deps.scope.documentAddress } : undefined,
-        });
-      if (currentBind(doc?.bindings.op, deps.scope.documentAddress)?.id !== (op || null))
+      if (doc?.bindings.op?.id !== (op || null))
         patches.push({
           path: ["bindings", "op"],
-          value: op ? { id: op, label: op, at: deps.scope.documentAddress } : undefined,
+          value: op ? { id: op, label: op } : undefined,
         });
       if (patches.length) expectRouteWrite(await apply(patches));
     } catch (cause) {

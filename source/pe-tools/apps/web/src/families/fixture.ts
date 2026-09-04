@@ -1,3 +1,4 @@
+import { pageScope } from "#/state/route-store";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -286,9 +287,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
     version: 1,
     revision: 0,
     doc: {
-      bindings: {
-        world: { id: "session:fixture", label: "fixture", at: fixtureFamiliesAddress },
-      },
+      bindings: {},
       profilePath: "desk.json",
       plan: {
         reading: {
@@ -360,7 +359,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
   };
   const store = createFamiliesStore({
     registry,
-    scope: { documentAddress: fixtureFamiliesAddress },
+    scope: pageScope(fixtureFamiliesAddress, "session:fixture"),
     host,
     slice,
     writer: {

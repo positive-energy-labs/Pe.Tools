@@ -31,6 +31,7 @@ import {
 } from "#/parameter-links/model";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
+import { pageScope } from "#/state/route-store";
 import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
 
 /**
@@ -113,7 +114,7 @@ function ParameterLinksStoreOwner({
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const route = useRouteState(parameterLinksRouteState, { documentAddress });
+  const route = useRouteState(parameterLinksRouteState, pageScope(documentAddress));
   const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
   return (
     <ParameterLinksWorkspace

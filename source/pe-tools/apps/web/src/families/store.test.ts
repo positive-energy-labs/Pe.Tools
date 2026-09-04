@@ -14,7 +14,7 @@ import { fixtureFamilyPlanEntry } from "#/families/fixture";
 import { createFamiliesStore } from "#/families/store";
 
 const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument => ({
-  bindings: { world: { id: "session:test", label: "test", at: address("C:\\Models\\Test.rvt") } },
+  bindings: {},
   profilePath: "desk.json",
   plan: {
     reading: {
@@ -85,7 +85,7 @@ const make = (
     docSlice,
     store: createFamiliesStore({
       registry,
-      scope: { documentAddress: address("C:\\Models\\Test.rvt") },
+      scope: { scope: { session: null, document: address("C:\\Models\\Test.rvt") } },
       host: testFixture.host,
       slice: docSlice,
       writer: testFixture.writer,
@@ -198,13 +198,8 @@ describe("families route store", () => {
 
   it("reloads a persisted document binding before plan", async () => {
     const persisted = document();
-    persisted.bindings.world = {
-      id: "session:new",
-      label: "new",
-      at: address("C:\\Models\\Test.rvt"),
-    };
     const { calls, registry, store } = make(fixture(), undefined, persisted);
-    expect(registry.get(store.atoms.target)).toBe("session:new");
+    expect(registry.get(store.atoms.target)).toBe("session:test");
     store.actions.setDraft({
       placement: "AllLoaded",
       categories: ["Furniture"],

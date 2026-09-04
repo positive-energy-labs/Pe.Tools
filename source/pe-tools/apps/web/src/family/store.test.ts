@@ -30,7 +30,7 @@ const MODEL = {
 const SETTINGS_PATH = "C:\\Settings\\test.family.json";
 const settings = (): SettingsRouteDocument => ({
   bindings: {
-    file: { id: SETTINGS_PATH, label: SETTINGS_PATH, at: address("C:\\Models\\Test.rfa") },
+    file: { id: SETTINGS_PATH, label: SETTINGS_PATH },
   },
   documentId: {
     moduleKey: "FamilyFoundry",
@@ -40,13 +40,7 @@ const settings = (): SettingsRouteDocument => ({
   fields: {},
 });
 const family = (evidence: FamilyDocument["evidence"] = null): FamilyDocument => ({
-  bindings: {
-    world: {
-      id: "session:test",
-      label: "test",
-      at: address("C:\\Models\\Test.rfa"),
-    },
-  },
+  bindings: {},
   doc: null,
   evidence,
 });
@@ -115,7 +109,7 @@ const make = (
     calls: testFixture.calls,
     store: createFamilyStore({
       registry,
-      scope: { documentAddress: address("C:\\Models\\Test.rfa") },
+      scope: { scope: { session: null, document: address("C:\\Models\\Test.rfa") } },
       host: testFixture.host,
       slices: { settings: settingsSlice, family: familySlice },
       writers: testFixture.writers,

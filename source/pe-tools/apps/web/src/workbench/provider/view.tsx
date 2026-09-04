@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
-import { turnScopeContextKey } from "@pe/agent-contracts";
+import type { ToolResume } from "./thread-summary";
 import { resolveWorkbenchConfig } from "../config";
 import {
   selectApprovals,
@@ -32,11 +32,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate({ from: "/chat" });
   const search = useSearch({ from: "/chat" });
   const [currentThreadId] = useState(() => search.thread ?? crypto.randomUUID());
-  // What the user is looking at when they send: rides every message as its `binding`.
-  const doc = useSearch({
-    strict: false,
-    select: (value) => (value as { doc?: string | null }).doc ?? null,
-  });
   const store = useRouteStore(() =>
     createChatPageStore({
       registry: appAtomRegistry,
@@ -102,27 +97,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const prompt = text.trim();
       if ((!prompt && !attachments?.length) || !session) return;
       const files = toFiles(attachments);
-      const turnId = crypto.randomUUID();
       try {
         setError(undefined);
-        await session.sendMessage(
-          { content: prompt, files },
-          {
-            requestContext: {
-              [turnScopeContextKey]: {
-                id: turnId,
-                document: doc,
-                target: search.target?.trim() || null,
-              },
-            },
-          },
-        );
+        // The host admits the turn under the thread's Scope; the browser names no target.
+        await session.sendMessage({ content: prompt, files });
         if (threadPending) await invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [doc, invalidate, search.target, session, threadPending],
+    [invalidate, session, threadPending],
   );
 
   const cancel = useCallback(() => {

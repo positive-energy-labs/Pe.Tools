@@ -6,15 +6,14 @@ import { MastraClient } from "@mastra/client-js";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/workbench/use-mode", () => ({ useMode: () => ["threads", vi.fn()] }));
-vi.mock("#/chat/chat-target", () => ({
-  useChatTarget: () => ({
-    selector: "",
-    resolution: { kind: "unresolved", selector: "", reason: "no-sessions" },
-    sessions: [],
-    worldLog: [],
-    pin: vi.fn(),
+vi.mock("#/chat/scope", () => ({
+  useThreadScope: () => ({
+    scope: { session: null, document: null },
+    revision: 0,
+    hydrated: true,
+    set: vi.fn(),
+    refusal: null,
   }),
-  TargetWorld: () => null,
 }));
 
 import { appAtomRegistry } from "#/state/registry";

@@ -1,5 +1,4 @@
 import { instancesRouteState } from "@pe/agent-contracts";
-import { useSearch } from "@tanstack/react-router";
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import {
@@ -19,7 +18,7 @@ import { useRouteState, type RouteStateHandle } from "../route-state";
 import { FamilyChatPlugin } from "../plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "../plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "../plugins/settings-chat-plugin";
-import { useRouteDocumentAddress } from "../route-document";
+import { useThreadScope } from "#/chat/scope";
 import {
   FamilyTypesChatPlugin,
   InlineRoutePlugin,
@@ -143,40 +142,22 @@ export function ConnectedRouteChatPlugin({
   registration,
   ...props
 }: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
-  const search = useSearch({ strict: false }) as { thread?: string; target?: string };
-  const documentAddress = useRouteDocumentAddress();
-  if (registration.spec.scope === "workspace")
-    return (
-      <WorkspaceRouteChatPlugin
-        registration={registration}
-        {...props}
-        workspaceId={
-          isRecord(props.args) && typeof props.args.workspace === "string"
-            ? props.args.workspace
-            : (search.thread ?? "instances")
-        }
-      />
-    );
-  if (!documentAddress) return null;
-  return (
-    <AddressedRouteChatPlugin
-      registration={registration}
-      {...props}
-      documentAddress={documentAddress}
-    />
-  );
+  const { currentThreadId } = useWorkbench();
+  const threadScope = useThreadScope(currentThreadId);
+  if (!threadScope.hydrated) return null;
+  return <ScopedRouteChatPlugin registration={registration} {...props} scope={threadScope.scope} />;
 }
 
-export function AddressedRouteChatPlugin({
+export function ScopedRouteChatPlugin({
   registration,
-  documentAddress,
+  scope,
   ...props
 }: RouteChatPluginViewProps & {
   active: boolean;
   registration: RouteChatPluginRegistration;
-  documentAddress: import("@pe/agent-contracts").Address;
+  scope: import("@pe/agent-contracts").Scope;
 }) {
-  const route = useRouteState(registration.spec, { documentAddress });
+  const route = useRouteState(registration.spec, { scope });
   if (!route.hydrated || route.slice == null) return null;
   const Renderer = registration.Renderer;
   return <Renderer {...props} sessionState={route.slice} routeState={route} />;
@@ -235,20 +216,6 @@ export function ParameterLinksChatPlugin({
       ) : null}
     </InlineRoutePlugin>
   );
-}
-
-function WorkspaceRouteChatPlugin({
-  registration,
-  workspaceId,
-  ...props
-}: RouteChatPluginViewProps & {
-  active: boolean;
-  registration: RouteChatPluginRegistration;
-  workspaceId: string;
-}) {
-  const routeState = useRouteState(registration.spec, { workspaceId });
-  const Renderer = registration.Renderer;
-  return <Renderer {...props} routeState={routeState} sessionState={routeState.slice} />;
 }
 
 function InstancesChatPlugin({ sessionState, toolName, args, running }: RouteChatPluginProps) {

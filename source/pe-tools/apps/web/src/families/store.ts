@@ -3,7 +3,6 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
-  current,
   familiesRouteState,
   here,
   type AppliedScope,
@@ -26,6 +25,7 @@ import {
   hostRead,
   type Scope,
   type Slice,
+  worldOf,
 } from "#/state/route-store";
 
 type Setter<A> = A | ((previous: A) => A);
@@ -54,9 +54,8 @@ export function createFamiliesStore(deps: {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
-  const target = Atom.make(
-    (get) => current(get(document)?.bindings.world, deps.scope.documentAddress)?.id ?? "",
-  ).pipe(owned("binding/world"));
+  // ponytail: the world is the page Scope's session; rebinding is a `?target` navigation, not a doc write.
+  const target = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
   const profilePath = Atom.make((get) => get(document)?.profilePath ?? null).pipe(
     owned("view/profile-path"),
   );
@@ -99,10 +98,7 @@ export function createFamiliesStore(deps: {
     if (!value || !doc) return null;
     const sessions = get(sessionsResult);
     const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(
-          sessions.value.value,
-          current(doc.bindings.world, deps.scope.documentAddress)?.id ?? "",
-        )
+      ? resolveTarget(sessions.value.value, worldOf(deps.scope))
       : null;
     if (resolution?.kind !== "resolved") return null;
     return here(value, documentAddress(resolution.session));
@@ -152,18 +148,9 @@ export function createFamiliesStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const bindDocument = async (nextTarget: string) => {
-    const doc = registry.get(document);
-    const patches: RouteStatePatch[] = [];
-    if (current(doc?.bindings.world, deps.scope.documentAddress)?.id !== (nextTarget || null))
-      patches.push({
-        path: ["bindings", "world"],
-        value: nextTarget
-          ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
-          : undefined,
-      });
-    return patches.length ? expectRouteWrite(await writer.apply(patches)) : { ok: true };
-  };
+  // ponytail: the world lives in the page Scope (`?target`); a bind here is a no-op until the
+  // route navigates. Owed: families route passes `?target` into `pageScope`.
+  const bindDocument = async (_nextTarget: string) => ({ ok: true });
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
     (nextFeed) => {

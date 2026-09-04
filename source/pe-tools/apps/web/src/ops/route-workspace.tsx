@@ -1,3 +1,4 @@
+import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { Workspace } from "#/components/anatomy";
 import { useAtomValue } from "@effect/atom-react";
@@ -17,6 +18,7 @@ import { createOpsStore, type OpsStore } from "#/ops/store";
 import { SyntheticRunner } from "#/ops/synthetic";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
+import { pageScope } from "#/state/route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
@@ -26,6 +28,7 @@ import { buildFormRequest, readFormSeed } from "#/ops/schema-form";
 import {
   createOpsFixtureSlice,
   OPS_FIXTURE_ADDRESS,
+  OPS_FIXTURE_WORLD,
   OPS_FIXTURE_CATALOG,
   OPS_FIXTURE_REQUEST,
   OPS_FIXTURE_SELECTED,
@@ -48,7 +51,7 @@ function FixtureOpsStoreOwner() {
   const store = useRouteStore(() => {
     const fixture = createOpsStore({
       registry: appAtomRegistry,
-      scope: { documentAddress: OPS_FIXTURE_ADDRESS },
+      scope: pageScope(OPS_FIXTURE_ADDRESS, OPS_FIXTURE_WORLD),
       slice: createOpsFixtureSlice(),
       apply: async () => ({ ok: true, revision: 1 }),
       call: async () => {
@@ -75,10 +78,15 @@ export function OpsStoreOwner({
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
+  // ponytail: the page's world is its `?target`; owed: the ops route declares it in validateSearch.
+  const target = useSearch({
+    strict: false,
+    select: (s) => (s as { target?: string }).target ?? "",
+  });
   const store = useRouteStore(() =>
     createOpsStore({
       registry: appAtomRegistry,
-      scope: { documentAddress },
+      scope: pageScope(documentAddress, target),
     }),
   );
   return <OpsPage store={store} />;

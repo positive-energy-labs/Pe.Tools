@@ -5,7 +5,6 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
   addressSchema,
-  current,
   takeoffsRouteState,
   here,
   type RouteStatePatch,
@@ -31,6 +30,7 @@ import {
   type Scope,
   type Slice,
   type TimedRead,
+  worldOf,
 } from "#/state/route-store";
 import {
   upsertResolution,
@@ -386,9 +386,7 @@ export function createTakeoffStore(deps: {
   const targetAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
     const target = deps.target?.trim();
-    return AsyncResult.isSuccess(result)
-      ? (target ?? current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ?? "")
-      : (target ?? "");
+    return AsyncResult.isSuccess(result) ? (target ?? worldOf(deps.scope)) : (target ?? "");
   }).pipe(owned("binding/target"));
   const ids = (bindings: TakeoffsRouteDocument["bindings"], prefix: string) =>
     Object.entries(bindings)
@@ -561,7 +559,7 @@ export function createTakeoffStore(deps: {
       const at = document
         ? addressSchema.parse(document.documentId)
         : deps.host.fixture
-          ? deps.scope.documentAddress
+          ? deps.scope.scope.document
           : null;
       const snapshot = here(persisted, at);
       if (persisted) {
@@ -947,7 +945,7 @@ export function createTakeoffStore(deps: {
           if (id !== undefined)
             patches.push({
               path: ["bindings", key],
-              value: id ? { id, label: id, at: deps.scope.documentAddress } : undefined,
+              value: id ? { id, label: id } : undefined,
             });
         }
         for (const key of ["views", "zones"] as const) {
@@ -959,7 +957,7 @@ export function createTakeoffStore(deps: {
           for (const id of next)
             patches.push({
               path: ["bindings", `${prefix}${id}`],
-              value: { id, label: id, at: deps.scope.documentAddress },
+              value: { id, label: id },
             });
         }
         if (patch.stage) patches.push({ path: ["stage"], value: patch.stage });
@@ -970,9 +968,8 @@ export function createTakeoffStore(deps: {
       const target = deps.target?.trim();
       if (!target) return;
       const document = await settle(activeDocumentResult);
-      if (document.value?.documentId !== deps.scope.documentAddress) return;
-      if (current(registry.get(bindingsAtom).world, deps.scope.documentAddress)?.id === target)
-        return;
+      if (document.value?.documentId !== deps.scope.scope.document) return;
+      if (worldOf(deps.scope) === target) return;
       expectRouteWrite(
         await takeoffsWriter.apply([
           {
@@ -980,7 +977,6 @@ export function createTakeoffStore(deps: {
             value: {
               id: target,
               label: target,
-              at: deps.scope.documentAddress,
             },
           },
         ]),

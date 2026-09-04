@@ -4,7 +4,6 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   address,
-  type Bind,
   type OpsReceipt,
   type OpsRouteDocument,
   type RouteStatePatch,
@@ -41,14 +40,8 @@ const oldReceipt = {
   target: "old",
   observedAt: "2026-08-25T00:00:00.000Z",
 };
-const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
-  bindings: {
-    world: {
-      id: `session:${target}` as const,
-      label: target,
-      at: address("C:\\Models\\Test.rvt"),
-    } satisfies Bind,
-  },
+const document = (_target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
+  bindings: {},
   receipt,
 });
 const feeds: Feeds<OpsSlot> = {
@@ -73,7 +66,7 @@ function make(
   const writes: RouteStatePatch[][] = [];
   const store = createOpsStore({
     registry,
-    scope: { documentAddress: address("C:\\Models\\Test.rvt") },
+    scope: { scope: { session: null, document: address("C:\\Models\\Test.rvt") } },
     slice: Atom.make(
       AsyncResult.success({
         doc: routeDocument,

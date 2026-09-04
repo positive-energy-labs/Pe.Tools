@@ -21,7 +21,6 @@ export interface ChatSearch {
     | "parameter-links"
     | "schedule-grid"
     | "instances";
-  readonly target?: string;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }

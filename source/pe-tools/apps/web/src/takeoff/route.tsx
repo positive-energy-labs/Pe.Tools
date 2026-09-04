@@ -9,6 +9,7 @@ import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
 import { createFixtureTakeoffStore } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
+import { pageScope } from "#/state/route-store";
 import { RouteDocument, routeDocumentChoices } from "#/workbench/route-document";
 import { usePeInfo } from "#/host/info";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
@@ -195,13 +196,13 @@ export function TakeoffsStoreOwner({
   const store = useRouteStore(() => {
     const created =
       source === "fixture"
-        ? createFixtureTakeoffStore(appAtomRegistry, { documentAddress })
+        ? createFixtureTakeoffStore(appAtomRegistry, pageScope(documentAddress, target))
         : createTakeoffStore({
             host: createLiveTakeoffHost(),
             sessions: createHostSessionSource(),
             source,
             registry: appAtomRegistry,
-            scope: { documentAddress },
+            scope: pageScope(documentAddress, target),
             target,
           });
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);

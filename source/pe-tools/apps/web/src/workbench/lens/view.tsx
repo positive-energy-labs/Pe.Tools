@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { annotation } from "#/components/anatomy";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
@@ -7,16 +6,8 @@ import { RouteChatPluginDock } from "../route-chat-plugins";
 import { WorldLane } from "../world";
 import { SidePane } from "#/components/lang/side-pane";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
-import { TargetWorld } from "#/chat/chat-target";
-import { chipDescriptor, laneVar } from "#/host/target-ui";
 import { Press } from "#/components/lang/press";
-import {
-  ContextStrip,
-  ToolCellBody,
-  TraceCellView,
-  formatTime,
-  ticksForMoment,
-} from "./context-strip";
+import { ContextStrip, ToolCellBody, TraceCellView, formatTime } from "./context-strip";
 import { useLensModel } from "./model";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
@@ -50,7 +41,7 @@ export function Lens({
     breakdown,
     userTurns,
     cache,
-    chatTarget,
+    threadScope,
     targetTone,
     targetRailColor,
     frameRef,
@@ -79,7 +70,7 @@ export function Lens({
           <div {...annotation("dial")} onPointerDown={onPointerDown} aria-label="Timeline">
             <div
               aria-hidden="true"
-              title={`target: ${chipDescriptor(chatTarget.resolution).text}`}
+              title={`scope: ${threadScope.scope.session ?? "no session"} r${threadScope.revision}`}
               style={{
                 position: "absolute",
                 left: 0,
@@ -109,27 +100,6 @@ export function Lens({
                   <span {...annotation("dial-number")} title={formatTime(moment.createdAt)}>
                     #{moment.turn}
                   </span>
-
-                  {ticksForMoment(chatTarget.worldLog, moments, index).map((event, k) => (
-                    <span
-                      key={`${event.atMs}-${k}`}
-                      title={event.label}
-                      style={{
-                        position: "absolute",
-                        left: -32,
-                        top: -1 + k * 3,
-                        width: 6,
-                        height: 2,
-                        backgroundColor:
-                          event.kind === "session-gone"
-                            ? token("caution")
-                            : laneVar(
-                                chatTarget.sessions.find((s) => s.sessionId === event.sessionId)
-                                  ?.lane ?? "installed",
-                              ),
-                      }}
-                    />
-                  ))}
                 </div>
               ))}
             </div>
@@ -209,10 +179,7 @@ export function Lens({
                   })()}
                 </div>
               ) : mode === "world" ? (
-                <>
-                  <TargetWorld />
-                  <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-                </>
+                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
               ) : (
                 threadList
               )}

@@ -4,8 +4,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useThreadMessages } from "../aui";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
-import { useChatTarget } from "#/chat/chat-target";
-import { chipDescriptor } from "#/host/target-ui";
+import { useThreadScope } from "#/chat/scope";
 import { selectBreakdown } from "../chat-state";
 import {
   lensScrollIntent,
@@ -50,9 +49,10 @@ export function useLensModel({
 
   const cache = useCacheView(breakdown, userTurns);
 
-  const chatTarget = useChatTarget();
-
-  const targetTone = chipDescriptor(chatTarget.resolution).tone;
+  const { currentThreadId, revit } = useWorkbench();
+  const threadScope = useThreadScope(currentThreadId, revit === true);
+  // The rail is the thread Scope: set (session named) reads as meta, absent as muted.
+  const targetTone = threadScope.scope.session ? "meta" : "muted";
 
   const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? token("ink-mute");
 
@@ -453,7 +453,7 @@ export function useLensModel({
     breakdown,
     userTurns,
     cache,
-    chatTarget,
+    threadScope,
     targetTone,
     targetRailColor,
     frameRef,

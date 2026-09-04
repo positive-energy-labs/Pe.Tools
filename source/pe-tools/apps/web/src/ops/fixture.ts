@@ -141,16 +141,7 @@ export const OPS_FIXTURE_WORLD_FACTS: WorldFacts = {
 
 const document: OpsRouteDocument = {
   bindings: {
-    world: {
-      id: OPS_FIXTURE_WORLD,
-      label: OPS_FIXTURE_TARGET,
-      at: OPS_FIXTURE_ADDRESS,
-    } satisfies Bind,
-    op: {
-      id: OPS_FIXTURE_SELECTED,
-      label: "Visible Model Summary",
-      at: OPS_FIXTURE_ADDRESS,
-    } satisfies Bind,
+    op: { id: OPS_FIXTURE_SELECTED, label: "Visible Model Summary" } satisfies Bind,
   },
   receipt: {
     opKey: OPS_FIXTURE_SELECTED,

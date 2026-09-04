@@ -1,15 +1,28 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { useChatTarget } from "#/chat/chat-target";
-import { Press } from "#/components/lang/press";
+import { ScopeHead, type ScopeSessionOption } from "#/chat/scope-head";
+import { useThreadScope } from "#/chat/scope";
 import { useFleet } from "#/host/fleet";
+import { documentAddress, type SessionFacts } from "#/host/target";
 import { RouteHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import { product } from "#/targeting/model";
-import { worldTrunk } from "#/targeting/world";
 import { useWorkbench } from "#/workbench/provider";
 
-/** Chat uses the same kit as route heads; the world picker is its only targeting slot. */
+export function scopeOptions(sessions: readonly SessionFacts[]): ScopeSessionOption[] {
+  return sessions.flatMap((session) =>
+    session.sdkSessionId
+      ? [
+          {
+            id: session.sdkSessionId,
+            label: session.sdkSessionId,
+            document: documentAddress(session),
+            documentLabel: session.activeDocumentTitle ?? null,
+          },
+        ]
+      : [],
+  );
+}
+
+/** The chat head: the thread name, and the ONE Scope surface beneath it. */
 export function ChatSentence({
   name,
   aside,
@@ -19,56 +32,19 @@ export function ChatSentence({
   aside?: ReactNode;
   live?: boolean;
 }) {
-  const { revit } = useWorkbench();
+  const { revit, currentThreadId, isRunning } = useWorkbench();
   const fleet = useFleet({ enabled: revit === true });
-  const { selector, resolution, pin } = useChatTarget();
-  const [open, setOpen] = useState<string | null>(null);
-  const [level, setLevel] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const worldFeed = worldTrunk.feed(fleet);
-  const legalSelector =
-    resolution.kind === "resolved" && worldFeed.options?.some((option) => option.id === selector)
-      ? selector
-      : null;
-  const manifest = product("chat", "target", { world: worldTrunk.link })({
-    feeds: { world: worldFeed },
-    stages: [{ key: "address", label: "address", verbs: [] }],
-    panes: [],
-  });
-  const state: BindingState<"world"> = {
-    bound: { world: legalSelector },
-    multi: {},
-    stage: "address",
-  };
-  const bindings = useBindings(
-    manifest,
-    state,
-    (patch) => patch.bound?.world !== undefined && pin(patch.bound.world ?? ""),
-    open,
-    setOpen,
-    level,
-    setLevel,
-    query,
-    setQuery,
-  );
-  const runner = useRunner(manifest, bindings);
+  const scope = useThreadScope(currentThreadId, live !== false);
   return (
-    <RouteHead
-      name={name}
-      aside={aside}
-      instrumentLive={live}
-      manifest={{
-        mode: "line",
-        product: manifest,
-        b: bindings,
-        runner,
-        extra: () =>
-          selector ? (
-            <Press type="button" tone="quiet" onClick={() => pin("")}>
-              clear target
-            </Press>
-          ) : null,
-      }}
-    />
+    <RouteHead name={name} aside={aside} instrumentLive={live}>
+      <ScopeHead
+        scope={scope.scope}
+        revision={scope.revision}
+        options={scopeOptions(fleet.sessions)}
+        busy={isRunning}
+        refusal={scope.refusal}
+        onSet={(next) => void scope.set(next)}
+      />
+    </RouteHead>
   );
 }

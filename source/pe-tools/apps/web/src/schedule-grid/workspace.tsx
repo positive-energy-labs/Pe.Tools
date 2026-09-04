@@ -1,3 +1,4 @@
+import { pageScope } from "#/state/route-store";
 import { useState } from "react";
 import { scheduleCellKey, scheduleGridRouteState, splitScheduleCellKey } from "@pe/agent-contracts";
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -27,7 +28,7 @@ export function LiveScheduleGridWorkspace({
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const state = useRouteState(scheduleGridRouteState, { documentAddress });
+  const state = useRouteState(scheduleGridRouteState, pageScope(documentAddress));
   return <ScheduleGridWorkspace state={state} />;
 }
 

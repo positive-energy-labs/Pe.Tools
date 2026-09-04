@@ -91,8 +91,11 @@ export function RouteHead<K extends string>({
   aside,
   manifest,
   instrumentLive,
+  children,
 }: {
   name: string;
+  /** Route chrome drawn beneath the name in place of a targeting manifest (the chat Scope head). */
+  children?: React.ReactNode;
   /** EXTRA route chrome, beside the cluster. Not the sentence's `fact` — that one names a datum
    * inside the sentence; this one is furniture on the name's line. */
   aside?: React.ReactNode;
@@ -118,7 +121,7 @@ export function RouteHead<K extends string>({
           <InstrumentCluster live={instrumentLive} />
         </span>
       </div>
-      {manifest ? <TargetingHead {...manifest} nameless /> : null}
+      {manifest ? <TargetingHead {...manifest} nameless /> : children}
     </div>
   );
 }

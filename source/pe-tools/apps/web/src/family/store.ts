@@ -3,7 +3,6 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
-  current,
   familyRouteState,
   here,
   settingsRouteState,
@@ -43,6 +42,7 @@ import {
   unbound,
   type Scope,
   type Slice,
+  worldOf,
 } from "#/state/route-store";
 
 type Setter<A> = A | ((previous: A) => A);
@@ -101,14 +101,11 @@ export function createFamilyStore(deps: {
     const result = get(familySlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
-  const target = Atom.make(
-    (get) => current(get(familyDoc)?.bindings.world, deps.scope.documentAddress)?.id ?? "",
-  ).pipe(owned("binding/world"));
+  // ponytail: the world is the page Scope's session; rebinding is a `?target` navigation, not a doc write.
+  const target = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
   const profile = Atom.make(
     (get) =>
-      current(get(familyDoc)?.bindings.profile, deps.scope.documentAddress)?.id ??
-      get(settingsDoc)?.documentId?.relativePath ??
-      "",
+      get(familyDoc)?.bindings.profile?.id ?? get(settingsDoc)?.documentId?.relativePath ?? "",
   ).pipe(owned("binding/profile"));
   const routeStage = Atom.make((get) => get(familyDoc)?.stage ?? "author").pipe(owned("stage"));
   const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
@@ -381,7 +378,7 @@ export function createFamilyStore(deps: {
             await writers.familyApply([
               {
                 path: ["bindings", "profile"],
-                value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
+                value: { id: relativePath, label: relativePath },
               },
             ]),
           );
@@ -396,16 +393,7 @@ export function createFamilyStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          expectRouteWrite(
-            await writers.familyApply([
-              {
-                path: ["bindings", "world"],
-                value: nextTarget
-                  ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
-                  : undefined,
-              },
-            ]),
-          );
+          // ponytail: the world lives in the page Scope (`?target`); owed: family route navigation.
           return `bound ${nextTarget}`;
         },
         ["family", "profile"],

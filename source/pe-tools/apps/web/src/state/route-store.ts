@@ -255,9 +255,17 @@ export function feed<A>(
   };
 }
 
+/** A standalone page's route scope: the Scope it keys under, with a document always present. */
 export interface Scope {
-  readonly documentAddress: Address;
+  readonly scope: { readonly session: string | null; readonly document: Address };
 }
+/** Build a page Scope from the route's document and its `?target` selector (`session:<id>`). */
+export const pageScope = (document: Address, target = ""): Scope => ({
+  scope: { session: target.startsWith("session:") ? target.slice(8) : null, document },
+});
+/** The bridge selector a page Scope resolves to; empty when the Scope names no session. */
+export const worldOf = (scope: Scope): string =>
+  scope.scope.session ? `session:${scope.scope.session}` : "";
 
 export interface Slice<D> {
   doc: D | null;
@@ -300,7 +308,10 @@ function routeUrl(
   const suffix = operation === "read" ? "" : `/${operation}`;
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
   if (scope.workspaceId !== undefined) url.searchParams.set("workspace", scope.workspaceId);
-  else url.searchParams.set("doc", scope.documentAddress);
+  else {
+    if (scope.scope.session) url.searchParams.set("session", scope.scope.session);
+    if (scope.scope.document) url.searchParams.set("doc", scope.scope.document);
+  }
   return url.toString();
 }
 

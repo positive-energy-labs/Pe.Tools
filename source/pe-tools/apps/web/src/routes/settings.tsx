@@ -26,6 +26,7 @@ import { createFixtureSettingsStore, fixtureSettingsPicker } from "#/settings/fi
 import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
+import { pageScope } from "#/state/route-store";
 import { TargetingHead } from "#/targeting/head";
 import { RouteDocument } from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
@@ -66,7 +67,7 @@ function SettingsStoreOwner({
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const store = useRouteStore(() => {
-    const scope = { documentAddress };
+    const scope = pageScope(documentAddress);
     return createSettingsStore({
       registry: appAtomRegistry,
       scope,

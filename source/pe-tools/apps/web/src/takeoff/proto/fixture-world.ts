@@ -201,10 +201,7 @@ export const createFixtureSessionSource = (): SessionSource => {
 export const createFixtureTakeoffStore = (registry: AtomRegistry.AtomRegistry, scope: Scope) => {
   const document = takeoffsRouteState.schema.parse({
     bindings: Object.fromEntries(
-      fallbackWorld.lanes.map(({ view }) => [
-        `views:${view}`,
-        { id: view, label: view, at: scope.documentAddress },
-      ]),
+      fallbackWorld.lanes.map(({ view }) => [`views:${view}`, { id: view, label: view }]),
     ),
     snapshot: snapshot(fallbackWorld, "2026-08-17T00:00:00.000Z"),
     staged: [],

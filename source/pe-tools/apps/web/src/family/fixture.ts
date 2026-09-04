@@ -1,3 +1,4 @@
+import { pageScope, type Slice } from "#/state/route-store";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -9,7 +10,6 @@ import {
 } from "@pe/agent-contracts";
 
 import { createFamilyStore } from "#/family/store";
-import type { Slice } from "#/state/route-store";
 
 const slice = <D>(doc: D): Slice<D> => ({
   doc,
@@ -30,7 +30,7 @@ const refused = async (): Promise<RouteStateWriteResult> => ({
 export function createFixtureFamilyStore(registry: AtomRegistry.AtomRegistry) {
   return createFamilyStore({
     registry,
-    scope: { documentAddress: address("C:\\Fixtures\\family-review.rfa") },
+    scope: pageScope(address("C:\\Fixtures\\family-review.rfa")),
     slices: {
       settings: Atom.make(
         AsyncResult.success(

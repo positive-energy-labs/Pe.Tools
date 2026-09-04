@@ -1,3 +1,4 @@
+import { pageScope } from "#/state/route-store";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -51,7 +52,7 @@ export function createFixtureSettingsStore(registry: AtomRegistry.AtomRegistry) 
   });
   const store = createSettingsStore({
     registry,
-    scope: { documentAddress: fixtureSettingsAddress },
+    scope: pageScope(fixtureSettingsAddress),
     slice,
     apply: async (patches) => {
       const result = applyPatches(

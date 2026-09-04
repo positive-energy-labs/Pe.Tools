@@ -13,8 +13,7 @@ import { FixtureWorkbenchProvider } from "#/workbench/fixture";
  *            state)
  *   mode   — chat | trace | world view depth (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
- *   target — pinned Revit session selector ("observed", "session:<id>", pid…), retained like thread.
- *            A SELECTOR, never a session id, so the pin survives process restarts.
+ *   scope  — fixture only: which Scope head state to draw (set | dangling | absent).
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  */
@@ -31,7 +30,7 @@ export const chatSearchSchema = z.object({
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
   plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
-  target: z.string().optional().catch(undefined),
+  scope: z.enum(["set", "dangling", "absent"]).optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
   source: z.enum(["live", "fixture"]).optional().catch(undefined),
 });
@@ -39,7 +38,7 @@ export const chatSearchSchema = z.object({
 export const Route = createFileRoute("/chat")({
   validateSearch: chatSearchSchema,
   search: {
-    middlewares: [retainSearchParams(["thread", "target"]), stripSearchParams(DEFAULTS)],
+    middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],
   },
   component: RouteComponent,
 });

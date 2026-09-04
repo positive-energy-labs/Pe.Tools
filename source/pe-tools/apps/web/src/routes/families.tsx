@@ -7,6 +7,7 @@ import { FamiliesWorkspace } from "#/families/workspace";
 import { RouteDocument } from "#/workbench/route-document";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
+import { pageScope } from "#/state/route-store";
 
 export const familiesSearch = (
   search: Record<string, unknown>,
@@ -43,7 +44,7 @@ function FamiliesStoreOwner({
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const store = useRouteStore(() => {
-    const scope = { documentAddress };
+    const scope = pageScope(documentAddress);
     return createFamiliesStore({
       registry: appAtomRegistry,
       scope,

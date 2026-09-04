@@ -1,4 +1,6 @@
-import { instancesRouteState } from "@pe/agent-contracts";
+import { instancesRouteState, routeScopeKey, type Scope } from "@pe/agent-contracts";
+import { useThreadScope } from "#/chat/scope";
+import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
 import type { ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -10,7 +12,6 @@ import {
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
-  type Address,
   type RouteStatePatch,
   type RouteStateSpec,
 } from "@pe/agent-contracts";
@@ -23,7 +24,6 @@ import { useRouteStore } from "#/state/use-route-store";
 import type { ChatPageStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";
 import { RouteWorkspaceShell } from "./route-workspace-shell";
-import { RouteDocument } from "./route-document";
 
 type PaneProps = { store: ChatPageStore };
 type Pane = (props: PaneProps) => ReactNode;
@@ -50,25 +50,41 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 }
 
 function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType> }) {
-  if (spec.scope === "workspace")
-    return <InstancesPage target={chat.search.target ?? ""} setTarget={() => {}} />;
+  const { currentThreadId } = useWorkbench();
+  const threadScope = useThreadScope(currentThreadId);
+  if (!threadScope.hydrated)
+    return (
+      <EmptyState story="scope" exit="wait for the thread Scope">
+        opening {spec.title}
+      </EmptyState>
+    );
+  if (spec.route === "instances")
+    return (
+      <InstancesPage
+        target={threadScope.scope.session ? `session:${threadScope.scope.session}` : ""}
+        setTarget={() => {}}
+      />
+    );
   return (
-    <RouteDocument>
-      {(at) => <AddressedRoutePaneOwner chat={chat} spec={spec} documentAddress={at} />}
-    </RouteDocument>
+    <ScopedRoutePaneOwner
+      key={routeScopeKey({ scope: threadScope.scope })}
+      chat={chat}
+      spec={spec}
+      scope={threadScope.scope}
+    />
   );
 }
 
-function AddressedRoutePaneOwner({
+function ScopedRoutePaneOwner({
   chat,
   spec,
-  documentAddress,
+  scope,
 }: {
   chat: ChatPageStore;
   spec: RouteStateSpec<z.ZodType>;
-  documentAddress: Address;
+  scope: Scope;
 }) {
-  const store = useRouteStore(() => createRoutePaneStore(chat, spec, documentAddress));
+  const store = useRouteStore(() => createRoutePaneStore(chat, spec, scope));
   return <RoutePane store={store} />;
 }
 
@@ -113,16 +129,15 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
   );
 }
 
-function createRoutePaneStore(
-  chat: ChatPageStore,
-  spec: RouteStateSpec<z.ZodType>,
-  documentAddress: Address,
-) {
+function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodType>, scope: Scope) {
   const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
-  const scope = { documentAddress };
+  const routeScope = { scope };
   // Shared family atom, never a labelled clone: one events stream per route document.
-  const slice = docAtom(spec, scope);
-  const searchState = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
+  const slice = docAtom(spec, routeScope);
+  const searchState = core.owned(
+    "page/search",
+    Atom.make({ target: scope.session ? `session:${scope.session}` : "" }),
+  );
   const search = {
     get target() {
       return chat.registry.get(searchState).target;
@@ -133,7 +148,7 @@ function createRoutePaneStore(
       );
     },
   };
-  const writer = docWriter(spec, scope, chat.registry, slice);
+  const writer = docWriter(spec, routeScope, chat.registry, slice);
   return {
     registry: chat.registry,
     spec,
