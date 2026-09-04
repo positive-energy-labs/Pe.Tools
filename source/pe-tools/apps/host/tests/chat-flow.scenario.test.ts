@@ -17,6 +17,9 @@ import { isUserTurn } from "../../web/src/workbench/chat-state.ts";
 
 const approvalFinalText = "APPROVAL_TURN_FINISHED";
 const approvalToolValue = "MASTER_SCENARIO_TOOL";
+const questionText = "Which Revit session should Pea use?";
+const questionAnswer = "Revit 2025";
+const questionFinalText = "QUESTION_TURN_FINISHED";
 const abortedText = "VISIBLE_BEFORE_ABORT";
 type AttributeElement = { getAttribute(name: string): string | null };
 type ThreadMessage = Parameters<typeof isUserTurn>[0];
@@ -39,6 +42,20 @@ function scenarioRuntime(
       responses: [
         { toolCall: { name: "scenario_approval", input: { value: approvalToolValue } } },
         { text: approvalFinalText },
+        {
+          toolCall: {
+            name: "ask_user",
+            input: {
+              question: questionText,
+              options: [
+                { label: "Revit 2024", description: "Use the older session" },
+                { label: questionAnswer, description: "Use the current session" },
+              ],
+              selectionMode: "single_select",
+            },
+          },
+        },
+        { text: questionFinalText },
         { text: abortedText, finishDelayMs: 10_000 },
       ],
       preseed,
@@ -214,6 +231,18 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(`APPROVED:${approvalToolValue}`);
+
+    await composer.fill("QUESTION_TURN");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
+    await questionRow.getByRole("button", { name: "Approve" }).click();
+    await waitForRowText(questionText);
+    expect(await questionRow.innerText()).toContain("Use the current session");
+    await questionRow.getByRole("button", { name: questionAnswer }).click();
+    await waitForRowText(questionFinalText);
+    await expect
+      .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
+      .toContain(`User answered: ${questionAnswer}`);
 
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "Send message" }).click();

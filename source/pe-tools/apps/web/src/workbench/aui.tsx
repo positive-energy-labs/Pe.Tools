@@ -22,10 +22,11 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight, X } from "lucide-react";
+import { Textarea } from "#/components/lang/textarea";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
 import { isRenderable, toThreadMessages } from "./aui-adapter";
-import { APPROVAL_OPTIONS, toolTarget } from "./chat-state";
+import { APPROVAL_OPTIONS, readRecord, readString, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
@@ -285,6 +286,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
   const target = toolTarget(args);
   const pending = approval && approval.approved === undefined && !approval.resolution;
+  const question = pending && toolName === "ask_user" ? readQuestion(args) : undefined;
   return (
     <div className="grid gap-0.5" data-tool-id={toolCallId}>
       <div {...annotation("tool-marker")} data-kind="tool" className={tone}>
@@ -305,7 +307,9 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         sessionState={{}}
         running={status?.type === "running"}
       />
-      {pending ? (
+      {question ? (
+        <AskUserPrompt toolCallId={toolCallId} question={question} resolve={resolveApproval} />
+      ) : pending ? (
         <div className="flex flex-wrap gap-[7px]">
           {(approval.options ?? APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");
@@ -329,3 +333,123 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
     </div>
   );
 };
+
+type Question = {
+  text: string;
+  options: { label: string; description?: string }[];
+  multiple: boolean;
+};
+
+function readQuestion(args: unknown): Question | undefined {
+  const value = readRecord(args);
+  if (value?.__peaApprovalKind !== "suspension") return undefined;
+  const text = readString(value?.question);
+  if (!text) return undefined;
+  const options = Array.isArray(value?.options)
+    ? value.options.flatMap((option) => {
+        const record = readRecord(option);
+        const label = readString(record?.label);
+        return label
+          ? [
+              {
+                label,
+                ...(readString(record?.description)
+                  ? { description: readString(record?.description) }
+                  : {}),
+              },
+            ]
+          : [];
+      })
+    : [];
+  return { text, options, multiple: value?.selectionMode === "multi_select" };
+}
+
+function AskUserPrompt({
+  toolCallId,
+  question,
+  resolve,
+}: {
+  toolCallId: string;
+  question: Question;
+  resolve: (toolCallId: string, response?: string | string[]) => Promise<void>;
+}) {
+  const [answer, setAnswer] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  return (
+    <div className="grid gap-2 py-1">
+      <div className="t-prose">{question.text}</div>
+      {question.options.length === 0 ? (
+        <>
+          <Textarea
+            size="compact"
+            aria-label="Answer"
+            value={answer}
+            onChange={(event) => setAnswer(event.target.value)}
+          />
+          <div>
+            <Verb
+              tone="commit"
+              icon={Check}
+              label="Answer"
+              reason="Send this answer to Pea"
+              disabled={!answer.trim()}
+              onClick={() => void resolve(toolCallId, answer.trim())}
+            />
+          </div>
+        </>
+      ) : question.multiple ? (
+        <>
+          <div className="grid gap-1">
+            {question.options.map((option) => (
+              <label key={option.label} className="flex items-start gap-2 t-prose">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.label)}
+                  onChange={() =>
+                    setSelected((current) =>
+                      current.includes(option.label)
+                        ? current.filter((label) => label !== option.label)
+                        : [...current, option.label],
+                    )
+                  }
+                />
+                <span>
+                  {option.label}
+                  {option.description ? (
+                    <span className="block t-small text-ink-2">{option.description}</span>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div>
+            <Verb
+              tone="commit"
+              icon={Check}
+              label="Answer"
+              reason="Send the selected answers to Pea"
+              disabled={selected.length === 0}
+              onClick={() => void resolve(toolCallId, selected)}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="grid gap-1">
+          {question.options.map((option) => (
+            <div key={option.label} className="flex items-baseline gap-2">
+              <Verb
+                tone="act"
+                label={option.label}
+                reason={option.description ?? `Answer ${option.label}`}
+                onClick={() => void resolve(toolCallId, option.label)}
+              />
+              {option.description ? (
+                <span className="t-small text-ink-2">{option.description}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

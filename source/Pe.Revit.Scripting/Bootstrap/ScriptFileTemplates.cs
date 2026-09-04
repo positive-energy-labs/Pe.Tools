@@ -82,7 +82,8 @@ internal static class ScriptFileTemplates {
         Authoring contract:
 
         - Put durable scripts under `src/` as normal C# files and declare each runnable one in `pod.json` under `entrypoints`.
-        - Run an entrypoint with `pea script execute --source-path src/MyScript.cs`.
+        - Every declared entrypoint is a button on the Scripts tab of Revit's Do palette, with a safe action (changes discarded) and a full action (changes kept). Its `name` and `description` are the button label and subtitle, so write them for whoever presses the button. A pod whose `pod.json` fails validation shows no buttons at all.
+        - Outside the palette, run an entrypoint with `pea script execute --source-path src/MyScript.cs`.
         - Each entrypoint source file must contain exactly one non-abstract `PeScriptContainer`; helper `src/**/*.cs` files compile alongside but are not runnable.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
         - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
@@ -148,7 +149,9 @@ internal static class ScriptFileTemplates {
         ## Contract
 
         - Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable.
-        - Execute an entrypoint with `pea script execute --source-path src/YourScript.cs`; add new scripts to `pod.json` under `entrypoints` first.
+        - EVERY DECLARED ENTRYPOINT IS A BUTTON in Revit's Do palette, on the Scripts tab, with two actions: run safe (document changes discarded) and run full (kept). The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit, and it runs in-process on the Revit lane even when Pea is closed and the host is disconnected.
+        - The entrypoint `name` and `description` in `pod.json` are the button label and its subtitle; the pod `name` is the filter pill. Write all three for the practitioner who presses the button. An entrypoint with no `name` shows its raw id, and a pod whose `pod.json` fails validation does not appear on the tab at all.
+        - Add new scripts to `pod.json` under `entrypoints` first. Outside the palette, run an entrypoint with `pea script execute --source-path src/YourScript.cs` (the terminal and non-Pea agents use this).
         - Each entrypoint source file must resolve to exactly one non-abstract `PeScriptContainer`; helper `src` files are compiled but are not entrypoints.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
         - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
@@ -179,10 +182,12 @@ internal static class ScriptFileTemplates {
 
     public static string CreateSampleScript() =>
         """
-        // Run from this workspace root:
-        // pea script execute --source-path src/SampleScript.cs
+        // This file is declared as an entrypoint in pod.json, so it is a button on the
+        // Scripts tab of Revit's Do palette (run safe / run full). Its pod.json name and
+        // description are that button's label and subtitle.
         //
-        // This file is declared as an entrypoint in pod.json.
+        // Outside the palette, run it from this workspace root:
+        // pea script execute --source-path src/SampleScript.cs
         // Keep exactly one non-abstract PeScriptContainer per entrypoint file.
 
         public sealed class SampleScript : PeScriptContainer

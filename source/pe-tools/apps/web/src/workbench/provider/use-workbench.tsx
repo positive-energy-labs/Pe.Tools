@@ -43,9 +43,10 @@ export async function forkSessionThread(
 export function resumeDataForSuspension(
   toolName: string | undefined,
   suspendPayload: unknown,
-  reject: boolean,
+  response?: ToolResume,
 ): ToolResume {
   const payload = readRecord(suspendPayload);
+  const reject = response === "reject_once";
   if (toolName === "submit_plan") {
     return {
       action: reject ? "rejected" : "approved",
@@ -55,7 +56,7 @@ export function resumeDataForSuspension(
   }
   if (toolName === "request_access") return reject ? "No" : "Yes";
   if (toolName === "ask_user") {
-    if (reject) return "(skipped)";
+    if (typeof response === "string" || Array.isArray(response)) return response;
     const options = readArray(payload?.options)?.map(optionText).filter(Boolean) as
       | string[]
       | undefined;
@@ -69,7 +70,9 @@ export async function rejectApproval(session: SessionClient, approval: Approval)
   if (approval.kind === "suspension") {
     await session.respondToToolSuspension(
       approval.toolCallId,
-      resumeDataForSuspension(approval.toolName, approval.payload, true),
+      approval.toolName === "ask_user"
+        ? "(skipped)"
+        : resumeDataForSuspension(approval.toolName, approval.payload, "reject_once"),
     );
     return;
   }

@@ -38,7 +38,7 @@ export interface WorkbenchContextValue {
   openThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => void | Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
-  resolveApproval: (toolCallId: string, optionId?: string) => Promise<void>;
+  resolveApproval: (toolCallId: string, response?: ToolResume) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   /** Store a provider API key in the host's auth.json and refresh the model choices. */
   addApiKey: (provider: string, apiKey: string) => Promise<void>;

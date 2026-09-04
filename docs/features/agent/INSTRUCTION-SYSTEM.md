@@ -16,6 +16,7 @@ inspection aids, not an exact resolved request.
 | Reusable workflow judgment | Bundled skills in `@pe/mcps` `skills.ts`, materialized under the product home | Each skill is a method with a crisp trigger. Materialization removes only `retiredPeaSkillNames`; user skills are never touched. |
 | Durable user and project facts | Observational Memory (`memory/profiles.ts`) | Live Revit/runtime state is excluded by the observer instruction. |
 | Active task state | `TaskSignalProvider` | One signal owner; no Pea copy. |
+| Pod-authoring rules at the moment of authoring | Generated workspace docs, C#-owned (`Pe.Revit.Scripting/Bootstrap/ScriptFileTemplates.cs`) | Mastra auto-injects a nested `AGENTS.md` when a tool call touches a path near it, so the workspace `AGENTS.md` reaches the prompt exactly while Pea edits the Pod. It and `build-pod` must agree; nothing enforces that yet. `AGENTS.md` rewrites on bootstrap, `README`/`JOIN_GUIDE` are create-once. |
 | Current document orientation | None yet | The old context signal is deleted: it had no producer and replayed stale snapshots. Return only with source, observation time, and clear-on-absence. |
 
 ## Skill set

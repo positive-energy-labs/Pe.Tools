@@ -182,23 +182,22 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const resolveApproval = useCallback(
-    async (toolCallId: string, optionId?: string) => {
+    async (toolCallId: string, response?: ToolResume) => {
       if (!session) return;
       // Settlement is server-only: the patched Mastra core clears the gate
       // and re-emits display state when the approval actually disarms. The client never removes
       // the gate itself; it only refuses a second send while one is in flight.
       if (settlingApprovalsRef.current.has(toolCallId)) return;
       settlingApprovalsRef.current.add(toolCallId);
-      const reject = optionId?.startsWith("reject") ?? false;
       const approval = selectApprovals(chat.display).find((item) => item.toolCallId === toolCallId);
       try {
         if (approval?.kind === "suspension") {
           await session.respondToToolSuspension(
             toolCallId,
-            resumeDataForSuspension(approval.toolName, approval.payload, reject),
+            resumeDataForSuspension(approval.toolName, approval.payload, response),
           );
         } else {
-          await session.approveTool(toolCallId, !reject);
+          await session.approveTool(toolCallId, response !== "reject_once");
         }
       } catch (caught) {
         setError(errorMessage(caught));

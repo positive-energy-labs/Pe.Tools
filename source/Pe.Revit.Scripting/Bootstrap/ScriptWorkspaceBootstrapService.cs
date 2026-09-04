@@ -49,7 +49,10 @@ public sealed class ScriptWorkspaceBootstrapService(
 
         EnsureFile(productAgentsPath, ScriptFileTemplates.CreateProductAgents(), generatedFiles);
         EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);
-        EnsureFile(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
+        // AGENTS.md is host-owned agent guidance, not user prose: rewrite it so an existing
+        // workspace picks up corrected guidance on the next bootstrap. README/JOIN_GUIDE stay
+        // create-once because a user may edit them.
+        WriteIfChanged(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
         EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
         EnsureFile(joinGuidePath, ScriptFileTemplates.CreateJoinGuide(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);

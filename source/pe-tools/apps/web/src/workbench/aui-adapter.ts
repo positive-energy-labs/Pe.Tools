@@ -118,8 +118,17 @@ function toolCallPart(call: {
   display: ChatDisplay;
 }): LikePart {
   const target = toolTarget(call.args);
-  const args = readRecord(call.args) ?? (target ? { path: target } : undefined);
-  const gated = selectApprovals(call.display).some((approval) => approval.toolCallId === call.id);
+  const approval = selectApprovals(call.display).find(
+    (candidate) => candidate.toolCallId === call.id,
+  );
+  const rawArgs =
+    (approval?.kind === "suspension" ? readRecord(approval.payload) : undefined) ??
+    readRecord(call.args) ??
+    (target ? { path: target } : undefined);
+  const args =
+    approval?.kind === "suspension" && rawArgs
+      ? { ...rawArgs, __peaApprovalKind: "suspension" }
+      : rawArgs;
   const part: Record<string, unknown> = {
     type: "tool-call",
     toolCallId: call.id,
@@ -127,7 +136,9 @@ function toolCallPart(call: {
     ...(args ? { args } : { argsText: stringify(call.args) }),
     ...(call.result !== undefined ? { result: call.result } : {}),
     ...(call.isError ? { isError: true } : {}),
-    ...(gated ? { approval: { id: call.id, approved: undefined, options: APPROVAL_OPTIONS } } : {}),
+    ...(approval
+      ? { approval: { id: call.id, approved: undefined, options: APPROVAL_OPTIONS } }
+      : {}),
   };
   return part as LikePart;
 }

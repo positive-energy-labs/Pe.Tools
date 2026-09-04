@@ -14,7 +14,17 @@ import { createRuntimeLibSqlStorage } from "./storage/profiles.ts";
 
 type DeterministicResponse =
   | { text: string; finishDelayMs?: number }
-  | { toolCall: { name: "scenario_approval"; input: { value: string } } };
+  | { toolCall: { name: "scenario_approval"; input: { value: string } } }
+  | {
+      toolCall: {
+        name: "ask_user";
+        input: {
+          question: string;
+          options: { label: string; description?: string }[];
+          selectionMode?: "single_select" | "multi_select";
+        };
+      };
+    };
 
 function responseStream(response: DeterministicResponse, responseAt: number) {
   return new ReadableStream({
