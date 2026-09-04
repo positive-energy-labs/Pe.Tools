@@ -156,21 +156,27 @@ The user supplies intent and ideas; you handle the code. Nothing that does not c
 
 A Pod is a scripting workspace the user runs from Pea and shares as source: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that declares the Pod id and its entrypoints. A workspace without pod.json is loose and runs only the selected file. A Pod validates its manifest, compiles every src/**/*.cs, and runs only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
 
-A Pod is not a ribbon button or a Revit add-in. Say so when the user asks for one: what they get is an entrypoint they run by asking Pea, shareable with anyone who has Pea.
+## Every entrypoint is a button
+
+A declared entrypoint appears in Revit's Do palette, on the Scripts tab, with two actions: run safe, where document changes are discarded, and run full, where they are kept. The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit. It runs in-process on the Revit lane, so the button still works when Pea is closed and the host is disconnected.
+
+The entrypoint name and description in pod.json are the button label and its subtitle, and the Pod name is the filter pill. Write all three for the practitioner who presses the button, not for yourself. An entrypoint with no name shows its raw id. A Pod whose pod.json is invalid does not appear on the tab at all, and the user cannot see why from Revit, so validate the manifest before you hand it over.
+
+A Pod is not a compiled add-in. The ladder is: a script proves the idea, a declared entrypoint makes it a button, and a typed host operation is the promotion after that. The last rung is a repo change and an add-in rebuild, not session work; say so when the user asks for it.
 
 ## Loop
 
 1. Name the nouns from the user's workflow, not from the API: what they start with, what they want at the end, what they decide along the way. Settle the intent before anything compounds.
 2. Lay out two or three shapes side by side, from one inline probe to a multi-entrypoint Pod, and say what each makes impossible. The user picks; one shape on the table is always one you would argue against.
 3. Bootstrap the workspace, then make the chain real end to end on the real model: one entrypoint, one readback, before any polish. Stubs and placeholders are scaffolding; count them and strike them one per round.
-4. Drive the whole workflow by hand with the user on real parts. That is the bar for done, and it gets a proof readback.
+4. Drive the whole workflow by hand with the user on real parts, ending with the user pressing the entrypoint in the palette themselves. That is the bar for done, and it gets a proof readback.
 5. Purge: delete anything the working Pod does not need. Keep the why in a short README the user can hand to a colleague.
 
 ## Adapting an existing Pod
 
 Read pod.json and the entrypoints before touching anything. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
 
-When more than a sentence is needed, report what the Pod does in the user's words, how to run it, what it will not do, and what remains scaffolding.
+When more than a sentence is needed, report what the Pod does in the user's words, which palette entry runs it and under which action, what it will not do, and what remains scaffolding.
 `,
   },
   {

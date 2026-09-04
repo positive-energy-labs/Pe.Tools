@@ -89,6 +89,7 @@ export const TOOL_TITLES: Record<string, string> = {
   revit_api_docs_search: "Search the Revit docs",
   revit_api_docs_fetch: "Read the Revit docs",
   script_bootstrap: "Draft a script",
+  script_pod_list: "List script buttons",
   script_execute: "Run a script",
   route_state_read: "Read the workspace",
   route_state_apply: "Suggest workspace changes",

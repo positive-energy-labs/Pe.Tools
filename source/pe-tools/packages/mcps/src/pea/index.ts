@@ -13,6 +13,7 @@ import {
   scriptBootstrapInputSchema,
   scriptClientTimeoutMs,
   scriptExecuteInputSchema,
+  scriptPodListInputSchema,
 } from "../shared/scripting.ts";
 import { readImage } from "../shared/read-image.ts";
 import { coerceJsonObject } from "../shared/coerce.ts";
@@ -307,6 +308,20 @@ export const scriptBootstrap = createTool({
   },
 });
 
+export const scriptPodList = createTool({
+  id: "script_pod_list",
+  description:
+    "List every scripting pod workspace with its validated pod.json manifest and declared entrypoints. Each declared entrypoint is what the user presses in Revit's Do palette, so this is how you see what buttons exist. Invalid pods are listed too, with the diagnostics explaining what to fix; a pod that fails validation does not appear in the palette at all.",
+  inputSchema: scriptPodListInputSchema,
+  execute: async (input) => {
+    try {
+      return await createCurrentScriptingTools(input.bridgeSessionId).listPods();
+    } catch (error) {
+      return { isError: true, content: error instanceof Error ? error.message : String(error) };
+    }
+  },
+});
+
 export const captureView = createCaptureViewTool((bridgeSessionId) =>
   createCurrentHostRpcCaller(bridgeSessionId),
 );
@@ -327,6 +342,7 @@ const productTools = {
   [revitApiSearch.id]: revitApiSearch,
   [revitApiFetch.id]: revitApiFetch,
   [scriptBootstrap.id]: scriptBootstrap,
+  [scriptPodList.id]: scriptPodList,
   [scriptExecute.id]: scriptExecute,
   ...routeStateTools,
 };
@@ -336,6 +352,7 @@ const targetScopedTools = new Set([
   "host_operation_call",
   "capture_view",
   "script_bootstrap",
+  "script_pod_list",
   "script_execute",
 ]);
 const documentScopedTools = new Set(["route_state_read", "route_state_apply", "route_command"]);
@@ -385,6 +402,7 @@ export const peaProductToolMetadata = {
   revit_api_docs_search: { category: "read", requiresRevit: false },
   revit_api_docs_fetch: { category: "read", requiresRevit: false },
   script_bootstrap: { category: "edit", requiresRevit: true },
+  script_pod_list: { category: "read", requiresRevit: true },
   script_execute: { category: "execute", requiresRevit: true },
   route_state_read: { category: "read", requiresRevit: false },
   route_state_apply: { category: "edit", requiresRevit: false },

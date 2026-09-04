@@ -21,5 +21,7 @@ A message arriving as <user delivery="while-active"> is new evidence or a constr
 export const peaRevitOrientation = `Revit is connected through typed host operations. Orient with pe_status, then discover capability with host_operation_search projection="capability-map" and inspect exact shapes with projection="matches". Use a script when no operation is the smallest capable surface.`;
 
 export function peaAgentInstructionsFor(capabilities: PeaRuntimeCapabilities): string {
-  return capabilities.revit ? `${peaAgentInstructions}\n\n${peaRevitOrientation}` : peaAgentInstructions;
+  return capabilities.revit
+    ? `${peaAgentInstructions}\n\n${peaRevitOrientation}`
+    : peaAgentInstructions;
 }

@@ -15,7 +15,7 @@ import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 const slowRuntimeTestTimeout = 30_000;
 
-test("pea exposes the exact 14-tool product surface", () => {
+test("pea exposes the exact 15-tool product surface", () => {
   const names = [
     "pe_status",
     "pe_logs",
@@ -27,6 +27,7 @@ test("pea exposes the exact 14-tool product surface", () => {
     "revit_api_docs_search",
     "revit_api_docs_fetch",
     "script_bootstrap",
+    "script_pod_list",
     "script_execute",
     "route_state_read",
     "route_state_apply",
