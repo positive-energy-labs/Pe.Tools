@@ -278,6 +278,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   toolCallId,
   toolName,
   args,
+  result,
   isError,
   status,
   approval,
@@ -285,6 +286,11 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   const { resolveApproval } = useWorkbench();
   const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
   const target = toolTarget(args);
+  // What the run actually touched: the Scope revision it was admitted under and the session and
+  // document the host resolved to. Read from the result, so it is evidence, not intent.
+  const ran = readRecord(result);
+  const ranTarget = readRecord(ran?.target);
+  const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
   const pending = approval && approval.approved === undefined && !approval.resolution;
   const question = pending && toolName === "ask_user" ? readQuestion(args) : undefined;
   return (
@@ -292,6 +298,16 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
       <div {...annotation("tool-marker")} data-kind="tool" className={tone}>
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
+        {revision !== undefined ? (
+          <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
+            r{revision}
+          </span>
+        ) : null}
+        {ranTarget && (ranTarget.session || ranTarget.document) ? (
+          <span className="t-small text-ink-2 truncate" data-testid="tool-target">
+            {[ranTarget.session, ranTarget.document].filter(Boolean).join(" · ")}
+          </span>
+        ) : null}
 
         <span
           className={`ml-auto t-small face-mono tracking-[0.02em] ${status?.type === "running" ? "text-ink-2" : ""}`}

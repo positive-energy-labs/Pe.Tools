@@ -101,9 +101,13 @@ export const CHAT_FIXTURE: ChatState = {
     message("assistant-2", "assistant", 34, [
       tool(
         "tool-receipt",
-        "host_operation_call",
-        { operation: "revit.context.visible-summary", target: "session:fixture-26" },
+        "pe_read",
+        { key: "op:revit.context.visible-summary" },
         {
+          ok: true,
+          key: "op:revit.context.visible-summary",
+          revision: 3,
+          target: { session: "pe.app-26", document: "C:\\Review\\Operations Fixture.rvt" },
           receipt: "op-20260830-1842",
           activeView: "Level 2 HVAC Plan",
           visibleElements: 47,
@@ -141,8 +145,8 @@ export const CHAT_FIXTURE: ChatState = {
       tools: [
         { name: "read_file", description: "Read committed workspace files.", approxTokens: 180 },
         {
-          name: "host_operation_call",
-          description: "Run a typed Revit host operation.",
+          name: "pe_do",
+          description: "Do one capability by key from pe_find.",
           approxTokens: 260,
         },
         { name: "submit_plan", description: "Request approval for a plan.", approxTokens: 120 },

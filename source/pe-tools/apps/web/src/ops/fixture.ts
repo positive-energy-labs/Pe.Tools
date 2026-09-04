@@ -1,12 +1,112 @@
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { address, type Bind, type OpsRouteDocument } from "@pe/agent-contracts";
+import {
+  address,
+  type Bind,
+  type CapabilityCatalog,
+  type OpsRouteDocument,
+} from "@pe/agent-contracts";
 
 import type { WorldFacts } from "#/host/fleet";
 import type { SessionFacts } from "#/host/target";
 import type { HostOperationCatalogEntry } from "#/ops/product";
 
 export const OPS_FIXTURE_ADDRESS = address("C:\\Review\\Operations Fixture.rvt");
+
+/** The catalog as `/ops?source=fixture` reviews it: one row per kind, one source silent, no Revit. */
+export const OPS_FIXTURE_CAPABILITIES: CapabilityCatalog = {
+  at: "2026-08-30T18:42:00.000Z",
+  bridgeSessionId: "fixture-26",
+  sessions: [
+    {
+      sessionId: "fixture-26",
+      custody: "observed",
+      sdkSessionId: "pe.app-26",
+      activeDocument: "C:\\Review\\Operations Fixture.rvt",
+    },
+  ],
+  sources: {
+    catalog: "ok",
+    "route registry": "ok",
+    "pod.json": "did not answer: scripting.pod.list timed out after 2000ms",
+    skills: "ok",
+    sessions: "ok",
+  },
+  capabilities: [
+    {
+      key: "op:revit.context.visible-summary",
+      kind: "op",
+      title: "Visible Model Summary",
+      description: "Counts of what the active view shows.",
+      needs: "project-document",
+      mutates: false,
+      actor: "any",
+      input: { type: "object" },
+      source: "catalog",
+      rank: 2,
+    },
+    {
+      key: "route:instances",
+      kind: "route-doc",
+      title: "Instances",
+      description: "Read the Instances document.",
+      needs: "nothing",
+      mutates: false,
+      actor: "any",
+      input: {},
+      source: "route registry",
+      rank: 1,
+    },
+    {
+      key: "route:instances.start",
+      kind: "route-command",
+      title: "Instances: start",
+      description: "Start installed Revit with the staged year and name.",
+      needs: "nothing",
+      mutates: true,
+      actor: "any",
+      input: { type: "object" },
+      source: "route registry",
+      rank: 0,
+    },
+    {
+      key: "route:instances.stop",
+      kind: "route-command",
+      title: "Instances: stop",
+      description: "Stop the selected session.",
+      needs: "nothing",
+      mutates: true,
+      actor: "human",
+      input: { type: "object" },
+      source: "route registry",
+      rank: 0,
+    },
+    {
+      key: "pod:sheets.rename",
+      kind: "pod",
+      title: "Sheet tools: Rename sheets",
+      description: "Pod button the user presses in Revit's Do palette.",
+      needs: "document",
+      mutates: true,
+      actor: "any",
+      input: { type: "object" },
+      source: "pod.json",
+      rank: 1,
+    },
+    {
+      key: "skill:build-pod",
+      kind: "skill",
+      title: "build-pod",
+      description: "Turn a repeated workflow into a shareable Pod.",
+      needs: "nothing",
+      mutates: false,
+      actor: "any",
+      input: {},
+      source: "skills",
+      rank: 0,
+    },
+  ],
+};
 export const OPS_FIXTURE_WORLD = "session:fixture-26" as const;
 export const OPS_FIXTURE_TARGET = "fixture-26";
 export const OPS_FIXTURE_SELECTED = "revit.context.visible-summary";

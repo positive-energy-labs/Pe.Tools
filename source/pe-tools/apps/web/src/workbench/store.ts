@@ -15,6 +15,7 @@ export interface ChatSearch {
   readonly mode: string;
   readonly turn?: number;
   readonly plugin?:
+    | "pods"
     | "family"
     | "families"
     | "settings"

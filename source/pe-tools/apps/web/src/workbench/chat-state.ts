@@ -385,6 +385,8 @@ function partText(part: MastraMessagePart): string {
 
 export function toolTarget(args: unknown): string | undefined {
   const record = readRecord(args);
+  // pe_read / pe_do: the capability key is what the user reads on the card.
+  if (typeof record?.key === "string") return record.key;
   const candidate = record?.path ?? record?.file ?? record?.query ?? record?.command;
   if (typeof candidate === "string") return candidate;
   if (typeof args === "string" && args.length <= 64) return args;

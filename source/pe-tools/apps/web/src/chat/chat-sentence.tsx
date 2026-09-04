@@ -1,15 +1,20 @@
 import type { ReactNode } from "react";
-import { useSearch } from "@tanstack/react-router";
-import { address, emptyScope, type Scope } from "@pe/agent-contracts";
+import { useQuery } from "@tanstack/react-query";
+import { address, addressSchema, emptyScope, type Address, type Scope } from "@pe/agent-contracts";
 
-import { ScopeHead, type ScopeSessionOption } from "#/chat/scope-head";
+import {
+  ScopeHead,
+  scopeDocuments,
+  type ScopeDocumentOption,
+  type ScopeSessionOption,
+} from "#/chat/scope-head";
 import { useThreadScope } from "#/chat/scope";
 import { useFleet } from "#/host/fleet";
 import { documentAddress, type SessionFacts } from "#/host/target";
 import { RouteHead } from "#/targeting/head";
 import { useWorkbench } from "#/workbench/provider";
 
-export function scopeOptions(sessions: readonly SessionFacts[]): ScopeSessionOption[] {
+export function scopeSessions(sessions: readonly SessionFacts[]): ScopeSessionOption[] {
   return sessions.flatMap((session) =>
     session.sdkSessionId
       ? [
@@ -24,6 +29,37 @@ export function scopeOptions(sessions: readonly SessionFacts[]): ScopeSessionOpt
   );
 }
 
+type Recent = { document: Address; label: string };
+
+/** The SDK's recent documents, the same lists /instances reads: one /doctor, then one per year. */
+function useRecentDocuments(enabled: boolean) {
+  return useQuery({
+    queryKey: ["pe", "recents"],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Recent[]> => {
+      const doctor = (await (await fetch("/doctor")).json()) as {
+        result?: { revitYears?: string[] };
+      };
+      const years = doctor.result?.revitYears ?? [];
+      const buckets = await Promise.all(
+        years.map(async (year) => {
+          const body = (await (
+            await fetch(`/docs/recents?year=${encodeURIComponent(year)}`)
+          ).json()) as { result?: { recents?: { path?: string; title?: string }[] } };
+          return body.result?.recents ?? [];
+        }),
+      );
+      return buckets.flat().flatMap((recent) => {
+        const parsed = addressSchema.safeParse(recent.path);
+        return parsed.success
+          ? [{ document: parsed.data, label: recent.title ?? parsed.data }]
+          : [];
+      });
+    },
+  });
+}
+
 /** The chat head: the thread name, and the ONE Scope surface beneath it. */
 export function ChatSentence({
   name,
@@ -36,18 +72,26 @@ export function ChatSentence({
 }) {
   const { revit, currentThreadId, isRunning } = useWorkbench();
   const fleet = useFleet({ enabled: revit === true });
+  const recents = useRecentDocuments(revit === true && live !== false);
   const scope = useThreadScope(currentThreadId, live !== false);
-  const fixture = useSearch({
-    strict: false,
-    select: (search) => (search as { scope?: FixtureScope }).scope,
-  });
-  const shown = live === false ? fixtureScope(fixture) : null;
+  // ponytail: the fixture switch reads the URL directly so the head renders without a router.
+  const shown =
+    live === false
+      ? fixtureScope(
+          (new URLSearchParams(window.location.search).get("scope") ?? undefined) as
+            | FixtureScope
+            | undefined,
+        )
+      : null;
+  const sessions = shown?.sessions ?? scopeSessions(fleet.sessions);
+  const documents = shown?.documents ?? scopeDocuments(sessions, recents.data ?? []);
   return (
     <RouteHead name={name} aside={aside} instrumentLive={live}>
       <ScopeHead
         scope={shown?.scope ?? scope.scope}
         revision={shown?.revision ?? scope.revision}
-        options={shown?.options ?? scopeOptions(fleet.sessions)}
+        sessions={sessions}
+        documents={documents}
         busy={isRunning}
         refusal={scope.refusal}
         onSet={(next) => void scope.set(next)}
@@ -56,23 +100,43 @@ export function ChatSentence({
   );
 }
 
-type FixtureScope = "set" | "dangling" | "absent";
-/** `/chat?source=fixture&scope=set|dangling|absent` draws the three head states without a host. */
+type FixtureScope = "set" | "dangling" | "absent" | "ambiguous";
+/** `/chat?source=fixture&scope=set|dangling|absent|ambiguous` draws the head states without a host. */
 function fixtureScope(kind: FixtureScope | undefined): {
   scope: Scope;
   revision: number;
-  options: ScopeSessionOption[];
+  sessions: ScopeSessionOption[];
+  documents: ScopeDocumentOption[];
 } {
   const document = address("C:\\Fixtures\\project-a Residence.rvt");
-  const option: ScopeSessionOption = {
+  const family = address("C:\\Fixtures\\Door-Single.rfa");
+  const one: ScopeSessionOption = {
     id: "pe.app-25",
     label: "pe.app-25",
     document,
     documentLabel: "project-a Residence.rvt",
   };
+  const two: ScopeSessionOption = {
+    id: "pe.app-26",
+    label: "pe.app-26",
+    document: kind === "ambiguous" ? document : family,
+    documentLabel: kind === "ambiguous" ? "project-a Residence.rvt" : "Door-Single.rfa",
+  };
+  const idle: ScopeSessionOption = {
+    id: "pe.idle",
+    label: "pe.idle",
+    document: null,
+    documentLabel: null,
+  };
+  const sessions = [one, two, idle];
+  const documents = scopeDocuments(sessions, [
+    { document: address("C:\\Fixtures\\Recent Tower.rvt"), label: "Recent Tower.rvt" },
+  ]);
   if (kind === "set")
-    return { scope: { session: option.id, document }, revision: 3, options: [option] };
+    return { scope: { session: one.id, document }, revision: 3, sessions, documents };
   if (kind === "dangling")
-    return { scope: { session: "gone-24", document }, revision: 2, options: [option] };
-  return { scope: emptyScope, revision: 0, options: [option] };
+    return { scope: { session: "gone-24", document }, revision: 2, sessions, documents };
+  if (kind === "ambiguous")
+    return { scope: { session: null, document }, revision: 4, sessions, documents };
+  return { scope: emptyScope, revision: 0, sessions, documents };
 }

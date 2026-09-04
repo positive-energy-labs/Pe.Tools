@@ -10,6 +10,7 @@ import {
   familiesRouteState,
   familyRouteState,
   parameterLinksRouteState,
+  podsRouteState,
   scheduleGridRouteState,
   settingsRouteState,
   type RouteStatePatch,
@@ -30,6 +31,7 @@ type Pane = (props: PaneProps) => ReactNode;
 
 const routePaneSpecs = {
   instances: instancesRouteState,
+  pods: podsRouteState,
   family: familyRouteState,
   families: familiesRouteState,
   settings: settingsRouteState,

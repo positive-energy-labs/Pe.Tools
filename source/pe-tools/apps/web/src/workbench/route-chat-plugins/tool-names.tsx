@@ -3,7 +3,9 @@ import type { ComponentType } from "react";
 import type { z } from "zod";
 import {
   actionLabel,
+  routeCallOf,
   familyRouteState,
+  podsRouteState,
   familyTypesRouteState,
   parameterLinksRouteState,
   parseRouteDoc,
@@ -18,6 +20,7 @@ import { useRouteState, type RouteStateHandle } from "../route-state";
 import { FamilyChatPlugin } from "../plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "../plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "../plugins/settings-chat-plugin";
+import { PodsChatPlugin } from "./pods-chat-plugin";
 import { useThreadScope } from "#/chat/scope";
 import {
   FamilyTypesChatPlugin,
@@ -28,8 +31,6 @@ import {
   sameParameterLinkProfile,
 } from "./parameter-links-review";
 
-export const ROUTE_TOOL_NAMES = new Set(["route_state_read", "route_state_apply", "route_command"]);
-
 export interface RouteChatPluginProps {
   toolCallId: string;
   toolName: string;
@@ -38,9 +39,14 @@ export interface RouteChatPluginProps {
   running: boolean;
   active: boolean;
   routeState: RouteStateHandle<unknown>;
+  /** The thread's current Scope revision; a command button pressed here runs under it. */
+  revision: number;
 }
 
-export type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active" | "routeState">;
+export type RouteChatPluginViewProps = Omit<
+  RouteChatPluginProps,
+  "active" | "routeState" | "revision"
+>;
 
 export interface RouteChatPluginRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -49,6 +55,7 @@ export interface RouteChatPluginRegistration {
 
 export const routeChatPluginList: RouteChatPluginRegistration[] = [
   { spec: instancesRouteState, Renderer: InstancesChatPlugin },
+  { spec: podsRouteState, Renderer: PodsChatPlugin },
   {
     spec: parameterLinksRouteState,
     Renderer: ParameterLinksChatPlugin,
@@ -77,6 +84,7 @@ export const routeChatPlugins = Object.fromEntries(
 
 export const CHAT_PLUGIN_ROUTES = [
   "instances",
+  "pods",
   "family",
   "families",
   "settings",
@@ -94,9 +102,8 @@ export function selectRouteChatPlugin(
   toolName: string,
   args: unknown,
 ): RouteChatPluginRegistration | null {
-  if (!ROUTE_TOOL_NAMES.has(toolName) || !isRecord(args) || typeof args.route !== "string")
-    return null;
-  return routeChatPlugins[args.route] ?? null;
+  const call = routeCallOf(toolName, args);
+  return call ? (routeChatPlugins[call.route] ?? null) : null;
 }
 
 export function RouteChatPluginView(props: RouteChatPluginViewProps) {
@@ -111,9 +118,8 @@ export function RouteChatPluginDock() {
   const registrations = Array.from(
     new Set(
       selectToolCalls(chat).flatMap((call) => {
-        if (!ROUTE_TOOL_NAMES.has(call.title) || !isRecord(call.args)) return [];
-        const route = call.args.route;
-        return typeof route === "string" && routeChatPlugins[route] ? [route] : [];
+        const route = routeCallOf(call.title, call.args)?.route;
+        return route && routeChatPlugins[route] ? [route] : [];
       }),
     ),
   ).map((route) => routeChatPlugins[route]);
@@ -127,8 +133,8 @@ export function RouteChatPluginDock() {
           key={registration.spec.route}
           registration={registration}
           toolCallId={`${registration.spec.route}-review-dock`}
-          toolName="route_command"
-          args={{ route: registration.spec.route, command: "Review" }}
+          toolName="pe_do"
+          args={{ key: `route:${registration.spec.route}.review` }}
           sessionState={{}}
           running={false}
           active
@@ -145,7 +151,14 @@ export function ConnectedRouteChatPlugin({
   const { currentThreadId } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId);
   if (!threadScope.hydrated) return null;
-  return <ScopedRouteChatPlugin registration={registration} {...props} scope={threadScope.scope} />;
+  return (
+    <ScopedRouteChatPlugin
+      registration={registration}
+      {...props}
+      scope={threadScope.scope}
+      revision={threadScope.revision}
+    />
+  );
 }
 
 export function ScopedRouteChatPlugin({
@@ -154,6 +167,7 @@ export function ScopedRouteChatPlugin({
   ...props
 }: RouteChatPluginViewProps & {
   active: boolean;
+  revision: number;
   registration: RouteChatPluginRegistration;
   scope: import("@pe/agent-contracts").Scope;
 }) {
@@ -218,11 +232,21 @@ export function ParameterLinksChatPlugin({
   );
 }
 
-function InstancesChatPlugin({ sessionState, toolName, args, running }: RouteChatPluginProps) {
+function InstancesChatPlugin({
+  sessionState,
+  toolName,
+  args,
+  running,
+  revision,
+}: RouteChatPluginProps) {
   const doc = parseRouteDoc(sessionState, instancesRouteState);
   const staged = doc?.staged;
   return (
-    <InlineRoutePlugin title="Instances" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title="Instances"
+      action={actionLabel(toolName, args, running)}
+      revision={revision}
+    >
       <span>
         {staged
           ? staged.kind === "start"

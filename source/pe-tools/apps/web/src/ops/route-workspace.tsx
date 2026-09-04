@@ -23,11 +23,13 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
+import { CapabilityCatalogSection } from "#/ops/capability-catalog";
 import { OperationPane, parseSchema } from "#/ops/operation-pane";
 import { buildFormRequest, readFormSeed } from "#/ops/schema-form";
 import {
   createOpsFixtureSlice,
   OPS_FIXTURE_ADDRESS,
+  OPS_FIXTURE_CAPABILITIES,
   OPS_FIXTURE_WORLD,
   OPS_FIXTURE_CATALOG,
   OPS_FIXTURE_REQUEST,
@@ -261,6 +263,7 @@ export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?:
       }
       table={
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-auto pt-4">
+          <CapabilityCatalogSection fixture={fixture ? OPS_FIXTURE_CAPABILITIES : undefined} />
           <section className="flex flex-wrap items-center gap-1.5">
             <span className="mr-1">Glance</span>
             {syntheticOps.map((glance) => (

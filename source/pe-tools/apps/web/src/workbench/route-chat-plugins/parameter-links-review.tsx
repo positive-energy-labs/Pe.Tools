@@ -177,10 +177,13 @@ export function FamilyTypesChatPlugin({
 export function InlineRoutePlugin({
   title,
   action,
+  revision,
   children,
 }: {
   title: string;
   action: string;
+  /** The Scope revision this card's buttons run under; the head shows the same number. */
+  revision?: number;
   children: ReactNode;
 }) {
   return (
@@ -189,6 +192,11 @@ export function InlineRoutePlugin({
         <div>
           <span className="">{title}</span>
           <span className="">{action}</span>
+          {revision !== undefined ? (
+            <span className="t-small face-mono text-ink-2" data-testid="plugin-revision">
+              r{revision}
+            </span>
+          ) : null}
         </div>
       }
     >
