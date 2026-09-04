@@ -404,10 +404,25 @@ export interface HttpLiveOptions {
  * Mastra tenant (bound loopback -> hostBaseUrl), and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
-  const ServerLive = NodeHttpServer.layer(() => options.nodeServer ?? createServer(), {
+  const nodeServer = options.nodeServer ?? createServer();
+  // Socket retirement. The platform layer detaches its request handler and calls `server.close`
+  // on release, but a keep-alive socket a browser still holds survives that close with nothing
+  // listening behind it; a reload against a successor on the same port then reuses the dead
+  // socket and waits forever (a dev-host takeover has the same shape). This finalizer is a
+  // dependency of the server layer, so it runs AFTER the platform release and closes every
+  // remaining connection: a retired host holds no socket a client can reuse.
+  const RetireSocketsLive = Layer.effectDiscard(
+    Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        nodeServer.closeIdleConnections();
+        nodeServer.closeAllConnections();
+      }),
+    ),
+  );
+  const ServerLive = NodeHttpServer.layer(() => nodeServer, {
     host: "127.0.0.1",
     port: options.port,
-  });
+  }).pipe(Layer.provide(RetireSocketsLive));
   const ClaimedServerLive = Layer.mergeAll(
     ServerLive,
     ServiceFileLive.pipe(Layer.provide(ServerLive)),
