@@ -384,6 +384,7 @@ test(
       "read_image",
       "revit_api_docs_search",
       "revit_api_docs_fetch",
+      "scope_set",
       "route_state_read",
       "route_state_apply",
       "route_command",
