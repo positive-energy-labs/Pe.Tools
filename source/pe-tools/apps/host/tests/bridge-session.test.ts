@@ -13,13 +13,24 @@ function candidate(overrides: Partial<SessionTargetCandidate>): SessionTargetCan
     processId: 100,
     lane: null,
     sdkSessionId: null,
+    documents: [],
     ...overrides,
   };
 }
 
 // No sdkSessionId ⇒ custody `observed`: pe-revit launched neither of these and holds no receipt.
-const dev = candidate({ sessionId: "session-dev", processId: 111, lane: "dev" });
-const installed = candidate({ sessionId: "session-inst", processId: 222, lane: "installed" });
+const dev = candidate({
+  sessionId: "session-dev",
+  processId: 111,
+  lane: "dev",
+  documents: ["C:ModelsA.rvt"],
+});
+const installed = candidate({
+  sessionId: "session-inst",
+  processId: 222,
+  lane: "installed",
+  documents: ["C:ModelsA.rvt"],
+});
 // Launched by pe-revit: it reported the session id from its launch receipt ⇒ custody `controlled`.
 const controlled = candidate({
   sessionId: "session-ctl",
@@ -165,4 +176,18 @@ test("pid and raw session id target one process incarnation", () => {
   const miss = resolveSessionTarget([dev, installed], "session-unknown");
   expect(miss).toMatchObject({ _tag: "error", statusCode: 404 });
   if (miss._tag === "error") expect(miss.message).toContain("target=");
+});
+
+test("doc:<Address> resolves the one holder, refuses none, and refuses two by naming them", () => {
+  const solo = candidate({ sessionId: "session-solo", processId: 444, documents: ["C:B.rvt"] });
+  const found = resolveSessionTarget([dev, installed, solo], "doc:C:B.rvt");
+  expect(found).toEqual({ _tag: "found", session: solo });
+  const none = resolveSessionTarget([dev, installed, solo], "doc:C:Nobody.rvt");
+  expect(none).toMatchObject({ _tag: "error", statusCode: 404 });
+  const two = resolveSessionTarget([dev, installed, solo], "doc:C:ModelsA.rvt");
+  expect(two).toMatchObject({ _tag: "error", statusCode: 409 });
+  if (two._tag !== "error") throw new Error("expected refusal");
+  expect(two.message).toContain("session-dev");
+  expect(two.message).toContain("session-inst");
+  expect(two.message).not.toContain("session-solo");
 });

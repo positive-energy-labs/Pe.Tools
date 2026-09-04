@@ -140,7 +140,20 @@ export type SessionTargetCandidate = {
   readonly processId: number;
   readonly lane: Lane | null;
   readonly sdkSessionId: string | null;
+  /** Document Addresses this session holds, as the bridge last reported them. */
+  readonly documents: readonly string[];
 };
+
+/** The document Addresses a bridge snapshot discloses. */
+// ponytail: the wire reports only the ACTIVE document per session (openDocumentCount is a bare
+// number), so "holds" means "is active in". Widen the state-sync payload with the open-document
+// list when a background document must be addressable.
+export function heldDocuments(
+  state: Pick<BridgeStateSnapshot, "activeDocumentCloudModelGuid" | "activeDocumentPath">,
+): string[] {
+  const id = state.activeDocumentCloudModelGuid ?? state.activeDocumentPath;
+  return id ? [id] : [];
+}
 
 export type SessionTargetResolution<S extends SessionTargetCandidate> =
   | { readonly _tag: "found"; readonly session: S }
@@ -154,7 +167,7 @@ function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
       (s) =>
         `${s.sessionId} (pid ${s.processId}, lane ${s.lane ?? "unreported"}, ${inferCustody(s)}${
           s.sdkSessionId ? `, session ${s.sdkSessionId}` : ""
-        })`,
+        }, holds ${s.documents.length ? s.documents.join(" + ") : "no document"})`,
     )
     .join("; ");
 }
@@ -167,7 +180,7 @@ const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 
 const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LANES]
   .map((word) => `'${word}'`)
-  .join(", ")}, 'session:<id>', a pid, or a bridge session id.`;
+  .join(", ")}, 'session:<id>', 'doc:<Address>', a pid, or a bridge session id.`;
 
 /**
  * The sole target-resolution choke point, over BRIDGE-CONNECTED sessions — the broker's own
@@ -176,7 +189,8 @@ const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LA
  * WebSocket attachments, and a session can be in either without being in the other.
  *
  * Selector grammar: `session:<id>` → the connection reporting that pe-revit session id;
- * `controlled`/`observed` → custody; `dev`/`installed` → lane; all digits → pid; anything else
+ * `doc:<Address>` → the one connection holding that document (zero or several holders refuse,
+ * naming every session and what it holds); `controlled`/`observed` → custody; `dev`/`installed` → lane; all digits → pid; anything else
  * → bridge session id (one process incarnation). Untargeted with one session is implicit
  * (ergonomic and safe); untargeted with several HARD-FAILS immediately with the listing —
  * read-only status/list surfaces aggregate via `list` instead, never through here.
@@ -212,6 +226,26 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
       _tag: "error",
       statusCode: 409,
       message: `pe-revit session '${sdkSessionId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per process incarnation). Target a pid or bridge session id instead. Connected sessions: ${listing}`,
+    };
+  }
+
+  // A Scope that names a document and no session resolves here: the document is the primary key
+  // and the session is derived from its one holder. Two holders is the one case the user must
+  // name a session, and the refusal lists them so the head can offer exactly those.
+  if (selector.toLowerCase().startsWith("doc:")) {
+    const address = selector.slice("doc:".length).trim();
+    const holders = sessions.filter((s) => s.documents.includes(address));
+    if (holders.length === 1) return { _tag: "found", session: holders[0] };
+    if (holders.length === 0)
+      return {
+        _tag: "error",
+        statusCode: 404,
+        message: `No connected session holds document '${address}'. Open it in Revit, or from /instances. Connected sessions: ${listing}`,
+      };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `Document '${address}' is open in ${holders.length} sessions: ${describeSessions(holders)}. Name one with 'session:<id>'.`,
     };
   }
 
@@ -388,7 +422,15 @@ export const RevitBridgeLive = Layer.effect(
     // The sole target-resolution choke point for operations that reach into one Revit process.
     const resolveTarget = Effect.fnUntraced(function* (target?: string) {
       const map = yield* Ref.get(sessions);
-      return resolveSessionTarget([...map.values()], target);
+      const candidates = yield* Effect.all(
+        [...map.values()].map((session) =>
+          Effect.map(Ref.get(session.state), (state) => ({
+            ...session,
+            documents: heldDocuments(state),
+          })),
+        ),
+      );
+      return resolveSessionTarget(candidates, target);
     });
 
     const failPendingRequest = Effect.fnUntraced(function* (session: Session, reason: string) {

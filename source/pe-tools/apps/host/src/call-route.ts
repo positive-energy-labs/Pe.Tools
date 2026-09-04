@@ -111,7 +111,10 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
       ? yield* dispatchTsOnlyOperation(key, request, bridgeSessionId, bridge)
       : yield* bridge.invoke(key, request ?? {}, bridgeSessionId);
     captureHostOp(op, { ok: true });
-    return Response.jsonUnsafe(result ?? null);
+    // Every /call response names the target it actually ran against, so a tool card can show
+    // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
+    const view = yield* bridge.snapshot(bridgeSessionId);
+    return Response.jsonUnsafe(result ?? null, { headers: resolvedTargetHeaders(view) });
   }).pipe(
     Effect.catch((error) => {
       if (op) captureHostOp(op, { ok: false, problem: toProblem(error) });
@@ -145,6 +148,18 @@ function captureHostOp(
     input_truncated: input.truncated,
     input_bytes: input.bytes,
   });
+}
+
+export const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
+export const RESOLVED_DOCUMENT_HEADER = "x-pe-resolved-document";
+
+function resolvedTargetHeaders(view: BridgeSessionView): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const session = view.sdkSessionId ?? view.sessionId;
+  const document = view.state?.activeDocumentCloudModelGuid ?? view.state?.activeDocumentPath;
+  if (view.connected && session) headers[RESOLVED_SESSION_HEADER] = session;
+  if (view.connected && document) headers[RESOLVED_DOCUMENT_HEADER] = encodeURIComponent(document);
+  return headers;
 }
 
 export class InvalidHostRequest {
