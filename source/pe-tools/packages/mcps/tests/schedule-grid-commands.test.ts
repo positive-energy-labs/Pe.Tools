@@ -39,7 +39,7 @@ function emptyDoc(): ScheduleGridDocument {
 
 function ctxFor(document: ScheduleGridDocument) {
   return {
-    documentAddress: address("C:\\Models\\A.rvt"),
+    scope: { session: null, document: address("C:\\Models\\A.rvt") },
     getDoc: () => document,
     setDoc: async () => undefined,
   };

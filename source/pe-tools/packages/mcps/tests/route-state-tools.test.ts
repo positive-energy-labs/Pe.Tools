@@ -1,12 +1,13 @@
 import { expect, test, vi } from "vite-plus/test";
+import { turnContextKey } from "@pe/agent-contracts";
 
-import { routeCommand, routeStateApply, routeStateRead } from "../src/pea/route-state.ts";
+import { routeCommand, routeStateApply, routeStateRead, scopeSet } from "../src/pea/route-state.ts";
 
 type ExecutableTool = {
   execute?: (input: never, context: never) => Promise<unknown>;
 };
 
-test("route-state tools keep discovery shallow and scope detail and writes to a document", async () => {
+test("route-state tools keep discovery shallow and key detail, writes and scope_set by the turn's Scope", async () => {
   // Explicit override: this test asserts URL routing, not host discovery (which requires a live
   // service file and would correctly fail without a running worktree host).
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
@@ -21,46 +22,63 @@ test("route-state tools keep discovery shallow and scope detail and writes to a 
     return Response.json(
       new URL(url).pathname === "/pe/route-state"
         ? [{ route: "family-types", title: "Family Types", description: "Review values." }]
-        : { ok: true },
+        : { ok: true, revision: 4 },
     );
   });
 
   const doc = "C:\\Models\\projectA.rvt";
+  const turn = {
+    id: "7d2f6a3e-4a3b-4d2e-9d1a-0f2b3c4d5e6f",
+    thread: "thread-1",
+    scope: { session: "pe.app-25", document: doc },
+    revision: 3,
+  };
+  const turnContext = (extra: Record<string, unknown> = {}) => ({
+    ...extra,
+    requestContext: { [turnContextKey]: turn },
+  });
 
   try {
     const discovery = await execute(routeStateRead, {}, {});
-    await execute(routeStateRead, { route: "family-types", doc }, {});
+    await execute(routeStateRead, { route: "family-types" }, turnContext());
     await execute(
       routeStateApply,
       {
         route: "family-types",
-        doc,
         patches: [{ path: ["cells", "one", "proposal"], value: 1 }],
         expectedRevision: 7,
       },
-      {},
+      turnContext(),
     );
     await execute(
       routeCommand,
-      { route: "family-types", doc, command: "refresh", input: {}, expectedRevision: 8 },
-      { agent: { agentId: "pea", toolCallId: "tool-1" } },
+      { route: "family-types", command: "refresh", input: {}, expectedRevision: 8 },
+      turnContext({ agent: { agentId: "pea", toolCallId: "tool-1" } }),
     );
     await execute(
       routeCommand,
-      { route: "family-types", doc, command: "refresh", input: {}, expectedRevision: 9 },
-      { mcp: { extra: { requestId: 42 } } },
+      { route: "family-types", command: "refresh", input: {}, expectedRevision: 9 },
+      turnContext({ mcp: { extra: { requestId: 42 } } }),
     );
-    await execute(routeStateRead, { route: "parameter-links", doc }, {});
+    // No turn: the empty Scope, not a refusal.
+    await execute(routeStateRead, { route: "parameter-links" }, {});
+    const set = await execute(scopeSet, { session: "dev-26", document: null }, turnContext());
 
     expect(
-      calls.map(({ method, url }) => [method, url.pathname, url.searchParams.get("doc")]),
+      calls.map(({ method, url }) => [
+        method,
+        url.pathname,
+        url.searchParams.get("session"),
+        url.searchParams.get("doc"),
+      ]),
     ).toEqual([
-      ["GET", "/pe/route-state", null],
-      ["GET", "/pe/route-state/family-types", doc],
-      ["POST", "/pe/agent/route-state/family-types/apply", doc],
-      ["POST", "/pe/agent/route-state/family-types/command", doc],
-      ["POST", "/pe/agent/route-state/family-types/command", doc],
-      ["GET", "/pe/route-state/parameter-links", doc],
+      ["GET", "/pe/route-state", null, null],
+      ["GET", "/pe/route-state/family-types", "pe.app-25", doc],
+      ["POST", "/pe/agent/route-state/family-types/apply", "pe.app-25", doc],
+      ["POST", "/pe/agent/route-state/family-types/command", "pe.app-25", doc],
+      ["POST", "/pe/agent/route-state/family-types/command", "pe.app-25", doc],
+      ["GET", "/pe/route-state/parameter-links", null, null],
+      ["PUT", "/pe/scope/thread-1", null, null],
     ]);
 
     expect(calls[2]?.body).toEqual({
@@ -79,13 +97,15 @@ test("route-state tools keep discovery shallow and scope detail and writes to a 
       expectedRevision: 9,
       requestId: "42",
     });
-
-    const missing = await execute(routeStateRead, { route: "family-types" }, {});
-    expect(missing).toMatchObject({
-      isError: true,
-      content: expect.stringContaining("document address"),
+    expect(calls[6]?.body).toEqual({
+      scope: { session: "dev-26", document: null },
+      expectedRevision: 3,
+      turn: turn.id,
     });
-    expect(calls).toHaveLength(6);
+    expect(set).toMatchObject({ revision: 4, note: expect.stringContaining("revision 3") });
+    expect(await execute(scopeSet, { session: null, document: null }, {})).toMatchObject({
+      isError: true,
+    });
     expect(JSON.stringify(discovery)).not.toContain('"key"');
   } finally {
     vi.unstubAllGlobals();

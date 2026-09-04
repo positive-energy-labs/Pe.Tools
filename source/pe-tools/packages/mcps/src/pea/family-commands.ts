@@ -5,7 +5,7 @@ import {
   type FamilyDocument,
   type RouteStateCommandHandlers,
   type SettingsDocumentId,
-  resolveTarget,
+  bridgeSelector,
 } from "@pe/agent-contracts";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -74,7 +74,7 @@ export function createFamilyCommandHandlers(
     },
 
     capture_evidence: async (input, ctx) => {
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       const rpc = caller(target);
       const raw = await rpc.call("revit.detail.family-model", {}).catch((error: unknown) => {
         throw new Error(
@@ -107,7 +107,7 @@ export function createFamilyCommandHandlers(
         outputPath?: string;
         modelDirectory?: string;
       };
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       const rpc = caller(target);
 
       // Build the SAVED revision — read it through the same open path every consumer uses.

@@ -1,6 +1,6 @@
 import {
   readingSchema,
-  resolveTarget,
+  bridgeSelector,
   type FamiliesRouteDocument,
   type RouteStateCommandHandlers,
 } from "@pe/agent-contracts";
@@ -21,9 +21,8 @@ export function createFamiliesCommandHandlers(
       const input = raw as {
         profilePath: string;
         scope: { familyNames: string[] };
-        target?: string;
       };
-      const rpc = caller(resolveTarget(input));
+      const rpc = caller(bridgeSelector(ctx.scope));
       const opened = await rpc.call("settings.document.open", {
         documentId: { ...PROFILE_MODULE, relativePath: input.profilePath },
       });
@@ -57,7 +56,7 @@ export function createFamiliesCommandHandlers(
         );
       }
 
-      const rpc = caller(resolveTarget(input));
+      const rpc = caller(bridgeSelector(ctx.scope));
       const opened = await rpc.call("settings.document.open", {
         documentId: { ...PROFILE_MODULE, relativePath: document.profilePath },
       });

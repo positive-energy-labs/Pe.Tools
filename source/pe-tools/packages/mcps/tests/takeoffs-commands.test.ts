@@ -77,22 +77,12 @@ test("takeoffs audit targets the bound world and sets the document snapshot", as
     });
   };
   try {
-    const document: TakeoffsRouteDocument = {
-      bindings: {
-        world: {
-          id: "session:dev-26",
-          label: "dev-26",
-          at: address("C:\\Models\\Harness.rvt"),
-        },
-      },
-      snapshot: null,
-      staged: [],
-    };
+    const document: TakeoffsRouteDocument = { bindings: {}, snapshot: null, staged: [] };
     let writes = 0;
     await createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
       { view: "Zoning", zones: ["zone-1"] },
       {
-        documentAddress: address("C:\\Models\\Harness.rvt"),
+        scope: { session: "dev-26", document: address("C:\\Models\\Harness.rvt") },
         getDoc: () => document,
         setDoc: async (next) => {
           Object.assign(document, next);
@@ -112,33 +102,6 @@ test("takeoffs audit targets the bound world and sets the document snapshot", as
       at: "C:\\Models\\Harness.rvt",
       version: "v1",
     });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("takeoffs audit refuses a missing world binding before any call", async () => {
-  const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    throw new Error("unexpected host call");
-  };
-  try {
-    const document: TakeoffsRouteDocument = { bindings: {}, snapshot: null, staged: [] };
-    await expect(
-      createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
-        { view: "Zoning", zones: ["zone-1"] },
-        {
-          documentAddress: address("C:\\Models\\Harness.rvt"),
-          getDoc: () => document,
-          setDoc: async () => {
-            throw new Error("unexpected document write");
-          },
-        },
-      ),
-    ).rejects.toThrow("route document has no world binding; select a world on the route first");
-    expect(calls).toBe(0);
   } finally {
     globalThis.fetch = originalFetch;
   }

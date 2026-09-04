@@ -3,11 +3,6 @@ import z from "zod";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.js";
 
-const bridgeSessionIdInputSchema = z
-  .string()
-  .optional()
-  .describe("Optional TS host bridge session id to target a specific connected Revit process.");
-
 // Defaults live in the C# request DTO (ExecuteRevitScriptRequest) — this layer passes values
 // through untouched so there is exactly one source of truth for scripting semantics.
 export const scriptExecuteInputSchema = z.object({
@@ -46,7 +41,6 @@ export const scriptExecuteInputSchema = z.object({
     .describe(
       "Cooperative execution timeout (host default 600s). Scripts must check ct / ThrowIfCancelled() to be interruptible.",
     ),
-  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptBootstrapInputSchema = z.object({
@@ -54,7 +48,6 @@ export const scriptBootstrapInputSchema = z.object({
     .string()
     .optional()
     .describe("Pe scripting workspace (pod) key. Defaults to the runtime workspace."),
-  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptCancelInputSchema = z.object({
@@ -62,12 +55,9 @@ export const scriptCancelInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional execution id guard; omit to cancel whatever script is currently running."),
-  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
-export const scriptPodListInputSchema = z.object({
-  bridgeSessionId: bridgeSessionIdInputSchema,
-});
+export const scriptPodListInputSchema = z.object({});
 
 export const scriptPodImportInputSchema = z.object({
   archivePath: z
@@ -77,7 +67,6 @@ export const scriptPodImportInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional target workspace slug. Omit to use the pod.json id."),
-  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptPodExportInputSchema = z.object({
@@ -86,7 +75,6 @@ export const scriptPodExportInputSchema = z.object({
     .optional()
     .describe("Pod workspace slug to export. Defaults to the runtime workspace."),
   archivePath: z.string().describe("Output path for the exported Pod .zip archive."),
-  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export type ScriptRuntimeContext = HostSessionScope & {

@@ -23,7 +23,7 @@ import {
   familyTypesSnapshotSchema,
   isFormulaCellKey,
   parameterLinksDataSchema,
-  resolveTarget,
+  bridgeSelector,
   splitCellKey,
 } from "@pe/agent-contracts";
 import type {
@@ -101,7 +101,7 @@ export function createFamilyTypesCommandHandlers(
     },
 
     refresh_snapshot: async (input, ctx) => {
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       let raw: unknown;
       try {
         // Unknown keys pass through POST /call untyped; typegen types this op later.
@@ -191,7 +191,7 @@ export function createParameterLinksCommandHandlers(
   return {
     refresh: async (input, ctx) => {
       const document = ctx.getDoc();
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       const data = await callParameterLinks(caller(target), "revit.detail.parameter-links", {
         includeEvaluation: true,
       });
@@ -208,7 +208,7 @@ export function createParameterLinksCommandHandlers(
     preview: async (input, ctx) => {
       const { profile } = input as { profile: ParameterLinkProfile };
       const document = ctx.getDoc();
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       requireCurrentParameterLinksDraft(document, profile);
       const data = await callParameterLinks(caller(target), "revit.apply.parameter-links", {
         profile,
@@ -228,7 +228,7 @@ export function createParameterLinksCommandHandlers(
     apply: async (input, ctx) => {
       const { profile } = input as { profile: ParameterLinkProfile };
       const document = ctx.getDoc();
-      const target = resolveTarget(input);
+      const target = bridgeSelector(ctx.scope);
       requireCurrentParameterLinksDraft(document, profile);
       const data = await callParameterLinks(caller(target), "revit.apply.parameter-links", {
         profile,

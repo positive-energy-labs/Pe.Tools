@@ -40,11 +40,7 @@ export function createSettingsCommandHandlers(
 
       const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
-      document.bindings.file = {
-        id: snapshot.path,
-        label: snapshot.path,
-        at: ctx.documentAddress,
-      };
+      document.bindings.file = { id: snapshot.path, label: snapshot.path };
       document.documentId = documentId;
       document.fields = {};
       document.savedAt = new Date().toISOString();
@@ -56,11 +52,7 @@ export function createSettingsCommandHandlers(
       const { documentId } = input as { documentId: SettingsDocumentId };
       const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
-      document.bindings.file = {
-        id: snapshot.path,
-        label: snapshot.path,
-        at: ctx.documentAddress,
-      };
+      document.bindings.file = { id: snapshot.path, label: snapshot.path };
       document.documentId = documentId;
       await ctx.setDoc(document);
       return summarizeSnapshot(snapshot);

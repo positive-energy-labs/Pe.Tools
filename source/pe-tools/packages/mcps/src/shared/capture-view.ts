@@ -58,10 +58,6 @@ const captureViewInputSchema = z.object({
     .describe(
       "Largest image dimension in pixels. 1500 is plenty for orientation; go higher only to read fine annotation.",
     ),
-  bridgeSessionId: z
-    .string()
-    .optional()
-    .describe("Optional TS host bridge session id to target a specific connected Revit process."),
 });
 
 type RevitViewImageData = {
@@ -75,16 +71,14 @@ type RevitViewImageData = {
 };
 
 /** One-hop "let me see Revit": export a view to PNG via the bridge, read the file, return it as an image part. */
-export function createCaptureViewTool(
-  createHostRpcCaller: (bridgeSessionId?: string) => HostRpcCaller,
-) {
+export function createCaptureViewTool(createHostRpcCaller: (context: unknown) => HostRpcCaller) {
   return createTool({
     id: "capture_view",
     description:
       "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. Use after placements/mutations to visually verify results, or whenever you need to look at what the user is looking at.",
     inputSchema: captureViewInputSchema,
-    execute: async (input): Promise<ReadImageResult> => {
-      const caller = createHostRpcCaller(input.bridgeSessionId);
+    execute: async (input, context): Promise<ReadImageResult> => {
+      const caller = createHostRpcCaller(context);
       const result = await caller.callOperation("revit.context.view-image", {
         target: input.target,
         focus: input.focus,

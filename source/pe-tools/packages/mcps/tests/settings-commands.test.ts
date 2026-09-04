@@ -51,7 +51,7 @@ async function withHost(
 
 function context(document: SettingsRouteDocument) {
   return {
-    documentAddress: DOCUMENT_ADDRESS,
+    scope: { session: null, document: DOCUMENT_ADDRESS },
     getDoc: () => document,
     setDoc: async (next: SettingsRouteDocument) => void Object.assign(document, next),
   };
@@ -79,7 +79,7 @@ test("settings opens with no world bound and persists no file snapshot", async (
       expect(calls[0]?.target).toBeNull();
       expect(document).toMatchObject({
         bindings: {
-          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH, at: DOCUMENT_ADDRESS },
+          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH },
         },
         documentId: DOCUMENT_ID,
       });
@@ -109,7 +109,7 @@ test("settings save refetches and uses the file version without persisting it", 
     async (calls) => {
       const document: SettingsRouteDocument = {
         bindings: {
-          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH, at: DOCUMENT_ADDRESS },
+          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH },
         },
         documentId: DOCUMENT_ID,
         fields: {

@@ -1,5 +1,5 @@
 import {
-  current,
+  bridgeSelector,
   type RouteStateCommandContext,
   type RouteStateCommandHandlers,
   type StagedRoomEdit,
@@ -21,13 +21,7 @@ export function createTakeoffsCommandHandlers(
 ): RouteStateCommandHandlers<TakeoffsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const runtime = (ctx: RouteStateCommandContext<TakeoffsRouteDocument>) => {
-    const bridgeSessionId = current(ctx.getDoc().bindings.world, ctx.documentAddress)?.id;
-    if (!bridgeSessionId)
-      throw Error("route document has no world binding; select a world on the route first");
-    return new HostRpcCaller({
-      hostBaseUrl,
-      bridgeSessionId,
-    });
+    return new HostRpcCaller({ hostBaseUrl, bridgeSessionId: bridgeSelector(ctx.scope) });
   };
 
   return {
