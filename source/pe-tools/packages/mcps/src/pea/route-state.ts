@@ -93,7 +93,7 @@ export const routeStateApply = createTool({
 export const routeCommand = createTool({
   id: "route_command",
   description:
-    "Run a named command on a route-state document (e.g. parse_spec, refresh_snapshot). Commands do the side-effectful work the write mask forbids you from doing by hand. Human-only commands (like push) reject you with a hint — ask the engineer to run those from the UI. Discover command names and their input shapes with route_state_read.",
+    "Run a named command on a route-state document (e.g. parse_spec, refresh_snapshot). Commands do the side-effectful work the write mask forbids you from doing by hand. Human-only commands (like push) reject you with a hint — ask the engineer to run those from the UI. Discover command names and their input shapes with route_state_read. On route=\"parameter-links\": inspect the model with host operations, replace only draftProfile with a complete profile, run command=\"preview\" with that exact profile, and stop for browser review; apply is human-only, and electricalEquipmentCircuits is how equipment parameters reach circuit parameters.",
   inputSchema: z.object({
     route: z.string(),
     doc: addressSchema,

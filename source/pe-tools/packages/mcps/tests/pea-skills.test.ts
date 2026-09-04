@@ -1,12 +1,15 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import {
+  bundledPeaSkills,
+  materializeBundledPeaSkills,
   peaProductHomeEnvVar,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
+  retiredPeaSkillNames,
 } from "../src/pea/skills.ts";
 
 test("resolves pea product home under the configured documents root", async () => {
@@ -55,3 +58,29 @@ async function withTempProductHomeEnv() {
     },
   };
 }
+
+test("materialization retires only the product's former skill directories", async () => {
+  const profile = await withTempProductHomeEnv();
+  try {
+    const skillsRoot = path.join(resolvePeaProductHomePath(), peaStandardSkillsRoot);
+    const retired = path.join(skillsRoot, retiredPeaSkillNames[0]!, "SKILL.md");
+    const userOwned = path.join(skillsRoot, "my-office-standards", "SKILL.md");
+    await mkdir(path.dirname(retired), { recursive: true });
+    await mkdir(path.dirname(userOwned), { recursive: true });
+    await writeFile(retired, "stale\n", "utf-8");
+    await writeFile(userOwned, "mine\n", "utf-8");
+
+    const materialized = await materializeBundledPeaSkills();
+
+    expect(materialized.map((skill) => skill.name)).toEqual(
+      bundledPeaSkills.map((skill) => skill.name),
+    );
+    await expect(access(path.dirname(retired))).rejects.toThrow();
+    expect(await readFile(userOwned, "utf-8")).toBe("mine\n");
+    expect(retiredPeaSkillNames.some((name) => bundledPeaSkills.some((s) => s.name === name))).toBe(
+      false,
+    );
+  } finally {
+    await profile.dispose();
+  }
+});
