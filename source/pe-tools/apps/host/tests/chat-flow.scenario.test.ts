@@ -180,11 +180,6 @@ test("the browser walks one durable chat lifecycle", async () => {
       expect(response.status).toBe(200);
       return (await response.json()) as {
         access: string;
-        display: {
-          isRunning: boolean;
-          pendingApproval: unknown;
-          pendingSuspensions: Record<string, unknown>;
-        };
         messages: ThreadMessage[];
         models: { currentId?: string };
       };
@@ -206,20 +201,16 @@ test("the browser walks one durable chat lifecycle", async () => {
     expect(await approvalRow.innerText()).toContain("Scenario Approval");
     await approve.click();
     await waitForRowText(approvalFinalText);
+    // Display is stream-only now: the settled gate is proven by the DOM, not the body.
     await expect
       .poll(
-        async () => {
-          const state = await readThread();
-          return {
-            stop: await page.getByRole("button", { name: "Stop" }).count(),
-            running: state.display.isRunning,
-            approval: state.display.pendingApproval,
-            suspensions: state.display.pendingSuspensions,
-          };
-        },
+        async () => ({
+          stop: await page.getByRole("button", { name: "Stop" }).count(),
+          gates: await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count(),
+        }),
         { timeout: 15_000 },
       )
-      .toEqual({ stop: 0, running: false, approval: null, suspensions: {} });
+      .toEqual({ stop: 0, gates: 0 });
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(`APPROVED:${approvalToolValue}`);
@@ -239,14 +230,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     await waitForRowText(abortedText);
     expect(await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count()).toBe(0);
     expect(await page.getByRole("button", { name: "Stop" }).count()).toBe(0);
-    const settled = await readThread();
-    expect(settled.display).toMatchObject({
-      isRunning: false,
-      pendingApproval: null,
-      pendingSuspensions: {},
-    });
-
-    const beforeRestart = settled.messages;
+    const beforeRestart = (await readThread()).messages;
     const beforeRestartKeys = await rows.evaluateAll((elements: AttributeElement[]) =>
       elements.map((element) => element.getAttribute("data-key")),
     );

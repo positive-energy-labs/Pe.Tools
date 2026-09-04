@@ -1,11 +1,10 @@
 import type { AgentControllerEvent, MastraClient } from "@mastra/client-js";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { emptyChatState, type ChatDisplay, type ChatState } from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
-type DisplayFrame = { at: number; value: ChatDisplay };
 
 const EMPTY = emptyChatState();
 
@@ -39,7 +38,9 @@ export function useThreadStream(options: {
     enabled: threadId !== null,
     staleTime: Infinity,
   });
-  const [frame, setFrame] = useState<DisplayFrame | null>(null);
+  // The stream is the only source of display: the server opens every attach with a snapshot
+  // frame, so no fetch ever competes with it and no clock is needed.
+  const [frame, setFrame] = useState<ChatDisplay | null>(null);
   const [streamFault, setStreamFault] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -47,17 +48,21 @@ export function useThreadStream(options: {
     setStreamFault(null);
   }, [threadId]);
 
+  // The one refetch path: cancel kills a fetch that left before the change, so an older body
+  // can never land after a newer one.
+  const invalidate = useCallback(async () => {
+    const key = threadQueryKey(origin, threadId);
+    await queryClient.cancelQueries({ queryKey: key });
+    await queryClient.invalidateQueries({ queryKey: key });
+  }, [queryClient, origin, threadId]);
+
   useEffect(() => {
     if (!session || !query.isSuccess) return;
     let stopped = false;
-    const invalidate = async () => {
-      await queryClient.cancelQueries({ queryKey });
-      await queryClient.invalidateQueries({ queryKey });
-    };
     const accept = (event: AgentControllerEvent) => {
       if (stopped) return;
       if (event.type === "display_state_changed") {
-        setFrame({ at: Date.now(), value: event.displayState as ChatDisplay });
+        setFrame(event.displayState as ChatDisplay);
         setStreamFault(null);
       }
       if (event.type === "error" || (event.type === "agent_end" && event.reason === "error")) {
@@ -94,13 +99,17 @@ export function useThreadStream(options: {
       stopped = true;
       unsubscribe?.();
     };
-  }, [origin, queryClient, query.isSuccess, session, threadId]);
+  }, [invalidate, query.isSuccess, session, threadId]);
 
-  const chat = useMemo(() => {
-    if (!query.data) return EMPTY;
-    const display = frame && frame.at >= query.dataUpdatedAt ? frame.value : query.data.display;
-    return { ...query.data, display };
-  }, [query.data, frame]);
+  const chat = useMemo<ChatState>(
+    () => (query.data ? { ...query.data, display: frame ?? {} } : EMPTY),
+    [query.data, frame],
+  );
 
-  return [chat, threadId !== null && query.isPending, query.error ?? streamFault] as const;
+  return {
+    chat,
+    pending: threadId !== null && query.isPending,
+    error: query.error ?? streamFault,
+    invalidate,
+  };
 }

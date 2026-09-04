@@ -25,13 +25,13 @@ export interface OmProgress {
   };
 }
 
+/** The fetched thread body plus the live display frame from the stream. */
 export type ChatState = ThreadViewState<
   MastraDBMessage,
-  ChatDisplay,
   AgentControllerAvailableModel,
   PermissionRules | undefined,
   PeInspect
->;
+> & { display: ChatDisplay };
 export type AccessLevel = ChatState["access"];
 
 /**
@@ -57,18 +57,18 @@ export function emptyChatState(): ChatState {
   };
 }
 
-export type ToolStatus = "in_progress" | "completed" | "failed";
+export type ToolOutcome =
+  | { status: "in_progress" }
+  | { status: "completed"; result?: unknown }
+  | { status: "failed"; error: string };
 
-export interface ToolCall {
+export type ToolCall = {
   id: string;
   title: string;
-  status: ToolStatus;
   args: unknown;
-  result?: unknown;
-  error?: string;
   target?: string;
   parentMessageId?: string;
-}
+} & ToolOutcome;
 
 export function selectToolCalls(state: ChatState): ToolCall[] {
   const calls: ToolCall[] = [];
@@ -92,22 +92,24 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const completed = terminal || active?.status === "completed";
       const args = call.rawInput ?? call.args;
       seen.add(call.toolCallId);
+      const outcome: ToolOutcome = failed
+        ? {
+            status: "failed",
+            error:
+              call.errorText ||
+              stringify(call.result ?? active?.result) ||
+              "Tool call ended without a terminal result.",
+          }
+        : completed
+          ? { status: "completed", result: call.result ?? active?.result }
+          : { status: "in_progress" };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
-        status: failed ? "failed" : completed ? "completed" : "in_progress",
         args,
         target: toolTarget(args),
         parentMessageId: message.id,
-        ...(completed ? { result: call.result ?? active?.result } : {}),
-        ...(failed
-          ? {
-              error:
-                call.errorText ||
-                stringify(call.result ?? active?.result) ||
-                "Tool call ended without a terminal result.",
-            }
-          : {}),
+        ...outcome,
       });
     }
   }
@@ -115,47 +117,45 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   for (const [id, tool] of Object.entries(state.display.activeTools ?? {})) {
     if (seen.has(id)) continue;
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
+    const outcome: ToolOutcome =
+      tool.status === "error" || tool.isError
+        ? { status: "failed", error: stringify(tool.result) || "Tool call failed." }
+        : tool.status === "completed"
+          ? { status: "completed", result }
+          : { status: "in_progress" };
     calls.push({
       id,
       title: tool.name,
-      status:
-        tool.status === "error"
-          ? "failed"
-          : tool.status === "completed"
-            ? "completed"
-            : "in_progress",
       args: tool.args,
       target: toolTarget(tool.args),
       parentMessageId: lastAssistantId,
-      ...(result !== undefined ? { result } : {}),
-      ...(tool.isError ? { error: stringify(tool.result) } : {}),
+      ...outcome,
     });
   }
   return calls;
 }
 
-export interface Approval {
-  toolCallId: string;
-  toolName: string;
-  suspended: boolean;
-  suspendPayload?: unknown;
-}
+/** A permission gate answers yes/no; a suspension answers with a resume payload. */
+export type Approval = { toolCallId: string; toolName: string } & (
+  | { kind: "permission" }
+  | { kind: "suspension"; payload: unknown }
+);
 
 export function selectApprovals(display: ChatDisplay): Approval[] {
   const approvals: Approval[] = [];
   const pending = display.pendingApproval;
   if (pending)
     approvals.push({
+      kind: "permission",
       toolCallId: pending.toolCallId,
       toolName: pending.toolName,
-      suspended: false,
     });
   for (const suspension of Object.values(display.pendingSuspensions ?? {})) {
     approvals.push({
+      kind: "suspension",
       toolCallId: suspension.toolCallId,
       toolName: suspension.toolName,
-      suspended: true,
-      suspendPayload: suspension.suspendPayload,
+      payload: suspension.suspendPayload,
     });
   }
   return approvals;

@@ -16,7 +16,7 @@ import { useRouteStore } from "#/state/use-route-store";
 import { createChatPageStore, type WorkbenchAttachment } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
-import { threadQueryKey, useThreadStream } from "./thread-stream";
+import { useThreadStream } from "./thread-stream";
 import {
   errorMessage,
   forkSessionThread,
@@ -71,7 +71,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
   }, [session]);
 
-  const [chat, threadPending, streamFault] = useThreadStream({
+  const {
+    chat,
+    pending: threadPending,
+    error: streamFault,
+    invalidate,
+  } = useThreadStream({
     origin: config.origin,
     queryClient,
     thread: session ? { id: currentThreadId, session } : null,
@@ -112,15 +117,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             },
           },
         );
-        if (threadPending)
-          await queryClient.resetQueries({
-            queryKey: threadQueryKey(config.origin, currentThreadId),
-          });
+        if (threadPending) await invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [config.origin, currentThreadId, doc, queryClient, search.target, session, threadPending],
+    [doc, invalidate, search.target, session, threadPending],
   );
 
   const cancel = useCallback(() => {
@@ -190,10 +192,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const reject = optionId?.startsWith("reject") ?? false;
       const approval = selectApprovals(chat.display).find((item) => item.toolCallId === toolCallId);
       try {
-        if (approval?.suspended) {
+        if (approval?.kind === "suspension") {
           await session.respondToToolSuspension(
             toolCallId,
-            resumeDataForSuspension(approval.toolName, approval.suspendPayload, reject),
+            resumeDataForSuspension(approval.toolName, approval.payload, reject),
           );
         } else {
           await session.approveTool(toolCallId, !reject);
@@ -218,11 +220,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         },
       );
       if (!response.ok) throw new Error(`credentials ${response.status}`);
-      await queryClient.invalidateQueries({
-        queryKey: threadQueryKey(config.origin, currentThreadId),
-      });
+      await invalidate();
     },
-    [config.origin, currentThreadId, queryClient],
+    [config.origin, invalidate],
   );
 
   const setModel = useCallback(
@@ -246,14 +246,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             category as ToolCategory,
             policy as PermissionPolicy,
           );
-        await queryClient.invalidateQueries({
-          queryKey: threadQueryKey(config.origin, currentThreadId),
-        });
+        await invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [config.origin, currentThreadId, queryClient, session],
+    [invalidate, session],
   );
 
   const operationError =

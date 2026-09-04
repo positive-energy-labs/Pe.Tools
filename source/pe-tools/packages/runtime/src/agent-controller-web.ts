@@ -5,7 +5,7 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { addressSchema, routeStatePatchSchema } from "@pe/agent-contracts";
-import { readThreadState } from "./thread-state.ts";
+import { readThreadState, toWireDisplayState } from "./thread-state.ts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
@@ -73,17 +73,33 @@ export async function buildAgentControllerApp(
   const resourceId = runtime.resourceId;
 
   const app = new Hono();
+  const openSession = (threadId: string) =>
+    runtime.controller.createSession({ resourceId, scope: threadId, threadId });
+  // Display state is session-lifetime and never in the thread body; the stream is its only
+  // source, so every (re)attach opens with one snapshot frame ahead of mastra's live events.
+  app.use("/api/agent-controller/:controllerId/sessions/:resourceId/stream", async (c, next) => {
+    const scope = c.req.query("sessionScope");
+    const snapshot = scope
+      ? `data: ${JSON.stringify({
+          type: "display_state_changed",
+          displayState: toWireDisplayState((await openSession(scope)).displayState.get()),
+        })}
+
+`
+      : null;
+    await next();
+    if (!snapshot || !c.res.body) return;
+    const body = c.res.body.pipeThrough(
+      new TransformStream({ start: (ctl) => ctl.enqueue(new TextEncoder().encode(snapshot)) }),
+    );
+    c.res = new Response(body, c.res);
+  });
   // Native display state omits Pe prompt, tool, skill, and OM metadata.
   app.get("/pe/inspect", (c) => c.json((runtime.metadata?.workbench as unknown) ?? {}));
   app.get("/pe/thread/:threadId", async (c) => {
     const threadId = c.req.param("threadId");
     try {
-      const session = await runtime.controller.createSession({
-        resourceId,
-        scope: threadId,
-        threadId,
-      });
-      return c.json(await readThreadState(runtime, session, threadId));
+      return c.json(await readThreadState(runtime, await openSession(threadId), threadId));
     } catch (error) {
       return c.json({ error: errorMessage(error) }, 500);
     }

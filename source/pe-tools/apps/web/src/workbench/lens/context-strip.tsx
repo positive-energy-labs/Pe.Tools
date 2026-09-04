@@ -108,8 +108,8 @@ export function CellHeader({ call }: { call: ToolCall }) {
 
 export function ToolCellBody({ call }: { call: ToolCall }) {
   const input = call.args;
-  const output = call.result;
-  const error = call.error;
+  const output = call.status === "completed" ? call.result : undefined;
+  const error = call.status === "failed" ? call.error : undefined;
   const images = toolImages(output);
   return (
     <>

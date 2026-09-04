@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
-import { readRecord, readString, shortId, type ChatState } from "../chat-state";
+import { readRecord, readString, shortId, type Approval, type ChatState } from "../chat-state";
 import { type WorkbenchAttachment } from "../store";
 import type {
   MessageFile,
@@ -65,14 +65,11 @@ export function resumeDataForSuspension(
   return reject ? "Rejected" : "Approved";
 }
 
-export async function rejectApproval(
-  session: SessionClient,
-  approval: { toolCallId: string; toolName: string; suspended: boolean; suspendPayload?: unknown },
-): Promise<void> {
-  if (approval.suspended) {
+export async function rejectApproval(session: SessionClient, approval: Approval): Promise<void> {
+  if (approval.kind === "suspension") {
     await session.respondToToolSuspension(
       approval.toolCallId,
-      resumeDataForSuspension(approval.toolName, approval.suspendPayload, true),
+      resumeDataForSuspension(approval.toolName, approval.payload, true),
     );
     return;
   }

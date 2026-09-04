@@ -10,12 +10,11 @@ import { threadAccess, type ThreadViewState } from "@pe/agent-contracts";
 
 type RuntimeThreadViewState = ThreadViewState<
   Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number],
-  WireDisplayState,
   AvailableModel,
   PermissionRules
 >;
 
-function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+export function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
   const state = structuredClone(displayState);
   return {
     ...state,
@@ -42,7 +41,6 @@ export async function readThreadState(
   ]);
   const permissions = session.permissions.getRules();
   return {
-    display: toWireDisplayState(session.displayState.get()),
     messages,
     models: { currentId: session.model.get() || undefined, available },
     permissions,

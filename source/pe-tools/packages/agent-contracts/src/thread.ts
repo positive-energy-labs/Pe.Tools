@@ -19,14 +19,13 @@ export function threadAccess(permissions: unknown): ThreadViewState["access"] {
   );
 }
 
+/** Persisted + session facts that survive a fetch. Live display state rides the SSE stream only. */
 export interface ThreadViewState<
   TMessage extends { id: string } = { id: string },
-  TDisplay = unknown,
   TModel = unknown,
   TPermissions = unknown,
   TInspect = unknown,
 > {
-  display: TDisplay;
   messages: TMessage[];
   inspect: TInspect;
   models: { currentId?: string; available: TModel[] };
