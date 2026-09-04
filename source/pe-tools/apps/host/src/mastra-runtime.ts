@@ -115,7 +115,8 @@ export function makeMastraRuntimeLive(
   contactFactory: typeof createRouteRegistrations = createRouteRegistrations,
   runtimeFactory: RuntimeFactory = createPeaRuntime,
 ) {
-  const routeRegistrations = capabilities.revit ? contactFactory : () => [];
+  // Route documents are host-owned data and exist without Revit; their commands fail at call time.
+  const routeRegistrations = contactFactory;
   return Layer.effect(
     MastraRuntime,
     Effect.gen(function* () {

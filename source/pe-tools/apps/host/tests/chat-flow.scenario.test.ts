@@ -20,6 +20,9 @@ const approvalToolValue = "MASTER_SCENARIO_TOOL";
 const questionText = "Which Revit session should Pea use?";
 const questionAnswer = "Revit 2025";
 const questionFinalText = "QUESTION_TURN_FINISHED";
+const scopeFinalText = "SCOPE_TURN_FINISHED";
+const scopeSession = "pe.app-25";
+const scopeDocument = "C:\\Models\\Scenario.rvt";
 const abortedText = "VISIBLE_BEFORE_ABORT";
 type AttributeElement = { getAttribute(name: string): string | null };
 type ThreadMessage = Parameters<typeof isUserTurn>[0];
@@ -56,6 +59,8 @@ function scenarioRuntime(
           },
         },
         { text: questionFinalText },
+        { toolCall: { name: "scenario_scope", input: {} } },
+        { text: scopeFinalText },
         { text: abortedText, finishDelayMs: 10_000 },
       ],
       preseed,
@@ -243,6 +248,58 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(`User answered: ${questionAnswer}`);
+
+    // Scope: the head sets it (PUT), the turn is admitted under that revision, the tool sees it,
+    // and a route document lands under the same Scope key.
+    const scopeUrl = `${baseUrl}/pe/scope/${encodeURIComponent(threadId)}`;
+    expect(await (await fetch(scopeUrl)).json()).toEqual({
+      scope: { session: null, document: null },
+      revision: 0,
+    });
+    const setScope = await fetch(scopeUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: { session: scopeSession, document: scopeDocument },
+        expectedRevision: 0,
+      }),
+    });
+    expect(await setScope.json()).toEqual({
+      scope: { session: scopeSession, document: scopeDocument },
+      revision: 1,
+    });
+    await expect
+      .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })
+      .toBe("r1");
+    await composer.fill("SCOPE_TURN");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await waitForRowText(scopeFinalText);
+    const scopeTurnBody = JSON.stringify((await readThread()).messages);
+    expect(scopeTurnBody).toContain(`"session":"${scopeSession}"`);
+    expect(scopeTurnBody).toContain('"revision":1');
+    const routeQuery = `session=${scopeSession}&doc=${encodeURIComponent(scopeDocument)}`;
+    const applied = await fetch(`${baseUrl}/pe/route-state/ops/apply?${routeQuery}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        patches: [{ path: ["bindings", "op"], value: { id: "revit.context.summary", label: "s" } }],
+        expectedRevision: 0,
+      }),
+    });
+    expect(await applied.json()).toMatchObject({ ok: true, revision: 1 });
+    expect(await (await fetch(`${baseUrl}/pe/route-state/ops?${routeQuery}`)).json()).toMatchObject(
+      {
+        revision: 1,
+        doc: { bindings: { op: { id: "revit.context.summary" } } },
+      },
+    );
+    expect(
+      await (
+        await fetch(
+          `${baseUrl}/pe/route-state/ops?session=other&doc=${encodeURIComponent(scopeDocument)}`,
+        )
+      ).json(),
+    ).toMatchObject({ revision: 0 });
 
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "Send message" }).click();
