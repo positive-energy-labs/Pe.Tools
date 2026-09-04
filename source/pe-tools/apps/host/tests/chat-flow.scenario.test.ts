@@ -258,6 +258,10 @@ test("the browser walks one durable chat lifecycle", async () => {
         if ((await approve.count()) > 0) await approve.click().catch(() => undefined);
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
+      console.log(
+        "DIAG thread tail",
+        JSON.stringify((await readThread()).messages.slice(-1)).slice(0, 400),
+      );
       throw new Error(`turn did not finish: ${finalText}`);
     };
 

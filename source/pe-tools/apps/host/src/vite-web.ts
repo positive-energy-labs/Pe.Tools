@@ -22,7 +22,10 @@ const viteHmrRoute = HttpRouter.add(
   Effect.succeed(Response.empty({ status: 426 })),
 );
 
-function runViteMiddleware(request: HttpServerRequest.HttpServerRequest, vite: ViteDevServer) {
+export function runViteMiddleware(
+  request: HttpServerRequest.HttpServerRequest,
+  vite: ViteDevServer,
+) {
   const nodeRequest = request as NodeBackedRequest;
   const nodeResponse = nodeRequest.resolvedResponse;
   // `source`/`resolvedResponse` are effect/unstable internals, not public contract — fail loudly

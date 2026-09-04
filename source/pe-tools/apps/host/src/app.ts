@@ -1,5 +1,10 @@
 import { Deferred, Effect, Layer, Stream } from "effect";
-import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
+import {
+  HttpRouter,
+  HttpServer,
+  type HttpServerRequest,
+  HttpServerResponse as Response,
+} from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -27,7 +32,7 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { viteWebLayer } from "./vite-web.ts";
+import { runViteMiddleware, viteWebLayer } from "./vite-web.ts";
 import type { ViteDevServer } from "vite-plus";
 
 export { resolveWebRoot } from "./static-spa.ts";
@@ -45,40 +50,49 @@ const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
 // bridgeCatalogError note, rather than a bare 503 — so discovery of e.g. settings workspaces
 // works with the host up and Revit closed. (host-typegen treats a bridge-op-less catalog
 // as "no session" and does not regenerate off the local ops alone.)
-const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    const sessionParam =
-      new URL(req.url, "http://localhost").searchParams.get("session") ?? undefined;
-    const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
-    if (sessionParam && sessionHeader && sessionParam !== sessionHeader)
-      return Response.jsonUnsafe(
-        { error: "Conflicting bridge session selectors in header and query." },
-        { status: 400 },
-      );
-    // Catalog reads never hard-fail on multi-session ambiguity: untargeted falls back to the
-    // snapshot session (most recently registered), same as other status displays.
-    const readSessionId =
-      sessionHeader ?? sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
-    const result = yield* Effect.result(bridge.invoke("host.ops.catalog", {}, readSessionId));
-    const bridgeOps =
-      result._tag === "Success" &&
-      Array.isArray((result.success as { operations?: unknown }).operations)
-        ? (result.success as { operations: unknown[] }).operations
-        : [];
-    const body: {
-      operations: unknown[];
-      bridgeSessionId?: string;
-      bridgeCatalogError?: string;
-    } = {
-      operations: [...bridgeOps, ...tsOnlyOperationCatalog],
-      bridgeSessionId: readSessionId,
-    };
-    if (result._tag === "Failure")
-      body.bridgeCatalogError = String(result.failure.message ?? result.failure);
-    return Response.jsonUnsafe(body);
-  }),
-);
+/** A browser navigation (Accept: text/html) to an API path belongs to the SPA, not the JSON. */
+type SpaFallback = (
+  req: HttpServerRequest.HttpServerRequest,
+) => Effect.Effect<Response.HttpServerResponse, unknown, never>;
+const isNavigation = (req: HttpServerRequest.HttpServerRequest) =>
+  (req.headers.accept ?? "").includes("text/html");
+
+const opsCatalogRoute = (spa: SpaFallback) =>
+  HttpRouter.add("GET", "/ops", (req) =>
+    Effect.gen(function* () {
+      if (isNavigation(req)) return yield* spa(req);
+      const bridge = yield* RevitBridge;
+      const sessionParam =
+        new URL(req.url, "http://localhost").searchParams.get("session") ?? undefined;
+      const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
+      if (sessionParam && sessionHeader && sessionParam !== sessionHeader)
+        return Response.jsonUnsafe(
+          { error: "Conflicting bridge session selectors in header and query." },
+          { status: 400 },
+        );
+      // Catalog reads never hard-fail on multi-session ambiguity: untargeted falls back to the
+      // snapshot session (most recently registered), same as other status displays.
+      const readSessionId =
+        sessionHeader ?? sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
+      const result = yield* Effect.result(bridge.invoke("host.ops.catalog", {}, readSessionId));
+      const bridgeOps =
+        result._tag === "Success" &&
+        Array.isArray((result.success as { operations?: unknown }).operations)
+          ? (result.success as { operations: unknown[] }).operations
+          : [];
+      const body: {
+        operations: unknown[];
+        bridgeSessionId?: string;
+        bridgeCatalogError?: string;
+      } = {
+        operations: [...bridgeOps, ...tsOnlyOperationCatalog],
+        bridgeSessionId: readSessionId,
+      };
+      if (result._tag === "Failure")
+        body.bridgeCatalogError = String(result.failure.message ?? result.failure);
+      return Response.jsonUnsafe(body);
+    }),
+  );
 
 // Live settings authoring schema, straight from the connected session. This is
 // the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
@@ -149,16 +163,18 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
   }),
 );
 
-export const NoRevitBoundaryLive = Layer.mergeAll(
-  HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
-  HttpRouter.add("*", "/call", emptyNotFound),
-  HttpRouter.add("*", "/ops", emptyNotFound),
-  HttpRouter.add("*", "/sessions", emptyNotFound),
-  HttpRouter.add("*", "/events", emptyNotFound),
-  HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
-  HttpRouter.add("*", "/host/install", emptyNotFound),
-  HttpRouter.add("*", "/host/update", emptyNotFound),
-);
+export const noRevitBoundary = (spa: SpaFallback) =>
+  Layer.mergeAll(
+    HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
+    HttpRouter.add("*", "/call", emptyNotFound),
+    HttpRouter.add("*", "/ops", (req) => (isNavigation(req) ? spa(req) : emptyNotFound)),
+    HttpRouter.add("*", "/sessions", emptyNotFound),
+    HttpRouter.add("*", "/events", emptyNotFound),
+    HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
+    HttpRouter.add("*", "/host/install", emptyNotFound),
+    HttpRouter.add("*", "/host/update", emptyNotFound),
+  );
+export const NoRevitBoundaryLive = noRevitBoundary(() => emptyNotFound);
 
 // One-click update starts the installed kernel without awaiting it: the add-in is staged for the
 // next Revit start, while the versioned host restarts onto the new pointer.
@@ -350,13 +366,16 @@ const InstallConvergeLive = Layer.effectDiscard(
   }),
 );
 
-function makeRevitComposition(includeInstallConverge: boolean) {
+function makeRevitComposition(
+  includeInstallConverge: boolean,
+  spa: SpaFallback = () => emptyNotFound,
+) {
   return {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
       bridgeWsRoute,
       bridgeEventsRoute,
-      opsCatalogRoute,
+      opsCatalogRoute(spa),
       settingsSchemaRoute,
       hostStatusRoute,
       hostUpdateRoute,
@@ -433,10 +452,18 @@ export function makeHttpLive(options: HttpLiveOptions) {
     MastraMountLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
   );
+  const vite = options.viteServer;
+  const webRoot = options.webRoot;
+  const spa: SpaFallback = vite
+    ? (req) => runViteMiddleware(req, vite)
+    : webRoot
+      ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
+      : () => emptyNotFound;
 
   if (options.capabilities.revit) {
     const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
       options.includeInstallConverge !== false,
+      spa,
     );
     return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
       Layer.provide(withMastraDegrade(options.mastraLayer)),
@@ -449,7 +476,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
   }
 
   return HttpRouter.serve(
-    Layer.mergeAll(NoRevitBoundaryLive, noRevitHostStatusRoute, CommonAppLive),
+    Layer.mergeAll(noRevitBoundary(spa), noRevitHostStatusRoute, CommonAppLive),
   ).pipe(
     // ClaimedServerLive binds and completes takeover before the tenant opens shared product state.
     // The tenant still receives that same HttpServer, and any runtime failure degrades only /pe/*.

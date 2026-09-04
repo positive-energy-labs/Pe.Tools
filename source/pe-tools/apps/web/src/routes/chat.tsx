@@ -30,7 +30,7 @@ export const chatSearchSchema = z.object({
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
   plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
-  scope: z.enum(["set", "dangling", "absent"]).optional().catch(undefined),
+  scope: z.enum(["set", "dangling", "absent", "ambiguous"]).optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
   source: z.enum(["live", "fixture"]).optional().catch(undefined),
 });

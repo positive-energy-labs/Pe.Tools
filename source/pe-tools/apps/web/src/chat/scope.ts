@@ -13,6 +13,37 @@ const scopeUrl = (threadId: string) =>
   peUrl(resolveWorkbenchConfig(), `/scope/${encodeURIComponent(threadId)}`);
 
 /**
+ * One `?watch` stream per thread, shared by every `useThreadScope` caller. The head, each route
+ * card, and the dock all read the Scope; a stream per caller once opened six long-lived
+ * connections to the host, which is Chrome's per-origin limit, and every later POST queued forever.
+ */
+const watchers = new Map<
+  string,
+  { source: EventSource; listeners: Set<(next: ScopeRevision) => void> }
+>();
+function watchScope(threadId: string, listener: (next: ScopeRevision) => void): () => void {
+  let entry = watchers.get(threadId);
+  if (!entry) {
+    const source = new EventSource(`${scopeUrl(threadId)}?watch`);
+    const listeners = new Set<(next: ScopeRevision) => void>();
+    source.onmessage = (event) => {
+      const next = scopeRevisionSchema.safeParse(JSON.parse(String(event.data)));
+      if (next.success) for (const notify of listeners) notify(next.data);
+    };
+    entry = { source, listeners };
+    watchers.set(threadId, entry);
+  }
+  entry.listeners.add(listener);
+  return () => {
+    entry.listeners.delete(listener);
+    if (entry.listeners.size === 0) {
+      entry.source.close();
+      watchers.delete(threadId);
+    }
+  };
+}
+
+/**
  * The thread's Scope as the host holds it: one GET (with `?watch` for the stream) and one PUT.
  * The head is the only writer; every tool call runs under the revision frozen at admission.
  */
@@ -32,12 +63,7 @@ export function useThreadScope(threadId: string, enabled = true) {
 
   useEffect(() => {
     if (!enabled) return;
-    const events = new EventSource(`${scopeUrl(threadId)}?watch`);
-    events.onmessage = (event) => {
-      const next = scopeRevisionSchema.safeParse(JSON.parse(String(event.data)));
-      if (next.success) queryClient.setQueryData(key, next.data);
-    };
-    return () => events.close();
+    return watchScope(threadId, (next) => queryClient.setQueryData(key, next));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, enabled, queryClient]);
 

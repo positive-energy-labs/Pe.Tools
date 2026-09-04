@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { expect, test, vi } from "vite-plus/test";
 import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
-import { makeHttpLive, NoRevitBoundaryLive } from "../src/app.ts";
+import { makeHttpLive, noRevitBoundary } from "../src/app.ts";
 import {
   NO_REVIT_ARGUMENT,
   resolveHostCapabilities,
@@ -78,7 +78,8 @@ test("no-Revit composition never touches contact factories", () => {
 
 test("no-Revit routes return empty 404 before the web fallback", async () => {
   const fallback = HttpRouter.add("*", "/*", Effect.succeed(Response.text("vite fallback")));
-  const web = HttpRouter.toWebHandler(Layer.mergeAll(NoRevitBoundaryLive, fallback), {
+  const boundary = noRevitBoundary(() => Effect.succeed(Response.text("spa index")));
+  const web = HttpRouter.toWebHandler(Layer.mergeAll(boundary, fallback), {
     disableLogger: true,
   });
 
@@ -103,6 +104,13 @@ test("no-Revit routes return empty 404 before the web fallback", async () => {
     );
     expect(websocket.status).toBe(404);
     expect(await websocket.text()).toBe("");
+
+    // A browser navigation to /ops belongs to the SPA on every lane; JSON callers keep the 404.
+    const navigation = await web.handler(
+      new Request("http://host.test/ops", { headers: { accept: "text/html,*/*" } }),
+    );
+    expect(navigation.status).toBe(200);
+    expect(await navigation.text()).toBe("spa index");
 
     const fallbackResponse = await web.handler(new Request("http://host.test/calls"));
     expect(fallbackResponse.status).toBe(200);
