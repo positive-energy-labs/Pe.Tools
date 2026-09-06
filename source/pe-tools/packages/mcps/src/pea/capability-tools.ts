@@ -47,9 +47,12 @@ function base(): string {
 }
 export const peaHostBaseUrl = base;
 
-/** What the Scope NAMES, as a target: the fallback when a receipt carries no resolved target. */
+/**
+ * The fallback when a receipt carries no resolved target: the document the Scope names, and no
+ * session, because a pin is what was typed, never what answered.
+ */
 const namedTarget = (scope: Scope): ResolvedTarget => ({
-  session: scopePin(scope),
+  session: null,
   document: scopeDocument(scope),
 });
 
@@ -156,19 +159,27 @@ async function runCapability(
   const catalog = await readCatalog(scope);
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
-  if (!row) return refuse(input.key, `Unknown capability '${input.key}'. Find keys with pe_find.`);
+  if (!row)
+    return refuse(
+      input.key,
+      scope,
+      revision,
+      `Unknown capability '${input.key}'. Find keys with pe_find.`,
+    );
   if (row.actor === "human")
     return refuse(
       row.key,
+      scope,
+      revision,
       `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
     );
   const refusal = gate(row);
-  if (refusal) return refuse(row.key, refusal);
+  if (refusal) return refuse(row.key, scope, revision, refusal);
   try {
     const outcome = await dispatch(row, input, scope, requestIdentity(context));
     return { key: row.key, kind: row.kind, revision, ...outcome };
   } catch (error) {
-    return refuse(row.key, message(error));
+    return refuse(row.key, scope, revision, message(error));
   }
 }
 
@@ -320,8 +331,9 @@ async function readCatalog(
   }
 }
 
-function refuse(key: string, content: string) {
-  return { isError: true, ok: false, key, content };
+/** A refusal still names the revision and the document it refused under, so the head can show it. */
+function refuse(key: string, scope: Scope, revision: number, content: string) {
+  return { isError: true, ok: false, key, content, revision, target: namedTarget(scope) };
 }
 
 function requestIdentity(context: unknown): string {
@@ -339,7 +351,7 @@ function requestIdentity(context: unknown): string {
 export const scopeSet = createTool({
   id: "scope_set",
   description:
-    "Propose the thread's Scope, what every following turn acts on. kind 'document' names a Revit document and the host derives its one holding session on every call (the normal choice); 'session' names an idle SDK session with nothing open; 'pinned' names both, only when two sessions hold the same document; 'none' clears it. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
+    "Propose the thread's Scope, what every following turn acts on. kind 'document' names a Revit document; the host derives its one holding session on every call. Add 'pin' (a session id) only when two sessions hold that document. kind 'none' clears it: every call takes what the fleet resolves. There is no session scope: to reach an idle Revit, stage an open with pe_do route:instances.open. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
   inputSchema: z.object({ scope: scopeSchema }),
   execute: async (input, context) => {
     const turn = turnOf(context);

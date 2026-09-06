@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { ResolvedTarget } from "@pe/agent-contracts";
 import {
   hostProcessIdentity,
   type HostOperationCostTier,
@@ -366,8 +367,6 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
     resolvedTarget: call.resolvedTarget,
   };
 });
-
-export type ResolvedTarget = { session: string | null; document: string | null };
 
 /** Every /call response names the target it ran against; absent headers mean no Revit session. */
 function readResolvedTarget(response: Response): ResolvedTarget | undefined {

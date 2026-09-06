@@ -22,6 +22,7 @@ export function Picker<K extends string>({
   runner,
   extra,
   inert,
+  derived,
 }: {
   product: Product<K>;
   link: Link<K>;
@@ -29,6 +30,8 @@ export function Picker<K extends string>({
   runner?: Runner<K>;
   extra?: (link: Link<K>) => React.ReactNode;
   inert?: boolean;
+  /** The bound value was reported by the world, not chosen by the user: drawn dashed (house law 8). */
+  derived?: boolean;
 }) {
   const chain = pathOf(product, link.key);
   const slot = `pick:${link.key}`;
@@ -58,6 +61,7 @@ export function Picker<K extends string>({
     feed?.note ?? null,
     p.complete ? null : `needs ${p.next!.needs}`,
     feed?.seam ? `seam — needs ${feed.seam.needs}` : null,
+    derived ? "derived from the world; pick to hold it" : null,
     lit ? "in flight" : null,
   ]
     .filter(Boolean)
@@ -91,7 +95,7 @@ export function Picker<K extends string>({
           style={{
             padding: 0,
             cursor: inert ? "not-allowed" : "pointer",
-            borderBottom: `1px solid ${token(caution ? "caution" : "ink")}`,
+            borderBottom: `1px ${derived ? "dashed" : "solid"} ${token(caution ? "caution" : "ink")}`,
             whiteSpace: "nowrap",
             animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
           }}

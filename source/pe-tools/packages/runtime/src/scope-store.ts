@@ -39,7 +39,10 @@ export class ScopeStore {
       threadId: this.resourceId,
       type: scopeType(threadId),
     });
-    return headSchema.safeParse(raw).data ?? { scope: emptyScope, revision: 0 };
+    const parsed = headSchema.safeParse(raw);
+    if (raw != null && !parsed.success)
+      console.warn(`scope ${threadId}: stored head no longer parses, reading as none`, raw);
+    return parsed.data ?? { scope: emptyScope, revision: 0 };
   }
 
   /** Every write says what it read: a stale `expectedRevision` returns the current Head instead. */

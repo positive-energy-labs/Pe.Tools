@@ -15,7 +15,7 @@ import {
 import { createPeaRuntime, peaModelAllowlist, peaModels } from "../src/pea-runtime.ts";
 
 const runtimeTestTimeout = 60_000;
-const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
+const defaultPeaAgentModelId = "anthropic/claude-opus-5";
 const expectedPermissionRules = {
   "read-only": {
     categories: { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
@@ -557,8 +557,8 @@ test(
       const models = [
         {
           id: defaultPeaAgentModelId,
-          provider: "openai",
-          modelName: "gpt-5.6-terra",
+          provider: "anthropic",
+          modelName: "claude-opus-5",
           hasApiKey: true,
           useCount: 0,
         },
@@ -584,7 +584,7 @@ test(
 
       expect(runtime.session.model.get()).toBe(defaultPeaAgentModelId);
       setContextModel(defaultPeaAgentModelId);
-      expect((await agent.getModel({ requestContext })).modelId).toBe("gpt-5.6-terra");
+      expect((await agent.getModel({ requestContext })).modelId).toBe("claude-opus-5");
       runtime.session.model.set({ modelId: "unknown/model" });
       setContextModel("unknown/model");
       await expect(agent.getModel({ requestContext })).rejects.toThrow(

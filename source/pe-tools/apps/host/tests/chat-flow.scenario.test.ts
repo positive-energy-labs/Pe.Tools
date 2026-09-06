@@ -340,7 +340,8 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
       .toBe("r1");
-    expect(await page.getByTestId("tool-target").last().innerText()).toContain(scopeSession);
+    // A route write touches no Revit: the card names the Scope's document and no session.
+    expect(await page.getByTestId("tool-target").last().innerText()).toContain(scopeDocument);
     await expect
       .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
       .toContain("start scenario in Revit 2026");

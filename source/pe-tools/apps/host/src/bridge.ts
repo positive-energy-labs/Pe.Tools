@@ -239,7 +239,8 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     const address = (pinned ? pinned[2]! : selector.slice("doc:".length)).trim();
     const pin = pinned?.[1]!.trim();
     const holders = sessions.filter((s) => s.documents.includes(address));
-    const held = pin ? holders.find((s) => s.sdkSessionId === pin) : undefined;
+    // An observed Revit (no pe-revit receipt) has no SDK id; its bridge id is its name on the head.
+    const held = pin ? holders.find((s) => (s.sdkSessionId ?? s.sessionId) === pin) : undefined;
     if (held) return { _tag: "found", session: held };
     if (holders.length === 1) return { _tag: "found", session: holders[0] };
     if (holders.length === 0)

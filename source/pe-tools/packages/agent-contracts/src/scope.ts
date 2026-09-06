@@ -142,7 +142,7 @@ export const putScopeResultSchema = z.discriminatedUnion("why", [
   /** Someone wrote first; `head` is current, re-read and decide again. */
   z.object({ ok: z.literal(false), why: z.literal("stale"), head: headSchema }),
   /** Pea is mid-turn and the write did not come from that turn; wait or stop it. */
-  z.object({ ok: z.literal(false), why: z.literal("in-turn"), turn: z.uuid() }),
+  z.object({ ok: z.literal(false), why: z.literal("in-turn") }),
 ]);
 export type PutScopeResult = z.infer<typeof putScopeResultSchema>;
 

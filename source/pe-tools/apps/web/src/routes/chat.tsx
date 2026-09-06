@@ -13,7 +13,7 @@ import { FixtureWorkbenchProvider } from "#/workbench/fixture";
  *            state)
  *   mode   — chat | trace | world view depth (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
- *   scope  — fixture only: which Scope head state to draw (set | dangling | absent).
+ *   scope  — fixture only: which Scope resolution the to-line draws (resolved | unheld | ambiguous | unchosen).
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  */

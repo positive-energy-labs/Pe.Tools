@@ -38,7 +38,7 @@ The pea product tools keep narrow repo-specific context because this environment
 - A Revit-backed test can own an ephemeral process or attach to an existing session; those are not interchangeable.
 - Source-linked `pea`, installed `pea`, dev `Pe.Host`, and installed `Pe.Host` are different runtime roots.
 
-The SDK encodes custody, session lifecycle, rung selection, materialization, and explicit proof/does-not-prove language. The pea MCP tools add the product context around that: read-only orientation (`pe_status`), bounded Pea/host/Revit logs (`pe_logs`), product probes, and `pea --prompt` for black-box Pea feedback.
+The SDK encodes custody, session lifecycle, rung selection, materialization, and explicit proof/does-not-prove language. The pea tools add the product context around that: `pe_find` ranks one capability catalog, `pe_read` runs a non-mutating row, `pe_do` runs any row under approval, and `pea --prompt` gives black-box Pea feedback.
 
 That does not make `BUILD.md` a tool manual. The durable decision is: **when the claim depends on current Revit state, drive it with `pe-revit session` and `pe-revit test` instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands; use the pea tools only when Pea status/logs or product probes should accompany the proof.** For how those verbs behave — flags, refusal codes, the resolver's five states — run `pe-revit guide session` and `pe-revit guide test`. This doc never restates them: a repo copy of an SDK flag is a cache that rots.
 
@@ -453,7 +453,7 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                  |
 | Revit-backed test proof           | `dotnet tool run pe-revit -- test --project <P> --filter "Name~..." --timeout-seconds 900 --json`                                |
 | Which rung, and why               | `dotnet tool run pe-revit -- test --plan --project <P> --json`                                                                   |
-| Attached proof                    | `dotnet tool run pe-revit -- test --project <P> --attach [--id <name>]`; add pea product tools (`pe_status`, `pe_logs`, `pea --prompt`) when Pea status/logs or product probes should accompany the proof. |
+| Attached proof                    | `dotnet tool run pe-revit -- test --project <P> --attach [--id <name>]`; add the pea doors (`pe_find`, `pe_read`, `pea --prompt`) when Pea's view of the fleet or product probes should accompany the proof. |
 | Apply your latest edit            | `dotnet tool run pe-revit -- session hr --id <name>`                                                                             |
 | What Revit is running             | `dotnet tool run pe-revit -- session list --json`                                                                                |
 | Durable installed-lane session    | `dotnet tool run pe-revit -- session start --year 25 --json`                                                                     |

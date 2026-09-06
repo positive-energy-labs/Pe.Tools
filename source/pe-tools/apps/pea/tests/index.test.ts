@@ -139,7 +139,7 @@ test(
 
     try {
       runtime = await createPeaRuntime({ workspaceRoot });
-      expect(runtime.session?.model.get()).toBe("openai/gpt-5.6-terra");
+      expect(runtime.session?.model.get()).toBe("anthropic/claude-opus-5");
       expect(runtime.session?.state.get()).toEqual(
         expect.objectContaining({ yolo: false, thinkingLevel: "high" }),
       );

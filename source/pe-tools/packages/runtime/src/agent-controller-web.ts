@@ -160,8 +160,8 @@ export async function buildAgentControllerApp(
     const session = await openSession(threadId);
     const admitted = runtime.scopes.admittedTurn(threadId);
     const result: PutScopeResult =
-      session.run.isRunning() && admitted !== undefined && parsed.data.turn !== admitted
-        ? { ok: false, why: "in-turn", turn: admitted }
+      session.run.isRunning() && parsed.data.turn !== admitted
+        ? { ok: false, why: "in-turn" }
         : await runtime.scopes.set(threadId, parsed.data.scope, parsed.data.expectedRevision);
     return c.json(result, result.ok ? 200 : 409);
   });
@@ -295,6 +295,7 @@ function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | 
     if (pin || doc || workspaceId.length > 200) return invalid("Provide exactly one route scope");
     return { workspaceId };
   }
+  if (pin && !doc) return invalid("invalid route scope: pin needs doc");
   const parsed = scopeSchema.safeParse(
     doc ? { kind: "document", document: doc, ...(pin ? { pin } : {}) } : emptyScope,
   );

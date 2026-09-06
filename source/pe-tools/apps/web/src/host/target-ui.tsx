@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { selectorLabel, type Lane, type TargetResolution } from "#/host/target";
+import type { Lane } from "#/host/target";
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
@@ -27,39 +27,6 @@ export function laneVar(lane: Lane): string {
 }
 
 type ChipTone = "muted" | "implicit" | "pinned" | "ambiguous" | "dangling";
-
-export function chipDescriptor(r: TargetResolution): {
-  tone: ChipTone;
-  text: string;
-  detail: string;
-} {
-  switch (r.kind) {
-    case "resolved": {
-      const doc = r.session.activeDocumentTitle ?? `Revit ${r.session.processId}`;
-      return r.mode === "implicit"
-        ? { tone: "implicit", text: `auto · ${doc}`, detail: "sole session — inferred, not chosen" }
-        : {
-            tone: "pinned",
-            text: `${selectorLabel(r.selector)} · ${doc}`,
-            detail: "pinned by you",
-          };
-    }
-    case "ambiguous":
-      return {
-        tone: "ambiguous",
-        text: `${r.candidates.length} sessions — pick`,
-        detail: "no pin and more than one session; untargeted calls would 409",
-      };
-    case "unresolved":
-      return r.reason === "no-sessions"
-        ? { tone: "muted", text: "no revit", detail: "no sessions connected" }
-        : {
-            tone: "dangling",
-            text: `${selectorLabel(r.selector)} · offline`,
-            detail: "pin kept; its process is gone",
-          };
-  }
-}
 
 export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) {
   const color =
@@ -91,13 +58,4 @@ export function LaneBadge({ lane }: { lane: Lane }) {
       {lane.toUpperCase()}
     </span>
   );
-}
-
-/** One-line mono readout of a resolution — the inspector row. */
-export function resolutionReadout(r: TargetResolution): string {
-  const sel = `selector=${JSON.stringify(r.selector)}`;
-  if (r.kind === "resolved")
-    return `${sel} → resolved/${r.mode} · session ${r.session.sessionId} · pid ${r.session.processId} · doc ${r.session.activeDocumentTitle ?? "∅"}`;
-  if (r.kind === "ambiguous") return `${sel} → ambiguous · ${r.candidates.length} candidates`;
-  return `${sel} → unresolved · ${r.reason}`;
 }

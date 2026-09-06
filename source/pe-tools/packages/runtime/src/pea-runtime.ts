@@ -43,7 +43,8 @@ import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
 export * from "./pea-instructions.ts";
 
-const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
+// ponytail: this constant is the model switch; --model-id overrides per run. Anthropic while Codex quota is out.
+const defaultPeaAgentModelId = "anthropic/claude-opus-5";
 
 /** The whole model world Pea offers, in display order. Edit this list to change the picker. */
 export const peaModelAllowlist = [

@@ -194,10 +194,11 @@ test("the doors ride the host under the turn's Scope and name the revision and r
 
     const read = (await run(peRead, { key: "route:instances", timeoutSeconds: 30 })) as {
       ok: boolean;
-      target: { session: string };
+      target: { session: string | null; document: string | null };
     };
     expect(read.ok).toBe(true);
-    expect(read.target.session).toBe("dev");
+    // A route read touches no Revit: the document is what the Scope names, the session is nobody.
+    expect(read.target).toEqual({ session: null, document: "C:\\Models\\A.rvt" });
     expect(calls.at(-1)?.url.pathname).toBe("/pe/route-state/instances");
     expect(calls.at(-1)?.url.search).toBe("?doc=C%3A%5CModels%5CA.rvt&pin=dev");
 

@@ -16,7 +16,8 @@ import { SidePane } from "#/components/lang/side-pane";
 import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
-import { ChatSentence } from "#/chat/chat-sentence";
+import { ScopeLine } from "#/chat/scope-line";
+import { RouteHead } from "#/targeting/head";
 import { WorldBadge } from "#/chat/world-badge";
 import "#/workbench/lens.css";
 
@@ -141,9 +142,9 @@ function Surface({
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
         <header className="hairline-b block h-auto px-5 py-0 pb-2">
-          <ChatSentence
+          <RouteHead
             name={threadLabel}
-            live={live}
+            instrumentLive={live}
             aside={
               <>
                 {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
@@ -204,11 +205,14 @@ function Surface({
                   <Composer
                     setMode={setMode}
                     topBar={
-                      <ContextRibbon
-                        breakdown={breakdown}
-                        cache={cache}
-                        onOpenWorld={() => setMode("world")}
-                      />
+                      <>
+                        <ScopeLine live={live} />
+                        <ContextRibbon
+                          breakdown={breakdown}
+                          cache={cache}
+                          onOpenWorld={() => setMode("world")}
+                        />
+                      </>
                     }
                   />
                 </div>

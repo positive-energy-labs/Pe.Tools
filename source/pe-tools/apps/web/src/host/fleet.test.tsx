@@ -20,9 +20,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-vi.mock("#/workbench/provider", () => ({ useWorkbench: () => ({ revit: false }) }));
+vi.mock("#/workbench/provider", () => ({
+  useWorkbench: () => ({ revit: false, currentThreadId: "t", isRunning: false, chat: { messages: [], display: {} } }),
+}));
 
-import { ChatSentence } from "#/chat/chat-sentence";
+import { ScopeLine } from "#/chat/scope-line";
 import { fuseFleet, useFleet } from "./fleet";
 import type { SessionFacts } from "./target";
 
@@ -267,9 +269,7 @@ test("mounted chat makes no session or bridge requests without Revit capability"
 
   try {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      createElement(QueryClientProvider, { client }, createElement(ChatSentence, { name: "Chat" })),
-    );
+    render(createElement(QueryClientProvider, { client }, createElement(ScopeLine)));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requests.filter((request) => /\/(sessions|call)(?:\?|$)/.test(request))).toEqual([]);
   } finally {

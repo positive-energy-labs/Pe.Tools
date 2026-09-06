@@ -113,8 +113,9 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
     captureHostOp(op, { ok: true });
     // Every /call response names the target it actually ran against, so a tool card can show
     // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
-    const view = yield* bridge.snapshot(bridgeSessionId);
-    return Response.jsonUnsafe(result ?? null, { headers: resolvedTargetHeaders(view) });
+    // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
+    const headers = op.tsOnly ? {} : resolvedTargetHeaders(yield* bridge.snapshot(bridgeSessionId));
+    return Response.jsonUnsafe(result ?? null, { headers });
   }).pipe(
     Effect.catch((error) => {
       if (op) captureHostOp(op, { ok: false, problem: toProblem(error) });

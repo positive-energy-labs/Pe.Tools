@@ -34,7 +34,7 @@ Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is
 - Custody decides what a verb may do, and the SDK resolver enforces it before the verb runs: `controlled` (pe-revit holds the session receipt) permits the full lifecycle and document operations, `observed` permits status and document reads only. Never re-implement that guard here.
 - Read `pe-revit guide session|test|install` for mechanics; repo docs never restate them. The vendored `pe-revit-contract.ts` is the consumer contract — never hand-sync a selector grammar or argv shape beside it.
 - Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
-- Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
+- Use Pea's doors (`pe_find`, `pe_read`, `pe_do`, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
 
 ### Session Discipline
 

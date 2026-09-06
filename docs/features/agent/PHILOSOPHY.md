@@ -39,7 +39,7 @@ Good context lets the model answer these questions without spending its reasonin
 
 If a tool, operation, skill, or prompt leaves these questions implicit, it is incomplete. Do not compensate by asking the model to be more careful. Fix the context surface.
 
-For **Pea**, host operations and product workflows must expose important secondary and tertiary relationships, not just flat object lists. `pe_status`, automatic document context injection, workspace roots, loaded-family catalogs, schema summaries, and generated reference docs are examples of context surfaces that make the Revit world smaller and more legible.
+For **Pea**, host operations and product workflows must expose important secondary and tertiary relationships, not just flat object lists. `pe_find` over one capability catalog, automatic document context injection, workspace roots, loaded-family catalogs, schema summaries, and generated reference docs are examples of context surfaces that make the Revit world smaller and more legible.
 
 For **Peco**, the priority is removing execution-loop and source-navigation friction. The agent should receive clear diagnostics, freshness verdicts, proof-lane guidance, focused repo skills, and enough source structure to avoid guessing where behavior belongs.
 
@@ -58,7 +58,7 @@ Examples:
 
 - `task_write`, `task_update`, `task_complete`, and `task_check` belong in system/tool guidance because they are harness state-management protocol.
 - `view`, `search_content`, `find_files`, `execute_command`, and edit tools belong there because they define the basic control surface for source work.
-- `host_operation_search` may belong there as a generic discovery door into a generated operation universe.
+- `pe_find` is the one discovery door into the generated capability catalog (host ops, route documents, pods, skills).
 - A specific operation like `get_revit_schedules` should not live in the system prompt (nor anywhere probably). Its description belongs beside the operation or in a generated catalog, where routing can stay local and update with the capability.
 
 A prompt is not bad because it contains tool specifics. It is bad when it spends scarce always-loaded context on judgment/action detail that should be discoverable, typed, or harness-owned.

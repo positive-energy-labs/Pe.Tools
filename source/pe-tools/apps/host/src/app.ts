@@ -174,7 +174,6 @@ export const noRevitBoundary = (spa: SpaFallback) =>
     HttpRouter.add("*", "/host/install", emptyNotFound),
     HttpRouter.add("*", "/host/update", emptyNotFound),
   );
-export const NoRevitBoundaryLive = noRevitBoundary(() => emptyNotFound);
 
 // One-click update starts the installed kernel without awaiting it: the add-in is staged for the
 // next Revit start, while the versioned host restarts onto the new pointer.
