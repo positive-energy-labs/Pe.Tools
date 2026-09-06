@@ -15,3 +15,5 @@ export * from "./schedule-grid.ts";
 export * from "./world.ts";
 export * from "./thread.ts";
 export * from "./turn.ts";
+export * from "./scope.ts";
+export * from "./instances.ts";

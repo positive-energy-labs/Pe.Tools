@@ -26,6 +26,7 @@ export interface RouteStateCommandSpec {
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
+  scope?: "document" | "workspace";
   /** Route name, e.g. `family-types` — the URL segment transport adapters key on. */
   route: string;
   /** Human-facing discovery metadata; adapters should not duplicate this. */
@@ -40,6 +41,12 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   agentWriteMask: string[][];
   commands: Record<string, RouteStateCommandSpec>;
 }
+
+export type RouteScope =
+  | { documentAddress: Address; workspaceId?: never }
+  | { workspaceId: string; documentAddress?: never };
+export const routeScopeKey = (scope: RouteScope): string =>
+  scope.workspaceId !== undefined ? `workspace:${scope.workspaceId}` : scope.documentAddress;
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =

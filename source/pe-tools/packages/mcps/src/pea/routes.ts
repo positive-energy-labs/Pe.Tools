@@ -1,3 +1,5 @@
+import { instancesRouteState } from "@pe/agent-contracts";
+import { createInstancesCommandHandlers } from "./instances-commands.ts";
 /**
  * The server-side route registry — the ONE place a new collaborative route is
  * wired (spec + command handlers). The host composition root registers
@@ -45,6 +47,7 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string } = {},
 ): RouteRegistration[] {
   return [
+    entry(instancesRouteState, createInstancesCommandHandlers(options)),
     entry(familiesRouteState, createFamiliesCommandHandlers(options)),
     entry(familyRouteState, createFamilyCommandHandlers(options)),
     entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),

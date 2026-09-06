@@ -1,3 +1,5 @@
+import { instancesRouteState } from "@pe/agent-contracts";
+import { InstancesPage } from "#/instances/route";
 import type { ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -27,6 +29,7 @@ type PaneProps = { store: ChatPageStore };
 type Pane = (props: PaneProps) => ReactNode;
 
 const routePaneSpecs = {
+  instances: instancesRouteState,
   family: familyRouteState,
   families: familiesRouteState,
   settings: settingsRouteState,
@@ -47,6 +50,8 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 }
 
 function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType> }) {
+  if (spec.scope === "workspace")
+    return <InstancesPage target={chat.search.target ?? ""} setTarget={() => {}} />;
   return (
     <RouteDocument>
       {(at) => <AddressedRoutePaneOwner chat={chat} spec={spec} documentAddress={at} />}

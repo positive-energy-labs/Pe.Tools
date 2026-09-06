@@ -1,3 +1,4 @@
+import { routeScopeKey } from "@pe/agent-contracts";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
 import { MastraServer } from "@mastra/hono";
@@ -226,6 +227,9 @@ export async function buildAgentControllerApp(
 }
 
 function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | Response {
+  const workspaceId = c.req.query("workspace")?.trim();
+  if (workspaceId && !c.req.query("doc") && workspaceId.length <= 200) return { workspaceId };
+  if (workspaceId) return c.json({ error: "Provide exactly one route scope" }, 400);
   const parsed = addressSchema.safeParse(c.req.query("doc")?.trim());
   if (parsed.success) return { documentAddress: parsed.data };
   return c.json(
@@ -252,7 +256,7 @@ function streamRouteWorkspace(
       wake = undefined;
     };
     const unsubscribe = workspace.subscribe((event) => {
-      if (event.route === route && event.scope.documentAddress === scope.documentAddress) notify();
+      if (event.route === route && routeScopeKey(event.scope) === routeScopeKey(scope)) notify();
     });
     stream.onAbort(() => {
       aborted = true;

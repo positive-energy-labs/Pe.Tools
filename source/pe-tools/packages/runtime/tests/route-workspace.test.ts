@@ -153,6 +153,7 @@ test("document-scoped route documents are isolated and survive module recreation
   expect(second.list()).toEqual([
     {
       route: "test-route",
+      scope: "document",
       title: "Test Route",
       description: "A test collaborative route.",
     },

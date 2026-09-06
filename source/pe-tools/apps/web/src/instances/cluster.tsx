@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { DoctorResult, Envelope, RecentDocument } from "@pe/host-contracts/pe-revit-contract";
+import { instancesRouteState, type InstancesDocument } from "@pe/agent-contracts";
+import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
+import { useSearch } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
@@ -11,7 +14,7 @@ import type { Column } from "#/components/master-table/model";
 import type { WorldFacts } from "#/host/fleet";
 import { HOST_QUERY_KEY } from "#/host/queries";
 import { timeAgo } from "#/lib/utils";
-import { docSelectorOf, documentTrunk, worldTrunk } from "#/targeting/world";
+import { docSelectorOf, worldTrunk } from "#/targeting/world";
 import type { InstancesFleet } from "#/instances/workspace";
 import { YEARS, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#/instances/route";
 
@@ -45,7 +48,7 @@ type DocFact = {
 
 type Staged =
   | { readonly kind: "open"; readonly doc: DocFact; readonly world: WorldFacts }
-  | { readonly kind: "start"; readonly doc: DocFact; readonly year: string };
+  | { readonly kind: "start"; readonly doc?: DocFact; readonly year: string };
 
 /** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
 export const sessionIdOf = (name: string) =>
@@ -55,44 +58,6 @@ export const sessionIdOf = (name: string) =>
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
-
-/**
- * Installed Revit years from the SDK's own census: `GET /doctor` relays `pe-revit doctor`
- * (beta.145 `result.revitYears`). `YEARS` is only the fallback while the read is in flight or
- * the host cannot answer.
- */
-function useInstalledYears(enabled: boolean) {
-  const query = useQuery({
-    queryKey: ["doctor-revit-years"],
-    queryFn: async () => {
-      const body = (await (await fetch("/doctor")).json()) as Envelope<DoctorResult> | null;
-      const years = body?.result?.revitYears;
-      if (!years || years.length === 0) throw Error("doctor reported no installed Revit years");
-      return years.map((year) => year.slice(-2));
-    },
-    enabled,
-    staleTime: Infinity,
-    retry: false,
-  });
-  return query.data ?? YEARS;
-}
-
-function useRecentsByYear(enabled: boolean, years: readonly string[]) {
-  const query = useQuery({
-    queryKey: ["doc-recents-all", years.join(".")],
-    queryFn: async () => {
-      const byYear = await Promise.all(years.map((year) => documentTrunk.recents(year)));
-      return years.map((year, index) => ({ year, recents: byYear[index]! }));
-    },
-    enabled,
-    staleTime: 30_000,
-  });
-  return {
-    buckets: query.data ?? [],
-    loading: enabled && query.isLoading,
-    error: query.error as Error | null,
-  };
-}
 
 /** Merge recents with what live worlds are actually showing; a shown document wins its identity. */
 function mergeDocFacts(
@@ -119,7 +84,7 @@ function mergeDocFacts(
     if (!title) continue;
     const path = world.session?.activeDocumentId ?? title;
     const existing = [...byId.values()].find(
-      (candidate) => candidate.title === title || candidate.path === path,
+      (candidate) => candidate.path === path || candidate.id === path,
     );
     if (existing) byId.set(existing.id, { ...existing, openIn: [...existing.openIn, world.id] });
     else
@@ -136,13 +101,51 @@ function mergeDocFacts(
   return [...byId.values()];
 }
 
-export function InstancesCluster({
+type ClusterProps = {
+  fleet: InstancesFleet;
+  target: string;
+  setTarget: (target: string) => void;
+  source?: "fixture";
+  onEvent?: (event: ClusterEvent) => void;
+};
+
+export function InstancesCluster(props: ClusterProps) {
+  const search = useSearch({ strict: false }) as { thread?: string };
+  return props.source === "fixture" ? (
+    <InstancesClusterView {...props} />
+  ) : (
+    <LiveInstancesCluster
+      key={search.thread ?? "instances"}
+      {...props}
+      workspaceId={search.thread ?? "instances"}
+    />
+  );
+}
+
+function LiveInstancesCluster({ workspaceId, ...props }: ClusterProps & { workspaceId: string }) {
+  const route = useRouteState(instancesRouteState, { workspaceId });
+  useEffect(() => {
+    if (route.hydrated && !route.slice?.observation) void route.command("refresh");
+  }, [route.hydrated]);
+  if (!route.hydrated)
+    return (
+      <OutcomeLine
+        kind={route.failure ? "error" : "busy"}
+        label={route.failure?.message ?? "reading instances workspace"}
+      />
+    );
+  return <InstancesClusterView {...props} route={route} />;
+}
+
+function InstancesClusterView({
   fleet,
   target,
   setTarget,
   source,
   onEvent,
+  route,
 }: {
+  route?: RouteStateHandle<InstancesDocument>;
   fleet: InstancesFleet;
   target: string;
   setTarget: (target: string) => void;
@@ -155,20 +158,105 @@ export function InstancesCluster({
   // `session list --all` (useFleet({all:true})) includes the graveyard; the table shows only
   // worlds that still exist as processes or receipts — gone rows serve the census, not the picker.
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
-  const years = useInstalledYears(source !== "fixture");
-  const { buckets, loading: recentsLoading } = useRecentsByYear(source !== "fixture", years);
+  const observation = route?.slice?.observation as {
+    years: string[];
+    recents: { year: string; recents: RecentDocument[] }[];
+  } | null;
+  const years = observation?.years.map((year) => year.slice(-2)) ?? YEARS;
+  const buckets =
+    observation?.recents.map((bucket) => ({
+      ...bucket,
+      recents: bucket.recents ?? [],
+      year: bucket.year.slice(-2),
+    })) ?? [];
+  const recentsLoading = route?.busy === "refresh";
   const documents = useMemo(() => mergeDocFacts(buckets, liveWorlds), [buckets, liveWorlds]);
-  const allRecents = useMemo(() => buckets.flatMap((bucket) => bucket.recents), [buckets]);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
-  const [staged, setStaged] = useState<Staged | null>(null);
-  const [sessionName, setSessionName] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<{
+  const [localStaged, setLocalStaged] = useState<Staged | null>(null);
+  const intent = route?.slice;
+  target = intent?.selectedSession ?? target;
+  const originalSetTarget = setTarget;
+  setTarget = (next) => {
+    if (route)
+      void route.apply([
+        { path: ["selectedSession"], value: next || null },
+        { path: ["staged"], value: null },
+      ]);
+    else originalSetTarget(next);
+  };
+  const stored = intent?.staged;
+  const storedDoc = stored?.document
+    ? (documents.find((d) => d.selector === stored.document) ?? {
+        id: stored.document,
+        title: stored.document,
+        path: stored.document,
+        selector: stored.document,
+        year: stored.kind === "start" ? stored.year.slice(-2) : null,
+        cloud: stored.document.startsWith("cld:"),
+        openIn: [],
+      })
+    : null;
+  const storedWorld =
+    stored?.kind === "open" ? worldTrunk.resolve(liveWorlds, sessions, stored.session) : undefined;
+  const staged: Staged | null = route
+    ? stored
+      ? stored.kind === "start"
+        ? { kind: "start", doc: storedDoc ?? undefined, year: stored.year.slice(-2) }
+        : storedWorld && storedDoc
+          ? { kind: "open", doc: storedDoc, world: storedWorld }
+          : null
+      : null
+    : localStaged;
+  const setStaged = (next: Staged | null) => {
+    if (!route) {
+      setLocalStaged(next);
+      return;
+    }
+    void route.apply([
+      {
+        path: ["staged"],
+        value:
+          next === null
+            ? null
+            : next.kind === "open"
+              ? {
+                  kind: "open",
+                  session: worldTrunk.option(next.world, sessions).id,
+                  document: next.doc.selector,
+                }
+              : {
+                  kind: "start",
+                  year: `20${next.year}`,
+                  name: sessionName,
+                  document: next.doc?.selector,
+                },
+      },
+    ]);
+  };
+  const [localSessionName, setLocalSessionName] = useState("");
+  const sessionName = stored?.kind === "start" ? stored.name : localSessionName;
+  const setSessionName = (name: string) => {
+    setLocalSessionName(sessionIdOf(name));
+    if (route && stored?.kind === "start")
+      void route.apply([{ path: ["staged", "name"], value: sessionIdOf(name) }]);
+  };
+  const busy = route?.busy ?? null;
+  const [localOutcome, setOutcome] = useState<{
     kind: OutcomeKind;
     text: string;
     says?: string;
   } | null>(null);
+
+  const outcome =
+    localOutcome ??
+    (intent?.outcome
+      ? {
+          kind: "receipt" as const,
+          text: `${intent.outcome.action} answered`,
+          says: undefined,
+        }
+      : null);
 
   const pickedWorld = worldTrunk.resolve(liveWorlds, sessions, target);
   const pickedYear = pickedWorld?.row?.year != null ? String(pickedWorld.row.year).slice(-2) : null;
@@ -190,44 +278,28 @@ export function InstancesCluster({
     if (kind !== "error") onEvent?.({ atMs: Date.now(), label: text });
   };
   const finish = () => {
-    setBusy(null);
     void queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
   };
-  const lifecycle = worldTrunk.verbs<"world">({
-    // ponytail: start here is only the staged-document start; lane is pinned installed.
-    start: () => ({
-      lane: "installed",
-      year: staged?.kind === "start" ? staged.year : (years.at(-1) ?? "25"),
-      // The staged document rides the start in the SDK's own `--doc` grammar (local path or
-      // exact `cld://` identity — kaitpw ruling 2026-09-01: opens behave exactly like the
-      // Revit UI, no clone/detach policy here, ever).
-      // `keep` is the least destructive cloud conflict answer; an `ask` policy that defers to
-      // the human is proposed on the SDK (kaitpw 2026-09-01) and supersedes this when it lands.
-      ...(staged?.kind === "start"
-        ? {
-            doc: staged.doc.selector,
-            ...(staged.doc.cloud ? { conflictPolicy: "keep" as const } : {}),
-          }
-        : {}),
-      ...(sessionIdOf(sessionName) ? { id: sessionIdOf(sessionName) } : {}),
-    }),
-    started: (action) => {
-      setBusy(action);
-      setOutcome(null);
-    },
-    settled: (receipt) => {
+  const runCommand = async (command: "start" | "open" | "restart" | "stop") => {
+    if (!route) return;
+    const result = await route.command(
+      command,
+      command === "stop" ? { force: pickedWorld?.phase === "unresponsive" } : {},
+    );
+    if (!result.ok) settle("error", result.error, result.hint);
+    else {
+      const receipt = result.result as {
+        diagnostics?: { detail?: string; code?: string }[];
+        result?: { state?: string };
+      };
       settle(
-        receipt.diagnostics.length === 0 ? "receipt" : "advisory",
-        receipt.diagnostics[0]?.detail ?? worldTrunk.describe(receipt),
-        receipt.nextSteps.length ? receipt.nextSteps.join(" · ") : undefined,
+        receipt.diagnostics?.length ? "advisory" : "receipt",
+        `${command} · ${receipt.result?.state ?? "answered"}`,
+        receipt.diagnostics?.map((d) => d.detail ?? d.code).join(" · "),
       );
-    },
-    failed: (action, caught) =>
-      settle("error", caught instanceof Error ? caught.message : `${action} failed`),
-    finished: finish,
-  });
-  const worldFeed = { world: worldTrunk.feed(fleet) };
-  const boundWorld = { world: target || null };
+    }
+    finish();
+  };
   const fixtureRefusal = source === "fixture" ? "fixture worlds are read-only" : null;
 
   // Staging: with a picked world the open targets THAT world; without one the document brings its
@@ -235,7 +307,7 @@ export function InstancesCluster({
   // a new session of its year.
   const stageDoc = (document: DocFact) => {
     setOutcome(null);
-    if (staged?.doc.id === document.id) {
+    if (staged?.doc?.id === document.id) {
       setStaged(null);
       return;
     }
@@ -269,28 +341,6 @@ export function InstancesCluster({
       : staged?.kind === "open" && !staged.world.session
         ? "this world has no connected session"
         : null);
-
-  const commitOpen = async (stagedOpen: Extract<Staged, { kind: "open" }>) => {
-    setBusy("open");
-    setOutcome(null);
-    try {
-      const session = stagedOpen.world.session!;
-      const said = stagedOpen.doc.cloud
-        ? await documentTrunk.pick(session, stagedOpen.doc.id, allRecents)
-        : await documentTrunk.activate(session, stagedOpen.doc.path);
-      settle("receipt", said);
-      setStaged(null);
-    } catch (caught) {
-      settle("error", caught instanceof Error ? caught.message : "open failed");
-    } finally {
-      finish();
-    }
-  };
-
-  const runLifecycle = async (verb: typeof lifecycle.start) => {
-    await verb.run(boundWorld, worldFeed);
-    if (verb.key === "start") setStaged(null);
-  };
 
   const fleetColumns = useMemo<Column<WorldFacts>[]>(
     () => [
@@ -398,6 +448,29 @@ export function InstancesCluster({
 
   return (
     <div className="flex flex-col gap-5" data-testid="instances-cluster">
+      {route?.outcomeUnknown ? (
+        <div>
+          <OutcomeLine
+            kind="advisory"
+            label="Previous operation outcome is uncertain. Inspect Revit and its SDK receipts before continuing."
+          />
+          <VerbButton
+            tone="act"
+            label="I inspected the outcome"
+            reason="acknowledge the uncertain operation"
+            onClick={() => void route.command("recover", { inspected: true })}
+          />
+        </div>
+      ) : null}
+      {route ? (
+        <VerbButton
+          tone="act"
+          label="refresh"
+          reason="read sessions and recent documents"
+          disabled={busy !== null}
+          onClick={() => void route.command("refresh")}
+        />
+      ) : null}
       <div className="flex items-center gap-2">
         <span className="t-small face-mono text-ink-2">year</span>
         {years.map((candidate) => (
@@ -427,7 +500,7 @@ export function InstancesCluster({
           onRowClick={(world) => {
             const id = worldTrunk.option(world, sessions).id;
             setTarget(target === id ? "" : id);
-            setStaged(null);
+            if (!route) setStaged(null);
           }}
           empty={
             isLoading ? (
@@ -451,7 +524,7 @@ export function InstancesCluster({
               : "documents — each brings its own session"
           }
           searchPlaceholder="search documents"
-          activeKey={staged?.doc.id}
+          activeKey={staged?.doc?.id}
           onRowClick={stageDoc}
           empty={
             recentsLoading || isLoading ? (
@@ -471,15 +544,16 @@ export function InstancesCluster({
             <span className="t-prose text-ink">
               {staged.kind === "open"
                 ? `open ${staged.doc.title} in ${worldTrunk.label(staged.world)}`
-                : `start a new 20${staged.year} session opening ${staged.doc.title}`}
+                : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
             </span>
             {staged.kind === "start" ? (
               <input
                 className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
                 aria-label="session name"
                 placeholder="name this session"
-                value={sessionName}
-                onChange={(event) => setSessionName(event.target.value)}
+                defaultValue={sessionName}
+                key={`${staged.doc?.selector ?? staged.year}:${sessionName}`}
+                onBlur={(event) => setSessionName(event.target.value)}
               />
             ) : null}
             {staged.kind === "open" ? (
@@ -487,18 +561,20 @@ export function InstancesCluster({
                 tone="commit"
                 label="open"
                 reason={openRefusal ?? "open the staged document in its session"}
-                disabled={busy !== null || openRefusal !== null}
+                disabled={busy !== null || openRefusal !== null || route?.outcomeUnknown === true}
                 busy={busy === "open"}
-                onClick={() => void commitOpen(staged)}
+                onClick={() => void runCommand("open")}
               />
             ) : (
               <VerbButton
                 tone="commit"
                 label={sessionIdOf(sessionName) ? `start ${sessionIdOf(sessionName)}` : "start"}
                 reason={fixtureRefusal ?? "start the session and open the staged document"}
-                disabled={busy !== null || fixtureRefusal !== null}
+                disabled={
+                  busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true
+                }
                 busy={busy === "start"}
-                onClick={() => void runLifecycle(lifecycle.start)}
+                onClick={() => void runCommand("start")}
               />
             )}
             <VerbButton tone="act" label="clear" reason="unstage" onClick={() => setStaged(null)} />
@@ -511,17 +587,17 @@ export function InstancesCluster({
               tone="act"
               label="restart"
               reason={fixtureRefusal ?? "cold-swap this session (session hr --restart)"}
-              disabled={busy !== null || fixtureRefusal !== null}
+              disabled={busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true}
               busy={busy === "restart"}
-              onClick={() => void runLifecycle(lifecycle.restart)}
+              onClick={() => void runCommand("restart")}
             />
             <VerbButton
               tone="act"
               label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
               reason={fixtureRefusal ?? "stop this session"}
-              disabled={busy !== null || fixtureRefusal !== null}
+              disabled={busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true}
               busy={busy === "stop"}
-              onClick={() => void runLifecycle(lifecycle.stop)}
+              onClick={() => void runCommand("stop")}
             />
             <VerbButton tone="act" label="clear" reason="unpick" onClick={() => setTarget("")} />
           </div>
@@ -530,6 +606,18 @@ export function InstancesCluster({
             nothing staged — pick a session above, or click a document row
           </span>
         )}
+        {route?.failure ? <OutcomeLine kind="error" label={route.failure.message} /> : null}
+        {stored?.kind === "open" && !storedWorld ? (
+          <div>
+            <OutcomeLine kind="error" label={`staged session unavailable: ${stored.session}`} />
+            <VerbButton
+              tone="act"
+              label="clear"
+              reason="unstage unavailable session"
+              onClick={() => setStaged(null)}
+            />
+          </div>
+        ) : null}
         {outcome ? (
           <div className="mt-2">
             <OutcomeLine kind={outcome.kind} label={outcome.text} says={outcome.says} />

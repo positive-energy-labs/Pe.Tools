@@ -49,26 +49,38 @@ export const routeStateRead = createTool({
       .string()
       .optional()
       .describe("Route name from the list; omit to list all live routes."),
-    doc: addressSchema.optional().describe("Revit document address; required with route."),
+    doc: addressSchema.optional().describe("Revit document scope."),
+    workspace: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "Workspace scope, normally the chat thread id; use instances for the standalone workspace.",
+      ),
   }),
   execute: async (input) => {
     if (!input.route) return call("/pe/route-state");
-    if (!input.doc)
+    if (!input.doc && !input.workspace)
       return {
         isError: true,
-        content: "Cannot read route-state detail without a Revit document address.",
+        content: "Supply a document address in doc, or a workspace id in workspace.",
       };
-    return call(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, input.doc));
+    return call(
+      scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, input.doc, input.workspace),
+    );
   },
 });
 
 export const routeStateApply = createTool({
   id: "route_state_apply",
   description:
-    "Propose changes to a route-state document by patching specific paths. Trust contract: you PROPOSE, the human stages and pushes — you cannot commit to Revit. Patches are segment-array paths (path is an array of string/number segments, e.g. ['cells','Width::Type A','proposal']); omit `value` to delete that key. Paths outside the route's agent write mask are rejected with a hint naming what you may write. The whole document is re-validated after patching; validation errors come back as hints you should act on (e.g. a low-confidence proposal must be marked for attention).",
+    "Edit a route document by patching specific paths. Patches only change route state; external operations require route_command and its declared actor permission. Patches are segment-array paths (e.g. ['cells','Width::Type A','proposal']); omit value to delete a key. Paths outside the agent write mask are rejected. The whole document is re-validated after patching.",
   inputSchema: z.object({
     route: z.string(),
-    doc: addressSchema,
+    doc: addressSchema.optional(),
+    workspace: z.string().trim().min(1).max(200).optional(),
     patches: z
       .array(
         z.object({
@@ -81,7 +93,11 @@ export const routeStateApply = createTool({
   }),
   execute: async (input) => {
     return call(
-      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, input.doc),
+      scopedPath(
+        `/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`,
+        input.doc,
+        input.workspace,
+      ),
       {
         patches: input.patches,
         expectedRevision: input.expectedRevision,
@@ -96,14 +112,19 @@ export const routeCommand = createTool({
     'Run a named command on a route-state document (e.g. parse_spec, refresh_snapshot). Commands do the side-effectful work the write mask forbids you from doing by hand. Human-only commands (like push) reject you with a hint — ask the engineer to run those from the UI. Discover command names and their input shapes with route_state_read. On route="parameter-links": inspect the model with host operations, replace only draftProfile with a complete profile, run command="preview" with that exact profile, and stop for browser review; apply is human-only, and electricalEquipmentCircuits is how equipment parameters reach circuit parameters.',
   inputSchema: z.object({
     route: z.string(),
-    doc: addressSchema,
+    doc: addressSchema.optional(),
+    workspace: z.string().trim().min(1).max(200).optional(),
     command: z.string(),
     input: z.unknown().optional(),
     expectedRevision: z.number().int().nonnegative(),
   }),
   execute: async (input, context) => {
     return call(
-      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, input.doc),
+      scopedPath(
+        `/pe/agent/route-state/${encodeURIComponent(input.route)}/command`,
+        input.doc,
+        input.workspace,
+      ),
       {
         command: input.command,
         input: coerceJsonObject(input.input),
@@ -127,8 +148,11 @@ function hintOf(payload: Record<string, unknown>): string | undefined {
   return typeof hint === "string" ? hint : undefined;
 }
 
-function scopedPath(path: string, doc: string): string {
-  return `${path}?doc=${encodeURIComponent(doc)}`;
+function scopedPath(path: string, doc?: string, workspace?: string): string {
+  const query = new URLSearchParams();
+  if (doc) query.set("doc", doc);
+  if (workspace) query.set("workspace", workspace);
+  return `${path}?${query}`;
 }
 
 function requestIdentity(context: {

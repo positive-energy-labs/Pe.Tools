@@ -6,6 +6,9 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-09-04 — ONE STREAM PER OWNER, NEVER ONE PER COMPONENT. A chat page with route cards held six long-lived host connections (one `/stream` and one `/events` per card, one `?watch` per head consumer), which is Chromium's per-origin HTTP/1.1 limit, so the fourth POST of a turn queued forever. Fixed on `fanout/chimera` at 7d7b0f8 and 90fe154: a route document holds one events stream and turn activity rides the workbench thread stream; a page holds three. Owed on main until the chimera port lands.
+- 2026-09-04 — A RETIRED HOST CLOSES ITS KEEP-ALIVE SOCKETS. `makeHttpLive` in `apps/host/src/app.ts` removed its request handler on shutdown but left keep-alive sockets open, so a browser reusing one after a dev-host takeover waited forever; the base scenario passed by socket-pool luck. Proven by a one-stream HTTP reproduction with no Chromium or Vite. Fixed on `fanout/chimera` at 04d005b with a finalizer that runs after the platform server releases and closes idle then all connections; `apps/host/tests/socket-retirement.test.ts` is the red-then-green probe. Owed on main until the chimera port lands.
+
 - 2026-09-03 — The general host ledger is deleted. Chat continuation uses Mastra's native session stream plus an authoritative runtime hydration endpoint; Revit world notifications use only `GET /events`, backed by a scoped sliding Effect `PubSub` and an opening SSE comment. Current world state stays query-owned. Host boundary files run serially because each claims the same source service identity; the permanent browser scenario injects only a deterministic model while keeping real Vite, Effect HTTP, Mastra controller/session, SSE, React, and LibSQL.
 - 2026-08-26 — Repository guards live in their own `@pe/repo-guards` workspace package; the web route lane runs route code alone, so its result remains route signal.
 - 2026-08-26 — `Reading.Here(Document)` mints document addresses in `Pe.Revit.Extensions.ProjDocument`; `Pe.Shared.RevitData` owns only the Revit-free `Reading` record because it may not reference the Revit API.
@@ -57,6 +60,8 @@ design-system ledger, not restated here.
 - 2026-08-16 — `src/ops/**` + `routes/ops.tsx` consume zero shim tokens after the pass — only `--r-*`, `--viz-*`, `--radius`, `--font-*`.
 
 ### The fleet cockpit (`/instances`)
+
+- 2026-09-04 — Instances shares selection and staging through a workspace-scoped route document; chat uses its thread id and the standalone route uses `instances`. Only start/open lifecycle mutations are agent-accessible. Preserve the fleet tables, document staging, named starts, sticky actions, and human lifecycle controls. Placement of lifecycle controls outside Instances remains undecided.
 
 - 2026-09-01 — protoui round settled (rewritten subsection; git holds the sentence-cockpit timeline): `/instances` IS the portable `InstancesCluster` (`instances/cluster.tsx`) — fleet table above, year chips, documents table, and one sticky bottom staging card as the only action surface. No targeting sentence: instances is what GIVES targeting something to attach; it is not itself targeted. A document row click STAGES an open (never acts); a picked fleet row filters documents and offers restart/stop in the card. Retired variants: sentence+tables (E), sentence-only with feed projections (G), session-manifest composer (H — its named-session idea survives as the start name).
 - 2026-09-01 — A session's NAME is its SDK id: the staging card's name input sanitizes through `sessionIdOf` into `session start --id` charset (≤64 of `a-z0-9._-`); a blank name lets the SDK mint (`SessionCommand.DefaultId`). Only ACTIVE session names render anywhere — "would be" ids are gone from the surface.

@@ -14,7 +14,13 @@ export interface ChatSearch {
   readonly thread?: string;
   readonly mode: string;
   readonly turn?: number;
-  readonly plugin?: "family" | "families" | "settings" | "parameter-links" | "schedule-grid";
+  readonly plugin?:
+    | "family"
+    | "families"
+    | "settings"
+    | "parameter-links"
+    | "schedule-grid"
+    | "instances";
   readonly target?: string;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;

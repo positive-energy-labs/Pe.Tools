@@ -1,3 +1,4 @@
+import { routeScopeKey, type RouteScope } from "@pe/agent-contracts";
 import { Cause, Effect, Equal, Hash, Layer, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -267,37 +268,43 @@ export interface Slice<D> {
   connected: boolean | null;
   error: string | null;
   peaActive: boolean;
+  outcomeUnknown?: boolean;
 }
 
 export const routeConflictAtom = Atom.make(false).pipe(Atom.withLabel("app/route-conflict"));
 
 type WireMessage =
-  | { kind: "doc"; doc: unknown; revision: number }
+  | { kind: "doc"; doc: unknown; revision: number; outcomeUnknown?: boolean }
   | { kind: "pea"; active: boolean }
   | { kind: "connected"; value: boolean };
 
 class RouteAtomKey implements Equal.Equal {
   constructor(
     readonly spec: RouteStateSpec<any>,
-    readonly scope: Scope,
+    readonly scope: RouteScope,
   ) {}
   [Equal.symbol](that: Equal.Equal): boolean {
     return (
       that instanceof RouteAtomKey &&
       this.spec.route === that.spec.route &&
-      this.scope.documentAddress === that.scope.documentAddress
+      routeScopeKey(this.scope) === routeScopeKey(that.scope)
     );
   }
   [Hash.symbol]() {
-    return Hash.string(`${this.spec.route}\0${this.scope.documentAddress}`);
+    return Hash.string(`${this.spec.route}\0${routeScopeKey(this.scope)}`);
   }
 }
 
-function routeUrl(route: string, operation: "read" | "events" | "apply" | "command", scope: Scope) {
+function routeUrl(
+  route: string,
+  operation: "read" | "events" | "apply" | "command",
+  scope: RouteScope,
+) {
   const config = resolveWorkbenchConfig();
   const suffix = operation === "read" ? "" : `/${operation}`;
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
-  url.searchParams.set("doc", scope.documentAddress);
+  if (scope.workspaceId !== undefined) url.searchParams.set("workspace", scope.workspaceId);
+  else url.searchParams.set("doc", scope.documentAddress);
   return url.toString();
 }
 
@@ -320,12 +327,17 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
             const info = await fetchPeInfo(config);
             const hydrated = await fetch(routeUrl(spec.route, "read", scope));
             if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
-            const payload = (await hydrated.json()) as { doc?: unknown; revision?: unknown };
+            const payload = (await hydrated.json()) as {
+              doc?: unknown;
+              revision?: unknown;
+              outcomeUnknown?: unknown;
+            };
             if ("doc" in payload && Number.isInteger(payload.revision))
               Queue.offerUnsafe(queue, {
                 kind: "doc",
                 doc: payload.doc ?? null,
                 revision: payload.revision as number,
+                outcomeUnknown: Boolean(payload.outcomeUnknown),
               });
             let unsubscribeSession = () => {};
             const threadId = new URLSearchParams(window.location.search).get("thread")?.trim();
@@ -357,12 +369,17 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
             events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
             events.onmessage = (raw) => {
               try {
-                const payload = JSON.parse(raw.data) as { doc?: unknown; revision?: unknown };
+                const payload = JSON.parse(raw.data) as {
+                  doc?: unknown;
+                  revision?: unknown;
+                  outcomeUnknown?: unknown;
+                };
                 if ("doc" in payload && Number.isInteger(payload.revision))
                   Queue.offerUnsafe(queue, {
                     kind: "doc",
                     doc: payload.doc ?? null,
                     revision: payload.revision as number,
+                    outcomeUnknown: Boolean(payload.outcomeUnknown),
                   });
               } catch {
                 // The next valid snapshot remains authoritative.
@@ -388,6 +405,7 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
               : {
                   ...state,
                   doc: parseRouteDoc(message.doc, spec),
+                  outcomeUnknown: message.outcomeUnknown,
                   revision: message.revision,
                   hydrated: true,
                 },
@@ -398,7 +416,7 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
 
 export function docAtom<S extends RouteStateSpec<any>>(
   spec: S,
-  scope: Scope,
+  scope: RouteScope,
 ): Atom.Atom<AsyncResult.AsyncResult<Slice<RouteDocOf<S>>, Error>> {
   return routeAtom(new RouteAtomKey(spec, scope));
 }
@@ -415,7 +433,7 @@ const notHydrated = fail("route document is not hydrated", "refused");
 
 export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
-  scope: Scope,
+  scope: RouteScope,
   registry: AtomRegistry.AtomRegistry,
   slice: Atom.Atom<AsyncResult.AsyncResult<Slice<RouteDocOf<S>>, Error>>,
 ) {

@@ -1,3 +1,4 @@
+import type { RouteScope } from "@pe/agent-contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -20,7 +21,6 @@ import {
   docWriter,
   fail,
   failuresNote,
-  type Scope,
   type VerbFailure,
 } from "#/state/route-store";
 import type { VerbAtoms } from "#/components/lang/verb-lane";
@@ -32,6 +32,7 @@ export interface RouteStateHandle<T> {
   slice: T | null;
   revision: number | null;
   hydrated: boolean;
+  outcomeUnknown?: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<RouteStateWriteResult>;
   command: (command: string, input?: unknown, receipt?: string) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
@@ -44,7 +45,7 @@ export interface RouteStateHandle<T> {
 
 export function useRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
-  scope: Scope,
+  scope: RouteScope,
 ): RouteStateHandle<z.infer<TSchema>> {
   const store = useRouteStore(() => createRouteStateStore(appAtomRegistry, spec, scope));
   const wireResult = useAtomValue(store.slice);
@@ -64,6 +65,7 @@ export function useRouteState<TSchema extends z.ZodType>(
     slice: wire?.doc ?? null,
     revision: wire?.revision ?? null,
     hydrated: wire?.hydrated ?? false,
+    outcomeUnknown: wire?.outcomeUnknown ?? false,
     apply: store.apply,
     command: store.command,
     peaActive: wire?.peaActive ?? false,
@@ -78,7 +80,7 @@ export function useRouteState<TSchema extends z.ZodType>(
 function createRouteStateStore<TSchema extends z.ZodType>(
   registry: AtomRegistry.AtomRegistry,
   spec: RouteStateSpec<TSchema>,
-  scope: Scope,
+  scope: RouteScope,
 ) {
   const core = createRouteStoreCore(`card/${spec.route}`, registry);
   const slice = core.owned("slice/document", docAtom(spec, scope));

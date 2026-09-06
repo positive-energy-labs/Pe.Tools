@@ -1,3 +1,4 @@
+import { routeScopeKey, type RouteScope } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   applyPatches,
@@ -9,7 +10,6 @@ import {
   message,
   refuse,
   type CommandReceipt,
-  type Address,
   type RouteActor,
   type RouteEnvelope,
   type RoutePatch,
@@ -18,7 +18,7 @@ import {
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 
-export type RouteWorkspaceScope = { documentAddress: Address };
+export type RouteWorkspaceScope = RouteScope;
 export type RouteWorkspaceActor = RouteActor;
 export type RouteWorkspacePatch = RoutePatch;
 
@@ -74,9 +74,15 @@ export class RouteWorkspace {
     }
   }
 
+  #checkScope(scope: RouteScope, spec: RouteStateSpec<z.ZodType>) {
+    if ((spec.scope === "workspace") !== (scope.workspaceId !== undefined))
+      throw Error(`Route ${spec.route} requires ${spec.scope ?? "document"} scope`);
+  }
+
   list() {
     return [...this.#registry.values()].map(({ spec }) => ({
       route: spec.route,
+      scope: spec.scope ?? "document",
       title: spec.title,
       description: spec.description,
     }));
@@ -86,9 +92,11 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
+    this.#checkScope(scope, spec);
     const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec));
     return {
       route,
+      scope: spec.scope ?? "document",
       title: spec.title,
       description: spec.description,
       doc: structuredClone(envelope.doc),
@@ -111,6 +119,7 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
+    this.#checkScope(scope, registration.spec);
     return this.#serialized(scope, route, async () => {
       const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
@@ -151,6 +160,7 @@ export class RouteWorkspace {
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
 
+    this.#checkScope(scope, registration.spec);
     return this.#serialized(scope, route, async () => {
       let envelope = await this.#load(scope, spec);
       const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
@@ -230,7 +240,10 @@ export class RouteWorkspace {
       let committed: RouteEnvelope<unknown> | null = null;
       try {
         const result = await handler(guarded.input, {
-          documentAddress: scope.documentAddress,
+          get documentAddress() {
+            if (!scope.documentAddress) throw Error("This command requires document scope");
+            return scope.documentAddress;
+          },
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
             const landed = commitDoc(spec, envelope, candidate);
@@ -303,7 +316,7 @@ export class RouteWorkspace {
     spec: RouteStateSpec<z.ZodType>,
   ): Promise<RouteEnvelope<unknown>> {
     const raw = await this.options.store.getState({
-      documentAddress: scope.documentAddress,
+      documentAddress: routeScopeKey(scope),
       route: spec.route,
     });
     if (raw == null)
@@ -317,7 +330,7 @@ export class RouteWorkspace {
       envelope.outcomeUnknown ??= envelope.inFlight;
       delete envelope.inFlight;
       await this.options.store.setState({
-        documentAddress: scope.documentAddress,
+        documentAddress: routeScopeKey(scope),
         route: spec.route,
         value: envelope,
       });
@@ -331,7 +344,7 @@ export class RouteWorkspace {
     envelope: RouteEnvelope<unknown>,
   ): Promise<void> {
     await this.options.store.setState({
-      documentAddress: scope.documentAddress,
+      documentAddress: routeScopeKey(scope),
       route,
       value: envelope,
     });
@@ -342,7 +355,7 @@ export class RouteWorkspace {
   }
 
   #serialized<T>(scope: RouteWorkspaceScope, route: string, work: () => Promise<T>): Promise<T> {
-    const key = `${scope.documentAddress}\0${route}`;
+    const key = `${routeScopeKey(scope)}\0${route}`;
     const previous = this.#tails.get(key) ?? Promise.resolve();
     const run = previous.catch(() => undefined).then(work);
     const tail = run.then(

@@ -1,3 +1,5 @@
+import { instancesRouteState } from "@pe/agent-contracts";
+import { useSearch } from "@tanstack/react-router";
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import {
@@ -47,6 +49,7 @@ export interface RouteChatPluginRegistration {
 }
 
 export const routeChatPluginList: RouteChatPluginRegistration[] = [
+  { spec: instancesRouteState, Renderer: InstancesChatPlugin },
   {
     spec: parameterLinksRouteState,
     Renderer: ParameterLinksChatPlugin,
@@ -74,6 +77,7 @@ export const routeChatPlugins = Object.fromEntries(
 ) as Record<string, RouteChatPluginRegistration>;
 
 export const CHAT_PLUGIN_ROUTES = [
+  "instances",
   "family",
   "families",
   "settings",
@@ -139,7 +143,20 @@ export function ConnectedRouteChatPlugin({
   registration,
   ...props
 }: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
+  const search = useSearch({ strict: false }) as { thread?: string; target?: string };
   const documentAddress = useRouteDocumentAddress();
+  if (registration.spec.scope === "workspace")
+    return (
+      <WorkspaceRouteChatPlugin
+        registration={registration}
+        {...props}
+        workspaceId={
+          isRecord(props.args) && typeof props.args.workspace === "string"
+            ? props.args.workspace
+            : (search.thread ?? "instances")
+        }
+      />
+    );
   if (!documentAddress) return null;
   return (
     <AddressedRouteChatPlugin
@@ -216,6 +233,39 @@ export function ParameterLinksChatPlugin({
           onCommand={(name) => void command(name).catch(() => undefined)}
         />
       ) : null}
+    </InlineRoutePlugin>
+  );
+}
+
+function WorkspaceRouteChatPlugin({
+  registration,
+  workspaceId,
+  ...props
+}: RouteChatPluginViewProps & {
+  active: boolean;
+  registration: RouteChatPluginRegistration;
+  workspaceId: string;
+}) {
+  const routeState = useRouteState(registration.spec, { workspaceId });
+  const Renderer = registration.Renderer;
+  return <Renderer {...props} routeState={routeState} sessionState={routeState.slice} />;
+}
+
+function InstancesChatPlugin({ sessionState, toolName, args, running }: RouteChatPluginProps) {
+  const doc = parseRouteDoc(sessionState, instancesRouteState);
+  const staged = doc?.staged;
+  return (
+    <InlineRoutePlugin title="Instances" action={actionLabel(toolName, args, running)}>
+      <span>
+        {staged
+          ? staged.kind === "start"
+            ? `start ${staged.name || "unnamed session"} in Revit ${staged.year}`
+            : `open ${staged.document} in ${staged.session}`
+          : (doc?.selectedSession ?? "no session selected")}
+      </span>
+      <Link to="/chat" search={(previous) => ({ ...previous, plugin: "instances" })}>
+        Open workspace
+      </Link>
     </InlineRoutePlugin>
   );
 }
