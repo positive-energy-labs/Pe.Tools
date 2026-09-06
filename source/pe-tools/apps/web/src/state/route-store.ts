@@ -4,7 +4,6 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-import { isKnownAgentControllerEvent, MastraClient } from "@mastra/client-js";
 
 import {
   type Address,
@@ -17,7 +16,6 @@ import {
 } from "@pe/agent-contracts";
 
 import { inspectAtomRegistry } from "#/state/atom-inspect";
-import { fetchPeInfo } from "#/host/info";
 import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
@@ -267,7 +265,6 @@ export interface Slice<D> {
   hydrated: boolean;
   connected: boolean | null;
   error: string | null;
-  peaActive: boolean;
   outcomeUnknown?: boolean;
 }
 
@@ -275,7 +272,6 @@ export const routeConflictAtom = Atom.make(false).pipe(Atom.withLabel("app/route
 
 type WireMessage =
   | { kind: "doc"; doc: unknown; revision: number; outcomeUnknown?: boolean }
-  | { kind: "pea"; active: boolean }
   | { kind: "connected"; value: boolean };
 
 class RouteAtomKey implements Equal.Equal {
@@ -316,15 +312,12 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
     hydrated: false,
     connected: null,
     error: null,
-    peaActive: false,
   };
-  const config = resolveWorkbenchConfig();
   return Atom.make(
     Stream.callback<WireMessage, Error>((queue) =>
       Effect.acquireRelease(
         Effect.tryPromise({
           try: async () => {
-            const info = await fetchPeInfo(config);
             const hydrated = await fetch(routeUrl(spec.route, "read", scope));
             if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
             const payload = (await hydrated.json()) as {
@@ -339,31 +332,10 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
                 revision: payload.revision as number,
                 outcomeUnknown: Boolean(payload.outcomeUnknown),
               });
-            let unsubscribeSession = () => {};
-            const threadId = new URLSearchParams(window.location.search).get("thread")?.trim();
-            if (threadId) {
-              const session = new MastraClient({ baseUrl: config.origin })
-                .getAgentController(info.controllerId)
-                .session(info.resourceId, threadId);
-              const running = await session.state({ threadId }).catch(() => undefined);
-              Queue.offerUnsafe(queue, { kind: "pea", active: running?.running ?? false });
-              const subscription = await session.subscribe({
-                reconnect: true,
-                onReconnect: async () => {
-                  const state = await session.state({ threadId }).catch(() => undefined);
-                  Queue.offerUnsafe(queue, { kind: "pea", active: state?.running ?? false });
-                },
-                onEvent: (event) => {
-                  if (!isKnownAgentControllerEvent(event)) return;
-                  if (event.type === "agent_start")
-                    Queue.offerUnsafe(queue, { kind: "pea", active: true });
-                  else if (event.type === "agent_end")
-                    Queue.offerUnsafe(queue, { kind: "pea", active: false });
-                },
-                onError: () => Queue.offerUnsafe(queue, { kind: "pea", active: false }),
-              });
-              unsubscribeSession = subscription.unsubscribe;
-            }
+            // ONE long-lived connection per route document: its events stream. Turn activity
+            // comes from the thread stream the workbench already owns (see useRouteState); a
+            // second controller subscription here once pushed a chat page past the browser's
+            // six-connection budget and starved every later POST.
             const events = new EventSource(routeUrl(spec.route, "events", scope));
             events.onopen = () => Queue.offerUnsafe(queue, { kind: "connected", value: true });
             events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
@@ -385,10 +357,7 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
                 // The next valid snapshot remains authoritative.
               }
             };
-            return () => {
-              events.close();
-              unsubscribeSession();
-            };
+            return () => events.close();
           },
           catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
         }),
@@ -398,17 +367,15 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
       Stream.scan(
         initial,
         (state, message): Slice<RouteDocOf<typeof spec>> =>
-          message.kind === "pea"
-            ? { ...state, peaActive: message.active }
-            : message.kind === "connected"
-              ? { ...state, connected: message.value }
-              : {
-                  ...state,
-                  doc: parseRouteDoc(message.doc, spec),
-                  outcomeUnknown: message.outcomeUnknown,
-                  revision: message.revision,
-                  hydrated: true,
-                },
+          message.kind === "connected"
+            ? { ...state, connected: message.value }
+            : {
+                ...state,
+                doc: parseRouteDoc(message.doc, spec),
+                outcomeUnknown: message.outcomeUnknown,
+                revision: message.revision,
+                hydrated: true,
+              },
       ),
     ),
   );

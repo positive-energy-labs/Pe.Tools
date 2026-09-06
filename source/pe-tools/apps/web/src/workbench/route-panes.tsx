@@ -120,7 +120,8 @@ function createRoutePaneStore(
 ) {
   const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
   const scope = { documentAddress };
-  const slice = core.owned("slice/document", docAtom(spec, scope));
+  // Shared family atom, never a labelled clone: one events stream per route document.
+  const slice = docAtom(spec, scope);
   const searchState = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
   const search = {
     get target() {

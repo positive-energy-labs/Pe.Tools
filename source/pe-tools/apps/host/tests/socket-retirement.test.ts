@@ -31,7 +31,7 @@ async function launchHost(databasePath: string, port: number, previousToken?: st
             capabilities: { revit: false },
             includeInstallConverge: false,
             lifecycle: { handle, latch },
-            // The real agent app: the socket under test carries a live Scope watch stream.
+            // The real agent app: the socket under test carries a live controller session stream.
             mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
               createDeterministicRuntime({
                 databasePath,
@@ -68,14 +68,22 @@ async function stopHost(host: Awaited<ReturnType<typeof launchHost>>) {
 
 type Probe = { status: number | "timeout"; reused: boolean; socketClosed: Promise<void> };
 
-/** A Scope watch stream on the agent's one socket: the connection is ACTIVE when the host retires. */
+/** A controller session stream on the agent's one socket: the connection is ACTIVE when the host retires. */
 function openStream(port: number, agent: Agent) {
   return new Promise<{ ended: Promise<void>; socketClosed: Promise<void> }>((resolve, reject) => {
-    const request = get(`http://127.0.0.1:${port}/pe/scope/probe?watch`, { agent }, (response) => {
-      const ended = new Promise<void>((done) => response.once("end", () => done()));
-      response.once("data", () => resolve({ ended, socketClosed }));
-      response.resume();
-    });
+    const request = get(
+      `http://127.0.0.1:${port}/api/agent-controller/pea/sessions/${resolvePeaWorld().id}/stream`,
+      { agent },
+      (response) => {
+        // A destroyed socket emits `close` without `end`; either means the stream is over.
+        const ended = new Promise<void>((done) => {
+          response.once("end", () => done());
+          response.once("close", () => done());
+        });
+        response.once("data", () => resolve({ ended, socketClosed }));
+        response.resume();
+      },
+    );
     let socketClosed: Promise<void> = Promise.resolve();
     request.on("socket", (socket) => {
       socketClosed = new Promise((done) => socket.once("close", () => done()));

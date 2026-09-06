@@ -4,6 +4,7 @@ import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { useContext } from "react";
 import { z } from "zod";
 
 import {
@@ -15,6 +16,7 @@ import {
 export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
 
 import { appAtomRegistry } from "#/state/registry";
+import { WorkbenchContext } from "./provider/thread-summary";
 import {
   createRouteStoreCore,
   docAtom,
@@ -48,6 +50,7 @@ export function useRouteState<TSchema extends z.ZodType>(
   scope: RouteScope,
 ): RouteStateHandle<z.infer<TSchema>> {
   const store = useRouteStore(() => createRouteStateStore(appAtomRegistry, spec, scope));
+  const workbench = useContext(WorkbenchContext);
   const wireResult = useAtomValue(store.slice);
   const busy = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
@@ -68,7 +71,8 @@ export function useRouteState<TSchema extends z.ZodType>(
     outcomeUnknown: wire?.outcomeUnknown ?? false,
     apply: store.apply,
     command: store.command,
-    peaActive: wire?.peaActive ?? false,
+    // Turn activity is the workbench thread stream, never a second subscription per document.
+    peaActive: workbench?.isRunning ?? false,
     connected: wireFailure ? false : (wire?.connected ?? null),
     failure: failure ?? (wireError ? { kind: "error", verb: "wire", message: wireError } : null),
     busy: busy?.id ?? null,
@@ -83,7 +87,9 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   scope: RouteScope,
 ) {
   const core = createRouteStoreCore(`card/${spec.route}`, registry);
-  const slice = core.owned("slice/document", docAtom(spec, scope));
+  // The document slice is the family's SHARED atom: labelling it cloned the node, and every
+  // clone opened its own route events stream.
+  const slice = docAtom(spec, scope);
   const writer = docWriter(spec, scope, registry, slice);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
   const run = (verb: string, write: () => Promise<RouteStateWriteResult>, receipt?: string) =>
