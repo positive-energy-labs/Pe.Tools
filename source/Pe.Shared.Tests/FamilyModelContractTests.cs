@@ -1,197 +1,200 @@
+using Newtonsoft.Json.Linq;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Shared.Tests;
 
+/// <summary>
+///     The `family.json` contract proved without Revit: the four showcase fixtures parse clean and roundtrip,
+///     the s-pea §2.4 silent errors are caught (or listed as deliberately silent), a patch merges, macros
+///     expand to exactly what r2-schema §5 names, and the slot grammar accepts Revit's feet-inches form.
+/// </summary>
 [TestFixture]
 public sealed class FamilyModelContractTests {
-    private const string MinimalBoxJson = """
-        {
-          "family": {
-            "name": "FF Minimal Box",
-            "category": "Generic Models",
-            "template": "Generic Model",
-            "placement": "Unhosted"
-          },
-          "familyParameters": {
-            "Width": { "dataType": "Length (Common)", "value": "12in" },
-            "Depth": { "dataType": "Length (Common)", "value": "8in" },
-            "Height": { "dataType": "Length (Common)", "value": "6in" }
-          },
-          "types": {
-            "Default": {}
-          },
-          "solids": {
-            "body": {
-              "kind": "Prism",
-              "frame": "frame:family",
-              "width": "param:Width",
-              "depth": "param:Depth",
-              "height": "param:Height"
-            }
-          }
+    private const string Head = """{"name":"x","category":"GenericModels","template":"Generic Model","placement":"OneLevelBased"}""";
+    private const string Datums = """{"Ref. Level":{"normal":"PlusZ","isLevel":true},"Center (Left/Right)":{"normal":"PlusX"},"Center (Front/Back)":{"normal":"PlusY"}}""";
+    private const string Box = """{"kind":"Prism","center":["Center (Left/Right)","Center (Front/Back)"],"bottom":"Ref. Level","width":"6in","depth":"1in","height":"1in"}""";
+
+    /// <summary>Wraps a `{...}` fragment of sections into a document with a header and the three stock datums.</summary>
+    private static string Doc(string sections) => "{\"family\":" + Head + ",\"datums\":" + Datums + "," + sections.Substring(1);
+
+    public static string FixtureDir {
+        get {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "source", "Pe.Revit.Tests"))) dir = dir.Parent;
+            return Path.Combine(dir!.FullName, "source", "Pe.Revit.Tests", "Fixtures", "FamilyModel");
         }
-        """;
-
-    [Test]
-    public void Minimal_box_is_a_valid_strict_hand_authored_contract() {
-        var result = FamilyModelJson.Parse(MinimalBoxJson);
-
-        Assert.That(result.Diagnostics, Is.Empty,
-            string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Message)));
-        Assert.That(result.Value, Is.Not.Null);
-        Assert.That(result.Value!.Family.Name, Is.EqualTo("FF Minimal Box"));
-        Assert.That(result.Value.FamilyParameters.Keys,
-            Is.EqualTo(new[] { "Width", "Depth", "Height" }));
-        Assert.That(result.Value.Solids["body"].Kind, Is.EqualTo(FamilySolidKind.Prism));
     }
 
-    [Test]
-    public void Formula_parameter_cannot_be_overridden_by_a_family_type() {
-        var result = FamilyModelJson.Parse(
-            MinimalBoxJson
-                .Replace("\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }",
-                    "\"Height\": { \"dataType\": \"Length (Common)\", \"formula\": \"Width / 2\" }")
-                .Replace("\"Default\": {}", "\"Default\": { \"Height\": \"5in\" }"));
+    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.family.json").Select(Path.GetFileName)!;
 
-        Assert.That(result.Diagnostics.Select(item => item.Code),
-            Does.Contain(FamilyModelDiagnosticCodes.FormulaTypeOverride));
+    [TestCaseSource(nameof(Fixtures))]
+    public void Showcase_fixture_parses_clean_and_roundtrips(string file) {
+        var result = FamilyModelJson.Parse(File.ReadAllText(Path.Combine(FixtureDir, file)));
+        Assert.That(result.Diagnostics, Is.Empty, string.Join("\n", result.Diagnostics.Select(d => $"[{d.Code}] {d.Path}: {d.Message}")));
+        var once = FamilyModelJson.Serialize(result.Value!);
+        var again = FamilyModelJson.Parse(once);
+        Assert.That(again.Diagnostics, Is.Empty);
+        Assert.That(FamilyModelJson.Serialize(again.Value!), Is.EqualTo(once));
+        Assert.That(again.Value!.Forms.Values.Select(f => f.Kind), Has.All.EqualTo(FormKind.Extrusion));
     }
 
-    [TestCase("1/2in", PortableScalarKind.Length, 0.5)]
-    [TestCase("-2.25ft", PortableScalarKind.Length, -2.25)]
-    [TestCase("0deg", PortableScalarKind.Angle, 0.0)]
-    public void Portable_scalars_parse_without_Revit_formatting(
-        string text,
-        PortableScalarKind expectedKind,
-        double expectedValue
-    ) {
-        var parsed = PortableScalar.TryParse(text, out var scalar);
-
-        Assert.That(parsed, Is.True);
-        Assert.That(scalar.Kind, Is.EqualTo(expectedKind));
-        Assert.That(scalar.Value, Is.EqualTo(expectedValue).Within(0.000001));
-    }
-
-    [Test]
-    public void References_preserve_exact_parameter_names_and_split_named_faces() {
-        Assert.That(PortableFamilyReference.TryParse("param:_conn size", out var parameter), Is.True);
-        Assert.That(parameter.Kind, Is.EqualTo(PortableFamilyReferenceKind.Parameter));
-        Assert.That(parameter.Target, Is.EqualTo("_conn size"));
-
-        Assert.That(PortableFamilyReference.TryParse("face:body.Front", out var face), Is.True);
-        Assert.That(face.Kind, Is.EqualTo(PortableFamilyReferenceKind.Face));
-        Assert.That(face.Target, Is.EqualTo("body"));
-        Assert.That(face.Member, Is.EqualTo("Front"));
-    }
-
-    [Test]
-    public void Unknown_fields_fail_at_the_authored_boundary() {
-        var result = FamilyModelJson.Parse(
-            MinimalBoxJson.Replace("\"placement\": \"Unhosted\"", "\"placement\": \"Unhosted\", \"mystery\": true"));
-
-        Assert.That(result.Value, Is.Null);
-        Assert.That(result.Diagnostics.Select(item => item.Code),
-            Does.Contain(FamilyModelDiagnosticCodes.InvalidJson));
-    }
-
-    [Test]
-    public void Observable_unmodeled_state_is_an_honest_non_executable_contract() {
-        var result = FamilyModelJson.Parse(MinimalBoxJson.Replace(
-            "\"solids\": {",
-            "\"unmodeled\": [{ \"reason\": \"unsupported-array\", \"path\": \"$.arrays\" }], \"solids\": {"));
-
-        Assert.That(result.Value, Is.Not.Null);
-        Assert.That(result.Diagnostics.Select(item => item.Code),
-            Does.Contain(FamilyModelDiagnosticCodes.UnmodeledState));
-    }
-
-    [Test]
-    public void Disabled_room_calculation_point_is_omission_not_another_mode() {
-        var model = FamilyModelJson.Parse(MinimalBoxJson).Value!;
-        var invalid = new FamilyModel {
-            Family = model.Family,
-            FamilyParameters = model.FamilyParameters,
-            Types = model.Types,
-            Solids = model.Solids,
-            RoomCalculationPoint = new FamilyModelRoomCalculationPoint { Enabled = false }
-        };
-
-        Assert.That(FamilyModelValidator.Validate(invalid).Select(item => item.Code),
-            Does.Contain(FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint));
-    }
-
-    [Test]
-    public void Centered_linear_array_keeps_the_GRD_topology_small_and_explicit() {
-        var json = MinimalBoxJson.Replace(
-            "\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }",
-            "\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }, " +
-            "\"Vane Half Count\": { \"dataType\": \"Integer\", \"value\": \"2\" }")
-            .Replace(
-            "\"solids\": {",
-            """
-            "planes": {
-              "opening.Front": { "from": "plane:family.CenterFB", "by": "4in", "direction": "Out" },
-              "opening.Back": { "from": "plane:family.CenterFB", "by": "4in", "direction": "In" }
-            },
-            "nestedFamilies": {
-              "vane": {
-                "family": "dependency:vane",
-                "type": "type one",
-                "frame": "frame:family",
-                "parameterBindings": { "_vane length": "param:Width" }
-              }
-            },
-            "arrays": {
-              "vane": {
-                "kind": "CenteredLinear",
-                "member": "nested:vane",
-                "axis": "+Y",
-                "halfCount": "param:Vane Half Count",
-                "limits": { "start": "plane:opening.Front", "end": "plane:opening.Back" }
-              }
-            },
-            "solids": {
-            """);
-
+    // s-pea §2.4 numbering. Deliberately silent: #7 wasNamed (names the current family), #12 bowtie (plane loops cannot self-intersect).
+    // Dead by construction: #3 wall-hosted solid, #22 connector direction. Product-only: #2 template, #13 nested type, #14 associate key, #16 array plane direction.
+    [TestCase(1, """{"family":{"name":"x","category":"Not A Revit Category","template":"t","placement":"OneLevelBased"}}""", "invalid-json")]
+    [TestCase(4, """{"parameters":{"W":{"dataType":"Sasquatch"}}}""", "invalid-json")]
+    [TestCase(5, """{"parameters":{"W":{"dataType":"Length","value":"purple"}}}""", "value-datatype-mismatch")]
+    [TestCase(6, """{"parameters":{"W":{"dataType":"Length","formula":"Nonexistent Parameter * 2"}}}""", "formula-unknown-name")]
+    [TestCase(8, """{"parameters":{"W":{"dataType":"Length"}},"types":{"S":{"W":"12 furlongs"}}}""", "value-datatype-mismatch")]
+    [TestCase(9, """{"dimensions":{"d":{"between":["ThisPlaneDoesNotExist","Center (Left/Right)"],"locked":"1in"}}}""", "unknown-reference")]
+    [TestCase(10, """{"connectors":{"c":{"domain":"Duct","systemType":"SupplyAir","on":"AlsoFake","at":["Center (Left/Right)","Center (Front/Back)"]}}}""", "unknown-reference")]
+    [TestCase(11, """{"refLines":{"l":{"on":"Ref. Level","from":["Center (Left/Right)","Center (Left/Right)"],"length":"1in"}}}""", "refline-from-parallel")]
+    [TestCase(15, """{"parameters":{"n":{"dataType":"Integer","value":-7}},"nested":{"m":{"family":"f","type":"t","host":"Ref. Level"}},"arrays":{"a":{"member":"m","direction":"PlusY","label":"param:n","moveTo":"Last","spacingPlane":"Center (Front/Back)"}}}""", "array-count-below-two")]
+    [TestCase(17, """{"connectors":{"c":{"domain":"Duct","systemType":"NotAnActualSystemType","on":"Ref. Level","at":["Center (Left/Right)","Center (Front/Back)"]}}}""", "invalid-json")]
+    [TestCase(18, """{"connectors":{"c":{"domain":"Duct","systemType":"SupplyAir","on":"Ref. Level","at":["Center (Left/Right)","Center (Front/Back)"],"flowDirection":"Sideways"}}}""", "invalid-json")]
+    [TestCase(19, """{"forms":{"b":{"kind":"Prism","center":["Center (Left/Right)","Center (Front/Back)"],"bottom":"Ref. Level","width":"-9in","depth":"1in","height":"1in"}}}""", "length-not-positive")]
+    [TestCase(20, """{"connectors":{"c":{"domain":"Duct","systemType":"SupplyAir","on":"Ref. Level","at":["Center (Left/Right)","Center (Front/Back)"]},"d":{"domain":"Duct","systemType":"ReturnAir","on":"Ref. Level","at":["Center (Front/Back)","Center (Left/Right)"]}}}""", "connector-position-duplicate")]
+    [TestCase(21, """{"lookupTables":{"t":{"csv":"a,b\n1,2"}}}""", "lookup-table-header")]
+    [TestCase(23, """{"forms":{"b":{"kind":"Prism","center":["Center (Left/Right)","Center (Front/Back)"],"bottom":"Ref. Level","width":"6","depth":"1in","height":"1in"}}}""", "invalid-json")]
+    [TestCase(24, """{"parameters":{"W":{"dataType":"Length","value":"1in"},"W":{"dataType":"Length"}}}""", "invalid-json")]
+    [TestCase(25, """{"parameters":{"W":{"dataType":"Length"}},"nonsense":{}}""", "invalid-json")]
+    [TestCase(26, """{"parameters":{"S":{"shared":true,"dataType":"Length"}}}""", "shared-owns-datatype")]
+    [TestCase(27, """{"parameters":{"W":{"value":"1in"}}}""", "required")]
+    [TestCase(28, """{"coverage":{"frames":"Read"}}""", "coverage-section-unknown")]
+    public void Silent_error_is_caught(int probe, string body, string code) {
+        var json = body.Contains("\"family\":{") ? body : Doc(body);
         var result = FamilyModelJson.Parse(json);
-
-        Assert.That(result.Diagnostics, Is.Empty,
-            string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Message)));
-        Assert.That(result.Value!.NestedFamilies["vane"].Family, Is.EqualTo("dependency:vane"));
-        Assert.That(result.Value.Arrays["vane"].Kind, Is.EqualTo(FamilyModelArrayKind.CenteredLinear));
-        Assert.That(result.Value.Arrays["vane"].Limits.Start, Is.EqualTo("plane:opening.Front"));
+        Assert.That(result.Diagnostics.Select(d => d.Code), Does.Contain(code),
+            $"#{probe}: {string.Join("\n", result.Diagnostics.Select(d => $"[{d.Code}] {d.Path}: {d.Message}"))}");
     }
 
     [Test]
-    public void Centered_linear_array_identity_is_derived_from_its_nested_family_not_hidden_metadata() {
-        var model = FamilyModelJson.Parse(MinimalBoxJson).Value!;
-        var invalid = new FamilyModel {
-            Family = model.Family,
-            FamilyParameters = model.FamilyParameters,
-            Types = model.Types,
-            Solids = model.Solids,
-            NestedFamilies = new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal) {
-                ["vane"] = new() {
-                    Family = "dependency:vane",
-                    Type = "type one",
-                    Frame = "frame:family"
-                }
-            },
-            Arrays = new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal) {
-                ["mystery-array"] = new() {
-                    Kind = FamilyModelArrayKind.CenteredLinear,
-                    Member = "nested:vane",
-                    Axis = "+Y",
-                    HalfCount = "param:Depth",
-                    Limits = new FamilyModelArrayLimits {
-                        Start = "plane:opening.Front",
-                        End = "plane:opening.Back"
-                    }
-                }
-            }
-        };
+    public void Patch_merges_with_omit_null_and_object_rules() {
+        var current = File.ReadAllText(Path.Combine(FixtureDir, "a-box.family.json"));
+        var patch = FamilyPatch.Parse("""
+            { "select": { "categories": ["Electrical Equipment"], "placedOnly": true },
+              "patch": { "connectors": { "aux": { "domain": "Electrical", "systemType": "PowerCircuit", "on": "body.top", "at": ["body.left", "Center (Front/Back)"] } },
+                         "types": { "Wide": null, "Narrow": {} },
+                         "parameters": { "Depth": { "value": "10in" } } },
+              "run": { "blanksBecome": [ { "specs": ["Number", "AirFlow"], "value": "-1" } ], "clean": true } }
+            """);
+        Assert.That(patch.Select.Categories, Is.EqualTo(new[] { FamilyCategory.ElectricalEquipment }));
+        Assert.That(patch.Run!.BlanksBecome![0].Specs, Does.Contain(DataType.AirFlow));
 
-        Assert.That(FamilyModelValidator.Validate(invalid).Select(item => item.Code),
-            Does.Contain(FamilyModelDiagnosticCodes.InvalidArray));
+        var merged = FamilyPatch.Apply(current, patch.Patch.ToString());
+        Assert.That(merged.Diagnostics, Is.Empty, string.Join("\n", merged.Diagnostics.Select(d => $"[{d.Code}] {d.Path}: {d.Message}")));
+        var m = merged.Value!;
+        Assert.That(m.Types.Keys, Is.EqualTo(new[] { "Standard", "Narrow" }));
+        Assert.That(m.Parameters["Depth"].Value!.Value.Text, Is.EqualTo("10in"));
+        Assert.That(m.Parameters["Depth"].DataType, Is.EqualTo(DataType.Length), "omission inside the object left dataType unchanged");
+        Assert.That(m.Connectors.Keys, Is.EquivalentTo(new[] { "power", "aux" }));
+    }
+
+    [Test]
+    public void Prism_macro_expands_to_exactly_five_planes_five_dims_one_extrusion() {
+        var result = FamilyModelJson.Parse(Doc("""{"parameters":{"W":{"dataType":"Length","value":"2ft"}},"forms":{"body":""" + Box.Replace("\"width\":\"6in\"", "\"width\":\"param:W\"") + "}}"));
+        Assert.That(result.Diagnostics, Is.Empty, string.Join("\n", result.Diagnostics.Select(d => d.Message)));
+        var m = result.Value!;
+        Assert.That(m.RefPlanes.Keys, Is.EquivalentTo(new[] { "body.left", "body.right", "body.front", "body.back", "body.top" }));
+        Assert.That(m.RefPlanes["body.left"].At.Feet, Is.EqualTo(-1.0).Within(1e-9), "seed from the parameter's uniform value");
+        Assert.That(m.RefPlanes["body.top"].Normal, Is.EqualTo(Axis.PlusZ));
+        Assert.That(m.Dimensions.Keys, Is.EquivalentTo(new[] { "body.eq-lr", "body.eq-fb", "body.width", "body.depth", "body.height" }));
+        Assert.That(m.Dimensions["body.eq-lr"].Between, Is.EqualTo(new[] { "body.left", "Center (Left/Right)", "body.right" }));
+        Assert.That(m.Dimensions["body.eq-lr"].Equality, Is.True);
+        Assert.That(m.Dimensions["body.width"].Label, Is.EqualTo("W"));
+        Assert.That(m.Dimensions["body.depth"].Locked!.Value.Text, Is.EqualTo("1in"));
+        Assert.That(m.Dimensions["body.height"].Between, Is.EqualTo(new[] { "Ref. Level", "body.top" }));
+        Assert.That(m.Dimensions["body.height"].View, Is.EqualTo(StockView.Front));
+        var form = m.Forms["body"];
+        Assert.That(m.Forms.Count, Is.EqualTo(1));
+        Assert.That(form.Kind, Is.EqualTo(FormKind.Extrusion));
+        Assert.That((form.SketchPlane, form.Start, form.End), Is.EqualTo(("Ref. Level", "Ref. Level", "body.top")));
+        Assert.That(form.Profile![0].Curves.Select(c => c.On), Is.EqualTo(new[] { "body.left", "body.back", "body.right", "body.front" }));
+    }
+
+    [Test]
+    public void Cylinder_macro_expands_to_top_plane_height_dim_and_a_circle_extrusion() {
+        var result = FamilyModelJson.Parse(Doc("""{"forms":{"drum":{"kind":"Cylinder","center":["Center (Left/Right)","Center (Front/Back)"],"bottom":"Ref. Level","diameter":"8in","height":"1' - 6\"","void":true}}}"""));
+        Assert.That(result.Diagnostics, Is.Empty, string.Join("\n", result.Diagnostics.Select(d => d.Message)));
+        var m = result.Value!;
+        Assert.That(m.RefPlanes.Keys, Is.EquivalentTo(new[] { "drum.top" }));
+        Assert.That(m.RefPlanes["drum.top"].At.Feet, Is.EqualTo(1.5).Within(1e-9));
+        Assert.That(m.Dimensions.Keys, Is.EquivalentTo(new[] { "drum.height" }));
+        var circle = m.Forms["drum"].Profile![0].Curves.Single();
+        Assert.That(circle.Kind, Is.EqualTo(CurveKind.Circle));
+        Assert.That(circle.Diameter!.Value.Text, Is.EqualTo("8in"));
+        Assert.That(m.Forms["drum"].Void, Is.True, "extra form properties ride on the extrusion");
+    }
+
+    [Test]
+    public void Macro_slot_from_another_kind_and_name_collision_are_refused() {
+        Assert.That(FamilyModelJson.Parse(Doc("""{"forms":{"b":""" + Box.Replace("\"width\":\"6in\"", "\"width\":\"6in\",\"sketchPlane\":\"Ref. Level\"") + "}}")).Diagnostics.Select(d => d.Code), Does.Contain("slot-not-legal-for-kind"));
+        Assert.That(FamilyModelJson.Parse(Doc("""{"refPlanes":{"b.top":{"normal":"PlusZ","at":"1in"}},"forms":{"b":""" + Box + "}}")).Diagnostics.Select(d => d.Code), Does.Contain("macro-name-collision"));
+    }
+
+    [TestCase("1/2in", 0.5 / 12)]
+    [TestCase("-2.25ft", -2.25)]
+    [TestCase("150mm", 150 / 304.8)]
+    [TestCase("1' - 0 1/2\"", 1 + 0.5 / 12)]
+    [TestCase("1'-6\"", 1.5)]
+    [TestCase("2\"", 2 / 12.0)]
+    [TestCase("3'", 3.0)]
+    [TestCase("21.2\"", 21.2 / 12)]
+    [TestCase("0' - 0 1/2\"", 0.5 / 12)]
+    public void Length_grammar_accepts_suffixed_and_feet_inches(string text, double feet) {
+        Assert.That(PortableScalar.TryParse(text, out var scalar), Is.True);
+        Assert.That(scalar.Kind, Is.EqualTo(PortableScalarKind.Length));
+        Assert.That(scalar.Feet, Is.EqualTo(feet).Within(1e-9));
+    }
+
+    [TestCase("6")]
+    [TestCase("12 furlongs")]
+    [TestCase("10 inches")]
+    [TestCase("'")]
+    public void Length_grammar_refuses(string text) => Assert.That(PortableScalar.TryParse(text, out _), Is.False);
+
+    [TestCase("Length", DataType.Length)]
+    [TestCase("Length (Common)", DataType.Length)]
+    [TestCase("autodesk.spec.aec:length-2.0.1", DataType.Length)]
+    [TestCase("Yes/No", DataType.YesNo)]
+    [TestCase("autodesk.spec:spec.bool-1.0.0", DataType.YesNo)]
+    [TestCase("Electrical Potential", DataType.ElectricalPotential)]
+    [TestCase("autodesk.spec.aec.electrical:potential-2.0.0", DataType.ElectricalPotential)]
+    [TestCase("Air Flow", DataType.AirFlow)]
+    public void DataType_accepts_token_label_and_forge_id_and_emits_the_token(string input, DataType expected) {
+        var result = FamilyModelJson.Parse(Doc("{\"parameters\":{\"p\":{\"dataType\":\"" + input + "\"}}}"));
+        Assert.That(result.Value!.Parameters["p"].DataType, Is.EqualTo(expected));
+        Assert.That(JObject.Parse(FamilyModelJson.Serialize(result.Value!))["parameters"]!["p"]!["dataType"]!.ToString(), Is.EqualTo(expected.ToString()));
+    }
+
+    [Test]
+    public void Category_accepts_the_revit_label_and_placement_mirrors_FamilyPlacementType() {
+        var result = FamilyModelJson.Parse("""{"family":{"name":"x","category":"Generic Models","template":"Generic Model","placement":"WorkPlaneBased"}}""");
+        Assert.That(result.Diagnostics, Is.Empty);
+        Assert.That(result.Value!.Family.Category, Is.EqualTo(FamilyCategory.GenericModels));
+        Assert.That(result.Value.Family.Placement, Is.EqualTo(FamilyModelPlacement.WorkPlaneBased));
+    }
+
+    [Test]
+    public void Settings_closed_key_set_and_lookup_tables_parse_and_an_unknown_key_is_refused() {
+        var ok = FamilyModelJson.Parse(Doc("""{"settings":{"alwaysVertical":false,"shared":true,"cutWithVoidsWhenLoaded":true,"partType":"MultiPort","omniClass":"23.80.20.11.14"},"lookupTables":{"FF Sizes":{"csv":",Width##length##feet\nSmall,1\nLarge,2\n"}},"roomCalculationPoint":{"enabled":true,"offset":"2ft"}}"""));
+        Assert.That(ok.Diagnostics, Is.Empty, string.Join("\n", ok.Diagnostics.Select(d => d.Message)));
+        Assert.That(ok.Value!.Settings!.PartType, Is.EqualTo(FamilyPartType.MultiPort));
+        Assert.That(FamilyModelJson.Parse(Doc("""{"settings":{"alwaysUpright":true}}""")).Diagnostics.Select(d => d.Code), Does.Contain("invalid-json"));
+    }
+
+    [Test]
+    public void Formula_names_strip_string_literals_and_built_ins() {
+        var names = FamilyModelValidator.FormulaNames("if(_vane spacing = 0mm, 0, roundup((Open Width / 2) / _vane spacing)) + size_lookup(\"tbl\", \"2024-01-01\", 1)").ToList();
+        Assert.That(names, Is.EqualTo(new[] { "_vane spacing", "Open Width", "_vane spacing" }));
+    }
+
+    [Test]
+    public void Patch_schema_derivation_makes_every_property_nullable_and_drops_required() {
+        var model = JObject.Parse("""{"type":"object","required":["family"],"properties":{"family":{"type":"object","required":["name"],"properties":{"name":{"type":"string"}}},"types":{"type":"object","additionalProperties":{"type":"object","required":["x"]}}}}""");
+        var patch = FamilyPatchSchema.Derive(model);
+        Assert.That(patch["required"], Is.Null);
+        Assert.That(patch["properties"]!["family"]!["anyOf"]![0]!["type"]!.ToString(), Is.EqualTo("null"));
+        Assert.That(patch["properties"]!["family"]!["anyOf"]![1]!["required"], Is.Null);
+        Assert.That(patch["properties"]!["types"]!["anyOf"]![1]!["additionalProperties"]!["anyOf"]![1]!["required"], Is.Null);
     }
 }

@@ -1,0 +1,27 @@
+{
+  "family": { "name": "PE Box", "category": "ElectricalEquipment", "template": "Electrical Equipment", "placement": "OneLevelBased" },
+  "parameters": {
+    "Width":   { "dataType": "Length", "value": "24in" },
+    "Height":  { "dataType": "Length", "value": "36in" },
+    "Depth":   { "dataType": "Length", "value": "8in" },
+    "Voltage": { "dataType": "ElectricalPotential", "value": 480 }
+  },
+  "types": { "Standard": {}, "Wide": { "Width": "36in" } },
+  "datums": {
+    "Ref. Level":          { "normal": "PlusZ", "isLevel": true },
+    "Center (Left/Right)": { "normal": "PlusX" },
+    "Center (Front/Back)": { "normal": "PlusY" }
+  },
+  "forms": {
+    "body": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",
+              "width": "param:Width", "depth": "param:Depth", "height": "param:Height" }
+  },
+  "connectors": {
+    "power": {
+      "domain": "Electrical", "systemType": "PowerBalanced",
+      "on": "body.top", "at": ["Center (Left/Right)", "Center (Front/Back)"],
+      "associate": { "Voltage": "param:Voltage" }
+    }
+  },
+  "roomCalculationPoint": { "enabled": true }
+}
