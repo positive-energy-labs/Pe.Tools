@@ -1,8 +1,9 @@
 namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
-///     Container for all snapshot data collected from a family.
-///     Captured fields track provenance when the model needs it.
+///     Parameter and lookup-table state captured from one family for the operations library
+///     (pre/post diffs, `ProcessingResultBuilder`). Geometry is NOT here: the portable geometric truth is
+///     <c>Document.CaptureFamilyModel()</c>.
 /// </summary>
 public class FamilySnapshot {
     public string FamilyName { get; init; } = string.Empty;
@@ -12,12 +13,4 @@ public class FamilySnapshot {
 
     /// <summary>Embedded family lookup tables captured as portable table definitions.</summary>
     public CapturedCollection<LookupTableDefinition>? LookupTables { get; set; }
-
-    /// <summary>Reference plane and dimension snapshots with source tracking.</summary>
-    public RefPlaneSnapshot? RefPlanesAndDims { get; set; }
-
-    /// <summary>Authored solid projection used for authoring roundtrips.</summary>
-    public AuthoredParamDrivenSolidsSettings? AuthoredParamDrivenSolids { get; set; }
-
-    // Future captured fields: connectors, etc.
 }

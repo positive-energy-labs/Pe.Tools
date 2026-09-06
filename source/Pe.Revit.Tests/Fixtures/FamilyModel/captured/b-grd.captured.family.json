@@ -1,0 +1,659 @@
+{
+  "family": {
+    "name": "PE GRD Exhaust",
+    "category": "AirTerminals",
+    "template": "Generic Model",
+    "placement": "OneLevelBased"
+  },
+  "parameters": {
+    "PE_G___Controller": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Description": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Location": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Manufacturer": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Model": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___NotesInstance": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___NotesType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___SoundLevel": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___TagInstance": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___TagType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___URL": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Weight": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_M_Fan_Filter": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_M_Grd_AirFlow": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_M_Grd_DeviceLength": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_M_Grd_DeviceWidth": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_M_Grd_ExternalStaticPressure": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_M_Grd_NeckLength": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_M_Grd_NeckWidth": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_M_Grd_OpenLength": {
+      "shared": true,
+      "isInstance": false,
+      "formula": "PE_M_Grd_DeviceLength - _opening inset lengthwise * 2"
+    },
+    "PE_M_Grd_OpenWidth": {
+      "shared": true,
+      "isInstance": false,
+      "formula": "PE_M_Grd_DeviceWidth - _opening inset widthwise * 2"
+    },
+    "PE_M_Grd_RoughOpenLength": {
+      "shared": true,
+      "isInstance": false,
+      "formula": "PE_M_Grd_NeckLength + _clearance * 2"
+    },
+    "PE_M_Grd_RoughOpenWidth": {
+      "shared": true,
+      "isInstance": false,
+      "formula": "PE_M_Grd_NeckWidth + _clearance * 2"
+    },
+    "PE_M___ServesEquip": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_M___ServesRoom": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_M___ServesSystem": {
+      "shared": true,
+      "isInstance": true
+    },
+    "_calc vane half count": {
+      "dataType": "Integer",
+      "isInstance": false,
+      "formula": "if(_vane spacing = 0', 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))"
+    },
+    "_clearance": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "_flange opening thickness": {
+      "dataType": "Length",
+      "isInstance": false,
+      "formula": "_flange thickness - 0'  0 1/32\""
+    },
+    "_flange size lengthwise": {
+      "dataType": "Length",
+      "isInstance": false,
+      "formula": "_flange size widthwise"
+    },
+    "_flange size widthwise": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "_flange thickness": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "_neck depth": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "_opening inset lengthwise": {
+      "dataType": "Length",
+      "isInstance": false,
+      "formula": "_opening inset widthwise"
+    },
+    "_opening inset widthwise": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "_vane spacing": {
+      "dataType": "Length",
+      "isInstance": false
+    },
+    "__PE GRD INSTRUCTIONS": {
+      "dataType": "MultilineText",
+      "isInstance": false
+    }
+  },
+  "types": {
+    "Grille": {
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "Tuttle and Bailey",
+      "PE_G___Model": "CRE510",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___SoundLevel": "-1.000000",
+      "PE_G___TagInstance": "EGX-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "-1.000000",
+      "PE_M_Fan_Filter": "",
+      "PE_M_Grd_AirFlow": "0.00 CFM",
+      "PE_M_Grd_DeviceLength": "0' - 11\"",
+      "PE_M_Grd_DeviceWidth": "1' - 9\"",
+      "PE_M_Grd_ExternalStaticPressure": "0.0000 in-wg",
+      "PE_M_Grd_NeckLength": "0' - 10\"",
+      "PE_M_Grd_NeckWidth": "1' - 8\"",
+      "PE_M___ServesEquip": "",
+      "PE_M___ServesRoom": "",
+      "PE_M___ServesSystem": "",
+      "_clearance": "0' - 1\"",
+      "_flange size widthwise": "0' - 0 1/2\"",
+      "_flange thickness": "0' - 0 5/32\"",
+      "_neck depth": "0' - 2\"",
+      "_opening inset widthwise": "0' - 1\"",
+      "_vane spacing": "0' - 0 3/4\"",
+      "__PE GRD INSTRUCTIONS": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\""
+    },
+    "Price LBP15A": {
+      "PE_G___Controller": "",
+      "PE_G___Description": "4\" Price LBP15A @ 0.024 in-wg static pressure",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___SoundLevel": "79.000000",
+      "PE_G___TagInstance": "EBX-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "https://www.priceindustries.com/content/uploads/assets/literature/catalogs/lbplbphlbmlbmh-linear-bar-grille-catalog.pdf",
+      "PE_G___Weight": "-1.000000",
+      "PE_M_Fan_Filter": "",
+      "PE_M_Grd_AirFlow": "292.00 CFM",
+      "PE_M_Grd_DeviceLength": "4' - 0\"",
+      "PE_M_Grd_DeviceWidth": "0' - 4\"",
+      "PE_M_Grd_ExternalStaticPressure": "0.0240 in-wg",
+      "PE_M_Grd_NeckLength": "4' - 0\"",
+      "PE_M_Grd_NeckWidth": "0' - 4\"",
+      "PE_M___ServesEquip": "",
+      "PE_M___ServesRoom": "",
+      "PE_M___ServesSystem": "",
+      "_clearance": "0' - 1\"",
+      "_flange size widthwise": "0' - 0\"",
+      "_flange thickness": "0' - 0 5/32\"",
+      "_neck depth": "0' - 2\"",
+      "_opening inset widthwise": "0' - 0\"",
+      "_vane spacing": "0' - 0 1/4\"",
+      "__PE GRD INSTRUCTIONS": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\""
+    },
+    "Slot": {
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "Tuttle and Bailey",
+      "PE_G___Model": "CRE510",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___SoundLevel": "-1.000000",
+      "PE_G___TagInstance": "ESX-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "-1.000000",
+      "PE_M_Fan_Filter": "",
+      "PE_M_Grd_AirFlow": "0.00 CFM",
+      "PE_M_Grd_DeviceLength": "4' - 2\"",
+      "PE_M_Grd_DeviceWidth": "0' - 6\"",
+      "PE_M_Grd_ExternalStaticPressure": "0.0000 in-wg",
+      "PE_M_Grd_NeckLength": "4' - 0\"",
+      "PE_M_Grd_NeckWidth": "0' - 4\"",
+      "PE_M___ServesEquip": "",
+      "PE_M___ServesRoom": "",
+      "PE_M___ServesSystem": "",
+      "_clearance": "0' - 1\"",
+      "_flange size widthwise": "0' - 1\"",
+      "_flange thickness": "0' - 0 5/32\"",
+      "_neck depth": "0' - 2\"",
+      "_opening inset widthwise": "0' - 1\"",
+      "_vane spacing": "0' - 0\"",
+      "__PE GRD INSTRUCTIONS": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\""
+    },
+    "Bar": {
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___SoundLevel": "-1.000000",
+      "PE_G___TagInstance": "EBX-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "-1.000000",
+      "PE_M_Fan_Filter": "",
+      "PE_M_Grd_AirFlow": "0.00 CFM",
+      "PE_M_Grd_DeviceLength": "1' - 9\"",
+      "PE_M_Grd_DeviceWidth": "2' - 6\"",
+      "PE_M_Grd_ExternalStaticPressure": "0.0000 in-wg",
+      "PE_M_Grd_NeckLength": "1' - 8\"",
+      "PE_M_Grd_NeckWidth": "2' - 5\"",
+      "PE_M___ServesEquip": "",
+      "PE_M___ServesRoom": "",
+      "PE_M___ServesSystem": "",
+      "_clearance": "0' - 1\"",
+      "_flange size widthwise": "0' - 0 1/2\"",
+      "_flange thickness": "0' - 0 5/32\"",
+      "_neck depth": "0' - 2\"",
+      "_opening inset widthwise": "0' - 1\"",
+      "_vane spacing": "0' - 0 3/4\"",
+      "__PE GRD INSTRUCTIONS": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\""
+    }
+  },
+  "datums": {
+    "Ref. Level": {
+      "normal": "PlusZ",
+      "isLevel": true
+    },
+    "Center (Front/Back)": {
+      "normal": "MinusY"
+    },
+    "Reference Plane": {
+      "normal": "PlusZ"
+    },
+    "Center (Left/Right)": {
+      "normal": "PlusX"
+    }
+  },
+  "refPlanes": {
+    "neck (Left)": {
+      "normal": "PlusX",
+      "at": "-2ft",
+      "isReference": "WeakReference"
+    },
+    "neck (Right)": {
+      "normal": "PlusX",
+      "at": "2ft",
+      "isReference": "WeakReference"
+    },
+    "opening (Left)": {
+      "normal": "PlusX",
+      "at": "-2ft"
+    },
+    "opening (Right)": {
+      "normal": "PlusX",
+      "at": "2ft"
+    },
+    "device (Left)": {
+      "normal": "PlusX",
+      "at": "-2.0833ft"
+    },
+    "device (Right)": {
+      "normal": "PlusX",
+      "at": "2.0833ft"
+    },
+    "neck (Back)": {
+      "normal": "MinusY",
+      "at": "-0.1667ft",
+      "isReference": "WeakReference"
+    },
+    "neck (Front)": {
+      "normal": "MinusY",
+      "at": "0.1667ft",
+      "isReference": "WeakReference"
+    },
+    "opening (Back)": {
+      "normal": "MinusY",
+      "at": "-0.1667ft"
+    },
+    "opening (Front)": {
+      "normal": "MinusY",
+      "at": "0.1667ft"
+    },
+    "device (Back)": {
+      "normal": "MinusY",
+      "at": "-0.25ft"
+    },
+    "device (Front)": {
+      "normal": "MinusY",
+      "at": "0.25ft"
+    }
+  },
+  "refLines": {},
+  "dimensions": {
+    "pe-m-grd-necklength": {
+      "between": [
+        "neck (Left)",
+        "neck (Right)"
+      ],
+      "label": "PE_M_Grd_NeckLength",
+      "view": "RefLevel"
+    },
+    "eq-neck-left-center-left-right-neck-right": {
+      "between": [
+        "neck (Left)",
+        "Center (Left/Right)",
+        "neck (Right)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "pe-m-grd-openlength": {
+      "between": [
+        "opening (Left)",
+        "opening (Right)"
+      ],
+      "label": "PE_M_Grd_OpenLength",
+      "view": "RefLevel"
+    },
+    "eq-opening-left-center-left-right-opening-right": {
+      "between": [
+        "opening (Left)",
+        "Center (Left/Right)",
+        "opening (Right)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "pe-m-grd-devicelength": {
+      "between": [
+        "device (Left)",
+        "device (Right)"
+      ],
+      "label": "PE_M_Grd_DeviceLength",
+      "view": "RefLevel"
+    },
+    "eq-device-left-center-left-right-device-right": {
+      "between": [
+        "device (Left)",
+        "Center (Left/Right)",
+        "device (Right)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "pe-m-grd-neckwidth": {
+      "between": [
+        "neck (Back)",
+        "neck (Front)"
+      ],
+      "label": "PE_M_Grd_NeckWidth",
+      "view": "RefLevel"
+    },
+    "eq-neck-back-center-front-back-neck-front": {
+      "between": [
+        "neck (Back)",
+        "Center (Front/Back)",
+        "neck (Front)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "pe-m-grd-openwidth": {
+      "between": [
+        "opening (Back)",
+        "opening (Front)"
+      ],
+      "label": "PE_M_Grd_OpenWidth",
+      "view": "RefLevel"
+    },
+    "eq-opening-back-center-front-back-opening-front": {
+      "between": [
+        "opening (Back)",
+        "Center (Front/Back)",
+        "opening (Front)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "pe-m-grd-devicewidth": {
+      "between": [
+        "device (Back)",
+        "device (Front)"
+      ],
+      "label": "PE_M_Grd_DeviceWidth",
+      "view": "RefLevel"
+    },
+    "eq-device-back-center-front-back-device-front": {
+      "between": [
+        "device (Back)",
+        "Center (Front/Back)",
+        "device (Front)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    }
+  },
+  "forms": {
+    "neck": {
+      "kind": "Extrusion",
+      "visibility": {
+        "planRcp": true,
+        "frontBack": true,
+        "leftRight": true,
+        "onlyWhenCut": false,
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "sketchPlane": "Ref. Level",
+      "profile": [
+        {
+          "curves": [
+            {
+              "kind": "Line",
+              "on": "neck (Left)"
+            },
+            {
+              "kind": "Line",
+              "on": "neck (Front)"
+            },
+            {
+              "kind": "Line",
+              "on": "neck (Right)"
+            },
+            {
+              "kind": "Line",
+              "on": "neck (Back)"
+            }
+          ]
+        }
+      ],
+      "start": "param:_flange opening thickness",
+      "end": "param:_neck depth"
+    },
+    "device": {
+      "kind": "Extrusion",
+      "visibility": {
+        "planRcp": true,
+        "frontBack": true,
+        "leftRight": true,
+        "onlyWhenCut": false,
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "sketchPlane": "Ref. Level",
+      "profile": [
+        {
+          "curves": [
+            {
+              "kind": "Line",
+              "on": "device (Right)"
+            },
+            {
+              "kind": "Line",
+              "on": "device (Front)"
+            },
+            {
+              "kind": "Line",
+              "on": "device (Left)"
+            },
+            {
+              "kind": "Line",
+              "on": "device (Back)"
+            }
+          ]
+        }
+      ],
+      "start": "0ft",
+      "end": "param:_flange thickness"
+    },
+    "opening": {
+      "kind": "Extrusion",
+      "void": true,
+      "visibility": {
+        "planRcp": true,
+        "frontBack": true,
+        "leftRight": true,
+        "onlyWhenCut": false,
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "sketchPlane": "Ref. Level",
+      "profile": [
+        {
+          "curves": [
+            {
+              "kind": "Line",
+              "on": "opening (Right)"
+            },
+            {
+              "kind": "Line",
+              "on": "opening (Front)"
+            },
+            {
+              "kind": "Line",
+              "on": "opening (Left)"
+            },
+            {
+              "kind": "Line",
+              "on": "opening (Back)"
+            }
+          ]
+        }
+      ],
+      "start": "0ft",
+      "end": "param:_flange thickness"
+    }
+  },
+  "nested": {
+    "vane": {
+      "family": "vane",
+      "type": "type one",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Center (Left/Right)",
+          "to": "Center (Left/Right)"
+        },
+        {
+          "instance": "Center (Front/Back)",
+          "to": "Center (Front/Back)"
+        }
+      ],
+      "associate": {
+        "_vane length": "param:PE_M_Grd_OpenLength",
+        "_vane thickness": "param:_flange thickness"
+      }
+    }
+  },
+  "arrays": {
+    "vane-opening-back": {
+      "member": "vane",
+      "direction": "PlusY",
+      "label": "param:_calc vane half count",
+      "moveTo": "Last",
+      "spacingPlane": "opening (Back)"
+    },
+    "vane-opening-front": {
+      "member": "vane",
+      "direction": "MinusY",
+      "label": "param:_calc vane half count",
+      "moveTo": "Last",
+      "spacingPlane": "opening (Front)"
+    }
+  },
+  "connectors": {},
+  "details": {},
+  "settings": {
+    "alwaysVertical": true,
+    "partType": "Normal"
+  },
+  "lookupTables": {},
+  "coverage": {
+    "parameters": "Read",
+    "types": "Read",
+    "datums": "Read",
+    "refPlanes": "Read",
+    "refLines": "Read",
+    "dimensions": "Read",
+    "forms": "Read",
+    "nested": "Read",
+    "arrays": "Read",
+    "connectors": "Read",
+    "details": "NotRead",
+    "settings": "Read",
+    "lookupTables": "Read",
+    "roomCalculationPoint": "Read"
+  },
+  "unmodeled": [
+    {
+      "reason": "ConnectorFaceNotOnPlane",
+      "path": "$.connectors",
+      "facts": {
+        "domain": "Duct",
+        "systemType": "ExhaustAir",
+        "origin": "(0,0,0.1667)",
+        "normal": "(0,0,1)"
+      }
+    },
+    {
+      "reason": "ThirdPartyStorage",
+      "path": "$",
+      "facts": {
+        "dataStorageElements": "1"
+      }
+    }
+  ]
+}
