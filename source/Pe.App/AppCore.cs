@@ -48,6 +48,7 @@ public sealed class AppCore : IPePayload {
         var documents = context.Documents;
         DocumentTrackerAccessor.Current = documents;
         DocumentCacheMaintenance.Wire(documents);
+        Pe.Revit.Space.SpaceWorld.Wire(documents);
         documents.ViewActivated += (doc, viewId) => {
             MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
             PostHogAnalytics.CurrentDocumentTitle = doc.Title;
