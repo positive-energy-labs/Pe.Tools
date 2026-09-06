@@ -10,9 +10,9 @@ vi.mock("#/workbench/route-state", () => ({
     throw new Error("fixture route mounted useRouteState transport");
   },
 }));
-vi.mock("#/workbench/route-document", () => ({
-  RouteDocument: () => {
-    throw new Error("fixture route mounted RouteDocument");
+vi.mock("#/workbench/route-scope", () => ({
+  RouteScope: () => {
+    throw new Error("fixture route mounted RouteScope");
   },
 }));
 

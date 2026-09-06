@@ -154,7 +154,7 @@ function InstancesClusterView({
   onEvent?: (event: ClusterEvent) => void;
 }) {
   const queryClient = useQueryClient();
-  const { worlds, sessions, isLoading } = fleet;
+  const { worlds, isLoading } = fleet;
   // `session list --all` (useFleet({all:true})) includes the graveyard; the table shows only
   // worlds that still exist as processes or receipts — gone rows serve the census, not the picker.
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
@@ -198,7 +198,7 @@ function InstancesClusterView({
       })
     : null;
   const storedWorld =
-    stored?.kind === "open" ? worldTrunk.resolve(liveWorlds, sessions, stored.session) : undefined;
+    stored?.kind === "open" ? worldTrunk.resolve(liveWorlds, stored.session) : undefined;
   const staged: Staged | null = route
     ? stored
       ? stored.kind === "start"
@@ -222,7 +222,7 @@ function InstancesClusterView({
             : next.kind === "open"
               ? {
                   kind: "open",
-                  session: worldTrunk.option(next.world, sessions).id,
+                  session: worldTrunk.option(next.world).id,
                   document: next.doc.selector,
                 }
               : {
@@ -258,7 +258,7 @@ function InstancesClusterView({
         }
       : null);
 
-  const pickedWorld = worldTrunk.resolve(liveWorlds, sessions, target);
+  const pickedWorld = worldTrunk.resolve(liveWorlds, target);
   const pickedYear = pickedWorld?.row?.year != null ? String(pickedWorld.row.year).slice(-2) : null;
   const worldYear = (world: WorldFacts) =>
     world.row?.year != null
@@ -498,7 +498,7 @@ function InstancesClusterView({
           searchPlaceholder="search sessions"
           activeKey={pickedWorld?.id}
           onRowClick={(world) => {
-            const id = worldTrunk.option(world, sessions).id;
+            const id = worldTrunk.option(world).id;
             setTarget(target === id ? "" : id);
             if (!route) setStaged(null);
           }}

@@ -4,7 +4,13 @@
 
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
-import { addressSchema, type Address } from "@pe/agent-contracts";
+import {
+  addressSchema,
+  resolveScope,
+  type Address,
+  type FleetSession,
+  type Scope,
+} from "@pe/agent-contracts";
 
 export type { Custody, Lane };
 
@@ -33,77 +39,8 @@ export interface SessionFacts {
   observedAtUnixMs?: number;
 }
 
-/**
- * Selector grammar — the host's `TARGET_SYNTAX`, in the SDK's words.
- * ""              implicit: sole session or nothing
- * "controlled"    custody controlled (pe-revit launched it)
- * "observed"      custody observed (no pe-revit receipt — the user's own Revit)
- * "dev"           lane dev
- * "installed"     lane installed
- * "session:<id>"  by pe-revit session id
- * "<digits>"      pid
- * anything else   raw bridge session id
- */
-export type TargetSelector = string;
-
-export type TargetResolution =
-  /** Exactly one session matched. mode says HOW: "pinned" = explicit selector, "implicit" = sole session. */
-  | {
-      kind: "resolved";
-      mode: "pinned" | "implicit";
-      selector: TargetSelector;
-      session: SessionFacts;
-    }
-  /** More than one candidate — mirror of the host's 409. The UI must refuse to guess, like the host does. */
-  | { kind: "ambiguous"; selector: TargetSelector; candidates: SessionFacts[] }
-  /** Nothing matched. "no-sessions" = empty world; "no-match" = a pin dangling (its process died). */
-  | { kind: "unresolved"; selector: TargetSelector; reason: "no-sessions" | "no-match" };
-
 const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 const LANES: readonly Lane[] = ["dev", "installed"];
-
-function matches(session: SessionFacts, selector: TargetSelector): boolean {
-  const lower = selector.toLowerCase();
-  if (CUSTODIES.some((c) => c === lower)) return session.custody === lower;
-  if (LANES.some((l) => l === lower)) return session.lane === lower;
-  if (lower.startsWith("session:"))
-    return session.sdkSessionId === selector.slice("session:".length);
-  if (/^\d+$/.test(selector)) return session.processId === Number(selector);
-  return session.sessionId === selector;
-}
-
-export function resolveTarget(
-  sessions: readonly SessionFacts[],
-  selector: TargetSelector,
-): TargetResolution {
-  if (selector === "") {
-    if (sessions.length === 1)
-      return { kind: "resolved", mode: "implicit", selector, session: sessions[0]! };
-    if (sessions.length === 0) return { kind: "unresolved", selector, reason: "no-sessions" };
-    return { kind: "ambiguous", selector, candidates: [...sessions] };
-  }
-  const hits = sessions.filter((s) => matches(s, selector));
-  if (hits.length === 1) return { kind: "resolved", mode: "pinned", selector, session: hits[0]! };
-  if (hits.length === 0)
-    return {
-      kind: "unresolved",
-      selector,
-      reason: sessions.length === 0 ? "no-sessions" : "no-match",
-    };
-  return { kind: "ambiguous", selector, candidates: hits };
-}
-
-/**
- * Mint the selector a UI writes when the user pins a session. Prefers the most stable selector
- * that is unambiguous in the CURRENT world: a pe-revit-launched session pins by its session id
- * (the SDK mints it and it survives restarts under the same name); the user's own Revit pins as
- * `observed` when it's the only observed session; else pid, which dies with the process.
- */
-export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]): TargetSelector {
-  if (session.sdkSessionId) return `session:${session.sdkSessionId}`;
-  if (all.filter((s) => s.custody === session.custody).length === 1) return session.custody;
-  return String(session.processId);
-}
 
 /** Mint the active Revit document identity. The world remains only the call target. */
 export function documentAddress(session: SessionFacts): Address | null {
@@ -132,10 +69,25 @@ export function fromBridgeSessions(entries: readonly BridgeSessionListEntry[]): 
     }));
 }
 
-/** Short human phrase for a selector (chip text, tooltips). */
-export function selectorLabel(selector: TargetSelector): string {
-  if (selector === "") return "auto";
-  if (selector.startsWith("session:")) return selector.slice("session:".length); // the id is the meaning
-  if (/^\d+$/.test(selector)) return `pid ${selector}`;
-  return selector;
+/** The id a Scope pin names: the pe-revit session id when the payload has one, else the broker's. */
+export const sessionKey = (session: SessionFacts): string =>
+  session.sdkSessionId ?? session.sessionId;
+
+/** SessionFacts → the fleet row `resolveScope` reads. Year is the eligibility key (ADR 0010). */
+export const fleetOf = (sessions: readonly SessionFacts[]): FleetSession[] =>
+  sessions.map((session) => ({
+    id: sessionKey(session),
+    year: session.year ? Number(session.year) : null,
+    document: documentAddress(session),
+  }));
+
+/**
+ * The one session a Scope resolves to, as the broker's facts. `resolveScope` (@pe/agent-contracts)
+ * is the only rule; this is the adapter between it and the bridge session list.
+ */
+export function scopeSession(scope: Scope, sessions: readonly SessionFacts[]): SessionFacts | null {
+  const resolution = resolveScope(scope, fleetOf(sessions));
+  return resolution.kind === "resolved"
+    ? (sessions.find((session) => sessionKey(session) === resolution.session) ?? null)
+    : null;
 }

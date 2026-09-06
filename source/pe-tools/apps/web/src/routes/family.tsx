@@ -4,10 +4,10 @@ import { createFixtureFamilyStore } from "#/family/fixture";
 import { createLiveFamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
-import { RouteDocument } from "#/workbench/route-document";
+import { RouteScope } from "#/workbench/route-scope";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import { pageScope } from "#/state/route-store";
+import type { Scope } from "#/state/route-store";
 
 export const familySearch = (
   search: Record<string, unknown>,
@@ -29,7 +29,9 @@ function FamilyRoute() {
 export function FamilyRouteContent({ source }: { source?: "fixture" }) {
   if (source === "fixture") return <FamilyFixtureRoute />;
   return (
-    <RouteDocument>{(at) => <FamilyStoreOwner key={at} documentAddress={at} />}</RouteDocument>
+    <RouteScope>
+      {(scope) => <FamilyStoreOwner key={scope.scope.document} scope={scope} />}
+    </RouteScope>
   );
 }
 
@@ -38,13 +40,8 @@ function FamilyFixtureRoute() {
   return <FamilyWorkspace store={store} source="fixture" />;
 }
 
-function FamilyStoreOwner({
-  documentAddress,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-}) {
+function FamilyStoreOwner({ scope }: { scope: Scope }) {
   const store = useRouteStore(() => {
-    const scope = pageScope(documentAddress);
     return createFamilyStore({
       registry: appAtomRegistry,
       scope,

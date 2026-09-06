@@ -195,7 +195,7 @@ describe("families route store", () => {
   it("reloads a persisted document binding before plan", async () => {
     const persisted = document();
     const { calls, registry, store } = make(fixture(), undefined, persisted);
-    expect(registry.get(store.atoms.target)).toBe("session:test");
+    expect(registry.get(store.atoms.target)).toBe("pin:test|doc:C:\\Models\\Test.rvt");
     store.actions.setDraft({
       placement: "AllLoaded",
       categories: ["Furniture"],

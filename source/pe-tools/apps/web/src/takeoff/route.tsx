@@ -1,37 +1,25 @@
-import { address, addressSchema } from "@pe/agent-contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { address } from "@pe/agent-contracts";
 import { useLocation, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { EmptyState } from "#/components/lang/empty";
-import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
 import { createFixtureTakeoffStore } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { pageScope } from "#/state/route-store";
-import { RouteDocument, routeDocumentChoices } from "#/workbench/route-document";
 import { usePeInfo } from "#/host/info";
+import { useRouteScope } from "#/workbench/route-scope";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 import { useFleet } from "#/host/fleet";
-import { documentTrunk, openLocalDocuments } from "#/targeting/world";
 import { InstancesCluster } from "#/instances/cluster";
 import { RouteHead } from "#/targeting/head";
-import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
 
 export const PANES = [
   { key: "plan", label: "plan image", draws: ["views"] },
   { key: "rooms", label: "room table", draws: ["zones"] },
   { key: "r10", label: ".r10 join", draws: ["r10"] },
 ] as const;
-
-export const resolvedWorldBinding = (
-  resolution: ReturnType<typeof resolveTarget>,
-  sessions: readonly SessionFacts[],
-) =>
-  resolution.kind === "resolved"
-    ? mintSelector(resolution.session, sessions)
-    : resolution.selector || null;
 
 export type TakeoffSource = "fixture" | "live";
 
@@ -72,8 +60,22 @@ export function LiveTakeoffsRoute({ target = "" }: { target?: string }) {
 
 function MountedLiveTakeoffsRoute({ target }: { target: string }) {
   const info = usePeInfo();
-  if (info.data?.capabilities.revit === true) return <LiveTakeoffsDocumentRoute target={target} />;
-  return <TakeoffsCapabilityState info={info} />;
+  // The capability gate stays OUTSIDE the Scope read: no router wire opens before Revit is real.
+  if (info.data?.capabilities.revit !== true) return <TakeoffsCapabilityState info={info} />;
+  return <ScopedLiveTakeoffsRoute target={target} />;
+}
+
+function ScopedLiveTakeoffsRoute({ target }: { target: string }) {
+  const scope = useRouteScope();
+  if (!scope) return <TakeoffsClusterFallback target={target} />;
+  return (
+    <TakeoffsStoreOwner
+      key={liveTakeoffsStoreKey(target, scope.scope.document)}
+      source="live"
+      documentAddress={scope.scope.document}
+      target={target}
+    />
+  );
 }
 
 function TakeoffsCapabilityState({ info }: { info?: ReturnType<typeof usePeInfo> }) {
@@ -99,58 +101,6 @@ function TakeoffsCapabilityState({ info }: { info?: ReturnType<typeof usePeInfo>
   );
 }
 
-export function LiveTakeoffsDocumentRoute({ target = "" }: { target?: string }) {
-  const fleet = useFleet();
-  const queryClient = useQueryClient();
-  const resolution = resolveTarget(fleet.sessions, target);
-  const session = resolution.kind === "resolved" ? resolution.session : null;
-  const documents = useHostOp("revit.context.document-session", undefined, {
-    bridgeSessionId: session?.sessionId,
-    enabled: session !== null,
-  });
-  const choices = useMemo(() => {
-    if (!session || !documents.data)
-      return routeDocumentChoices(session ? [session] : fleet.sessions);
-    return openLocalDocuments(documents.data).flatMap((document) => {
-      const parsed = addressSchema.safeParse(document.id);
-      return parsed.success
-        ? [
-            {
-              at: parsed.data,
-              label: `${session.sdkSessionId ?? session.sessionId} · ${document.label}`,
-              active: document.active,
-            },
-          ]
-        : [];
-    });
-  }, [documents.data, fleet.sessions, session]);
-  const activate = useCallback(
-    async (choice: (typeof choices)[number]) => {
-      if (!session) throw Error("no world bound");
-      await documentTrunk.activate(session, choice.at);
-      await queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
-    },
-    [queryClient, session],
-  );
-  return (
-    <RouteDocument
-      sessions={fleet.sessions}
-      choices={choices}
-      onActivate={activate}
-      empty={() => <TakeoffsClusterFallback target={target} />}
-    >
-      {(at) => (
-        <TakeoffsStoreOwner
-          key={liveTakeoffsStoreKey(session?.sessionId ?? target, at)}
-          source="live"
-          documentAddress={at}
-          target={target}
-        />
-      )}
-    </RouteDocument>
-  );
-}
-
 export const liveTakeoffsStoreKey = (sessionId: string, documentAddress: string) =>
   `live:${sessionId}:${documentAddress}`;
 
@@ -159,7 +109,7 @@ export const liveTakeoffsStoreKey = (sessionId: string, documentAddress: string)
  * opens documents exactly as the Revit UI would — no clone/detach policy (kaitpw ruling
  * 2026-09-01, after the working-copy clone policy stranded `ProjectA1` documentless and refused a
  * cloud model; explicit safe-copy/--detach verbs are owed in the takeoffs ledger). Once a
- * document is active, `RouteDocument` binds it and the takeoff store owns working-copy concerns.
+ * document is named, `RouteScope` binds it and the takeoff store owns working-copy concerns.
  */
 function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
   const fleet = useFleet({ all: true });

@@ -18,7 +18,7 @@ import {
   type Scope,
   type Slice,
   verbFailure,
-  worldOf,
+  worldSelector,
 } from "#/state/route-store";
 import type { BindingPatch } from "#/targeting/kit";
 import type { HostOperationCatalogEntry } from "#/ops/product";
@@ -54,7 +54,7 @@ export function createOpsStore(deps: {
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
   // ponytail: the world is the page Scope's session; changing it is a `?target` navigation, not a doc write.
-  const world = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
+  const world = Atom.make(() => worldSelector(deps.scope.scope)).pipe(owned("binding/world"));
   const hydrated = Atom.make((get) => {
     const result = get(slice);
     return AsyncResult.isSuccess(result) && result.value.hydrated;
@@ -170,6 +170,7 @@ export function createOpsStore(deps: {
 
   return {
     registry,
+    scope: deps.scope,
     atoms: {
       world,
       op: selectedKey,

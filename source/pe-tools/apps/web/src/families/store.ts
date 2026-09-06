@@ -13,7 +13,8 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import type { FfProjectData } from "#/host/familyfoundry";
-import { documentAddress, resolveTarget } from "#/host/target";
+import { bridgeSelector } from "@pe/agent-contracts";
+import { documentAddress, scopeSession } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
 import {
   createRouteStoreCore,
@@ -25,7 +26,6 @@ import {
   hostRead,
   type Scope,
   type Slice,
-  worldOf,
 } from "#/state/route-store";
 
 type Setter<A> = A | ((previous: A) => A);
@@ -55,7 +55,10 @@ export function createFamiliesStore(deps: {
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
   // ponytail: the world is the page Scope's session; rebinding is a `?target` navigation, not a doc write.
-  const target = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
+  // The host selector for this page: `doc:<Address>`, or `pin:<id>|doc:<Address>` when pinned.
+  const target = Atom.make(() => bridgeSelector(deps.scope.scope) ?? "").pipe(
+    owned("binding/world"),
+  );
   const profilePath = Atom.make((get) => get(document)?.profilePath ?? null).pipe(
     owned("view/profile-path"),
   );
@@ -97,11 +100,11 @@ export function createFamiliesStore(deps: {
     const doc = get(document);
     if (!value || !doc) return null;
     const sessions = get(sessionsResult);
-    const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, worldOf(deps.scope))
+    const session = AsyncResult.isSuccess(sessions)
+      ? scopeSession(deps.scope.scope, sessions.value.value)
       : null;
-    if (resolution?.kind !== "resolved") return null;
-    return here(value, documentAddress(resolution.session));
+    if (!session) return null;
+    return here(value, documentAddress(session));
   }).pipe(owned("view/plan"));
   const categorySource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),

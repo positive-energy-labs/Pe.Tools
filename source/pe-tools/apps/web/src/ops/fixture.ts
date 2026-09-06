@@ -107,7 +107,6 @@ export const OPS_FIXTURE_CAPABILITIES: CapabilityCatalog = {
     },
   ],
 };
-export const OPS_FIXTURE_WORLD = "session:fixture-26" as const;
 export const OPS_FIXTURE_TARGET = "fixture-26";
 export const OPS_FIXTURE_SELECTED = "revit.context.visible-summary";
 export const OPS_FIXTURE_REQUEST = {

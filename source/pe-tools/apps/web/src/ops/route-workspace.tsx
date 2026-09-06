@@ -1,9 +1,8 @@
-import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { Workspace } from "#/components/anatomy";
 import { useAtomValue } from "@effect/atom-react";
 import { FactChip } from "#/components/lang/chip";
-import { RouteDocument } from "#/workbench/route-document";
+import { RouteScope } from "#/workbench/route-scope";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/lang/verb-lane";
@@ -11,14 +10,14 @@ import { Provenance } from "#/components/lang/section";
 import { Press } from "#/components/lang/press";
 import { useFleet } from "#/host/fleet";
 import { useHostOp } from "#/host/queries";
-import { resolveTarget } from "#/host/target";
+import { scopeSession } from "#/host/target";
 import { syntheticOps } from "#/ops/glance";
 import { OPS_PRODUCT, opsRefusal, type OpsSlot } from "#/ops/product";
 import { createOpsStore, type OpsStore } from "#/ops/store";
 import { SyntheticRunner } from "#/ops/synthetic";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import { pageScope } from "#/state/route-store";
+import { pageScope, type Scope } from "#/state/route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
@@ -30,7 +29,6 @@ import {
   createOpsFixtureSlice,
   OPS_FIXTURE_ADDRESS,
   OPS_FIXTURE_CAPABILITIES,
-  OPS_FIXTURE_WORLD,
   OPS_FIXTURE_CATALOG,
   OPS_FIXTURE_REQUEST,
   OPS_FIXTURE_SELECTED,
@@ -45,7 +43,7 @@ export function OpsRoute({ source }: { source?: "fixture" }) {
   return source === "fixture" ? (
     <FixtureOpsStoreOwner />
   ) : (
-    <RouteDocument>{(at) => <OpsStoreOwner key={at} documentAddress={at} />}</RouteDocument>
+    <RouteScope>{(scope) => <OpsStoreOwner key={scope.scope.document} scope={scope} />}</RouteScope>
   );
 }
 
@@ -53,7 +51,7 @@ function FixtureOpsStoreOwner() {
   const store = useRouteStore(() => {
     const fixture = createOpsStore({
       registry: appAtomRegistry,
-      scope: pageScope(OPS_FIXTURE_ADDRESS, OPS_FIXTURE_WORLD),
+      scope: pageScope(OPS_FIXTURE_ADDRESS, OPS_FIXTURE_TARGET),
       slice: createOpsFixtureSlice(),
       apply: async () => ({ ok: true, revision: 1 }),
       call: async () => {
@@ -75,20 +73,11 @@ function FixtureOpsStoreOwner() {
   return <OpsPage store={store} fixture />;
 }
 
-export function OpsStoreOwner({
-  documentAddress,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-}) {
-  // ponytail: the page's world is its `?target`; owed: the ops route declares it in validateSearch.
-  const target = useSearch({
-    strict: false,
-    select: (s) => (s as { target?: string }).target ?? "",
-  });
+export function OpsStoreOwner({ scope }: { scope: Scope }) {
   const store = useRouteStore(() =>
     createOpsStore({
       registry: appAtomRegistry,
-      scope: pageScope(documentAddress, target),
+      scope,
     }),
   );
   return <OpsPage store={store} />;
@@ -106,11 +95,10 @@ export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?:
         stale: false,
         error: null,
         at: Date.UTC(2026, 7, 30, 18, 42, 0),
-        basis: ["fixture.ops.catalog", "fixture.route-document"],
+        basis: ["fixture.ops.catalog", "fixture.route-scope"],
       }
     : liveFleet;
-  const resolution = resolveTarget(fleet.sessions, world);
-  const session = resolution.kind === "resolved" ? resolution.session : null;
+  const session = scopeSession(store.scope.scope, fleet.sessions);
   const catalog = useHostOp("host.ops.catalog", undefined, {
     bridgeSessionId: session?.sessionId,
     enabled: !fixture && session !== null,
@@ -220,16 +208,10 @@ export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?:
     product,
     state,
     (patch) => {
-      const nextWorld = patch.bound?.world ?? world;
-      const nextResolution = resolveTarget(fleet.sessions, nextWorld || "");
-      const nextSession = nextResolution.kind === "resolved" ? nextResolution.session : null;
+      // The world is the page Scope, never a binding (ops/store.ts persistBinding ignores it).
       void store.actions.setBindings(
         patch,
-        nextSession
-          ? {
-              target: nextSession.sdkSessionId ?? `pid:${nextSession.processId}`,
-            }
-          : null,
+        session ? { target: session.sdkSessionId ?? `pid:${session.processId}` } : null,
       );
     },
     picker.open,

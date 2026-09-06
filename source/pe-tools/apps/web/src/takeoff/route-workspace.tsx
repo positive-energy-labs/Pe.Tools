@@ -10,7 +10,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { VerbLane } from "#/components/lang/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { fuseFleet, useFleet } from "#/host/fleet";
-import { resolveTarget } from "#/host/target";
+import { scopeSession } from "#/host/target";
 import { Atlas } from "#/takeoff/atlas";
 import { DEFAULT_ARTIFACT_DIR } from "#/takeoff/model";
 import { TAKEOFF_SLOTS, type TakeoffSlot, type TakeoffStore } from "#/takeoff/store";
@@ -19,13 +19,7 @@ import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
 import { documentTrunk, openLocalDocuments, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import {
-  DIRS_KEY,
-  PANES,
-  readDirs,
-  resolvedWorldBinding,
-  takeoffsWorkingCopyPath,
-} from "#/takeoff/route";
+import { DIRS_KEY, PANES, readDirs, takeoffsWorkingCopyPath } from "#/takeoff/route";
 import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
 import { addressSchema } from "@pe/agent-contracts";
 import { useHostOp } from "#/host/queries";
@@ -59,8 +53,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   };
   const targetingFleet = live ? fleet : fixtureFleet;
   const sessions = targetingFleet.sessions;
-  const resolution = resolveTarget(sessions, target);
-  const session = resolution.kind === "resolved" ? resolution.session : null;
+  const session = scopeSession(store.scope.scope, sessions);
   const documentSession = useHostOp("revit.context.document-session", undefined, {
     bridgeSessionId: session?.sessionId,
     enabled: live && session !== null,
@@ -107,7 +100,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const state: BindingState<TakeoffSlot> = useMemo(
     () => ({
       bound: {
-        world: resolvedWorldBinding(resolution, sessions),
+        world: target || null,
         rvt: activeDocument?.documentId ?? null,
         views: null,
         zones: null,
@@ -117,7 +110,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       multi: { views: new Set(views), zones: new Set(zones) },
       stage,
     }),
-    [resolution, sessions, activeDocument?.documentId, views, dir, r10, zones, stage],
+    [target, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
   const moveToDocument = (documentId: string) => {
     const at = addressSchema.safeParse(documentId);
@@ -388,11 +381,9 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
             <EmptyState
               story="scope"
               exit={
-                resolution.kind === "ambiguous"
-                  ? "more than one session — pick a world in the sentence above"
-                  : sessions.length === 0
-                    ? "start Revit with the Pe add-in loaded and a world appears in the sentence — or take the fixture lane"
-                    : `nothing matches "${target}" — pick a world in the sentence above`
+                sessions.length === 0
+                  ? "start Revit with the Pe add-in loaded and a world appears in the sentence — or take the fixture lane"
+                  : "no session holds this document — pick a world in the sentence above"
               }
             >
               no world bound — the sentence's first slot is the live connected-host catalog
