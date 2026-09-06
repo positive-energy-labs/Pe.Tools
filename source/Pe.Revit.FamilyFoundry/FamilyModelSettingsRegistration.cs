@@ -13,11 +13,12 @@ namespace Pe.Revit.FamilyFoundry;
 public static class FamilyModelSettingsRegistration {
     public const string ModuleKey = "FamilyFoundry";
     public const string RootKey = "models";
+    public const string PatchRootKey = "patches";
 
     public static StructuralSettingsModuleDescriptor Module { get; } = new(
         ModuleKey,
         RootKey,
-        [new SettingsRootDescriptor(RootKey, "Family Models")],
+        [new SettingsRootDescriptor(RootKey, "Family Models"), new SettingsRootDescriptor(PatchRootKey, "Family Patches")],
         SettingsStorageProfiles.SharedAuthoring,
         SettingsModuleHostScope.Session,
         SettingsModuleActiveDocumentKind.Any
@@ -27,13 +28,26 @@ public static class FamilyModelSettingsRegistration {
         new SettingsRootBinding<FamilyModel>(Module, RootKey);
 
     public static IReadOnlyList<StructuralSettingsModuleDescriptor> StructuralModules { get; } = [Module];
-    public static IReadOnlyList<ISettingsRootBinding> RootBindings { get; } = [Root];
+    public static ISettingsRootBinding<FamilyPatch> PatchRoot { get; } =
+        new SettingsRootBinding<FamilyPatch>(Module, PatchRootKey);
+
+    public static IReadOnlyList<ISettingsRootBinding> RootBindings { get; } = [Root, PatchRoot];
 
     /// <summary>Registers the strict validator and tells the schema generator that the slot-grammar structs are strings.</summary>
     public static void RegisterValidator() {
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyModel>(Validate);
+        SettingsDocumentValidatorRegistry.Shared.Register<FamilyPatch>(ValidatePatch);
         foreach (var slot in new[] { typeof(PortableLength), typeof(PortableAngle), typeof(PortableValue) })
             JsonTypeSchemaBindingRegistry.Shared.Register(slot, StringSlotSchemaBinding.Instance);
+    }
+
+    private static IReadOnlyList<SettingsDocumentValidationIssue> ValidatePatch(SettingsDocumentValidationContext context) {
+        try {
+            _ = FamilyPatch.Parse(context.ComposedContent);
+            return [];
+        } catch (Newtonsoft.Json.JsonException ex) {
+            return [new SettingsDocumentValidationIssue("$", FamilyModelDiagnosticCodes.InvalidJson, "error", ex.Message)];
+        }
     }
 
     private static IReadOnlyList<SettingsDocumentValidationIssue> Validate(

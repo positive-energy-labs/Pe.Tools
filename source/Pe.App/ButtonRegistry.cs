@@ -39,34 +39,11 @@ public sealed class ButtonRegistry {
             ToolTip = "Manage families in a variety of ways from the Family Foundry.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register(new ButtonRegistration<CmdFFManagerProjectSnapshot> {
-            Text = "FF Snapshot Projector",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip =
-                "Capture the current family state, project it to an FF profile, and optionally apply that projected profile to a fresh family document.",
-            Container = new ButtonContainer.Panel("Migration")
-        }),
         Register(new ButtonRegistration<CmdFFMigrator> {
             Text = "FF Migrator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Process families in a variety of ways from the Family Foundry.",
-            Container = new ButtonContainer.Panel("Migration")
-        }),
-        Register(new ButtonRegistration<CmdFFDesiredMigrator> {
-            Text = "FF Desired Migrator",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Process families from declarative desired-state Family Foundry profiles.",
-            Container = new ButtonContainer.Panel("Migration")
-        }),
-        Register(new ButtonRegistration<CmdFFMakeATVariants> {
-            Text = "Make AT Variants",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip =
-                "Create Air Terminal variants from an air terminal family by prepopulating the configured tag parameter and setting an existing duct connector's connection settings properly.",
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register(new ButtonRegistration<CmdPltCommands> {

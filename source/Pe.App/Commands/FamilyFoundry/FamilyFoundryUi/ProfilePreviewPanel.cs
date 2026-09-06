@@ -1,285 +1,73 @@
 using Pe.Revit.Ui.Core;
+using Pe.Shared.RevitData.Families;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Media;
-using Pe.Shared.RevitData;
 using TextElement = System.Windows.Documents.TextElement;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
-// Note: This panel has complex domain-specific rendering that benefits from manual FlowDocument building.
-// FlowDocumentBuilder helpers are used where applicable (Create, AddSectionHeader, AddJsonBlock).
-
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
-/// <summary>
-///     Side panel that displays profile preview data including operations, parameters, and families.
-///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
-///     Preview data building is injected via delegate to support generic TProfile without making this class generic.
-/// </summary>
-public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewData> {
-    private readonly Func<ProfileListItem?, CancellationToken, Task<PreviewData?>> _previewBuilder;
-    private readonly WpfUiRichTextBox _richTextBox;
+/// <summary>Side panel: validity, section counts, selected families, and the JSON of the selected file.</summary>
+public class ProfilePreviewPanel(Func<ProfileListItem?, CancellationToken, Task<PreviewData?>> previewBuilder) : PaletteSidebarPanel<ProfileListItem, PreviewData> {
+    private readonly WpfUiRichTextBox _richTextBox = new() {
+        IsReadOnly = true, IsDocumentEnabled = true, Focusable = true, IsTextSelectionEnabled = true, AutoWordSelection = false,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+    };
 
-    /// <summary>
-    ///     Creates a ProfilePreviewPanel with injected preview building logic.
-    /// </summary>
-    /// <param name="previewBuilder">
-    ///     Delegate that builds PreviewData from a ProfileListItem.
-    ///     This delegate should handle caching and context updates internally.
-    /// </param>
-    public ProfilePreviewPanel(Func<ProfileListItem?, CancellationToken, Task<PreviewData?>> previewBuilder) {
-        this._previewBuilder = previewBuilder;
+    protected override async Task<PreviewData?> BuildDataAsync(ProfileListItem item, CancellationToken ct) => ct.IsCancellationRequested ? null : await previewBuilder(item, ct);
 
-        // Palette handles sidebar padding and scrolling - just provide the content
-        this._richTextBox = new WpfUiRichTextBox {
-            IsReadOnly = true,
-            IsDocumentEnabled = true,
-            Focusable = true,
-            IsTextSelectionEnabled = true,
-            AutoWordSelection = false,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
-        };
+    protected override void RenderData(PreviewData? data) {
+        this.Content ??= this._richTextBox;
+        if (data == null) { this._richTextBox.Document = FlowDocumentBuilder.Create(); return; }
+        var doc = FlowDocumentBuilder.Create().AddHeader(data.ProfileName);
 
-        this.Content = this._richTextBox;
-    }
+        var status = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
+        var run = new Run(data.IsValid ? "✓ Valid" : "✗ Invalid") { FontWeight = FontWeights.Bold, FontSize = 12 };
+        run.SetResourceReference(TextElement.ForegroundProperty, data.IsValid ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush");
+        status.Inlines.Add(run);
+        doc.Blocks.Add(status);
 
-    protected override async Task<PreviewData?> BuildDataAsync(ProfileListItem item, CancellationToken ct) {
-        if (ct.IsCancellationRequested) return null;
-        return await this._previewBuilder(item, ct);
-    }
-
-    protected override void RenderData(PreviewData? data) => this.UpdateContent(data);
-
-    protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
-
-    private void UpdateContent(PreviewData? data) {
-        if (data == null) {
-            this._richTextBox.Document = FlowDocumentBuilder.Create();
-            return;
+        if (data.RemainingErrors.Count > 0) {
+            _ = doc.AddSectionHeader("Errors");
+            var list = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
+            foreach (var error in data.RemainingErrors) list.ListItems.Add(new ListItem(new Paragraph(new Run(error))));
+            doc.Blocks.Add(list);
         }
-
-        var doc = FlowDocumentBuilder.Create()
-            .AddHeader(data.ProfileName);
-
-        // Validation Status Section (if there are fixes or errors)
-        if (!data.IsValid || data.AppliedFixes.Any() || data.RemainingErrors.Any() || data.Warnings.Any())
-            AddValidationSection(doc, data);
-
-        // Only show operations/params/families if profile is valid
-        if (data.IsValid) {
-            // Summary section
-            var summaryPara = new Paragraph();
-            summaryPara.Inlines.Add(
-                new Run($"Operations: {data.OperationCount}") { FontWeight = FontWeights.SemiBold });
-            summaryPara.Inlines.Add(new LineBreak());
-            summaryPara.Inlines.Add(new Run($"APS Parameters: {data.ApsParameterCount}"));
-            summaryPara.Inlines.Add(new LineBreak());
-            summaryPara.Inlines.Add(new Run($"AddAndSet Parameters: {data.AddAndSetParameterCount}"));
-            summaryPara.Inlines.Add(new LineBreak());
-            summaryPara.Inlines.Add(new Run($"Families: {data.FamilyCount}"));
-            summaryPara.Margin = new Thickness(0, 0, 0, 12);
-            doc.Blocks.Add(summaryPara);
-
-            // Operations list with enabled status
-            if (data.Operations.Count > 0) {
-                _ = doc.AddSectionHeader("Operations");
-                var opList = new List { MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12) };
-                foreach (var op in data.Operations) {
-                    var enabledText = op.Enabled ? "✓" : "✗";
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run($"{enabledText} ") {
-                        FontWeight = FontWeights.Bold,
-                        Foreground = op.Enabled
-                            ? Brushes.Green
-                            : Brushes.Red
-                    });
-                    para.Inlines.Add(new Run($"{op.Name}"));
-                    para.Inlines.Add(new LineBreak());
-                    para.Inlines.Add(new Run($"  Type: {op.Type}, Batch: {op.IsMerged}") { FontSize = 10 });
-                    var listItem = new ListItem(para);
-                    opList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(opList);
-            }
-
-            // APS Parameters list with details
-            if (data.ApsParameters.Count > 0) {
-                _ = doc.AddSectionHeader("APS Parameters (from Parameters Service)");
-                var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-                foreach (var param in data.ApsParameters) {
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run(param.Name) { FontWeight = FontWeights.SemiBold });
-                    para.Inlines.Add(new LineBreak());
-                    para.Inlines.Add(
-                        new Run($"  {(param.IsInstance ? "Instance" : "Type")}, {param.DataType}") { FontSize = 10 });
-                    var listItem = new ListItem(para);
-                    paramList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(paramList);
-            }
-
-            // AddAndSet Parameters list with details
-            if (data.AddAndSetParameters.Count > 0) {
-                _ = doc.AddSectionHeader("AddAndSet Parameters (set by profile)");
-                var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-                foreach (var param in data.AddAndSetParameters) {
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run(param.Name) { FontWeight = FontWeights.SemiBold });
-                    para.Inlines.Add(new LineBreak());
-                    para.Inlines.Add(
-                        new Run($"  {(param.IsInstance ? "Instance" : "Type")}, {param.DataType}") { FontSize = 10 });
-                    var listItem = new ListItem(para);
-                    paramList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(paramList);
-            }
-
-            // Families list with categories
-            if (data.Families.Count > 0) {
-                _ = doc.AddSectionHeader("Families to Process");
-                var famList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-                foreach (var fam in data.Families) {
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run(fam.Name) { FontWeight = FontWeights.SemiBold });
-                    para.Inlines.Add(new LineBreak());
-                    para.Inlines.Add(new Run($"  Category: {fam.Category}") { FontSize = 10 });
-                    var listItem = new ListItem(para);
-                    famList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(famList);
-            }
-
-            // Profile JSON section
-            if (!string.IsNullOrEmpty(data.ProfileJson)) {
-                _ = doc.AddSectionHeader("Profile Settings (JSON)");
-                _ = doc.AddJsonBlock(data.ProfileJson);
-            }
+        if (data.Sections.Count > 0) {
+            _ = doc.AddSectionHeader(data.Patch is null ? "Sections" : "Patch fragment");
+            var list = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
+            foreach (var s in data.Sections) list.ListItems.Add(new ListItem(new Paragraph(new Run(s))));
+            doc.Blocks.Add(list);
         }
-
+        if (data.Families.Count > 0) {
+            _ = doc.AddSectionHeader($"Families selected ({data.Families.Count})");
+            var list = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
+            foreach (var f in data.Families) list.ListItems.Add(new ListItem(new Paragraph(new Run($"{f.Name}  ({f.Category})"))));
+            doc.Blocks.Add(list);
+        }
+        if (!string.IsNullOrEmpty(data.ProfileJson)) {
+            _ = doc.AddSectionHeader("JSON");
+            _ = doc.AddJsonBlock(data.ProfileJson);
+        }
         this._richTextBox.Document = doc;
     }
 
-    private static void AddValidationSection(FlowDocument doc, PreviewData data) {
-        // Status indicator
-        var statusPara = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
-
-        if (data.IsValid) {
-            var validRun = new Run("✓ Valid Profile") { FontWeight = FontWeights.Bold, FontSize = 12 };
-            validRun.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
-            statusPara.Inlines.Add(validRun);
-        } else {
-            var invalidRun = new Run("✗ Invalid Profile") { FontWeight = FontWeights.Bold, FontSize = 12 };
-            invalidRun.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
-            statusPara.Inlines.Add(invalidRun);
-        }
-
-        doc.Blocks.Add(statusPara);
-
-        // Applied fixes section (green)
-        if (data.AppliedFixes.Any()) {
-            var fixesHeader = new Paragraph(new Run("Applied Fixes") { FontWeight = FontWeights.SemiBold }) {
-                Margin = new Thickness(0, 8, 0, 4)
-            };
-            fixesHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
-            doc.Blocks.Add(fixesHeader);
-
-            var fixesList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-            foreach (var fix in data.AppliedFixes) {
-                var para = new Paragraph(new Run(fix));
-                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
-                var listItem = new ListItem(para);
-                fixesList.ListItems.Add(listItem);
-            }
-
-            doc.Blocks.Add(fixesList);
-        }
-
-        // Remaining errors section (red)
-        if (data.RemainingErrors.Any()) {
-            var errorsHeader = new Paragraph(new Run("Validation Errors") { FontWeight = FontWeights.SemiBold }) {
-                Margin = new Thickness(0, 8, 0, 4)
-            };
-            errorsHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
-            doc.Blocks.Add(errorsHeader);
-
-            var errorsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-            foreach (var error in data.RemainingErrors) {
-                var para = new Paragraph(new Run(error));
-                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
-                var listItem = new ListItem(para);
-                errorsList.ListItems.Add(listItem);
-            }
-
-            doc.Blocks.Add(errorsList);
-        }
-
-        if (data.Warnings.Any()) {
-            var warningsHeader = new Paragraph(new Run("Warnings") { FontWeight = FontWeights.SemiBold }) {
-                Margin = new Thickness(0, 8, 0, 4)
-            };
-            warningsHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCautionBrush");
-            doc.Blocks.Add(warningsHeader);
-
-            var warningsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-            foreach (var warning in data.Warnings) {
-                var para = new Paragraph(new Run(warning));
-                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCautionBrush");
-                warningsList.ListItems.Add(new ListItem(para));
-            }
-
-            doc.Blocks.Add(warningsList);
-        }
-    }
+    protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
 }
 
-/// <summary>
-///     Data model for profile preview display.
-/// </summary>
-public class PreviewData {
+public sealed record PreviewData {
     public string ProfileName { get; init; } = string.Empty;
-    public int OperationCount => this.Operations.Count;
-    public int ApsParameterCount => this.ApsParameters.Count;
-    public int AddAndSetParameterCount => this.AddAndSetParameters.Count;
-    public int FamilyCount => this.Families.Count;
-    public List<OperationInfo> Operations { get; init; } = [];
-    public List<ParameterInfo> ApsParameters { get; init; } = [];
-    public List<ParameterInfo> AddAndSetParameters { get; init; } = [];
-    public List<FamilyInfo> Families { get; init; } = [];
-    public string ProfileJson { get; init; } = string.Empty;
-
-    // File metadata (from ProfileListItem)
     public string FilePath { get; init; } = string.Empty;
-    public DateTime? CreatedDate { get; init; }
     public DateTime? ModifiedDate { get; init; }
     public int LineCount { get; init; }
-
-    // Validation status
-    public bool IsValid { get; init; } = true;
-    public List<string> AppliedFixes { get; init; } = [];
+    public string ProfileJson { get; init; } = string.Empty;
+    public bool IsValid { get; init; }
     public List<string> RemainingErrors { get; init; } = [];
-    public List<string> Warnings { get; init; } = [];
+    public List<string> Sections { get; init; } = [];
+    public List<FamilyInfo> Families { get; init; } = [];
+    public FamilyModel? Model { get; init; }
+    public FamilyPatch? Patch { get; init; }
 }
 
-/// <summary>
-///     Operation info for preview display.
-/// </summary>
-public record OperationInfo(string Name, string Description, string Type, string IsMerged, bool Enabled);
-
-/// <summary>
-///     Parameter info for preview display.
-/// </summary>
-public record ParameterInfo(ParameterDefinitionDescriptor Definition, string DataType) {
-    public string Name => this.Definition.Identity.Name;
-    public bool IsInstance => this.Definition.IsInstance == true;
-}
-
-/// <summary>
-///     Family info for preview display.
-/// </summary>
 public record FamilyInfo(string Name, string Category);

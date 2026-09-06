@@ -5,7 +5,6 @@ global using Autodesk.Revit.UI;
 global using NUnit.Framework;
 global using Pe.Revit.FamilyFoundry.Capture;
 global using Pe.Revit.FamilyFoundry.OperationSettings;
-global using Pe.Revit.FamilyFoundry.Plans;
 global using Pe.Revit.FamilyFoundry.Snapshots;
 global using Pe.Bcl.Compat;
 global using Pe.Revit.Compat;

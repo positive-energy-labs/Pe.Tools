@@ -93,44 +93,4 @@ internal static class ProbeJsonDump {
             connectors = probe.ConnectorCount
         }
     };
-
-    /// <summary>
-    ///     The intent oracle's own prediction, carried beside the reading it is asserted against. The board
-    ///     draws BOTH sides from this file, so the web never becomes a second predictor: it renders what
-    ///     <see cref="FamilyModelEvaluatorOracle" /> said and what Revit did.
-    /// </summary>
-    /// <remarks>
-    ///     A prediction the oracle refuses to make (a turned cylinder, an unresolvable reference) is board
-    ///     content, not an error — the refusal replaces the numbers and says why.
-    /// </remarks>
-    private static object Predict(RuntimeStateProbe probe, FamilyModel model) {
-        try {
-            var prediction = FamilyModelEvaluatorOracle.Predict(model, probe.ParameterValues);
-            return new {
-                refusal = (string?)null,
-                solids = prediction.Solids.Select(solid => new {
-                    slug = solid.Slug,
-                    kind = solid.Kind.ToString(),
-                    isSolid = solid.IsSolid,
-                    min = new[] { solid.Min.X, solid.Min.Y, solid.Min.Z },
-                    max = new[] { solid.Max.X, solid.Max.Y, solid.Max.Z },
-                    diameter = solid.Diameter
-                }),
-                planes = prediction.Planes.Select(plane => new {
-                    name = plane.Name,
-                    point = Vector(plane.Geometry.Point),
-                    normal = Vector(plane.Geometry.Normal)
-                })
-            };
-        } catch (Exception exception) {
-            return new { refusal = exception.Message, solids = Array.Empty<object>(), planes = Array.Empty<object>() };
-        }
-    }
-
-    private static double[] Vector(FamilyModelVector vector) => [vector.X, vector.Y, vector.Z];
-
-    private static double[] Xyz(XYZ point) => [point.X, point.Y, point.Z];
-
-    private static string SanitizeName(string value) =>
-        string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
 }

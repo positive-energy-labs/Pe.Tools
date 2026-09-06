@@ -115,6 +115,11 @@ public class OperationProcessor(
         return (contexts, totalSw.Elapsed.TotalMilliseconds);
     }
 
+    /// <summary>
+    ///     Project path: one <see cref="FamilyVisit" /> per selected family. The visit owns EditFamily, the
+    ///     transaction discipline (<see cref="ExecutionOptions.Visit" />), LoadFamily and the post-verify; the
+    ///     processor contributes the snapshots, the operation funcs, and the save paths.
+    /// </summary>
     private List<FamilyProcessingContext> ProcessNormalDocument(
         OperationQueue queue,
         SnapshotCapturePipeline? collectorQueue,
@@ -131,59 +136,63 @@ public class OperationProcessor(
         }
 
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
+        var visitOptions = new FamilyVisitOptions {
+            Transaction = this._exOpts.Visit.Transaction,
+            Park = this._exOpts.Visit.Park,
+            SuppressWarnings = this._exOpts.SuppressWarnings,
+            Load = saveOpts.LoadFamily
+        };
 
         foreach (var family in families) {
             var familyName = family.Name;
             AppendProcessorTrace(outputFolderPath, familyName, "family-start");
-
-            // Reset GroupContexts for each family processing cycle
             queue.ResetAllGroupContexts();
-
-            var namedFamilyFuncs = queue.ToNamedFuncs(
-                this._exOpts.OptimizeTypeOperations,
-                this._exOpts.SingleTransaction);
-            var familyFuncs = namedFamilyFuncs.Select(item => item.Callback).ToArray();
-            var transactionNames = this._exOpts.SingleTransaction
-                ? null
-                : namedFamilyFuncs.Select(item => item.Name).ToArray();
-
-            var famDoc = this.OpenDoc.GetFamilyDocument(family);
-            AppendProcessorTrace(outputFolderPath, familyName, "edit-family-opened");
-            famDoc = famDoc.EnsureDefaultType();
-            AppendProcessorTrace(outputFolderPath, familyName, "default-type-ready");
-            _ = famDoc.StartPipeline(this.OpenDoc, family, pipeline => {
-                    AppendProcessorTrace(outputFolderPath, familyName, "collect-pre-start");
-                    var current = pipeline.CollectPreSnapshot(collectorQueue);
-                    AppendProcessorTrace(outputFolderPath, familyName, "collect-pre-complete");
-
+            var edits = queue.ToNamedFuncs(this._exOpts.OptimizeTypeOperations, this._exOpts.SingleTransaction);
+            var context = new FamilyProcessingContext { FamilyName = familyName };
+            var sw = Stopwatch.StartNew();
+            var logs = new List<OperationLog>();
+            try {
+                var result = FamilyVisit.Run(this.OpenDoc, family, scope => {
+                    var famDoc = scope.Document;
+                    var projectCollector = collectorQueue?.ToProjectCollectorFunc();
+                    var famDocCollector = collectorQueue?.ToFamilyDocCollectorFunc();
+                    if (collectorQueue != null) {
+                        var pre = new FamilySnapshot { FamilyName = familyName };
+                        projectCollector!(pre, this.OpenDoc, family);
+                        famDocCollector!(pre, famDoc);
+                        context.PreProcessSnapshot = pre;
+                    }
                     AppendProcessorTrace(outputFolderPath, familyName, "operations-start");
-                    current = current.Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings);
+                    var opSw = Stopwatch.StartNew();
+                    foreach (var (name, callback) in edits)
+                        scope.Edit(name, d => logs.AddRange(callback(d, context)));
+                    context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
                     AppendProcessorTrace(outputFolderPath, familyName, "operations-complete");
+                    _ = famDoc.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
+                    if (collectorQueue != null) {
+                        var post = new FamilySnapshot { FamilyName = familyName };
+                        projectCollector!(post, this.OpenDoc, family);
+                        famDocCollector!(post, famDoc);
+                        context.PostProcessSnapshot = post;
+                    }
+                }, visitOptions);
 
-                    AppendProcessorTrace(outputFolderPath, familyName, "save-start");
-                    current = current.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
-                    AppendProcessorTrace(outputFolderPath, familyName, "save-complete");
-
-                    AppendProcessorTrace(outputFolderPath, familyName, "load-start");
-                    current = current.Load();
-                    AppendProcessorTrace(outputFolderPath, familyName, "load-complete");
-
-                    AppendProcessorTrace(outputFolderPath, familyName, "collect-post-start");
-                    _ = current.CollectPostSnapshot(collectorQueue);
-                    AppendProcessorTrace(outputFolderPath, familyName, "collect-post-complete");
-                },
-                out var context);
-            AppendProcessorTrace(outputFolderPath, familyName, "pipeline-complete");
-
-            AppendProcessorTrace(outputFolderPath, familyName, "close-start");
-            if (!famDoc.Close(false))
-                throw new InvalidOperationException($"Failed to close family document for {familyName}");
-            AppendProcessorTrace(outputFolderPath, familyName, "close-complete");
+                if (!result.Ran)
+                    throw new InvalidOperationException($"{result.Refusal}: {result.Message}");
+                if (result.Diagnostics.Count > 0)
+                    logs.Add(new OperationLog("Commit", result.Diagnostics
+                        .Select((d, i) => d.IsError ? new LogEntry($"{d.Edit} {i + 1}").Error(d.Message) : new LogEntry($"{d.Edit} {i + 1}").Skip(d.Message)).ToList()));
+                if (saveOpts.LoadFamily && !result.Verified)
+                    logs.Add(new OperationLog("LoadFamily", [new LogEntry("post-verify").Error(result.Message ?? "unverified")]));
+                context.OperationLogs = logs;
+            } catch (Exception ex) {
+                context.OperationLogs = new Exception($"Failed to process family {familyName}: {ex.ToStringDemystified()}");
+            } finally {
+                context.TotalMs = sw.Elapsed.TotalMilliseconds;
+            }
 
             contexts.Add(context);
-            AppendProcessorTrace(outputFolderPath, familyName, "write-artifacts-start");
             this.WriteArtifacts(context);
-            AppendProcessorTrace(outputFolderPath, familyName, "write-artifacts-complete");
             this._perFamilyCallback?.Invoke(context);
             AppendProcessorTrace(outputFolderPath, familyName, "family-complete");
         }
@@ -226,121 +235,6 @@ public class OperationProcessor(
         return [context];
     }
 
-
-    public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
-        List<(string variant, OperationQueue queue)> variants,
-        string outputDirectory
-    ) => this.ProcessFamilyDocumentIntoVariants(variants, null, outputDirectory);
-
-    public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
-        List<(string variant, OperationQueue queue)> variants,
-        SnapshotCapturePipeline? collectorQueue,
-        string outputDirectory
-    ) => this.ProcessFamilyDocumentIntoVariants(
-        variants.Select(v => new VariantSpec(v.variant, v.queue)).ToList(),
-        collectorQueue,
-        outputDirectory
-    );
-
-    public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
-        List<VariantSpec> variants,
-        SnapshotCapturePipeline? collectorQueue,
-        string outputDirectory
-    ) {
-        var contexts = new List<FamilyProcessingContext>();
-
-        try {
-            if (variants.Count == 0) return [];
-            var directoryInfo = !Directory.Exists(outputDirectory)
-                ? Directory.CreateDirectory(outputDirectory)
-                : new DirectoryInfo(outputDirectory);
-
-            var baseFamilyName = this.OpenDoc.Title;
-
-            foreach (var variant in variants) {
-                variant.Queue.ResetAllGroupContexts();
-                var namedVariantFuncs = variant.Queue.ToNamedFuncs(false, false);
-                var variantFuncs = namedVariantFuncs.Select(item => item.Callback).ToArray();
-                var variantTransactionNames = namedVariantFuncs.Select(item => item.Name).ToArray();
-                var variantSw = Stopwatch.StartNew();
-
-                var context = new FamilyProcessingContext {
-                    FamilyName = $"{baseFamilyName} - {variant.Name.Trim()}",
-                    Tag = variant // Store variant spec for later retrieval
-                };
-
-                _ = this.OpenDoc
-                    .GetFamilyDocument()
-                    .EnsureDefaultType()
-                    .ProcessAndSaveVariant(directoryInfo.FullName, variant.Name,
-                        famDoc => {
-                            // Collect pre-snapshot if collector is provided
-                            if (collectorQueue != null) {
-                                var preSw = Stopwatch.StartNew();
-                                var preSnapshot = new FamilySnapshot { FamilyName = context.FamilyName };
-                                context.PreProcessSnapshot = preSnapshot;
-
-                                var projectCollector = collectorQueue.ToProjectCollectorFunc();
-                                var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
-
-                                // Collect from project document (if available via OwnerFamily)
-                                if (famDoc.OwnerFamily?.Document != null)
-                                    projectCollector(preSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
-                                famDocCollector(preSnapshot, famDoc);
-
-                                preSw.Stop();
-                                context.PreCollectionMs = preSw.Elapsed.TotalMilliseconds;
-                            }
-
-                            // Process operations
-                            var opSw = Stopwatch.StartNew();
-                            _ = famDoc.Process(
-                                context,
-                                variantFuncs,
-                                out var logs,
-                                variantTransactionNames,
-                                suppressWarnings: this._exOpts.SuppressWarnings);
-                            opSw.Stop();
-                            context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
-
-                            // Collect post-snapshot if collector is provided
-                            if (collectorQueue != null) {
-                                var postSw = Stopwatch.StartNew();
-                                var postSnapshot = new FamilySnapshot { FamilyName = context.FamilyName };
-                                context.PostProcessSnapshot = postSnapshot;
-
-                                var projectCollector = collectorQueue.ToProjectCollectorFunc();
-                                var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
-
-                                // Collect from project document (if available via OwnerFamily)
-                                if (famDoc.OwnerFamily?.Document != null)
-                                    projectCollector(postSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
-                                famDocCollector(postSnapshot, famDoc);
-
-                                postSw.Stop();
-                                context.PostCollectionMs = postSw.Elapsed.TotalMilliseconds;
-                            }
-
-                            return logs;
-                        },
-                        out var variantLogs);
-
-                variantSw.Stop();
-                context.OperationLogs = variantLogs;
-                context.TotalMs = variantSw.Elapsed.TotalMilliseconds;
-                contexts.Add(context);
-                this.WriteArtifacts(context);
-            }
-        } catch (Exception ex) {
-            contexts.Add(new FamilyProcessingContext {
-                FamilyName = this.OpenDoc.Title,
-                OperationLogs = new Exception($"Failed to process family {this.OpenDoc.Title}: {ex.Message}"),
-                TotalMs = 0
-            });
-        }
-
-        return contexts;
-    }
 
     private static List<string> GetSavePaths(
         FamilyDocument famDoc,
@@ -417,6 +311,10 @@ public class ExecutionOptions {
 
     [Description("When enabled Revit transaction warnings are auto-suppressed and recorded as commit diagnostics.")]
     public bool SuppressWarnings { get; init; } = false;
+
+    /// <summary>Who owns the transaction on each visited family and how a modifiable project is parked (pods pass Sandbox + a park).</summary>
+    [Description("Transaction discipline for the per-family visit: Owned (default) or Sandbox, plus an optional park for a modifiable project.")]
+    public FamilyVisitOptions Visit { get; init; } = new();
 }
 
 public class LoadAndSaveOptions {
@@ -436,23 +334,4 @@ public class LoadAndSaveOptions {
     [Description("Save processed family(ies) as copies inside the command output directory")]
     [Required]
     public bool SaveFamilyToOutputDir { get; set; } = false;
-}
-
-/// <summary>
-///     Specification for a family variant including its queue and optional metadata.
-/// </summary>
-public class VariantSpec(string name, OperationQueue queue) {
-    public string Name { get; } = name;
-    public OperationQueue Queue { get; } = queue;
-
-    /// <summary>
-    ///     Optional metadata dictionary for storing variant-specific information
-    ///     (e.g., synthetic settings, configuration data, etc.)
-    /// </summary>
-    public BaseProfile? Profile { get; set; }
-
-    public VariantSpec WithProfile(BaseProfile profile) {
-        this.Profile = profile;
-        return this;
-    }
 }
