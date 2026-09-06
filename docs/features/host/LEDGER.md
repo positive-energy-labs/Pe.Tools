@@ -97,6 +97,8 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- `vp run @pe/host#test` from a checkout whose dev host is up hangs on the third scenario file (both claim the checkout's service identity `host-source-<hash>`); it passes in a sibling worktree in about two minutes (2026-09-06, 13 files, 63 passed). Give the boundary tests their own identity, or refuse with a message naming the live host.
+
 - `/ops` gains ONE bounded staged-operation command for Pea (grill verdict kaitpw 2026-09-01,
   recorded at the design-system ledger's ONE ROUTE SPEC line): its empty `agentWriteMask` and
   command set contradict the explorer purpose; the trichotomy already supplies the approval gate.
