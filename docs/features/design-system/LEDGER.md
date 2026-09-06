@@ -472,6 +472,7 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
+- `Picker` gained `derived` (a dashed underline: the bound value was reported by the world, not chosen; house law 8) for the chat to-line on 2026-09-06 without a swatch specimen; add one beside the popover specimens on `/design-system`.
 - 2026-09-01 pane/tutorial refinements (kaitpw at the merge verdict: "some refinements need to
   be done on the pane+hotkey stuff"; the integration wave itself LANDED — report
   `.artifacts/handoffs/2026-09-01-integrate-pane-tutorial-report.md`): specific refinements are

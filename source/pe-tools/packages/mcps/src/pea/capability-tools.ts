@@ -23,10 +23,12 @@ import {
   parsePodKey,
   parseRouteKey,
   putScopeResultSchema,
+  resolveScope,
   scopeDocument,
-  scopeSchema,
   scopePin,
+  scopeSchema,
   turnOf,
+  type Address,
   type Capability,
   type CapabilityCatalog,
   type ResolvedTarget,
@@ -94,9 +96,19 @@ export const peFind = createTool({
         revision,
         bridgeSessionId: catalog.bridgeSessionId,
         sessions: catalog.sessions,
+        // What the Scope resolves to right now, the same rule the head draws. A resolved kind
+        // means every call already has its session and document: do not propose a Scope.
+        resolution: resolveScope(
+          scope,
+          catalog.sessions.map((session) => ({
+            id: session.sdkSessionId ?? session.sessionId ?? "",
+            year: Number.parseInt(session.revitVersion ?? "", 10) || null,
+            document: (session.activeDocument as Address | undefined) ?? null,
+          })),
+        ),
         sources: catalog.sources,
         map: capabilityMap(catalog.capabilities),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. A session's custody says what the SDK will allow (observed = reads only).",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. A session's custody says what the SDK will allow (observed = reads only). resolution says which session and document every call takes; call scope_set only when it is not resolved, and then name the document by sessions[].activeDocument (its Address), never by its title.",
       };
     const rows = findCapabilities(catalog.capabilities, input);
     return {
@@ -352,7 +364,7 @@ function requestIdentity(context: unknown): string {
 export const scopeSet = createTool({
   id: "scope_set",
   description:
-    "Propose the thread's Scope, what every following turn acts on. kind 'document' names a Revit document; the host derives its one holding session on every call. Add 'pin' (a session id) only when two sessions hold that document. kind 'none' clears it: every call takes what the fleet resolves. There is no session scope: to reach an idle Revit, stage an open with pe_do route:instances.open. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
+    "Propose the thread's Scope, what every following turn acts on. kind 'document' names a Revit document by its Address, the exact sessions[].activeDocument string from pe_find (a cloud model GUID or an absolute path, never the title); the host derives its one holding session on every call. Add 'pin' (a session id) only when two sessions hold that document. kind 'none' clears it: every call takes what the fleet resolves. Skip it when pe_find's resolution is already resolved. There is no session scope: to reach an idle Revit, stage an open with pe_do route:instances.open. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
   inputSchema: z.object({ scope: scopeSchema }),
   execute: async (input, context) => {
     const turn = turnOf(context);

@@ -654,7 +654,11 @@ export const RevitBridgeLive = Layer.effect(
       if (resolution._tag === "none") return yield* Effect.fail(new NoRevitSession());
       if (resolution._tag === "error")
         return yield* Effect.fail(new BridgeError(resolution.message, resolution.statusCode));
-      const session = resolution.session;
+      // The candidate is a spread copy carrying `documents`; the liveness check below compares by
+      // identity, so take the map's own Session object. FOOTGUN: every invoke failed NoRevitSession
+      // on a live Revit (2026-09-06) while `list` showed the session, because of this copy.
+      const session = (yield* Ref.get(sessions)).get(resolution.session.sessionId);
+      if (!session) return yield* Effect.fail(new NoRevitSession());
 
       const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
       if (depth > MAX_QUEUED_OPS) {
