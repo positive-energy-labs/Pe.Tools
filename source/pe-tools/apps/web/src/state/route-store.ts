@@ -265,15 +265,17 @@ export function feed<A>(
 export interface Scope {
   readonly scope: Extract<ChatScope, { kind: "document" }>;
 }
-/** Build a page Scope from the route's document and its `?target` pin (`session:<id>`). */
+/** Build a page Scope from the route's document and its `?target` pin. */
 export const pageScope = (document: Address, target = ""): Scope => ({
-  scope: target.startsWith("session:")
-    ? { kind: "document", document, pin: target.slice(8) }
-    : { kind: "document", document },
+  scope: target ? { kind: "document", document, pin: target } : { kind: "document", document },
 });
-/** The `?target` a page Scope carries; empty when the Scope pins no session. */
-export const worldOf = (scope: Scope): string =>
-  scope.scope.pin ? `session:${scope.scope.pin}` : "";
+/**
+ * The `?target` a Scope carries: the bare session id `scopePin` speaks, empty when the Scope pins
+ * nobody. The inverse of `pageScope`, and the one conversion — chat panes, page stores, and the
+ * route query all read this. The host's `session:<id>` selector grammar is the HOST's wire form;
+ * `bridgeSelector` adds it at that boundary, never here.
+ */
+export const worldSelector = (scope: ChatScope): string => scopePin(scope) ?? "";
 
 export interface Slice<D> {
   doc: D | null;

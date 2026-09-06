@@ -1,4 +1,4 @@
-import { instancesRouteState, routeScopeKey, scopePin, type Scope } from "@pe/agent-contracts";
+import { instancesRouteState, routeScopeKey, type Scope } from "@pe/agent-contracts";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
@@ -18,15 +18,15 @@ import {
 } from "@pe/agent-contracts";
 import type { z } from "zod";
 
-/** The `?target` selector a route page understands: only a NAMED session; a document scope derives. */
-const worldSelector = (scope: Scope): string => {
-  const pin = scopePin(scope);
-  return pin ? `session:${pin}` : "";
-};
-
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { createRouteStoreCore, docAtom, docWriter, expectRouteWrite } from "#/state/route-store";
+import {
+  createRouteStoreCore,
+  docAtom,
+  docWriter,
+  expectRouteWrite,
+  worldSelector,
+} from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 import type { ChatPageStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";

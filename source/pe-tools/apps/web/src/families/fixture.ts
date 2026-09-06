@@ -359,7 +359,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
   };
   const store = createFamiliesStore({
     registry,
-    scope: pageScope(fixtureFamiliesAddress, "session:fixture"),
+    scope: pageScope(fixtureFamiliesAddress, "fixture"),
     host,
     slice,
     writer: {

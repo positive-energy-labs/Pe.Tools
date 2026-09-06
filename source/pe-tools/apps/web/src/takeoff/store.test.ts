@@ -105,8 +105,10 @@ const createStore = (
   const store = createTakeoffStore({
     ...deps,
     registry,
+    // The harness session holds this document: the store resolves its Scope against the fleet
+    // (ADR 0010), so a page scoped elsewhere reads no session at all.
     scope: deps.scope ?? {
-      scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") },
+      scope: { kind: "document" as const, document: address("C:\\Models\\Harness.rvt") },
     },
     slice,
     writer,
@@ -269,6 +271,14 @@ function harness() {
   };
 }
 
+/** The document `createFixtureSessionSource` holds; a page Scope resolves against the fleet. */
+const ProjectA_SCOPE = {
+  scope: {
+    kind: "document" as const,
+    document: address("C:\\Fixtures\\project-a Residence.rvt"),
+  },
+};
+
 describe("takeoff route store", () => {
   it("starts the fixture lane with the dense project-a world before Host transport", () => {
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
@@ -370,7 +380,7 @@ describe("takeoff route store", () => {
         doc: {
           bindings: {
             world: {
-              id: "session:dev-26" as const,
+              id: "dev-26" as const,
               label: "dev-26",
               at: address("C:\\Models\\Test.rvt"),
             },
@@ -418,7 +428,7 @@ describe("takeoff route store", () => {
         doc: {
           bindings: {
             world: {
-              id: "session:dev-26" as const,
+              id: "dev-26" as const,
               label: "dev-26",
               at: address("C:\\Models\\Test.rvt"),
             },
@@ -482,7 +492,7 @@ describe("takeoff route store", () => {
         doc: {
           bindings: {
             world: {
-              id: "session:dev-26" as const,
+              id: "dev-26" as const,
               label: "dev-26",
               at: address("C:\\Models\\Test.rvt"),
             },
@@ -502,15 +512,15 @@ describe("takeoff route store", () => {
         slice,
         host: h.host,
         sessions,
-        target: "session:other",
+        target: "other",
       },
       (next) => patches.push(next),
     );
     await store.actions.settle(store.atoms.sessions);
 
-    expect(store.atoms.registry.get(store.atoms.target)).toBe("session:other");
+    expect(store.atoms.registry.get(store.atoms.target)).toBe("other");
 
-    store.actions.setBindings({ bound: { world: "session:other" } });
+    store.actions.setBindings({ bound: { world: "other" } });
     await tick();
 
     expect(patches).toEqual([]);
@@ -529,7 +539,7 @@ describe("takeoff route store", () => {
         host: h.host,
         sessions: h.sessions,
         scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
-        target: "session:dev-26",
+        target: "dev-26",
       },
       (next) => patches.push(next),
     );
@@ -542,16 +552,16 @@ describe("takeoff route store", () => {
       {
         path: ["bindings", "world"],
         value: {
-          id: "session:dev-26",
-          label: "session:dev-26",
+          id: "dev-26",
+          label: "dev-26",
         },
       },
     ]);
     expect(
       AsyncResult.getOrThrow(store.atoms.registry.get(store.slices.takeoffs)).doc?.bindings.world,
     ).toEqual({
-      id: "session:dev-26",
-      label: "session:dev-26",
+      id: "dev-26",
+      label: "dev-26",
     });
 
     const matchedPatches: RouteStatePatch[][] = [];
@@ -561,7 +571,7 @@ describe("takeoff route store", () => {
         host: h.host,
         sessions: h.sessions,
         scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
-        target: "session:dev-26",
+        target: "dev-26",
         slice: Atom.make(AsyncResult.success(reconciled)),
       },
       (next) => matchedPatches.push(next),
@@ -584,6 +594,7 @@ describe("takeoff route store", () => {
       {
         host: createFixtureTakeoffHost(),
         sessions: createFixtureSessionSource(),
+        scope: ProjectA_SCOPE,
       },
       (next) => patches.push(next),
     );
@@ -600,6 +611,7 @@ describe("takeoff route store", () => {
       {
         host: createFixtureTakeoffHost(),
         sessions: createFixtureSessionSource(),
+        scope: ProjectA_SCOPE,
       },
       (next) => patches.push(next),
     );
@@ -623,6 +635,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
 
@@ -636,6 +649,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
@@ -690,6 +704,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
@@ -731,6 +746,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
@@ -749,6 +765,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
@@ -837,7 +854,7 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("refreshes the active document after a pushed document change", async () => {
+  it("drops the active document when the session opens another one", async () => {
     const h = harness();
     const store = createStore({
       host: h.host,
@@ -856,16 +873,13 @@ describe("takeoff route store", () => {
     await store.actions.settle(store.atoms.snapshot);
 
     expect(h.calls.sessions).toBe(before.sessions + 1);
-    expect(h.calls.doc).toBeGreaterThan(before.doc);
-    expect(h.calls.snapshot).toBeGreaterThan(before.snapshot);
     expect(h.calls.list).toBe(before.list);
     expect(h.calls.open).toBe(before.open);
+    // The page's Scope names Harness.rvt; nobody holds it now, so the page reads no document
+    // rather than silently following the session onto Second.rvt (ADR 0010 `unheld`).
     expect(
       AsyncResult.getOrThrow(store.atoms.registry.get(store.atoms.activeDocument)).value,
-    ).toMatchObject({
-      documentId: "C:\\Models\\Second.rvt",
-      title: "Second.rvt",
-    });
+    ).toBeNull();
     expect(
       AsyncResult.getOrThrow(store.atoms.registry.get(store.atoms.sessions)).value[0]
         ?.activeDocumentTitle,
@@ -982,6 +996,7 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
+      scope: ProjectA_SCOPE,
     });
     store.actions.setSelection({
       ...EMPTY_TAKEOFF_SELECTION,

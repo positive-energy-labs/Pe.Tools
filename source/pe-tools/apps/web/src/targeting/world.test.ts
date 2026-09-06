@@ -6,7 +6,7 @@ import type {
 } from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
-import { resolveTarget, type SessionFacts } from "#/host/target";
+import type { SessionFacts } from "#/host/target";
 import { documentTrunk, worldTrunk, type WorldLifecycleReceipt } from "#/targeting/world";
 
 const session = (overrides: Partial<SessionFacts> = {}): SessionFacts => ({
@@ -155,16 +155,16 @@ describe("targeting world", () => {
 
     expect(result).toMatchObject({
       options: [
-        { id: "session:pe.app-25", label: "pe.app-25", sub: "controlled" },
-        { id: "observed", label: "Revit 77", sub: "observed" },
-        { id: "88", label: "installed-25", sub: "controlled" },
+        { id: "pe.app-25", label: "pe.app-25", sub: "controlled" },
+        { id: "bridge-user", label: "Revit 77", sub: "observed" },
+        { id: "bridge-installed", label: "installed-25", sub: "controlled" },
       ],
       lane: "live",
       at: 123,
       basis: ["sessions.list", "bridge.sessions.list"],
     });
     for (const option of result.options ?? [])
-      expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
+      expect(worldTrunk.resolve(worlds, option.id)).toBeDefined();
   });
 
   it("never offers gone or failed worlds as targets", () => {
@@ -286,7 +286,7 @@ describe("targeting world", () => {
     const empty = worldFeed([]);
     const ready = worldFeed([controlled]);
     const unresponsive = worldFeed([{ ...controlled, phase: "unresponsive" }]);
-    const bound = { world: "session:pe.app-25" };
+    const bound = { world: "pe.app-25" };
 
     await verbs.start.run({ world: null }, { world: empty });
     await verbs.restart.run(bound, { world: ready });

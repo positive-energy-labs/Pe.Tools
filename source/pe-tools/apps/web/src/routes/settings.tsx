@@ -26,9 +26,9 @@ import { createFixtureSettingsStore, fixtureSettingsPicker } from "#/settings/fi
 import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import { pageScope } from "#/state/route-store";
+import type { Scope } from "#/state/route-store";
 import { TargetingHead } from "#/targeting/head";
-import { RouteDocument } from "#/workbench/route-document";
+import { RouteScope } from "#/workbench/route-scope";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 
 export const settingsSearch = (
@@ -51,7 +51,9 @@ function SettingsRoute() {
 export function SettingsRouteContent({ source }: { source?: "fixture" }) {
   if (source === "fixture") return <SettingsFixtureRoute />;
   return (
-    <RouteDocument>{(at) => <SettingsStoreOwner key={at} documentAddress={at} />}</RouteDocument>
+    <RouteScope>
+      {(scope) => <SettingsStoreOwner key={scope.scope.document} scope={scope} />}
+    </RouteScope>
   );
 }
 
@@ -61,13 +63,8 @@ export function SettingsFixtureRoute() {
   return <SettingsWorkspace store={store} />;
 }
 
-function SettingsStoreOwner({
-  documentAddress,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-}) {
+function SettingsStoreOwner({ scope }: { scope: Scope }) {
   const store = useRouteStore(() => {
-    const scope = pageScope(documentAddress);
     return createSettingsStore({
       registry: appAtomRegistry,
       scope,

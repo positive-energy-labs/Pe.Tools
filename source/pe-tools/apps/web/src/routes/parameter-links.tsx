@@ -14,7 +14,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/lang/verb-lane";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/lang/side-pane";
-import { RouteDocument } from "#/workbench/route-document";
+import { RouteScope } from "#/workbench/route-scope";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -31,7 +31,7 @@ import {
 } from "#/parameter-links/model";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import { pageScope } from "#/state/route-store";
+import type { Scope } from "#/state/route-store";
 import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
 
 /**
@@ -76,9 +76,9 @@ function ParameterLinksRoute() {
 export function ParameterLinksRouteContent({ source }: { source?: "fixture" }) {
   if (source === "fixture") return <ParameterLinksFixtureRoute />;
   return (
-    <RouteDocument>
-      {(at) => <ParameterLinksStoreOwner key={at} documentAddress={at} />}
-    </RouteDocument>
+    <RouteScope>
+      {(scope) => <ParameterLinksStoreOwner key={scope.scope.document} scope={scope} />}
+    </RouteScope>
   );
 }
 
@@ -109,12 +109,9 @@ function ParameterLinksFixtureRoute() {
   );
 }
 
-function ParameterLinksStoreOwner({
-  documentAddress,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-}) {
-  const route = useRouteState(parameterLinksRouteState, pageScope(documentAddress));
+function ParameterLinksStoreOwner({ scope }: { scope: Scope }) {
+  const documentAddress = scope.scope.document;
+  const route = useRouteState(parameterLinksRouteState, scope);
   const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
   return (
     <ParameterLinksWorkspace

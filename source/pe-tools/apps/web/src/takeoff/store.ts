@@ -17,7 +17,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { resolveTarget, type SessionFacts } from "#/host/target";
+import { scopeSession, type SessionFacts } from "#/host/target";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
@@ -30,7 +30,7 @@ import {
   type Scope,
   type Slice,
   type TimedRead,
-  worldOf,
+  worldSelector,
 } from "#/state/route-store";
 import {
   upsertResolution,
@@ -386,7 +386,9 @@ export function createTakeoffStore(deps: {
   const targetAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
     const target = deps.target?.trim();
-    return AsyncResult.isSuccess(result) ? (target ?? worldOf(deps.scope)) : (target ?? "");
+    return AsyncResult.isSuccess(result)
+      ? (target ?? worldSelector(deps.scope.scope))
+      : (target ?? "");
   }).pipe(owned("binding/target"));
   const ids = (bindings: TakeoffsRouteDocument["bindings"], prefix: string) =>
     Object.entries(bindings)
@@ -470,12 +472,9 @@ export function createTakeoffStore(deps: {
       const target = get(targetAtom);
       return Effect.gen(function* () {
         const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
-        const resolution = resolveTarget(read.value, target);
-        if (resolution.kind !== "resolved") return unbound<ActiveDocument | null>(null, [target]);
-        const document = yield* hostRead([resolution.session.sessionId], () =>
-          deps.sessions.activeDocument(resolution.session),
-        );
-        return document;
+        const session = scopeSession(deps.scope.scope, read.value);
+        if (!session) return unbound<ActiveDocument | null>(null, [target]);
+        return yield* hostRead([session.sessionId], () => deps.sessions.activeDocument(session));
       });
     })
     .pipe(Atom.autoDispose);
@@ -487,12 +486,8 @@ export function createTakeoffStore(deps: {
       Effect.gen(function* () {
         const target = get(targetAtom);
         const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
-        const resolution = resolveTarget(read.value, target);
-        if (resolution.kind !== "resolved" || deps.host.fixture)
-          return unbound<readonly RecentDocument[]>([], [target]);
-        const session = read.value.find(
-          (candidate) => candidate.sessionId === resolution.session.sessionId,
-        )!;
+        const session = scopeSession(deps.scope.scope, read.value);
+        if (!session || deps.host.fixture) return unbound<readonly RecentDocument[]>([], [target]);
         return yield* hostRead([session.sessionId, session.year ?? "all"], () =>
           documentTrunk.recents(session.year),
         );
@@ -970,7 +965,11 @@ export function createTakeoffStore(deps: {
       const document = await settle(activeDocumentResult);
       if (document.value?.documentId !== deps.scope.scope.document) return;
       // Once: the page pin or the document's own world binding already says this target.
-      if (worldOf(deps.scope) === target || registry.get(bindingsAtom).world?.id === target) return;
+      if (
+        worldSelector(deps.scope.scope) === target ||
+        registry.get(bindingsAtom).world?.id === target
+      )
+        return;
       expectRouteWrite(
         await takeoffsWriter.apply([
           {
@@ -1254,6 +1253,7 @@ export function createTakeoffStore(deps: {
   const store = {
     source: deps.source ?? (deps.host.fixture ? "fixture" : "live"),
     registry,
+    scope: deps.scope,
     slices: { takeoffs: takeoffsSlice },
     atoms: {
       registry,

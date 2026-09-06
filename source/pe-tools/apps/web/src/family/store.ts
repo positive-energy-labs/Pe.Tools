@@ -30,7 +30,8 @@ import {
 import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { draftToPatches } from "#/family/project";
-import { documentAddress, resolveTarget } from "#/host/target";
+import { bridgeSelector } from "@pe/agent-contracts";
+import { documentAddress, scopeSession } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
@@ -42,7 +43,6 @@ import {
   unbound,
   type Scope,
   type Slice,
-  worldOf,
 } from "#/state/route-store";
 
 type Setter<A> = A | ((previous: A) => A);
@@ -102,7 +102,10 @@ export function createFamilyStore(deps: {
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
   // ponytail: the world is the page Scope's session; rebinding is a `?target` navigation, not a doc write.
-  const target = Atom.make(() => worldOf(deps.scope)).pipe(owned("binding/world"));
+  // The host selector for this page: `doc:<Address>`, or `pin:<id>|doc:<Address>` when pinned.
+  const target = Atom.make(() => bridgeSelector(deps.scope.scope) ?? "").pipe(
+    owned("binding/world"),
+  );
   const profile = Atom.make(
     (get) =>
       get(familyDoc)?.bindings.profile?.id ?? get(settingsDoc)?.documentId?.relativePath ?? "",
@@ -144,11 +147,11 @@ export function createFamilyStore(deps: {
     const value = get(familyDoc)?.evidence;
     if (!value) return null;
     const sessions = get(sessionsResult);
-    const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, get(target))
+    const session = AsyncResult.isSuccess(sessions)
+      ? scopeSession(deps.scope.scope, sessions.value.value)
       : null;
-    if (resolution?.kind !== "resolved") return null;
-    return here(value, documentAddress(resolution.session)) as EvidenceSlice | null;
+    if (!session) return null;
+    return here(value, documentAddress(session)) as EvidenceSlice | null;
   }).pipe(owned("view/evidence"));
   const lane = Atom.make((get) => familyLane(get(snapshot), get(evidence))).pipe(
     owned("view/lane"),

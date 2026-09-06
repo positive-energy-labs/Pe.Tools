@@ -6,11 +6,11 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 const callHostDynamic = vi.hoisted(() => vi.fn());
 const callHostRpc = vi.hoisted(() => vi.fn());
-const routeDocument = vi.hoisted(() => vi.fn());
+const routeScope = vi.hoisted(() => vi.fn());
 vi.mock("#/host/client", () => ({ callHostDynamic, callHostRpc }));
-vi.mock("#/workbench/route-document", () => ({
-  RouteDocument: () => {
-    routeDocument();
+vi.mock("#/workbench/route-scope", () => ({
+  RouteScope: () => {
+    routeScope();
     return null;
   },
 }));
@@ -25,7 +25,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the varied selected fixture without RouteDocument or Host calls", async () => {
+test("renders the varied selected fixture without RouteScope or Host calls", async () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
   expect(opsSearch({ source: "fixture", thread: "review" })).toEqual({
@@ -75,7 +75,7 @@ test("renders the varied selected fixture without RouteDocument or Host calls", 
     "settings.tree",
   ]);
 
-  expect(routeDocument).not.toHaveBeenCalled();
+  expect(routeScope).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
   expect(callHostDynamic).not.toHaveBeenCalled();
   expect(callHostRpc).not.toHaveBeenCalled();

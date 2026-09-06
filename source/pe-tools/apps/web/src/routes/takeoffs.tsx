@@ -1,21 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TakeoffsRoute } from "#/takeoff/route";
-import { routeDocumentSearch } from "#/workbench/route-document";
+import { routeScopeSearch } from "#/workbench/route-scope";
 
-export {
-  resolvedWorldBinding,
-  takeoffsWorkingCopyPath,
-  TakeoffsRoute,
-  LiveTakeoffsRoute,
-} from "#/takeoff/route";
+export { takeoffsWorkingCopyPath, TakeoffsRoute, LiveTakeoffsRoute } from "#/takeoff/route";
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
-    ...routeDocumentSearch(search),
+    ...routeScopeSearch(search),
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
-    target: str(search.target) || undefined,
     thread: str(search.thread) || undefined,
     targeting: search.targeting === "flow" ? ("flow" as const) : undefined,
   }),

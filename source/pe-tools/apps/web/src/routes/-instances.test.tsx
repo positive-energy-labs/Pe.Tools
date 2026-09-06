@@ -149,11 +149,7 @@ describe("instances route", () => {
   it("uses the URL target in fixture mode", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <InstancesRouteContent
-          source="fixture"
-          target="session:fixture-dev-25"
-          setTarget={() => {}}
-        />
+        <InstancesRouteContent source="fixture" target="fixture-dev-25" setTarget={() => {}} />
       </QueryClientProvider>,
     );
 
@@ -269,7 +265,7 @@ describe("instances route", () => {
       error: null,
       basis: [],
     });
-    const pending = verbs.restart.run({ world: "session:pe.app-25" }, { world: feed });
+    const pending = verbs.restart.run({ world: "pe.app-25" }, { world: feed });
 
     expect(record).not.toHaveBeenCalled();
     answer(

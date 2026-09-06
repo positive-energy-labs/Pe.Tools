@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { address } from "@pe/agent-contracts";
+import { emptyScope } from "@pe/agent-contracts";
 
-import { resolveTarget, type SessionFacts } from "#/host/target";
+import { scopeSession, type SessionFacts } from "#/host/target";
 import { documentTrunk, openLocalDocuments } from "#/targeting/world";
-import { routeDocumentScope } from "#/workbench/route-document";
 import { liveTakeoffsStoreKey } from "#/takeoff/route";
-import { resolvedWorldBinding, takeoffsWorkingCopyPath } from "./takeoffs";
+import { takeoffsWorkingCopyPath } from "./takeoffs";
 
 describe("takeoffs document scope", () => {
   it("uses one stable durable working-copy path", () => {
@@ -29,7 +28,6 @@ describe("takeoffs document scope", () => {
         openDocumentCount: 1,
       },
     ];
-    const world = resolvedWorldBinding(resolveTarget(sessions, ""), sessions);
     const rvt = documentTrunk.feed(
       AsyncResult.success({
         value: { documentId: "model-a", title: "projectA.rvt" },
@@ -39,8 +37,8 @@ describe("takeoffs document scope", () => {
       }),
     );
 
-    expect(resolveTarget(sessions, world!)).toMatchObject({ kind: "resolved" });
-    expect(world && rvt.options).toEqual([{ id: "model-a", label: "projectA.rvt" }]);
+    expect(scopeSession(emptyScope, sessions)).toBe(sessions[0]);
+    expect(rvt.options).toEqual([{ id: "model-a", label: "projectA.rvt" }]);
   });
 
   it("offers every open local exact-path document and hands inactive selection to activation", () => {
@@ -66,16 +64,6 @@ describe("takeoffs document scope", () => {
       { id: "C:\\Models\\Active.rvt", label: "Active.rvt" },
       { id: "C:\\Models\\Other.rvt", label: "Other.rvt", active: false },
     ]);
-    expect(
-      routeDocumentScope(
-        open.map(({ id, label, active: isActive }) => ({
-          at: address(id),
-          label,
-          active: isActive,
-        })),
-        address("C:\\Models\\Other.rvt"),
-      ),
-    ).toMatchObject({ kind: "activate" });
   });
 
   it("remounts a same-path document when its Revit world changes", () => {

@@ -22,7 +22,7 @@ import type { SessionActionRequest } from "@pe/host-contracts/contracts";
 import { addressSchema } from "@pe/agent-contracts";
 
 import type { WorldFacts } from "#/host/fleet";
-import { mintSelector, type SessionFacts } from "#/host/target";
+import { sessionKey, type SessionFacts } from "#/host/target";
 import { feed, type Feed, type Lane, type TimedRead } from "#/state/route-store";
 import type { Bound, Feeds, Link, Option, Verb } from "#/targeting/model";
 
@@ -91,8 +91,15 @@ const worldLabel = (world: Pick<WorldFacts, "custody" | "id" | "pid" | "session"
   world.session?.sdkSessionId ??
   (world.custody === "observed" ? `Revit ${world.pid ?? world.id}` : world.id);
 
-const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
-  id: world.session ? mintSelector(world.session, sessions) : `session:${worldLabel(world)}`,
+/**
+ * A world's `?target`: the session key a Scope pin names (`sdkSessionId ?? bridge id`), which is
+ * the same string the host matches a `pin:` against. A world with no connection has only its label.
+ */
+const worldTarget = (world: WorldFacts): string =>
+  world.session ? sessionKey(world.session) : worldLabel(world);
+
+const worldOption = (world: WorldFacts): WorldOption => ({
+  id: worldTarget(world),
   label: worldLabel(world),
   sub: world.custody,
   world,
@@ -180,8 +187,8 @@ export const worldTrunk = {
   label: worldLabel,
   option: worldOption,
   describe,
-  resolve(worlds: readonly WorldFacts[], sessions: readonly SessionFacts[], target: string) {
-    return worlds.find((world) => worldOption(world, sessions).id === target);
+  resolve(worlds: readonly WorldFacts[], target: string) {
+    return worlds.find((world) => worldTarget(world) === target);
   },
   verbs<K extends string>(input: {
     start: () => WorldStart;
@@ -230,7 +237,7 @@ export const worldTrunk = {
           (world) =>
             world.phase !== "gone" && world.phase !== "failed" && (world.session || world.row),
         )
-        .map((world) => worldOption(world, source.sessions)),
+        .map(worldOption),
       state: "ready",
       lane: "live",
       stale: source.stale,
