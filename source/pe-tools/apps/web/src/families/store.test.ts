@@ -85,7 +85,13 @@ const make = (
     docSlice,
     store: createFamiliesStore({
       registry,
-      scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") } },
+      scope: {
+        scope: {
+          kind: "document" as const,
+          document: address("C:\\Models\\Test.rvt"),
+          pin: "test",
+        },
+      },
       host: testFixture.host,
       slice: docSlice,
       writer: testFixture.writer,
@@ -179,21 +185,11 @@ describe("families route store", () => {
     expect(calls).toEqual([{ op: "apply", input: [{ path: ["excludedIds"], value: [1] }] }]);
   });
 
-  it("binds another target without clearing the plan", async () => {
+  it("binding another target is a navigation, never a document write", async () => {
     const { calls, registry, store } = make();
     await store.actions.bind("session:new");
     expect(registry.get(store.atoms.failure)).toBeNull();
-    expect(calls.filter(({ op }) => op === "apply")).toEqual([
-      {
-        op: "apply",
-        input: [
-          {
-            path: ["bindings", "world"],
-            value: expect.objectContaining({ id: "session:new" }),
-          },
-        ],
-      },
-    ]);
+    expect(calls.filter(({ op }) => op === "apply")).toEqual([]);
   });
 
   it("reloads a persisted document binding before plan", async () => {

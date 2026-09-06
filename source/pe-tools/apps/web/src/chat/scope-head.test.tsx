@@ -11,6 +11,7 @@ const door = address("C:\\Fixtures\\Door-Single.rfa");
 const one: ScopeSessionOption = {
   id: "pe.app-25",
   label: "pe.app-25",
+  year: 2025,
   document: projectA,
   documentLabel: "project-a Residence.rvt",
 };
@@ -18,6 +19,7 @@ const two: ScopeSessionOption = { ...one, id: "pe.app-26", label: "pe.app-26" };
 const other: ScopeSessionOption = {
   id: "pe.app-27",
   label: "pe.app-27",
+  year: 2025,
   document: door,
   documentLabel: "Door-Single.rfa",
 };
@@ -42,15 +44,17 @@ test("the head renders the resolution of the Scope against the fleet, one kind p
   expect(mount({ kind: "document", document: projectA }, [one, other]).kind).toBe("resolved");
   expect(mount({ kind: "document", document: projectA }, [other]).kind).toBe("unheld");
   expect(mount({ kind: "document", document: projectA }, [one, two]).kind).toBe("ambiguous");
-  expect(mount({ kind: "session", session: "gone-24" }, [one]).kind).toBe("gone");
-  expect(mount({ kind: "none" }, [one, other]).kind).toBe("nothing");
+  expect(mount({ kind: "document", document: projectA, pin: "pe.app-26" }, [one, two]).kind).toBe(
+    "resolved",
+  );
+  expect(mount({ kind: "none" }, [one, other]).kind).toBe("unchosen");
 });
 
 test("an ambiguous head offers exactly the holders, and pressing one pins the Scope", () => {
   const { sets } = mount({ kind: "document", document: projectA }, [one, two, other]);
   expect(screen.queryByRole("button", { name: "pe.app-27" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "pe.app-26" }));
-  expect(sets).toEqual([{ kind: "pinned", session: "pe.app-26", document: projectA }]);
+  expect(sets).toEqual([{ kind: "document", document: projectA, pin: "pe.app-26" }]);
   // Picking a document never names a session: the host derives the holder on every call.
   fireEvent.click(screen.getByRole("button", { name: "Door-Single.rfa" }));
   expect(sets[1]).toEqual({ kind: "document", document: door });

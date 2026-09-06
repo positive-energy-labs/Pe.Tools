@@ -17,7 +17,6 @@ const slice = <D>(doc: D): Slice<D> => ({
   hydrated: true,
   connected: false,
   error: null,
-  peaActive: false,
 });
 
 const refused = async (): Promise<RouteStateWriteResult> => ({

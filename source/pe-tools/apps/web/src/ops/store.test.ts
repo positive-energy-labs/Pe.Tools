@@ -166,7 +166,7 @@ describe("ops route store", () => {
     expect(writes).toEqual([]);
   });
 
-  it("binds elsewhere without clearing the receipt", async () => {
+  it("binds the op without clearing the receipt; the world is the page Scope, never a binding", async () => {
     const { store, writes } = make();
 
     await store.actions.setBindings(
@@ -176,22 +176,7 @@ describe("ops route store", () => {
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual([
-      {
-        path: ["bindings", "world"],
-        value: {
-          id: "session:new",
-          label: "session:new",
-          at: address("C:\\Models\\Test.rvt"),
-        },
-      },
-      {
-        path: ["bindings", "op"],
-        value: {
-          id: oldReceipt.opKey,
-          label: oldReceipt.opKey,
-          at: address("C:\\Models\\Test.rvt"),
-        },
-      },
+      { path: ["bindings", "op"], value: { id: oldReceipt.opKey, label: oldReceipt.opKey } },
     ]);
   });
 

@@ -544,7 +544,6 @@ describe("takeoff route store", () => {
         value: {
           id: "session:dev-26",
           label: "session:dev-26",
-          at: address("C:\\Models\\Other.rvt"),
         },
       },
     ]);
@@ -553,7 +552,6 @@ describe("takeoff route store", () => {
     ).toEqual({
       id: "session:dev-26",
       label: "session:dev-26",
-      at: address("C:\\Models\\Other.rvt"),
     });
 
     const matchedPatches: RouteStatePatch[][] = [];

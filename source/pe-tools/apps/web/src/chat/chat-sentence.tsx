@@ -21,6 +21,7 @@ export function scopeSessions(sessions: readonly SessionFacts[]): ScopeSessionOp
           {
             id: session.sdkSessionId,
             label: session.sdkSessionId,
+            year: session.year ? Number(session.year) : null,
             document: documentAddress(session),
             documentLabel: session.activeDocumentTitle ?? null,
           },
@@ -100,7 +101,7 @@ export function ChatSentence({
   );
 }
 
-type FixtureScope = "resolved" | "unheld" | "ambiguous" | "gone" | "nothing";
+type FixtureScope = "resolved" | "unheld" | "ambiguous" | "unchosen";
 /** `/chat?source=fixture&scope=<kind>` draws each head resolution without a host. */
 function fixtureScope(kind: FixtureScope | undefined): {
   scope: Scope;
@@ -113,18 +114,21 @@ function fixtureScope(kind: FixtureScope | undefined): {
   const one: ScopeSessionOption = {
     id: "pe.app-25",
     label: "pe.app-25",
+    year: 2025,
     document,
     documentLabel: "project-a Residence.rvt",
   };
   const two: ScopeSessionOption = {
     id: "pe.app-26",
     label: "pe.app-26",
+    year: 2025,
     document: kind === "ambiguous" ? document : family,
     documentLabel: kind === "ambiguous" ? "project-a Residence.rvt" : "Door-Single.rfa",
   };
   const idle: ScopeSessionOption = {
     id: "pe.idle",
     label: "pe.idle",
+    year: 2025,
     document: null,
     documentLabel: null,
   };
@@ -138,9 +142,7 @@ function fixtureScope(kind: FixtureScope | undefined): {
       return { scope: { kind: "document", document: recent }, revision: 2, sessions, documents };
     case "ambiguous":
       return { scope: { kind: "document", document }, revision: 4, sessions, documents };
-    case "gone":
-      return { scope: { kind: "session", session: "gone-24" }, revision: 5, sessions, documents };
-    case "nothing":
+    case "unchosen":
     case undefined:
       return { scope: emptyScope, revision: 0, sessions, documents };
   }

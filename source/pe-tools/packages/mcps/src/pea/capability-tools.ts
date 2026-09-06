@@ -25,7 +25,7 @@ import {
   putScopeResultSchema,
   scopeDocument,
   scopeSchema,
-  scopeSession,
+  scopePin,
   turnOf,
   type Capability,
   type CapabilityCatalog,
@@ -49,7 +49,7 @@ export const peaHostBaseUrl = base;
 
 /** What the Scope NAMES, as a target: the fallback when a receipt carries no resolved target. */
 const namedTarget = (scope: Scope): ResolvedTarget => ({
-  session: scopeSession(scope),
+  session: scopePin(scope),
   document: scopeDocument(scope),
 });
 
@@ -61,10 +61,10 @@ function scopeOf(context: unknown): { scope: Scope; revision: number } {
 
 const scopeQuery = (scope: Scope): string => {
   const query = new URLSearchParams();
-  const session = scopeSession(scope);
   const document = scopeDocument(scope);
-  if (session) query.set("session", session);
+  const pin = scopePin(scope);
   if (document) query.set("doc", document);
+  if (pin) query.set("pin", pin);
   return query.toString();
 };
 

@@ -1,8 +1,8 @@
 import {
   resolveScope,
   scopeDocument,
-  scopeSession,
   type Address,
+  type FleetSession,
   type Scope,
   type ScopeResolution,
 } from "@pe/agent-contracts";
@@ -11,10 +11,8 @@ import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
 
 /** A connected SDK session and the document it has active, as the fleet reports it. */
-export interface ScopeSessionOption {
-  id: string;
+export interface ScopeSessionOption extends FleetSession {
   label: string;
-  document: Address | null;
   documentLabel: string | null;
 }
 
@@ -62,7 +60,7 @@ function chips(
       return {
         document: label(resolution.document),
         session: resolution.session,
-        title: `session ${resolution.session}`,
+        title: `session ${resolution.session}, via ${resolution.via}`,
         tone: "meta",
       };
     case "ambiguous":
@@ -76,17 +74,13 @@ function chips(
       return {
         document: label(resolution.document),
         session: "no holder ∅",
-        title: "no connected session holds this document",
+        title:
+          resolution.eligible.length === 0
+            ? "no connected Revit of this document's year; start one"
+            : `no connected session holds this document; open it in ${resolution.eligible.join(", ")}`,
         tone: "caution",
       };
-    case "gone":
-      return {
-        document: "no document",
-        session: `${resolution.session} ∅`,
-        title: `session ${resolution.session} is not connected`,
-        tone: "caution",
-      };
-    case "nothing":
+    case "unchosen":
       return {
         document: "no document",
         session: "no session",
@@ -102,10 +96,10 @@ function chips(
 /**
  * THE one place the user sees and changes the thread's Scope. The user picks a DOCUMENT; the
  * session is derived from its one holder. Only when two sessions hold the picked document does
- * the head demand a session, and it offers exactly those holders (pinning it). A session with
- * nothing open is still pickable (a lifecycle target). Every mutating tool card renders the
- * revision it ran under next to this number, so drift between them is visible. While pea is
- * mid-turn the pickers are disabled: the turn keeps the Scope it was admitted under.
+ * the head demand a session, and it offers exactly those holders (pinning it). Every mutating
+ * tool card renders the revision it ran under next to this number, so drift between them is
+ * visible. While pea is mid-turn the pickers are disabled: the turn keeps the Scope it was
+ * admitted under. Paper, not house style: the sentence motif replaces this (protoui, round 3).
  */
 export function ScopeHead({
   scope,
@@ -132,7 +126,6 @@ export function ScopeHead({
       : (documents.find((option) => option.document === document)?.label ?? document);
   const chip = chips(resolution, label);
   const namedDocument = scopeDocument(scope);
-  const namedSession = scopeSession(scope);
   const busyTitle = busy ? "pea is mid-turn; the Scope is frozen" : undefined;
   return (
     <div
@@ -162,7 +155,7 @@ export function ScopeHead({
               disabled={busy}
               title={busyTitle ?? `run in ${holder}`}
               onClick={() =>
-                onSet({ kind: "pinned", session: holder, document: resolution.document })
+                onSet({ kind: "document", document: resolution.document, pin: holder })
               }
             >
               {sessions.find((session) => session.id === holder)?.label ?? holder}
@@ -179,7 +172,7 @@ export function ScopeHead({
           title={
             busyTitle ??
             (option.holders.length === 0
-              ? `${option.document} (not open; a lifecycle target)`
+              ? `${option.document} (not open; opening it is an instances verb)`
               : `${option.document} in ${option.holders.join(", ")}`)
           }
           onClick={() => onSet({ kind: "document", document: option.document })}
@@ -187,21 +180,6 @@ export function ScopeHead({
           {option.label}
         </Press>
       ))}
-      {sessions
-        .filter((session) => !session.document)
-        .map((session) => (
-          <Press
-            key={session.id}
-            type="button"
-            tone="quiet"
-            state={namedSession === session.id ? "selected" : "rest"}
-            disabled={busy}
-            title={busyTitle ?? `${session.label} has nothing open`}
-            onClick={() => onSet({ kind: "session", session: session.id })}
-          >
-            {session.label} ∅
-          </Press>
-        ))}
       {scope.kind !== "none" ? (
         <Press type="button" tone="quiet" disabled={busy} onClick={() => onSet({ kind: "none" })}>
           clear scope

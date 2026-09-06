@@ -969,7 +969,8 @@ export function createTakeoffStore(deps: {
       if (!target) return;
       const document = await settle(activeDocumentResult);
       if (document.value?.documentId !== deps.scope.scope.document) return;
-      if (worldOf(deps.scope) === target) return;
+      // Once: the page pin or the document's own world binding already says this target.
+      if (worldOf(deps.scope) === target || registry.get(bindingsAtom).world?.id === target) return;
       expectRouteWrite(
         await takeoffsWriter.apply([
           {

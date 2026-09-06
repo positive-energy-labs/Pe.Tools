@@ -109,7 +109,13 @@ const make = (
     calls: testFixture.calls,
     store: createFamilyStore({
       registry,
-      scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rfa") } },
+      scope: {
+        scope: {
+          kind: "document" as const,
+          document: address("C:\\Models\\Test.rfa"),
+          pin: "test",
+        },
+      },
       host: testFixture.host,
       slices: { settings: settingsSlice, family: familySlice },
       writers: testFixture.writers,
@@ -152,19 +158,10 @@ describe("family route store", () => {
     await tick();
     expect(registry.get(store.atoms.lane).world.live?.worldLabel).toBe("C:\\Models\\Test.rfa");
 
+    // Binding another target is a navigation of the page Scope, never a document write.
     await store.actions.bind("session:new");
 
-    expect(calls).toEqual([
-      {
-        op: "family.apply",
-        input: [
-          {
-            path: ["bindings", "world"],
-            value: expect.objectContaining({ id: "session:new" }),
-          },
-        ],
-      },
-    ]);
+    expect(calls).toEqual([]);
   });
 
   it("persists a picked profile before opening it", async () => {

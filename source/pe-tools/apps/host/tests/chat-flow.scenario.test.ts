@@ -310,7 +310,7 @@ test("the browser walks one durable chat lifecycle", async () => {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        scope: { kind: "pinned", session: scopeSession, document: scopeDocument },
+        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
         expectedRevision: 0,
       }),
     });
@@ -318,7 +318,7 @@ test("the browser walks one durable chat lifecycle", async () => {
       ok: true,
       why: "set",
       head: {
-        scope: { kind: "pinned", session: scopeSession, document: scopeDocument },
+        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
         revision: 1,
       },
     });
@@ -328,7 +328,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     // pe_find under that Scope: the map, the connected sessions (none), and the silent sources.
     await driveTurn("FIND_TURN", findFinalText);
     const findBody = JSON.stringify((await readThread()).messages);
-    expect(findBody).toContain(`"session":"${scopeSession}"`);
+    expect(findBody).toContain(`"pin":"${scopeSession}"`);
     expect(findBody).toContain('"revision":1');
     expect(findBody).toContain('"map":{');
     expect(findBody).toContain("route-command");
@@ -347,7 +347,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
-    const routeQuery = `session=${scopeSession}&doc=${encodeURIComponent(scopeDocument)}`;
+    const routeQuery = `doc=${encodeURIComponent(scopeDocument)}&pin=${scopeSession}`;
     expect(
       await (await fetch(`${baseUrl}/pe/route-state/instances?${routeQuery}`)).json(),
     ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
@@ -366,11 +366,18 @@ test("the browser walks one durable chat lifecycle", async () => {
         doc: { bindings: { op: { id: "revit.context.summary" } } },
       },
     );
+    // The pin is a tiebreak, never identity: another pin reads the same document, another
+    // document starts fresh.
     expect(
       await (
         await fetch(
-          `${baseUrl}/pe/route-state/ops?session=other&doc=${encodeURIComponent(scopeDocument)}`,
+          `${baseUrl}/pe/route-state/ops?pin=other&doc=${encodeURIComponent(scopeDocument)}`,
         )
+      ).json(),
+    ).toMatchObject({ revision: 1 });
+    expect(
+      await (
+        await fetch(`${baseUrl}/pe/route-state/ops?doc=${encodeURIComponent("C:\\Models\\Other.rvt")}`)
       ).json(),
     ).toMatchObject({ revision: 0 });
 

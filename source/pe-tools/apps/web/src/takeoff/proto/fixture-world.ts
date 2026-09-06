@@ -213,7 +213,6 @@ export const createFixtureTakeoffStore = (registry: AtomRegistry.AtomRegistry, s
     hydrated: true,
     connected: false,
     error: null,
-    peaActive: false,
   });
   const slice = Atom.make(AsyncResult.success(value()));
   const writer = {

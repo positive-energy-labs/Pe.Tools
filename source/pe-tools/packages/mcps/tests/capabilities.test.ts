@@ -126,7 +126,7 @@ type ExecutableTool = { execute?: (input: never, context: never) => Promise<unkn
 const turn = {
   id: "11111111-1111-4111-8111-111111111111",
   thread: "t1",
-  scope: { kind: "pinned", session: "dev", document: "C:\\Models\\A.rvt" },
+  scope: { kind: "document", document: "C:\\Models\\A.rvt", pin: "dev" },
   revision: 4,
 };
 const run = (tool: ExecutableTool, input: unknown) =>
@@ -171,7 +171,7 @@ test("the doors ride the host under the turn's Scope and name the revision and r
     expect(map.sessions).toHaveLength(1);
     expect(map.revision).toBe(4);
     // The catalog is read for the turn's Scope, never for a model-typed selector.
-    expect(calls[0]?.url.search).toBe("?session=dev&doc=C%3A%5CModels%5CA.rvt");
+    expect(calls[0]?.url.search).toBe("?doc=C%3A%5CModels%5CA.rvt&pin=dev");
 
     const op = (await run(peRead, {
       key: "op:revit.catalog.loaded-families",
@@ -180,7 +180,9 @@ test("the doors ride the host under the turn's Scope and name the revision and r
     expect(op.ok).toBe(true);
     expect(op.revision).toBe(4);
     expect(op.target).toEqual({ session: "dev", document: "C:\\Models\\A.rvt" });
-    expect(calls.at(-1)?.headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe("session:dev");
+    expect(calls.at(-1)?.headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
+      "pin:dev|doc:C:\\Models\\A.rvt",
+    );
     expect(calls.at(-1)?.body).toEqual({ key: "revit.catalog.loaded-families", request: {} });
 
     const mutating = (await run(peRead, { key: "op:scripting.execute", timeoutSeconds: 30 })) as {
@@ -197,7 +199,7 @@ test("the doors ride the host under the turn's Scope and name the revision and r
     expect(read.ok).toBe(true);
     expect(read.target.session).toBe("dev");
     expect(calls.at(-1)?.url.pathname).toBe("/pe/route-state/instances");
-    expect(calls.at(-1)?.url.search).toBe("?session=dev&doc=C%3A%5CModels%5CA.rvt");
+    expect(calls.at(-1)?.url.search).toBe("?doc=C%3A%5CModels%5CA.rvt&pin=dev");
 
     const command = (await run(peDo, { key: "route:instances.refresh", timeoutSeconds: 30 })) as {
       ok: boolean;

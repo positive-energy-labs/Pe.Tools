@@ -82,7 +82,7 @@ test("takeoffs audit targets the bound world and sets the document snapshot", as
     await createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
       { view: "Zoning", zones: ["zone-1"] },
       {
-        scope: { kind: "pinned", session: "dev-26", document: address("C:\\Models\\Harness.rvt") },
+        scope: { kind: "document", document: address("C:\\Models\\Harness.rvt"), pin: "dev-26" },
         getDoc: () => document,
         setDoc: async (next) => {
           Object.assign(document, next);
@@ -93,7 +93,9 @@ test("takeoffs audit targets the bound world and sets the document snapshot", as
 
     expect(writes).toBe(1);
     expect(targets.length).toBeGreaterThan(0);
-    expect(targets.every((target) => target === "session:dev-26")).toBe(true);
+    expect(targets.every((target) => target === "pin:dev-26|doc:C:\\Models\\Harness.rvt")).toBe(
+      true,
+    );
     expect(document.snapshot?.world).toMatchObject({
       docName: "Harness.rvt",
       zones: [{ name: "Zone 1" }],

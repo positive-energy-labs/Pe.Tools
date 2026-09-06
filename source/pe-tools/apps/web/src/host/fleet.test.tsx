@@ -253,6 +253,12 @@ test("capability admission gates every fleet request", async () => {
 test("mounted chat makes no session or bridge requests without Revit capability", async () => {
   const requests: string[] = [];
   const originalFetch = globalThis.fetch;
+  // jsdom has no EventSource; the thread Scope watch is host-owned and opens without Revit.
+  const originalEventSource = (globalThis as { EventSource?: unknown }).EventSource;
+  (globalThis as { EventSource?: unknown }).EventSource = class {
+    onmessage: unknown = null;
+    close() {}
+  };
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     requests.push(`${init?.method ?? "GET"} ${url}`);
@@ -269,5 +275,6 @@ test("mounted chat makes no session or bridge requests without Revit capability"
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;
+    (globalThis as { EventSource?: unknown }).EventSource = originalEventSource;
   }
 });

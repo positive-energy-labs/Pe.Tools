@@ -1,4 +1,4 @@
-import { instancesRouteState, routeScopeKey, scopeSession, type Scope } from "@pe/agent-contracts";
+import { instancesRouteState, routeScopeKey, scopePin, type Scope } from "@pe/agent-contracts";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
@@ -20,8 +20,8 @@ import type { z } from "zod";
 
 /** The `?target` selector a route page understands: only a NAMED session; a document scope derives. */
 const worldSelector = (scope: Scope): string => {
-  const session = scopeSession(scope);
-  return session ? `session:${session}` : "";
+  const pin = scopePin(scope);
+  return pin ? `session:${pin}` : "";
 };
 
 import { EmptyState } from "#/components/lang/empty";

@@ -145,10 +145,6 @@ export function createSettingsStore(deps: {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.connected : null;
   }).pipe(owned("view/connected"));
-  const peaActive = Atom.make((get) => {
-    const result = get(settingsSlice);
-    return AsyncResult.isSuccess(result) && result.value.peaActive;
-  }).pipe(owned("view/pea-active"));
   const sliceError = Atom.make((get) => {
     const result = get(settingsSlice);
     return AsyncResult.isFailure(result)
@@ -415,7 +411,6 @@ export function createSettingsStore(deps: {
       formValues,
       schemaJson,
       connected,
-      peaActive,
       sliceError,
       picker,
       targeting,

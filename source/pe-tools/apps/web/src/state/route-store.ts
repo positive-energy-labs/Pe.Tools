@@ -1,7 +1,7 @@
 import {
   routeScopeKey,
   scopeDocument,
-  scopeSession,
+  scopePin,
   type RouteScope,
   type Scope as ChatScope,
 } from "@pe/agent-contracts";
@@ -263,17 +263,17 @@ export function feed<A>(
 
 /** A standalone page's route scope: a Scope that always names the page's document. */
 export interface Scope {
-  readonly scope: Extract<ChatScope, { kind: "document" | "pinned" }>;
+  readonly scope: Extract<ChatScope, { kind: "document" }>;
 }
-/** Build a page Scope from the route's document and its `?target` selector (`session:<id>`). */
+/** Build a page Scope from the route's document and its `?target` pin (`session:<id>`). */
 export const pageScope = (document: Address, target = ""): Scope => ({
   scope: target.startsWith("session:")
-    ? { kind: "pinned", session: target.slice(8), document }
+    ? { kind: "document", document, pin: target.slice(8) }
     : { kind: "document", document },
 });
-/** The bridge selector a page Scope resolves to; empty when the Scope names no session. */
+/** The `?target` a page Scope carries; empty when the Scope pins no session. */
 export const worldOf = (scope: Scope): string =>
-  scope.scope.kind === "pinned" ? `session:${scope.scope.session}` : "";
+  scope.scope.pin ? `session:${scope.scope.pin}` : "";
 
 export interface Slice<D> {
   doc: D | null;
@@ -317,10 +317,10 @@ function routeUrl(
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
   if (scope.workspaceId !== undefined) url.searchParams.set("workspace", scope.workspaceId);
   else {
-    const session = scopeSession(scope.scope);
     const document = scopeDocument(scope.scope);
-    if (session) url.searchParams.set("session", session);
+    const pin = scopePin(scope.scope);
     if (document) url.searchParams.set("doc", document);
+    if (pin) url.searchParams.set("pin", pin);
   }
   return url.toString();
 }

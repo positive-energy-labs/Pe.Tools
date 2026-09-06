@@ -166,7 +166,7 @@ export async function buildAgentControllerApp(
     return c.json(result, result.ok ? 200 : 409);
   });
   // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
-  // Scope query as a route document: ?session=&doc=, either absent.
+  // Scope query as a route document: ?doc= with an optional ?pin=, or neither.
   app.get("/pe/capabilities", async (c) => {
     if (!options.capabilityCatalog) return c.json({ error: "no capability catalog" }, 503);
     const scope = scopeOr400(c, "read");
@@ -200,7 +200,7 @@ export async function buildAgentControllerApp(
   });
 
   // Discovery is unscoped; every document read or write names one route scope: a chat Scope
-  // (?session, ?doc, either absent) or a standalone ?workspace.
+  // (?doc with an optional ?pin, or neither) or a standalone ?workspace.
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
     const scope = scopeOr400(c, "read");
@@ -287,25 +287,18 @@ export async function buildAgentControllerApp(
 
 function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | Response {
   const workspaceId = c.req.query("workspace")?.trim();
-  const session = c.req.query("session")?.trim() || null;
+  const pin = c.req.query("pin")?.trim() || null;
   const doc = c.req.query("doc")?.trim() || null;
   const invalid = (error: string) =>
     c.json(shape === "read" ? { error } : { ok: false, kind: "error", error, hint: error }, 400);
   if (workspaceId) {
-    if (session || doc || workspaceId.length > 200)
-      return invalid("Provide exactly one route scope");
+    if (pin || doc || workspaceId.length > 200) return invalid("Provide exactly one route scope");
     return { workspaceId };
   }
   const parsed = scopeSchema.safeParse(
-    session && doc
-      ? { kind: "pinned", session, document: doc }
-      : doc
-        ? { kind: "document", document: doc }
-        : session
-          ? { kind: "session", session }
-          : emptyScope,
+    doc ? { kind: "document", document: doc, ...(pin ? { pin } : {}) } : emptyScope,
   );
-  if (!parsed.success) return invalid("invalid route scope: session or doc malformed");
+  if (!parsed.success) return invalid("invalid route scope: doc or pin malformed");
   return { scope: parsed.data };
 }
 

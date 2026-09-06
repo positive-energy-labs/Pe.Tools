@@ -86,7 +86,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const values = useAtomValue(store.atoms.formValues);
   const schemaJson = useAtomValue(store.atoms.schemaJson);
   const connected = useAtomValue(store.atoms.connected);
-  const peaActive = useAtomValue(store.atoms.peaActive);
   const sliceError = useAtomValue(store.atoms.sliceError);
   const busy = useAtomValue(store.atoms.busy);
   const rows = useMemo(
@@ -191,7 +190,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
         <div className="mx-auto max-w-5xl space-y-1.5">
-          {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />

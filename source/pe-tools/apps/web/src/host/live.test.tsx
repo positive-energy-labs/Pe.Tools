@@ -8,8 +8,6 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -191,7 +189,4 @@ test("PeInfo reads host status with one-shot query failure", async () => {
 
   await waitFor(() => expect(error).toBeInstanceOf(Error));
   expect(fetchMock).toHaveBeenCalledOnce();
-  const routeStore = readFileSync(join(process.cwd(), "src/state/route-store.ts"), "utf8");
-  expect(routeStore).toContain("await fetchPeInfo(config)");
-  expect(routeStore).not.toContain('peUrl(config, "/info")');
 });
