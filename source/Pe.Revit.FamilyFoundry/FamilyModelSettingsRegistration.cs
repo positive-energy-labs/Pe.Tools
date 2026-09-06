@@ -1,7 +1,12 @@
+using Newtonsoft.Json;
+using NJsonSchema;
+using NJsonSchema.Generation.TypeMappers;
+using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
+using System.Reflection;
 
 namespace Pe.Revit.FamilyFoundry;
 
@@ -24,8 +29,12 @@ public static class FamilyModelSettingsRegistration {
     public static IReadOnlyList<StructuralSettingsModuleDescriptor> StructuralModules { get; } = [Module];
     public static IReadOnlyList<ISettingsRootBinding> RootBindings { get; } = [Root];
 
-    public static void RegisterValidator() =>
+    /// <summary>Registers the strict validator and tells the schema generator that the slot-grammar structs are strings.</summary>
+    public static void RegisterValidator() {
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyModel>(Validate);
+        foreach (var slot in new[] { typeof(PortableLength), typeof(PortableAngle), typeof(PortableValue) })
+            JsonTypeSchemaBindingRegistry.Shared.Register(slot, StringSlotSchemaBinding.Instance);
+    }
 
     private static IReadOnlyList<SettingsDocumentValidationIssue> Validate(
         SettingsDocumentValidationContext context
@@ -41,5 +50,36 @@ public static class FamilyModelSettingsRegistration {
                 "error",
                 issue.Message))
             .ToList();
+    }
+}
+
+/// <summary>
+///     A <see cref="PortableLength" />/<see cref="PortableAngle" />/<see cref="PortableValue" /> is one JSON
+///     string parsed by its own converter; the generator must not expand the record struct into an object.
+/// </summary>
+internal sealed class StringSlotSchemaBinding : IJsonTypeSchemaBinding {
+    public static readonly StringSlotSchemaBinding Instance = new();
+
+    public JsonObjectType SchemaType => JsonObjectType.String;
+
+    public JsonConverter? CreateConverter(PropertyInfo propertyInfo) => null;
+
+    public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) => AsString(schema, false);
+
+    public void ConfigurePropertySchema(JsonSchema schema, PropertyInfo propertyInfo, JsonSchemaBuildOptions options) {
+        var nullable = schema.OneOf.Any(c => c.Type == JsonObjectType.Null) || Nullable.GetUnderlyingType(propertyInfo.PropertyType) != null;
+        if (schema.HasReference) schema.Reference = null;
+        AsString(schema, nullable);
+    }
+
+    private static void AsString(JsonSchema schema, bool nullable) {
+        schema.Type = nullable ? JsonObjectType.String | JsonObjectType.Null : JsonObjectType.String;
+        schema.OneOf.Clear();
+        schema.AnyOf.Clear();
+        schema.AllOf.Clear();
+        schema.Properties.Clear();
+        schema.Item = null;
+        schema.AdditionalPropertiesSchema = null;
+        schema.AllowAdditionalProperties = false;
     }
 }

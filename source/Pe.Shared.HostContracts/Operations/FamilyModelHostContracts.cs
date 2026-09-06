@@ -9,8 +9,7 @@ public sealed record FamilyModelCaptureData(
     Reading Reading,
     string FamilyName,
     string ModelJson,
-    int UnmodeledCount,
-    FamilyModelEvidence Evidence
+    int UnmodeledCount
 );
 
 public sealed record FamilyModelBuildRequest(
@@ -24,6 +23,5 @@ public sealed record FamilyModelBuildData(
     Reading Reading,
     string FamilyName,
     string OutputPath,
-    string TemplatePath,
-    FamilyModelEvidence Evidence
+    string TemplatePath
 );
