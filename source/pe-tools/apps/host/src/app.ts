@@ -42,7 +42,7 @@ const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
 );
 
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
-// connected Revit session (the standard selector header targets one; ?session remains compatible)
+// connected Revit session (the standard selector header targets one; ?session is the raw query form)
 // op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
 // are appended so discovery (host_operation_search, pea `operations`, the web ops page)
 // sees both surfaces from one catalog; host-typegen skips them by their origin marker.

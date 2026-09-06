@@ -103,12 +103,12 @@ function workspace(
 }
 
 const documentA = {
-  scope: { kind: "pinned", session: "pe.app-25", document: address("C:\\Models\\A.rvt") },
+  scope: { kind: "document", document: address("C:\\Models\\A.rvt"), pin: "pe.app-25" },
 } as const;
 const documentB = {
   scope: { kind: "document", document: address("C:\\Models\\B.rvt") },
 } as const;
-const queryA = `session=pe.app-25&doc=${encodeURIComponent(documentA.scope.document)}`;
+const queryA = `doc=${encodeURIComponent(documentA.scope.document)}&pin=pe.app-25`;
 
 function bind(module: RouteWorkspace, scope: RouteScope = documentA) {
   return {

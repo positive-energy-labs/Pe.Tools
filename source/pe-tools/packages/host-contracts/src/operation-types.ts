@@ -860,7 +860,7 @@ export type HostLocalCatalogEntry = HostOperationDefinition & {
 
 /**
  * Discovery metadata for the TS-only (host-local) ops so `GET /ops` lists them next to the Revit
- * bridge ops — host_operation_search, the pea `operations` command, and the web ops page all read
+ * bridge ops — pe_find, the pea `operations` command, and the web ops page all read
  * that one catalog. These ops dispatch locally (call-route.ts) and don't need a Revit session.
  *
  * `origin:"host-local"` marks them so host-typegen SKIPS them: their request/response types are the

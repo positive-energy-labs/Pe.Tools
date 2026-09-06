@@ -192,9 +192,9 @@ Settings documents are co-edited with the user in their browser. Pea proposes fi
 
 ## Method
 
-1. Read the live routes first (route_state_read with no arguments). If the document is bound on route="settings", read that route to get the document, its schema, and the agent write mask.
+1. Read the live route first (pe_read key=route:settings). It answers the document, its schema, the agent write mask, and the commands.
 2. Start from diagnostics and artifacts before proposing. Keep authored intent, generated output, and runtime proof distinct.
-3. Propose only inside the write mask (route_state_apply on fields), then run command="validate" with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
+3. Propose only inside the write mask (pe_do key=route:settings.propose), then pe_do key=route:settings.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
 4. Stop for review. Saving is human-only; do not refetch, splice, or write the file yourself while it is bound.
 5. Direct file editing is the fallback only when no route binds the document, and you say so before editing. Use host-reported paths and the available schemas, then validate through the host.
 
@@ -212,7 +212,7 @@ description: Lay out ductwork in Revit - rough in a supply, return, or exhaust t
 
 You do not hand-draw ducts. You DECLARE intent as JSON; the Pe.Revit.Placement library routes collision-aware paths on a lattice and DRAFTS native placeholder ducts (visible; the user can drag them); you read the report and a plan image, refine the intent, re-SOLVE and read the DIFF; when it is clean you COMMIT real connected ducts and fittings. Use these five words with the user and repeat them when reporting.
 
-Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via script_execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
+Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via pe_do key=route:pods.execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
 
     using Pe.Revit.Placement;
     var place = new DuctPlacer(doc, "L3");   // level name or id; plan and 3D views auto-resolve

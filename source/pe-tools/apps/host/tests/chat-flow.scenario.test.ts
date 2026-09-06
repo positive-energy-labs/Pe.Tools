@@ -377,7 +377,9 @@ test("the browser walks one durable chat lifecycle", async () => {
     ).toMatchObject({ revision: 1 });
     expect(
       await (
-        await fetch(`${baseUrl}/pe/route-state/ops?doc=${encodeURIComponent("C:\\Models\\Other.rvt")}`)
+        await fetch(
+          `${baseUrl}/pe/route-state/ops?doc=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
+        )
       ).json(),
     ).toMatchObject({ revision: 0 });
 

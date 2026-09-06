@@ -20,6 +20,8 @@ export interface ScopeSessionOption extends FleetSession {
 export interface ScopeDocumentOption {
   document: Address;
   label: string;
+  /** The Revit year that saved the file: the holder's year, or the header year of a recent. */
+  year: number | null;
   /** Session ids holding it now; empty for a recent document nobody has open. */
   holders: string[];
 }
@@ -27,7 +29,7 @@ export interface ScopeDocumentOption {
 /** Documents first: every session's active document, then recents nobody has open. */
 export function scopeDocuments(
   sessions: readonly ScopeSessionOption[],
-  recents: readonly { document: Address; label: string }[] = [],
+  recents: readonly { document: Address; label: string; year: number | null }[] = [],
 ): ScopeDocumentOption[] {
   const byDocument = new Map<Address, ScopeDocumentOption>();
   for (const session of sessions) {
@@ -35,6 +37,7 @@ export function scopeDocuments(
     const entry = byDocument.get(session.document) ?? {
       document: session.document,
       label: session.documentLabel ?? session.document,
+      year: session.year,
       holders: [],
     };
     entry.holders.push(session.id);
@@ -45,6 +48,7 @@ export function scopeDocuments(
       byDocument.set(recent.document, {
         document: recent.document,
         label: recent.label,
+        year: recent.year,
         holders: [],
       });
   return [...byDocument.values()];
@@ -119,13 +123,14 @@ export function ScopeHead({
   refusal?: string | null;
   onSet: (next: Scope) => void;
 }) {
-  const resolution = resolveScope(scope, sessions);
+  const named = scopeDocument(scope);
+  const fileYear = documents.find((option) => option.document === named)?.year ?? null;
+  const resolution = resolveScope(scope, sessions, fileYear);
   const label = (document: Address | null) =>
     document === null
       ? "no document"
       : (documents.find((option) => option.document === document)?.label ?? document);
   const chip = chips(resolution, label);
-  const namedDocument = scopeDocument(scope);
   const busyTitle = busy ? "pea is mid-turn; the Scope is frozen" : undefined;
   return (
     <div
@@ -133,7 +138,7 @@ export function ScopeHead({
       data-scope={resolution.kind}
       className="flex flex-wrap items-center gap-2"
     >
-      <FactChip tone={chip.tone} title={namedDocument ?? "no document"}>
+      <FactChip tone={chip.tone} title={named ?? "no document"}>
         {chip.document}
       </FactChip>
       <FactChip tone={chip.tone} title={chip.title}>
@@ -167,7 +172,7 @@ export function ScopeHead({
           key={option.document}
           type="button"
           tone="neutral"
-          state={namedDocument === option.document ? "selected" : "rest"}
+          state={named === option.document ? "selected" : "rest"}
           disabled={busy}
           title={
             busyTitle ??

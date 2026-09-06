@@ -7,7 +7,7 @@
  * (the side-effectful work the mask forbids doing by hand). No per-route server code
  * beyond the schema + mask + command handlers: RouteWorkspace (packages/runtime)
  * owns document persistence, ordering, recovery, validation, and commands; the
- * three universal pea tools (route_state_read/route_state_apply/route_command) are thin
+ * pea doors (`pe_read route:<name>`, `pe_do route:<name>.propose|<command>`) are thin
  * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
  * (unmasked) and receives document snapshots through its route-specific event stream.
  */

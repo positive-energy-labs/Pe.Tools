@@ -50,6 +50,26 @@ test("the head renders the resolution of the Scope against the fleet, one kind p
   expect(mount({ kind: "none" }, [one, other]).kind).toBe("unchosen");
 });
 
+test("an unheld recent of another year offers no session to open into", () => {
+  const tower = address("C:\\Fixtures\\Recent Tower.rvt");
+  cleanup();
+  render(
+    <ScopeHead
+      scope={{ kind: "document", document: tower }}
+      revision={1}
+      sessions={[one]}
+      documents={scopeDocuments(
+        [one],
+        [{ document: tower, label: "Recent Tower.rvt", year: 2024 }],
+      )}
+      busy={false}
+      onSet={() => {}}
+    />,
+  );
+  expect(screen.getByTestId("scope-head").getAttribute("data-scope")).toBe("unheld");
+  expect(screen.getByTitle(/start one/)).toBeTruthy();
+});
+
 test("an ambiguous head offers exactly the holders, and pressing one pins the Scope", () => {
   const { sets } = mount({ kind: "document", document: projectA }, [one, two, other]);
   expect(screen.queryByRole("button", { name: "pe.app-27" })).toBeNull();

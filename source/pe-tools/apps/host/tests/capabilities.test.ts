@@ -66,7 +66,7 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
 
     const started = Date.now();
     const response = await fetch(
-      `${base}/pe/capabilities?session=pe.app-25&doc=${encodeURIComponent("C:\\Models\\A.rvt")}`,
+      `${base}/pe/capabilities?doc=${encodeURIComponent("C:\\Models\\A.rvt")}&pin=pe.app-25`,
     );
     const elapsed = Date.now() - started;
     expect(response.status).toBe(200);

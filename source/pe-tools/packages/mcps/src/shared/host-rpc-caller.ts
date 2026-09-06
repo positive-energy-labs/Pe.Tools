@@ -289,23 +289,22 @@ function createHiddenTierHint(hiddenCount: number): HostOperationSearchResult {
     responseTypeName: "n/a",
     requestHint: "n/a",
     usageHint:
-      'host_operation_search query="<capability>" — or visibility=EscalationVisible to list the escalation tier.',
+      'pe_find query="<capability>" — or visibility=EscalationVisible to list the escalation tier.',
   };
 }
 
-// Mutation searches that match no catalog operation fall back to scripting, which
-// lives behind the dedicated script_execute TOOL — not a catalog op, so the hint
-// is synthetic rather than a catalog entry.
+// Mutation searches that match no catalog operation fall back to scripting, which lives behind
+// the pods route document (`route:pods.execute`), not a catalog op, so the hint is synthetic.
 const scriptExecuteToolHint: HostOperationSearchResult = {
-  key: "script_execute",
-  displayName: "script_execute (dedicated tool)",
+  key: "route:pods.execute",
+  displayName: "route:pods.execute (scripting)",
   description:
-    "No catalog operation covers this mutation. Scripting is not a catalog op: use the script_execute tool to run a C# script against the Revit API; script_bootstrap prepares a workspace.",
+    "No catalog operation covers this mutation. Scripting is not a catalog op: pe_do key=route:pods.execute runs a C# script against the Revit API; route:pods.bootstrap prepares a workspace.",
   safety: "mutation",
   requestTypeName: "n/a",
   responseTypeName: "n/a",
-  requestHint: "Call the script_execute tool directly; host_operation_call does not apply.",
-  usageHint: "Use the script_execute tool (inline snippet or workspace file).",
+  requestHint: "pe_do key=route:pods.execute; an op: row does not apply.",
+  usageHint: "pe_do key=route:pods.execute (inline snippet or workspace file).",
 };
 
 function shouldHintScriptExecuteTool(
@@ -500,8 +499,8 @@ function toSearchResult(
     bestRequestExample: operation.requestExamples?.[0],
     usageHint:
       operation.requestTypeName === "NoRequest"
-        ? `host_operation_call key=${operation.key}`
-        : `host_operation_call key=${operation.key} request=${requestHint}`,
+        ? `pe_do key=op:${operation.key}`
+        : `pe_do key=op:${operation.key} input=${requestHint}`,
   } satisfies HostOperationSearchResult;
 
   if (verbosity === "compact") return result;
@@ -753,11 +752,11 @@ function createFailureNextSteps(
   operation: HostOperationDefinition | undefined,
   error: unknown,
 ): string[] {
-  if (operation == null) return ["Use host_operation_search to verify the operation key."];
+  if (operation == null) return ["Use pe_find to verify the operation key."];
   if (error instanceof HostCallError && error.status === 400)
     return [`Check the JSON request against ${createRequestHint(operation)}.`];
   return [
-    "Check pe_status for bridge/session connectivity; if it shows a failure, read pe_logs, then retry with a bounded request.",
+    "Check pe_find with no query for bridge/session connectivity, then retry with a bounded request.",
   ];
 }
 

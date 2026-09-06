@@ -30,7 +30,7 @@ export function scopeSessions(sessions: readonly SessionFacts[]): ScopeSessionOp
   );
 }
 
-type Recent = { document: Address; label: string };
+type Recent = { document: Address; label: string; year: number | null };
 
 /** The SDK's recent documents, the same lists /instances reads: one /doctor, then one per year. */
 function useRecentDocuments(enabled: boolean) {
@@ -47,14 +47,23 @@ function useRecentDocuments(enabled: boolean) {
         years.map(async (year) => {
           const body = (await (
             await fetch(`/docs/recents?year=${encodeURIComponent(year)}`)
-          ).json()) as { result?: { recents?: { path?: string; title?: string }[] } };
+          ).json()) as {
+            result?: { recents?: { path?: string; title?: string; savedYear?: number | null }[] };
+          };
           return body.result?.recents ?? [];
         }),
       );
       return buckets.flat().flatMap((recent) => {
         const parsed = addressSchema.safeParse(recent.path);
         return parsed.success
-          ? [{ document: parsed.data, label: recent.title ?? parsed.data }]
+          ? [
+              {
+                document: parsed.data,
+                label: recent.title ?? parsed.data,
+                // The year the file was saved in, read from its header by the SDK; null when unreadable.
+                year: recent.savedYear ?? null,
+              },
+            ]
           : [];
       });
     },
@@ -134,7 +143,9 @@ function fixtureScope(kind: FixtureScope | undefined): {
   };
   const sessions = [one, two, idle];
   const recent = address("C:\\Fixtures\\Recent Tower.rvt");
-  const documents = scopeDocuments(sessions, [{ document: recent, label: "Recent Tower.rvt" }]);
+  const documents = scopeDocuments(sessions, [
+    { document: recent, label: "Recent Tower.rvt", year: 2025 },
+  ]);
   switch (kind) {
     case "resolved":
       return { scope: { kind: "document", document }, revision: 3, sessions, documents };

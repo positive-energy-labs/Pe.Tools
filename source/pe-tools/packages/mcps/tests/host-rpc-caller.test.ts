@@ -162,12 +162,12 @@ test("hides scripting.* from the catalog projection while keeping it at transpor
   expect(map.matchedOperationKeys).not.toContain("scripting.execute");
   expect(map.rendered).not.toContain("scripting.");
 
-  // Transport: the op stays resolvable for host_operation_call enrichment/dispatch.
+  // Transport: the op stays resolvable for pe_do enrichment/dispatch.
   const transportOp = await caller.getOperation("scripting.execute");
   expect(transportOp?.key).toBe("scripting.execute");
 });
 
-test("unmatched mutate searches hint at the script_execute tool, not a scripting op", async () => {
+test("unmatched mutate searches hint at route:pods.execute, not a scripting op", async () => {
   const results = await new HostRpcCaller({ catalogOverride: catalog }).searchOperations({
     query: "duct layout route mains branches",
     intent: "Mutate",
@@ -177,8 +177,8 @@ test("unmatched mutate searches hint at the script_execute tool, not a scripting
   expect(Array.isArray(results)).toBe(true);
   if (!Array.isArray(results)) throw new Error("expected matches projection");
   expect(results).toHaveLength(1);
-  expect(results[0].key).toBe("script_execute");
-  expect(results[0].usageHint).toContain("script_execute tool");
+  expect(results[0].key).toBe("route:pods.execute");
+  expect(results[0].usageHint).toContain("pe_do key=route:pods.execute");
   expect(results.map((result) => result.key)).not.toContain("scripting.execute");
 });
 
