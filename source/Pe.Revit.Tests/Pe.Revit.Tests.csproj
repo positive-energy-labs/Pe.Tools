@@ -27,6 +27,7 @@
 
     <ItemGroup>
         <None Include="Fixtures\Profiles\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Fixtures\FamilyModel\**\*.json" CopyToOutputDirectory="PreserveNewest" />
         <EmbeddedResource
                 Include="Fixtures\Profiles\family-model-evaluator.conformance.json"
                 LogicalName="Pe.Revit.Tests.FamilyModelEvaluatorConformance.json" />

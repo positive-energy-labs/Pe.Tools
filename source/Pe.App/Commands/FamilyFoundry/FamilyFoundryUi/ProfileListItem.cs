@@ -1,3 +1,4 @@
+using Pe.Revit.FamilyFoundry;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using System.IO;
@@ -6,69 +7,40 @@ using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
-/// <summary>
-///     Palette list item representing a Family Foundry profile JSON file.
-///     Displays metadata: filename, line count, and dates.
-/// </summary>
+public enum FoundryFileKind { FamilyModel, Patch }
+
+/// <summary>One `*.family.json` (models root) or `*.patch.json` (patches root) in the FamilyFoundry module.</summary>
 public class ProfileListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
-    private readonly string? _relativePath;
 
-    public ProfileListItem(string filePath, string? relativePath = null) {
+    public ProfileListItem(string filePath, string relativePath, FoundryFileKind kind) {
         this.FilePath = filePath;
+        this.RelativePath = relativePath;
+        this.Kind = kind;
         this._fileInfo = new FileInfo(filePath);
-        this._relativePath = relativePath;
         this.LineCount = File.ReadAllLines(filePath).Length;
     }
 
-    /// <summary> Full path to the profile JSON file </summary>
     public string FilePath { get; }
-
-    /// <summary> Number of lines in the profile file </summary>
+    public string RelativePath { get; }
+    public FoundryFileKind Kind { get; }
     public int LineCount { get; }
-
-    /// <summary> Last modified date for sorting </summary>
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
-    /// <summary> Profile filename without extension (or relative path if nested) </summary>
-    public string TextPrimary => this._relativePath != null
-        ? Path.ChangeExtension(this._relativePath, null)
-        : Path.GetFileNameWithoutExtension(this.FilePath);
-
-    /// <summary> Shows profile path context </summary>
-    public string TextSecondary => this._relativePath != null
-        ? Path.GetDirectoryName(this._relativePath)?.Replace('\\', '/') ?? "Profile"
-        : "Profile";
-
-    /// <summary> Line count badge </summary>
+    public string TextPrimary => Path.GetFileName(this.FilePath);
+    public string TextSecondary => this.Kind == FoundryFileKind.Patch ? "patch" : "family.json";
     public string TextPill => $"{this.LineCount} lines";
-
-    public Func<string> GetTextInfo => () => string.Empty; // Tooltip disabled - info shown in preview panel
-
+    public Func<string> GetTextInfo => () => string.Empty;
     public BitmapImage? Icon => null;
     public WpfColor? ItemColor => null;
 
-    public static List<ProfileListItem> DiscoverProfiles(
-        ModuleDocumentStorage storage,
-        string? rootKey = null
-    ) {
-        var discovered = storage
-            .DiscoverAsync(
-                new SettingsDiscoveryOptions(
-                    Recursive: true,
-                    IncludeFragments: false,
-                    IncludeSchemas: false
-                ),
-                rootKey
-            )
-            .GetAwaiter()
-            .GetResult();
-
-        return discovered.Files
-            .Select(file => new ProfileListItem(
-                storage.ResolveDocumentPath(file.RelativePath, rootKey),
-                file.RelativePath
-            ))
+    public static List<ProfileListItem> Discover(ModuleDocumentStorage storage) {
+        List<ProfileListItem> In(string rootKey, FoundryFileKind kind) {
+            var discovered = storage.DiscoverAsync(new SettingsDiscoveryOptions(Recursive: true, IncludeFragments: false, IncludeSchemas: false), rootKey).GetAwaiter().GetResult();
+            return discovered.Files.Select(f => new ProfileListItem(storage.ResolveDocumentPath(f.RelativePath, rootKey), f.RelativePath, kind)).ToList();
+        }
+        return In(FamilyModelSettingsRegistration.RootKey, FoundryFileKind.FamilyModel)
+            .Concat(In(FamilyModelSettingsRegistration.PatchRootKey, FoundryFileKind.Patch))
             .OrderByDescending(p => p.LastModified)
             .ToList();
     }
