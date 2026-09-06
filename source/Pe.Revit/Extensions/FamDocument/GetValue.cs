@@ -40,6 +40,13 @@ public static class FamilyManagerGetValue {
     }
 
     /// <summary>
+    ///     Per-type blankness (critic F14): a formula counts as a value; otherwise `FamilyType.HasValue` on the
+    ///     explicit type, which needs no `CurrentType` switch and no transaction.
+    /// </summary>
+    public static bool HasValue(this FamilyDocument doc, FamilyType famType, FamilyParameter param) =>
+        !string.IsNullOrWhiteSpace(param.Formula) || famType.HasValue(param);
+
+    /// <summary>
     ///     Get the string value with a unit (ie. what you see in the family editor) of a parameter using the current family
     ///     type.
     ///     Handles all storage types correctly:
