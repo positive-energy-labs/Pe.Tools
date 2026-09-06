@@ -4,7 +4,6 @@ import {
   hostProcessIdentity,
   type HostOperationCostTier,
   type HostOperationDefinition,
-  type HostOperationIntent,
   type HostOperationNeeds,
   type HostOperationRequestExample,
   type HostOperationVisibility,
@@ -27,32 +26,12 @@ type HostRpcCallerOptions = HostSessionScope & {
 
 // --- runtime op catalog ---------------------------------------------------------
 // The connected session's GET /ops is the only catalog; there is no compiled-in
-// metadata. Cached briefly so capability maps and per-call enrichment don't hit
-// the bridge repeatedly.
+// metadata. Cached briefly so per-call enrichment doesn't hit the bridge repeatedly.
 
 type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-
-/** Ops already exposed through dedicated MCP tools (pe_status, pe_logs). */
-const dedicatedToolOperationKeys = new Set([
-  "host.status",
-  "logs.tail",
-  "bridge.sessions.list",
-  "bridge.sessions.summary",
-]);
-
-/**
- * Control-plane keys hidden from the catalog projection (search and capability
- * map), exactly like the dedicated-tool admin ops above. scripting.* remains a
- * bridge op at the transport level (POST /call, host_operation_call) — the
- * script_execute tool is the one scripting door; the catalog is purely the
- * document-world data plane.
- */
-function isHiddenFromCatalogProjection(key: string): boolean {
-  return dedicatedToolOperationKeys.has(key) || key.startsWith("scripting.");
-}
 
 const CATALOG_TTL_MS = 30_000;
 const catalogCache = new Map<string, { at: number; ops: HostOperationDefinition[] }>();
@@ -110,36 +89,8 @@ async function loadCatalog(
 }
 
 type HostOperationVerbosity = "compact" | "hints" | "full";
-type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
 
-type HostCapabilityMapRow = {
-  key: string;
-  description: string;
-  safety: string;
-  inputKind: string;
-  outputKind: string;
-  terms: string;
-};
-
-type HostCapabilityMapSection = {
-  id: string;
-  title: string;
-  summary: string;
-  rows: readonly HostCapabilityMapRow[];
-};
-
-type HostOperationSearchOptions = {
-  query?: string;
-  domain?: string;
-  intent?: HostOperationIntent;
-  needs?: HostOperationNeeds;
-  limit?: number;
-  verbosity?: HostOperationVerbosity;
-  visibility?: HostOperationVisibility;
-  projection?: "matches" | "capability-map";
-  capabilityMapFormat?: "markdown" | "json" | "toon";
-};
-
+/** The enrichment row a `/call` receipt carries; the ranked catalog lives in `findCapabilities`. */
 type HostOperationSearchResult = {
   key: string;
   displayName: string;
@@ -209,18 +160,6 @@ export class HostRpcCaller {
     return operations.find((operation) => operation.key === key);
   }
 
-  /** Search/capability-map over the live catalog. Throws when the catalog is unreachable. */
-  async searchOperations(options: HostOperationSearchOptions = {}) {
-    // Host-admin ops are served by the dedicated pe_status/pe_logs tools and
-    // scripting by the script_execute tool; hiding them here keeps exactly one
-    // door per capability.
-    const operations = (await this.catalog()).filter(
-      (operation) => !isHiddenFromCatalogProjection(operation.key),
-    );
-    if (options.projection === "capability-map") return renderCapabilityMap(operations, options);
-    return searchHostOperations(operations, options);
-  }
-
   async callOperation(
     key: string,
     request?: unknown,
@@ -236,85 +175,6 @@ export class HostRpcCaller {
     if (this.options.catalogOverride) return Promise.resolve([...this.options.catalogOverride]);
     return loadCatalog(this.options.hostBaseUrl, this.options.bridgeSessionId);
   }
-}
-
-function searchHostOperations(
-  operations: readonly HostOperationDefinition[],
-  options: HostOperationSearchOptions,
-): HostOperationSearchResult[] {
-  const queryTerms = normalizeQuery(options.query);
-  const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
-  const verbosity = options.verbosity ?? "compact";
-  // Progressive discovery (ADR 0003): a bare browse surfaces only the
-  // DefaultVisible orient tier; the rest of the catalog stays reachable by
-  // query, an explicit visibility filter, or any other filter the caller set.
-  const browsing =
-    queryTerms.length === 0 &&
-    !options.visibility &&
-    !options.domain?.trim() &&
-    !options.intent &&
-    options.needs == null;
-  const searchable = browsing
-    ? operations.filter((operation) => operation.visibility === "DefaultVisible")
-    : operations;
-  const matchedOperations = searchable
-    .filter((operation) => matchesFilters(operation, options))
-    .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }))
-    .filter(({ score }) => queryTerms.length === 0 || score > 0);
-
-  if (matchedOperations.length === 0 && shouldHintScriptExecuteTool(options, queryTerms))
-    return [scriptExecuteToolHint];
-
-  const results = matchedOperations
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.operation.key.localeCompare(right.operation.key),
-    )
-    .slice(0, limit)
-    .map(({ operation }) => toSearchResult(operation, verbosity));
-  const hiddenCount = operations.length - searchable.length;
-  if (browsing && hiddenCount > 0) results.push(createHiddenTierHint(hiddenCount));
-  return results;
-}
-
-// Synthetic row (same pattern as scriptExecuteToolHint): tells the agent the
-// default surface is deliberately small and how to escalate, so hiding tiers
-// never reads as "the catalog only has N operations".
-function createHiddenTierHint(hiddenCount: number): HostOperationSearchResult {
-  return {
-    key: "catalog.more-operations",
-    displayName: `${hiddenCount} more operations (not shown)`,
-    description: `This default listing shows only the orient tier. ${hiddenCount} more operations are searchable: pass a query describing the capability you need, or filter by visibility (EscalationVisible, ExpertOnly), domain, or intent.`,
-    safety: "read",
-    requestTypeName: "n/a",
-    responseTypeName: "n/a",
-    requestHint: "n/a",
-    usageHint:
-      'pe_find query="<capability>" — or visibility=EscalationVisible to list the escalation tier.',
-  };
-}
-
-// Mutation searches that match no catalog operation fall back to scripting, which lives behind
-// the pods route document (`route:pods.execute`), not a catalog op, so the hint is synthetic.
-const scriptExecuteToolHint: HostOperationSearchResult = {
-  key: "route:pods.execute",
-  displayName: "route:pods.execute (scripting)",
-  description:
-    "No catalog operation covers this mutation. Scripting is not a catalog op: pe_do key=route:pods.execute runs a C# script against the Revit API; route:pods.bootstrap prepares a workspace.",
-  safety: "mutation",
-  requestTypeName: "n/a",
-  responseTypeName: "n/a",
-  requestHint: "pe_do key=route:pods.execute; an op: row does not apply.",
-  usageHint: "pe_do key=route:pods.execute (inline snippet or workspace file).",
-};
-
-function shouldHintScriptExecuteTool(
-  options: HostOperationSearchOptions,
-  queryTerms: string[],
-): boolean {
-  if (queryTerms.length === 0 || options.intent !== "Mutate") return false;
-  const domain = options.domain?.trim().toLowerCase();
-  return !domain || domain === "scripting";
 }
 
 const callHostRpcOperationEffect = Effect.fnUntraced(function* (
@@ -435,48 +295,6 @@ function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function matchesFilters(
-  operation: HostOperationDefinition,
-  options: HostOperationSearchOptions,
-): boolean {
-  return (
-    matchesDomain(operation, options.domain) &&
-    (!options.intent || operation.intent === options.intent) &&
-    (!options.needs || operation.needs === options.needs) &&
-    (!options.visibility || operation.visibility === options.visibility)
-  );
-}
-
-function matchesDomain(operation: HostOperationDefinition, domain: string | undefined): boolean {
-  if (!domain?.trim()) return true;
-  const expected = domain.trim().toLowerCase();
-  return inferDomain(operation.key) === expected;
-}
-
-function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]): number {
-  if (queryTerms.length === 0) return 1;
-  const haystack = [
-    operation.key,
-    operation.displayName,
-    operation.description,
-    inferDomain(operation.key),
-    operation.requestTypeName,
-    operation.responseTypeName,
-    operation.costTier,
-    ...(operation.searchTerms ?? []),
-    ...(operation.callGuidance ?? []),
-    ...(operation.requestExamples ?? []).flatMap((example) => [
-      example.name,
-      example.description,
-      example.json,
-    ]),
-  ]
-    .filter((value): value is string => value != null && value.length > 0)
-    .join(" ")
-    .toLowerCase();
-  return queryTerms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
-}
-
 function toSearchResult(
   operation: HostOperationDefinition,
   verbosity: HostOperationVerbosity,
@@ -519,234 +337,6 @@ function createRequestHint(operation: HostOperationDefinition): string {
   return `${operation.requestTypeName ?? "request object"} JSON object`;
 }
 
-function renderCapabilityMap(
-  operations: readonly HostOperationDefinition[],
-  options: HostOperationSearchOptions,
-) {
-  const queryTerms = normalizeQuery(options.query);
-  const sections = buildCapabilityMapSections(operations)
-    .map((section) => ({
-      ...section,
-      rows: section.rows.filter(
-        (row) =>
-          queryTerms.length === 0 ||
-          queryTerms.some((term) => Object.values(row).join(" ").toLowerCase().includes(term)),
-      ),
-    }))
-    .filter((section) => section.rows.length > 0);
-  return {
-    kind: "hostCapabilityMap",
-    format: options.capabilityMapFormat ?? "markdown",
-    generatedFrom: "host.ops.catalog",
-    formatVersion: 1,
-    rowCount: sections.reduce((count, section) => count + section.rows.length, 0),
-    guidance:
-      "Table-of-contents routing map only. Use projection=matches for call guidance and exact request/response shapes.",
-    matchedOperationKeys: sections.flatMap((section) => section.rows.map((row) => row.key)),
-    rendered: renderCapabilityMapMarkdown(sections),
-    sections,
-    nextSteps: ["Use projection=matches for ranked operation search results."],
-  };
-}
-
-function buildCapabilityMapSections(
-  catalogOperations: readonly HostOperationDefinition[],
-): HostCapabilityMapSection[] {
-  const operations = [...catalogOperations].sort((left, right) =>
-    left.key.localeCompare(right.key),
-  );
-  const sections = [
-    createLayerSection(
-      "context",
-      "Context",
-      "Cheap current Revit document, active view, selection, and session orientation.",
-      "Context",
-      operations,
-    ),
-    createLayerSection(
-      "catalog",
-      "Catalog",
-      "Cheap/bounded inventories of candidate schedules, families, parameters, browser paths, and model nouns.",
-      "Catalog",
-      operations,
-    ),
-    createLayerSection(
-      "matrix",
-      "Matrix",
-      "Bounded joins and audits after context/catalog narrowing.",
-      "Matrix",
-      operations,
-    ),
-    createLayerSection(
-      "detail",
-      "Detail",
-      "Exact inspection of known schedules, sheets, elements, rows, or panel schedules.",
-      "Detail",
-      operations,
-    ),
-    createLayerSection(
-      "resolve",
-      "Resolve",
-      "Fuzzy human references into stable handles before detail or matrix calls.",
-      "Resolve",
-      operations,
-    ),
-    createLayerSection(
-      "apply",
-      "Apply",
-      "Explicit host/Revit state changes after discovery and inspection.",
-      "Apply",
-      operations,
-    ),
-    createDomainSection(
-      "settings",
-      "Settings",
-      "Schema-backed settings/profile authoring, validation, field options, and workspaces.",
-      "settings",
-      operations,
-    ),
-    // No Scripting section: scripting.* is control plane, hidden from the catalog
-    // projection — the script_execute tool is the one scripting door.
-  ].filter((section) => section.rows.length > 0);
-  const covered = new Set(sections.flatMap((section) => section.rows.map((row) => row.key)));
-  const otherRows = operations
-    .filter((operation) => !covered.has(operation.key))
-    .map(toCapabilityRow);
-  if (otherRows.length > 0)
-    sections.push({
-      id: "other",
-      title: "Other",
-      summary: "Public operations not covered by the primary routing sections.",
-      rows: otherRows,
-    });
-  return sections;
-}
-
-function createLayerSection(
-  id: string,
-  title: string,
-  summary: string,
-  layer: RevitOperationLayer,
-  operations: readonly HostOperationDefinition[],
-): HostCapabilityMapSection {
-  return {
-    id,
-    title,
-    summary,
-    rows: operations
-      .filter((operation) => inferRevitLayer(operation.key) === layer)
-      .map(toCapabilityRow),
-  };
-}
-
-function createDomainSection(
-  id: string,
-  title: string,
-  summary: string,
-  domain: string,
-  operations: readonly HostOperationDefinition[],
-): HostCapabilityMapSection {
-  return {
-    id,
-    title,
-    summary,
-    rows: operations
-      .filter((operation) => inferDomain(operation.key) === domain)
-      .map(toCapabilityRow),
-  };
-}
-
-function toCapabilityRow(operation: HostOperationDefinition): HostCapabilityMapRow {
-  return {
-    key: operation.key,
-    description: operation.description ?? operation.displayName ?? operation.key,
-    safety: [operation.needs === "nothing" ? undefined : operation.needs, operation.costTier]
-      .filter((value) => value != null && value.length > 0)
-      .join(", "),
-    inputKind: formatCapabilityInputKind(operation),
-    outputKind: formatCapabilityOutputKind(operation),
-    terms: (operation.searchTerms ?? []).join("|"),
-  };
-}
-
-function formatCapabilityInputKind(operation: HostOperationDefinition): string {
-  if (operation.requestTypeName === "NoRequest") return "none";
-  switch (inferRevitLayer(operation.key)) {
-    case "Context":
-      return "context scope";
-    case "Catalog":
-      return "bounded filters";
-    case "Matrix":
-      return "scoped audit query";
-    case "Detail":
-      return "known handles or filters";
-    case "Resolve":
-      return "reference text/context";
-    case "Apply":
-      return "explicit mutation request";
-    default:
-      return inferDomain(operation.key) === "settings"
-        ? "settings/profile request"
-        : "typed request";
-  }
-}
-
-function formatCapabilityOutputKind(operation: HostOperationDefinition): string {
-  switch (inferRevitLayer(operation.key)) {
-    case "Context":
-      return "current state summary";
-    case "Catalog":
-      return "candidate handles/list";
-    case "Matrix":
-      return "join/audit results";
-    case "Detail":
-      return "detail records";
-    case "Resolve":
-      return "resolved references";
-    case "Apply":
-      return "mutation result";
-    default:
-      return inferDomain(operation.key) === "settings" ? "settings/profile result" : "typed result";
-  }
-}
-
-function inferRevitLayer(key: string): RevitOperationLayer | undefined {
-  const [domain, layer] = key.split(".");
-  if (domain !== "revit") return undefined;
-  switch (layer) {
-    case "context":
-      return "Context";
-    case "catalog":
-      return "Catalog";
-    case "matrix":
-      return "Matrix";
-    case "detail":
-      return "Detail";
-    case "resolve":
-      return "Resolve";
-    case "apply":
-      return "Apply";
-    default:
-      return undefined;
-  }
-}
-
-function inferDomain(key: string): string {
-  return key.split(".", 1)[0].toLowerCase();
-}
-
-function renderCapabilityMapMarkdown(sections: readonly HostCapabilityMapSection[]): string {
-  return sections
-    .flatMap((section) => [
-      `## ${section.title}`,
-      section.summary,
-      ...section.rows.map((row) => `- ${row.key}: ${row.description}`),
-      "",
-    ])
-    .join("\n")
-    .trimEnd();
-}
-
 function createFailureNextSteps(
   operation: HostOperationDefinition | undefined,
   error: unknown,
@@ -757,11 +347,4 @@ function createFailureNextSteps(
   return [
     "Check pe_find with no query for bridge/session connectivity, then retry with a bounded request.",
   ];
-}
-
-function normalizeQuery(query: string | undefined): string[] {
-  return (query ?? "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((term) => term.length > 1);
 }

@@ -1,6 +1,8 @@
 import { define } from "gunshi";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
+import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
+import { readCatalog } from "./capability-tools.ts";
 import {
   ScriptingTools,
   parseCliPermissionMode,
@@ -122,7 +124,7 @@ export class PeaCliCommands {
   private hostOperationsCommand() {
     return define({
       name: "operations",
-      description: "Search and call generated public host operations.",
+      description: "Search the capability catalog and call a generated public host operation.",
       subCommands: {
         search: this.hostOperationSearchCommand(),
         call: this.hostOperationCallCommand(),
@@ -136,42 +138,40 @@ export class PeaCliCommands {
   private hostOperationSearchCommand() {
     return define({
       name: "search",
-      description: "Search generated public host operations by capability and filters.",
+      description:
+        "Search the one capability catalog (ops, route documents, pods, skills) — the same rows and ranking pe_find gives the agent.",
       args: {
         host: commonArgs.host,
-        bridgeSessionId: commonArgs.bridgeSessionId,
         query: { type: "string", description: "Optional search query." },
-        domain: { type: "string", description: "Optional top-level domain filter." },
-        intent: { type: "string", description: "Optional intent filter: Read or Mutate." },
-        limit: { type: "number", description: "Maximum operations to print.", default: 8 },
-        verbosity: {
+        kind: {
           type: "string",
-          description: "Output size: compact, hints, or full.",
-          default: "compact",
+          description: "Optional kind filter: op, route-doc, route-command, pod, or skill.",
         },
+        needs: {
+          type: "string",
+          description:
+            "Optional needs filter: nothing, document, project-document, family-document, or session.",
+        },
+        limit: { type: "number", description: "Maximum rows to print.", default: 8 },
       },
       run: async (ctx) => {
-        // Same host resolution as `call` (service file, never the 5180 default): a bare
-        // `new HostRpcCaller()` was the `fetch failed` with no URL seen 2026-08-19/20. The URL
-        // is disclosed BEFORE the fetch, so an empty catalog and a wrong-lane resolution are
-        // told apart by reading the output rather than by guessing.
-        const client = this.createHostRpcCaller(ctx.values);
-        console.log(`host ${client.hostBaseUrl}`);
-        const results = await client.searchOperations({
+        // The URL is disclosed BEFORE the fetch: a bare `fetch failed` with no URL was the
+        // 2026-08-19/20 dead end — an empty catalog and a wrong-lane resolution are told apart
+        // by reading the output rather than by guessing.
+        const hostBaseUrl = this.resolveHostBaseUrl(ctx.values.host);
+        console.log(`host ${hostBaseUrl}`);
+        const catalog = await readCatalog(undefined, hostBaseUrl);
+        if ("isError" in catalog) throw new Error(catalog.content);
+        const rows = findCapabilities(catalog.capabilities, {
           query: firstNonBlank(ctx.values.query),
-          domain: firstNonBlank(ctx.values.domain),
-          intent: parseOperationIntent(ctx.values.intent),
+          kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),
+          needs: capabilityNeedsSchema.optional().parse(firstNonBlank(ctx.values.needs)),
           limit: ctx.values.limit,
-          verbosity: parseOperationVerbosity(ctx.values.verbosity),
         });
-        if (!Array.isArray(results)) {
-          console.log(results.rendered ?? JSON.stringify(results, null, 2));
-          return;
-        }
-        for (const result of results) {
-          console.log(`${result.key}  ${result.displayName}`);
-          console.log(`  ${result.description}`);
-          console.log(`  ${result.requestHint}`);
+        for (const row of rows) {
+          console.log(`${row.key}  ${row.title}`);
+          console.log(`  ${row.description}`);
+          console.log(`  ${row.needs}${row.mutates ? ", mutates" : ""}`);
         }
       },
     });
@@ -184,7 +184,10 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
-        key: { type: "string", description: "Operation key returned by host operations search." },
+        key: {
+          type: "string",
+          description: "Operation key, with or without the `op:` prefix `search` prints.",
+        },
         request: {
           type: "string",
           description: "JSON request object. Omit for NoRequest operations.",
@@ -196,7 +199,7 @@ export class PeaCliCommands {
         },
       },
       run: async (ctx) => {
-        const key = firstNonBlank(ctx.values.key);
+        const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
         const request = parseOptionalJson(ctx.values.request);
         const result = await this.createHostRpcCaller(ctx.values).callOperation(
@@ -517,18 +520,6 @@ function parseOperationVerbosity(value: unknown): "compact" | "hints" | "full" {
       return "full";
     default:
       throw new Error("Unknown verbosity. Expected compact, hints, or full.");
-  }
-}
-
-function parseOperationIntent(value: unknown): "Read" | "Mutate" | undefined {
-  const text = firstNonBlank(value);
-  if (!text) return undefined;
-  switch (text) {
-    case "Read":
-    case "Mutate":
-      return text;
-    default:
-      throw new Error("Unknown operation intent. Expected Read or Mutate.");
   }
 }
 

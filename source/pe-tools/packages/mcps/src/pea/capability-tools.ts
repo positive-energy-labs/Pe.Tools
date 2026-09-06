@@ -311,22 +311,23 @@ async function routeFetch(path: string, body?: unknown): Promise<Record<string, 
   return payload;
 }
 
-async function readCatalog(
-  scope: Scope,
+/** The one capability read: `GET /pe/capabilities`. Shared by the three doors and `pea host operations`. */
+export async function readCatalog(
+  scope: Scope = emptyScope,
+  hostBaseUrl?: string,
 ): Promise<CapabilityCatalog | { isError: true; content: string }> {
+  let url = hostBaseUrl;
   try {
-    const response = await fetch(`${base()}/pe/capabilities?${scopeQuery(scope)}`);
+    url ??= base();
+    const response = await fetch(`${url}/pe/capabilities?${scopeQuery(scope)}`);
     const parsed = capabilityCatalogSchema.safeParse(await response.json());
     if (!response.ok || !parsed.success)
-      return {
-        isError: true,
-        content: `GET ${base()}/pe/capabilities failed (${response.status}).`,
-      };
+      return { isError: true, content: `GET ${url}/pe/capabilities failed (${response.status}).` };
     return parsed.data;
   } catch (error) {
     return {
       isError: true,
-      content: `Couldn't reach the host at ${base()} (${message(error)}). Is the host running?`,
+      content: `Couldn't reach the host at ${url ?? "(unresolved)"} (${message(error)}). Is the host running?`,
     };
   }
 }
