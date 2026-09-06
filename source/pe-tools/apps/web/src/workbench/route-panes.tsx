@@ -1,4 +1,4 @@
-import { instancesRouteState, routeScopeKey, type Scope } from "@pe/agent-contracts";
+import { instancesRouteState, routeScopeKey, scopeSession, type Scope } from "@pe/agent-contracts";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
@@ -17,6 +17,12 @@ import {
   type RouteStateSpec,
 } from "@pe/agent-contracts";
 import type { z } from "zod";
+
+/** The `?target` selector a route page understands: only a NAMED session; a document scope derives. */
+const worldSelector = (scope: Scope): string => {
+  const session = scopeSession(scope);
+  return session ? `session:${session}` : "";
+};
 
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -61,12 +67,7 @@ function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateS
       </EmptyState>
     );
   if (spec.route === "instances")
-    return (
-      <InstancesPage
-        target={threadScope.scope.session ? `session:${threadScope.scope.session}` : ""}
-        setTarget={() => {}}
-      />
-    );
+    return <InstancesPage target={worldSelector(threadScope.scope)} setTarget={() => {}} />;
   return (
     <ScopedRoutePaneOwner
       key={routeScopeKey({ scope: threadScope.scope })}
@@ -136,10 +137,7 @@ function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodTyp
   const routeScope = { scope };
   // Shared family atom, never a labelled clone: one events stream per route document.
   const slice = docAtom(spec, routeScope);
-  const searchState = core.owned(
-    "page/search",
-    Atom.make({ target: scope.session ? `session:${scope.session}` : "" }),
-  );
+  const searchState = core.owned("page/search", Atom.make({ target: worldSelector(scope) }));
   const search = {
     get target() {
       return chat.registry.get(searchState).target;

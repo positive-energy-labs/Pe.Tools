@@ -303,20 +303,24 @@ test("the browser walks one durable chat lifecycle", async () => {
     // and a route document lands under the same Scope key.
     const scopeUrl = `${baseUrl}/pe/scope/${encodeURIComponent(threadId)}`;
     expect(await (await fetch(scopeUrl)).json()).toEqual({
-      scope: { session: null, document: null },
+      scope: { kind: "none" },
       revision: 0,
     });
     const setScope = await fetch(scopeUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        scope: { session: scopeSession, document: scopeDocument },
+        scope: { kind: "pinned", session: scopeSession, document: scopeDocument },
         expectedRevision: 0,
       }),
     });
     expect(await setScope.json()).toEqual({
-      scope: { session: scopeSession, document: scopeDocument },
-      revision: 1,
+      ok: true,
+      why: "set",
+      head: {
+        scope: { kind: "pinned", session: scopeSession, document: scopeDocument },
+        revision: 1,
+      },
     });
     await expect
       .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })

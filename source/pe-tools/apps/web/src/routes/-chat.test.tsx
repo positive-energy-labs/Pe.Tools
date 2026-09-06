@@ -8,7 +8,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 vi.mock("#/workbench/use-mode", () => ({ useMode: () => ["threads", vi.fn()] }));
 vi.mock("#/chat/scope", () => ({
   useThreadScope: () => ({
-    scope: { session: null, document: null },
+    scope: { kind: "none" },
     revision: 0,
     hydrated: true,
     set: vi.fn(),

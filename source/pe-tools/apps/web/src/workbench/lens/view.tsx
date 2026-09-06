@@ -1,3 +1,4 @@
+import { scopeDocument, scopeSession } from "@pe/agent-contracts";
 import { annotation } from "#/components/anatomy";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
@@ -70,7 +71,7 @@ export function Lens({
           <div {...annotation("dial")} onPointerDown={onPointerDown} aria-label="Timeline">
             <div
               aria-hidden="true"
-              title={`scope: ${threadScope.scope.session ?? "no session"} r${threadScope.revision}`}
+              title={`scope: ${scopeSession(threadScope.scope) ?? scopeDocument(threadScope.scope) ?? "none"} r${threadScope.revision}`}
               style={{
                 position: "absolute",
                 left: 0,

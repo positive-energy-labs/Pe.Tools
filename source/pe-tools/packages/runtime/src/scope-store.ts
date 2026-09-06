@@ -2,10 +2,11 @@ import { RequestContext } from "@mastra/core/request-context";
 import type { Session } from "@mastra/core/agent-controller";
 import {
   emptyScope,
-  scopeRevisionSchema,
+  headSchema,
   turnContextKey,
+  type Head,
+  type PutScopeResult,
   type Scope,
-  type ScopeRevision,
   type Turn,
 } from "@pe/agent-contracts";
 import { messageContents } from "./message-contents.ts";
@@ -23,7 +24,7 @@ const scopeType = (threadId: string) => `scope:${threadId}`;
  * ends; `admit` records which turn holds the thread so the human head can be refused mid-turn.
  */
 export class ScopeStore {
-  readonly #listeners = new Set<(threadId: string, next: ScopeRevision) => void>();
+  readonly #listeners = new Set<(threadId: string, next: Head) => void>();
   readonly #turns = new Map<string, string>();
 
   constructor(
@@ -31,21 +32,21 @@ export class ScopeStore {
     private readonly resourceId: string,
   ) {}
 
-  async read(threadId: string): Promise<ScopeRevision> {
+  async read(threadId: string): Promise<Head> {
     const raw = await (
       await this.store()
     ).getState({
       threadId: this.resourceId,
       type: scopeType(threadId),
     });
-    return scopeRevisionSchema.safeParse(raw).data ?? { scope: emptyScope, revision: 0 };
+    return headSchema.safeParse(raw).data ?? { scope: emptyScope, revision: 0 };
   }
 
-  async set(threadId: string, scope: Scope, expectedRevision: number): Promise<ScopeRevision> {
+  /** Every write says what it read: a stale `expectedRevision` returns the current Head instead. */
+  async set(threadId: string, scope: Scope, expectedRevision: number): Promise<PutScopeResult> {
     const current = await this.read(threadId);
-    if (current.revision !== expectedRevision)
-      throw new ScopeRefused(`scope is at revision ${current.revision}; re-read before setting.`);
-    const next = { scope, revision: current.revision + 1 };
+    if (current.revision !== expectedRevision) return { ok: false, why: "stale", head: current };
+    const next: Head = { scope, revision: current.revision + 1 };
     await (
       await this.store()
     ).setState({
@@ -54,7 +55,7 @@ export class ScopeStore {
       value: next,
     });
     for (const listener of this.#listeners) listener(threadId, next);
-    return next;
+    return { ok: true, why: "set", head: next };
   }
 
   admit(threadId: string, turnId: string): void {
@@ -65,13 +66,11 @@ export class ScopeStore {
     return this.#turns.get(threadId);
   }
 
-  subscribe(listener: (threadId: string, next: ScopeRevision) => void): () => void {
+  subscribe(listener: (threadId: string, next: Head) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
 }
-
-export class ScopeRefused extends Error {}
 
 type MessageFile = { data: string; mediaType: string; filename?: string };
 

@@ -1,5 +1,7 @@
 import {
   bridgeSelector,
+  scopeDocument,
+  scopeSession,
   type PodsDocument,
   type ResolvedTarget,
   type RouteStateCommandHandlers,
@@ -33,8 +35,8 @@ export function createPodsCommandHandlers(
   const resolve = async (scope: Scope): Promise<ResolvedTarget> => {
     const summary = await caller(scope).call("bridge.sessions.summary");
     return {
-      session: summary.sdkSessionId ?? summary.sessionId ?? scope.session,
-      document: summary.activeDocument?.path ?? scope.document,
+      session: summary.sdkSessionId ?? summary.sessionId ?? scopeSession(scope),
+      document: summary.activeDocument?.path ?? scopeDocument(scope),
     };
   };
 

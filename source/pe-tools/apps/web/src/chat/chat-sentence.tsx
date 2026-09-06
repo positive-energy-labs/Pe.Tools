@@ -100,8 +100,8 @@ export function ChatSentence({
   );
 }
 
-type FixtureScope = "set" | "dangling" | "absent" | "ambiguous";
-/** `/chat?source=fixture&scope=set|dangling|absent|ambiguous` draws the head states without a host. */
+type FixtureScope = "resolved" | "unheld" | "ambiguous" | "gone" | "nothing";
+/** `/chat?source=fixture&scope=<kind>` draws each head resolution without a host. */
 function fixtureScope(kind: FixtureScope | undefined): {
   scope: Scope;
   revision: number;
@@ -129,14 +129,19 @@ function fixtureScope(kind: FixtureScope | undefined): {
     documentLabel: null,
   };
   const sessions = [one, two, idle];
-  const documents = scopeDocuments(sessions, [
-    { document: address("C:\\Fixtures\\Recent Tower.rvt"), label: "Recent Tower.rvt" },
-  ]);
-  if (kind === "set")
-    return { scope: { session: one.id, document }, revision: 3, sessions, documents };
-  if (kind === "dangling")
-    return { scope: { session: "gone-24", document }, revision: 2, sessions, documents };
-  if (kind === "ambiguous")
-    return { scope: { session: null, document }, revision: 4, sessions, documents };
-  return { scope: emptyScope, revision: 0, sessions, documents };
+  const recent = address("C:\\Fixtures\\Recent Tower.rvt");
+  const documents = scopeDocuments(sessions, [{ document: recent, label: "Recent Tower.rvt" }]);
+  switch (kind) {
+    case "resolved":
+      return { scope: { kind: "document", document }, revision: 3, sessions, documents };
+    case "unheld":
+      return { scope: { kind: "document", document: recent }, revision: 2, sessions, documents };
+    case "ambiguous":
+      return { scope: { kind: "document", document }, revision: 4, sessions, documents };
+    case "gone":
+      return { scope: { kind: "session", session: "gone-24" }, revision: 5, sessions, documents };
+    case "nothing":
+    case undefined:
+      return { scope: emptyScope, revision: 0, sessions, documents };
+  }
 }

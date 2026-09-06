@@ -105,7 +105,9 @@ const createStore = (
   const store = createTakeoffStore({
     ...deps,
     registry,
-    scope: deps.scope ?? { scope: { session: null, document: address("C:\\Models\\Test.rvt") } },
+    scope: deps.scope ?? {
+      scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") },
+    },
     slice,
     writer,
   });
@@ -272,7 +274,10 @@ describe("takeoff route store", () => {
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
     registries.push(registry);
     const store = createFixtureTakeoffStore(registry, {
-      scope: { session: null, document: address("C:\\Fixtures\\project-a Residence.rvt") },
+      scope: {
+        kind: "document" as const,
+        document: address("C:\\Fixtures\\project-a Residence.rvt"),
+      },
     });
     const world = registry.get(store.atoms.world);
 
@@ -523,7 +528,7 @@ describe("takeoff route store", () => {
       {
         host: h.host,
         sessions: h.sessions,
-        scope: { scope: { session: null, document: address("C:\\Models\\Other.rvt") } },
+        scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
         target: "session:dev-26",
       },
       (next) => patches.push(next),
@@ -557,7 +562,7 @@ describe("takeoff route store", () => {
       {
         host: h.host,
         sessions: h.sessions,
-        scope: { scope: { session: null, document: address("C:\\Models\\Other.rvt") } },
+        scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
         target: "session:dev-26",
         slice: Atom.make(AsyncResult.success(reconciled)),
       },

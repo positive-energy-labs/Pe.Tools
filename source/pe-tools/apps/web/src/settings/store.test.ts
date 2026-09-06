@@ -63,7 +63,10 @@ function make(applyResult?: RouteStateWriteResult) {
   const store = createSettingsStore({
     registry,
     scope: {
-      scope: { session: null, document: address(`C:\\Models\\settings-${registries.length}.rvt`) },
+      scope: {
+        kind: "document" as const,
+        document: address(`C:\\Models\\settings-${registries.length}.rvt`),
+      },
     },
     slice,
     apply,

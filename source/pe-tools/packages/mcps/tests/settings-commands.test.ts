@@ -51,7 +51,7 @@ async function withHost(
 
 function context(document: SettingsRouteDocument) {
   return {
-    scope: { session: null, document: DOCUMENT_ADDRESS },
+    scope: { kind: "document" as const, document: DOCUMENT_ADDRESS },
     getDoc: () => document,
     setDoc: async (next: SettingsRouteDocument) => void Object.assign(document, next),
   };

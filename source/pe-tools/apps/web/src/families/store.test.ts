@@ -85,7 +85,7 @@ const make = (
     docSlice,
     store: createFamiliesStore({
       registry,
-      scope: { scope: { session: null, document: address("C:\\Models\\Test.rvt") } },
+      scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") } },
       host: testFixture.host,
       slice: docSlice,
       writer: testFixture.writer,

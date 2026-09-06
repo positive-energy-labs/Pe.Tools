@@ -126,7 +126,7 @@ type ExecutableTool = { execute?: (input: never, context: never) => Promise<unkn
 const turn = {
   id: "11111111-1111-4111-8111-111111111111",
   thread: "t1",
-  scope: { session: "dev", document: "C:\\Models\\A.rvt" },
+  scope: { kind: "pinned", session: "dev", document: "C:\\Models\\A.rvt" },
   revision: 4,
 };
 const run = (tool: ExecutableTool, input: unknown) =>

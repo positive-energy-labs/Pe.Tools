@@ -66,7 +66,7 @@ function make(
   const writes: RouteStatePatch[][] = [];
   const store = createOpsStore({
     registry,
-    scope: { scope: { session: null, document: address("C:\\Models\\Test.rvt") } },
+    scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") } },
     slice: Atom.make(
       AsyncResult.success({
         doc: routeDocument,

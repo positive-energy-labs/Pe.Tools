@@ -69,7 +69,7 @@ test("parameter links apply rejects a reviewed profile after the draft changes",
     apply(
       { profile: reviewed },
       {
-        scope: { session: null, document: DOCUMENT_ADDRESS },
+        scope: { kind: "document" as const, document: DOCUMENT_ADDRESS },
         getDoc: () => document,
         setDoc: async () => undefined,
       },

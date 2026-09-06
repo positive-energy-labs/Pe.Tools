@@ -12,7 +12,7 @@
  * (unmasked) and receives document snapshots through its route-specific event stream.
  */
 import { z } from "zod";
-import { scopeKey, scopeSchema, type Scope } from "./scope.ts";
+import { emptyScope, scopeKey, scopeSchema, type Scope } from "./scope.ts";
 
 /** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
@@ -52,8 +52,7 @@ export const routeScopeSchema = z.union([
   z.object({ workspaceId: z.string().trim().min(1).max(200) }),
 ]);
 /** The Scope a route command runs under; workspace routes carry the empty Scope. */
-export const scopeOfRoute = (scope: RouteScope): Scope =>
-  scope.scope ?? { session: null, document: null };
+export const scopeOfRoute = (scope: RouteScope): Scope => scope.scope ?? emptyScope;
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =

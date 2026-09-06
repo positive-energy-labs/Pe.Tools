@@ -109,7 +109,7 @@ const make = (
     calls: testFixture.calls,
     store: createFamilyStore({
       registry,
-      scope: { scope: { session: null, document: address("C:\\Models\\Test.rfa") } },
+      scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rfa") } },
       host: testFixture.host,
       slices: { settings: settingsSlice, family: familySlice },
       writers: testFixture.writers,

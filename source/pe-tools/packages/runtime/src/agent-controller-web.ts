@@ -5,8 +5,15 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { routeStatePatchSchema, scopeSchema, type ScopeRevision } from "@pe/agent-contracts";
-import { ScopeRefused, type ScopeStore } from "./scope-store.ts";
+import {
+  emptyScope,
+  putScopeSchema,
+  routeStatePatchSchema,
+  scopeSchema,
+  type Head,
+  type PutScopeResult,
+} from "@pe/agent-contracts";
+import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, toWireDisplayState } from "./thread-state.ts";
 import {
   RouteWorkspace,
@@ -19,11 +26,6 @@ import {
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
-});
-const scopeSetBodySchema = z.object({
-  scope: scopeSchema,
-  expectedRevision: z.number().int().nonnegative(),
-  turn: z.uuid().optional(),
 });
 const routeStateCommandBodySchema = z.object({
   command: z.string(),
@@ -135,7 +137,7 @@ export async function buildAgentControllerApp(
     const threadId = c.req.param("threadId");
     if (c.req.query("watch") === undefined) return c.json(await runtime.scopes.read(threadId));
     return streamSSE(c, async (stream) => {
-      const send = (next: ScopeRevision) => stream.writeSSE({ data: JSON.stringify(next) });
+      const send = (next: Head) => stream.writeSSE({ data: JSON.stringify(next) });
       const unsubscribe = runtime.scopes.subscribe((thread, next) => {
         if (thread === threadId) void send(next);
       });
@@ -146,29 +148,22 @@ export async function buildAgentControllerApp(
   });
   app.put("/pe/scope/:threadId", async (c) => {
     const threadId = c.req.param("threadId");
-    const parsed = scopeSetBodySchema.safeParse(await c.req.json().catch(() => null));
+    const parsed = putScopeSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json(
-        { error: "invalid body", hint: "expected { scope, expectedRevision, turn? }" },
+        {
+          error: "invalid body",
+          hint: "expected { scope: { kind, ... }, expectedRevision, turn? }",
+        },
         400,
       );
     const session = await openSession(threadId);
-    if (session.run.isRunning() && parsed.data.turn !== runtime.scopes.admittedTurn(threadId))
-      return c.json(
-        {
-          error: "pea is mid-turn",
-          hint: "the turn keeps the Scope it was admitted under; wait or stop it.",
-        },
-        409,
-      );
-    try {
-      return c.json(
-        await runtime.scopes.set(threadId, parsed.data.scope, parsed.data.expectedRevision),
-      );
-    } catch (error) {
-      if (error instanceof ScopeRefused) return c.json({ error: error.message }, 409);
-      throw error;
-    }
+    const admitted = runtime.scopes.admittedTurn(threadId);
+    const result: PutScopeResult =
+      session.run.isRunning() && admitted !== undefined && parsed.data.turn !== admitted
+        ? { ok: false, why: "in-turn", turn: admitted }
+        : await runtime.scopes.set(threadId, parsed.data.scope, parsed.data.expectedRevision);
+    return c.json(result, result.ok ? 200 : 409);
   });
   // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
   // Scope query as a route document: ?session=&doc=, either absent.
@@ -301,7 +296,15 @@ function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | 
       return invalid("Provide exactly one route scope");
     return { workspaceId };
   }
-  const parsed = scopeSchema.safeParse({ session, document: doc });
+  const parsed = scopeSchema.safeParse(
+    session && doc
+      ? { kind: "pinned", session, document: doc }
+      : doc
+        ? { kind: "document", document: doc }
+        : session
+          ? { kind: "session", session }
+          : emptyScope,
+  );
   if (!parsed.success) return invalid("invalid route scope: session or doc malformed");
   return { scope: parsed.data };
 }

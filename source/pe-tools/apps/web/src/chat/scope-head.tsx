@@ -1,4 +1,11 @@
-import type { Address, Scope } from "@pe/agent-contracts";
+import {
+  resolveScope,
+  scopeDocument,
+  scopeSession,
+  type Address,
+  type Scope,
+  type ScopeResolution,
+} from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
@@ -18,12 +25,6 @@ export interface ScopeDocumentOption {
   /** Session ids holding it now; empty for a recent document nobody has open. */
   holders: string[];
 }
-
-export type ScopeHeadState =
-  | { kind: "absent" }
-  | { kind: "set"; session: string | null; documentLabel: string | null }
-  | { kind: "dangling"; session: string | null; documentLabel: string | null }
-  | { kind: "ambiguous"; documentLabel: string; holders: ScopeSessionOption[] };
 
 /** Documents first: every session's active document, then recents nobody has open. */
 export function scopeDocuments(
@@ -51,33 +52,60 @@ export function scopeDocuments(
   return [...byDocument.values()];
 }
 
-export function scopeHeadState(
-  scope: Scope,
-  sessions: readonly ScopeSessionOption[],
-  documents: readonly ScopeDocumentOption[],
-): ScopeHeadState {
-  const session = scope.session ? sessions.find((option) => option.id === scope.session) : null;
-  const document = scope.document
-    ? documents.find((option) => option.document === scope.document)
-    : null;
-  const documentLabel = document?.label ?? scope.document ?? null;
-  if (!scope.session && !scope.document) return { kind: "absent" };
-  if (scope.session && !session) return { kind: "dangling", session: scope.session, documentLabel };
-  if (scope.document && !scope.session) {
-    const holders = sessions.filter((option) => option.document === scope.document);
-    if (holders.length > 1) return { kind: "ambiguous", documentLabel: documentLabel!, holders };
-    if (holders.length === 0) return { kind: "dangling", session: null, documentLabel };
+/** The two chips the head shows for a resolution: what document, what session, and the tone. */
+function chips(
+  resolution: ScopeResolution,
+  label: (document: Address | null) => string,
+): { document: string; session: string; title: string; tone: "meta" | "caution" } {
+  switch (resolution.kind) {
+    case "resolved":
+      return {
+        document: label(resolution.document),
+        session: resolution.session,
+        title: `session ${resolution.session}`,
+        tone: "meta",
+      };
+    case "ambiguous":
+      return {
+        document: label(resolution.document),
+        session: "pick a session",
+        title: `${resolution.holders.length} sessions hold this document; pick one`,
+        tone: "caution",
+      };
+    case "unheld":
+      return {
+        document: label(resolution.document),
+        session: "no holder ∅",
+        title: "no connected session holds this document",
+        tone: "caution",
+      };
+    case "gone":
+      return {
+        document: "no document",
+        session: `${resolution.session} ∅`,
+        title: `session ${resolution.session} is not connected`,
+        tone: "caution",
+      };
+    case "nothing":
+      return {
+        document: "no document",
+        session: "no session",
+        title:
+          resolution.sessions.length === 0
+            ? "no Revit session is connected"
+            : `${resolution.sessions.length} sessions connected; pick a document`,
+        tone: "caution",
+      };
   }
-  return { kind: "set", session: scope.session, documentLabel };
 }
 
 /**
  * THE one place the user sees and changes the thread's Scope. The user picks a DOCUMENT; the
  * session is derived from its one holder. Only when two sessions hold the picked document does
- * the head demand a session, and it offers exactly those holders. A session with nothing open is
- * still pickable (a lifecycle target). Every mutating tool card renders the revision it ran under
- * next to this number, so drift between them is visible. While pea is mid-turn the pickers are
- * disabled: the turn keeps the Scope it was admitted under.
+ * the head demand a session, and it offers exactly those holders (pinning it). A session with
+ * nothing open is still pickable (a lifecycle target). Every mutating tool card renders the
+ * revision it ran under next to this number, so drift between them is visible. While pea is
+ * mid-turn the pickers are disabled: the turn keeps the Scope it was admitted under.
  */
 export function ScopeHead({
   scope,
@@ -97,39 +125,26 @@ export function ScopeHead({
   refusal?: string | null;
   onSet: (next: Scope) => void;
 }) {
-  const state = scopeHeadState(scope, sessions, documents);
-  const tone = state.kind === "set" ? "meta" : "caution";
+  const resolution = resolveScope(scope, sessions);
+  const label = (document: Address | null) =>
+    document === null
+      ? "no document"
+      : (documents.find((option) => option.document === document)?.label ?? document);
+  const chip = chips(resolution, label);
+  const namedDocument = scopeDocument(scope);
+  const namedSession = scopeSession(scope);
   const busyTitle = busy ? "pea is mid-turn; the Scope is frozen" : undefined;
   return (
     <div
       data-testid="scope-head"
-      data-scope={state.kind}
+      data-scope={resolution.kind}
       className="flex flex-wrap items-center gap-2"
     >
-      <FactChip tone={scope.document ? tone : "caution"} title={scope.document ?? "no document"}>
-        {state.kind === "absent" ? "no document" : (state.documentLabel ?? "no document")}
+      <FactChip tone={chip.tone} title={namedDocument ?? "no document"}>
+        {chip.document}
       </FactChip>
-      <FactChip
-        tone={tone}
-        title={
-          state.kind === "ambiguous"
-            ? `${state.holders.length} sessions hold this document; pick one`
-            : state.kind === "dangling"
-              ? state.session
-                ? `session ${state.session} is not connected`
-                : "no connected session holds this document"
-              : state.kind === "set" && state.session
-                ? `session ${state.session}`
-                : "no session: the host derives it from the document, or picks the only one"
-        }
-      >
-        {state.kind === "ambiguous"
-          ? "pick a session"
-          : state.kind === "dangling"
-            ? `${state.session ?? "no holder"} ∅`
-            : state.kind === "set"
-              ? (state.session ?? "derived")
-              : "no session"}
+      <FactChip tone={chip.tone} title={chip.title}>
+        {chip.session}
       </FactChip>
       <span
         className="t-small face-mono text-ink-2"
@@ -138,17 +153,19 @@ export function ScopeHead({
       >
         r{revision}
       </span>
-      {state.kind === "ambiguous"
-        ? state.holders.map((holder) => (
+      {resolution.kind === "ambiguous"
+        ? resolution.holders.map((holder) => (
             <Press
-              key={holder.id}
+              key={holder}
               type="button"
               tone="agent"
               disabled={busy}
-              title={busyTitle ?? `run in ${holder.label}`}
-              onClick={() => onSet({ session: holder.id, document: scope.document })}
+              title={busyTitle ?? `run in ${holder}`}
+              onClick={() =>
+                onSet({ kind: "pinned", session: holder, document: resolution.document })
+              }
             >
-              {holder.label}
+              {sessions.find((session) => session.id === holder)?.label ?? holder}
             </Press>
           ))
         : null}
@@ -157,7 +174,7 @@ export function ScopeHead({
           key={option.document}
           type="button"
           tone="neutral"
-          state={scope.document === option.document ? "selected" : "rest"}
+          state={namedDocument === option.document ? "selected" : "rest"}
           disabled={busy}
           title={
             busyTitle ??
@@ -165,12 +182,7 @@ export function ScopeHead({
               ? `${option.document} (not open; a lifecycle target)`
               : `${option.document} in ${option.holders.join(", ")}`)
           }
-          onClick={() =>
-            onSet({
-              document: option.document,
-              session: option.holders.length === 1 ? option.holders[0]! : null,
-            })
-          }
+          onClick={() => onSet({ kind: "document", document: option.document })}
         >
           {option.label}
         </Press>
@@ -182,21 +194,16 @@ export function ScopeHead({
             key={session.id}
             type="button"
             tone="quiet"
-            state={scope.session === session.id ? "selected" : "rest"}
+            state={namedSession === session.id ? "selected" : "rest"}
             disabled={busy}
             title={busyTitle ?? `${session.label} has nothing open`}
-            onClick={() => onSet({ session: session.id, document: null })}
+            onClick={() => onSet({ kind: "session", session: session.id })}
           >
             {session.label} ∅
           </Press>
         ))}
-      {scope.session || scope.document ? (
-        <Press
-          type="button"
-          tone="quiet"
-          disabled={busy}
-          onClick={() => onSet({ session: null, document: null })}
-        >
+      {scope.kind !== "none" ? (
+        <Press type="button" tone="quiet" disabled={busy} onClick={() => onSet({ kind: "none" })}>
           clear scope
         </Press>
       ) : null}

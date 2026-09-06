@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   emptyScope,
-  scopeRevisionSchema,
+  headSchema,
+  putScopeResultSchema,
+  type Head,
   type Scope,
-  type ScopeRevision,
 } from "@pe/agent-contracts";
 
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
@@ -17,17 +18,14 @@ const scopeUrl = (threadId: string) =>
  * card, and the dock all read the Scope; a stream per caller once opened six long-lived
  * connections to the host, which is Chrome's per-origin limit, and every later POST queued forever.
  */
-const watchers = new Map<
-  string,
-  { source: EventSource; listeners: Set<(next: ScopeRevision) => void> }
->();
-function watchScope(threadId: string, listener: (next: ScopeRevision) => void): () => void {
+const watchers = new Map<string, { source: EventSource; listeners: Set<(next: Head) => void> }>();
+function watchScope(threadId: string, listener: (next: Head) => void): () => void {
   let entry = watchers.get(threadId);
   if (!entry) {
     const source = new EventSource(`${scopeUrl(threadId)}?watch`);
-    const listeners = new Set<(next: ScopeRevision) => void>();
+    const listeners = new Set<(next: Head) => void>();
     source.onmessage = (event) => {
-      const next = scopeRevisionSchema.safeParse(JSON.parse(String(event.data)));
+      const next = headSchema.safeParse(JSON.parse(String(event.data)));
       if (next.success) for (const notify of listeners) notify(next.data);
     };
     entry = { source, listeners };
@@ -53,10 +51,10 @@ export function useThreadScope(threadId: string, enabled = true) {
   const query = useQuery({
     queryKey: key,
     enabled,
-    queryFn: async (): Promise<ScopeRevision> => {
+    queryFn: async (): Promise<Head> => {
       const response = await fetch(scopeUrl(threadId));
       if (!response.ok) throw new Error(`scope read ${response.status}`);
-      return scopeRevisionSchema.parse(await response.json());
+      return headSchema.parse(await response.json());
     },
   });
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -75,16 +73,22 @@ export function useThreadScope(threadId: string, enabled = true) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ scope, expectedRevision: current.revision }),
     });
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      hint?: string;
-    };
-    if (!response.ok) {
-      setRefusal(body.hint ?? body.error ?? `scope set ${response.status}`);
+    const result = putScopeResultSchema.safeParse(await response.json().catch(() => null)).data;
+    if (!result) {
+      setRefusal(`scope set ${response.status}`);
       return;
     }
-    const next = scopeRevisionSchema.safeParse(body);
-    if (next.success) queryClient.setQueryData(key, next.data);
+    if (result.ok) {
+      queryClient.setQueryData(key, result.head);
+      return;
+    }
+    if (result.why === "stale") {
+      // Someone wrote first: show what is current, and let the user decide again.
+      queryClient.setQueryData(key, result.head);
+      setRefusal(`the Scope changed to r${result.head.revision} under you; pick again.`);
+      return;
+    }
+    setRefusal("pea is mid-turn; the turn keeps the Scope it was admitted under. Wait or stop it.");
   };
   return { ...current, hydrated: query.data !== undefined, set, refusal };
 }

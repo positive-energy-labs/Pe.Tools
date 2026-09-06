@@ -180,14 +180,17 @@ describe("route store kit", () => {
     } satisfies RouteStateSpec<typeof schema>;
 
     expect(
-      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
+      docAtom(spec, { scope: { kind: "document", document: address("C:\\Models\\One.rvt") } }),
     ).toBe(
-      docAtom({ ...spec }, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
+      docAtom(
+        { ...spec },
+        { scope: { kind: "document", document: address("C:\\Models\\One.rvt") } },
+      ),
     );
     expect(
-      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\Two.rvt") } }),
+      docAtom(spec, { scope: { kind: "document", document: address("C:\\Models\\Two.rvt") } }),
     ).not.toBe(
-      docAtom(spec, { scope: { session: null, document: address("C:\\Models\\One.rvt") } }),
+      docAtom(spec, { scope: { kind: "document", document: address("C:\\Models\\One.rvt") } }),
     );
   });
 
@@ -230,7 +233,7 @@ describe("route store kit", () => {
     );
     const writer = docWriter(
       spec,
-      { scope: { session: null, document: address("C:\\Models\\One.rvt") } },
+      { scope: { kind: "document", document: address("C:\\Models\\One.rvt") } },
       registry,
       slice,
     );
@@ -333,7 +336,7 @@ describe("route store kit", () => {
     );
     const writer = docWriter(
       spec,
-      { scope: { session: null, document: address("C:\\Models\\One.rvt") } },
+      { scope: { kind: "document", document: address("C:\\Models\\One.rvt") } },
       registry,
       slice,
     );

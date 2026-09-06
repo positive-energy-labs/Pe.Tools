@@ -12,7 +12,6 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import {
-  addressSchema,
   bridgeSelector,
   capabilityCatalogSchema,
   capabilityKindSchema,
@@ -23,8 +22,10 @@ import {
   message,
   parsePodKey,
   parseRouteKey,
+  putScopeResultSchema,
+  scopeDocument,
   scopeSchema,
-  sdkSessionIdSchema,
+  scopeSession,
   turnOf,
   type Capability,
   type CapabilityCatalog,
@@ -46,6 +47,12 @@ function base(): string {
 }
 export const peaHostBaseUrl = base;
 
+/** What the Scope NAMES, as a target: the fallback when a receipt carries no resolved target. */
+const namedTarget = (scope: Scope): ResolvedTarget => ({
+  session: scopeSession(scope),
+  document: scopeDocument(scope),
+});
+
 /** The turn's frozen Scope; a call outside a chat turn (CLI, MCP) runs under the empty Scope. */
 function scopeOf(context: unknown): { scope: Scope; revision: number } {
   const turn = turnOf(context);
@@ -54,8 +61,10 @@ function scopeOf(context: unknown): { scope: Scope; revision: number } {
 
 const scopeQuery = (scope: Scope): string => {
   const query = new URLSearchParams();
-  if (scope.session) query.set("session", scope.session);
-  if (scope.document) query.set("doc", scope.document);
+  const session = scopeSession(scope);
+  const document = scopeDocument(scope);
+  if (session) query.set("session", session);
+  if (document) query.set("doc", document);
   return query.toString();
 };
 
@@ -174,7 +183,7 @@ async function dispatch(
   const coerced = coerceJsonObject(input.input);
   const payload: Record<string, unknown> =
     coerced && typeof coerced === "object" ? (coerced as Record<string, unknown>) : {};
-  const scopeTarget: ResolvedTarget = { session: scope.session, document: scope.document };
+  const scopeTarget = namedTarget(scope);
   switch (row.kind) {
     case "op": {
       const caller = new HostRpcCaller({
@@ -254,7 +263,7 @@ async function routeWrite(
   const target = receipt && typeof receipt === "object" ? parseTarget(receipt.target) : null;
   return {
     ok: !("isError" in result),
-    target: target ?? { session: scope.session, document: scope.document },
+    target: target ?? namedTarget(scope),
     result,
   };
 }
@@ -330,32 +339,29 @@ function requestIdentity(context: unknown): string {
 export const scopeSet = createTool({
   id: "scope_set",
   description:
-    "Propose the thread's Scope: the Revit document (primary) and the SDK session every following turn acts on. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
-  inputSchema: z.object({
-    session: sdkSessionIdSchema
-      .nullable()
-      .describe("SDK session id, or null to derive it from the document's one holder."),
-    document: addressSchema.nullable().describe("Revit document Address, or null for none."),
-  }),
+    "Propose the thread's Scope, what every following turn acts on. kind 'document' names a Revit document and the host derives its one holding session on every call (the normal choice); 'session' names an idle SDK session with nothing open; 'pinned' names both, only when two sessions hold the same document; 'none' clears it. The human approves it in the chat head. The running turn keeps the Scope it was admitted under; the new revision applies from the next turn. pe_find with no query lists sessions with their active document.",
+  inputSchema: z.object({ scope: scopeSchema }),
   execute: async (input, context) => {
     const turn = turnOf(context);
     if (!turn) return { isError: true, content: "scope_set needs a chat turn; none is admitted." };
-    const scope = scopeSchema.parse(input);
+    const scope = input.scope;
     const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(turn.thread)}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ scope, expectedRevision: turn.revision, turn: turn.id }),
     });
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) {
-      const hint = payload.hint ?? payload.error;
+    const result = putScopeResultSchema.safeParse(await response.json().catch(() => null)).data;
+    if (!result) return { isError: true, content: `scope set failed (${response.status})` };
+    if (!result.ok)
       return {
         isError: true,
-        content: typeof hint === "string" ? hint : `scope set failed (${response.status})`,
+        content:
+          result.why === "stale"
+            ? `Scope is at revision ${result.head.revision}, not ${turn.revision}; it changed under you.`
+            : "Another turn holds the Scope; wait for it to end.",
       };
-    }
     return {
-      ...payload,
+      head: result.head,
       note: `This turn keeps revision ${turn.revision}; the next turn runs under the new Scope.`,
     };
   },

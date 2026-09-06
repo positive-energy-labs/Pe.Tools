@@ -82,7 +82,7 @@ test("takeoffs audit targets the bound world and sets the document snapshot", as
     await createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
       { view: "Zoning", zones: ["zone-1"] },
       {
-        scope: { session: "dev-26", document: address("C:\\Models\\Harness.rvt") },
+        scope: { kind: "pinned", session: "dev-26", document: address("C:\\Models\\Harness.rvt") },
         getDoc: () => document,
         setDoc: async (next) => {
           Object.assign(document, next);

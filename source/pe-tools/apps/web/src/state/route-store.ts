@@ -1,4 +1,10 @@
-import { routeScopeKey, type RouteScope } from "@pe/agent-contracts";
+import {
+  routeScopeKey,
+  scopeDocument,
+  scopeSession,
+  type RouteScope,
+  type Scope as ChatScope,
+} from "@pe/agent-contracts";
 import { Cause, Effect, Equal, Hash, Layer, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -255,17 +261,19 @@ export function feed<A>(
   };
 }
 
-/** A standalone page's route scope: the Scope it keys under, with a document always present. */
+/** A standalone page's route scope: a Scope that always names the page's document. */
 export interface Scope {
-  readonly scope: { readonly session: string | null; readonly document: Address };
+  readonly scope: Extract<ChatScope, { kind: "document" | "pinned" }>;
 }
 /** Build a page Scope from the route's document and its `?target` selector (`session:<id>`). */
 export const pageScope = (document: Address, target = ""): Scope => ({
-  scope: { session: target.startsWith("session:") ? target.slice(8) : null, document },
+  scope: target.startsWith("session:")
+    ? { kind: "pinned", session: target.slice(8), document }
+    : { kind: "document", document },
 });
 /** The bridge selector a page Scope resolves to; empty when the Scope names no session. */
 export const worldOf = (scope: Scope): string =>
-  scope.scope.session ? `session:${scope.scope.session}` : "";
+  scope.scope.kind === "pinned" ? `session:${scope.scope.session}` : "";
 
 export interface Slice<D> {
   doc: D | null;
@@ -309,8 +317,10 @@ function routeUrl(
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
   if (scope.workspaceId !== undefined) url.searchParams.set("workspace", scope.workspaceId);
   else {
-    if (scope.scope.session) url.searchParams.set("session", scope.scope.session);
-    if (scope.scope.document) url.searchParams.set("doc", scope.scope.document);
+    const session = scopeSession(scope.scope);
+    const document = scopeDocument(scope.scope);
+    if (session) url.searchParams.set("session", session);
+    if (document) url.searchParams.set("doc", document);
   }
   return url.toString();
 }
