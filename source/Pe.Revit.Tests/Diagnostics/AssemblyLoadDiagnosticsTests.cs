@@ -1,5 +1,4 @@
 using Pe.App.Commands.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Profiles;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -34,7 +33,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
 
         var anchorAssemblies = new[] {
             typeof(AssemblyLoadDiagnosticsTests).Assembly, typeof(CmdFFManager).Assembly,
-            typeof(FFManagerProfile).Assembly
+            typeof(Pe.Revit.FamilyFoundry.OperationProcessor).Assembly
         };
 
         return currentDomainAssemblies

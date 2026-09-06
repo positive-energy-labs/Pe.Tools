@@ -5,7 +5,7 @@ using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
@@ -16,32 +16,15 @@ public sealed class RoomDinglerTests {
     private const string RoomName = "Room Dingler Proof Room";
 
     [Test]
-    public void Manager_and_migrator_queues_include_room_dingler_when_enabled() {
-        var managerQueue = FFManagerQueueBuilder.Build(
-            new FFManagerProfile { AddRoomDingler = new AddRoomDinglerSettings { Enabled = true } },
-            []);
-        var migratorQueue = FFMigratorQueueBuilder.Build(
-            new FFMigratorProfile { AddRoomDingler = new AddRoomDinglerSettings { Enabled = true } },
-            []);
+    public void Reconcile_plan_includes_room_dingler_only_when_the_document_declares_the_point() {
+        var header = new FamilyModelHeader { Name = "T", Category = FamilyCategory.GenericModels, Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased };
+        var with = new FamilyModel { Family = header, RoomCalculationPoint = new FamilyModelRoomCalculationPoint { Enabled = true } };
+        var without = new FamilyModel { Family = header };
+        var template = new FamilyModel { Family = header };
 
         Assert.Multiple(() => {
-            Assert.That(managerQueue.Operations.Select(operation => operation.GetType()),
-                Does.Contain(typeof(AddRoomDingler)));
-            Assert.That(migratorQueue.Operations.Select(operation => operation.GetType()),
-                Does.Contain(typeof(AddRoomDingler)));
-        });
-    }
-
-    [Test]
-    public void Manager_and_migrator_queues_omit_room_dingler_when_disabled() {
-        var managerQueue = FFManagerQueueBuilder.Build(new FFManagerProfile(), []);
-        var migratorQueue = FFMigratorQueueBuilder.Build(new FFMigratorProfile(), []);
-
-        Assert.Multiple(() => {
-            Assert.That(managerQueue.Operations.Select(operation => operation.GetType()),
-                Does.Not.Contain(typeof(AddRoomDingler)));
-            Assert.That(migratorQueue.Operations.Select(operation => operation.GetType()),
-                Does.Not.Contain(typeof(AddRoomDingler)));
+            Assert.That(FamilyReconciler.Reconcile(with, template, UnitResolvers.Portable).Queue.Operations.Select(o => o.GetType()), Does.Contain(typeof(AddRoomDingler)));
+            Assert.That(FamilyReconciler.Reconcile(without, template, UnitResolvers.Portable).Queue.Operations.Select(o => o.GetType()), Does.Not.Contain(typeof(AddRoomDingler)));
         });
     }
 
@@ -60,17 +43,10 @@ public sealed class RoomDinglerTests {
     [Test]
     public void Generated_grd_opens_into_the_room_and_exports_visual_proof(UIApplication uiApplication) {
         var application = uiApplication.Application;
-        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(
-            Path.Combine("family-model", "pe-grd-vane.family.json"));
-        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
-        Assert.That(parsed.Diagnostics, Is.Empty,
-            string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => item.Message)));
+        var parsed = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Generated_grd_opens_into_the_room_and_exports_visual_proof));
-        var familyDocument = FamilyModelBuilder.Build(
-            application,
-            parsed.Value!,
-            Path.GetDirectoryName(fixturePath)).Document;
+        var familyDocument = FamilyModelBuild.Build(application, parsed).Document;
         Document? projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         UIDocument? activeProject = null;
 
@@ -87,7 +63,7 @@ public sealed class RoomDinglerTests {
                 (room, hostWall) = BuildSingleRoom(projectDocument);
                 var symbol = loadedFamily.GetFamilySymbolIds()
                     .Select(id => (FamilySymbol)projectDocument.GetElement(id))
-                    .Single(item => item.Name == "Thirty Seven Vanes");
+                    .First();
                 if (!symbol.IsActive)
                     symbol.Activate();
                 instance = PlaceFaceHostedInstance(projectDocument, symbol, hostWall);
