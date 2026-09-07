@@ -19,7 +19,7 @@ const opened = {
   metadata: { documentId: { stableId: "C:\\Settings\\width.json" }, versionToken: { value: "v1" } },
 };
 
-test("native route consumes reviewed hashes and preserves replacement identity and residue", async () => {
+test("native fleet keeps the replacement receipt and requires a fresh no-op plan", async () => {
   const doc = familiesRouteState.schema.parse({});
   const entry = {
     familyId: 1,
@@ -29,22 +29,36 @@ test("native route consumes reviewed hashes and preserves replacement identity a
     runEffects: [],
     refusals: [],
   };
+  const failedEntry = { ...entry, familyId: 3, familyName: "Other", planHash: "hash-3" };
   const receipt = {
     familyId: 2,
+    success: true,
+    converged: true,
+    residue: [],
+    errors: [],
+    artifactDirectory: "C:\\Evidence",
+  };
+  const failedReceipt = {
+    familyId: 3,
     success: false,
     converged: false,
-    residue: entry.changes,
+    residue: failedEntry.changes,
     errors: ["rolled back"],
     artifactDirectory: "C:\\Evidence",
   };
   const call = vi
     .spyOn(HostRpcCaller.prototype, "call")
     .mockResolvedValueOnce(opened as never)
-    .mockResolvedValueOnce({ families: [entry], diagnostics: [] } as never)
+    .mockResolvedValueOnce({ families: [entry, failedEntry], diagnostics: [] } as never)
     .mockResolvedValueOnce(opened as never)
     .mockResolvedValueOnce({
-      receipts: [receipt],
+      receipts: [receipt, failedReceipt],
       diagnostics: [{ code: "BatchIssue", path: "$", message: "review receipts" }],
+    } as never)
+    .mockResolvedValueOnce(opened as never)
+    .mockResolvedValueOnce({
+      families: [{ ...entry, familyId: 2, planHash: "hash-2", changes: [] }],
+      diagnostics: [],
     } as never);
   const ctx = {
     scope,
@@ -54,26 +68,40 @@ test("native route consumes reviewed hashes and preserves replacement identity a
     },
   };
   const handlers = createFamiliesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
-  await handlers.plan({ profilePath: "width", scope: { familyNames: ["Box"] } }, ctx);
+  await handlers.plan({ profilePath: "width", scope: { familyNames: ["Box", "Other"] } }, ctx);
   expect(call.mock.calls[1]).toEqual(["familyfoundry.plan", { patchJson: opened.composedContent }]);
   await expect(handlers.apply({ expectedPlanHashes: { "1": "stale" } }, ctx)).rejects.toThrow(
     "reviewed family plans",
   );
   expect(call).toHaveBeenCalledTimes(2);
   const input = familiesRouteState.commands.apply.input.parse({
-    expectedPlanHashes: { "1": "hash-1" },
+    expectedPlanHashes: { "1": "hash-1", "3": "hash-3" },
   });
   await handlers.apply(input, ctx);
   expect(call.mock.calls[3]).toEqual([
     "familyfoundry.apply",
-    { patchJson: opened.composedContent, expectedPlanHashes: { "1": "hash-1" } },
+    {
+      patchJson: opened.composedContent,
+      expectedPlanHashes: { "1": "hash-1", "3": "hash-3" },
+    },
   ]);
-  expect(doc.apply?.receipts).toEqual([receipt]);
+  expect(doc.apply?.receipts).toEqual([receipt, failedReceipt]);
+  expect(doc.apply?.diagnostics[0]?.code).toBe("BatchIssue");
+  expect(familiesRouteState.schema.parse(doc).apply?.receipts[1]?.residue).toEqual(
+    failedEntry.changes,
+  );
   expect(doc.plan).toBeNull();
   await expect(handlers.apply(input, ctx)).rejects.toThrow("Plan first");
   expect(call).toHaveBeenCalledTimes(4);
-  expect(doc.apply?.diagnostics[0]?.code).toBe("BatchIssue");
-  expect(familiesRouteState.schema.parse(doc).apply?.receipts[0]?.residue).toEqual(entry.changes);
+  await handlers.plan({ profilePath: "width", scope: { familyNames: ["Box"] } }, ctx);
+  expect(doc.plan?.entries).toEqual([
+    expect.objectContaining({ familyId: 2, changes: [], runEffects: [] }),
+  ]);
+  await expect(handlers.apply({ expectedPlanHashes: {} }, ctx)).rejects.toThrow(
+    "No included family has changes",
+  );
+  expect(call).toHaveBeenCalledTimes(6);
+  expect(familiesRouteState.schema.parse(doc).apply).toBeNull();
 });
 
 test("native build stores convergence separately and invalid composition cannot reach Revit", async () => {

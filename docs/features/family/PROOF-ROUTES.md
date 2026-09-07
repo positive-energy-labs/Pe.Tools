@@ -406,3 +406,77 @@ Raw output: `.artifacts/runs/browser-20260906-ff/{composition-test,family-test,t
 - Native examples are selectable on `/family` through explicit fixture URLs. `/families` keeps six populated fixture rows and native-shaped per-family plans/projection JSON; command mutations remain refused in fixture mode. Additional authored patch examples and a route-level JSON authoring view remain outstanding; Pea authors through existing route:settings commands/fields.
 - Inherited local-versus-shared editing and include-conflict resolution remain user questions. No merge precedence, inline override, or keyed-include syntax was added. Blank-fill-from-source is not sent until the C# owner supplies its field.
 - Host/schema verification of the four native JSON examples must run after the root's scalar schema and composed-validation fixes are present. No fixture carries a fabricated green provider-schema verdict.
+
+# Route acceptance readiness — 2026-09-07
+
+Read-only comparison against integrated root `debea34` found the six active `/family` and
+`/families` store/host/workspace files byte-identical to this route tree. No stale route adapter
+needed a source change in this slice.
+
+## Current entry flows
+
+- `/family`: the profile picker writes `route:settings`'s saved document binding. Plan refuses
+  unsaved or staged edits, opens that saved document with `includeComposedContent: true`, selects
+  validated composition through `executionContent`, and sends the resulting native patch to
+  `familyfoundry.plan` (`family/store.ts:287`, `family-commands.ts:26`). Apply checks the reviewed
+  hash and unchanged composed JSON, consumes the plan before the mutation boundary, sends the
+  OwnerFamily id/hash, stores the complete native response, and calls
+  `revit.detail.family-model` again to replace route evidence (`family-commands.ts:48`). A repeat
+  therefore requires a new plan; the recapture is the value readback. No command saves the family.
+- `/families`: the picker persists `profilePath`; scope becomes executable only through explicit
+  Apply scope. Plan opens the saved patch with composition enabled, sends `patchJson`, filters the
+  returned plans to the chosen family names, and persists their native hashes
+  (`families-commands.ts:19`). Apply derives the exact included, non-refused, changed hash map from
+  the stored plan, compares it with the browser submission, reopens the same composed profile,
+  sends `familyfoundry.apply`, then stores receipts and diagnostics without rewriting family ids
+  (`families-commands.ts:48`). Successful completion clears the plan, so no-op verification is a
+  fresh Plan; Apply is disabled when no included family has changes (`families/store.ts:117`).
+- Fleet recapture is the existing Host event path: root mounts `useHostLiveInvalidation`, a Revit
+  world event invalidates `HOST_QUERY_KEY`, and the active loaded-family matrix query reads the
+  project again (`routes/__root.tsx:70`, `host/live.ts:16`, `families/workspace.tsx:90`). Matrix rows
+  and receipt verdicts both key the ids returned after replacement, so the native replacement
+  `familyId` remains authoritative (`families/workspace.tsx:200`). There is no client-side attempt
+  to retain the pre-load element id.
+- Unknown external outcomes remain retry-blocking in route command admission; `/families` also
+  exposes that refusal before the click (`families/store.ts:117`). Current-family Apply consumes
+  its review before calling Revit, so a failed response cannot reuse the old hash.
+
+## Next controlled browser actions
+
+1. Bind `/family` to the proof owner's active family document, select the saved composed profile,
+   Plan, record its single native hash/change list, Apply once, inspect its receipt, and confirm the
+   automatic capture shows the authored values. Plan again and record the no-op plan. Confirm the
+   document remains modified and unsaved.
+2. After the proof owner activates the unchanged project, bind `/families`, select the same saved
+   profile, apply the exact family scope, Plan, retain the per-family hashes, and Apply once. Record
+   every receipt/diagnostic, wait for Host event invalidation, and verify the recaptured matrix row
+   uses the receipt's replacement id and authored values. Plan again; the expected repeat result is
+   no included changes and a disabled Apply. Do not retry an unknown outcome.
+
+## Remaining proof dependencies
+
+- Deterministic route proof is green: 31 tests in the family store, families store, and MCP family
+  command suites passed. Raw output is
+  `.artifacts/runs/browser-20260906-ff/route-readiness-tests.txt`.
+- Browser click-through, Host event delivery, native receipts/readback, replacement-id convergence,
+  per-family rollback, batch continuation, and no implicit save remain runtime claims for the next
+  controlled session. The route has no recovery command for an unknown Apply outcome; recovery
+  still requires authoritative native readback before another mutation.
+
+## Wave12 route and script acceptance preparation - 2026-09-07
+
+Root `4a97297` was read-only under its source hold. Its TypeScript route consumers match this tree. The corrected native fleet response now uses `FamilyProcessingContext.LoadedFamilyId` in `FamilyFoundryBridgeOps.ApplyFamilies`, so the receipt's `familyId` can differ from the reviewed plan id after `LoadFamily` replaces the project element. The existing route stores that returned id unchanged. A fresh plan must read and hash the replacement family.
+
+The existing MCP command check now covers the complete deterministic sequence: reviewed id 1 applies, the successful converged receipt returns replacement id 2, the consumed plan cannot replay, and a fresh id 2 plan with no changes refuses Apply before another Host call. The generic route-workspace check proves an abandoned external mutation becomes `outcomeUnknown` and blocks the next external mutation. The `/families` store check proves the browser Apply action also stops before its writer when that state is present. These checks avoid inducing another ambiguous native mutation only to test the guard.
+
+### Controlled browser prerequisites and actions
+
+The proof owner must supply one controlled dev session receipt for the final root payload, including SDK session id, bridge session id, PID, generation/build stamp, checkout commit, loaded Pe.App identity, and exact active document path. The answering Host receipt must identify the same source root and connected bridge. The disposable family and project paths must be distinct. The project must contain the proof family at the recorded baseline before `/family` changes it, because current-family Apply does not save or reload it. Generate the two saved settings inputs with `acceptance/prepare.ps1 -ParametersOnly` against those exact paths and the integrated canonical `a-box.family.json`; the generator sends no request.
+
+On `/family`, select the generated model, Plan, record the reviewed hash, Apply once, retain the HTTP/native receipt, and inspect automatic native recapture. Plan again and record an empty plan with Apply unavailable. Confirm the family document remains modified and unsaved. On `/families`, activate the unchanged project, select only the seeded proof family and generated patch, then Plan and Apply once. The receipt must be successful and converged with no residue, and its returned replacement `familyId` is authoritative. Wait for Host invalidation and record the project matrix readback against that id. Plan again. The repeat must name the replacement id, contain no changes or run effects, and keep Apply unavailable. If the HTTP outcome is unknown, preserve the envelope and native receipts, do an independent readback, and do not replay Apply.
+
+### `NoTransaction` native script plan
+
+Use the same controlled session only after the route proof owner releases the document. Call `scripting.execute` with `permissionMode: "NoTransaction"` and an inline script that first opens and rolls back a script-owned `Transaction`, then calls `FamilyModelBuild.Build` for a minimal Generic Model family and closes the returned family document without saving. Require `Succeeded`, output markers for `Started`, `RolledBack`, and `ff-build-complete`, and no policy diagnostic. Read the active project before and after to confirm the script did not alter it. This proves that the scripting host opens no enclosing transaction and that the called Family Foundry library owns its internal transaction boundaries. The existing fresh test `RevitScriptingPortTests.NoTransaction_executes_script_and_library_owned_transactions` is the matching native oracle; no new script framework or mock is needed.
+
+Deterministic validation in this tree: MCP family commands 4/4, route workspace 14/14, and `/families` store 12/12. No root file, Revit session, runtime process, document, or takeoffs/main work changed. Browser receipts, native replacement-id readback, no implicit save, and the `NoTransaction` execution remain unproven until the controlled session runs them.
