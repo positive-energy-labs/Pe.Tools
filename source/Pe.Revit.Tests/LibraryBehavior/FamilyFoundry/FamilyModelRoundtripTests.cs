@@ -48,6 +48,28 @@ public sealed class FamilyModelRoundtripTests {
         }
     }
 
+    [Test]
+    public void Portable_angle_values_use_radians_and_reapply_without_changes() {
+        var parsed = FamilyModelJson.Parse("""
+            { "family": { "name": "Portable angle", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
+              "parameters": { "Rotation": { "dataType": "Angle", "value": "90deg" } },
+              "types": { "Quarter turn": {}, "Half turn": { "Rotation": "180deg" } } }
+            """);
+        Assert.That(parsed.Diagnostics, Is.Empty);
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!).Document;
+            var parameter = document.FamilyManager.get_Parameter("Rotation");
+            foreach (FamilyType type in document.FamilyManager.Types)
+                Assert.That(type.AsDouble(parameter), Is.EqualTo(type.Name == "Half turn" ? Math.PI : Math.PI / 2).Within(1e-9));
+            var receipt = FamilyModelBuild.Reconcile(document, parsed.Value!);
+            Assert.That(receipt?.Converged, Is.True);
+            Assert.That(receipt!.Outcomes, Is.Empty);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
     [TestCase("a-box")]
     [TestCase("b-grd")]
     [TestCase("c-bath-shower")]

@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 using Pe.Revit.Global;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
@@ -120,7 +121,7 @@ public class CoerceByStorageType : ICoercionStrategy {
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            var parseResult = UnitFormatUtils.TryParse(
+            var parseResult = ParameterStringIo.TryParseMeasuredValue(
                 context.FamilyDocument.GetUnits(),
                 dataType,
                 stringValue,
@@ -128,7 +129,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             );
             if (!parseResult) {
                 var normalizedValue = NormalizeForUnitParsing(stringValue);
-                parseResult = UnitFormatUtils.TryParse(
+                parseResult = ParameterStringIo.TryParseMeasuredValue(
                     context.FamilyDocument.GetUnits(),
                     dataType,
                     normalizedValue,
@@ -159,11 +160,11 @@ public class CoerceByStorageType : ICoercionStrategy {
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
+            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
                 return parsed;
 
             var normalizedValue = NormalizeForUnitParsing(stringValue);
-            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
+            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
                 return parsed;
 
             throw new ArgumentException(

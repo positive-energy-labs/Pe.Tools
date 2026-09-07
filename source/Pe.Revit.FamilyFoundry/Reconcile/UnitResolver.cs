@@ -1,4 +1,5 @@
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
@@ -39,7 +40,8 @@ public static class UnitResolvers {
                 return false;
             }
             var spec = fp.Definition.GetDataType();
-            if (UnitUtils.IsMeasurableSpec(spec) && UnitFormatUtils.TryParse(units, spec, text, out value)) return true;
+            if (spec != SpecTypeId.Number && UnitUtils.IsMeasurableSpec(spec))
+                return ParameterStringIo.TryParseMeasuredValue(units, spec, text, out value);
             return Portable(parameter, text, out value);
         };
     }

@@ -16,7 +16,26 @@ Delete the map when the effort closes. No merge to main or live-product completi
 - Restore meaningful deleted tests through cleanroom behavioral acceptance, not obsolete scaffolding.
 - Preserve every feature, including unfinished ones, unless the user approves its removal.
 
-## Wave 1 owners and proof gates
+## Current checkpoint and proof gates
+
+Integration `8008e19` includes composed desktop/host inputs, current-family apply and fleet navigation,
+native fixture readouts, per-family rollback/terminal receipts, offline shared definitions, explicit units,
+and one fallback type pass for all mapped parameters. Source integration is not product completion.
+Fresh controlled Revit 2025 wave 2 (`9941494`) passed 11/24; wave 3 (`1e24ef0`) passed 3/7.
+Wave 3 confirms named-plane reapply, rejected-template cleanup and assembly identity. The four
+geometry roundtrips remain red: dimension references, shared creation and portable angle parsing.
+Proof owns a bounded dimension diagnostic and lookup value loss; root owns geometry and parsing.
+Normalize owns destination-wins reference transfer, no-op planning, company conversion and corpus proof.
+Routes owns recursive field composition and the route-to-Revit journey. Four fixtures and fleet
+navigation were exercised in the browser; screenshot capture timed out and visual proof remains open.
+Root deterministic checks passed 129 web tests, 20 host tests and 6 command-chain tests before the
+latest readout/portable-definition integration. Combined validation is due after the current fixes.
+The SDK lease now enables only the required adapter, rejects overlapping leases under one mutex,
+and restores the exact acquired native settings. Wave 3 restored its original settings, left zero
+holds, and left the user's session unchanged. SDK changes remain isolated and unpublished.
+
+The paragraphs below retain the earlier measured experiment and initial ownership context;
+the current checkpoint above supersedes their source-only and runtime-pending status.
 
 Checkpoint: integration HEAD `f576a5a` contains the three capture rulings, restored native
 roundtrip/lookup acceptance, named-plane deletion repair, and the first normalization slice.
@@ -117,6 +136,8 @@ No permanent strategy flag or formula compiler is authorized merely by this expe
 
 ## Current user frontier
 
+- Destination wins conflicting source values. Rewire references and remove the source; transfer failure
+  rolls back the family. User ruled 2026-09-07. No cleanup-policy question remains pending.
 - Edit inherited content in its shared fragment by default. Raw profile JSON holds the reference;
   an expanded editor must make that origin clear. User ruled 2026-09-06.
 - Included fragments merge recursively by field. Later values win; an earlier Width data type
@@ -127,7 +148,7 @@ No permanent strategy flag or formula compiler is authorized merely by this expe
 ## Protected state and evidence boundaries
 
 - Main has substantial concurrent Space/Partition/takeoff and route work. Do not reset/stage it.
-- `pe.app-25` is the user's expensive session; previous PID 65356 and modified project-a document.
+- `pe.app-25` is the user's expensive session; latest verified PID 71484, with protected user documents.
   Read current registry before any action, but never mutate this session for the wave.
 - Main-only ignored fixture: `source/Pe.Revit.Tests/Fixtures/Projects/Old_Template.rvt`, SHA256
   `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`.

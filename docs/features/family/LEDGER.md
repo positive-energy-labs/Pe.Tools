@@ -10,6 +10,7 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 
 ## Decided
 
+- 2026-09-07, user ruling: an existing company destination wins even when source values differ. Rewire source references to the destination, then remove the source; a failed transfer rolls back the whole family.
 - 2026-09-07, user ruling: edit inherited content in its shared fragment by default; raw profile JSON holds the reference. Included fragments merge fields recursively: later values win while unspecified earlier fields remain.
 - 2026-09-07, user ruling: measurable authored values require explicit units (for example `480 V`, `0 K`); Number and Integer remain unitless. Controlling project display units during sets is a separate idea, not part of this change.
 - 2026-09-06, user correction: explicit JSON specifications must be manifested and unmentioned content stays untouched; filling blank destination cells from migration sources is an optional flag and never overrides an explicit desired value.

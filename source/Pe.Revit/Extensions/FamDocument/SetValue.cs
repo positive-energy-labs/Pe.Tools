@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using System.Globalization;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
@@ -48,7 +49,7 @@ public static class FamilyDocumentSetValue {
             StorageType.String => input,
             StorageType.Integer => int.Parse(input, CultureInfo.InvariantCulture),
             StorageType.Double when UnitUtils.IsMeasurableSpec(dataType) =>
-                UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, input, out var parsed)
+                ParameterStringIo.TryParseMeasuredValue(famDoc.GetUnits(), dataType, input, out var parsed)
                     ? parsed
                     : double.Parse(input, CultureInfo.InvariantCulture),
             StorageType.Double => double.Parse(input, CultureInfo.InvariantCulture),
