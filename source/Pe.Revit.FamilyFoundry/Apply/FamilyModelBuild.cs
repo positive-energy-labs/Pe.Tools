@@ -1,9 +1,11 @@
 using Autodesk.Revit.ApplicationServices;
 using Pe.Revit.Compat;
+using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
 
@@ -117,7 +119,7 @@ public static class FamilyModelBuild {
         var placed = select.PlacedOnly == true
             ? new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>().Select(i => i.Symbol.Family.Id).ToHashSet()
             : null;
-        return new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
+        var candidates = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
             .Where(f => f.IsEditable && !f.IsInPlace)
             .Where(f => names is null || names.Contains(f.Name))
             .Where(f => Matches(f.Name, select.IncludeNames) && !Excluded(f.Name, select.ExcludeNames))
@@ -125,5 +127,20 @@ public static class FamilyModelBuild {
             .Where(f => placed is null || placed.Contains(f.Id))
             .OrderBy(f => f.Name, StringComparer.Ordinal)
             .ToList();
+        if (select.IncludeByCondition is not { } condition) return candidates;
+        if (string.IsNullOrWhiteSpace(condition.FieldName)) {
+            if (!string.IsNullOrWhiteSpace(condition.Value))
+                throw new InvalidOperationException("IncludeByCondition requires FieldName when Value is set.");
+            return candidates;
+        }
+        if (!Enum.IsDefined(typeof(ScheduleAuthoredFilterType), condition.FilterType))
+            throw new InvalidOperationException($"IncludeByCondition has unknown FilterType '{condition.FilterType}'.");
+
+        var matchingIds = candidates
+            .GroupBy(f => f.FamilyCategory?.Id.Value() ?? throw new InvalidOperationException($"Family '{f.Name}' has no category for condition selection."))
+            .SelectMany(group => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(project,
+                new ScheduleProfile("Family Foundry condition", group.First().FamilyCategory!.Name) { Filters = [condition] }, group))
+            .ToHashSet();
+        return candidates.Where(f => matchingIds.Contains(f.Id.Value())).ToList();
     }
 }
