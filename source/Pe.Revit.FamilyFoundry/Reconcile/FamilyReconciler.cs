@@ -54,9 +54,11 @@ public static class FamilyReconciler {
 
     /// <summary>Ask Revit to canonicalize formulas without retaining any document mutation. Missing add-then-formula references remain authored until apply.</summary>
     public static FamilyModel ResolveNativeFormulas(FamilyModel desired, Document document) {
-        var pending = desired.Parameters.Where(p => p.Value.Formula is not null).ToList();
-        if (pending.Count == 0) return desired;
         var fm = document.FamilyManager;
+        var pending = desired.Parameters.Where(p => p.Value.Formula is not null)
+            .Select(p => (p.Key, p.Value, Target: fm.FindParameter(p.Key)))
+            .Where(p => p.Target is not null && p.Target.Formula != p.Value.Formula).ToList();
+        if (pending.Count == 0) return desired;
         var json = JObject.Parse(FamilyModelJson.Serialize(desired));
         Transaction? transaction = null;
         SubTransaction? subTransaction = null;
@@ -65,12 +67,11 @@ public static class FamilyReconciler {
             if (document.IsModifiable) { subTransaction = new SubTransaction(document); subTransaction.Start(); }
             else { transaction = new Transaction(document, "Interpret family formulas"); transaction.Start(); }
             started = true;
-            foreach (var (name, parameter) in pending) {
-                var target = fm.FindParameter(name);
-                if (target is null || FamilyModelValidator.FormulaNames(parameter.Formula!).Any(reference => fm.FindParameter(reference) is null)) continue;
-                fm.SetFormula(target, parameter.Formula);
+            foreach (var (name, parameter, target) in pending) {
+                if (FamilyModelValidator.FormulaNames(parameter.Formula!).Any(reference => fm.FindParameter(reference) is null)) continue;
+                fm.SetFormula(target!, parameter.Formula);
                 document.Regenerate();
-                json["parameters"]![name]!["formula"] = target.Formula
+                json["parameters"]![name]!["formula"] = target!.Formula
                     ?? throw new InvalidOperationException($"Revit did not retain formula for '{name}'.");
             }
         } finally {

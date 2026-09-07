@@ -42,6 +42,42 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [Test]
+    public void Native_formula_canonicalization_is_rollback_only_and_distinguishes_changed_literal() {
+        const string raw = "if(PE_E___Voltage = 120, 1, 2)";
+        var document = this.NewFamily("Formula canonicalization");
+        try {
+            using (var transaction = new Transaction(document, "Seed formula")) {
+                transaction.Start();
+                var fm = document.FamilyManager;
+                fm.AddParameter("PE_E___Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
+                var poles = fm.AddParameter("PE_E___NumberOfPoles", GroupTypeId.Electrical, SpecTypeId.Int.NumberOfPoles, false);
+                fm.SetFormula(poles, raw);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var current = document.CaptureFamilyModel();
+            var native = current.Parameters["PE_E___NumberOfPoles"].Formula!;
+            Assert.That(native, Is.Not.EqualTo(raw));
+            var before = FamilyModelJson.Serialize(current);
+            var currentType = document.FamilyManager.CurrentType.Name;
+            var modified = document.IsModified;
+            FamilyModel Desired(string formula) => FamilyReconciler.Desired(current, new FamilyPatch { Patch = new JObject {
+                ["parameters"] = new JObject { ["PE_E___NumberOfPoles"] = new JObject { ["formula"] = formula } }
+            } }).Value!;
+
+            var canonical = FamilyReconciler.ResolveNativeFormulas(Desired(raw), document);
+            Assert.That(canonical.Parameters["PE_E___NumberOfPoles"].Formula, Is.EqualTo(native));
+            Assert.That(FamilyReconciler.Reconcile(canonical, current, UnitResolvers.Revit(document)).Changes, Is.Empty);
+            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(document.FamilyManager.CurrentType.Name, Is.EqualTo(currentType));
+            Assert.That(document.IsModified, Is.EqualTo(modified));
+
+            var changed = FamilyReconciler.ResolveNativeFormulas(Desired(raw.Replace("120", "208")), document);
+            Assert.That(FamilyReconciler.Diff(changed, current, UnitResolvers.Revit(document)),
+                Has.Some.Matches<FamilyChange>(c => c.Section == "parameters" && c.Key == "PE_E___NumberOfPoles"));
+        } finally { document.Close(false); }
+    }
+
     [TestCase(false, false)]
     [TestCase(true, false)]
     [TestCase(false, true)]
