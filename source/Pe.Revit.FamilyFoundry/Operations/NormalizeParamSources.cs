@@ -6,7 +6,7 @@ using Pe.Shared.RevitData.Families;
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>Source migration precedes explicit authored writes. Destination state wins; source references transfer before removal.</summary>
-public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource)
+public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource, IReadOnlyCollection<string>? targets = null)
     : DocOperation<DefaultOperationSettings>(new()) {
     public override string Description => "Normalize explicit parameter sources and shared identities";
 
@@ -16,7 +16,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         var logs = new List<LogEntry>();
         var cleanup = new List<(string Source, string Target)>();
         var ranking = new MapParamsSettings();
-        var mappings = desired.Parameters.Where(p => authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+        var mappings = desired.Parameters.Where(p => (targets ?? authoredNames).Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
         var sharedCandidates = mappings.SelectMany(p => (p.Value.WasNamed ?? []).Distinct()).GroupBy(n => n)
             .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
         var transfers = new List<(string Target, List<string> Sources, string Strategy, bool PreservePopulated)>();

@@ -69,6 +69,51 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void Direct_public_plan_keeps_group_contexts_after_normalization() {
+        var document = this.NewFamily("FF public plan");
+        try {
+            var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Mapped Width":{"dataType":"Length","wasNamed":["Width"],"value":"3ft"}}}}""");
+            var current = document.CaptureFamilyModel();
+            var desired = FamilyReconciler.Desired(current, patch);
+            Assert.That(desired.Diagnostics, Is.Empty);
+            var plan = FamilyReconciler.Reconcile(desired.Value!, current, UnitResolvers.Revit(document), authored: patch.Patch);
+            Assert.That(plan.OpOrder.First(), Is.EqualTo("NormalizeParamSources"));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(plan.Queue);
+            var (logs, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(logs!.Sum(log => log.PendingCount), Is.Zero);
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
+                Assert.That(type.AsDouble(document.FamilyManager.FindParameter("Mapped Width")), Is.EqualTo(3d));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Reapplying_shared_mapping_has_no_operations_changes_or_effects() {
+        var document = this.NewFamily("FF repeated shared mapping");
+        try {
+            var definitions = CompanyDefinitions();
+            var patch = CompanyNormalizationFixture.Convert(CompanyNormalizationFixture.MechanicalMappings(), ["PE_G_Dim_Width1"]);
+            patch.Patch["parameters"]!["PE_G_Dim_Width1"]!["value"] = "5ft";
+            string? repeatedHash = null;
+            for (var pass = 0; pass < 3; pass++) {
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                using var processor = new OperationProcessor(document);
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+                if (pass == 0) continue;
+                Assert.That(operation.LastPlan!.Changes, Is.Empty);
+                Assert.That(operation.LastPlan.Queue.Operations, Is.Empty);
+                Assert.That(operation.LastPlan.RunEffects, Is.Empty);
+                if (repeatedHash is not null) Assert.That(operation.LastPlan.PlanHash, Is.EqualTo(repeatedHash));
+                repeatedHash = operation.LastPlan.PlanHash;
+            }
+        } finally { document.Close(false); }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void Conflicting_source_references_follow_existing_destination_before_source_removal(bool incompatible) {

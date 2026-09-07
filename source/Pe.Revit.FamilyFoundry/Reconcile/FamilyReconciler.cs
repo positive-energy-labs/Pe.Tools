@@ -58,20 +58,29 @@ public static class FamilyReconciler {
             .ToList();
         if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([]));
         var changes = Diff(desired, current, units);
-        var (queue, effects) = Lower(changes, desired, current, run, sharedSource);
         var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
-        var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+        var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && NeedsNormalization(p.Key, p.Value, current, names)).ToList();
+        var normalization = mappings.Count == 0 ? null : new NormalizeParamSources(desired, names,
+            sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source.")), mappings.Select(p => p.Key).ToList());
+        var (queue, effects) = Lower(changes, desired, current, run, sharedSource, normalization);
         if (mappings.Count > 0) {
-            var planned = new OperationQueue().Add(new NormalizeParamSources(desired, names,
-                sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source."))));
-            foreach (var operation in queue.Operations) planned.Add(operation);
-            queue = planned;
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
                 current.Parameters.Where(c => c.Key == p.Key || p.Value.WasNamed?.Contains(c.Key) == true).ToDictionary(c => c.Key, c => c.Value), p.Value))).ToList();
         }
         var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
-        var definitionEffects = sharedDefinitions is null ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
+        var definitionEffects = sharedDefinitions is null || mappings.Count == 0 ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
         return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions));
+    }
+
+    private static bool NeedsNormalization(string name, FamilyModelParameter desired, FamilyModel current, IReadOnlyCollection<string> authoredNames) {
+        var sources = desired.WasNamed ?? [];
+        if (!current.Parameters.TryGetValue(name, out var have)) return desired.Shared.HasValue || sources.Count > 0;
+        if (desired.Shared == false && have.Shared == true || desired.Shared == true &&
+            (have.Shared != true || desired.SharedGuid != have.SharedGuid || desired.SharedSpecId != have.SharedSpecId ||
+             desired.SharedVisible != have.SharedVisible || desired.SharedUserModifiable != have.SharedUserModifiable)) return true;
+        if (sources.Any(source => source != name && !authoredNames.Contains(source) && current.Parameters.ContainsKey(source))) return true;
+        return desired.FillBlanksFromSources == true && sources.Count > 0 && have.Formula is null && current.Types.Values.Any(row =>
+            !row.TryGetValue(name, out var value) || string.IsNullOrWhiteSpace(value.Text));
     }
 
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
@@ -136,6 +145,7 @@ public static class FamilyReconciler {
         var parameters = m.Parameters.ToDictionary(p => p.Key, p => {
             var o = JObject.FromObject(p.Value, Serializer);
             o.Remove("value");
+            if (p.Value.Shared == false) o.Remove("shared");
             if (p.Value.Shared == true) o.Remove("tooltip");
             o.Remove("wasNamed");
             o.Remove("mappingStrategy");
@@ -275,8 +285,9 @@ public static class FamilyReconciler {
 
     // ── lowering: the ordering DAG (r2-reconcile §4) ──
 
-    private static (OperationQueue, IReadOnlyList<string>) Lower(IReadOnlyList<FamilyChange> changes, FamilyModel d, FamilyModel c, PatchRun? run, Func<string, ExternalDefinition?>? sharedSource) {
+    private static (OperationQueue, IReadOnlyList<string>) Lower(IReadOnlyList<FamilyChange> changes, FamilyModel d, FamilyModel c, PatchRun? run, Func<string, ExternalDefinition?>? sharedSource, NormalizeParamSources? normalization = null) {
         var q = new OperationQueue();
+        if (normalization is not null) q.Add(normalization);
         var effects = new List<string>();
         FamilyChange[] Of(string section, params ChangeKind[] kinds) => changes.Where(x => x.Section == section && kinds.Contains(x.Kind)).ToArray();
         (string Slug, T Spec)[] After<T>(string section) => Of(section, ChangeKind.Add, ChangeKind.Recreate).Select(x => (x.Key, (T)x.After!)).ToArray();
@@ -287,7 +298,7 @@ public static class FamilyReconciler {
             if (Of(section, gone) is { Length: > 0 } dead)
                 q.Add(new DeleteByName(section, dead.Select(x => section is "refPlanes" or "refLines" ? x.Key : x.Before!).ToArray()));
         // 2 renames before adds (gotcha 26), 3 param deletes, formula length descending
-        if (Of("parameters", ChangeKind.Rename) is { Length: > 0 } renames)
+        if (normalization is null && Of("parameters", ChangeKind.Rename) is { Length: > 0 } renames)
             q.Add(new RenameParams(renames.Select(x => (x.MappedFrom!, x.Key)).ToArray()));
         if (Of("parameters", ChangeKind.Delete) is { Length: > 0 } dels)
             q.Add(new DeleteParams(new DeleteParamsSettings {
