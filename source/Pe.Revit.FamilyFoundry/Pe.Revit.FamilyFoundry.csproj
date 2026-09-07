@@ -19,12 +19,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- SHIM: replaced by family/capture merge; Capture/CaptureStub.cs stands in until then. -->
-        <Compile Remove="Capture\FamilyModelCaptureExtensions.cs"/>
-        <Compile Remove="Capture\FamilySnapshotCaptureExtensions.cs"/>
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
         <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>

@@ -221,8 +221,7 @@ internal static class PracticalBenchmarks {
         var patch = FamilyPatch.Parse("""{ "select": {}, "patch": {}, "run": { "sort": true } }""");
         var queue = new OperationQueue().Add(new ReconcileFamily(patch));
         var collectorQueue = new SnapshotCapturePipeline()
-            .Add(new ParameterSnapshotCollector())
-            .Add(new ReferencePlaneSnapshotCollector());
+            .Add(new ParameterSnapshotCollector());
 
         return BenchmarkHarness.RunDocumentLoop(
             application,

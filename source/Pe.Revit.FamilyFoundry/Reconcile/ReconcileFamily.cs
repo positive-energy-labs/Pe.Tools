@@ -20,14 +20,14 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null) : base(new DefaultOperationSettings()) {
         this._desired = desired;
         this._dryRun = dryRun;
-        this._capture = capture ?? CaptureStub.CaptureFamilyModel;
+        this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
     }
 
     /// <summary>Patch mode: omission = unchanged, null = delete, {} = ensure; `run` rules ride along.</summary>
     public ReconcileFamily(FamilyPatch patch, bool dryRun = false, Func<Document, FamilyModel>? capture = null) : base(new DefaultOperationSettings()) {
         this._patch = patch;
         this._dryRun = dryRun;
-        this._capture = capture ?? CaptureStub.CaptureFamilyModel;
+        this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
     }
 
     public override string Description => this._patch is null

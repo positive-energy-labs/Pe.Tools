@@ -4,12 +4,13 @@ using Pe.Shared.RevitData.Families;
 namespace Pe.Revit.Tests;
 
 /// <summary>
-///     Writes one runtime probe as JSON beside its <see cref="ProbeSvgGallery" /> SVG, so the ACTUAL side of
-///     the family review board can be drawn in the web from Revit-side readings instead of a picture.
+///     Writes one runtime probe as JSON, so the ACTUAL side of the family review board can be drawn in the
+///     web from Revit-side readings instead of a picture.
 /// </summary>
 /// <remarks>
-///     The SVG is for a human; this is for a renderer. Same probe, same run directory, same file stem.
-///     Revit types do not serialize, so every <c>XYZ</c> becomes <c>[x, y, z]</c> in feet and every
+///     The frames-era SVG gallery and evaluator oracle are purged, so the dump no longer carries a
+///     <c>predicted</c> side: the reconciler receipt owns prediction now. Revit types do not serialize, so
+///     every <c>XYZ</c> becomes <c>[x, y, z]</c> in feet and every
 ///     <c>ElementId</c> is dropped — an element id is machine identity from one document, meaningless to a
 ///     reader of a checked-in fixture.
 /// </remarks>
@@ -21,21 +22,19 @@ internal static class ProbeJsonDump {
     public static string Write(
         string directory,
         string familyName,
-        RuntimeStateProbe probe,
-        FamilyModel model
+        RuntimeStateProbe probe
     ) {
         var familyDirectory = Path.Combine(directory, SanitizeName(familyName));
         _ = Directory.CreateDirectory(familyDirectory);
         var path = Path.Combine(familyDirectory, $"{SanitizeName(probe.TypeName)}.probe.json");
         File.WriteAllText(path,
-            JsonConvert.SerializeObject(Project(familyName, probe, model), Formatting.Indented));
+            JsonConvert.SerializeObject(Project(familyName, probe), Formatting.Indented));
         return path;
     }
 
-    private static object Project(string familyName, RuntimeStateProbe probe, FamilyModel model) => new {
+    private static object Project(string familyName, RuntimeStateProbe probe) => new {
         familyName,
         typeName = probe.TypeName,
-        predicted = Predict(probe, model),
         parameterValues = probe.ParameterValues,
         planes = probe.Planes.ToDictionary(
             entry => entry.Key,
@@ -93,4 +92,9 @@ internal static class ProbeJsonDump {
             connectors = probe.ConnectorCount
         }
     };
+
+    private static double[] Xyz(XYZ point) => [point.X, point.Y, point.Z];
+
+    private static string SanitizeName(string value) =>
+        string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
 }
