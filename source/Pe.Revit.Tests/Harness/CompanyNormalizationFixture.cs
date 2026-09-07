@@ -55,7 +55,7 @@ internal static class CompanyNormalizationFixture {
     }
 
     public static MapParamsSettings MechanicalMappings() {
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", "company-20260906", "Global", "fragments", "_mapping-data", "mech-equip-mapping-data.json");
+        var path = RevitFamilyFixtureHarness.GetProfileFixturePath(Path.Combine("company-20260906", "Global", "fragments", "_mapping-data", "mech-equip-mapping-data.json"));
         return new MapParamsSettings { MappingData = JObject.Parse(File.ReadAllText(path))["Items"]!.ToObject<List<MappingData>>()! };
     }
 }

@@ -40,7 +40,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private static IReadOnlyList<ParametersApi.Parameters.ParametersResult> CompanyDefinitions() =>
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", "normalization-aps-definitions.json")))!;
+            RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
     [Test]
     public void Company_shared_definition_replaces_local_source_with_exact_guid_and_values() {
@@ -124,7 +124,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var target = this.NewFamily("FF offline rebuild");
         try {
             var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
-                Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", "normalization-company-definitions.json")))!;
+                RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
             var mappingNames = CompanyNormalizationFixture.MechanicalMappings().MappingData.Select(m => m.NewName).ToHashSet();
             definitions = definitions.Where(d => mappingNames.Contains(d.Name!)).ToList();
             Assert.That(definitions.Count, Is.EqualTo(38), "Every target in the real mechanical mapping fragment has an exact frozen definition.");
@@ -170,7 +170,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             using (var transaction = new Transaction(document, "Seed company source candidates")) {
                 transaction.Start();
                 var fm = document.FamilyManager;
-                var sparse = fm.AddParameter("Model", GroupTypeId.Data, SpecTypeId.String.Text, false);
+                var sparse = fm.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)
+                    ?? throw new InvalidOperationException("Generic Model template has no built-in Model source.");
                 var dense = fm.AddParameter("Mech Equip Model Number", GroupTypeId.Data, SpecTypeId.String.Text, false);
                 var target = fm.AddParameter("PE_G___Model", GroupTypeId.Data, SpecTypeId.String.Text, false);
                 foreach (var type in fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B")) {
@@ -275,16 +276,21 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             var operation = WidthPatch();
             var receipts = new List<bool>();
+            var failure = new FailFamily(families[0].Name);
+            Assert.That(families.Select(f => f.Id).Distinct().Count(), Is.EqualTo(2));
             using var processor = new OperationProcessor(project, new ExecutionOptions { SingleTransaction = false });
             var (contexts, _) = processor.SelectFamilies(() => families)
                 .WithPerFamilyCallback(_ => receipts.Add(operation.LastReceipt?.Converged ?? false))
-                .ProcessQueue(new OperationQueue().Add(operation).Add(new FailFamily("FF fail")));
+                .ProcessQueue(new OperationQueue().Add(operation).Add(failure));
             Assert.That(contexts.Count, Is.EqualTo(2));
+            Assert.That(failure.Triggered, Is.True, $"Loaded names: {string.Join(", ", families.Select(f => f.Name))}; contexts: {string.Join(", ", contexts.Select(c => c.FamilyName))}");
+            var (_, firstError) = contexts[0].OperationLogs;
+            Assert.That(firstError?.Message, Does.Contain("injected failure"));
             Assert.That(receipts, Is.EqualTo(new[] { false, true }));
             foreach (var family in families) {
                 var document = project.EditFamily(family);
                 try {
-                    if (family.Name == "FF fail") AssertOriginalWidths(document);
+                    if (family.Id == families[0].Id) AssertOriginalWidths(document);
                     else foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
                         Assert.That(type.AsDouble(document.FamilyManager.FindParameter("Width")), Is.EqualTo(3.0));
                 } finally { document.Close(false); }
@@ -299,9 +305,11 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private sealed class FailFamily(string? family = null) : DocOperation<DefaultOperationSettings>(new()) {
         public override string Description => "Injected dependent failure";
-        public override OperationLog Execute(FamilyDocument document, FamilyProcessingContext context, OperationContext group) =>
-            new(this.Name, [family is null || family == context.FamilyName
-                ? new LogEntry("dependent").Error("injected failure")
-                : new LogEntry("dependent").Success("accepted")]);
+        public bool Triggered { get; private set; }
+        public override OperationLog Execute(FamilyDocument document, FamilyProcessingContext context, OperationContext group) {
+            var reject = family is null || family == context.FamilyName;
+            this.Triggered |= reject;
+            return new(this.Name, [reject ? new LogEntry("dependent").Error("injected failure") : new LogEntry("dependent").Success("accepted")]);
+        }
     }
 }
