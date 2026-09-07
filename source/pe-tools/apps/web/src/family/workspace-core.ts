@@ -266,7 +266,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
       say(text);
       return text;
     }
-    setDraft((previous) => {
+    return setDraft((previous) => {
       const next = structuredClone(previous);
       next.authored[param] = trimmed;
       sever(next, param, null);

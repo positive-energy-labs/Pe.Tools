@@ -162,6 +162,26 @@ export function settingsFieldSegments(pointer: string): string[] {
     .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"));
 }
 
+/** Locate a raw directive boundary without expanding or choosing a fragment's winning fields. */
+export function settingsFieldDirectives(root: unknown, segments: string[]): string[] | null {
+  let cursor = root;
+  for (const [index, segment] of segments.entries()) {
+    if (cursor == null || typeof cursor !== "object") return null;
+    const object = cursor as Record<string, unknown>;
+    if (
+      ("$preset" in object || "$include" in object) &&
+      !(index === segments.length - 1 && segment.startsWith("$"))
+    ) {
+      const directive = object.$preset ?? object.$include;
+      return (Array.isArray(directive) ? directive : [directive]).filter(
+        (value): value is string => typeof value === "string",
+      );
+    }
+    cursor = object[segment];
+  }
+  return null;
+}
+
 /** Encode property segments as an RFC 6901 JSON Pointer field key. */
 export function settingsFieldPointer(segments: string[]): string {
   return segments

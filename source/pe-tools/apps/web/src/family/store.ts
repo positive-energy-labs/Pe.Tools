@@ -6,6 +6,8 @@ import {
   familyRouteState,
   here,
   settingsRouteState,
+  settingsFieldSegments,
+  settingsFieldDirectives,
   type FamilyDocument,
   type RouteStatePatch,
   type RouteStateWriteResult,
@@ -192,6 +194,9 @@ export function createFamilyStore(deps: {
     Atom.autoDispose,
   );
   const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed"));
+  const sharedEdit = Atom.make<{ pointer: string; directives: string[] } | null>(null).pipe(
+    owned("page/shared-edit"),
+  );
 
   const profileSource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.profile(registry.get(target))),
@@ -215,6 +220,7 @@ export function createFamilyStore(deps: {
     write("system", "slice-reset", () =>
       Atom.batch(() => {
         registry.set(seededRef, nextLane.seedKey);
+        registry.set(sharedEdit, null);
         registry.set(draft, initialDraft(nextLane.world));
         registry.set(stageType, nextLane.world.typeNames[1] ?? nextLane.world.typeNames[0] ?? "");
         registry.set(drillType, null);
@@ -370,7 +376,28 @@ export function createFamilyStore(deps: {
       }),
     );
   const actions = {
-    setDraft: (value: Setter<Draft>) => set("set-draft", draft, value),
+    setDraft(this: void, value: Setter<Draft>): string | void {
+      const previous = registry.get(draft);
+      const next = typeof value === "function" ? value(previous) : value;
+      const current = registry.get(lane);
+      const raw = registry.get(snapshot)?.rawContent;
+      if (current.document && raw) {
+        const authored: unknown = JSON.parse(raw);
+        for (const patch of draftToPatches(current.document.model, next, previous)) {
+          const pointer = String(patch.path[1]);
+          const directives = settingsFieldDirectives(authored, settingsFieldSegments(pointer));
+          if (directives) {
+            const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was staged.`;
+            write("edit-shared", "page/shared-edit", () => {
+              registry.set(sharedEdit, { pointer, directives });
+              registry.set(core.receipt, { verb: "page", text, at: Date.now() });
+            });
+            return text;
+          }
+        }
+      }
+      set("set-draft", draft, next);
+    },
     setOverlay: (value: Setter<Overlay>) => set("set-overlay", overlay, value),
     setTable: (value: Setter<MasterTableState>) => set("set-table", tableState, value),
     setDrill: (value: Setter<MasterTableState>) => set("set-drill", drillState, value),
@@ -481,6 +508,7 @@ export function createFamilyStore(deps: {
       binding,
       picker,
       armedBuild,
+      sharedEdit,
       buildFacts,
       buildOutcome,
       ...core.verbAtoms,

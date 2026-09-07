@@ -3,6 +3,7 @@ import {
   type SettingsRouteDocument,
   type SettingsSnapshot,
   settingsFieldSegments,
+  settingsFieldDirectives,
   stagedEntries,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers } from "@pe/agent-contracts";
@@ -248,23 +249,19 @@ function applyFieldEdit(
   edit: { value?: unknown; delete?: true },
 ) {
   if (segments.length === 0) return;
+  if (settingsFieldDirectives(root, segments))
+    throw new Error(
+      "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
+    );
   let cursor = root;
   for (let i = 0; i < segments.length - 1; i += 1) {
     const key = segments[i];
-    if ("$preset" in cursor || "$include" in cursor)
-      throw new Error(
-        "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
-      );
     const next = cursor[key];
     if (next == null || typeof next !== "object" || Array.isArray(next)) {
       cursor[key] = {};
     }
     cursor = cursor[key] as Record<string, unknown>;
   }
-  if (("$preset" in cursor || "$include" in cursor) && !segments.at(-1)?.startsWith("$"))
-    throw new Error(
-      "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
-    );
   const leaf = segments[segments.length - 1];
   if (edit.delete === true) delete cursor[leaf];
   else cursor[leaf] = edit.value;

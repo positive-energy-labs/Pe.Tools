@@ -28,6 +28,7 @@ export function FamilyWorkspaceView() {
   } = useFamilyWorkspace();
   const reconciliation = useAtomValue(store.atoms.reconciliation);
   const evidence = useAtomValue(store.atoms.evidence);
+  const sharedEdit = useAtomValue(store.atoms.sharedEdit);
   return (
     <Workspace
       className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
@@ -87,6 +88,13 @@ export function FamilyWorkspaceView() {
                   </details>
                 </details>
               )}
+              {sharedEdit && (
+                <OutcomeLine
+                  kind="advisory"
+                  label={`edit shared source / ${sharedEdit.pointer}`}
+                  says="No local edit was staged. Open the referenced source below; nested fragments may contribute different fields."
+                />
+              )}
               {(snapshot?.dependencies ?? []).map((dependency) => (
                 <a
                   key={dependency.directivePath}
@@ -108,7 +116,10 @@ export function FamilyWorkspaceView() {
                       );
                   }}
                 >
-                  edit shared {dependency.directivePath}
+                  {sharedEdit?.directives.includes(dependency.directivePath)
+                    ? "open referenced source "
+                    : "edit shared "}
+                  {dependency.directivePath}
                 </a>
               ))}
               {!lane.fixture && (

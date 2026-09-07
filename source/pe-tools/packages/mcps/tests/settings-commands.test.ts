@@ -132,3 +132,29 @@ test("settings save refetches and uses the file version without persisting it", 
     },
   );
 });
+
+test("settings save preserves staged inherited edits and never writes through a raw directive", async () => {
+  await withHost(
+    (key) => {
+      if (key !== "settings.document.open") throw new Error(`unexpected write ${key}`);
+      return openResponse(
+        '{"parameters":{"$include":["@global/_parameters/base","@global/_parameters/later"]}}',
+      );
+    },
+    async (calls) => {
+      const document: SettingsRouteDocument = {
+        bindings: { file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH } },
+        documentId: DOCUMENT_ID,
+        fields: { "/parameters/Width/value": { staged: { value: "42in" } } },
+      };
+      await expect(
+        createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }).save(
+          {},
+          context(document),
+        ),
+      ).rejects.toThrow("shared fragment");
+      expect(calls.map(({ key }) => key)).toEqual(["settings.document.open"]);
+      expect(document.fields["/parameters/Width/value"]?.staged).toEqual({ value: "42in" });
+    },
+  );
+});

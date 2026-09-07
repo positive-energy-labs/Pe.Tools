@@ -317,3 +317,43 @@ it("preserves unsaved authored edits when target navigation is requested", async
   expect(calls.filter((c) => c.op === "navigate")).toEqual([]);
   expect(registry.get(store.atoms.draft).authored.Width).toBe("42in");
 });
+
+it.each([
+  { $preset: "@global/_parameters/base" },
+  { $include: ["@global/_parameters/base", "@global/_parameters/later"] },
+])(
+  "keeps inherited edits out of the local draft and leaves shared navigation available: %j",
+  async (directive) => {
+    const f = fixture();
+    const documentId = {
+      moduleKey: "Global",
+      rootKey: "fragments",
+      relativePath: "_parameters/base",
+    };
+    const { familyParameters, ...rest } = MODEL;
+    const host: FamilyHost = {
+      ...f.host,
+      settings: async (id) => ({
+        ...(await f.host.settings(id)),
+        rawContent: JSON.stringify({ ...rest, parameters: directive }),
+        composedContent: JSON.stringify({ ...rest, parameters: familyParameters }),
+        dependencies: [{ directivePath: "@global/_parameters/base", documentId }],
+      }),
+    };
+    const { registry, store, calls } = make({ ...f, host });
+    registry.get(store.atoms.lane);
+    await tick();
+    const before = registry.get(store.atoms.draft);
+    expect(
+      store.actions.setDraft((d) => ({ ...d, authored: { ...d.authored, Width: "42in" } })),
+    ).toContain("Edit the shared source");
+    expect(registry.get(store.atoms.draft)).toBe(before);
+    expect(registry.get(store.atoms.sharedEdit)?.pointer).toBe("/parameters/Width/value");
+    expect(calls).toEqual([]);
+    await store.actions.openShared(documentId);
+    expect(calls).toEqual([{ op: "settings.open", input: { documentId } }]);
+    // An explicitly authored type cell is still local even when its default is inherited.
+    store.actions.setDraft((d) => ({ ...d, types: { ...d.types, Standard: { Width: "36in" } } }));
+    expect(registry.get(store.atoms.draft).types.Standard?.Width).toBe("36in");
+  },
+);
