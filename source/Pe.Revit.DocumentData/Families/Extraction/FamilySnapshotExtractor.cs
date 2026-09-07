@@ -128,10 +128,11 @@ public static class FamilySnapshotExtractor {
         var formula = string.IsNullOrWhiteSpace(familyParameter.Formula) ? null : familyParameter.Formula;
 
         var valuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal);
-        var format = familyParameter.StorageType == StorageType.Double ? ParameterPortableFormat.ForSpec(familyParameter.Definition.GetDataType()) : null;
+        var spec = familyParameter.Definition.GetDataType();
+        var format = familyParameter.StorageType == StorageType.Double ? ParameterPortableFormat.ForSpec(spec) : null;
         foreach (var type in types)
-            valuesPerType[type.Name] = format is not null && type.HasValue(familyParameter)
-                ? format(type.AsDouble(familyParameter)!.Value) : famDoc.GetValueString(type, familyParameter);
+            valuesPerType[type.Name] = format is not null && type.HasValue(familyParameter) && type.AsDouble(familyParameter) is { } value
+                ? format(value) : famDoc.GetValueString(type, familyParameter);
 
         return new FamilyParameterSnapshot(
             new ParameterDefinitionDescriptor(
