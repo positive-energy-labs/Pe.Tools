@@ -50,7 +50,7 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
         )}
         {board && (
           <span className="">
-            B: {board.solved}/{board.zones} solved · {board.acceptedRooms ?? "?"} rooms /{" "}
+            B: {board.solved}/{board.zones} solved · {board.acceptedRooms ?? "?"} accepted rooms /{" "}
             {board.errors} errors · {fmtSqft(board.acceptedSqft)} accepted ·{" "}
             {fmtSqft(board.heldSqft)} held
           </span>

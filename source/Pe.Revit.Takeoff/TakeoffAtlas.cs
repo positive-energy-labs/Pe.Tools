@@ -125,7 +125,7 @@ public static class TakeoffAtlas
         Action<string> log = static _ => { };
         var view = FindView(doc, request.View);
         var level = view.GenLevel;
-        double elevation = level?.Elevation ?? 0.0;
+        double elevation = level?.ProjectElevation ?? 0.0;
 
         var rooms = new List<RoomResult>();
         var residues = new List<ResidueResult>();

@@ -77,14 +77,29 @@ public sealed class NativeProposalTests {
         AssertPartition(answer, new WKTReader().Read("POLYGON ((0 0,20 0,20 20,0 20,0 0))"));
     }
 
-    private static PartitionAnswer Run(double[][] zone, IReadOnlyList<RoomProposal> proposals) {
+    [TestCase(null, 9.0, Disposition.Held, Reasons.NoFloor)]
+    [TestCase(0.0, null, Disposition.Held, Reasons.NoCeiling)]
+    [TestCase(0.0, 5.0, Disposition.Void, Reasons.LowHeadroom)]
+    [TestCase(0.0, 9.0, Disposition.Accepted, null)]
+    public void Missing_height_evidence_is_reviewable_and_only_measured_low_headroom_is_void(
+        double? floor, double? ceiling, Disposition disposition, string? reason) {
+        var proposal = new RoomProposal("unit-room", "Unit room", "1", [Box(0, 0, 20, 20)]);
+        var room = Run(proposal.Loops, [proposal], floor, ceiling).Rooms.Single();
+        Assert.That((room.Disposition, room.Reason), Is.EqualTo((disposition, reason)));
+        Assert.That(room.Proposal, Is.SameAs(proposal));
+    }
+
+    private static PartitionAnswer Run(double[][] zone, IReadOnlyList<RoomProposal> proposals,
+        double? floor = 0, double? ceiling = 9) {
         var queries = new List<(double X, double Y)>();
         // Explicit unit-domain evidence: a floor at 0 and ceiling at 9, never a live-capture claim.
         ProbeAnswer Probe(double x, double y) {
             queries.Add((x, y));
             var handle = new Handle("unit-domain", 1, "unit-hit", null, "unit", PrimKind.Solid);
             return new ProbeAnswer(Empty.Stamp, Empty.Searched,
-                new ProbeHit(handle, 3.5, 0), new ProbeHit(handle, 5.5, 9), 200, 0);
+                floor is { } f ? new ProbeHit(handle, 3.5 - f, f) : null,
+                ceiling is { } c ? new ProbeHit(handle, c - 3.5, c) : null, 200, 0,
+                ProbePurpose.RoomHeights);
         }
         var answer = Solve.Run(new PartitionInput(Empty, Empty, zone, 0, Knobs.Default,
             [Gate, Gate, Gate, Gate], "unit-domain", proposals, "unit: empty enclosure"), Probe);
