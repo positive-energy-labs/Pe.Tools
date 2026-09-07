@@ -35,6 +35,15 @@ public static class FamilyDocumentNormalizeParameter {
         if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
         if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         var fm = document.FamilyManager;
+        var dependents = source.GetDependents(fm.Parameters).ToList();
+        var targetDependsOnSource = dependents.Any(dependent => dependent.Id == target.Id);
+        var targetIsExactAlias = targetDependsOnSource && fm.Parameters.TryGetSingleReference(target.Formula)?.Id == source.Id;
+        if (targetDependsOnSource && !targetIsExactAlias)
+            throw new InvalidOperationException(
+                $"Cannot remove source '{source.Definition.Name}': destination '{target.Definition.Name}' formula '{target.Formula}' depends on the source but is not an exact alias. Refusing to discard formula intent.");
+        var targetValues = targetIsExactAlias
+            ? fm.Types.Cast<FamilyType>().Select(type => (Type: type, Value: document.GetValue(type, target))).ToList()
+            : [];
         var associations = source.AssociatedParameters.Cast<Parameter>().Select(parameter => {
             var builtIn = (parameter.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID;
             if (parameter.Element is not ConnectorElement || associationRoutes?.TryGetValue(builtIn, out var routedName) != true)
@@ -47,35 +56,48 @@ public static class FamilyDocumentNormalizeParameter {
         }).ToList();
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
+        var originalType = fm.CurrentType;
         var sourceName = source.Definition.Name;
-        var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
-        if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
-        else fm.RenameParameter(source, temporary);
-        var dimensions = source.AssociatedDimensions(document).ToList();
-        var arrays = source.AssociatedArrays(document).ToList();
-        foreach (var (parameter, associationTarget) in associations) {
-            var diagnostic = AssociationDiagnostic(source, associationTarget, parameter, fm);
-            if (!fm.CanElementParameterBeAssociated(parameter))
-                throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}");
-            try {
-                fm.AssociateElementParameterToFamilyParameter(parameter, null);
-                fm.AssociateElementParameterToFamilyParameter(parameter, associationTarget);
-            } catch (Exception exception) {
-                throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}", exception);
+        try {
+            var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
+            if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
+            else fm.RenameParameter(source, temporary);
+            var dimensions = source.AssociatedDimensions(document).ToList();
+            var arrays = source.AssociatedArrays(document).ToList();
+            foreach (var (parameter, associationTarget) in associations) {
+                var diagnostic = AssociationDiagnostic(source, associationTarget, parameter, fm);
+                if (!fm.CanElementParameterBeAssociated(parameter))
+                    throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}");
+                try {
+                    fm.AssociateElementParameterToFamilyParameter(parameter, null);
+                    fm.AssociateElementParameterToFamilyParameter(parameter, associationTarget);
+                } catch (Exception exception) {
+                    throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}", exception);
+                }
             }
-        }
-        document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
-        foreach (var array in arrays) array.Label = target;
-        foreach (var dependent in source.GetDependents(fm.Parameters).ToList()) {
-            var formula = dependent.Formula.Replace(temporary, target.Definition.Name);
-            try { fm.SetFormula(dependent, formula); }
-            catch (Exception exception) {
-                throw new InvalidOperationException(
-                    $"Failed to transfer formula on '{dependent.Definition.Name}' from source '{sourceName}' to destination '{target.Definition.Name}'. Attempted formula: {formula}", exception);
+            document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
+            foreach (var array in arrays) array.Label = target;
+            if (targetIsExactAlias) {
+                fm.SetFormula(target, null!);
+                foreach (var (type, value) in targetValues.Where(item => item.Value is not null)) {
+                    if (fm.CurrentType != type) fm.CurrentType = type;
+                    if (document.SetValue(target, value) is null)
+                        throw new InvalidOperationException($"Failed to materialize destination '{target.Definition.Name}' for family type '{type.Name}'.");
+                }
             }
+            foreach (var dependent in dependents.Where(dependent => dependent.Id != target.Id)) {
+                var formula = dependent.Formula.Replace(temporary, target.Definition.Name);
+                try { fm.SetFormula(dependent, formula); }
+                catch (Exception exception) {
+                    throw new InvalidOperationException(
+                        $"Failed to transfer formula on '{dependent.Definition.Name}' from source '{sourceName}' to destination '{target.Definition.Name}'. Attempted formula: {formula}", exception);
+                }
+            }
+            if (source.HasAnyAssociation(document)) throw new InvalidOperationException($"Source '{temporary}' still has dependencies.");
+            fm.RemoveParameter(source);
+        } finally {
+            if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
         }
-        if (source.HasAnyAssociation(document)) throw new InvalidOperationException($"Source '{temporary}' still has dependencies.");
-        fm.RemoveParameter(source);
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
     }
 
