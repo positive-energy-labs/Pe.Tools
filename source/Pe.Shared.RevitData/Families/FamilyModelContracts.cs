@@ -690,7 +690,7 @@ public enum ConnectorShape { Round, Rectangular, Oval }
 public enum FlowDirection { In, Out, Bidirectional }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum FlowConfiguration { Preset, Calculated, System }
+public enum FlowConfiguration { Preset, Calculated, System, Demand }
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum LossMethod { NotDefined, Coefficient, SpecificLoss, Table }

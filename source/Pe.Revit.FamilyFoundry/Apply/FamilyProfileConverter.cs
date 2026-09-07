@@ -311,7 +311,7 @@ public static class FamilyProfileConverter {
             RequireOnly(config, "ParamDrivenSolids.Connector.Config", domain);
             var domainConfig = RequiredObject(config, domain, "ParamDrivenSolids.Connector.Config");
             var allowed = domain == "Duct" ? new[] { "SystemType", "FlowConfiguration", "FlowDirection", "LossMethod" }
-                : domain == "Pipe" ? new[] { "SystemType", "FlowDirection" } : domain == "Electrical" ? new[] { "SystemType" }
+                : domain == "Pipe" ? new[] { "SystemType", "FlowConfiguration", "FlowDirection" } : domain == "Electrical" ? new[] { "SystemType" }
                 : throw new InvalidOperationException($"ParamDrivenSolids connector domain '{domain}' requires native conversion.");
             RequireOnly(domainConfig, $"ParamDrivenSolids.Connector.Config.{domain}", allowed);
             var system = Required(domainConfig, "SystemType", $"ParamDrivenSolids.Connector.Config.{domain}") switch {

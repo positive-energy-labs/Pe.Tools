@@ -166,6 +166,8 @@ public static class FamilyModelValidator {
                 d.Add(new(FamilyModelDiagnosticCodes.ConnectorPositionDuplicate, path, "Two connectors of one domain at one position are coincident; capture cannot tell them apart."));
             if (!DomainAllows(c.Domain, c.SystemType)) d.Add(new(FamilyModelDiagnosticCodes.SystemTypeDomain, $"{path}.systemType", $"{c.SystemType} is not a {c.Domain} system type."));
             if (c.Domain == ConnectorDomain.Pipe && c.Shape is not (null or ConnectorShape.Round)) d.Add(new(FamilyModelDiagnosticCodes.PipeRound, $"{path}.shape", "Pipe connectors are Round."));
+            if (c.FlowConfiguration == FlowConfiguration.Demand && c.Domain != ConnectorDomain.Pipe)
+                d.Add(new(FamilyModelDiagnosticCodes.SlotNotLegalForKind, $"{path}.flowConfiguration", "Demand is only a Pipe flow configuration."));
             foreach (var (n, v) in new[] { ("diameter", c.Diameter), ("width", c.Width), ("height", c.Height) }) if (v is { } len) Length(len, $"{path}.{n}", m, d);
             if (c.Angle is { IsParameter: true } ang) Param(ang.Text, $"{path}.angle", m, DataType.Angle, d);
             foreach (var (k, v) in c.Associate ?? []) Param(v, $"{path}.associate.{k}", m, null, d);

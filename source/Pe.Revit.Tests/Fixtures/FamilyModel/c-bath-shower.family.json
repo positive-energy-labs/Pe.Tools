@@ -58,11 +58,11 @@
     }
   },
   "connectors": {
-    "cold":  { "domain": "Pipe", "systemType": "DomesticColdWater", "on": "conn top", "at": ["conn (left)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In",
+    "cold":  { "domain": "Pipe", "systemType": "DomesticColdWater", "on": "conn top", "at": ["conn (left)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In", "flowConfiguration": "Demand",
                "associate": { "Fixture Units": "param:PE_P_LoadCalc_CWFU" } },
-    "hot":   { "domain": "Pipe", "systemType": "DomesticHotWater",  "on": "conn top", "at": ["conn (right)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In",
+    "hot":   { "domain": "Pipe", "systemType": "DomesticHotWater",  "on": "conn top", "at": ["conn (right)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In", "flowConfiguration": "Demand",
                "associate": { "Fixture Units": "param:PE_P_LoadCalc_HWFU" } },
-    "drain": { "domain": "Pipe", "systemType": "Sanitary",          "on": "conn top", "at": ["drain x", "drain y"], "diameter": "param:_drain size", "flowDirection": "Out",
+    "drain": { "domain": "Pipe", "systemType": "Sanitary",          "on": "conn top", "at": ["drain x", "drain y"], "diameter": "param:_drain size", "flowDirection": "Out", "flowConfiguration": "Demand",
                "associate": { "Fixture Units": "param:PE_P_LoadCalc_DFU" } }
   }
 }
