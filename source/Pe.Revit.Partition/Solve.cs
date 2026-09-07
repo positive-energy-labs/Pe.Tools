@@ -39,29 +39,28 @@ public static class Solve {
         var knee = input.Knee;
         var knobs = input.Knobs;
         var zone = GeometryOf(input.ZoneLoops);
-        var native = input.Proposals.Select(p => (Proposal: p, Geom: GeometryOf(p.Loops).Intersection(zone)))
+        var native = input.Proposals.Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
             .Where(p => !p.Geom.IsEmpty && p.Geom.Area > AreaTolSqft).ToList();
         var overlaps = new List<Geometry>();
         for (var i = 0; i < native.Count; i++)
             for (var j = i + 1; j < native.Count; j++) {
-                var overlap = native[i].Geom.Intersection(native[j].Geom);
+                var overlap = IntersectArea(native[i].Geom, native[j].Geom);
                 if (overlap.Area > AreaTolSqft) overlaps.Add(overlap);
             }
         var contested = UnionOf(overlaps);
-        var remainder = zone.Difference(UnionOf(native.Select(p => p.Geom).ToList()));
+        var remainder = Area(zone.Difference(UnionOf(native.Select(p => p.Geom).ToList())));
         var kneeRaw = Buffered(knee, knobs.InkHalfWidthFt);
         var headerRaw = Buffered(input.Header, knobs.InkHalfWidthFt);
         var backing = Reach(kneeRaw, headerRaw, knobs);
-        var noInk = UnionOf([kneeRaw, headerRaw]).Intersection(remainder).IsEmpty;
+        var noInk = IntersectArea(UnionOf([kneeRaw, headerRaw]), remainder).IsEmpty;
         var generated = new List<Geometry>();
         Geometry excluded = Gf.CreatePolygon();
         if (!remainder.IsEmpty) {
             if (noInk) generated.AddRange(Polys(remainder));
             else {
-                var ink = UnionOf([Close(kneeRaw, knobs.CloseFt), Close(headerRaw, knobs.CloseFt)])
-                    .Intersection(remainder);
+                var ink = IntersectArea(UnionOf([Close(kneeRaw, knobs.CloseFt), Close(headerRaw, knobs.CloseFt)]), remainder);
                 var faces = Polys(remainder.Difference(ink)).OrderByDescending(p => p.Area).ToList();
-                var wall = remainder.Difference(UnionOf(faces.Cast<Geometry>().ToList()));
+                var wall = Area(remainder.Difference(UnionOf(faces.Cast<Geometry>().ToList())));
                 generated = Reclaim(faces, wall, out excluded);
                 Merge(generated, backing, knobs);
                 generated = Rectify(generated, input);
@@ -163,7 +162,7 @@ public static class Solve {
             if (cell.UserData is not Coordinate site) continue;
             var idx = seeds.FindIndex(s => s.Equals2D(site));
             if (idx < 0) continue;
-            var piece = cell.Intersection(wall);
+            var piece = IntersectArea(cell, wall);
 
             if (piece.IsEmpty || piece.Area <= 0) continue;
             buckets[owner[idx]].Add(piece);
@@ -193,7 +192,7 @@ public static class Solve {
             }
         if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(grown.ToArray()))
             throw new PartitionException("reclaimed faces do not have matching shared boundaries");
-        unclaimed = wall.Difference(UnionOf(grown));
+        unclaimed = Area(wall.Difference(UnionOf(grown)));
         return grown;
     }
 
@@ -416,12 +415,15 @@ public static class Solve {
         };
     }
 
-    private static List<Polygon> Polys(Geometry g) {
-        var outp = new List<Polygon>();
-        for (var i = 0; i < g.NumGeometries; i++)
-            if (g.GetGeometryN(i) is Polygon p && !p.IsEmpty) outp.Add(p);
-        return outp;
-    }
+    // Area overlays can also contain isolated line/point contacts; those are not room area.
+    private static Geometry IntersectArea(Geometry a, Geometry b) =>
+        Area(a.Intersection(b));
+
+    private static Geometry Area(Geometry g) => Gf.CreateMultiPolygon(Polys(g).ToArray());
+
+    private static List<Polygon> Polys(Geometry g) =>
+        NetTopologySuite.Geometries.Utilities.PolygonExtracter.GetPolygons(g)
+            .Cast<Polygon>().Where(p => !p.IsEmpty).ToList();
 
     private static double[] Loop(Geometry g) => Flat(((Polygon)g).ExteriorRing.Coordinates);
 

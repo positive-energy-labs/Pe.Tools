@@ -103,6 +103,14 @@ public sealed class BoundaryShapeTests {
         Write(fixture + "-solve", before, after, answer.Rooms.Select(r => new[] { r.LabelX, r.LabelY }).ToArray());
     }
 
+    [Test]
+    public void ProjectC_level2_clipping_keeps_area_without_mixed_dimension_overlay_failure() {
+        var input = Load<PartitionInput>("project-c-level2", "partition-input");
+        var answer = Solve.Run(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
+        Assert.That(answer.Rooms, Is.Not.Empty);
+        Validate(answer.Rooms.Select(Polygon).ToArray(), input);
+    }
+
     private static Geometry Polygon(Room room) => Solve.GeometryOf(new[] { room.Loop }.Concat(room.Holes ?? []).ToArray());
 
     private static void Validate(Geometry[] polygons, PartitionInput input) {
