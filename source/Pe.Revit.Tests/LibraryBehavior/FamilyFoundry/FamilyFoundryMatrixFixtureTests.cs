@@ -1,3 +1,9 @@
+using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Shared.RevitData.Families;
+
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -34,6 +40,40 @@ public sealed class FamilyFoundryMatrixFixtureTests {
 
             familyDocument = projectDocument.EditFamily(loadedFamily);
             AssertSetValueMatrixFamilyTopology(familyDocument);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    [Test]
+    public void Public_reconciler_migrates_the_set_value_matrix_and_every_native_reference() {
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.Public_reconciler_migrates_the_set_value_matrix_and_every_native_reference));
+        var projectDocument = this.OpenOldTemplateProjectCopy(outputDirectory);
+        Document? familyDocument = null;
+        try {
+            var loadedFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
+                this._dbApplication,
+                projectDocument,
+                outputDirectory);
+            familyDocument = projectDocument.EditFamily(loadedFamily);
+            using var processor = new OperationProcessor(familyDocument);
+            var patch = SetValueMatrixPatch();
+            var operation = new ReconcileFamily(patch);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+
+            AssertMigratedMatrixEndState(familyDocument, patch);
+
+            var repeated = new ReconcileFamily(patch);
+            var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
+            var (_, repeatedError) = repeatedContexts.Single().OperationLogs;
+            Assert.That(repeatedError, Is.Null, repeatedError?.Message);
+            Assert.That(repeated.LastReceipt?.Converged, Is.True);
+            Assert.That(repeated.LastPlan!.Changes, Is.Empty);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
             RevitFamilyFixtureHarness.CloseDocument(projectDocument);
@@ -116,6 +156,140 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                           ?? throw new InvalidOperationException("Nested FF matrix width parameter was not found.");
         var associatedParameter = manager.GetAssociatedFamilyParameter(nestedWidth);
         Assert.That(associatedParameter?.Definition.Name, Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth));
+    }
+
+    private static FamilyPatch SetValueMatrixPatch() {
+        var parameters = new JObject();
+        var definitionIndex = 0;
+        void Map(string target, ForgeTypeId dataType, string group, bool instance, string[] sources,
+            string strategy = "CoerceByStorageType", bool clearFormula = false) {
+            var parameter = new JObject {
+                ["shared"] = true,
+                ["sharedGuid"] = $"33333333-4444-5555-6666-{++definitionIndex:D12}",
+                ["sharedSpecId"] = dataType.TypeId,
+                ["propertiesGroup"] = group,
+                ["isInstance"] = instance,
+                ["wasNamed"] = new JArray(sources),
+                ["mappingStrategy"] = strategy
+            };
+            if (clearFormula) parameter["formula"] = JValue.CreateNull();
+            parameters[target] = parameter;
+        }
+
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetText, SpecTypeId.String.Text, "Text", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceText]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, SpecTypeId.Number, "Identity Data", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceBlankText, FamilyFoundryMatrixFixtureBuilder.SourceFallbackText]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetInteger, SpecTypeId.Int.Integer, "Identity Data", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceInteger]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetYesNo, SpecTypeId.Boolean.YesNo, "Identity Data", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceYesNo]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetNumber, SpecTypeId.Number, "Identity Data", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceNumberText]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetLength, SpecTypeId.Length, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceLengthText]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetVoltage, SpecTypeId.ElectricalPotential, "Electrical", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceVoltageText], "CoerceElectrical");
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetCurrent, SpecTypeId.Current, "Electrical", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceCurrentText], "CoerceElectrical");
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, SpecTypeId.Length, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceFormulaNested], clearFormula: true);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, SpecTypeId.Length, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceLengthText]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, SpecTypeId.Length, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceLinearDimension]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, SpecTypeId.Angle, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceAngularDimension]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, SpecTypeId.Length, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, SpecTypeId.Int.Integer, "Geometry", false,
+            [FamilyFoundryMatrixFixtureBuilder.SourceArrayCount]);
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, "Geometry", true,
+            [FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth]);
+        return new FamilyPatch { Patch = new JObject { ["parameters"] = parameters } };
+    }
+
+    private static void AssertMigratedMatrixEndState(Document familyDocument, FamilyPatch patch) {
+        var manager = familyDocument.FamilyManager;
+        var types = FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames.Select(name =>
+            manager.Types.Cast<FamilyType>().Single(type => type.Name == name)).ToArray();
+        FamilyParameter Target(string name) => manager.FindParameter(name)
+            ?? throw new InvalidOperationException($"Migrated target '{name}' was not found.");
+        static void Doubles(FamilyType[] familyTypes, FamilyParameter parameter, params double[] expected) {
+            for (var index = 0; index < familyTypes.Length; index++)
+                Assert.That(familyTypes[index].AsDouble(parameter), Is.EqualTo(expected[index]).Within(1e-9),
+                    $"{familyTypes[index].Name}/{parameter.Definition.Name}");
+        }
+
+        var removedSources = ((JObject)patch.Patch["parameters"]!).Properties()
+            .SelectMany(parameter => parameter.Value["wasNamed"]!.Values<string>()).Distinct(StringComparer.Ordinal);
+        Assert.That(removedSources.Select(manager.FindParameter), Is.All.Null);
+
+        Assert.Multiple(() => {
+            Assert.That(new[] {
+                    FamilyFoundryMatrixFixtureBuilder.TargetText,
+                    FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber,
+                    FamilyFoundryMatrixFixtureBuilder.TargetInteger,
+                    FamilyFoundryMatrixFixtureBuilder.TargetYesNo,
+                    FamilyFoundryMatrixFixtureBuilder.TargetNumber,
+                    FamilyFoundryMatrixFixtureBuilder.TargetLength,
+                    FamilyFoundryMatrixFixtureBuilder.TargetVoltage,
+                    FamilyFoundryMatrixFixtureBuilder.TargetCurrent,
+                    FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength,
+                    FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength,
+                    FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension,
+                    FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension,
+                    FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension,
+                    FamilyFoundryMatrixFixtureBuilder.TargetArrayCount,
+                    FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth
+                }.Select(name => Target(name).IsShared), Is.All.True);
+            Assert.That(types.Select(type => type.AsString(Target(FamilyFoundryMatrixFixtureBuilder.TargetText))),
+                Is.EqualTo(new[] { "matrix-text-1", "matrix-text-2", "matrix-text-3" }));
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber), 20, 21, 22);
+            Assert.That(types.Select(type => type.AsInteger(Target(FamilyFoundryMatrixFixtureBuilder.TargetInteger))),
+                Is.EqualTo(new int?[] { 2, 3, 4 }));
+            Assert.That(types.Select(type => type.AsInteger(Target(FamilyFoundryMatrixFixtureBuilder.TargetYesNo))),
+                Is.EqualTo(new int?[] { 1, 0, 1 }));
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetNumber), 42.5, 0, -7.25);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetLength), 1.5, 2.0 / 12.0, 2.5);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetVoltage),
+                UnitUtils.ConvertToInternalUnits(208, UnitTypeId.Volts),
+                UnitUtils.ConvertToInternalUnits(240, UnitTypeId.Volts),
+                UnitUtils.ConvertToInternalUnits(120, UnitTypeId.Volts));
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetCurrent),
+                UnitUtils.ConvertToInternalUnits(12, UnitTypeId.Amperes),
+                UnitUtils.ConvertToInternalUnits(0, UnitTypeId.Amperes),
+                UnitUtils.ConvertToInternalUnits(18.5, UnitTypeId.Amperes));
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength), 2, 4, 6);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength), 2, 3, 4);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension), 2, 3, 4);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension), Math.PI / 4, Math.PI / 5, Math.PI / 6);
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension), .5, 1.5, 2.5);
+            Assert.That(types.Select(type => type.AsInteger(Target(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount))),
+                Is.EqualTo(new int?[] { 2, 3, 4 }));
+            Doubles(types, Target(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth), 1.25, 2.25, 3.25);
+            Assert.That(Target(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength).Formula, Is.Null);
+            Assert.That(Target(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength).Formula,
+                Is.EqualTo($"{FamilyFoundryMatrixFixtureBuilder.SourceFormulaBase} + 1'"));
+        });
+
+        var dimensionLabels = new FilteredElementCollector(familyDocument).OfClass(typeof(Dimension)).Cast<Dimension>()
+            .Select(GetFamilyLabelName).Where(name => name is not null).ToList();
+        Assert.That(dimensionLabels, Does.Contain(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension)
+            .And.Contain(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension)
+            .And.Contain(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension)
+            .And.Not.Contain(FamilyFoundryMatrixFixtureBuilder.SourceLinearDimension)
+            .And.Not.Contain(FamilyFoundryMatrixFixtureBuilder.SourceAngularDimension)
+            .And.Not.Contain(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension));
+
+        var arrays = new FilteredElementCollector(familyDocument).OfClass(typeof(BaseArray)).Cast<BaseArray>().ToList();
+        Assert.That(arrays.Select(array => array.Label?.Definition.Name),
+            Does.Contain(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount)
+                .And.Not.Contain(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount));
+        var nestedWidth = new FilteredElementCollector(familyDocument).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+            .Select(instance => instance.LookupParameter(FamilyFoundryMatrixFixtureBuilder.NestedWidth)).First(parameter => parameter is not null)!;
+        Assert.That(manager.GetAssociatedFamilyParameter(nestedWidth)?.Definition.Name,
+            Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth));
     }
 
     private static void AssertMetadataStateFamilyTopology(Document familyDocument) {
