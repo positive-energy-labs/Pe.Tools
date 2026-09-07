@@ -18,8 +18,7 @@ public static class FamilyProfileConverter {
             "AddAndMapSharedParams", "AddFamilyParams", "SetKnownParams", "CleanFamilyDocument", "SortParams", "DeleteParams",
             "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler" };
         foreach (var field in composed.Properties().Where(p => !supported.Contains(p.Name)))
-            if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false &&
-                operation.Properties().Any(p => p.Name != "Enabled" && p.Value.HasValues))
+            if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false)
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
         if (composed["ExecutionOptions"] is JObject execution && execution.HasValues)
             throw new InvalidOperationException("Profile ExecutionOptions require an explicit processor invocation; export cannot discard them.");
