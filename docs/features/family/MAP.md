@@ -12,11 +12,12 @@ on symbols and native filters select correctly, but no schedulable field exposes
 PID88932 exited with exact settings restoration, empty quarantine, and protected identities
 preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
 
-Current native proof is controlled dev ff-profile-proof-25 PID89376, generation20260907143006678,
-immutable source6620376, on the disposable old template. SDK candidate f59ceb7 retained quarantine
+Current native proof is controlled dev ff-profile-proof-25 on the disposable old template.
+Latest completed payload checkpoint is PID79148, generation20260907153529058, sourceb5d3cbf;
+P is refreshing to e180b2f for full AprilAire Apply/reapply. SDK candidate f59ceb7 retained quarantine
 across restart. Its saved original has identical85 add-in rows and disable flags to the prior
 baseline, but different JSON bytes; final stop/restoration remains owed. Protected sessions stay
-untouched. P owns all lifecycle. Plan6 is terminal; first AprilAire Apply was refused before migration.
+untouched. P owns all lifecycle. Plan6 is terminal; neither AprilAire Apply has converged yet.
 
 Request-file binding, empty/Other parameter groups, and unitless sone conversion are repaired.
 Plan6 completed all45 profiles:43 converted,2 literal conversion failures;37 native Plan operations
@@ -27,8 +28,12 @@ Alternator exposed pre-existing geometry-constraint warnings and blocked capture
 shared capture failure boundary; no constraints were removed. Two timed-out electrical requests
 have recovered terminal native results for14 and27 families. AprilAire800 has a reviewed clean
 plan for3813845; its fresh Apply refused hash drift12DF8B5967B8A884 to98AFB19C7704BE06.
-Before/after captures are semantically identical despite different property order. N owns the
-hash-input diagnosis and repair; P owns duplicate-key diagnosis. No no-op reapply has run. Historical request
+Hash repair962cfc2 passed the native guard on the second Apply. That run reached residue5:
+regeneration after dimension labels copied current-type values into another type. Whole-family
+rollback preserved the captured model. Native alphabetical-first-type control preserved all values,
+unset states, formulas, and original current type; shared two-line fix e180b2f awaits full Apply proof.
+Duplicate-key cause was a built-in/local name collision; canonical identity fix468706e compiles.
+No successful no-op reapply has run. Historical request
 and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
 Plan6 later exposed destructive native-copy warnings at journal3673 10:06:33: dimensions could
 not be copied and elements were deleted. That affected capture cannot certify safe Apply even
@@ -38,8 +43,14 @@ route parsing. Affected family5982572 PE - Title Block remains excluded from App
 
 NoTransaction script-owned rollback plus public FF Build passed in controlled915790e. Browser
 proved the shared Instances selector repair6eb667d. Explicit scope parser d7016d4 passes route
-checks; actual scoped family/families mounting waits for the native queue. Modine Fahrenheit
+checks and actual scope binding is proven. Reconnect/warning UI1811d2a is integrated; real catalog
+returns560 families/1635 types/64 categories, with81 Mechanical Equipment families/282 types.
+Category selection still leaves the family feed disabled; R owns that path and a company profile
+copy in the authoritative route root. Full matrix/profile/Apply route proof remains owed. Modine Fahrenheit
 repair c63fa31 compiles, with native proof owed. Name matching and Grinder80dBi rulings are pending.
+
+Focused parameter capture candidate7cc0706 is NOT integrated. Native full/focused parity and
+repeated EditFamily identity stability gate integration; connector extension remains separate.
 
 Demand support149a556/61d28ba, mixed local/shared/instance selectors87cee69, array prevention
 controls, and restored combined box acceptancee1587be remain native-proof obligations. The
