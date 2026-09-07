@@ -102,6 +102,50 @@ public sealed class FamilyFoundryMatrixFixtureTests {
     }
 
     [Test]
+    public void SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries() {
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries));
+        var projectDocument = this.OpenOldTemplateProjectCopy(outputDirectory);
+        Document? familyDocument = null;
+        var stages = new JArray();
+        void Observe(string stage, Document document) => stages.Add(new JObject {
+            ["stage"] = stage,
+            ["currentType"] = document.FamilyManager.CurrentType?.Name,
+            ["values"] = NativeMatrixValues(document, [
+                FamilyFoundryMatrixFixtureBuilder.SourceText,
+                FamilyFoundryMatrixFixtureBuilder.SourceInteger,
+                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension
+            ])
+        });
+
+        try {
+            var loadedFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
+                this._dbApplication,
+                projectDocument,
+                outputDirectory,
+                Observe);
+            familyDocument = projectDocument.EditFamily(loadedFamily);
+            Observe("afterLoadEditFamily", familyDocument);
+            File.WriteAllText(Path.Combine(outputDirectory, "matrix-seed-boundaries.json"), stages.ToString());
+
+            Assert.That(stages.Select(stage => stage.Value<string>("stage")), Is.EqualTo(new[] {
+                "beforeSeed",
+                "beforeSeed:Matrix Type A", "afterSeed:Matrix Type A",
+                "beforeSeed:Matrix Type B", "afterSeed:Matrix Type B",
+                "beforeSeed:Matrix Type C", "afterSeed:Matrix Type C",
+                "beforeTopology", "afterTopology", "afterRegenerate", "afterCommit",
+                "afterSaveAs", "afterReopen", "afterLoadEditFamily"
+            }));
+            AssertSeedProbeValues(stages[^1]!["values"]!);
+        } finally {
+            if (stages.Count > 0 && !File.Exists(Path.Combine(outputDirectory, "matrix-seed-boundaries.json")))
+                File.WriteAllText(Path.Combine(outputDirectory, "matrix-seed-boundaries.json"), stages.ToString());
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    [Test]
     public void Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid() {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid));
@@ -505,6 +549,19 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         row[FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth] = 1.25 + index;
         row[FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength] = index + 2d;
     });
+
+    private static void AssertSeedProbeValues(JToken values) {
+        for (var index = 0; index < FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames.Length; index++) {
+            var row = values[FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[index]]!;
+            Assert.Multiple(() => {
+                Assert.That(row.Value<string>(FamilyFoundryMatrixFixtureBuilder.SourceText),
+                    Is.EqualTo($"matrix-text-{index + 1}"));
+                Assert.That(row.Value<int>(FamilyFoundryMatrixFixtureBuilder.SourceInteger), Is.EqualTo(index + 2));
+                Assert.That(row.Value<double>(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension),
+                    Is.EqualTo(.5 + index).Within(1e-9));
+            });
+        }
+    }
 
     private static JObject ExpectedTargetMatrix() => ExpectedMatrix((index, row) => {
         row[FamilyFoundryMatrixFixtureBuilder.TargetText] = $"matrix-text-{index + 1}";
