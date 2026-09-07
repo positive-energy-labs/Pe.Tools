@@ -59,7 +59,14 @@ public sealed class FamilyPatch {
                     if (run[name] is JValue { Type: JTokenType.Boolean } shorthand)
                         run[name] = new JObject { ["Enabled"] = shorthand.Value<bool>() };
         }
-        return token.ToObject<FamilyPatch>(JsonSerializer.Create(Settings)) ?? throw new JsonSerializationException("Patch deserialized to null.");
+        var patch = token.ToObject<FamilyPatch>(JsonSerializer.Create(Settings)) ?? throw new JsonSerializationException("Patch deserialized to null.");
+        if (patch.Select.IncludeByCondition is { } condition) {
+            if (!Enum.IsDefined(typeof(ScheduleAuthoredFilterType), condition.FilterType))
+                throw new JsonSerializationException($"IncludeByCondition has unknown FilterType '{condition.FilterType}'.");
+            if (string.IsNullOrWhiteSpace(condition.FieldName) && !string.IsNullOrWhiteSpace(condition.Value))
+                throw new JsonSerializationException("IncludeByCondition requires FieldName when Value is set.");
+        }
+        return patch;
     }
 
     /// <summary>Merge the fragment onto one current document. Pure; returns the merged JSON to parse.</summary>

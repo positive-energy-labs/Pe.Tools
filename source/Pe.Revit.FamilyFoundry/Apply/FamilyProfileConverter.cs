@@ -45,7 +45,7 @@ public static class FamilyProfileConverter {
                     throw new InvalidOperationException($"FilterFamilies.IncludeByCondition has unknown FilterType '{condition["FilterType"]}'.");
             } else if (!string.IsNullOrWhiteSpace((string?)condition["Value"]))
                 throw new InvalidOperationException("FilterFamilies.IncludeByCondition requires FieldName when Value is set.");
-        } else if (familyFilter?["IncludeByCondition"] is not null)
+        } else if (familyFilter?["IncludeByCondition"] is { Type: not JTokenType.Null })
             throw new InvalidOperationException("FilterFamilies.IncludeByCondition must be an object.");
         var older = composed["SharedParameterSelection"];
         var filter = composed["FilterApsParams"];
