@@ -117,7 +117,7 @@ public static class FamilyReconciler {
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
         Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units);
         Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units, x => $"{x.Label}|{string.Join(",", x.Between)}");
-        Structural(changes, "forms", desired.Forms, current.Forms, units, x => $"{x.SketchPlane}|{string.Join(",", OnPlanes(x))}|{x.End}");
+        Structural(changes, "forms", desired.Forms, current.Forms, units, x => $"{x.SketchPlane}|{string.Join(",", OnPlanes(x).OrderBy(p => p, StringComparer.Ordinal))}|{x.End}");
         Structural(changes, "nested", desired.Nested, current.Nested, units, x => $"{x.Family}|{x.Type}|{x.Host}");
         Structural(changes, "arrays", desired.Arrays, current.Arrays, units, x => $"{x.Member}|{x.Direction}|{x.Label}");
         Structural(changes, "connectors", desired.Connectors, current.Connectors, units, ConnectorKey);
@@ -187,7 +187,7 @@ public static class FamilyReconciler {
         foreach (var (slug, want) in desired) {
             if (byIdentity.TryGetValue(identity(want), out var hit)) {
                 matched.Add(hit.Key);
-                if (!Same(want, hit.Value, units, null))
+                if (!StructuralSame(want, hit.Value, units))
                     changes.Add(new FamilyChange(section, slug, ChangeKind.Recreate, null, hit.Value, want));
                 continue;
             }
@@ -195,6 +195,40 @@ public static class FamilyReconciler {
         }
         foreach (var (slug, have) in current)
             if (!matched.Contains(slug)) changes.Add(new FamilyChange(section, slug, ChangeKind.Delete, null, have, null));
+    }
+
+    private static bool StructuralSame(object want, object have, UnitResolver units) {
+        var a = StructuralToken(want);
+        var b = StructuralToken(have);
+        // An omitted view or visibility field does not constrain native defaults.
+        if (want is FamilyModelDim { View: null }) b.Remove("view");
+        if (want is FamilyModelForm) {
+            if (a["visibility"] is not JObject visibility) b.Remove("visibility");
+            else if (b["visibility"] is JObject observed)
+                foreach (var field in observed.Properties().Where(p => visibility[p.Name] is null).ToList()) field.Remove();
+        }
+        return TokenSame(a, b, units, null);
+    }
+
+    private static JObject StructuralToken(object value) {
+        var token = JObject.FromObject(value, Serializer);
+        if (value is FamilyModelConnector && token["at"] is JArray at)
+            token["at"] = new JArray(at.OrderBy(x => (string?)x, StringComparer.Ordinal));
+        if (value is FamilyModelForm && token["profile"] is JArray profile) {
+            foreach (var loop in profile.OfType<JObject>()) {
+                var curves = ((JArray)loop["curves"]!).ToList();
+                foreach (var curve in curves.OfType<JObject>())
+                    if (curve["center"] is JArray center)
+                        curve["center"] = new JArray(center.OrderBy(x => (string?)x, StringComparer.Ordinal));
+                // A closed loop has no distinguished first edge or traversal direction; adjacency still matters.
+                if (curves.Count > 0)
+                    loop["curves"] = new[] { curves, curves.AsEnumerable().Reverse().ToList() }
+                        .SelectMany(order => Enumerable.Range(0, order.Count).Select(i => new JArray(order.Skip(i).Concat(order.Take(i)))))
+                        .OrderBy(order => order.ToString(Formatting.None), StringComparer.Ordinal).First();
+            }
+            token["profile"] = new JArray(profile.OrderBy(loop => loop.ToString(Formatting.None), StringComparer.Ordinal));
+        }
+        return token;
     }
 
     private static void Singleton<T>(List<FamilyChange> changes, string section, T? want, T? have, UnitResolver units) where T : class {
@@ -276,7 +310,7 @@ public static class FamilyReconciler {
     private static bool IsGeometry(string section) => section is "refPlanes" or "refLines" or "datums";
 
     private static IEnumerable<string> OnPlanes(FamilyModelForm form) =>
-        form.Profile?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", c.Center ?? [])) ?? [];
+        form.Profile?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", (c.Center ?? []).OrderBy(p => p, StringComparer.Ordinal))) ?? [];
 
     private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null, FamilyModel? desired = null, JObject? authored = null, object? sharedDefinitions = null) {
         var json = JsonConvert.SerializeObject(

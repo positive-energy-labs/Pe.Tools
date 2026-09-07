@@ -66,7 +66,7 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
                         FamilyRefs.Align(doc, view, FamilyRefs.Resolve(doc, circle.Center[1]).Reference, centerRef);
                         if (circle.Diameter is { Parameter: { } dp } && sketchCurve.GeometryCurve is Arc arc && arc.Reference is not null) {
                             var dim = doc.Document.FamilyCreate.NewDiameterDimension(view, arc.Reference, arc.Center + (arc.XDirection * arc.Radius * 0.5));
-                            dim.FamilyLabel = FamilyRefs.Param(doc, dp);
+                            doc.LabelDimensions([(dim, FamilyRefs.Param(doc, dp))]);
                         }
                     }
                 }

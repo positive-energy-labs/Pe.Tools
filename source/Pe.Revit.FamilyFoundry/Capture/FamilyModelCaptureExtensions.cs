@@ -292,7 +292,7 @@ internal sealed class FamilyModelCapturer {
 
                         lockedTo.Add(on);
                         portable.Add(new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on });
-                    } else if (curve is Arc arc && !arc.IsBound && mc != null) {
+                    } else if (curve is Arc arc && IsCircle(arc) && mc != null) {
                         var center = this.CrossingPlanesThrough(arc.Center, arc.Normal);
                         if (center == null) {
                             this.Add(UnmodeledReason.SketchLineUnlocked, "$.forms", ("name", ext.Name ?? ""), ("circleCenter", Fmt(arc.Center)));
@@ -822,10 +822,13 @@ internal sealed class FamilyModelCapturer {
 
     private static XYZ? PointOf(FamilyInstance fi) => (fi.Location as LocationPoint)?.Point;
 
+    private static bool IsCircle(Arc arc) => !arc.IsBound || Math.Abs(arc.Length - 2 * Math.PI * arc.Radius) < FaceTol;
+
     private static bool SameCurve(Curve? a, Curve b) {
         if (a == null || a.GetType() != b.GetType()) return false;
-        if (a is Arc arcA && b is Arc arcB && !arcA.IsBound && !arcB.IsBound)
-            return arcA.Center.IsAlmostEqualTo(arcB.Center, FaceTol) && Math.Abs(arcA.Radius - arcB.Radius) < FaceTol;
+        if (a is Arc arcA && b is Arc arcB && IsCircle(arcA) && IsCircle(arcB))
+            return arcA.Center.IsAlmostEqualTo(arcB.Center, FaceTol) && Math.Abs(arcA.Radius - arcB.Radius) < FaceTol &&
+                Math.Abs(Math.Abs(arcA.Normal.DotProduct(arcB.Normal)) - 1) < FaceTol;
         if (!a.IsBound || !b.IsBound) return false;
         var (a0, a1, b0, b1) = (a.GetEndPoint(0), a.GetEndPoint(1), b.GetEndPoint(0), b.GetEndPoint(1));
         return (a0.IsAlmostEqualTo(b0, FaceTol) && a1.IsAlmostEqualTo(b1, FaceTol)) || (a0.IsAlmostEqualTo(b1, FaceTol) && a1.IsAlmostEqualTo(b0, FaceTol));

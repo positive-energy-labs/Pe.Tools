@@ -43,7 +43,7 @@ public static class FamilyDocumentNormalizeParameter {
             fm.AssociateElementParameterToFamilyParameter(parameter, null);
             fm.AssociateElementParameterToFamilyParameter(parameter, target);
         }
-        foreach (var dimension in dimensions) dimension.FamilyLabel = target;
+        document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
         foreach (var array in arrays) array.Label = target;
         foreach (var dependent in source.GetDependents(fm.Parameters).ToList())
             fm.SetFormula(dependent, dependent.Formula.Replace(temporary, target.Definition.Name));

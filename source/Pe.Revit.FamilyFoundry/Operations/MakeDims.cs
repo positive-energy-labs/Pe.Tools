@@ -17,6 +17,7 @@ public sealed class MakeDims((string Slug, FamilyModelDim Spec)[] dims, FamilyMo
         // Newly created planes have no usable dimension references until geometry is regenerated.
         doc.Document.Regenerate();
         var logs = new List<LogEntry>();
+        var labels = new List<(Dimension, FamilyParameter)>();
         var index = 0;
         foreach (var (slug, spec) in dims) {
             try {
@@ -32,11 +33,12 @@ public sealed class MakeDims((string Slug, FamilyModelDim Spec)[] dims, FamilyMo
                 var p1 = first + (offsetDir * (Stagger * (1 + index++)));
                 var dim = doc.Document.FamilyCreate.NewLinearDimension(view, Line.CreateBound(p1, p1 + span), refs);
                 if (spec.Equality == true) dim.AreSegmentsEqual = true;
-                if (spec.Label is { } label) dim.FamilyLabel = FamilyRefs.Param(doc, label);
+                if (spec.Label is { } label) labels.Add((dim, FamilyRefs.Param(doc, label)));
                 else if (spec.Locked is not null) dim.IsLocked = true;
                 logs.Add(new LogEntry(slug).Success($"{string.Join(" | ", spec.Between)}{(spec.Label is null ? "" : $" = {spec.Label}")}{(spec.Equality == true ? " EQ" : "")}"));
             } catch (Exception ex) { logs.Add(new LogEntry(slug).Error(ex)); }
         }
+        doc.LabelDimensions(labels);
         return new OperationLog(this.Name, logs);
     }
 

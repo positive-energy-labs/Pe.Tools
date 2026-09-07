@@ -112,6 +112,15 @@ public sealed class FamilyModelRoundtripTests {
             if (spec.Formula is not null) Assert.That(parameter!.Formula, Is.EqualTo(spec.Formula), name);
             if (spec.IsInstance is { } instance) Assert.That(parameter!.IsInstance, Is.EqualTo(instance), name);
             if (spec.Shared is { } shared) Assert.That(parameter!.IsShared, Is.EqualTo(shared), name);
+            foreach (var (typeName, row) in desired.Types) {
+                var literal = row.TryGetValue(name, out var cell) ? cell.Text : spec.Value?.Text;
+                if (literal is null || spec.Formula is not null) continue;
+                var type = fm.Types.Cast<FamilyType>().Single(t => t.Name == typeName);
+                if (parameter!.StorageType == StorageType.String)
+                    Assert.That(type.AsString(parameter), Is.EqualTo(literal), $"{typeName}/{name}");
+                else if (PortableScalar.TryParse(literal, out var scalar))
+                    Assert.That(type.AsDouble(parameter), Is.EqualTo(scalar.Kind == PortableScalarKind.Length ? scalar.Feet : scalar.Value * Math.PI / 180).Within(1e-9), $"{typeName}/{name}");
+            }
         }
         Assert.That(new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).GetElementCount(),
             Is.EqualTo(desired.Connectors.Count), "Connectors must actually exist in the saved RFA.");

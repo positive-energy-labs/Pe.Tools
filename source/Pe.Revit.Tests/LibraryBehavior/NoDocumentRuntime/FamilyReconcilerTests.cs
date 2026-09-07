@@ -63,12 +63,22 @@ public sealed class FamilyReconcilerTests {
     [Test]
     public void Prism_authored_desired_against_its_expanded_captured_form_diffs_empty() {
         var authored = Load("a-box");                                  // Parse expanded the prism into planes, dims, one extrusion
-        var captured = Parse(FamilyModelJson.Serialize(authored));     // what capture emits: the expanded form, never the macro
+        var native = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(authored));
+        var curves = (Newtonsoft.Json.Linq.JArray)native["forms"]!["body"]!["profile"]![0]!["curves"]!;
+        native["forms"]!["body"]!["profile"]![0]!["curves"] = new Newtonsoft.Json.Linq.JArray(curves.Reverse().Skip(1).Concat(curves.Reverse().Take(1)));
+        native["forms"]!["body"]!["visibility"] = Newtonsoft.Json.Linq.JObject.Parse("""{"planRcp":true,"frontBack":true,"leftRight":true,"onlyWhenCut":false,"coarse":true,"medium":true,"fine":true}""");
+        foreach (var dimension in ((Newtonsoft.Json.Linq.JObject)native["dimensions"]!).Properties()) dimension.Value["view"] = "RefLevel";
+        var at = (Newtonsoft.Json.Linq.JArray)native["connectors"]!["power"]!["at"]!;
+        native["connectors"]!["power"]!["at"] = new Newtonsoft.Json.Linq.JArray(at.Reverse());
+        var captured = Parse(native.ToString());
         Assert.Multiple(() => {
             Assert.That(captured.Forms["body"].Kind, Is.EqualTo(FormKind.Extrusion));
             Assert.That(captured.RefPlanes.Keys, Is.SupersetOf(new[] { "body.left", "body.right", "body.front", "body.back", "body.top" }));
             Assert.That(FamilyReconciler.Diff(authored, captured, UnitResolvers.Portable), Is.Empty);
         });
+        native["types"]!["Wide"]!["Width"] = "2ft";
+        Assert.That(FamilyReconciler.Diff(authored, Parse(native.ToString()), UnitResolvers.Portable)
+            .Single().Key, Is.EqualTo("Wide/Width"), "Equivalent geometry ordering must not hide a changed native value.");
     }
 
     [Test]

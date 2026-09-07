@@ -12,6 +12,7 @@ public sealed class MakeRefLines((string Name, FamilyModelRefLine Spec)[] lines,
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
         var logs = new List<LogEntry>();
+        var labels = new List<(Dimension, FamilyParameter)>();
         foreach (var (name, spec) in lines.OrderBy(line => int.Parse(line.Name[5..]))) {
             try {
                 if (FamilyRefs.FindRefLine(doc, name) is not null) { logs.Add(new LogEntry(name).Skip("Already exists.")); continue; }
@@ -37,16 +38,17 @@ public sealed class MakeRefLines((string Name, FamilyModelRefLine Spec)[] lines,
                     endpoints.Append(startReference);
                     endpoints.Append(curve.GeometryCurve.GetEndPointReference(1));
                     var dimension = doc.Document.FamilyCreate.NewLinearDimension(view, (Line)curve.GeometryCurve, endpoints);
-                    dimension.FamilyLabel = FamilyRefs.Param(doc, lengthLabel);
+                    labels.Add((dimension, FamilyRefs.Param(doc, lengthLabel)));
                 }
                 if (spec.Angle is { Parameter: { } label } && spec.AngleFrom is { } fromName) {
                     var arc = Arc.Create(start, length * 0.5, 0, angle == 0 ? 0.1 : angle, along, on.Normal.CrossProduct(along));
                     var dim = doc.Document.FamilyCreate.NewAngularDimension(view, arc, FamilyRefs.Resolve(doc, fromName).Reference, curve.GeometryCurve.Reference);
-                    dim.FamilyLabel = FamilyRefs.Param(doc, label);
+                    labels.Add((dim, FamilyRefs.Param(doc, label)));
                 }
                 logs.Add(new LogEntry(name).Success($"Created on {spec.On} from {spec.From[0]} × {spec.From[1]}."));
             } catch (Exception ex) { logs.Add(new LogEntry(name).Error(ex)); }
         }
+        doc.LabelDimensions(labels);
         return new OperationLog(this.Name, logs);
     }
 
