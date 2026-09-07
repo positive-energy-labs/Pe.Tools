@@ -125,6 +125,28 @@ export namespace FamilyfoundryApply {
       expectedPlanHashes: {
         [k: string]: string;
       };
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
     }
   }
   export namespace Res {
@@ -176,6 +198,28 @@ export namespace FamilyfoundryPlan {
     export interface Request {
       patchJson: string;
       familyId?: number | null;
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
     }
   }
   export namespace Res {

@@ -63,9 +63,8 @@ public static class RenameParamAcross {
 
         if (families.Count > 0) {
             using var processor = new OperationProcessor(project, new ExecutionOptions {
-                SuppressWarnings = true,
-                Visit = new FamilyVisitOptions { Transaction = transaction, SuppressWarnings = true }
-            });
+                SuppressWarnings = true
+            }, new FamilyVisitOptions { Transaction = transaction, SuppressWarnings = true });
             _ = processor
                 .SelectFamilies(() => families)
                 .WithPerFamilyCallback(ctx => byFamily[ctx.FamilyName] = new RenameOutcome(

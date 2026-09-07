@@ -40,6 +40,23 @@ public sealed class FamilyReconcilerTests {
             FamilyPatch.Parse("""{"patch":{},"run":{"sort":{"MisspelledPolicy":true}}}"""));
     }
 
+    [Test]
+    public void Execution_behavior_is_bound_into_the_plan_hash() {
+        var model = new FamilyModel { Family = new FamilyModelHeader { Name = "Options", Category = FamilyCategory.GenericModels,
+            Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased } };
+        var baseline = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable).PlanHash;
+        var variants = new[] {
+            new ExecutionOptions { OptimizeTypeOperations = false },
+            new ExecutionOptions { SuppressWarnings = true }
+        };
+        Assert.That(variants.Select(options => FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable, executionOptions: options).PlanHash),
+            Is.All.Not.EqualTo(baseline));
+        Assert.That(FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable,
+            executionOptions: new ExecutionOptions { EnableCollectors = false }).PlanHash, Is.EqualTo(baseline));
+        Assert.That(FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable,
+            executionOptions: new ExecutionOptions { SingleTransaction = false }).PlanHash, Is.EqualTo(baseline));
+    }
+
     private static readonly string[] Fixtures = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
 
     [TestCase("association")]

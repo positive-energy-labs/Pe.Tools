@@ -10,5 +10,6 @@ global using Pe.Bcl.Compat;
 global using Pe.Revit.Compat;
 global using Pe.Revit.Extensions.ProjDocument;
 global using Pe.Shared.RevitData;
+global using Pe.Shared.RevitData.Families;
 global using Pe.Shared.RevitData.Schedules;
 global using Pe.Shared.StorageRuntime;

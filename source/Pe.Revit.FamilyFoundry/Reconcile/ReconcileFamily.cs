@@ -17,25 +17,28 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     private readonly FamilyPatch? _patch;
     private readonly Func<Document, FamilyModel> _capture;
     private readonly bool _dryRun;
+    private readonly ExecutionOptions _executionOptions;
     private readonly string? _expectedPlanHash;
     private FamilyReceipt? _candidateReceipt;
     private readonly Func<Document, FamilySharedParameterSource>? _sharedSource;
 
     /// <summary>Apply specified state; unmentioned family contents remain unchanged.</summary>
-    public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null) : base(new DefaultOperationSettings()) {
+    public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null, ExecutionOptions? executionOptions = null) : base(new DefaultOperationSettings()) {
         this._desired = desired;
         this._dryRun = dryRun;
+        this._executionOptions = executionOptions ?? new ExecutionOptions();
         this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
     }
 
     /// <summary>Patch mode: omission = unchanged, null = delete, {} = ensure; `run` rules ride along.</summary>
     public ReconcileFamily(FamilyPatch patch, bool dryRun = false, Func<Document, FamilyModel>? capture = null, string? expectedPlanHash = null,
-        Func<Document, FamilySharedParameterSource>? sharedSource = null) : base(new DefaultOperationSettings()) {
+        Func<Document, FamilySharedParameterSource>? sharedSource = null, ExecutionOptions? executionOptions = null) : base(new DefaultOperationSettings()) {
         this._patch = patch;
         this._dryRun = dryRun;
         this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
         this._expectedPlanHash = expectedPlanHash;
         this._sharedSource = sharedSource;
+        this._executionOptions = executionOptions ?? new ExecutionOptions();
     }
 
     public override string Description => this._patch is null
@@ -90,7 +93,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         var unitDiagnostics = FamilyModelUnitValidation.Validate(desired!, patch.Patch, source.GetDefinition);
         if (unitDiagnostics.Count > 0)
             return new OperationLog(this.Name, unitDiagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
-        var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions);
+        var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions, this._executionOptions);
         this.LastPlan = plan;
         if (this._expectedPlanHash is { } expected && !string.Equals(expected, plan.PlanHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Plan hash drifted: expected {expected}, recomputed {plan.PlanHash}. Plan again.");
@@ -113,11 +116,11 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
                 throw new InvalidOperationException(string.Join(Environment.NewLine, afterMigration.Diagnostics.Select(d => d.Message)));
             desired = source.Resolve(afterMigration.Value, patch.Patch);
             desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document);
-            applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition);
+            applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
         }
         if (applyPlan.Refusals.Count > 0 || applyPlan.Changes.Any(c => c.Kind == ChangeKind.Unverifiable))
             throw new InvalidOperationException("Source migration left an unsupported requested change.");
-        foreach (var callback in applyPlan.Queue.ToFuncs(optimizeTypeOperations: true, singleTransaction: false)) {
+        foreach (var callback in applyPlan.Queue.ToFuncs(this._executionOptions.OptimizeTypeOperations, singleTransaction: false)) {
             logs.AddRange(callback(doc, ctx));
             OperationProcessor.ThrowOnErrors(logs);
         }

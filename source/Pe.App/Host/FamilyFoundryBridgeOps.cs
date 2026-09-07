@@ -31,6 +31,7 @@ internal static class FamilyFoundryBridgeOps {
     internal static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request, Document document) {
         var (patch, diagnostics) = ParsePatch(request.PatchJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
+        var executionOptions = request.ExecutionOptions ?? new ExecutionOptions();
 
         var families = document.IsFamilyDocument
             ? request.FamilyId is null || request.FamilyId == document.OwnerFamily.Id.Value() ? new List<Family> { document.OwnerFamily } : []
@@ -52,7 +53,7 @@ internal static class FamilyFoundryBridgeOps {
             var unitDiagnostics = FamilyModelUnitValidation.Validate(resolved, effective, source.GetDefinition);
             if (unitDiagnostics.Count > 0)
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList());
-            var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, effective, source.ResolvedDefinitions);
+            var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, effective, source.ResolvedDefinitions, executionOptions);
             return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, plan.PlanHash, plan.Changes.Select(ToChange).ToList(), plan.RunEffects, plan.Refusals.Select(ToDiagnostic).ToList());
             }); } catch (Autodesk.Revit.Exceptions.InvalidOperationException exception) {
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [],
@@ -64,6 +65,7 @@ internal static class FamilyFoundryBridgeOps {
     internal static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request, Document document) {
         var (patch, diagnostics) = ParsePatch(request.PatchJson);
         if (patch is null) return new FamilyFoundryApplyData([], diagnostics);
+        var executionOptions = request.ExecutionOptions ?? new ExecutionOptions();
         if (request.ExpectedPlanHashes is not { Count: > 0 })
             return new FamilyFoundryApplyData([], [new FamilyFoundryDiagnostic("ExpectedPlanHashesRequired", "$.expectedPlanHashes", "Call familyfoundry.plan first and pass each family's planHash.")]);
 
@@ -79,9 +81,9 @@ internal static class FamilyFoundryBridgeOps {
             }
             var familyName = family.Name;
             try {
-                var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash);
+                var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash, executionOptions: executionOptions);
                 var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-patch").WithReconcile(op);
-                using var processor = new OperationProcessor(document);
+                using var processor = new OperationProcessor(document, executionOptions);
                 var (contexts, _) = processor.SelectFamilies(() => [family]).WithArtifactWriter(writer)
                     .ProcessQueue(new OperationQueue().Add(op), null, runOutput.DirectoryPath, new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false });
                 var context = contexts.Single();

@@ -11,12 +11,15 @@ namespace Pe.Revit.FamilyFoundry;
 ///     Handles document and family selection, execution, and result aggregation.
 /// </summary>
 /// <param name="executionOptions">The execution options for the processor. If null, default options will be used.</param>
+/// <param name="visitOptions">Runtime transaction ownership and optional document parking for family visits.</param>
 /// <param name="doc">The document to process.</param>
 public class OperationProcessor(
     Document doc,
-    ExecutionOptions? executionOptions = null
+    ExecutionOptions? executionOptions = null,
+    FamilyVisitOptions? visitOptions = null
 ) : IDisposable {
     private readonly ExecutionOptions _exOpts = executionOptions ?? new ExecutionOptions();
+    private readonly FamilyVisitOptions _visitOpts = visitOptions ?? new FamilyVisitOptions();
     private ProcessingResultBuilder? _artifactWriter;
 
     /// <summary>
@@ -117,7 +120,7 @@ public class OperationProcessor(
 
     /// <summary>
     ///     Project path: one <see cref="FamilyVisit" /> per selected family. The visit owns EditFamily, the
-    ///     transaction discipline (<see cref="ExecutionOptions.Visit" />), LoadFamily and the post-verify; the
+    ///     transaction discipline, LoadFamily and the post-verify; the
     ///     processor contributes the snapshots, the operation funcs, and the save paths.
     /// </summary>
     private List<FamilyProcessingContext> ProcessNormalDocument(
@@ -137,9 +140,9 @@ public class OperationProcessor(
 
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
         var visitOptions = new FamilyVisitOptions {
-            Transaction = this._exOpts.Visit.Transaction,
-            Park = this._exOpts.Visit.Park,
-            SuppressWarnings = this._exOpts.SuppressWarnings,
+            Transaction = this._visitOpts.Transaction,
+            Park = this._visitOpts.Park,
+            SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings,
             Load = saveOpts.LoadFamily
         };
 
@@ -227,7 +230,7 @@ public class OperationProcessor(
                         foreach (var (name, callback) in namedFamilyFuncs)
                             scope.Edit(name, d => { logs.AddRange(callback(d, pipeline.Context)); ThrowOnErrors(logs); });
                         pipeline.CollectPostSnapshot(collectorQueue);
-                    }, new FamilyVisitOptions { Transaction = this._exOpts.Visit.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings });
+                    }, new FamilyVisitOptions { Transaction = this._visitOpts.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings });
                     pipeline.Context.OperationLogs = logs;
                     pipeline.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
                 },
@@ -306,29 +309,6 @@ public class OperationProcessor(
                     $"{error.Message}{Environment.NewLine}Processing artifact generation failed: {ex.Message}");
         }
     }
-}
-
-public class ExecutionOptions {
-    [Description("When enabled, the command will bundle the operations into a single transaction.")]
-    public bool SingleTransaction { get; init; } = true;
-
-    [Description("When enabled, consecutive type operations will be batched together for better performance.")]
-    public bool OptimizeTypeOperations { get; init; } = true;
-
-    [Description(
-        "When enabled parameter collectors will take a snapshot of parameter values pre and post family processing. " +
-        "Having the data from the pre snapshot will enable the processor to maintain higher data integrity. Without" +
-        "collection more parameters are likely to be purged in every purging even.t" +
-        "In many cases the same results can be obtained without the collection's data. " +
-        "Disabling collectors will reduce processing time, especially for families that are complicated with many family types. + ")]
-    public bool EnableCollectors { get; init; } = true;
-
-    [Description("When enabled Revit transaction warnings are auto-suppressed and recorded as commit diagnostics.")]
-    public bool SuppressWarnings { get; init; } = false;
-
-    /// <summary>Who owns the transaction on each visited family and how a modifiable project is parked (pods pass Sandbox + a park).</summary>
-    [Description("Transaction discipline for the per-family visit: Owned (default) or Sandbox, plus an optional park for a modifiable project.")]
-    public FamilyVisitOptions Visit { get; init; } = new();
 }
 
 public class LoadAndSaveOptions {
