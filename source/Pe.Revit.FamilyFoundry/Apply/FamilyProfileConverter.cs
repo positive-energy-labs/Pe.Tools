@@ -12,6 +12,12 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 
 /// <summary>Export selected company definitions and source rules as portable native patch intent, without resolving against one family.</summary>
 public static class FamilyProfileConverter {
+    private static readonly IReadOnlyDictionary<string, (ForgeTypeId Spec, ForgeTypeId Unit)> LegacyLiteralUnits =
+        new Dictionary<string, (ForgeTypeId, ForgeTypeId)>(StringComparer.Ordinal) {
+            ["PE_G___Weight"] = (SpecTypeId.Mass, UnitTypeId.PoundsMass),
+            ["PE_M_Fan_ExternalStaticPressure"] = (SpecTypeId.HvacPressure, UnitTypeId.InchesOfWater60DegreesFahrenheit)
+        };
+
     /// <summary>Convert composed legacy settings to native intent. Refuses any active operation not yet represented; never rewrites source files.</summary>
     public static FamilyPatch Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
         var supported = new HashSet<string>(StringComparer.Ordinal) { "$schema", "ExecutionOptions", "FilterFamilies", "FilterApsParams",
@@ -103,6 +109,15 @@ public static class FamilyProfileConverter {
             if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
                 throw new InvalidOperationException($"Legacy literal needs a source datatype: {name}={value}");
             return value;
+        }
+        if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
+            var legacyUnits = new Units(UnitSystem.Imperial);
+            legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));
+            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, value, out var legacyRaw))
+                throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");
+            if (spec == SpecTypeId.Number)
+                return UnitUtils.ConvertFromInternalUnits(legacyRaw, legacy.Unit).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            return ParameterPortableFormat.ForSpec(spec)(legacyRaw);
         }
         if (spec == SpecTypeId.Number || spec == SpecTypeId.Int.Integer || !UnitUtils.IsMeasurableSpec(spec)) return value;
         if (!UnitFormatUtils.TryParse(units, spec, value, out var raw)) throw new InvalidOperationException($"Legacy literal cannot resolve in source units: {name}={value}");

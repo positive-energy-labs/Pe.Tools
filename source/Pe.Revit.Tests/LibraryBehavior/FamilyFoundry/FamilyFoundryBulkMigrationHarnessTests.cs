@@ -150,11 +150,32 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(actual?.IsShared, Is.True, parameter.Name);
                 Assert.That(actual!.GUID, Is.EqualTo(definitions.Single(d => d.Name == parameter.Name).DownloadOptions.GetGuid()));
             }
+            AssertCompanyLiteral(profilePath, document);
         } catch (Exception error) { evidence["failure"] = error.ToString(); throw; }
         finally {
             File.WriteAllText(Path.Combine(output, "company-profile-parameters.json"), evidence.ToString());
             document.Close(false);
         }
+    }
+
+    private static void AssertCompanyLiteral(string profilePath, Document document) {
+        var expected = profilePath.Replace('\\', '/') switch {
+            "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json" => (Name: "PE_M_Fan_ExternalStaticPressure", Type: (string?)null,
+                Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.2, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
+            "CmdFFManager/profiles/SavedEquip/Build Equinox CERV2.json" => (Name: "PE_M_Fan_ExternalStaticPressure", Type: "CERV2",
+                Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.4, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
+            "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json" => (Name: "PE_G___Weight", Type: "E130",
+                Spec: SpecTypeId.Number, Value: 98d),
+            _ => default
+        };
+        if (expected.Name is null) return;
+        var parameter = document.FamilyManager.get_Parameter(expected.Name);
+        Assert.That(parameter.StorageType, Is.EqualTo(StorageType.Double), expected.Name);
+        Assert.That(parameter.Definition.GetDataType(), Is.EqualTo(expected.Spec), expected.Name);
+        var types = document.FamilyManager.Types.Cast<FamilyType>().Where(type => expected.Type is null || type.Name == expected.Type).ToList();
+        Assert.That(types, Is.Not.Empty, $"{profilePath}: {expected.Type}");
+        foreach (var type in types)
+            Assert.That(type.AsDouble(parameter), Is.EqualTo(expected.Value).Within(1e-9), $"{profilePath}: {type.Name}/{expected.Name}");
     }
 
     [Test]
