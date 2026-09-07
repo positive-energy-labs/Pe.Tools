@@ -590,24 +590,18 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     private static IReadOnlyList<string> CaptureJoinGraph(Document project, Family family) {
         var document = project.EditFamily(family);
         try {
-            var elements = new FilteredElementCollector(document).WhereElementIsNotElementType().ToElements();
-            var byId = elements.ToDictionary(element => element.Id);
-            return elements.SelectMany(element => JoinGeometryUtils.GetJoinedElements(document, element)
-                    .Where(byId.ContainsKey)
-                    .Select(joinedId => (Left: element, Right: byId[joinedId])))
-                .Select(edge => DescribeJoinEdge(edge.Left, edge.Right))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(edge => edge, StringComparer.Ordinal)
+            static string Describe(CombinableElement element) =>
+                $"{element.UniqueId}|{element.GetType().Name}|{element.Category?.Name ?? "<none>"}";
+            return new FilteredElementCollector(document).OfClass(typeof(CombinableElement)).Cast<CombinableElement>()
+                .SelectMany(element => element.Combinations.Cast<GeomCombination>())
+                .DistinctBy(combination => combination.Id)
+                .Select(combination => combination.AllMembers.Cast<CombinableElement>()
+                    .Select(Describe).OrderBy(member => member, StringComparer.Ordinal).ToList())
+                .Where(members => members.Count > 1)
+                .Select(members => string.Join("<->", members))
+                .OrderBy(combination => combination, StringComparer.Ordinal)
                 .ToList();
         } finally { document.Close(false); }
-    }
-
-    private static string DescribeJoinEdge(Element first, Element second) {
-        static string Describe(Element element) =>
-            $"{element.UniqueId}|{element.GetType().Name}|{element.Category?.Name ?? "<none>"}";
-        var left = Describe(first);
-        var right = Describe(second);
-        return string.CompareOrdinal(left, right) <= 0 ? $"{left}<->{right}" : $"{right}<->{left}";
     }
 
     [Test, Timeout(600000)]
