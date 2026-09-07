@@ -2,6 +2,14 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Integrated unsigned-datum regression - 2026-09-07
+
+Root's `2c54314` integration failure was caused by canonical unsigned datum normals (`X/Y/Z`), not by Voltage changing to `480 V`. The shared plane reader recognized only signed tokens, returned null axes for all three datum planes, and correctly refused to draw a centered macro whose origin could not resolve. The reader now recognizes unsigned datum axes as well as signed reference-plane axes; signed seeds keep their direction. Electrical values do not participate in dimension evaluation.
+
+The committed regression loads the unchanged local Box source, applies the current canonical datum spelling and `480 V`, and checks dimensions/connector position/native edit pointers. An additional temporary executable check read **all four current root fixture files directly**, without modifying them; script, SHA-256 source manifest and output are retained as `native-current-proof.test.ts`, `unsigned-datum-source-hashes.json`, and `unsigned-datum-tests.txt` under the evidence directory. That check plus lane tests passed 6/6. Wider correctly scoped web run: **135/135 tests, 16 files**, exit 0 (`unsigned-datum-wide-tests.txt`). Static/type/format: 0 errors, one existing parameterText warning (`unsigned-datum-check.txt`). No C# fixture, project unit, transport schema or Revit runtime change.
+
+Deep merge (`b69ca97`) and target navigation (`b17d6cd`) are already committed on this branch and included in the wider passing suite. Integrated route-to-Revit proof and generated-schema freshness remain with root/proof owner.
+
 ## Target selection closure - 2026-09-07
 
 - `/family` and `/families` store bind actions now call a route-owned navigation callback; surfaces without a callback refuse rather than report fake success. Route owners retain the explicit document address and route search, validate the selected session id with the shared sdkSessionIdSchema, and write the session pin into `?target`. They are keyed by the full bridge selector, so a pin-only change recreates the store/writers with the new scope.

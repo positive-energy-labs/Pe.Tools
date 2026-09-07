@@ -342,7 +342,7 @@ function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
 export function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
   if (model.datums || model.refPlanes)
     return Object.entries({ ...model.datums, ...model.refPlanes }).map(([slug, plane]) => {
-      const direction = /^(Plus|Minus)(X|Y|Z)$/.exec(plane.normal);
+      const direction = /^(Plus|Minus)?(X|Y|Z)$/.exec(plane.normal);
       const text = "at" in plane ? plane.at : "0in";
       const seed = inches(text);
       return {

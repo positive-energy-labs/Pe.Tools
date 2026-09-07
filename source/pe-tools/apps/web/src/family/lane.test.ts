@@ -121,6 +121,11 @@ test("native source geometry resolves macros and authored seeds without solving 
       ),
     );
   const box = source("a-box");
+  // Native datums are unsigned axes; signed ref-plane seeds retain their sign.
+  for (const datum of Object.values(box.datums!))
+    datum.normal = datum.normal.replace(/^(Plus|Minus)/, "");
+  box.parameters!.Voltage!.value = "480 V";
+
   expect(buildSheet(box, "Standard").solids[0]).toMatchObject({ slug: "body", w: 24, d: 8, h: 36 });
   expect(buildSheet(box, "Standard").conns[0]?.pos).toEqual({ x: 0, y: 0, z: 36 });
   expect(buildSheet(box, "Wide").solids[0]?.w).toBe(36);
