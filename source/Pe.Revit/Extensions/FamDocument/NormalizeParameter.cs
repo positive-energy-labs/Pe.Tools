@@ -35,6 +35,7 @@ public static class FamilyDocumentNormalizeParameter {
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
         var fm = document.FamilyManager;
+        var sourceName = source.Definition.Name;
         var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
         if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
         else fm.RenameParameter(source, temporary);
@@ -47,8 +48,14 @@ public static class FamilyDocumentNormalizeParameter {
         }
         document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
         foreach (var array in arrays) array.Label = target;
-        foreach (var dependent in source.GetDependents(fm.Parameters).ToList())
-            fm.SetFormula(dependent, dependent.Formula.Replace(temporary, target.Definition.Name));
+        foreach (var dependent in source.GetDependents(fm.Parameters).ToList()) {
+            var formula = dependent.Formula.Replace(temporary, target.Definition.Name);
+            try { fm.SetFormula(dependent, formula); }
+            catch (Exception exception) {
+                throw new InvalidOperationException(
+                    $"Failed to transfer formula on '{dependent.Definition.Name}' from source '{sourceName}' to destination '{target.Definition.Name}'. Attempted formula: {formula}", exception);
+            }
+        }
         if (source.HasAnyAssociation(document)) throw new InvalidOperationException($"Source '{temporary}' still has dependencies.");
         fm.RemoveParameter(source);
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");

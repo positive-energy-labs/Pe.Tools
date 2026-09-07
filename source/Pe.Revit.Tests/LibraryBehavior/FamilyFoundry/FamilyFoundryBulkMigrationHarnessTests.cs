@@ -825,6 +825,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var (_, error) = contexts.Single().OperationLogs;
             if (incompatible) {
                 Assert.That(error, Is.Not.Null, "A text destination cannot replace a length reference in multiplication.");
+                Assert.That(error!.ToString(), Does.Contain("Dependent Width").And.Contain("Width").And.Contain("Winning Width")
+                    .And.Contain("Winning Width * 2").And.Contain("Formula setting failed"));
                 Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
                 AssertOriginalWidths(document);
                 Assert.That(document.FamilyManager.FindParameter("Dependent Width").Formula, Is.EqualTo("Width * 2"));
