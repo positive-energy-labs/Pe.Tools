@@ -48,6 +48,29 @@ public sealed class FamilyModelRoundtripTests {
         }
     }
 
+    [Test]
+    public void Raw_prism_profile_reapplies_after_native_capture() {
+        const string json = """
+            { "family": { "name": "Raw profile reapply", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
+              "types": { "Standard": {} },
+              "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
+              "forms": { "body": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "2ft", "depth": "2ft", "height": "2ft" } } }
+            """;
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._ui.Application, FamilyModelJson.Parse(json).Value!).Document;
+            // Routes send the composed authored JSON, which still contains the Prism macro.
+            var operation = new ReconcileFamily(FamilyPatch.Parse("{\"patch\":" + json + "}"));
+            using var processor = new Pe.Revit.FamilyFoundry.OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new Pe.Revit.FamilyFoundry.OperationQueue().Add(operation));
+            var (logs, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(logs?.SelectMany(log => log.Entries).Where(entry => entry.Status == Pe.Revit.FamilyFoundry.LogStatus.Error), Is.Empty);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(operation.LastReceipt!.Outcomes, Is.Empty);
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void Symbolic_loop_roundtrip_preserves_geometry_and_reapplies_visibility_binding(bool circle) {
