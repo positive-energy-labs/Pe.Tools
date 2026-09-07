@@ -5,11 +5,13 @@ Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort c
 Nothing is merged to main or published. No whole user story is closed yet.
 
 Wave21 at 141877b ran eight independent native checks: 0 passed, 8 failed.
-Parameter capture now omits definitions; the candidate description reader is the leading
-cause under investigation. Source confirms that extraction errors drop a parameter while
-warning-only handling incorrectly leaves the snapshot complete.
-N owns the description and partial-capture repair. Bath checks stopped at Fixture Units
-association before positioning; selector matching returned no expected families.
+Installed API metadata identifies GetParameterSchema as internal: the public reflection
+lookup cannot find it. Integrated 3294fbb retains parameter rows on optional tooltip errors
+and blocks reconciliation on incomplete required-field capture. Internal schema invocation
+remains a native probe, not a production dependency or accepted tooltip readback.
+Selector fixture naming (0fdf8f7), pipe Fixture Units identity (dd67073), and explicit
+NotAReference capture (4f4ca9e) are repaired in source. Native acceptance remains owed.
+Exact integrated Debug.R25.Tests compilation at 4f4ca9e passed with 0 errors/129 warnings.
 The separate join diagnostic recorded no failures and did not establish a native warning ID.
 Both SDK-owned processes exited, settings were restored exactly, and protected sessions
 71484/98976 retained their identities. No source hold remains from these runs.
@@ -17,7 +19,9 @@ Both SDK-owned processes exited, settings were restored exactly, and protected s
 Conditional selection is integrated at af051b7 using the existing native schedule evaluator,
 including null/omitted condition semantics. Native acceptance remains owed. SDK exact-target
 candidate c21da71 and adapter d838f46 use immutable local package 1.11.1-pe.target.2;
-safe preflight is proven, native multi-process targeting is not yet accepted.
+safe preflight is proven, native multi-process targeting is not yet accepted. The rebuilt
+console is unsigned; adapter discovery requires Authenticode trust. P is checking existing
+configured signing support without altering trust or bypassing signature validation.
 
 Compile portability at e44aa8e: Pe.Revit.FamilyFoundry builds successfully for Debug.R23
 and Debug.R24 (net48, 161 warnings each) and Debug.R26 (net8.0-windows7.0, 74 warnings).
