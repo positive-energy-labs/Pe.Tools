@@ -302,6 +302,15 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(operation.LastReceipt?.Converged, Is.True);
+            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/Constrained Box.json") {
+                Assert.That(document.CaptureFamilyModel().Forms.Values.Single().Start, Is.EqualTo("Reference Plane"));
+                var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
+                var (_, repeatedError) = repeatedContexts.Single().OperationLogs;
+                Assert.That(repeatedError, Is.Null, repeatedError?.Message);
+                Assert.That(repeated.LastReceipt?.Converged, Is.True);
+                Assert.That(repeated.LastPlan!.Changes, Is.Empty);
+            }
             foreach (var parameter in ((JObject)patch.Patch["parameters"]!).Properties().Where(p => p.Value.Value<bool?>("shared") == true)) {
                 var actual = document.FamilyManager.get_Parameter(parameter.Name);
                 Assert.That(actual?.IsShared, Is.True, parameter.Name);

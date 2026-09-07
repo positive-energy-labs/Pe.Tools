@@ -321,10 +321,8 @@ internal sealed class FamilyModelCapturer {
             if (!ok) continue;
 
             var support = ext.Sketch.SketchPlane.GetPlane();
-            string? CapPlane(double offset) => this.NamedPlanesThrough(support.Origin + support.Normal * offset,
-                p => Math.Abs(Math.Abs(p.Normal.DotProduct(support.Normal)) - 1) < Tol).FirstOrDefault();
-            var start = CapPlane(ext.StartOffset);
-            var end = CapPlane(ext.EndOffset);
+            var start = this.CapPlane(ext, support, ext.StartOffset);
+            var end = this.CapPlane(ext, support, ext.EndOffset);
             if (start is null || end is null) {
                 this.Add(UnmodeledReason.PlaneNotNamed, "$.forms", ("sketchPlane", sketchPlane),
                     ("start", start ?? ext.StartOffset.ToString("R", CultureInfo.InvariantCulture)),
@@ -470,6 +468,22 @@ internal sealed class FamilyModelCapturer {
         this._alignments.Where(a => a.Refs.Any(r => r.ElementId == curveId))
             .SelectMany(a => a.Refs.Where(r => r.ElementId != curveId).Select(r => this.NameOf(r)))
             .FirstOrDefault(n => n != null);
+
+    private string? CapPlane(Extrusion extrusion, Plane support, double offset) {
+        var aligned = this._alignments
+            .Where(alignment => alignment.Refs.Any(reference => reference.ElementId == extrusion.Id &&
+                Try(() => extrusion.GetGeometryObjectFromReference(reference)) is PlanarFace face &&
+                Math.Abs(Math.Abs(face.FaceNormal.Normalize().DotProduct(support.Normal.Normalize())) - 1) < Tol &&
+                Math.Abs((face.Origin - support.Origin).DotProduct(support.Normal.Normalize()) - offset) < FaceTol))
+            .SelectMany(alignment => alignment.Refs.Where(reference => reference.ElementId != extrusion.Id).Select(this.NameOf))
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (aligned.Count == 1) return aligned[0];
+        if (aligned.Count > 1) return null;
+
+        var geometric = this.NamedPlanesThrough(support.Origin + support.Normal * offset,
+            plane => Math.Abs(Math.Abs(plane.Normal.DotProduct(support.Normal)) - 1) < Tol);
+        return geometric.Count == 1 ? geometric[0] : null;
+    }
 
     private string? Material(Extrusion ext) {
         var p = ext.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM);
