@@ -17,6 +17,28 @@ public sealed class FamilyModelContractTests {
     /// <summary>Wraps a `{...}` fragment of sections into a document with a header and the three stock datums.</summary>
     private static string Doc(string sections) => "{\"family\":" + Head + ",\"datums\":" + Datums + "," + sections.Substring(1);
 
+    [Test]
+    public void Explicit_uniform_value_replaces_captured_cells_but_keeps_explicit_type_override() {
+        var current = Doc("""{"parameters":{"W":{"dataType":"Length"},"Keep":{"dataType":"Text"}},"types":{"A":{"W":"1ft","Keep":"unchanged"},"B":{"W":"2ft"}}}""");
+        var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"value":"3ft"}},"types":{"B":{"W":"4ft"}}}""");
+        Assert.That(result.Diagnostics, Is.Empty);
+        Assert.Multiple(() => {
+            Assert.That(result.Value!.Parameters["W"].Value!.Value.Text, Is.EqualTo("3ft"));
+            Assert.That(result.Value.Types["A"].ContainsKey("W"), Is.False);
+            Assert.That(result.Value.Types["A"]["Keep"].Text, Is.EqualTo("unchanged"));
+            Assert.That(result.Value.Types["B"]["W"].Text, Is.EqualTo("4ft"));
+        });
+    }
+
+    [TestCase("""{"value":"3ft"}""", false)]
+    [TestCase("""{"formula":"2 * 1'"}""", true)]
+    public void Explicit_formula_or_value_replaces_inherited_opposite(string authored, bool formula) {
+        var current = Doc("""{"parameters":{"W":{"dataType":"Length","formula":"1'"}},"types":{"A":{}}}""");
+        var result = FamilyPatch.Apply(current, "{\"parameters\":{\"W\":" + authored + "}}");
+        Assert.That(result.Diagnostics, Is.Empty);
+        Assert.That(result.Value!.Parameters["W"].Formula is not null, Is.EqualTo(formula));
+    }
+
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

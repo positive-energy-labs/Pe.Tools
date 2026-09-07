@@ -75,31 +75,55 @@ public sealed class FamilyVisitScope {
         doc.Application.FailuresProcessing += OnFailures;
         try {
             if (doc.IsModifiable) {
-                edit(this.Document); // the caller's transaction already holds this document
+                using var transaction = new SubTransaction(doc);
+                _ = transaction.Start();
+                edit(this.Document);
+                RequireCommitted(transaction.Commit(), name);
             } else if (this._options.Transaction == FamilyVisitTransaction.Sandbox) {
                 using var sandbox = DocumentSandbox.BeginCommit(doc, name);
                 Suppress(sandbox.Transaction, diagnostics);
                 edit(this.Document);
                 sandbox.Complete();
+                RequireCommitted(sandbox.Transaction.GetStatus(), name);
             } else {
                 using var transaction = new Transaction(doc, name);
                 _ = transaction.Start();
                 Suppress(transaction, diagnostics);
                 edit(this.Document);
-                _ = transaction.Commit();
+                RequireCommitted(transaction.Commit(), name);
             }
         } finally {
             doc.Application.FailuresProcessing -= OnFailures;
         }
         this.Diagnostics.AddRange(diagnostics.Select(d => (name, d.IsError, d.Message)));
+        if (diagnostics.Any(d => d.IsError)) throw new InvalidOperationException($"'{name}' reported commit errors.");
+    }
+
+    internal static void RequireCommitted(TransactionStatus status, string name) {
+        if (status != TransactionStatus.Committed)
+            throw new InvalidOperationException($"'{name}' did not commit: {status}.");
     }
 
     private void Suppress(Transaction transaction, List<(bool IsError, string Message)> diagnostics) {
-        if (!this._options.SuppressWarnings) return;
         var options = transaction.GetFailureHandlingOptions();
-        _ = options.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(diagnostics));
-        _ = options.SetForcedModalHandling(false);
+        _ = options.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
+            RejectErrors(accessor, diagnostics, this._options.SuppressWarnings)));
+        _ = options.SetClearAfterRollback(true);
+        _ = options.SetForcedModalHandling(true);
         transaction.SetFailureHandlingOptions(options);
+    }
+
+    internal static FailureProcessingResult RejectErrors(FailuresAccessor accessor,
+        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings) {
+        var error = false;
+        foreach (var failure in accessor.GetFailureMessages()) {
+            var isError = failure.GetSeverity() != FailureSeverity.Warning;
+            error |= isError;
+            diagnostics.Add((isError, failure.GetDescriptionText()));
+            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
+        }
+        // Normalization must never resolve a failure by deleting or detaching unmentioned content.
+        return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
     }
 }
 
@@ -120,7 +144,8 @@ public sealed record FamilyVisitResult(
 ///     cannot serve (gotcha 25) unless the caller supplied a park. No FF dependency: pods call it directly.
 /// </summary>
 public static class FamilyVisit {
-    public static FamilyVisitResult Run(Document project, Family family, Action<FamilyVisitScope> visit, FamilyVisitOptions? options = null) {
+    public static FamilyVisitResult Run(Document project, Family family, Action<FamilyVisitScope> visit, FamilyVisitOptions? options = null,
+        Action<FamilyDocument>? afterEdits = null) {
         options ??= new FamilyVisitOptions();
         if (project.IsFamilyDocument)
             return Refused(FamilyVisitRefusal.DocumentIsFamily, "The document is a family document; use FamilyVisit.InPlace.");
@@ -135,18 +160,25 @@ public static class FamilyVisit {
             return Refused(FamilyVisitRefusal.ProjectIsModifiable, "The park did not release the project; it is still modifiable.");
 
         var familyName = family.Name;
-        var famDoc = new FamilyDocument(project.EditFamily(family)).EnsureDefaultType();
+        var famDoc = new FamilyDocument(project.EditFamily(family));
         var scope = new FamilyVisitScope(famDoc, options);
         try {
-            visit(scope);
+            using var projectGroup = new TransactionGroup(project, "Visit family");
+            _ = projectGroup.Start();
+            _ = InPlace(famDoc, inner => { visit(inner); scope.Diagnostics.AddRange(inner.Diagnostics); }, options);
+            afterEdits?.Invoke(famDoc);
             if (!options.Load) return new FamilyVisitResult(FamilyVisitRefusal.None, null, null, false, scope.Diagnostics);
 
             var loadDiagnostics = new List<(bool IsError, string Message)>();
-            var loaded = PeToolsFailureHandling.ExecuteWithFailureHandling(project,
-                () => famDoc.LoadFamily(project, options.LoadOptions), loadDiagnostics, famDoc.Document);
+            var loaded = RevitFailureScope.Execute(project,
+                accessor => FamilyVisitScope.RejectErrors(accessor, loadDiagnostics, options.SuppressWarnings),
+                () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
             scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
             // post-verify: the family is in the project by name and is the element LoadFamily handed back
             var verified = loaded is not null && project.GetElement(loaded.Id) is Family reread && reread.Name == familyName;
+            if (verified && !scope.Diagnostics.Any(d => d.IsError))
+                FamilyVisitScope.RequireCommitted(projectGroup.Assimilate(), "Load family");
+            else verified = false;
             return new FamilyVisitResult(FamilyVisitRefusal.None, verified ? null : $"LoadFamily returned {(loaded is null ? "null" : $"'{loaded.Name}'")} for '{familyName}'.", loaded, verified, scope.Diagnostics);
         } finally {
             _ = famDoc.Close(false);
@@ -155,9 +187,21 @@ public static class FamilyVisit {
 
     /// <summary>The family-document path: no EditFamily, no Load. Edits run under the same transaction discipline.</summary>
     public static FamilyVisitResult InPlace(FamilyDocument document, Action<FamilyVisitScope> visit, FamilyVisitOptions? options = null) {
-        var scope = new FamilyVisitScope(document.Document.IsModifiable ? document : document.EnsureDefaultType(), options ?? new FamilyVisitOptions());
-        visit(scope);
-        return new FamilyVisitResult(FamilyVisitRefusal.None, null, null, true, scope.Diagnostics);
+        var scope = new FamilyVisitScope(document, options ?? new FamilyVisitOptions());
+        if (document.Document.IsModifiable) {
+            using var transaction = new SubTransaction(document.Document);
+            _ = transaction.Start();
+            visit(scope);
+            FamilyVisitScope.RequireCommitted(transaction.Commit(), "Visit family");
+        } else {
+            using var group = new TransactionGroup(document.Document, "Visit family");
+            _ = group.Start();
+            visit(scope);
+            FamilyVisitScope.RequireCommitted(group.Assimilate(), "Visit family");
+        }
+        return new FamilyVisitResult(FamilyVisitRefusal.None,
+            document.Document.IsModifiable ? "Edits are staged in the caller's transaction; its commit is not verified." : null,
+            null, !document.Document.IsModifiable, scope.Diagnostics);
     }
 
     private static FamilyVisitResult Refused(FamilyVisitRefusal refusal, string message) => new(refusal, message, null, false, []);

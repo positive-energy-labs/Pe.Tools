@@ -165,17 +165,16 @@ public class OperationProcessor(
                     AppendProcessorTrace(outputFolderPath, familyName, "operations-start");
                     var opSw = Stopwatch.StartNew();
                     foreach (var (name, callback) in edits)
-                        scope.Edit(name, d => logs.AddRange(callback(d, context)));
+                        scope.Edit(name, d => { logs.AddRange(callback(d, context)); ThrowOnErrors(logs); });
                     context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
                     AppendProcessorTrace(outputFolderPath, familyName, "operations-complete");
-                    _ = famDoc.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
                     if (collectorQueue != null) {
                         var post = new FamilySnapshot { FamilyName = familyName };
                         projectCollector!(post, this.OpenDoc, family);
                         famDocCollector!(post, famDoc);
                         context.PostProcessSnapshot = post;
                     }
-                }, visitOptions);
+                }, visitOptions, famDoc => famDoc.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath)));
 
                 if (!result.Ran)
                     throw new InvalidOperationException($"{result.Refusal}: {result.Message}");
@@ -185,7 +184,9 @@ public class OperationProcessor(
                 if (saveOpts.LoadFamily && !result.Verified)
                     logs.Add(new OperationLog("LoadFamily", [new LogEntry("post-verify").Error(result.Message ?? "unverified")]));
                 context.OperationLogs = logs;
+                CompleteReconciliation(queue, !logs.Any(l => l.ErrorCount > 0));
             } catch (Exception ex) {
+                CompleteReconciliation(queue, false);
                 context.OperationLogs = new Exception($"Failed to process family {familyName}: {ex.ToStringDemystified()}");
             } finally {
                 context.TotalMs = sw.Elapsed.TotalMilliseconds;
@@ -213,26 +214,38 @@ public class OperationProcessor(
         var namedFamilyFuncs = queue.ToNamedFuncs(
             this._exOpts.OptimizeTypeOperations,
             this._exOpts.SingleTransaction);
-        var familyFuncs = namedFamilyFuncs.Select(item => item.Callback).ToArray();
-        var transactionNames = this._exOpts.SingleTransaction
-            ? null
-            : namedFamilyFuncs.Select(item => item.Name).ToArray();
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
 
         _ = this.OpenDoc
             .GetFamilyDocument()
-            .EnsureDefaultType()
             .StartPipeline(pipeline =>
-                    pipeline
-                        .CollectPreSnapshot(collectorQueue)
-                        .Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings)
-                        .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
-                        .CollectPostSnapshot(collectorQueue),
+                {
+                    pipeline.CollectPreSnapshot(collectorQueue);
+                    var logs = new List<OperationLog>();
+                    _ = FamilyVisit.InPlace(pipeline.FamDoc, scope => {
+                        foreach (var (name, callback) in namedFamilyFuncs)
+                            scope.Edit(name, d => { logs.AddRange(callback(d, pipeline.Context)); ThrowOnErrors(logs); });
+                        pipeline.CollectPostSnapshot(collectorQueue);
+                    }, new FamilyVisitOptions { Transaction = this._exOpts.Visit.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings });
+                    pipeline.Context.OperationLogs = logs;
+                    pipeline.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
+                },
                 out var context);
+        var (_, error) = context.OperationLogs;
+        CompleteReconciliation(queue, error is null && !this.OpenDoc.IsModifiable);
         // Note: No Close() call - we don't close the active family document
         this.WriteArtifacts(context);
         this._perFamilyCallback?.Invoke(context);
         return [context];
+    }
+
+    internal static void ThrowOnErrors(IEnumerable<OperationLog> logs) {
+        var errors = logs.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).ToList();
+        if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors.Select(e => $"{e.Name}: {e.Message}")));
+    }
+
+    private static void CompleteReconciliation(OperationQueue queue, bool committed) {
+        foreach (var operation in queue.Operations.OfType<Reconcile.ReconcileFamily>()) operation.Complete(committed);
     }
 
 

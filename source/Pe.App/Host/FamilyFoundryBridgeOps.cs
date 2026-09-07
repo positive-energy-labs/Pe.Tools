@@ -62,7 +62,7 @@ internal static class FamilyFoundryBridgeOps {
                 continue;
             }
             try {
-                var op = new ReconcileFamily(patch);
+                var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash);
                 var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-patch").WithReconcile(op);
                 using var processor = new OperationProcessor(document);
                 var (contexts, _) = processor.SelectFamilies(() => [family]).WithArtifactWriter(writer)
@@ -70,11 +70,9 @@ internal static class FamilyFoundryBridgeOps {
                 var context = contexts.Single();
                 var (logs, error) = context.OperationLogs;
                 var receipt = op.LastReceipt;
-                if (receipt is not null && !string.Equals(receipt.PlanHash, expectedHash, StringComparison.OrdinalIgnoreCase))
-                    receipts.Add(Failed(familyId, family.Name, $"Plan hash drifted: expected {expectedHash}, recomputed {receipt.PlanHash}. The family changed since the plan; plan again."));
-                else {
+                {
                     var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                    receipts.Add(new FamilyFoundryApplyReceipt(familyId, family.Name, error is null && errors.Count == 0, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                    receipts.Add(new FamilyFoundryApplyReceipt(familyId, family.Name, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
                         receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null));
                 }
             } catch (Exception exception) {

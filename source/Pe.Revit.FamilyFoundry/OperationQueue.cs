@@ -41,7 +41,8 @@ public class OperationQueue {
     /// <summary>
     ///     Resets all group contexts for a new family processing cycle.
     /// </summary>
-    public void ResetAllGroupContexts() =>
+    public void ResetAllGroupContexts() {
+        foreach (var operation in this.Operations.OfType<Reconcile.ReconcileFamily>()) operation.Reset();
         this._operations
             .Select(o => o.Ctx)
             .Where(c => c != null)
@@ -49,6 +50,7 @@ public class OperationQueue {
             .Distinct()
             .ToList()
             .ForEach(c => c.Reset());
+    }
 
     /// <summary>
     ///     Get metadata about all queued operations for frontend display

@@ -58,7 +58,7 @@ public static class FamilyReconciler {
         if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([]));
         var changes = Diff(desired, current, units);
         var (queue, effects) = Lower(changes, desired, current, run);
-        return new FamilyPlan(changes, queue, [], effects, Hash(changes));
+        return new FamilyPlan(changes, queue, [], effects, Hash(changes, current, run));
     }
 
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
@@ -66,7 +66,12 @@ public static class FamilyReconciler {
         var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(current)), patch.Patch);
         merged.Remove("coverage");
         merged.Remove("unmodeled");
-        return FamilyModelJson.Parse(merged.ToString());
+        var parsed = FamilyModelJson.Parse(merged.ToString());
+        var existingDiagnostics = FamilyModelValidator.Validate(current);
+        var authoredSections = patch.Patch.Properties().Where(p => p.Value is not JObject o || o.HasValues)
+            .Select(p => "$." + p.Name).ToList();
+        return parsed with { Diagnostics = parsed.Diagnostics.Where(d => !existingDiagnostics.Contains(d) ||
+            authoredSections.Any(section => d.Path == section || d.Path.StartsWith(section + ".", StringComparison.Ordinal))).ToList() };
     }
 
     public static IReadOnlyList<FamilyChange> Diff(FamilyModel desired, FamilyModel current, UnitResolver units) {
@@ -246,9 +251,9 @@ public static class FamilyReconciler {
     private static IEnumerable<string> OnPlanes(FamilyModelForm form) =>
         form.Profile?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", c.Center ?? [])) ?? [];
 
-    private static string Hash(IReadOnlyList<FamilyChange> changes) {
+    private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null) {
         var json = JsonConvert.SerializeObject(
-            changes.Select(c => new { c.Section, c.Key, Kind = c.Kind.ToString(), c.MappedFrom, c.After }), FamilyModelJson.Settings);
+            new { Changes = changes, Current = current, Run = run }, FamilyModelJson.Settings);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)))[..16];
     }
 

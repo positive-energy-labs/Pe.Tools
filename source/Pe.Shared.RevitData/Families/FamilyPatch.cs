@@ -44,6 +44,18 @@ public sealed class FamilyPatch {
     public static JObject Apply(JObject current, JObject patch) {
         var result = (JObject)current.DeepClone();
         Merge(result, patch);
+        foreach (var parameter in (patch["parameters"] as JObject)?.Properties() ?? []) {
+            var authored = parameter.Value as JObject;
+            var merged = result["parameters"]?[parameter.Name] as JObject;
+            if (authored?["value"] is { Type: not JTokenType.Null }) merged?.Remove("formula");
+            if (authored?["formula"] is { Type: not JTokenType.Null }) merged?.Remove("value");
+            if (parameter.Value.Type != JTokenType.Null && authored?["value"] is not { Type: not JTokenType.Null } && authored?["formula"] is not { Type: not JTokenType.Null }) continue;
+            foreach (var type in (result["types"] as JObject)?.Properties() ?? []) {
+                // Explicit type cells override an explicit uniform value; captured cells do not.
+                if (patch["types"]?[type.Name] is JObject row && row.ContainsKey(parameter.Name)) continue;
+                (type.Value as JObject)?.Remove(parameter.Name);
+            }
+        }
         return result;
     }
 
