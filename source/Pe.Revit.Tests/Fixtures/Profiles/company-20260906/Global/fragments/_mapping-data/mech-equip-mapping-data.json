@@ -102,8 +102,7 @@
     },
     {
       "CurrNames": ["Horsepower (HP)", "Pump HP"],
-      "NewName": "PE_G_Perf_Horsepower",
-      "SourceValuesTreatedAsMissing": ["N/A"]
+      "NewName": "PE_G_Perf_Horsepower"
     },
     {
       "CurrNames": ["Phase", "PE_Phase"],

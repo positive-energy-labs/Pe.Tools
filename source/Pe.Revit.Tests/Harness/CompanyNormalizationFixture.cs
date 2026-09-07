@@ -67,4 +67,12 @@ internal static class CompanyNormalizationFixture {
         var path = RevitFamilyFixtureHarness.GetProfileFixturePath(Path.Combine("company-20260906", "Global", "fragments", "_mapping-data", "mech-equip-mapping-data.json"));
         return new MapParamsSettings { MappingData = JObject.Parse(File.ReadAllText(path))["Items"]!.ToObject<List<MappingData>>()! };
     }
+
+    public static (HashSet<string> Families, MapParamsSettings Mappings) OldTemplateHorsepowerOverride() {
+        var path = RevitFamilyFixtureHarness.GetProfileFixturePath(Path.Combine("native-overrides", "old-template-magna3-horsepower.json"));
+        var profile = JObject.Parse(File.ReadAllText(path));
+        var families = profile["FilterFamilies"]!["IncludeNames"]!["Equaling"]!.Values<string>().ToHashSet(StringComparer.Ordinal);
+        var overlay = profile["AddAndMapSharedParams"]!["MappingData"]!.ToObject<List<MappingData>>()!;
+        return (families, new MapParamsSettings { MappingData = MechanicalMappings().MappingData.Concat(overlay).ToList() });
+    }
 }

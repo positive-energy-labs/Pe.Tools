@@ -9,7 +9,7 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 [GROUNDING-REVIT.md](GROUNDING-REVIT.md).
 
 ## Decided
-- 2026-09-07, user ruling: only the company mechanical horsepower mapping treats the exact Text value `N/A` as a missing source; unrelated mappings keep strict coercion, and no default is synthesized when none is authored.
+- 2026-09-07, user ruling: only the native old-template Magna3 override treats the exact Text horsepower value `N/A` as a missing source; the frozen company standards and unrelated mappings keep strict coercion, and no default is synthesized when none is authored.
 - 2026-09-07: Explicit NoTransaction permits scripts or called libraries to own Revit transactions; ReadOnly remains the default. User approved this for multi-family creation and migration.
 
 - 2026-09-07, symbolic detail capture preserves geometry and visibility and gives connected loops generated names; no Revit metadata is added to retain JSON grouping names. User delegated the simplest solution.

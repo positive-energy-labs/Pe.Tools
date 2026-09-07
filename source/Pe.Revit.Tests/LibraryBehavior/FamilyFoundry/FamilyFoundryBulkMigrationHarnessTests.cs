@@ -551,6 +551,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name!)).ToList();
             Assert.That(definitions.Count, Is.EqualTo(38));
             var patch = CompanyNormalizationFixture.Convert(mappings, names);
+            var scopedOverride = CompanyNormalizationFixture.OldTemplateHorsepowerOverride();
+            var scopedPatch = CompanyNormalizationFixture.Convert(scopedOverride.Mappings, names);
             var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
                 .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
                 .Select(f => f.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
@@ -575,7 +577,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 var originalId = family.Id;
                 var originalUniqueId = family.UniqueId;
                 var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
-                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                var operation = new ReconcileFamily(scopedOverride.Families.Contains(familyName) ? scopedPatch : patch,
+                    sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
                 var (contexts, processorMs) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
                 var (_, error) = contexts.Single().OperationLogs;
@@ -686,9 +689,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             var definitions = CompanyCorpusDefinitions();
             var definition = definitions.Single(item => item.Name == "PE_G_Perf_Horsepower");
-            var mappings = companyMapping ? CompanyNormalizationFixture.MechanicalMappings() : new Pe.Revit.FamilyFoundry.OperationSettings.MapParamsSettings {
-                MappingData = [new() { NewName = definition.Name!, CurrNames = ["Horsepower (HP)"] }]
-            };
+            var mappings = companyMapping ? CompanyNormalizationFixture.OldTemplateHorsepowerOverride().Mappings : CompanyNormalizationFixture.MechanicalMappings();
             var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.ExportSharedMappings(mappings, [definition]);
             Assert.That(patch.Patch["parameters"]![definition.Name!]!["sourceValuesTreatedAsMissing"] is not null, Is.EqualTo(companyMapping));
             var before = document.CaptureFamilyModel();
