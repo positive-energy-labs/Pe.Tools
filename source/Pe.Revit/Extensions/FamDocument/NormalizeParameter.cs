@@ -42,9 +42,15 @@ public static class FamilyDocumentNormalizeParameter {
         var dimensions = source.AssociatedDimensions(document).ToList();
         var arrays = source.AssociatedArrays(document).ToList();
         foreach (var parameter in source.AssociatedParameters.Cast<Parameter>().ToList()) {
-            if (!fm.CanElementParameterBeAssociated(parameter)) throw new InvalidOperationException($"Cannot transfer association to '{target.Definition.Name}'.");
-            fm.AssociateElementParameterToFamilyParameter(parameter, null);
-            fm.AssociateElementParameterToFamilyParameter(parameter, target);
+            var diagnostic = AssociationDiagnostic(source, target, parameter, fm);
+            if (!fm.CanElementParameterBeAssociated(parameter))
+                throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}");
+            try {
+                fm.AssociateElementParameterToFamilyParameter(parameter, null);
+                fm.AssociateElementParameterToFamilyParameter(parameter, target);
+            } catch (Exception exception) {
+                throw new InvalidOperationException($"Cannot transfer parameter association. {diagnostic}", exception);
+            }
         }
         document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
         foreach (var array in arrays) array.Label = target;
@@ -59,5 +65,15 @@ public static class FamilyDocumentNormalizeParameter {
         if (source.HasAnyAssociation(document)) throw new InvalidOperationException($"Source '{temporary}' still has dependencies.");
         fm.RemoveParameter(source);
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
+    }
+
+    private static string AssociationDiagnostic(FamilyParameter source, FamilyParameter target, Parameter elementParameter, FamilyManager manager) {
+        var element = elementParameter.Element;
+        var builtIn = (elementParameter.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID;
+        static string Spec(Definition definition) => definition.GetDataType().TypeId;
+        return $"Source='{source.Definition.Name}' Id={source.Id} Storage={source.StorageType} Spec={Spec(source.Definition)} Instance={source.IsInstance}; " +
+               $"Destination='{target.Definition.Name}' Id={target.Id} Storage={target.StorageType} Spec={Spec(target.Definition)} Instance={target.IsInstance}; " +
+               $"Element={element.GetType().Name} Id={element.Id}; ElementParameter='{elementParameter.Definition.Name}' Id={elementParameter.Id} " +
+               $"BIP={builtIn} Storage={elementParameter.StorageType} Spec={Spec(elementParameter.Definition)} CanAssociate={manager.CanElementParameterBeAssociated(elementParameter)}.";
     }
 }
