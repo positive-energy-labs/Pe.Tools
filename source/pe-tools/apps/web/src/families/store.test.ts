@@ -107,6 +107,28 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("families route store", () => {
+  it("refreshes family choices when categories change without waiting for cache expiry", async () => {
+    const testFixture = fixture();
+    const reads: string[][] = [];
+    testFixture.host.families = async (_target, draft) => {
+      reads.push(draft.categories);
+      return ["PE Box"];
+    };
+    const { registry, store } = make(testFixture);
+    await tick();
+    store.actions.setDraft({
+      placement: "AllLoaded",
+      categories: ["Electrical Equipment"],
+      families: [],
+    });
+    await tick();
+    await tick();
+    expect(reads).toEqual([["Electrical Equipment"]]);
+    expect(registry.get(store.feeds.family).options?.map((option) => option.id)).toEqual([
+      "PE Box",
+    ]);
+  });
+
   it("unbinds a persisted plan from another document", () => {
     const { registry, store } = make(fixture(), undefined, document("C:\\Models\\Other.rvt"));
 

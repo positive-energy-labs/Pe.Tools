@@ -1,5 +1,11 @@
 # Family routes proof checkpoint
 
+## Fleet browser blocker repaired in routes tree - 2026-09-07 06:41 UTC
+
+P activated the existing project and independently proved its baseline remained Width24in/Old_Count3 with the new shared parameter absent. R created the unique patch through create-only settings authoring and opened `/families` on the exact project holder. Browser category selection succeeded, but the dependent family picker stayed stale/disabled. Network observation after toggling the category showed no catalog request. No fleet Plan or Apply ran.
+
+The regression in `families/store.test.ts` reproduces zero family reads after changing categories. `families/store.ts` now reads category and placement atoms directly through the existing runtime, removing the SWR wrapper that left this dependent read stale. Separate selectors prevent family-selection updates from feeding back into catalog reads. The test passes with exactly one catalog read and PE Box available; all 11 store tests pass. Static check: zero errors, one pre-existing unbound-method warning at the session read. Root integration/web refresh and actual fleet click-through remain required; no C# or host restart is needed for this web-only fix.
+
 ## Actual current-family browser acceptance - 2026-09-07 06:38 UTC
 
 PROVEN[browser + session/dev, controlled ff-route-25, immutable ca353e9]: P confirmed active native `PE Box.rfa` after loading the original Width24in/Old_Count3 baseline into the separate project. R used root host `http://127.0.0.1:52068` and the exact backslash document address from `family-holder.json`. The unique model `ff-route-proof-ff-route-25-parameters` was created through the settings route command with create-only semantics and independently read back; existing company settings were not overwritten.

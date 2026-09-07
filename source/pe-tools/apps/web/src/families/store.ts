@@ -122,17 +122,21 @@ export function createFamiliesStore(deps: {
       Atom.swr(categorySource, { staleTime: "5 minutes", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
+  const familyCategories = Atom.map(draft, (value) => value.categories);
+  const familyPlacement = Atom.map(draft, (value) => value.placement);
   const familySource = runtime.atom((get) => {
-    const next = get(draft);
+    const next = {
+      categories: get(familyCategories),
+      placement: get(familyPlacement),
+      families: [],
+    };
     const world = get(target);
     return hostRead([world, ...next.categories, next.placement], () =>
       next.categories.length ? deps.host.families(world, next) : Promise.resolve([]),
     );
   });
   const familyResult = runtimeFactory
-    .withReactivity(["family"])(
-      Atom.swr(familySource, { staleTime: "5 minutes", revalidateOnMount: false }),
-    )
+    .withReactivity(["family"])(familySource)
     .pipe(Atom.autoDispose);
   const profileSource = runtime.atom(() =>
     hostRead(["family-foundry"], () => deps.host.profiles()),
