@@ -8,29 +8,22 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
-Latest checkpoint: fresh controlled wave10 at `4200a91` ran 108 tests: 68 passed,
-40 failed; company cases 10/45 passed. The strict converter now exposes unsupported
-active operations instead of omitting them. Owned Revit exited, zero quarantines remain,
-and native settings were restored byte-for-byte. Formula canonicalization and its rollback
-regression plus the wall-template census are integrated at `dc524dd`, not yet native proven.
+Latest native checkpoint: fresh controlled Revit 2025 wave11 at `5531460` ran
+122 tests: 77 passed and 45 failed. Electrical associations passed 4/4; the connector
+run-rule rollback, native formula probe, text rename, box and symbolic roundtrips passed.
+The 11-system-type connector census found no MCA/current target. MCA intent remains retained.
+The owned process exited; quarantine is empty and native settings were restored byte-for-byte.
 
-Current bounded dispatch: Sol medium owns cloud-template mechanical-family value benchmarking
-in the proof tree and the sole Revit lifecycle lane. Sol high repairs the three company literal
-failures in the normalization tree. Sol medium implements legacy plane/dimension conversion
-in `Pe.Tools-ff-convert`. No integration source hold is active; benchmark bytes are isolated.
-Integrated `09a19a3` permits explicit NoTransaction ownership and repairs script loading:
-R25.Tests compile passes, and ScriptPolicyAnalyzerTests pass 3/3 deterministic. Native script
-execution remains owed. `64c9239` fixes empty explicit rename sources; native proof is owed.
-`ae8021f` exposes curve and alignment diagnostics without masking either alignment attempt.
+Current integration `e23ded4` includes the old-template per-family checkpoint, removal of
+heuristic formula rejection, legacy unit-alias and omitted-scope repairs, and wall-template
+plane/view correction. R25.Tests compile passes with 0 errors and 123 warnings. These changes
+await native proof. No source hold or FF-owned Revit session is active.
 
-Final simplification must redistill state, contracts, compilers and serialization while
-retaining all features and native acceptance. The takeoffs review was sent here by mistake
-and is outside this effort, as corrected by the user.
-
-Latest integration `bf9f321` includes pressure/weight literal conversion, legacy plane/dimension
-conversion, and existing execution options beside the desired patch. R25.Tests compile passes
-(0 errors, 120 warnings); these changes still await native proof. The solids conversion and
-electrical normalization design are the current converter frontier.
+Current bounded work: Sol medium investigates complete split-circle capture/constraints;
+Sol high repairs nested alignment view selection; Sol medium checks AprilAire URL definition
+intent and legacy parser fallback. Root integrates changes and coordinates native acceptance.
+Final simplification must retain features while reducing state, contracts and serialization.
+The takeoffs review was sent here by mistake and remains outside this effort.
 
 ## Completion contract
 
@@ -45,43 +38,14 @@ electrical normalization design are the current converter frontier.
 - Shared fragments merge by field, later values win; profile fields override their preset.
 - Measurable authored literals require units. Number/Integer stay unitless.
 
-## Checkpoint at 2026-09-07 07:03 UTC
+## Route and corpus checkpoint
 
-Native integration `897872a` compiles Pe.Revit.Tests for R25 (0 errors, 119 warnings).
-Web/Host receipt and Apply eligibility changes are integrated in `b56b452` (agent checks 39/39).
-SDK candidate `0.1.0-beta.151.ff.1` is a complete eleven-package graph from SDK `8fe90de`.
-Integration pins CLI and SDK together; all receipt hashes were checked before copying.
-R24 and R26 FamilyFoundry compiles now pass, resolving missing-companion/fallback failures.
-R23 FamilyFoundry also compiles after replacing the NET48-incompatible DistinctBy call.
-The candidate is local to this branch/feed; no installed-product update or publication occurred.
-
-Fresh controlled wave 7 (`3dc0dcb`): 25 passed, 22 failed / 47. Lookup full roundtrip,
-nested dependency save/reopen, portable values and native scope defaults pass. All four
-geometry showcase roundtrips remain red. Native shared creation passes 4/4 with its temporary
-file active and fails 4/4 without it. The shared TempSharedParamFile lifetime is now repaired.
-Latest source also repairs GUID token parsing, non-labelable dimension reads, batch label value
-preservation, geometry loop ordering, closed bound circles, room-point disable and form view flags.
-Those repairs compile but await the next fresh acceptance. No geometry acceptance is inferred.
-
-SDK custody is valid in wave 6 diagnostic, wave 6 functional and wave 7: exact child identity,
-settings restoration and cleanup. Wave 5 wrongly claimed pre-existing PID 80052; it exited and
-its exit cause remains unconfirmed. Do not describe that process as preserved.
-
-The `/family` + `/families` session is controlled `ff-route-25`, dev snapshot generation
-`20260907062428752`, build stamp `ed915890270c`, source `ca353e9`. It runs SDK151.ff.1
-payload dependencies. P owns lifecycle and document activation; R owns browser interaction.
-Actual `/family` browser Apply and native independent readback passed: Width 42 inches,
-shared count 7 with the expected GUID, and old source removed. Fleet Apply committed the same
-changes, but its response failed by reading an invalid pre-load Family object. Native receipt
-and independent readback recovered success; the original Apply must not be replayed.
-An open same-name external family editor also contaminated project Plan through title-based
-reuse. Both shared-owner fixes and a native bridge regression test are now integrated, awaiting
-fresh proof. The next browser run uses new disposable paths and keeps unknown-outcome evidence.
-Root source edits do not refresh this immutable session.
-
-All 45 frozen company profiles now compose, including reconstructed Dehumidifier and AprilAire
-inline override. All 52 original fixture files preserve their original bytes in Git; a scoped
-.gitattributes rule prevents newline normalization. OneDrive originals remain unchanged.
+Earlier `/family` browser Apply plus independent native readback passed on `ca353e9`.
+Fleet mutation committed, but its response read an invalid pre-load Family object. Reacquisition
+and receipt fixes are integrated; a new browser proof is owed. The old route session is stopped.
+NoTransaction policy passes 3/3 deterministic; native script execution remains owed.
+All 45 company profiles compose. The 52 original fixture files retain their original bytes.
+The old-template 38-definition mapping gate has not run and is distinct from full profile migration.
 Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [routes](PROOF-ROUTES.md).
 
 ## User stories and remaining proof
@@ -100,7 +64,7 @@ Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [ro
 
 ## Dispatch and primitive frontier
 
-- P: complete R's actual route session; then wave 8 acceptance on a declared source hold.
+- P: run the next native acceptance on a declared source hold, then restore route proof.
   If shared/migration basics pass, run the full old-template mechanical-family acceptance.
   That full corpus test has never run; the current 38-definition mapping is not all 45 profiles.
 - N: native parameter/source/association repairs; all-profile operation coverage and conversion;
@@ -134,7 +98,7 @@ No selector optimization adopted. New numeric values are raw zero; blank writes 
 
 ## Protected state
 
-- User `pe.app-25` PID71484 and other pre-existing PID86872 are protected; re-read identity before
+- User `pe.app-25` PID71484 and other pre-existing PID98976 are protected; re-read identity before
   runtime work. No FF mutation may target either.
 - Main has concurrent Space/Partition/takeoff/web changes. Never broad-stage, reset or overwrite it.
 - Old_Template.rvt SHA256 `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`.
