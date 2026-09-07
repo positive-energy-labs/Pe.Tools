@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Reconcile;
@@ -81,6 +82,33 @@ public sealed class FamilyFoundryMatrixFixtureTests {
     }
 
     [Test]
+    public void Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid() {
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid));
+        var projectDocument = this.OpenOldTemplateProjectCopy(outputDirectory);
+        Document? familyDocument = null;
+        try {
+            var loadedFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
+                this._dbApplication, projectDocument, outputDirectory);
+            familyDocument = projectDocument.EditFamily(loadedFamily);
+            var before = FamilyModelJson.Serialize(familyDocument.CaptureFamilyModel());
+            var referencesBefore = NativeReferenceGraph(familyDocument);
+            var operation = new ReconcileFamily(SetValueMatrixPatch(includeInvalid: true));
+            using var processor = new OperationProcessor(familyDocument);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error?.ToString(), Does.Contain(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber)
+                .And.Contain("All sources failed"));
+            Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
+            Assert.That(FamilyModelJson.Serialize(familyDocument.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(NativeReferenceGraph(familyDocument), Is.EqualTo(referencesBefore));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    [Test]
     public void Metadata_state_fixture_generates_parameter_identity_group_and_binding_topology() {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Metadata_state_fixture_generates_parameter_identity_group_and_binding_topology));
@@ -97,6 +125,39 @@ public sealed class FamilyFoundryMatrixFixtureTests {
 
             familyDocument = projectDocument.EditFamily(loadedFamily);
             AssertMetadataStateFamilyTopology(familyDocument);
+            AssertMetadataProjectBinding(projectDocument);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    [Test]
+    public void Public_reconciler_applies_all_seven_metadata_cases_and_preserves_values() {
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.Public_reconciler_applies_all_seven_metadata_cases_and_preserves_values));
+        var projectDocument = this.OpenOldTemplateProjectCopy(outputDirectory);
+        Document? familyDocument = null;
+        try {
+            var loadedFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadMetadataStateFamily(
+                this._dbApplication, projectDocument, outputDirectory);
+            familyDocument = projectDocument.EditFamily(loadedFamily);
+            var preservedNames = new[] {
+                FamilyFoundryMatrixFixtureBuilder.MetadataLocalTypeText,
+                FamilyFoundryMatrixFixtureBuilder.MetadataLocalInstanceNumber,
+                FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip,
+                FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText,
+                FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength,
+                FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared
+            };
+            var beforeValues = MetadataValues(familyDocument, preservedNames);
+            var operation = new ReconcileFamily(MetadataPatch());
+            using var processor = new OperationProcessor(familyDocument);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            AssertAppliedMetadataEndState(familyDocument, beforeValues);
             AssertMetadataProjectBinding(projectDocument);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -158,7 +219,7 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         Assert.That(associatedParameter?.Definition.Name, Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth));
     }
 
-    private static FamilyPatch SetValueMatrixPatch() {
+    private static FamilyPatch SetValueMatrixPatch(bool includeInvalid = false) {
         var parameters = new JObject();
         var definitionIndex = 0;
         void Map(string target, ForgeTypeId dataType, string group, bool instance, string[] sources,
@@ -206,7 +267,39 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             [FamilyFoundryMatrixFixtureBuilder.SourceArrayCount]);
         Map(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, "Geometry", true,
             [FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth]);
+        if (includeInvalid)
+            Map(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber, SpecTypeId.Number, "Identity Data", false,
+                [FamilyFoundryMatrixFixtureBuilder.SourceText]);
         return new FamilyPatch { Patch = new JObject { ["parameters"] = parameters } };
+    }
+
+    private static FamilyPatch MetadataPatch() {
+        var parameters = new JObject {
+            [FamilyFoundryMatrixFixtureBuilder.MetadataLocalTypeText] = Local("Text", "Text", false),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataLocalInstanceNumber] = Local("Number", "Identity Data", true),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip] = Local("Text", "Identity Data", true,
+                FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltipDescription),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText] = Shared(
+                FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeTextGuid, SpecTypeId.String.Text, "Text", false),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength] = Shared(
+                FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLengthGuid, SpecTypeId.Length, "Geometry", true),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared] = Shared(
+                FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundSharedGuid, SpecTypeId.String.Text, "Electrical", true),
+            [FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText] = Local("Text", "Identity Data", false,
+                "Metadata state applied by the matrix migration profile.", "metadata-applied-local-ok")
+        };
+        return new FamilyPatch { Patch = new JObject { ["parameters"] = parameters } };
+
+        static JObject Local(string dataType, string group, bool instance, string? tooltip = null, string? value = null) {
+            var result = new JObject { ["dataType"] = dataType, ["propertiesGroup"] = group, ["isInstance"] = instance };
+            if (tooltip is not null) result["tooltip"] = tooltip;
+            if (value is not null) result["value"] = value;
+            return result;
+        }
+        static JObject Shared(Guid guid, ForgeTypeId spec, string group, bool instance) => new() {
+            ["shared"] = true, ["sharedGuid"] = guid.ToString(), ["sharedSpecId"] = spec.TypeId,
+            ["propertiesGroup"] = group, ["isInstance"] = instance
+        };
     }
 
     private static void AssertMigratedMatrixEndState(Document familyDocument, FamilyPatch patch) {
@@ -222,7 +315,7 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         }
 
         var removedSources = ((JObject)patch.Patch["parameters"]!).Properties()
-            .SelectMany(parameter => parameter.Value["wasNamed"]!.Values<string>()).Distinct(StringComparer.Ordinal);
+            .SelectMany(parameter => parameter.Value["wasNamed"]!.Values<string>().OfType<string>()).Distinct(StringComparer.Ordinal);
         Assert.That(removedSources.Select(manager.FindParameter), Is.All.Null);
 
         Assert.Multiple(() => {
@@ -290,6 +383,72 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             .Select(instance => instance.LookupParameter(FamilyFoundryMatrixFixtureBuilder.NestedWidth)).First(parameter => parameter is not null)!;
         Assert.That(manager.GetAssociatedFamilyParameter(nestedWidth)?.Definition.Name,
             Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth));
+    }
+
+    private static string[] NativeReferenceGraph(Document familyDocument) {
+        var manager = familyDocument.FamilyManager;
+        return new FilteredElementCollector(familyDocument).OfClass(typeof(Dimension)).Cast<Dimension>()
+            .Select(dimension => $"dimension:{dimension.Id}:{GetFamilyLabelName(dimension)}")
+            .Concat(new FilteredElementCollector(familyDocument).OfClass(typeof(BaseArray)).Cast<BaseArray>()
+                .Select(array => $"array:{array.Id}:{array.Label?.Definition.Name}"))
+            .Concat(new FilteredElementCollector(familyDocument).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .Select(instance => instance.LookupParameter(FamilyFoundryMatrixFixtureBuilder.NestedWidth))
+                .Where(parameter => parameter is not null)
+                .Select(parameter => $"nested:{parameter!.Element.Id}:{manager.GetAssociatedFamilyParameter(parameter)?.Definition.Name}"))
+            .OrderBy(value => value, StringComparer.Ordinal).ToArray();
+    }
+
+    private static Dictionary<string, object?> MetadataValues(Document familyDocument, IEnumerable<string> names) {
+        var manager = familyDocument.FamilyManager;
+        var document = new FamilyDocument(familyDocument);
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var typeName in FamilyFoundryMatrixFixtureBuilder.MetadataTypeNames) {
+            var type = manager.Types.Cast<FamilyType>().Single(item => item.Name == typeName);
+            foreach (var name in names) {
+                var parameter = manager.FindParameter(name)
+                    ?? throw new InvalidOperationException($"Metadata parameter '{name}' was not found.");
+                values[$"{typeName}/{name}"] = document.GetValue(type, parameter);
+            }
+        }
+        return values;
+    }
+
+    private static void AssertAppliedMetadataEndState(Document familyDocument, IReadOnlyDictionary<string, object?> beforeValues) {
+        var manager = familyDocument.FamilyManager;
+        var parameters = manager.Parameters.Cast<FamilyParameter>()
+            .ToDictionary(parameter => parameter.Definition.Name, StringComparer.Ordinal);
+        Assert.Multiple(() => {
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataLocalTypeText,
+                false, false, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataLocalInstanceNumber,
+                false, true, StorageType.Double, SpecTypeId.Number, GroupTypeId.IdentityData);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip,
+                false, true, StorageType.String, SpecTypeId.String.Text, GroupTypeId.IdentityData);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText,
+                true, false, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength,
+                true, true, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared,
+                true, true, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Electrical);
+            AssertMetadataParameter(parameters, FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText,
+                false, false, StorageType.String, SpecTypeId.String.Text, GroupTypeId.IdentityData);
+        });
+        Assert.That(MetadataValues(familyDocument, beforeValues.Keys.Select(key => key[(key.IndexOf('/') + 1)..]).Distinct()),
+            Is.EqualTo(beforeValues));
+        foreach (var typeName in FamilyFoundryMatrixFixtureBuilder.MetadataTypeNames) {
+            var type = manager.Types.Cast<FamilyType>().Single(item => item.Name == typeName);
+            Assert.That(type.AsString(parameters[FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText]),
+                Is.EqualTo("metadata-applied-local-ok"));
+        }
+        var captured = familyDocument.CaptureFamilyModel();
+        Assert.That(captured.Parameters[FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip].Tooltip,
+            Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltipDescription));
+        Assert.That(captured.Parameters[FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText].Tooltip,
+            Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeTextDescription));
+        Assert.That(captured.Parameters[FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength].Tooltip,
+            Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLengthDescription));
+        Assert.That(captured.Parameters[FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared].Tooltip,
+            Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundSharedDescription));
     }
 
     private static void AssertMetadataStateFamilyTopology(Document familyDocument) {
