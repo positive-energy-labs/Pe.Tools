@@ -268,11 +268,18 @@ public sealed class FamilyModelRoundtripTests {
     [Test]
     public void Bath_nested_instances_follow_authored_host_geometry() {
         var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Bath_nested_instances_follow_authored_host_geometry));
+        WritePipeFixtureUnitsAssociationProbe(this._ui.Application, directory!, output);
         Document? bath = null;
         Document? hinged = null;
         try {
-            bath = FamilyModelBuild.Build(this._ui.Application,
-                RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower"), modelDirectory: directory).Document;
+            try {
+                bath = FamilyModelBuild.Build(this._ui.Application,
+                    RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower"), modelDirectory: directory).Document;
+            } catch (Exception exception) {
+                File.WriteAllText(Path.Combine(output, "bath-connector-association-diagnostic.txt"), exception.ToString());
+                throw;
+            }
             var pucks = new FilteredElementCollector(bath).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
                 .Where(instance => instance.Symbol.Family.Name == "puck").ToList();
             Assert.That(pucks, Has.Count.EqualTo(3));
@@ -318,6 +325,118 @@ public sealed class FamilyModelRoundtripTests {
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(bath);
             RevitFamilyFixtureHarness.CloseDocument(hinged);
+        }
+    }
+
+    private static void WritePipeFixtureUnitsAssociationProbe(Application application, string modelDirectory, string output) {
+        var evidence = new JObject { ["revitVersion"] = application.VersionNumber, ["connectors"] = new JArray() };
+        Document? document = null;
+        try {
+            var source = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json")));
+            source["connectors"] = new JObject();
+            var parsed = FamilyModelJson.Parse(source.ToString(Newtonsoft.Json.Formatting.None));
+            if (parsed.Value is null || parsed.Diagnostics.Count != 0)
+                throw new InvalidOperationException(string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}")));
+            document = FamilyModelBuild.Build(application, parsed.Value, modelDirectory: modelDirectory).Document;
+            var host = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                .Single(plane => plane.Name == "conn top");
+            var manager = document.FamilyManager;
+            using var transaction = new Transaction(document, "Probe pipe Fixture Units association prerequisites");
+            transaction.Start();
+            try {
+                var cases = new[] {
+                    (Autodesk.Revit.DB.Plumbing.PipeSystemType.DomesticColdWater, FlowDirectionType.In, "PE_P_LoadCalc_CWFU"),
+                    (Autodesk.Revit.DB.Plumbing.PipeSystemType.DomesticHotWater, FlowDirectionType.In, "PE_P_LoadCalc_HWFU"),
+                    (Autodesk.Revit.DB.Plumbing.PipeSystemType.Sanitary, FlowDirectionType.Out, "PE_P_LoadCalc_DFU")
+                };
+                foreach (var (systemType, direction, targetName) in cases) {
+                    var row = new JObject {
+                        ["systemType"] = systemType.ToString(),
+                        ["flowDirectionRequested"] = direction.ToString(),
+                        ["targetName"] = targetName,
+                        ["stages"] = new JArray()
+                    };
+                    ((JArray)evidence["connectors"]!).Add(row);
+                    using var attempt = new SubTransaction(document);
+                    attempt.Start();
+                    try {
+                        var target = manager.get_Parameter(targetName)
+                                     ?? throw new InvalidOperationException($"Probe family has no parameter '{targetName}'.");
+                        var connector = ConnectorElement.CreatePipeConnector(document, systemType, host.GetReference());
+                        document.Regenerate();
+                        row["fixtureUnits"] = ParameterFacts(connector.get_Parameter(BuiltInParameter.RBS_PIPE_FIXTURE_UNITS_PARAM));
+                        row["familyTarget"] = new JObject {
+                            ["id"] = target.Id.Value(),
+                            ["name"] = target.Definition.Name,
+                            ["storage"] = target.StorageType.ToString(),
+                            ["spec"] = target.Definition.GetDataType().TypeId,
+                            ["group"] = target.Definition.GetGroupTypeId().TypeId,
+                            ["shared"] = target.IsShared,
+                            ["guid"] = target.IsShared ? target.GUID : null,
+                            ["instance"] = target.IsInstance
+                        };
+                        AddStage("created");
+
+                        var directionParameter = connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM);
+                        row["flowDirectionSet"] = directionParameter?.Set((int)direction);
+                        document.Regenerate();
+                        AddStage("flow-direction-set");
+
+                        var configuration = connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM);
+                        row["demandSet"] = configuration?.Set((int)Autodesk.Revit.DB.Plumbing.PipeFlowConfigurationType.Demand);
+                        document.Regenerate();
+                        AddStage("demand-set");
+
+                        void AddStage(string stage) {
+                            var fixtureUnits = connector.get_Parameter(BuiltInParameter.RBS_PIPE_FIXTURE_UNITS_PARAM)
+                                               ?? throw new InvalidOperationException("Native connector has no RBS_PIPE_FIXTURE_UNITS_PARAM.");
+                            ((JArray)row["stages"]!).Add(new JObject {
+                                ["stage"] = stage,
+                                ["domain"] = connector.Domain.ToString(),
+                                ["systemClassification"] = connector.SystemClassification.ToString(),
+                                ["flowConfiguration"] = EnumParameterFacts<Autodesk.Revit.DB.Plumbing.PipeFlowConfigurationType>(
+                                    connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM)),
+                                ["flowDirection"] = EnumParameterFacts<FlowDirectionType>(
+                                    connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM)),
+                                ["canAssociate"] = manager.CanElementParameterBeAssociated(fixtureUnits)
+                            });
+                        }
+                    } catch (Exception exception) {
+                        row["error"] = exception.ToString();
+                    } finally {
+                        if (attempt.GetStatus() == TransactionStatus.Started) attempt.RollBack();
+                    }
+                }
+            } finally {
+                if (transaction.GetStatus() == TransactionStatus.Started) transaction.RollBack();
+            }
+        } catch (Exception exception) {
+            evidence["probeError"] = exception.ToString();
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            File.WriteAllText(Path.Combine(output, "bath-connector-association-prerequisites.json"), evidence.ToString());
+        }
+
+        static JObject ParameterFacts(Parameter? parameter) {
+            if (parameter is null) return new JObject { ["missing"] = true };
+            var builtIn = (parameter.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID;
+            return new JObject {
+                ["id"] = parameter.Id.Value(),
+                ["builtInParameter"] = builtIn.ToString(),
+                ["name"] = parameter.Definition.Name,
+                ["storage"] = parameter.StorageType.ToString(),
+                ["spec"] = parameter.Definition.GetDataType().TypeId,
+                ["readOnly"] = parameter.IsReadOnly
+            };
+        }
+
+        static JObject EnumParameterFacts<T>(Parameter? parameter) where T : struct, Enum {
+            var facts = ParameterFacts(parameter);
+            if (parameter?.StorageType != StorageType.Integer) return facts;
+            var value = parameter.AsInteger();
+            facts["value"] = value;
+            facts["enum"] = Enum.GetName(typeof(T), value);
+            return facts;
         }
     }
 
