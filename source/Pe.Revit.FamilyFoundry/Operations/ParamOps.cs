@@ -161,7 +161,7 @@ public sealed class SetFamilySettings(FamilyModelSettings settings) : DocOperati
         Set(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS, "cutWithVoidsWhenLoaded", settings.CutWithVoidsWhenLoaded, logs);
         if (settings.PartType is { } pt) {
             try {
-                var partType = Enum.Parse<PartType>(pt.ToString());
+                var partType = (PartType)Enum.Parse(typeof(PartType), pt.ToString());
                 var p = family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE) ?? throw new InvalidOperationException("no Part Type parameter");
                 _ = p.Set((int)partType);
                 logs.Add(new LogEntry("partType").Success(pt.ToString()));

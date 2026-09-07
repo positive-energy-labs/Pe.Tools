@@ -280,7 +280,8 @@ public static class FamilyReconciler {
     private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null, FamilyModel? desired = null, JObject? authored = null, object? sharedDefinitions = null) {
         var json = JsonConvert.SerializeObject(
             new { Changes = changes, Current = current, Run = run, Desired = desired, Authored = authored, SharedDefinitions = sharedDefinitions }, FamilyModelJson.Settings);
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)))[..16];
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-", "")[..16];
     }
 
     // ── lowering: the ordering DAG (r2-reconcile §4) ──

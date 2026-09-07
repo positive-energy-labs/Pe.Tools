@@ -56,7 +56,7 @@ internal sealed class FamilyModelCapturer {
     }
 
     public FamilyModel Run() {
-        var placement = Enum.Parse<FamilyModelPlacement>(this._d.OwnerFamily.FamilyPlacementType.ToString());
+        var placement = (FamilyModelPlacement)Enum.Parse(typeof(FamilyModelPlacement), this._d.OwnerFamily.FamilyPlacementType.ToString());
         var categoryName = this._d.OwnerFamily.FamilyCategory?.Name ?? string.Empty;
         if (!LenientEnumConverter<FamilyCategory>.TryParse(categoryName, out var category)) {
             this.Add(UnmodeledReason.TemplateUnknown, "$.family.category", ("category", categoryName));
@@ -556,7 +556,7 @@ internal sealed class FamilyModelCapturer {
             var nestedFace = this.NestedFaceUnder(c.Origin, normal);
             if (nestedFace != null) {
                 this.Add(UnmodeledReason.ConnectorOnNestedFace, "$.connectors", ("domain", domain.ToString()!), ("systemType", system.ToString()!),
-                    ("family", nestedFace.Symbol.Family.Name), ("instance", this._nestedSlug.GetValueOrDefault(nestedFace.Id, "")), ("origin", Fmt(c.Origin)));
+                    ("family", nestedFace.Symbol.Family.Name), ("instance", this._nestedSlug.TryGetValue(nestedFace.Id, out var nestedSlug) ? nestedSlug : ""), ("origin", Fmt(c.Origin)));
                 continue;
             }
 
@@ -842,7 +842,7 @@ internal sealed class FamilyModelCapturer {
         string.Join("-", new string(value.Trim().Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-').ToArray())
             .Split(['-'], StringSplitOptions.RemoveEmptyEntries));
 
-    private static string Fmt(XYZ p) => string.Create(CultureInfo.InvariantCulture, $"({p.X:0.####},{p.Y:0.####},{p.Z:0.####})");
+    private static string Fmt(XYZ p) => FormattableString.Invariant($"({p.X:0.####},{p.Y:0.####},{p.Z:0.####})");
 
     private static T? Try<T>(Func<T> f) {
         try { return f(); } catch { return default; }
