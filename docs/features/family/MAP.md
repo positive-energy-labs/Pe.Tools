@@ -17,13 +17,14 @@ Nothing is merged to main or published. No whole user story is closed yet.
 - Shared fragments merge by field, later values win; profile fields override their preset.
 - Measurable authored literals require units. Number/Integer stay unitless.
 
-## Checkpoint at 2026-09-07 06:32 UTC
+## Checkpoint at 2026-09-07 07:03 UTC
 
-Integration `23dc97e` compiles Pe.Revit.Tests for R25 (0 errors, 120 warnings).
+Native integration `897872a` compiles Pe.Revit.Tests for R25 (0 errors, 119 warnings).
+Web/Host receipt and Apply eligibility changes are integrated in `b56b452` (agent checks 39/39).
 SDK candidate `0.1.0-beta.151.ff.1` is a complete eleven-package graph from SDK `8fe90de`.
 Integration pins CLI and SDK together; all receipt hashes were checked before copying.
 R24 and R26 FamilyFoundry compiles now pass, resolving missing-companion/fallback failures.
-R23 compiled earlier; the latest integrated source still needs that year's check.
+R23 FamilyFoundry also compiles after replacing the NET48-incompatible DistinctBy call.
 The candidate is local to this branch/feed; no installed-product update or publication occurred.
 
 Fresh controlled wave 7 (`3dc0dcb`): 25 passed, 22 failed / 47. Lookup full roundtrip,
@@ -41,7 +42,13 @@ its exit cause remains unconfirmed. Do not describe that process as preserved.
 The `/family` + `/families` session is controlled `ff-route-25`, dev snapshot generation
 `20260907062428752`, build stamp `ed915890270c`, source `ca353e9`. It runs SDK151.ff.1
 payload dependencies. P owns lifecycle and document activation; R owns browser interaction.
-Disposable project/family baselines are being prepared; actual Plan/Apply/readback is pending.
+Actual `/family` browser Apply and native independent readback passed: Width 42 inches,
+shared count 7 with the expected GUID, and old source removed. Fleet Apply committed the same
+changes, but its response failed by reading an invalid pre-load Family object. Native receipt
+and independent readback recovered success; the original Apply must not be replayed.
+An open same-name external family editor also contaminated project Plan through title-based
+reuse. Both shared-owner fixes and a native bridge regression test are now integrated, awaiting
+fresh proof. The next browser run uses new disposable paths and keeps unknown-outcome evidence.
 Root source edits do not refresh this immutable session.
 
 All 45 frozen company profiles now compose, including reconstructed Dehumidifier and AprilAire
@@ -74,9 +81,12 @@ Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [ro
   connector/template support geometry.
 - R: actual route Plan/Apply/receipt/no-op journeys; shared-fragment edit origin, native dependency
   composition, Pea authoring and durable scope/target integration. Fixture browser proof is separate.
-- Root: geometry identity/capture and native value preservation acceptance; complete details capture
-  and application (currently NotRead); replace DeleteByName shape heuristics with exact capture-derived
-  native identity. Current form lookup by sketch plane and size-based stub exclusion are unsafe.
+- Root: geometry identity/capture and native value preservation acceptance. Symbolic connected-loop
+  capture/application and exact capture-derived deletion are implemented and compile, not yet native
+  proven. Generated names retain no metadata. Two symbolic roundtrips exercise visibility and geometry.
+- Root: connector support extrusion capture/rebuild and raw macro-profile reapply. Inspect the actual
+  composed route payload: applying a raw Prism to already expanded captured geometry may collide with
+  generated planes or inherit incompatible extrusion fields. No workaround or feature waiver adopted.
 - Root/P: circle/ref-line constraints, arrays, connector orientation/association and physical geometry
   perturbation. Four self-consistent roundtrips alone do not prove authored intent.
 - Root: supported-year compilation/runtime and native sidecar availability; cross-year script/Pod
