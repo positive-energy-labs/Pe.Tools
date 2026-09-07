@@ -9,6 +9,14 @@ export const diagnosticSchema = z.object({
   message: z.string(),
   suggestion: z.string().nullish(),
 });
+export const revitDataIssueSchema = z.object({
+  code: z.string(),
+  severity: z.enum(["Info", "Warning", "Error"]),
+  message: z.string(),
+  familyName: z.string().nullish(),
+  typeName: z.string().nullish(),
+  parameterName: z.string().nullish(),
+});
 const changeSchema = z.object({
   section: z.string(),
   key: z.string(),
@@ -22,6 +30,7 @@ export const ffPlanEntrySchema = z.object({
   changes: z.array(changeSchema),
   runEffects: z.array(z.string()),
   refusals: z.array(diagnosticSchema),
+  warnings: z.array(revitDataIssueSchema),
 });
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
 export const ffReceiptSchema = z.object({

@@ -44,6 +44,7 @@ function planEntry(familyId: number, familyName: string, ...targets: string[]): 
     })),
     runEffects: [],
     refusals: [],
+    warnings: [],
   };
 }
 
@@ -383,6 +384,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry, 
             modelJson: authored.raw,
             coverage: {} as Record<string, string>,
             unmodeledCount: authored.model.unmodeled?.length ?? 0,
+            issues: [],
           };
         const family = rows.find((candidate) => candidate.familyId === familyId);
         return family
@@ -392,6 +394,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry, 
               success: true,
               coverage: { parameters: "Read", types: "Read" },
               unmodeledCount: 0,
+              issues: [],
               modelJson: JSON.stringify(
                 {
                   family: {
@@ -427,6 +430,7 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry, 
               success: false,
               coverage: {} as Record<string, string>,
               unmodeledCount: 0,
+              issues: [],
               error: "fixture family not found",
             };
       }),

@@ -85,6 +85,7 @@ test("native capture projects only read values and gates missing claims on cover
     origin: "capture" as const,
     unmodeledCount: 1,
     coverage: { parameters: "Partial" },
+    issues: [],
     modelJson:
       '{"parameters":{"Width":{},"Derived":{"formula":"Width * 2"}},"types":{"Standard":{"Width":12,"Derived":24}}}',
   };
@@ -118,6 +119,7 @@ test("native capture without an authored file renders a read-only family lane", 
     familyName: "Opened family",
     coverage: { parameters: "Read" },
     unmodeledCount: 0,
+    issues: [],
     origin: "capture" as const,
     reading: {
       at: address("C:\\Models\\Opened.rfa"),

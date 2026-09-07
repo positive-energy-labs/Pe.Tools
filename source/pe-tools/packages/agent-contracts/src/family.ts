@@ -18,6 +18,7 @@ import {
   familyExecutionOptionsSchema,
   ffPlanEntrySchema,
   ffReceiptSchema,
+  revitDataIssueSchema,
 } from "./families.ts";
 import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
@@ -75,6 +76,7 @@ export const familyEvidenceSchema = z.union([
     modelJson: z.string(),
     unmodeledCount: z.number(),
     coverage: z.record(z.string(), z.string()),
+    issues: z.array(revitDataIssueSchema),
     origin: z.literal("capture"),
     rfaPath: z.string().nullish(),
   }),
