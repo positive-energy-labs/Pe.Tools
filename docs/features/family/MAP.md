@@ -4,6 +4,13 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
+Compile portability at e44aa8e: Pe.Revit.FamilyFoundry builds successfully for Debug.R23
+and Debug.R24 (net48, 161 warnings each) and Debug.R26 (net8.0-windows7.0, 74 warnings).
+MSBuild property reads independently confirm each RevitVersion and output configuration.
+Together with the Debug.R25.Tests build this covers compile compatibility for all declared
+2023-2026 years, not cross-year runtime or full Pe.App/route integration. Evidence is in
+Pe.Tools-ff-portability/.artifacts/runs/compile-20260907-portability/r23.log, r24.log, r26.log.
+
 Budget posture revised by user: Sol medium/high for bounded work; Opus high when useful;
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
