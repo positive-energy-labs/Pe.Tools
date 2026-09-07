@@ -158,10 +158,12 @@ public static class FamilyReconciler {
                 parsed = FamilyModelJson.Parse(merged.ToString());
             }
         }
-        var existingDiagnostics = FamilyModelValidator.Validate(current);
+        var existingDiagnostics = FamilyModelValidator.Validate(current).Select(d => (d.Code, d.Path)).ToHashSet();
         var authoredSections = effective.Properties().Where(p => p.Value is not JObject o || o.HasValues)
-            .Select(p => "$." + p.Name).ToList();
-        return parsed with { Diagnostics = parsed.Diagnostics.Where(d => !existingDiagnostics.Contains(d) ||
+            .SelectMany(p => p.Name == "parameters" && p.Value is JObject parameters
+                ? parameters.Properties().Select(parameter => $"$.parameters.{parameter.Name}")
+                : ["$." + p.Name]).ToList();
+        return parsed with { Diagnostics = parsed.Diagnostics.Where(d => !existingDiagnostics.Contains((d.Code, d.Path)) ||
             authoredSections.Any(section => d.Path == section || d.Path.StartsWith(section + ".", StringComparison.Ordinal))).ToList() };
     }
 

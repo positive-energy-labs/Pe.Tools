@@ -77,6 +77,34 @@ public sealed class FamilyReconcilerTests {
     private const string Header = """ "family": { "name": "T", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" } """;
 
     [Test]
+    public void Parameter_patch_preserves_unmentioned_native_formula_and_unknown_spec_diagnostics() {
+        var current = new FamilyModel {
+            Family = new FamilyModelHeader { Name = "Legacy", Category = FamilyCategory.MechanicalEquipment,
+                Template = "Mechanical Equipment", Placement = FamilyModelPlacement.OneLevelBased },
+            Parameters = new Dictionary<string, FamilyModelParameter>(StringComparer.Ordinal) {
+                ["Mech Equip Model Number"] = new() { DataType = DataType.Text, Formula = "Model" },
+                ["Density"] = new()
+            }
+        };
+        var unrelated = FamilyPatch.Parse("""{"patch":{"parameters":{"PE_G___Model":{"dataType":"Text"}}}}""");
+        var preserved = FamilyReconciler.Desired(current, unrelated);
+
+        Assert.Multiple(() => {
+            Assert.That(preserved.Diagnostics, Is.Empty);
+            Assert.That(preserved.Value!.Parameters["Mech Equip Model Number"].Formula, Is.EqualTo("Model"));
+            Assert.That(preserved.Value.Parameters["Density"].DataType, Is.Null);
+            Assert.That(FamilyReconciler.Diff(preserved.Value, current, UnitResolvers.Portable)
+                .Where(change => change.Key is "Mech Equip Model Number" or "Density"), Is.Empty);
+            Assert.That(FamilyReconciler.Desired(current, FamilyPatch.Parse(
+                """{"patch":{"parameters":{"Mech Equip Model Number":{"formula":"Missing authored name"}}}}""")).Diagnostics
+                .Select(d => d.Code), Does.Contain(FamilyModelDiagnosticCodes.FormulaUnknownName));
+            Assert.That(FamilyReconciler.Desired(current, FamilyPatch.Parse(
+                """{"patch":{"parameters":{"Density":{"value":1}}}}""")).Diagnostics
+                .Select(d => d.Code), Does.Contain(FamilyModelDiagnosticCodes.Required));
+        });
+    }
+
+    [Test]
     public void Empty_group_and_omitted_group_diff_empty_without_native_resolution() {
         var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "" } } }""");
         var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } } }""");
