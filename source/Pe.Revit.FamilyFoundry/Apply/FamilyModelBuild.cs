@@ -63,13 +63,21 @@ public static class FamilyModelBuild {
                     child = Build(application, parsed.Value, options, directory, ancestors).Document;
                 } else if (File.Exists(nativePath)) {
                     child = application.OpenDocumentFile(nativePath);
-                    if (!child.IsFamilyDocument || child.OwnerFamily.Name != name)
-                        throw new InvalidOperationException($"Dependency '{nativePath}' must contain family '{name}'.");
+                    if (!child.IsFamilyDocument)
+                        throw new InvalidOperationException($"Dependency '{nativePath}' is not a family document.");
                 } else {
                     throw new FileNotFoundException($"Nested family '{name}' requires sibling '{jsonPath}' or '{nativePath}'.");
                 }
                 var loaded = child.LoadFamily(target, new DefaultFamilyLoadOptions())
                              ?? throw new InvalidOperationException($"Revit did not load nested family '{name}'.");
+                // Unsaved documents and native sidecars can carry a different internal family name.
+                if (loaded.Name != name) {
+                    using var rename = new Transaction(target, "Name nested dependency");
+                    rename.Start();
+                    loaded.Name = name;
+                    if (rename.Commit() != TransactionStatus.Committed)
+                        throw new InvalidOperationException($"Nested family '{name}' could not be named.");
+                }
                 var types = loaded.GetFamilySymbolIds().Select(id => target.GetElement(id).Name).ToHashSet(StringComparer.Ordinal);
                 foreach (var required in group.Select(n => n.Type).Distinct(StringComparer.Ordinal))
                     if (!types.Contains(required))
