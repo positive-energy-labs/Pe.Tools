@@ -42,6 +42,47 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    public static IEnumerable<string> CompanyProfiles() => JArray.Parse(File.ReadAllText(
+        RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).Select(p => (string)p["source"]!);
+
+    [TestCaseSource(nameof(CompanyProfiles))]
+    [Category("CompanyCorpus")]
+    public void Each_company_profile_parameter_intent_uses_public_reconciler(string profilePath) {
+        var profile = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+            .Single(p => (string)p["source"]! == profilePath);
+        var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+            RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
+        var document = this.NewFamily("Company profile parameter proof");
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Each_company_profile_parameter_intent_uses_public_reconciler));
+        var evidence = new JObject { ["profile"] = profilePath, ["composedSettings"] = profile["settings"]!.DeepClone() };
+        try {
+            var patch = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
+            evidence["parameterPatch"] = patch.Patch.DeepClone();
+            var before = document.CaptureFamilyModel();
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            evidence["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt);
+            evidence["error"] = error?.ToString();
+            if (error is not null) {
+                var after = document.CaptureFamilyModel();
+                Assert.That(FamilyModelJson.Serialize(after), Is.EqualTo(FamilyModelJson.Serialize(before)), "Failed parameter migration must fully roll back.");
+            }
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            foreach (var parameter in ((JObject)patch.Patch["parameters"]!).Properties().Where(p => p.Value.Value<bool?>("shared") == true)) {
+                var actual = document.FamilyManager.get_Parameter(parameter.Name);
+                Assert.That(actual?.IsShared, Is.True, parameter.Name);
+                Assert.That(actual!.GUID, Is.EqualTo(definitions.Single(d => d.Name == parameter.Name).DownloadOptions.GetGuid()));
+            }
+        } catch (Exception error) { evidence["failure"] = error.ToString(); throw; }
+        finally {
+            File.WriteAllText(Path.Combine(output, "company-profile-parameters.json"), evidence.ToString());
+            document.Close(false);
+        }
+    }
+
     [Test]
     public void Authored_form_view_flags_survive_build_save_and_reopen() {
         var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.family.json")));
@@ -54,9 +95,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         Assert.That(built.Receipt?.Converged, Is.True);
         var document = this._application.OpenDocumentFile(path);
         try {
-            var forms = new FilteredElementCollector(document).OfClass(typeof(Extrusion)).Cast<Extrusion>().ToList();
-            Assert.That(forms, Is.Not.Empty);
-            foreach (var form in forms) {
+            var manager = document.FamilyManager;
+            var type = manager.CurrentType;
+            var expectedSize = new XYZ(type.AsDouble(manager.get_Parameter("Width"))!.Value,
+                type.AsDouble(manager.get_Parameter("Depth"))!.Value, type.AsDouble(manager.get_Parameter("Height"))!.Value);
+            // Identify the authored box independently by its native extents, not the writer's lookup or every extrusion.
+            var body = new FilteredElementCollector(document).OfClass(typeof(Extrusion)).Cast<Extrusion>().Single(form => {
+                var bounds = form.get_BoundingBox(null);
+                return bounds is not null && (bounds.Max - bounds.Min).IsAlmostEqualTo(expectedSize, 1e-6);
+            });
+            {
+                var form = body;
                 var visibility = form.GetVisibility();
                 Assert.That(new[] { visibility.IsShownInPlanRCPCut, visibility.IsShownInFrontBack, visibility.IsShownInLeftRight,
                     visibility.IsShownOnlyWhenCut, visibility.IsShownInCoarse, visibility.IsShownInMedium, visibility.IsShownInFine },

@@ -2,11 +2,71 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Shared.RevitData.Families;
 using Pe.Revit.Parameters;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.DocumentData.Parameters;
 
 namespace Pe.Revit.Tests;
 
 /// <summary>Test-only parameter conversion after existing include/filter composition. Unsupported policy fails explicitly.</summary>
 internal static class CompanyNormalizationFixture {
+    public static FamilyPatch ConvertProfileParameters(JObject profile, Document document,
+        IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions) {
+        var filter = profile["FilterApsParams"];
+        var older = profile["SharedParameterSelection"];
+        var selected = definitions.Where(d => !d.IsArchived && Matches(d.Name!, filter?["IncludeNames"] ?? older?["Include"], true) &&
+            !Matches(d.Name!, filter?["ExcludeNames"] ?? older?["Exclude"], false)).Select(d => d.Name!).ToList();
+        var mappings = profile["AddAndMapSharedParams"]?.ToObject<MapParamsSettings>() ??
+            new MapParamsSettings { Enabled = profile["MappingData"] is not null, MappingData = profile["MappingData"]?.ToObject<List<MappingData>>() ?? [] };
+        var conditional = mappings.MappingData.Where(m => m.OnlyAddIfSourceExists).ToList();
+        foreach (var mapping in conditional) {
+            if (document.FamilyManager.get_Parameter(mapping.NewName) is null && !mapping.CurrNames.Any(n => document.FamilyManager.get_Parameter(n) is not null))
+                selected.Remove(mapping.NewName);
+        }
+        // The existing converter can now consume the per-family decision without an unresolved conditional rule.
+        var resolvedMappings = JObject.FromObject(mappings);
+        foreach (var mapping in resolvedMappings["MappingData"]!) mapping["OnlyAddIfSourceExists"] = false;
+        var specs = definitions.ToDictionary(d => d.Name!, d => d.DownloadOptions.GetSpecTypeId(), StringComparer.Ordinal);
+        var locals = new JObject();
+        if (profile["AddFamilyParams"] is JObject add && add.Value<bool?>("Enabled") != false) {
+            var labels = RevitLabelCatalog.GetLabelToSpecMap();
+            foreach (var local in add["Parameters"] ?? new JArray()) {
+                var name = (string)local["Name"]!;
+                var label = (string?)local["DataType"] ?? "Text (Common)";
+                var spec = labels.TryGetValue(label, out var known) ? known : throw new InvalidOperationException($"Unknown legacy datatype {label}: {name}");
+                specs[name] = spec;
+                var dataType = Enum.GetValues(typeof(DataType)).Cast<DataType>().First(t => SetParamMetadata.Spec(t) == spec);
+                locals[name] = new JObject { ["dataType"] = dataType.ToString(), ["isInstance"] = local.Value<bool?>("IsInstance") ?? true,
+                    ["propertiesGroup"] = SetParamMetadata.Group((string?)local["PropertiesGroup"] ?? "").TypeId };
+                if (local["Tooltip"] is { Type: JTokenType.String } tooltip) locals[name]!["tooltip"] = tooltip.DeepClone();
+            }
+        }
+        foreach (FamilyParameter parameter in document.FamilyManager.Parameters) specs.TryAdd(parameter.Definition.Name, parameter.Definition.GetDataType());
+        var assignments = profile["SetKnownParams"]?.ToObject<SetKnownParamsSettings>();
+        if (older is not null) {
+            if (profile["FamilyParameters"]?.HasValues == true || profile["PerTypeAssignmentsTable"]?.HasValues == true)
+                throw new InvalidOperationException("Unmodeled older local/type assignments must be converted explicitly.");
+            assignments = new SetKnownParamsSettings { GlobalAssignments = (profile["SharedParameters"] ?? new JArray())
+                .Select(p => new GlobalParamAssignment { Parameter = (string)p["Name"]!, Kind = ParamAssignmentKind.Value, Value = (string)p["Value"]! }).ToList() };
+        }
+        var patch = Convert(resolvedMappings.ToObject<MapParamsSettings>()!, selected,
+            assignments, specs: specs, legacyUnits: document.GetUnits());
+        var parameters = (JObject)patch.Patch["parameters"]!;
+        foreach (var local in locals.Properties()) {
+            if (parameters[local.Name] is JObject assigned) ((JObject)local.Value).Merge(assigned);
+            parameters[local.Name] = local.Value;
+        }
+        return patch;
+
+        static bool Matches(string name, JToken? rules, bool empty) {
+            var equal = (rules?["Equaling"] ?? rules?["Names"])?.Values<string>().ToList() ?? [];
+            var starts = rules?["StartingWith"]?.Values<string>().ToList() ?? [];
+            var contains = rules?["Containing"]?.Values<string>().ToList() ?? [];
+            return equal.Count + starts.Count + contains.Count == 0 ? empty : equal.Contains(name) ||
+                starts.Any(p => name.StartsWith(p!, StringComparison.Ordinal)) || contains.Any(p => name.Contains(p!, StringComparison.Ordinal));
+        }
+    }
+
     public static FamilyPatch Convert(MapParamsSettings mappings, IEnumerable<string> selectedSharedNames,
         SetKnownParamsSettings? assignments = null, bool fillBlanksFromSources = false,
         IReadOnlyDictionary<string, ForgeTypeId>? specs = null, Units? legacyUnits = null) {

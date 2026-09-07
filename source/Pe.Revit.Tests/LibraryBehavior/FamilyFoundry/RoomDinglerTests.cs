@@ -8,12 +8,66 @@ using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Tests.LibraryBehavior.FamilyFoundry;
 
 [TestFixture]
 public sealed class RoomDinglerTests {
     private const string RoomName = "Room Dingler Proof Room";
+
+    [Test]
+    public void Native_room_point_parameters_report_binding_and_position_response(UIApplication uiApplication) {
+        RevitTestFailureGuard.EnsureInstalled(uiApplication.Application);
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_room_point_parameters_report_binding_and_position_response));
+        var evidence = new JArray();
+        try {
+            foreach (var template in new[] { "Mechanical Equipment.rft", "Generic Model face based.rft", "Mechanical Equipment wall based.rft", "Door.rft" }) {
+                var document = uiApplication.Application.NewFamilyDocument(ResolveFamilyTemplatePath(uiApplication.Application, template));
+                try {
+                    using var transaction = new Transaction(document, "Probe room point native bindings");
+                    transaction.Start();
+                    document.OwnerFamily.ShowSpatialElementCalculationPoint = true;
+                    var manager = document.FamilyManager;
+                    if (manager.CurrentType is null) manager.NewType("Binding probe");
+                    var source = manager.AddParameter("Probe room offset", GroupTypeId.Geometry, SpecTypeId.Length, false);
+                    manager.Set(source, 1d);
+                    document.Regenerate();
+                    var points = new FilteredElementCollector(document).WhereElementIsNotElementType().OfType<SpatialElementCalculationLocation>().ToList();
+                    Assert.That(points, Is.Not.Empty, template);
+                    foreach (var point in points) {
+                        var row = new JObject { ["template"] = template, ["class"] = point.GetType().Name, ["parameters"] = new JArray() };
+                        evidence.Add(row);
+                        foreach (Parameter parameter in point.Parameters) {
+                            var item = new JObject { ["name"] = parameter.Definition.Name, ["spec"] = parameter.Definition.GetDataType().TypeId,
+                                ["storage"] = parameter.StorageType.ToString(), ["readOnly"] = parameter.IsReadOnly };
+                            ((JArray)row["parameters"]!).Add(item);
+                            item["canAssociate"] = manager.CanElementParameterBeAssociated(parameter);
+                            if (!(bool)item["canAssociate"]! || parameter.Definition.GetDataType() != SpecTypeId.Length) continue;
+                            using var attempt = new SubTransaction(document);
+                            attempt.Start();
+                            try {
+                                manager.AssociateElementParameterToFamilyParameter(parameter, source);
+                                manager.Set(source, 1d);
+                                document.Regenerate();
+                                item["atOneFoot"] = Positions(point);
+                                manager.Set(source, 2d);
+                                document.Regenerate();
+                                item["atTwoFeet"] = Positions(point);
+                                item["associationReadback"] = manager.GetAssociatedFamilyParameter(parameter)?.Definition.Name;
+                            } catch (Exception error) { item["error"] = error.ToString(); }
+                            finally { attempt.RollBack(); }
+                        }
+                    }
+                    transaction.RollBack();
+                } finally { document.Close(false); }
+            }
+        } finally { File.WriteAllText(Path.Combine(output, "room-point-native-bindings.json"), evidence.ToString()); }
+
+        static JArray Positions(SpatialElementCalculationLocation point) => new((point is SpatialElementCalculationPoint single
+            ? new[] { single.Position } : point is SpatialElementFromToCalculationPoints pair ? new[] { pair.FromPosition, pair.ToPosition } : [])
+            .Select(p => new JArray(p.X, p.Y, p.Z)));
+    }
 
     [Test]
     public void Reconciler_enables_moves_disables_and_reapplies_room_point(UIApplication uiApplication) {
