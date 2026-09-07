@@ -128,7 +128,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var operation = new JObject { ["MakeRefPlaneAndDims"] = settings["MakeRefPlaneAndDims"]!.DeepClone() };
         var document = this.NewFamily("Reference plane conversion proof");
         try {
-            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(operation, [], document.GetUnits());
+            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(operation, [], document.GetUnits()).Patch;
             Assert.That(((JObject)patch.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount));
             Assert.That(((JObject)patch.Patch["dimensions"]!).Count, Is.EqualTo(dimensionCount));
             var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), patch.Patch);
@@ -147,11 +147,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Each_company_profile_parameter_intent_uses_public_reconciler));
         var evidence = new JObject { ["profile"] = profilePath, ["composedSettings"] = profile["settings"]!.DeepClone() };
         try {
-            var patch = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
+            var conversion = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
+            var patch = conversion.Patch;
             evidence["parameterPatch"] = patch.Patch.DeepClone();
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            using var processor = new OperationProcessor(document);
+            using var processor = new OperationProcessor(document, conversion.Options);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
             var (_, error) = contexts.Single().OperationLogs;
             evidence["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt);
@@ -764,7 +765,16 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var document = this.NewFamily("FF normalization rollback");
         try {
             var operation = WidthPatch();
-            using var processor = new OperationProcessor(document, new ExecutionOptions { SingleTransaction = singleTransaction });
+            var options = new ExecutionOptions();
+            if (!singleTransaction) {
+                var profile = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+                    .Single(p => (string)p["source"]! == "CmdFFManager/profiles/SavedEquip/Constrained Box.json");
+                options = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
+                    new JObject { ["ExecutionOptions"] = profile["settings"]!["ExecutionOptions"]!.DeepClone() }, [], document.GetUnits()).Options;
+                Assert.That(options.SingleTransaction, Is.False);
+                Assert.That(options.OptimizeTypeOperations, Is.False);
+            }
+            using var processor = new OperationProcessor(document, options);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation).Add(new FailFamily()));
             var (_, error) = contexts.Single().OperationLogs;
             Assert.That(error, Is.Not.Null);

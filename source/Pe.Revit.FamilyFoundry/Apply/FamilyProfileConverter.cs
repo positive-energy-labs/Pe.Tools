@@ -19,15 +19,14 @@ public static class FamilyProfileConverter {
         };
 
     /// <summary>Convert composed legacy settings to native intent. Refuses any active operation not yet represented; never rewrites source files.</summary>
-    public static FamilyPatch Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
+    public static FamilyProfileConversion Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
         var supported = new HashSet<string>(StringComparer.Ordinal) { "$schema", "ExecutionOptions", "FilterFamilies", "FilterApsParams",
             "AddAndMapSharedParams", "AddFamilyParams", "SetKnownParams", "CleanFamilyDocument", "SortParams", "DeleteParams",
             "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims" };
         foreach (var field in composed.Properties().Where(p => !supported.Contains(p.Name)))
             if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false)
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
-        if (composed["ExecutionOptions"] is JObject execution && execution.HasValues)
-            throw new InvalidOperationException("Profile ExecutionOptions require an explicit processor invocation; export cannot discard them.");
+        var executionOptions = ConvertExecutionOptions(composed["ExecutionOptions"]);
         var familyFilter = composed["FilterFamilies"];
         foreach (var side in new[] { "IncludeNames", "ExcludeNames" })
             if (familyFilter?[side] is JObject names && names.Properties().Any(p => p.Name != "Equaling" && p.Value.HasValues) ||
@@ -90,11 +89,23 @@ public static class FamilyProfileConverter {
         if (composed["AddRoomDingler"]?.ToObject<AddRoomDinglerSettings>() is { Enabled: true } room)
             exported.Patch["roomCalculationPoint"] = JObject.FromObject(new FamilyModelRoomCalculationPoint { Enabled = true, Offset = PortableLength.FromFeet(room.OffsetFeet) }, JsonSerializer.Create(FamilyModelJson.Settings));
         ConvertReferencePlanes(composed["MakeRefPlaneAndDims"], exported.Patch);
-        return new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
+        return new FamilyProfileConversion(new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
             Names = familyFilter?["IncludeNames"]?["Equaling"]?.ToObject<List<string>>(),
             Categories = familyFilter?["IncludeCategoriesEqualing"]?.ToObject<List<FamilyCategory>>(JsonSerializer.Create(FamilyModelJson.Settings)),
             PlacedOnly = familyFilter?.Value<bool?>("IncludeUnusedFamilies") == false ? true : null
-        } };
+        } }, executionOptions);
+    }
+
+    private static ExecutionOptions ConvertExecutionOptions(JToken? token) {
+        if (token is null) return new ExecutionOptions();
+        if (token is not JObject options) throw new InvalidOperationException("ExecutionOptions must be an object.");
+        var supported = new[] { nameof(ExecutionOptions.SingleTransaction), nameof(ExecutionOptions.OptimizeTypeOperations),
+            nameof(ExecutionOptions.EnableCollectors), nameof(ExecutionOptions.SuppressWarnings) };
+        var unknown = options.Properties().Where(p => !supported.Contains(p.Name, StringComparer.Ordinal)).Select(p => p.Name).ToList();
+        if (unknown.Count > 0) throw new InvalidOperationException($"ExecutionOptions fields are not supported: {string.Join(", ", unknown)}.");
+        if (options.Properties().Any(p => p.Value.Type != JTokenType.Boolean))
+            throw new InvalidOperationException("ExecutionOptions values must be booleans.");
+        return options.ToObject<ExecutionOptions>() ?? throw new InvalidOperationException("ExecutionOptions could not be read.");
     }
 
     private static void ConvertReferencePlanes(JToken? token, JObject patch) {
@@ -117,6 +128,7 @@ public static class FamilyProfileConverter {
         var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
         var index = 0;
         foreach (var spec in mirrors.OfType<JObject>()) {
+            RequireOnly(spec, "mirror", "Name", "CenterAnchor", "Parameter", "Strength");
             var name = Required(spec, "Name");
             var anchor = Required(spec, "CenterAnchor");
             var parameter = Required(spec, "Parameter");
@@ -127,17 +139,18 @@ public static class FamilyProfileConverter {
             };
             var left = $"{name} ({negative})";
             var right = $"{name} ({positive})";
-            planes[left] = JObject.FromObject(new FamilyModelRefPlane { Normal = normal, At = PortableLength.FromFeet(-0.5), IsReference = Strength(spec) }, serializer);
-            planes[right] = JObject.FromObject(new FamilyModelRefPlane { Normal = normal, At = PortableLength.FromFeet(0.5), IsReference = Strength(spec) }, serializer);
+            AddPlane(planes, left, new FamilyModelRefPlane { Normal = normal, At = PortableLength.FromFeet(-0.5), IsReference = Strength(spec) }, serializer);
+            AddPlane(planes, right, new FamilyModelRefPlane { Normal = normal, At = PortableLength.FromFeet(0.5), IsReference = Strength(spec) }, serializer);
             dimensions[$"legacy-mirror-{index}-size"] = JObject.FromObject(new FamilyModelDim { Between = [left, right], Label = parameter }, serializer);
             dimensions[$"legacy-mirror-{index++}-eq"] = JObject.FromObject(new FamilyModelDim { Between = [left, anchor, right], Equality = true }, serializer);
         }
         foreach (var spec in offsets.OfType<JObject>()) {
+            RequireOnly(spec, "offset", "Name", "AnchorName", "Direction", "Parameter", "Strength");
             var name = Required(spec, "Name");
             var anchor = Required(spec, "AnchorName");
             var direction = Required(spec, "Direction");
             if (direction is not "Positive" and not "Negative") throw new InvalidOperationException($"Unknown MakeRefPlaneAndDims direction '{direction}'.");
-            planes[name] = JObject.FromObject(new FamilyModelRefPlane { Normal = AxisFor(anchor), At = PortableLength.FromFeet(direction == "Positive" ? 1 : -1), IsReference = Strength(spec) }, serializer);
+            AddPlane(planes, name, new FamilyModelRefPlane { Normal = AxisFor(anchor), At = PortableLength.FromFeet(direction == "Positive" ? 1 : -1), IsReference = Strength(spec) }, serializer);
             dimensions[$"legacy-offset-{index++}"] = JObject.FromObject(new FamilyModelDim { Between = [anchor, name], Label = Required(spec, "Parameter") }, serializer);
         }
         patch["refPlanes"] = planes;
@@ -147,10 +160,20 @@ public static class FamilyProfileConverter {
     private static string Required(JObject value, string field) =>
         value.Value<string>(field) is { Length: > 0 } result ? result : throw new InvalidOperationException($"MakeRefPlaneAndDims requires {field}.");
 
+    private static void RequireOnly(JObject value, string kind, params string[] fields) {
+        var unknown = value.Properties().Where(p => !fields.Contains(p.Name, StringComparer.Ordinal)).Select(p => p.Name).ToList();
+        if (unknown.Count > 0) throw new InvalidOperationException($"MakeRefPlaneAndDims {kind} fields require native conversion: {string.Join(", ", unknown)}.");
+    }
+
+    private static void AddPlane(JObject planes, string name, FamilyModelRefPlane plane, JsonSerializer serializer) {
+        if (planes.ContainsKey(name)) throw new InvalidOperationException($"MakeRefPlaneAndDims generates duplicate plane '{name}'.");
+        planes[name] = JObject.FromObject(plane, serializer);
+    }
+
     private static Axis AxisFor(string anchor) => anchor switch {
         "Center (Left/Right)" or "Left" or "Right" => Axis.PlusX,
-        "Center (Front/Back)" or "Front" or "Back" => Axis.PlusY,
-        "Reference Plane" or "Ref. Level" or "Bottom" or "Top" => Axis.PlusZ,
+        "Center (Front/Back)" => Axis.PlusY,
+        "Reference Plane" => Axis.PlusZ,
         _ => throw new InvalidOperationException($"MakeRefPlaneAndDims anchor '{anchor}' has no native axis mapping.")
     };
 
@@ -227,3 +250,5 @@ public static class FamilyProfileConverter {
         };
     }
 }
+
+public sealed record FamilyProfileConversion(FamilyPatch Patch, ExecutionOptions Options);

@@ -10,7 +10,7 @@ namespace Pe.Revit.Tests;
 
 /// <summary>Test-only parameter conversion after existing include/filter composition. Unsupported policy fails explicitly.</summary>
 internal static class CompanyNormalizationFixture {
-    public static FamilyPatch ConvertProfileParameters(JObject profile, Document document,
+    public static Pe.Revit.FamilyFoundry.Apply.FamilyProfileConversion ConvertProfileParameters(JObject profile, Document document,
         IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions) =>
         Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(profile, definitions, document.GetUnits());
 
