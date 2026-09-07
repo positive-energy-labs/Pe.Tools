@@ -40,6 +40,7 @@ public static class FamilyModelParameterProjection {
             var formula = string.IsNullOrWhiteSpace(row.Formula) ? null : row.Formula;
             parameters[name] = new FamilyModelParameter {
                 Shared = shared ? true : null,
+                SharedGuid = shared ? Guid.Parse(d.Identity.SharedGuid!) : null,
                 DataType = dataType,
                 PropertiesGroup = string.IsNullOrWhiteSpace(d.GroupTypeLabel) ? null : d.GroupTypeLabel,
                 IsInstance = d.IsInstance,

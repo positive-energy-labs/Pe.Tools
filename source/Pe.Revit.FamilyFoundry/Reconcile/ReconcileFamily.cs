@@ -1,6 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.FamilyFoundry.Operations;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
@@ -17,6 +18,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     private readonly bool _dryRun;
     private readonly string? _expectedPlanHash;
     private FamilyReceipt? _candidateReceipt;
+    private readonly Func<Document, FamilySharedParameterSource>? _sharedSource;
 
     /// <summary>Apply specified state; unmentioned family contents remain unchanged.</summary>
     public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null) : base(new DefaultOperationSettings()) {
@@ -26,11 +28,13 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     }
 
     /// <summary>Patch mode: omission = unchanged, null = delete, {} = ensure; `run` rules ride along.</summary>
-    public ReconcileFamily(FamilyPatch patch, bool dryRun = false, Func<Document, FamilyModel>? capture = null, string? expectedPlanHash = null) : base(new DefaultOperationSettings()) {
+    public ReconcileFamily(FamilyPatch patch, bool dryRun = false, Func<Document, FamilyModel>? capture = null, string? expectedPlanHash = null,
+        Func<Document, FamilySharedParameterSource>? sharedSource = null) : base(new DefaultOperationSettings()) {
         this._patch = patch;
         this._dryRun = dryRun;
         this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
         this._expectedPlanHash = expectedPlanHash;
+        this._sharedSource = sharedSource;
     }
 
     public override string Description => this._patch is null
@@ -58,16 +62,17 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
         this.Reset();
         var current = this._capture(doc.Document);
+        var patch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
+        using var source = this._sharedSource?.Invoke(doc.Document) ?? new FamilySharedParameterSource(doc.Document);
         FamilyModel? desired;
         {
-            var patch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
             var parsed = FamilyReconciler.Desired(current, patch);
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return new OperationLog(this.Name, parsed.Diagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
-            desired = parsed.Value;
+            desired = source.Resolve(parsed.Value, patch.Patch);
         }
 
-        var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run);
+        var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions);
         this.LastPlan = plan;
         if (this._expectedPlanHash is { } expected && !string.Equals(expected, plan.PlanHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Plan hash drifted: expected {expected}, recomputed {plan.PlanHash}. Plan again.");
@@ -80,14 +85,28 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         if (unverifiable.Count > 0)
             throw new InvalidOperationException($"Requested changes cannot be verified: {string.Join(", ", unverifiable.Select(c => $"{c.Section}:{c.Key}"))}.");
         var logs = new List<OperationLog>();
-        foreach (var callback in plan.Queue.ToFuncs(optimizeTypeOperations: true, singleTransaction: false)) {
+        var applyPlan = plan;
+        if (plan.Queue.Operations.OfType<NormalizeParamSources>().SingleOrDefault() is { } normalization) {
+            logs.Add(normalization.Execute(doc, ctx, groupContext));
+            OperationProcessor.ThrowOnErrors(logs);
+            current = this._capture(doc.Document);
+            var afterMigration = FamilyReconciler.Desired(current, patch);
+            if (afterMigration.Value is null || afterMigration.Diagnostics.Count > 0)
+                throw new InvalidOperationException(string.Join(Environment.NewLine, afterMigration.Diagnostics.Select(d => d.Message)));
+            desired = source.Resolve(afterMigration.Value, patch.Patch);
+            applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition);
+        }
+        if (applyPlan.Refusals.Count > 0 || applyPlan.Changes.Any(c => c.Kind == ChangeKind.Unverifiable))
+            throw new InvalidOperationException("Source migration left an unsupported requested change.");
+        foreach (var callback in applyPlan.Queue.ToFuncs(optimizeTypeOperations: true, singleTransaction: false)) {
             logs.AddRange(callback(doc, ctx));
             OperationProcessor.ThrowOnErrors(logs);
         }
         doc.Document.Regenerate();
         var residue = FamilyReconciler.Diff(desired!, this._capture(doc.Document), UnitResolvers.Revit(doc.Document));
         var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,
-            residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success, null)).ToList();
+            residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
+            c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
         this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, outcomes, plan.RunEffects, residue, current.Unmodeled,
             residue.Count == 0 && logs.All(l => l.PendingCount == 0));
         if (!this._candidateReceipt.Converged)

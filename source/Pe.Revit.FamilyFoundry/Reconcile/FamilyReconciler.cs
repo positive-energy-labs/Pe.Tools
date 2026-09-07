@@ -51,14 +51,27 @@ public static class FamilyReconciler {
     private const double Tolerance = 1e-9;
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(FamilyModelJson.Settings);
 
-    public static FamilyPlan Reconcile(FamilyModel desired, FamilyModel current, UnitResolver units, PatchRun? run = null) {
+    public static FamilyPlan Reconcile(FamilyModel desired, FamilyModel current, UnitResolver units, PatchRun? run = null,
+        Func<string, ExternalDefinition?>? sharedSource = null, JObject? authored = null, object? sharedDefinitions = null) {
         var refusals = desired.Unmodeled
             .Select(f => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, f.Path, "A desired document may not carry unmodeled facts."))
             .ToList();
         if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([]));
         var changes = Diff(desired, current, units);
-        var (queue, effects) = Lower(changes, desired, current, run);
-        return new FamilyPlan(changes, queue, [], effects, Hash(changes, current, run));
+        var (queue, effects) = Lower(changes, desired, current, run, sharedSource);
+        var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
+        var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+        if (mappings.Count > 0) {
+            var planned = new OperationQueue().Add(new NormalizeParamSources(desired, names,
+                sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source."))));
+            foreach (var operation in queue.Operations) planned.Add(operation);
+            queue = planned;
+            changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
+                current.Parameters.Where(c => c.Key == p.Key || p.Value.WasNamed?.Contains(c.Key) == true).ToDictionary(c => c.Key, c => c.Value), p.Value))).ToList();
+        }
+        var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove only equivalent sources; explicit writes follow");
+        var definitionEffects = sharedDefinitions is null ? [] : new[] { "shared.definitions: " + JsonConvert.SerializeObject(sharedDefinitions) };
+        return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions));
     }
 
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
@@ -124,6 +137,8 @@ public static class FamilyReconciler {
             var o = JObject.FromObject(p.Value, Serializer);
             o.Remove("value");
             o.Remove("wasNamed");
+            o.Remove("mappingStrategy");
+            o.Remove("fillBlanksFromSources");
             return o;
         }, StringComparer.Ordinal);
         return (parameters, cells);
@@ -251,15 +266,15 @@ public static class FamilyReconciler {
     private static IEnumerable<string> OnPlanes(FamilyModelForm form) =>
         form.Profile?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", c.Center ?? [])) ?? [];
 
-    private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null) {
+    private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null, FamilyModel? desired = null, JObject? authored = null, object? sharedDefinitions = null) {
         var json = JsonConvert.SerializeObject(
-            new { Changes = changes, Current = current, Run = run }, FamilyModelJson.Settings);
+            new { Changes = changes, Current = current, Run = run, Desired = desired, Authored = authored, SharedDefinitions = sharedDefinitions }, FamilyModelJson.Settings);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)))[..16];
     }
 
     // ── lowering: the ordering DAG (r2-reconcile §4) ──
 
-    private static (OperationQueue, IReadOnlyList<string>) Lower(IReadOnlyList<FamilyChange> changes, FamilyModel d, FamilyModel c, PatchRun? run) {
+    private static (OperationQueue, IReadOnlyList<string>) Lower(IReadOnlyList<FamilyChange> changes, FamilyModel d, FamilyModel c, PatchRun? run, Func<string, ExternalDefinition?>? sharedSource) {
         var q = new OperationQueue();
         var effects = new List<string>();
         FamilyChange[] Of(string section, params ChangeKind[] kinds) => changes.Where(x => x.Section == section && kinds.Contains(x.Kind)).ToArray();
@@ -280,7 +295,7 @@ public static class FamilyReconciler {
         // 4 types, 5 params + metadata (instance/type before formulas: gotcha 4)
         if (Of("types", ChangeKind.Add) is { Length: > 0 } types) q.Add(new CreateFamilyTypes(types.Select(x => x.Key).ToArray()));
         var paramAdds = Of("parameters", ChangeKind.Add).Select(x => (x.Key, d.Parameters[x.Key])).ToArray();
-        if (paramAdds.Length > 0) q.Add(new AddParams(paramAdds));
+        if (paramAdds.Length > 0) q.Add(new AddParams(paramAdds, sharedSource));
         var metadata = Of("parameters", ChangeKind.Add, ChangeKind.Update, ChangeKind.Rename).Select(x => (x.Key, d.Parameters[x.Key])).ToArray();
         if (metadata.Length > 0) q.Add(new SetParamMetadata(metadata));
         // 6 clear formulas that become values

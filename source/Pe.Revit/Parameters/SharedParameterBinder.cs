@@ -36,8 +36,11 @@ public static class SharedParameterBinder {
         if (string.IsNullOrWhiteSpace(spec.Name))
             throw new ArgumentException("Shared parameter name is required.", nameof(spec));
 
-        if (group.Definitions.get_Item(spec.Name) is ExternalDefinition existing)
+        if (group.Definitions.get_Item(spec.Name) is ExternalDefinition existing) {
+            if (existing.GetDataType() != spec.DataType || spec.Guid is { } expectedGuid && existing.GUID != expectedGuid)
+                throw new InvalidOperationException($"Shared definition '{spec.Name}' already exists with a different identity or datatype.");
             return existing;
+        }
 
         var options = new ExternalDefinitionCreationOptions(spec.Name, spec.DataType) {
             Description = spec.Description,

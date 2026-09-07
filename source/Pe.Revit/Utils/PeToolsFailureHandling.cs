@@ -29,6 +29,20 @@ public static class PeToolsFailureHandling {
         ICollection<(bool IsError, string Message)> diagnostics
     ) => new DelegatingFailuresPreprocessor(accessor => ResolveFailures(accessor, diagnostics));
 
+    /// <summary>Report every failure, dismiss warnings when requested, and roll back errors without changing content.</summary>
+    public static FailureProcessingResult RejectErrors(FailuresAccessor accessor,
+        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings = true) {
+        var error = false;
+        foreach (var failure in accessor.GetFailureMessages()) {
+            var isError = failure.GetSeverity() != FailureSeverity.Warning;
+            error |= isError;
+            diagnostics.Add((isError, failure.GetDescriptionText()));
+            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
+        }
+        // Normalization must never resolve a failure by deleting or detaching unmentioned content.
+        return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+    }
+
     public static FailureProcessingResult ResolveFailures(
         FailuresAccessor failuresAccessor,
         ICollection<(bool IsError, string Message)> diagnostics

@@ -14,8 +14,10 @@ public static class FamilyManagerGetValue {
     /// <exception cref="T:Autodesk.Revit.Exceptions.ArgumentException">
     ///     Thrown if the input argument-"familyParameter"-is invalid,
     /// </exception>
-    public static object? GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) {
-        var famType = famDoc.FamilyManager.CurrentType;
+    public static object? GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) =>
+        famDoc.GetValue(famDoc.FamilyManager.CurrentType, familyParameter);
+
+    public static object? GetValue(this FamilyDocument famDoc, FamilyType famType, FamilyParameter familyParameter) {
         if (!famType.HasValue(familyParameter)) return null;
 
         return familyParameter.StorageType switch {

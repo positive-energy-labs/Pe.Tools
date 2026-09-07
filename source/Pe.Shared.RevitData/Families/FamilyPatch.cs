@@ -47,6 +47,11 @@ public sealed class FamilyPatch {
         foreach (var parameter in (patch["parameters"] as JObject)?.Properties() ?? []) {
             var authored = parameter.Value as JObject;
             var merged = result["parameters"]?[parameter.Name] as JObject;
+            if (authored?.Value<bool?>("shared") == false) merged?.Remove("sharedGuid");
+            if (authored?.Value<bool?>("shared") == true) {
+                if (!authored.ContainsKey("dataType")) merged?.Remove("dataType");
+                if (!authored.ContainsKey("tooltip")) merged?.Remove("tooltip");
+            }
             if (authored?["value"] is { Type: not JTokenType.Null }) merged?.Remove("formula");
             if (authored?["formula"] is { Type: not JTokenType.Null }) merged?.Remove("value");
             if (parameter.Value.Type != JTokenType.Null && authored?["value"] is not { Type: not JTokenType.Null } && authored?["formula"] is not { Type: not JTokenType.Null }) continue;

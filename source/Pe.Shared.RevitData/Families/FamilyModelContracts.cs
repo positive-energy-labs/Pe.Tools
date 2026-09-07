@@ -208,6 +208,9 @@ public sealed class FamilyModelParameter {
     [JsonProperty("shared", NullValueHandling = NullValueHandling.Ignore)]
     public bool? Shared { get; init; }
 
+    [JsonProperty("sharedGuid", NullValueHandling = NullValueHandling.Ignore)]
+    public Guid? SharedGuid { get; init; }
+
     [JsonProperty("dataType", NullValueHandling = NullValueHandling.Ignore)]
     public DataType? DataType { get; init; }
 
@@ -230,12 +233,19 @@ public sealed class FamilyModelParameter {
     public string? Formula { get; init; }
 
     /// <summary>
-    ///     Former names; the reconciler renames the first one it finds in the current document (gotcha 26).
-    ///     Deliberately silent at validate: it names a parameter in the CURRENT family, which this document
-    ///     cannot see; the receipt reports `rename-source-missing`.
+    ///     Explicit source candidates, ranked by populated type count with authored-order ties. Existing
+    ///     destination wins. Safe native replacement preserves references; non-equivalent copied sources remain.
     /// </summary>
     [JsonProperty("wasNamed", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? WasNamed { get; init; }
+
+    /// <summary>For an existing destination only, fill blank cells from ranked wasNamed sources. Explicit values always win.</summary>
+    [JsonProperty("fillBlanksFromSources", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? FillBlanksFromSources { get; init; }
+
+    /// <summary>Existing SetValue coercion strategy name; omitted means CoerceByStorageType.</summary>
+    [JsonProperty("mappingStrategy", NullValueHandling = NullValueHandling.Ignore)]
+    public string? MappingStrategy { get; init; }
 }
 
 /// <summary>

@@ -4,6 +4,10 @@ using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.Tests;
 
@@ -33,6 +37,75 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private static ReconcileFamily WidthPatch(string? expectedHash = null) => new(FamilyPatch.Parse(
         """{"patch":{"parameters":{"Width":{"value":"3ft"}}}}"""), expectedPlanHash: expectedHash);
+
+    private static IReadOnlyList<ParametersApi.Parameters.ParametersResult> CompanyDefinitions() =>
+        JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", "normalization-aps-definitions.json")))!;
+
+    [Test]
+    public void Company_shared_definition_replaces_local_source_with_exact_guid_and_values() {
+        var document = this.NewFamily("FF company width");
+        try {
+            var definitions = CompanyDefinitions();
+            var requested = definitions.Single(p => p.Name == "PE_G_Dim_Width1");
+            var originalSetting = this._application.SharedParametersFilename;
+            var operation = new ReconcileFamily(FamilyPatch.Parse("""
+                {"patch":{"parameters":{"PE_G_Dim_Width1":{"shared":true,"wasNamed":["Mech Equip Width","Width","PE_Width","Width (mm)"],"value":"5ft"}}}}
+                """), sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            var parameter = document.FamilyManager.FindParameter(requested.Name!);
+            Assert.That(parameter.GUID, Is.EqualTo(requested.DownloadOptions.GetGuid()));
+            Assert.That(document.CaptureFamilyModel().Parameters[requested.Name!].SharedGuid, Is.EqualTo(parameter.GUID));
+            Assert.That(document.FamilyManager.FindParameter("Width"), Is.Null);
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
+                Assert.That(type.AsDouble(parameter), Is.EqualTo(5.0));
+            using var source = new FamilySharedParameterSource(document, definitions);
+            Assert.That(source.GetDefinition(requested.Name!).Description, Is.EqualTo(requested.Description), "native source tooltip; not a claim of internal-definition readback");
+            Assert.That(this._application.SharedParametersFilename, Is.EqualTo(originalSetting));
+        } finally { document.Close(false); }
+    }
+
+    [TestCase(false, false)]
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    [TestCase(true, true)]
+    public void Ranked_company_sources_fill_only_opted_in_blanks_and_explicit_values_always_win(bool fill, bool explicitValue) {
+        var document = this.NewFamily("FF company model");
+        try {
+            using (var transaction = new Transaction(document, "Seed company source candidates")) {
+                transaction.Start();
+                var fm = document.FamilyManager;
+                var sparse = fm.AddParameter("Model", GroupTypeId.Data, SpecTypeId.String.Text, false);
+                var dense = fm.AddParameter("Mech Equip Model Number", GroupTypeId.Data, SpecTypeId.String.Text, false);
+                var target = fm.AddParameter("PE_G___Model", GroupTypeId.Data, SpecTypeId.String.Text, false);
+                foreach (var type in fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B")) {
+                    fm.CurrentType = type;
+                    fm.Set(sparse, type.Name == "A" ? "sparse" : "");
+                    fm.Set(dense, "dense-" + type.Name);
+                    fm.Set(target, type.Name == "A" ? "destination" : "");
+                }
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var parameter = JObject.Parse("""{"shared":true,"wasNamed":["Model","Mech Equip Model Number"]}""");
+            parameter["fillBlanksFromSources"] = fill;
+            if (explicitValue) parameter["value"] = "explicit";
+            var operation = new ReconcileFamily(new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_G___Model"] = parameter } } },
+                sharedSource: d => new FamilySharedParameterSource(d, CompanyDefinitions()));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            var targetParameter = document.FamilyManager.FindParameter("PE_G___Model");
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
+                Assert.That(type.AsString(targetParameter), Is.EqualTo(explicitValue ? "explicit" : type.Name == "A" ? "destination" : fill ? "dense-B" : ""));
+            Assert.That(document.FamilyManager.FindParameter("Model"), Is.Not.Null, "different source values must not be discarded");
+        } finally { document.Close(false); }
+    }
 
     [Test]
     public void Explicit_value_updates_every_type_preserves_unmentioned_parameter_and_does_not_save() {

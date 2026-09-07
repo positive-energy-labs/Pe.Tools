@@ -39,6 +39,28 @@ public sealed class FamilyModelContractTests {
         Assert.That(result.Value!.Parameters["W"].Formula is not null, Is.EqualTo(formula));
     }
 
+    [Test]
+    public void Shared_mapping_fields_roundtrip_and_local_conversion_clears_identity() {
+        var current = Doc("""{"parameters":{"W":{"dataType":"Length","tooltip":"old"}},"types":{"A":{}}}""");
+        var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"shared":true,"sharedGuid":"692091cc-1e3d-47e6-a7c5-9336c3149419","wasNamed":["Width"],"fillBlanksFromSources":true,"mappingStrategy":"Strict"}}}""");
+        Assert.That(result.Diagnostics, Is.Empty);
+        var parameter = result.Value!.Parameters["W"];
+        Assert.Multiple(() => {
+            Assert.That(parameter.SharedGuid, Is.EqualTo(Guid.Parse("692091cc-1e3d-47e6-a7c5-9336c3149419")));
+            Assert.That(parameter.FillBlanksFromSources, Is.True);
+            Assert.That(parameter.MappingStrategy, Is.EqualTo("Strict"));
+            Assert.That(parameter.DataType, Is.Null);
+            Assert.That(parameter.Tooltip, Is.Null);
+        });
+        var serialized = FamilyModelJson.Serialize(result.Value);
+        var roundtrip = FamilyModelJson.Parse(serialized);
+        Assert.That(roundtrip.Diagnostics, Is.Empty);
+        Assert.That(FamilyModelJson.Serialize(roundtrip.Value!), Is.EqualTo(serialized));
+        var local = FamilyPatch.Apply(serialized, """{"parameters":{"W":{"shared":false,"dataType":"Length"}}}""");
+        Assert.That(local.Diagnostics, Is.Empty);
+        Assert.That(local.Value!.Parameters["W"].SharedGuid, Is.Null);
+    }
+
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

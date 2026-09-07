@@ -107,24 +107,13 @@ public sealed class FamilyVisitScope {
     private void Suppress(Transaction transaction, List<(bool IsError, string Message)> diagnostics) {
         var options = transaction.GetFailureHandlingOptions();
         _ = options.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
-            RejectErrors(accessor, diagnostics, this._options.SuppressWarnings)));
+            PeToolsFailureHandling.RejectErrors(accessor, diagnostics, this._options.SuppressWarnings)));
         _ = options.SetClearAfterRollback(true);
         _ = options.SetForcedModalHandling(true);
         transaction.SetFailureHandlingOptions(options);
     }
 
-    internal static FailureProcessingResult RejectErrors(FailuresAccessor accessor,
-        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings) {
-        var error = false;
-        foreach (var failure in accessor.GetFailureMessages()) {
-            var isError = failure.GetSeverity() != FailureSeverity.Warning;
-            error |= isError;
-            diagnostics.Add((isError, failure.GetDescriptionText()));
-            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
-        }
-        // Normalization must never resolve a failure by deleting or detaching unmentioned content.
-        return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
-    }
+
 }
 
 public sealed record FamilyVisitResult(
@@ -171,7 +160,7 @@ public static class FamilyVisit {
 
             var loadDiagnostics = new List<(bool IsError, string Message)>();
             var loaded = RevitFailureScope.Execute(project,
-                accessor => FamilyVisitScope.RejectErrors(accessor, loadDiagnostics, options.SuppressWarnings),
+                accessor => PeToolsFailureHandling.RejectErrors(accessor, loadDiagnostics, options.SuppressWarnings),
                 () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
             scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
             // post-verify: the family is in the project by name and is the element LoadFamily handed back

@@ -42,8 +42,8 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
             // Try each CurrName in priority order until one succeeds
             var foundMatch = false;
             foreach (var currParam in filteredCurrNames.TakeWhile(_ => !foundMatch)) {
+                var currParamName = currParam.Definition.Name;
                 try {
-                    var currParamName = currParam.Definition.Name;
                     if (currParam.IsBuiltInParameter()) {
                         _ = log
                             .WithParameterEvent(
@@ -77,8 +77,9 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
                         break;
                     }
 
-                    var replaced = fm.ReplaceParameter(
+                    var replaced = doc.ReplaceDefinition(
                         currParam,
+                        target.Name,
                         target.ExternalDefinition,
                         target.GroupTypeId,
                         target.IsInstance
@@ -95,12 +96,12 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
                         .WithParameterEvent(
                             ParameterEventOutcome.ReplaceDeferred,
                             ParameterEventReason.Exception,
-                            sourceParameter: currParam.Definition.Name,
+                            sourceParameter: currParamName,
                             targetParameter: mapping.NewName,
                             mappingKey: mapping.NewName,
                             dataType: target.Definition.DataTypeId,
                             isInstance: target.IsInstance)
-                        .Defer($"Failed to map {currParam.Definition.Name} → {mapping.NewName}");
+                        .Defer($"Failed to map {currParamName} → {mapping.NewName}");
                 }
             }
         }
