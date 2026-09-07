@@ -92,6 +92,24 @@ public sealed class FamilyModelRoundtripTests {
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
 
+    [Test]
+    public void Native_wall_template_exposes_its_actual_planes_and_views() {
+        var header = RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower").Family;
+        var document = FamilyTemplate.NewDocument(this._ui.Application, header);
+        try {
+            static double[] Point(XYZ point) => [point.X, point.Y, point.Z];
+            var planes = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                .Select(p => new { p.Name, origin = Point(p.GetPlane().Origin), normal = Point(p.GetPlane().Normal) }).ToArray();
+            var views = new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>()
+                .Where(v => !v.IsTemplate && v.ViewType is ViewType.Elevation or ViewType.Section or ViewType.FloorPlan)
+                .Select(v => new { v.Name, type = v.ViewType.ToString(), direction = Point(v.ViewDirection) }).ToArray();
+            Assert.That(planes, Is.Not.Empty);
+            Assert.That(views, Is.Not.Empty);
+            var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_wall_template_exposes_its_actual_planes_and_views));
+            File.WriteAllText(Path.Combine(directory, "wall-template-geometry.json"), Newtonsoft.Json.JsonConvert.SerializeObject(new { header.Template, planes, views }));
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void Symbolic_loop_roundtrip_preserves_geometry_and_reapplies_visibility_binding(bool circle) {
