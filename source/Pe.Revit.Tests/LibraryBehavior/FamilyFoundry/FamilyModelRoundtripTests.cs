@@ -406,8 +406,6 @@ public sealed class FamilyModelRoundtripTests {
         var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
         var json = JObject.Parse(File.ReadAllText(fixturePath));
         foreach (var section in new[] { "forms", "nested", "arrays", "connectors" }) json.Remove(section);
-        foreach (var plane in ((JObject)json["refPlanes"]!).Properties())
-            ((JObject)plane.Value).Remove("isReference");
         var parsed = FamilyModelJson.Parse(json.ToString());
         Assert.That(parsed.Diagnostics, Is.Empty);
 
@@ -421,11 +419,14 @@ public sealed class FamilyModelRoundtripTests {
             var planes = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
                 .Where(plane => plane.Name is "opening (Front)" or "opening (Back)")
                 .ToDictionary(plane => plane.Name, plane => plane.GetPlane().Origin.Y);
+            var capturedPlanes = document.CaptureFamilyModel().RefPlanes;
             Assert.Multiple(() => {
                 Assert.That(values["24x12"], Is.EqualTo(2.0 / 12.0).Within(1e-9));
                 Assert.That(values["Slot"], Is.Zero.Within(1e-9));
                 Assert.That(planes["opening (Front)"], Is.EqualTo(-0.5).Within(1e-9));
                 Assert.That(planes["opening (Back)"], Is.EqualTo(0.5).Within(1e-9));
+                Assert.That(capturedPlanes["opening (Front)"].IsReference, Is.EqualTo(RefStrength.NotAReference));
+                Assert.That(capturedPlanes["opening (Back)"].IsReference, Is.EqualTo(RefStrength.NotAReference));
             });
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
