@@ -27,6 +27,8 @@ internal static class CompanyNormalizationFixture {
                 parameter["wasNamed"] = new JArray(mapping.CurrNames);
                 parameter["mappingStrategy"] = mapping.MappingStrategy;
                 parameter["fillBlanksFromSources"] = fillBlanksFromSources;
+                if (mapping.SourceValuesTreatedAsMissing.Count > 0)
+                    parameter["sourceValuesTreatedAsMissing"] = new JArray(mapping.SourceValuesTreatedAsMissing);
             }
         }
         var types = new JObject();

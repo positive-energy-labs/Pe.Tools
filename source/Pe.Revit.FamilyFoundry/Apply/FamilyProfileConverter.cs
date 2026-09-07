@@ -694,6 +694,8 @@ public static class FamilyProfileConverter {
                 parameter["wasNamed"] = new JArray(mapping.CurrNames);
                 parameter["mappingStrategy"] = mapping.MappingStrategy;
                 parameter["fillBlanksFromSources"] = fillBlanksFromSources;
+                if (mapping.SourceValuesTreatedAsMissing.Count > 0)
+                    parameter["sourceValuesTreatedAsMissing"] = new JArray(mapping.SourceValuesTreatedAsMissing);
             }
             if (mapping?.OnlyAddIfSourceExists == true)
                 conditional[name] = parameter.ToObject<FamilyModelParameter>(JsonSerializer.Create(FamilyModelJson.Settings))!;

@@ -19,7 +19,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         var mappings = desired.Parameters.Where(p => (targets ?? authoredNames).Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
         var sharedCandidates = mappings.SelectMany(p => (p.Value.WasNamed ?? []).Distinct()).GroupBy(n => n)
             .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
-        var transfers = new List<(string Target, List<string> Sources, string Strategy, bool PreservePopulated)>();
+        var transfers = new List<(string Target, List<string> Sources, string Strategy, bool PreservePopulated, IReadOnlyCollection<string> MissingValues)>();
         context.PreProcessSnapshot ??= doc.Document.CaptureFamilySnapshot();
         try {
             foreach (var (name, spec) in mappings) {
@@ -49,7 +49,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 if (dataType is not null && existing.Definition.GetDataType() != dataType)
                     throw new InvalidOperationException($"'{name}' has an incompatible destination datatype.");
                 if (!existed || spec.FillBlanksFromSources == true)
-                    transfers.Add((name, candidates, strategy, existed || nativeReplacement));
+                    transfers.Add((name, candidates, strategy, existed || nativeReplacement, spec.SourceValuesTreatedAsMissing ?? []));
                 cleanup.AddRange(candidates.Select(source => (source, name)));
                 logs.Add(new LogEntry(name).Success(existed ? "Existing destination preferred; explicit writes follow." : "Destination created from explicit source rules."));
             }
@@ -57,15 +57,15 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
             if (mappings.Count > 0) doc.Document.Regenerate();
             fm = doc.FamilyManager;
             var work = transfers.Select(t => (Target: fm.FindParameter(t.Target) ?? throw new InvalidOperationException($"Created target '{t.Target}' is unavailable after regeneration."),
-                Sources: t.Sources.Select(fm.FindParameter).OfType<FamilyParameter>().ToList(), t.Strategy, t.PreservePopulated)).ToList();
+                Sources: t.Sources.Select(fm.FindParameter).OfType<FamilyParameter>().ToList(), t.Strategy, t.PreservePopulated, t.MissingValues)).ToList();
             foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
                 var pending = work.Where(t => (!t.PreservePopulated || Blank(doc, type, t.Target)) &&
-                    t.Sources.Any(source => !Blank(doc, type, source))).ToList();
+                    t.Sources.Any(source => !Blank(doc, type, source, t.MissingValues))).ToList();
                 if (pending.Count == 0) continue;
                 if (fm.CurrentType != type) fm.CurrentType = type;
                 foreach (var transfer in pending) {
                     Exception? failure = null;
-                    foreach (var source in transfer.Sources.Where(source => !Blank(doc, type, source))) {
+                    foreach (var source in transfer.Sources.Where(source => !Blank(doc, type, source, transfer.MissingValues))) {
                         using var attempt = new SubTransaction(doc.Document);
                         attempt.Start();
                         try {
@@ -95,6 +95,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         return new OperationLog(this.Name, logs);
     }
 
-    private static bool Blank(FamilyDocument doc, FamilyType type, FamilyParameter parameter) =>
-        string.IsNullOrWhiteSpace(parameter.Formula) && (!type.HasValue(parameter) || parameter.StorageType == StorageType.String && string.IsNullOrWhiteSpace(type.AsString(parameter)));
+    private static bool Blank(FamilyDocument doc, FamilyType type, FamilyParameter parameter, IReadOnlyCollection<string>? missingValues = null) =>
+        string.IsNullOrWhiteSpace(parameter.Formula) && (!type.HasValue(parameter) || parameter.StorageType == StorageType.String &&
+            (string.IsNullOrWhiteSpace(type.AsString(parameter)) || missingValues?.Contains(type.AsString(parameter), StringComparer.Ordinal) == true));
 }

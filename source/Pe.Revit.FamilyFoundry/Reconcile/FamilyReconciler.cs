@@ -257,6 +257,7 @@ public static class FamilyReconciler {
             o.Remove("wasNamed");
             o.Remove("mappingStrategy");
             o.Remove("fillBlanksFromSources");
+            o.Remove("sourceValuesTreatedAsMissing");
             return o;
         }, StringComparer.Ordinal);
         return (parameters, cells);

@@ -24,7 +24,8 @@ public class MapParamsSettings : IOperationSettings {
             if (group.Any(m => m.OnlyAddIfSourceExists != first.OnlyAddIfSourceExists || m.MappingStrategy != first.MappingStrategy))
                 throw new InvalidOperationException($"Mapping target '{group.Key}' has conflicting conditional/coercion policies.");
             return new MappingData { NewName = group.Key, CurrNames = group.SelectMany(m => m.CurrNames).Distinct(StringComparer.Ordinal).ToList(),
-                OnlyAddIfSourceExists = first.OnlyAddIfSourceExists, MappingStrategy = first.MappingStrategy };
+                OnlyAddIfSourceExists = first.OnlyAddIfSourceExists, MappingStrategy = first.MappingStrategy,
+                SourceValuesTreatedAsMissing = group.SelectMany(m => m.SourceValuesTreatedAsMissing).Distinct(StringComparer.Ordinal).ToList() };
         }, StringComparer.Ordinal);
 
     public IEnumerable<(MappingData Mapping, LogEntry Log)> GetIncompleteMappings(OperationContext groupContext) {
@@ -133,4 +134,7 @@ public class MappingData {
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
+
+    [Description("Exact source string values treated as missing for this mapping.")]
+    public List<string> SourceValuesTreatedAsMissing { get; init; } = [];
 }

@@ -670,6 +670,47 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Company_horsepower_na_is_missing_only_when_the_mapping_authors_it(bool companyMapping) {
+        var document = this.NewFamily(companyMapping ? "FF company missing horsepower" : "FF unrelated horsepower");
+        try {
+            using (var seed = new Transaction(document, "Seed text horsepower sentinel")) {
+                seed.Start();
+                var source = document.FamilyManager.AddParameter("Horsepower (HP)", GroupTypeId.Data, SpecTypeId.String.Text, false);
+                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
+                    document.FamilyManager.CurrentType = type;
+                    document.FamilyManager.Set(source, "N/A");
+                }
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var definitions = CompanyCorpusDefinitions();
+            var definition = definitions.Single(item => item.Name == "PE_G_Perf_Horsepower");
+            var mappings = companyMapping ? CompanyNormalizationFixture.MechanicalMappings() : new Pe.Revit.FamilyFoundry.OperationSettings.MapParamsSettings {
+                MappingData = [new() { NewName = definition.Name!, CurrNames = ["Horsepower (HP)"] }]
+            };
+            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.ExportSharedMappings(mappings, [definition]);
+            Assert.That(patch.Patch["parameters"]![definition.Name!]!["sourceValuesTreatedAsMissing"] is not null, Is.EqualTo(companyMapping));
+            var before = document.CaptureFamilyModel();
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            if (!companyMapping) {
+                Assert.That(error?.ToString(), Does.Contain("SourceValue='N/A'").And.Contain("PE_G_Perf_Horsepower"));
+                Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(FamilyModelJson.Serialize(before)));
+                return;
+            }
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(document.FamilyManager.FindParameter("Horsepower (HP)"), Is.Null);
+            var target = document.FamilyManager.FindParameter(definition.Name!);
+            Assert.That(target, Is.Not.Null);
+            Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Any(type => type.HasValue(target)), Is.False,
+                "No profile default was authored, so the missing source leaves the target blank.");
+        } finally { document.Close(false); }
+    }
+
     [Test]
     public void Captured_raw_values_rebuild_despite_rounded_symbol_suppressed_display() {
         var source = this.NewFamily("FF exact capture");

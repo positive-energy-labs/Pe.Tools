@@ -256,6 +256,10 @@ public sealed class FamilyModelParameter {
     /// <summary>Existing SetValue coercion strategy name; omitted means CoerceByStorageType.</summary>
     [JsonProperty("mappingStrategy", NullValueHandling = NullValueHandling.Ignore)]
     public string? MappingStrategy { get; init; }
+
+    /// <summary>Exact source string values treated as missing for this mapping; other mappings retain normal coercion.</summary>
+    [JsonProperty("sourceValuesTreatedAsMissing", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? SourceValuesTreatedAsMissing { get; init; }
 }
 
 /// <summary>
