@@ -840,6 +840,7 @@ public enum UnmodeledReason {
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     FormulaNameNotDeclared,
+    ParameterMetadataUnreadable,
     LookupTableUnreadable,
     PartTypeNotPortable,
     RoomPointNotOnAxis,

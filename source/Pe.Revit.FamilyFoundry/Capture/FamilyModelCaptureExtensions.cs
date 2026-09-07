@@ -78,6 +78,14 @@ internal sealed class FamilyModelCapturer {
         }
 
         var snapshot = this._d.CaptureFamilySnapshot();
+        if (snapshot.Parameters?.IsPartial == true) {
+            var errors = snapshot.Parameters.Issues.Where(issue => issue.Severity == Pe.Shared.RevitData.RevitDataIssueSeverity.Error);
+            throw new InvalidOperationException("Family parameter capture is partial; refusing unsafe reconciliation. " +
+                                                string.Join(" | ", errors.Select(issue => issue.Message)));
+        }
+        foreach (var issue in snapshot.Parameters?.Issues.Where(issue => issue.Code == "FamilyParameterDescriptionReadFailed") ?? [])
+            this.Add(UnmodeledReason.ParameterMetadataUnreadable, $"$.parameters.{issue.ParameterName}.tooltip",
+                ("code", issue.Code), ("message", issue.Message));
         var typeNames = this._fm.Types.Cast<FamilyType>().Select(t => t.Name).ToList();
         var projected = FamilyModelParameterProjection.Project(
             (snapshot.Parameters?.Data ?? []).Select(p => p.ToCanonical()), typeNames);

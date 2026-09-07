@@ -98,12 +98,13 @@ public static class FamilySnapshotExtractor {
         var snapshots = new List<FamilyParameterSnapshot>();
         foreach (var familyParameter in fm.GetParameters()) {
             try {
-                snapshots.Add(ExtractParameter(famDoc, familyParameter, types));
+                snapshots.Add(ExtractParameter(famDoc, familyParameter, types, issues));
             } catch (Exception ex) {
                 issues.Add(new RevitDataIssue(
                     "FamilyParameterSnapshotReadFailed",
-                    RevitDataIssueSeverity.Warning,
-                    $"Could not read family parameter '{familyParameter.Definition?.Name}': {ex.Message}"
+                    RevitDataIssueSeverity.Error,
+                    $"Could not read required fields for family parameter '{familyParameter.Definition?.Name}': {ex.GetType().FullName}: {ex.Message}",
+                    ParameterName: familyParameter.Definition?.Name
                 ));
             }
         }
@@ -117,7 +118,8 @@ public static class FamilySnapshotExtractor {
     private static FamilyParameterSnapshot ExtractParameter(
         FamilyDocument famDoc,
         FamilyParameter familyParameter,
-        IReadOnlyList<FamilyType> types
+        IReadOnlyList<FamilyType> types,
+        List<RevitDataIssue> issues
     ) {
         var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
         var dataType = NormalizeForgeTypeId(familyParameter.Definition.GetDataType());
@@ -143,7 +145,7 @@ public static class FamilySnapshotExtractor {
                     : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId()),
                 (familyParameter.Definition as InternalDefinition)?.Visible,
                 familyParameter.UserModifiable,
-                ReadDescription(famDoc.Document, familyParameter)
+                ReadDescription(famDoc.Document, familyParameter, issues)
             ),
             familyParameter.IsShared ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
             LoadedFamilyParameterPresence.Family,
@@ -157,13 +159,24 @@ public static class FamilySnapshotExtractor {
     private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
         string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 
-    private static string? ReadDescription(Document document, FamilyParameter parameter) {
+    private static string? ReadDescription(Document document, FamilyParameter parameter, List<RevitDataIssue> issues) {
         if (Autodesk.Revit.DB.ParameterUtils.IsBuiltInParameter(parameter.Id)) return null;
-        var getSchema = typeof(Autodesk.Revit.DB.ParameterUtils).GetMethod(
-            "GetParameterSchema",
-            [typeof(ElementId), typeof(Document)]
-        ) ?? throw new MissingMethodException(typeof(Autodesk.Revit.DB.ParameterUtils).FullName, "GetParameterSchema");
-        var json = (string)getSchema.Invoke(null, [parameter.Id, document])!;
-        return JObject.Parse(json)["description"]?.Value<string>();
+        try {
+            var getSchema = typeof(Autodesk.Revit.DB.ParameterUtils).GetMethod(
+                "GetParameterSchema",
+                [typeof(ElementId), typeof(Document)]
+            ) ?? throw new MissingMethodException(typeof(Autodesk.Revit.DB.ParameterUtils).FullName, "GetParameterSchema");
+            var json = (string)getSchema.Invoke(null, [parameter.Id, document])!;
+            return JObject.Parse(json)["description"]?.Value<string>();
+        } catch (Exception ex) {
+            var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            issues.Add(new RevitDataIssue(
+                "FamilyParameterDescriptionReadFailed",
+                RevitDataIssueSeverity.Warning,
+                $"Could not read optional description for family parameter '{parameter.Definition.Name}' via ParameterUtils.GetParameterSchema: {cause.GetType().FullName}: {cause.Message}",
+                ParameterName: parameter.Definition.Name
+            ));
+            return null;
+        }
     }
 }

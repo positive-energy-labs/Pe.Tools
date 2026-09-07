@@ -77,10 +77,15 @@ public sealed class FamilySnapshotExtractorParityTests {
             }
 
             var record = FamilySnapshotExtractor.ExtractFromFamilyDocument(familyDocument);
+            foreach (var issue in record.Issues.Where(issue => issue.Code == "FamilyParameterDescriptionReadFailed"))
+                TestContext.Progress.WriteLine($"[PE_FF_PARAMETER_DESCRIPTION_EVIDENCE] {issue.ParameterName}: {issue.Message}");
 
             Assert.That(record.IsPartial, Is.False);
             Assert.That(record.Issues.Where(issue => issue.Severity == RevitDataIssueSeverity.Error), Is.Empty);
             Assert.That(record.TypeNames, Does.Contain("Parity Type A").And.Contain("Parity Type B"));
+            Assert.That(record.Parameters.Select(parameter => parameter.Definition.Identity.Name),
+                Is.SupersetOf(new[] { "Parity Length", "Parity Text", "Parity YesNo", "Parity Formula Length" }),
+                string.Join(" | ", record.Issues.Select(issue => issue.Message)));
 
             var comparedCells = 0;
             foreach (var parameterSnapshot in record.Parameters) {

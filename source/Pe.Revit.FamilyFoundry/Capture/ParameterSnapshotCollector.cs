@@ -82,6 +82,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.Project,
             IsPartial = record.IsPartial,
+            Issues = record.Issues.ToList(),
             Data = ToSnapshots(record)
         };
     }
@@ -94,6 +95,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.FamilyDoc,
             IsPartial = record.IsPartial,
+            Issues = record.Issues.ToList(),
             Data = ToSnapshots(record)
         };
     }
