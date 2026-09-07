@@ -580,6 +580,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 var originalId = family.Id;
                 var originalUniqueId = family.UniqueId;
                 var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
+                var fantechMcaBefore = familyName == "Fantech - MUAH Heater"
+                    ? before.Parameters.Single(parameter => parameter.Definition.Identity.Name == "PE_E___MCA")
+                    : null;
                 var operation = new ReconcileFamily(scopedOverride.Families.Contains(familyName) ? scopedPatch : patch,
                     sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
@@ -605,6 +608,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                         assertions["exactSharedIdentityCount"] = exact;
                         assertions["all38SharedIdentities"] = exact == definitions.Count;
                         if (exact != definitions.Count) familyFailures.Add($"exact shared identities: {exact}/{definitions.Count}");
+                        if (fantechMcaBefore is not null) {
+                            var fantechMcaAfter = after.Parameters.Single(parameter => parameter.Definition.Identity.Name == "PE_E___MCA");
+                            var valuesPreserved = fantechMcaBefore.ValuesPerType.Count == fantechMcaAfter.ValuesPerType.Count &&
+                                fantechMcaBefore.ValuesPerType.All(value => fantechMcaAfter.ValuesPerType.TryGetValue(value.Key, out var afterValue) && afterValue == value.Value);
+                            assertions["fantechMcaSourceWasExactAlias"] = fantechMcaBefore.Formula == "Amperage";
+                            assertions["fantechMcaValuesPreserved"] = valuesPreserved;
+                            assertions["fantechMcaAliasCleared"] = fantechMcaAfter.Formula is null;
+                            if (fantechMcaBefore.Formula != "Amperage") familyFailures.Add($"unexpected original PE_E___MCA formula: {fantechMcaBefore.Formula}");
+                            if (!valuesPreserved) familyFailures.Add("PE_E___MCA per-type values changed while materializing Amperage alias");
+                            if (fantechMcaAfter.Formula is not null) familyFailures.Add($"PE_E___MCA alias remained: {fantechMcaAfter.Formula}");
+                        }
                     }
                 }
                 timer.Stop();
@@ -962,6 +976,85 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(type.AsDouble(targetParameter), Is.EqualTo(9d));
                 Assert.That(type.AsDouble(dependentParameter), Is.EqualTo(18d));
             }
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Exact_destination_alias_materializes_every_type_and_reapply_is_noop() {
+        var document = this.NewFamily("FF exact destination alias");
+        try {
+            IReadOnlyDictionary<string, double?> beforeValues;
+            string unrelatedFormula;
+            using (var seed = new Transaction(document, "Seed exact destination alias")) {
+                seed.Start();
+                var seedManager = document.FamilyManager;
+                var source = seedManager.AddParameter("Amperage", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                var targetParameter = seedManager.AddParameter("PE_E___MCA", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                var related = seedManager.AddParameter("Related Current", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                var unrelatedInput = seedManager.AddParameter("Unrelated Current", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                var unrelated = seedManager.AddParameter("Unrelated Formula", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                foreach (var type in seedManager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")) {
+                    seedManager.CurrentType = type;
+                    seedManager.Set(source, type.Name == "A" ? 10d : 20d);
+                    seedManager.Set(unrelatedInput, type.Name == "A" ? 3d : 4d);
+                }
+                seedManager.SetFormula(targetParameter, "Amperage");
+                seedManager.SetFormula(related, "Amperage * 2");
+                seedManager.SetFormula(unrelated, "Unrelated Current * 3");
+                beforeValues = seedManager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")
+                    .ToDictionary(type => type.Name, type => type.AsDouble(targetParameter), StringComparer.Ordinal);
+                unrelatedFormula = unrelated.Formula;
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"PE_E___MCA":{"wasNamed":["Amperage"]}}}}""");
+            using var processor = new OperationProcessor(document);
+            var operation = new ReconcileFamily(patch);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            var manager = document.FamilyManager;
+            var target = manager.FindParameter("PE_E___MCA");
+            Assert.That(target.Formula, Is.Null);
+            Assert.That(manager.FindParameter("Amperage"), Is.Null);
+            foreach (var (typeName, value) in beforeValues)
+                Assert.That(manager.Types.Cast<FamilyType>().Single(type => type.Name == typeName).AsDouble(target), Is.EqualTo(value));
+            Assert.That(manager.FindParameter("Related Current").Formula, Is.EqualTo("PE_E___MCA * 2"));
+            Assert.That(manager.FindParameter("Unrelated Formula").Formula, Is.EqualTo(unrelatedFormula));
+
+            var repeated = new ReconcileFamily(patch);
+            var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
+            var (_, repeatedError) = repeatedContexts.Single().OperationLogs;
+            Assert.That(repeatedError, Is.Null, repeatedError?.Message);
+            Assert.That(repeated.LastReceipt?.Converged, Is.True);
+            Assert.That(repeated.LastPlan!.Changes, Is.Empty);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Nontrivial_destination_dependency_refuses_without_dropping_formula() {
+        var document = this.NewFamily("FF nontrivial destination dependency");
+        try {
+            using (var seed = new Transaction(document, "Seed nontrivial destination dependency")) {
+                seed.Start();
+                var manager = document.FamilyManager;
+                var source = manager.AddParameter("Amperage", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                var target = manager.AddParameter("PE_E___MCA", GroupTypeId.Electrical, SpecTypeId.Current, false);
+                foreach (var type in manager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")) {
+                    manager.CurrentType = type;
+                    manager.Set(source, type.Name == "A" ? 10d : 20d);
+                }
+                manager.SetFormula(target, "Amperage * 1.25");
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var operation = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"PE_E___MCA":{"wasNamed":["Amperage"]}}}}"""));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error?.ToString(), Does.Contain("PE_E___MCA").And.Contain("Amperage * 1.25")
+                .And.Contain("not an exact alias").And.Contain("Refusing to discard formula intent"));
+            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
         } finally { document.Close(false); }
     }
 
