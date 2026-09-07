@@ -540,12 +540,56 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(after.Select(x => x.TypeName), Is.EqualTo(before.Select(x => x.TypeName)));
             for (var i = 0; i < before.Count; i++) AssertRuntimeSame(before[i].Result, after[i].Result);
 
+            if (fixture == "a-box")
+                AssertMinimalBoxPreservation(artifact, before[0].Result, after[0].Result);
+
             var receipt = FamilyModelBuild.Reconcile(artifact.ReopenedB, artifact.Authored);
             Assert.That(receipt?.Converged, Is.True, "Reapplying the original specification must converge.");
             Assert.That(receipt!.Outcomes, Is.Empty, "Reapply must not need another mutation round.");
         } finally {
             artifact.CloseDocuments();
         }
+    }
+
+    private static void AssertMinimalBoxPreservation(
+        FamilyModelRoundtripArtifact artifact,
+        RuntimeStateProbe a,
+        RuntimeStateProbe b
+    ) {
+        Assert.Multiple(() => {
+            Assert.That(artifact.CapturedFromA.Unmodeled, Is.Empty);
+            Assert.That(a.Settings.AlwaysVertical, Is.False, "settings.alwaysVertical");
+            Assert.That(a.Settings.CutWithVoidsWhenLoaded, Is.True, "settings.cutWithVoidsWhenLoaded");
+            Assert.That(a.Settings.RoomCalculationPointOffsetFeet, Is.EqualTo(2).Within(1e-9),
+                "roomCalculationPoint.offset");
+            Assert.That(b.Settings.RoomCalculationPointOffsetFeet, Is.EqualTo(2).Within(1e-9),
+                "rebuilt roomCalculationPoint.offset");
+            Assert.That(a.Settings.LookupTableNames, Is.EqualTo(new[] { "FF Minimal Sizes" }));
+            Assert.That(artifact.CapturedFromA.Parameters["Lookup Result"].Formula,
+                Does.StartWith("size_lookup(LookupTableName,"));
+            Assert.That(artifact.CapturedFromA.LookupTables["FF Minimal Sizes"].Csv,
+                Does.Contain("Width##length##feet").And.Contain("Small").And.Contain("Large"));
+        });
+        AssertParameterInventory(artifact.ReopenedA, artifact.Authored);
+        AssertParameterInventory(artifact.ReopenedB, artifact.CapturedFromA);
+        Assert.That(new FilteredElementCollector(artifact.ReopenedA)
+                .OfClass(typeof(Autodesk.Revit.DB.ExtensibleStorage.DataStorage)).GetElementCount(),
+            Is.Zero, "The authored RFA must not persist Family Foundry metadata.");
+        Assert.That(new FilteredElementCollector(artifact.ReopenedB)
+                .OfClass(typeof(Autodesk.Revit.DB.ExtensibleStorage.DataStorage)).GetElementCount(),
+            Is.Zero, "The rebuilt RFA must not persist Family Foundry metadata.");
+    }
+
+    private static void AssertParameterInventory(Document document, FamilyModel model) {
+        var declared = model.Parameters.Keys.ToHashSet(StringComparer.Ordinal);
+        var undeclared = document.FamilyManager.Parameters.Cast<FamilyParameter>()
+            .Where(parameter => parameter.Id.Value() > 0)
+            .Select(parameter => parameter.Definition.Name)
+            .Where(name => !declared.Contains(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.That(undeclared, Is.Empty,
+            $"Family Foundry introduced undeclared user parameters: {string.Join(", ", undeclared)}");
     }
 
     [Test]
@@ -711,6 +755,8 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(b.Settings.CutWithVoidsWhenLoaded, Is.EqualTo(a.Settings.CutWithVoidsWhenLoaded));
             Assert.That(b.Settings.PartType, Is.EqualTo(a.Settings.PartType));
             Assert.That(b.Settings.RoomCalculationPointEnabled, Is.EqualTo(a.Settings.RoomCalculationPointEnabled));
+            Assert.That(b.Settings.RoomCalculationPointOffsetFeet,
+                Is.EqualTo(a.Settings.RoomCalculationPointOffsetFeet).Within(1e-9));
             Assert.That(b.Settings.LookupTableNames, Is.EqualTo(a.Settings.LookupTableNames));
         });
     }

@@ -4,7 +4,10 @@
     "Width":   { "dataType": "Length", "value": "24in" },
     "Height":  { "dataType": "Length", "value": "36in" },
     "Depth":   { "dataType": "Length", "value": "8in" },
-    "Voltage": { "dataType": "ElectricalPotential", "value": "480 V" }
+    "Voltage": { "dataType": "ElectricalPotential", "value": "480 V" },
+    "Lookup Key": { "dataType": "Number", "value": 1 },
+    "Lookup Result": { "dataType": "Number", "formula": "size_lookup(LookupTableName, \"Lookup Result\", 0, Lookup Key)" },
+    "LookupTableName": { "dataType": "Text", "value": "FF Minimal Sizes" }
   },
   "types": { "Standard": {}, "Wide": { "Width": "36in" } },
   "datums": {
@@ -23,5 +26,11 @@
       "associate": { "Voltage": "param:Voltage" }
     }
   },
-  "roomCalculationPoint": { "enabled": true }
+  "settings": { "alwaysVertical": false, "cutWithVoidsWhenLoaded": true },
+  "lookupTables": {
+    "FF Minimal Sizes": {
+      "csv": ",Lookup Key##number##general,Lookup Result##number##general,Width##length##feet,Height##length##feet\nSmall,1,6,1,0.5\nLarge,2,12,2,1\n"
+    }
+  },
+  "roomCalculationPoint": { "enabled": true, "offset": "2ft" }
 }
