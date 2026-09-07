@@ -8,20 +8,22 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
-Latest native checkpoint: fresh controlled Revit 2025 wave11 at `5531460` ran
-122 tests: 77 passed and 45 failed. Electrical associations passed 4/4; the connector
-run-rule rollback, native formula probe, text rename, box and symbolic roundtrips passed.
-The 11-system-type connector census found no MCA/current target. MCA intent remains retained.
-The owned process exited; quarantine is empty and native settings were restored byte-for-byte.
+Latest valid native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
+123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
+Wave12 reused stale Debug.R25.Tests binaries because root compiled Debug.R25 and passed
+--no-build. Wave12 does not prove its stated source. Wave11 remains valid for 5531460.
+The corrected wave13 built the SDK-selected Debug.R25.Tests graph before execution.
+Both owned processes exited and native settings were restored byte-for-byte.
+Protected sessions retained their exact start identities. No FF-owned session is active.
 
-Current integration `e23ded4` includes the old-template per-family checkpoint, removal of
-heuristic formula rejection, legacy unit-alias and omitted-scope repairs, and wall-template
-plane/view correction. R25.Tests compile passes with 0 errors and 123 warnings. These changes
-await native proof. No source hold or FF-owned Revit session is active.
+Current integration adds explicit cap-alignment capture, one-use structural matching,
+and native wall-template view vocabulary. These changes await the next compile/native gate.
+Current Sol work repairs slash-containing type cell identity and shared tooltip repeat,
+checks native array constraints and the circle test readback, and types clean/sort contracts.
+The old-template fixture is staged with verified original hash. Its 38-definition mechanical
+mapping gate remains unrun and is the next primary acceptance after parameter repairs.
+No whole user story is closed. Route browser receipt proof and native scripting remain owed.
 
-Current bounded work: Sol medium investigates complete split-circle capture/constraints;
-Sol high repairs nested alignment view selection; Sol medium checks AprilAire URL definition
-intent and legacy parser fallback. Root integrates changes and coordinates native acceptance.
 Final simplification must retain features while reducing state, contracts and serialization.
 The takeoffs review was sent here by mistake and remains outside this effort.
 
