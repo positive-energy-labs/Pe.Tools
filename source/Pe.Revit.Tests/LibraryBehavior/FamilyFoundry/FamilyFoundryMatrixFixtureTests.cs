@@ -133,10 +133,18 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 "beforeSeed:Matrix Type A", "afterSeed:Matrix Type A",
                 "beforeSeed:Matrix Type B", "afterSeed:Matrix Type B",
                 "beforeSeed:Matrix Type C", "afterSeed:Matrix Type C",
-                "beforeTopology", "afterTopology", "afterRegenerate", "afterCommit",
+                "beforeTopology",
+                "beforeLinearDimensionCreate", "afterLinearDimensionCreate", "afterLinearDimensionLabel",
+                "beforeAngularDimensionCreate", "afterAngularDimensionCreate", "afterAngularDimensionLabel",
+                "beforeRadialDimensionCreate", "afterRadialDimensionCreate", "afterRadialDimensionLabel",
+                "beforeArrayCreate", "afterArrayCreate", "afterArrayLabel",
+                "beforeNestedActivate", "afterNestedActivate",
+                "beforeNestedCreate", "afterNestedCreate",
+                "beforeNestedAssociation", "afterNestedAssociation",
+                "afterTopology", "afterRegenerate", "afterCommit",
                 "afterSaveAs", "afterReopen", "afterLoadEditFamily"
             }));
-            AssertSeedProbeValues(stages[^1]!["values"]!);
+            AssertSeedProbeValues(stages[stages.Count - 1]!["values"]!);
         } finally {
             if (stages.Count > 0 && !File.Exists(Path.Combine(outputDirectory, "matrix-seed-boundaries.json")))
                 File.WriteAllText(Path.Combine(outputDirectory, "matrix-seed-boundaries.json"), stages.ToString());
