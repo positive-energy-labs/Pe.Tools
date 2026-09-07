@@ -42,6 +42,58 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [Test, Timeout(600000)]
+    public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
+        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
+        var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_all_editable_mechanical_families_migrate_company_mapping));
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(original, copy);
+        var project = this._application.OpenDocumentFile(copy);
+        var evidence = new JArray();
+        var failures = new List<string>();
+        try {
+            var mappings = CompanyNormalizationFixture.MechanicalMappings();
+            var names = mappings.MappingData.Select(m => m.NewName).ToHashSet(StringComparer.Ordinal);
+            var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+                RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name!)).ToList();
+            Assert.That(definitions.Count, Is.EqualTo(38));
+            var patch = CompanyNormalizationFixture.Convert(mappings, names);
+            var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
+                .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
+                .OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
+            Assert.That(families, Is.Not.Empty, "The real template must provide migration candidates.");
+            foreach (var family in families) {
+                var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                using var processor = new OperationProcessor(project);
+                var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
+                var entry = new JObject { ["family"] = family.Name, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt), ["error"] = error?.ToString() };
+                evidence.Add(entry);
+                if (error is not null || operation.LastReceipt?.Converged != true) {
+                    failures.Add($"{family.Name}: {error?.Message ?? "No committed converged receipt"}");
+                    if (!JToken.DeepEquals(JToken.FromObject(before.Parameters), JToken.FromObject(after.Parameters)))
+                        failures.Add($"{family.Name}: failed migration changed the loaded parameter matrix");
+                    continue;
+                }
+                if (before.Issues.Count != 0 || after.Issues.Count != 0) failures.Add($"{family.Name}: incomplete parameter evidence");
+                foreach (var definition in definitions) {
+                    var parameter = after.Parameters.SingleOrDefault(p => p.Definition.Identity.Name == definition.Name);
+                    if (parameter?.Definition.Identity.SharedGuid != definition.DownloadOptions.GetGuid().ToString())
+                        failures.Add($"{family.Name}: exact shared identity missing for {definition.Name}");
+                }
+            }
+            File.WriteAllText(Path.Combine(output, "company-template-migration.json"), evidence.ToString());
+            Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
+        } finally {
+            File.WriteAllText(Path.Combine(output, "company-template-migration.json"), evidence.ToString());
+            project.Close(false);
+            Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash), "Original template fixture was modified.");
+        }
+    }
+
     [Test]
     public void Company_shared_definition_replaces_local_source_with_exact_guid_and_values() {
         var document = this.NewFamily("FF company width");

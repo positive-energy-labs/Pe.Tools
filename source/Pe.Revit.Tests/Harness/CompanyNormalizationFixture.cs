@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.Tests;
 
@@ -25,7 +26,8 @@ internal static class CompanyNormalizationFixture {
         }
         var types = new JObject();
         if (assignments?.Enabled == true) {
-            if (!assignments.OverrideExistingValues) throw new InvalidOperationException("Conditional assignment needs per-family conversion; explicit JSON always wins.");
+            if (!assignments.OverrideExistingValues && (assignments.GlobalAssignments.Count != 0 || assignments.PerTypeAssignmentsTable.Count != 0))
+                throw new InvalidOperationException("Conditional assignment needs per-family conversion; explicit JSON always wins.");
             foreach (var assignment in assignments.GetGlobalAssignmentsByParameter().Values) {
                 if (!parameters.ContainsKey(assignment.Parameter)) parameters[assignment.Parameter] = new JObject();
                 parameters[assignment.Parameter]![assignment.Kind == ParamAssignmentKind.Formula ? "formula" : "value"] =
@@ -47,7 +49,7 @@ internal static class CompanyNormalizationFixture {
         if (spec == SpecTypeId.Number || spec == SpecTypeId.Int.Integer || !UnitUtils.IsMeasurableSpec(spec)) return value;
         if (legacyUnits is null || !UnitFormatUtils.TryParse(legacyUnits, spec, value, out var internalValue))
             throw new InvalidOperationException($"Unitless legacy assignment needs its source document units: {parameter}={value}");
-        var formatted = UnitFormatUtils.Format(legacyUnits, spec, internalValue, false, new FormatValueOptions { AppendUnitSymbol = true });
+        var formatted = ParameterPortableFormat.ForSpec(spec)(internalValue);
         if (!UnitFormatUtils.TryParse(legacyUnits, spec, formatted, out var reread) || Math.Abs(reread - internalValue) > Math.Max(1, Math.Abs(internalValue)) * 1e-12 ||
             FamilyValueUnits.Validate(new JObject { ["parameters"] = new JObject { [parameter] = new JObject { ["value"] = formatted } } }, _ => true).Count != 0)
             throw new InvalidOperationException($"Legacy unit formatting cannot preserve {parameter}={value}; explicit authoring is required.");

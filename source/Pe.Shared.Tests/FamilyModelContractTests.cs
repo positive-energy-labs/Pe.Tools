@@ -109,6 +109,22 @@ public sealed class FamilyModelContractTests {
         Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "Unresolved original presets remain explicit blockers.");
     }
 
+    [Test]
+    public void Composed_company_corpus_covers_every_profile_except_the_two_unresolved_presets() {
+        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
+        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "manifest.json")));
+        var blocked = original["unresolved"]!.Select(x => (string)x["source"]!).ToHashSet(StringComparer.Ordinal);
+        var expected = original["files"]!.Select(x => (string)x["path"]!).Where(p => p.Contains("/profiles/") && !blocked.Contains(p));
+        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
+        Assert.That(composed.Select(x => (string)x["source"]!), Is.EquivalentTo(expected));
+        Assert.That(composed.Count, Is.EqualTo(43));
+        Assert.That(composed.Descendants().OfType<JProperty>().Where(p => p.Name is "$include" or "$preset"), Is.Empty);
+        foreach (var profile in composed) {
+            var source = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", (string)profile["source"]!)));
+            Assert.That(((JObject)profile["settings"]!).Properties().Select(p => p.Name), Is.EquivalentTo(source.Properties().Select(p => p.Name)), (string)profile["source"]!);
+        }
+    }
+
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
