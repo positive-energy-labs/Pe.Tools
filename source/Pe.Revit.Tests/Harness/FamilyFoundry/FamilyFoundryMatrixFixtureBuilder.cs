@@ -18,6 +18,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     public static readonly Guid MetadataProjectBoundSharedGuid = new("22222222-3333-4444-5555-666666666603");
 
     public const string SourceText = "FF Matrix Source Text";
+    public const string SourceUnsetText = "FF Matrix Source Unset Text";
     public const string SourceBlankText = "FF Matrix Source Blank Text";
     public const string SourceFallbackText = "FF Matrix Source Fallback Text";
     public const string SourceInteger = "FF Matrix Source Integer";
@@ -73,7 +74,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         Application application,
         Document projectDocument,
         string outputDirectory,
-        Action<string, Document>? observe = null
+        Action<string, Document>? observe = null,
+        bool selectFirstTypeForArrayCreate = false
     ) {
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
@@ -82,7 +84,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
 
         try {
             var nestedFamily = BuildAndLoadNestedFamily(application, familyDocument, outputDirectory);
-            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily, observe);
+            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily, observe, selectFirstTypeForArrayCreate);
             var familyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(
                 familyDocument,
                 outputDirectory,
@@ -207,7 +209,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     private static void BuildSetValueMatrixFamilyDocument(
         Document familyDocument,
         Family nestedFamily,
-        Action<string, Document>? observe
+        Action<string, Document>? observe,
+        bool selectFirstTypeForArrayCreate
     ) {
         using var transaction = new Transaction(familyDocument, "Build FF set-value matrix family");
         _ = transaction.Start();
@@ -218,6 +221,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             _ = RevitFamilyFixtureHarness.EnsureFamilyType(familyDocument, typeName);
 
         var sourceText = AddFamilyParameter(familyDocument, SourceText, SpecTypeId.String.Text, GroupTypeId.Text, false);
+        _ = AddFamilyParameter(familyDocument, SourceUnsetText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceBlankText = AddFamilyParameter(familyDocument, SourceBlankText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceFallbackText = AddFamilyParameter(familyDocument, SourceFallbackText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceInteger = AddFamilyParameter(familyDocument, SourceInteger, SpecTypeId.Int.Integer, GroupTypeId.IdentityData, false);
@@ -266,7 +270,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             sourceAngularDimension,
             sourceRadialDimension,
             observe);
-        CreateLabeledArrayTopology(familyDocument, sourceArrayCount, observe);
+        CreateLabeledArrayTopology(familyDocument, sourceArrayCount, observe, selectFirstTypeForArrayCreate);
         CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth, observe);
         observe?.Invoke("afterTopology", familyDocument);
 
@@ -465,7 +469,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     private static void CreateLabeledArrayTopology(
         Document familyDocument,
         FamilyParameter arrayLabel,
-        Action<string, Document>? observe
+        Action<string, Document>? observe,
+        bool selectFirstTypeForArrayCreate
     ) {
         var view = GetPlanView(familyDocument);
         var sketchPlane = SketchPlane.Create(familyDocument, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero));
@@ -477,13 +482,25 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             throw new InvalidOperationException("The FF matrix model line was not arrayable.");
 
         observe?.Invoke("beforeArrayCreate", familyDocument);
-        var array = LinearArray.Create(
-            familyDocument,
-            view,
-            seedLine.Id,
-            3,
-            new XYZ(0, 1, 0),
-            (ArrayAnchorMember)0);
+        var manager = familyDocument.FamilyManager;
+        var previousType = manager.CurrentType;
+        if (selectFirstTypeForArrayCreate) {
+            manager.CurrentType = manager.Types.Cast<FamilyType>().First();
+            observe?.Invoke("beforeArrayCreate:firstType", familyDocument);
+        }
+        LinearArray array;
+        try {
+            array = LinearArray.Create(
+                familyDocument,
+                view,
+                seedLine.Id,
+                3,
+                new XYZ(0, 1, 0),
+                (ArrayAnchorMember)0);
+        } finally {
+            if (selectFirstTypeForArrayCreate)
+                manager.CurrentType = previousType;
+        }
         observe?.Invoke("afterArrayCreate", familyDocument);
         array.Label = arrayLabel;
         observe?.Invoke("afterArrayLabel", familyDocument);
