@@ -30,7 +30,7 @@ public static class FamilyDocumentSetValue {
             var formula = ValueToFormulaString(famDoc, param, value);
             var success = famDoc.TrySetFormulaFast(param, formula, out errorMessage);
             if (!success) return false;
-            return famDoc.UnsetFormula(param);
+            return famDoc.TrySetFormulaFast(param, null, out errorMessage);
         } catch (Exception ex) {
             errorMessage = ex.ToStringDemystified();
             return false;
@@ -67,11 +67,27 @@ public static class FamilyDocumentSetValue {
             StorageType.String => $"\"{value}\"",
             StorageType.Integer => Convert.ToInt32(value).ToString(),
             StorageType.Double when UnitUtils.IsMeasurableSpec(dataType) =>
-                UnitFormatUtils.Format(famDoc.GetUnits(), dataType, Convert.ToDouble(value), true),
+                FormatMeasuredValue(famDoc, dataType, Convert.ToDouble(value)),
             StorageType.Double => Convert.ToDouble(value).ToString(CultureInfo.InvariantCulture),
             _ => throw new InvalidOperationException(
                 $"ValueToFormulaString not supported for parameter '{param.Definition.Name}' with StorageType.{param.StorageType}")
         };
+    }
+
+    private static string FormatMeasuredValue(FamilyDocument famDoc, ForgeTypeId dataType, double value) {
+        if (dataType == SpecTypeId.Number) return value.ToString("R", CultureInfo.InvariantCulture);
+        var units = famDoc.GetUnits();
+        var unit = units.GetFormatOptions(dataType).GetUnitTypeId();
+        if (!FormatOptions.IsValidAccuracy(unit, 1e-12))
+            unit = UnitUtils.GetValidUnits(dataType).First(candidate => FormatOptions.IsValidAccuracy(candidate, 1e-12));
+        using var format = new FormatOptions(unit) { Accuracy = 1e-12 };
+        using var options = new FormatValueOptions { AppendUnitSymbol = true };
+        options.SetFormatOptions(format);
+        var formula = UnitFormatUtils.Format(units, dataType, value, true, options);
+        // Display precision can turn 0 K into -0.183333 K. Refuse lossy literals so callers can use per-type Set.
+        if (!UnitFormatUtils.TryParse(units, dataType, formula, out var parsed) || Math.Abs(parsed - value) > 1e-9)
+            throw new InvalidOperationException($"Cannot represent {value:R} accurately as a formula literal for {dataType.TypeId}.");
+        return formula;
     }
 
     public static IReadOnlyDictionary<string, string> DescribeSetValue(
