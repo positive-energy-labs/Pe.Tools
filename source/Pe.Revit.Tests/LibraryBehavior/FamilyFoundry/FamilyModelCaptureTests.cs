@@ -1,6 +1,8 @@
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB.Mechanical;
+using Autodesk.Revit.DB.Structure;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
@@ -84,30 +86,47 @@ public sealed class FamilyModelCaptureTests {
 
     [Test]
     public void Native_connector_host_probe_compares_plane_with_coincident_nested_face() {
-        var model = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
-        model.Connectors.Clear();
+        var host = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
+        var dependency = RevitFamilyFixtureHarness.LoadFamilyModelFixture("vane");
         var modelDirectory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json"));
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_connector_host_probe_compares_plane_with_coincident_nested_face));
         Document? document = null;
         try {
-            document = FamilyModelBuild.Build(this._application, model, modelDirectory: modelDirectory).Document;
+            document = FamilyTemplate.NewDocument(this._application, host.Family);
+            Document? dependencyDocument = null;
+            try {
+                dependencyDocument = FamilyModelBuild.Build(this._application, dependency, modelDirectory: modelDirectory).Document;
+                _ = dependencyDocument.LoadFamily(document, new DefaultFamilyLoadOptions());
+            } finally { RevitFamilyFixtureHarness.CloseDocument(dependencyDocument); }
+
             using var transaction = new Transaction(document, "Probe connector host identity");
             transaction.Start();
-            var plane = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
-                .Single(referencePlane => referencePlane.Name == "flange.top");
-            var vane = new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
-                .Where(instance => instance.Symbol.Family.Name == "vane")
-                .OrderBy(instance => ((LocationPoint)instance.Location).Point.GetLength()).First();
+            var symbol = new FilteredElementCollector(document).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
+                .Single(candidate => candidate.Family.Name == "vane" && candidate.Name == "type one");
+            if (!symbol.IsActive) symbol.Activate();
+            var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+                .Single(candidate => candidate.Name == "Ref. Level");
+            var vane = document.FamilyCreate.NewFamilyInstance(XYZ.Zero, symbol, level, StructuralType.NonStructural);
+            document.Regenerate();
             var options = new Options { ComputeReferences = true, DetailLevel = ViewDetailLevel.Fine };
             var face = vane.get_Geometry(options).OfType<GeometryInstance>()
                 .SelectMany(instance => instance.GetSymbolGeometry().OfType<Solid>())
                 .SelectMany(solid => solid.Faces.OfType<PlanarFace>())
-                .Where(candidate => candidate.Reference is not null &&
-                    Math.Abs(Math.Abs(candidate.FaceNormal.DotProduct(plane.GetPlane().Normal)) - 1) < 1e-7)
-                .OrderBy(candidate => Math.Abs((candidate.Origin - plane.GetPlane().Origin).DotProduct(plane.GetPlane().Normal)))
+                .Where(candidate => candidate.Reference is not null)
+                .OrderByDescending(candidate => Math.Abs(candidate.FaceNormal.DotProduct(XYZ.BasisZ)))
                 .First();
+            var normal = face.FaceNormal.Normalize();
+            var direction = (Math.Abs(normal.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ).CrossProduct(normal).Normalize();
+            var cut = normal.CrossProduct(direction).Normalize();
+            var viewNormal = Math.Abs(normal.Z) > 0.95 ? XYZ.BasisX : XYZ.BasisZ;
+            var view = new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>()
+                .Where(candidate => !candidate.IsTemplate && candidate.ViewType is ViewType.Elevation or ViewType.Section)
+                .OrderByDescending(candidate => Math.Abs(candidate.ViewDirection.DotProduct(viewNormal))).First();
+            var plane = document.FamilyCreate.NewReferencePlane(face.Origin + direction * 8, face.Origin - direction * 8, cut, view);
+            plane.Name = "connector-control-plane";
+            document.Regenerate();
             Assert.That(Math.Abs((face.Origin - plane.GetPlane().Origin).DotProduct(plane.GetPlane().Normal)),
-                Is.LessThan(1e-7), "Control requires the nested face to be coincident with flange.top.");
+                Is.LessThan(1e-7), "Control requires the nested face and reference plane to be coincident.");
 
             var planeConnector = ConnectorElement.CreateDuctConnector(document, DuctSystemType.ExhaustAir,
                 ConnectorProfileType.Rectangular, plane.GetReference());
