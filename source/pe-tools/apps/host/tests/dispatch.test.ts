@@ -278,13 +278,14 @@ test("composition preserves authored JSON, substitutes keyed presets, and fails 
     expect(snapshot.dependencies).toHaveLength(3);
     writeFileSync(
       join(root, "_fragments", "later.json"),
-      '{"Width":{"value":42},"Enabled":{"value":true}}',
+      '{"Width":{"value":"42in"},"Enabled":{"value":true}}',
     );
-    const keyed = await open(
-      '{"parameters":{"$include":["@local/_fragments/parameters","@local/_fragments/later"]}}',
-    );
+    const keyedRaw =
+      '{"parameters":{"$include":["@local/_fragments/parameters","@local/_fragments/later"]}}';
+    const keyed = await open(keyedRaw);
+    expect(keyed.rawContent).toBe(keyedRaw);
     expect(JSON.parse(keyed.composedContent!)).toEqual({
-      parameters: { Width: { value: 42 }, Enabled: { value: true } },
+      parameters: { Width: { dataType: "Length", value: "42in" }, Enabled: { value: true } },
     });
     expect(keyed.dependencies).toHaveLength(2);
     for (const invalid of [

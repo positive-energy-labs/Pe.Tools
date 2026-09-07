@@ -795,6 +795,20 @@ const expandPresets: (
   },
 );
 
+// Keyed includes merge object fields; arrays and scalar leaves keep the later value.
+function mergeIncludeFields(earlier: unknown, later: unknown): unknown {
+  if (!isRecord(earlier) || !isRecord(later)) return later;
+  return {
+    ...earlier,
+    ...Object.fromEntries(
+      Object.entries(later).map(([key, value]) => [
+        key,
+        mergeIncludeFields(Object.hasOwn(earlier, key) ? earlier[key] : undefined, value),
+      ]),
+    ),
+  };
+}
+
 const expandIncludes: (
   value: unknown,
   localRootDirectory: string,
@@ -869,7 +883,7 @@ const expandIncludes: (
           const paths = Array.isArray(candidate.$include)
             ? candidate.$include
             : [candidate.$include];
-          const merged: Record<string, unknown> = {};
+          let merged: unknown = {};
           for (const includePath of paths) {
             const directive = yield* Effect.try(() =>
               resolveDirective(includePath, localRootDirectory, options.includeRoots ?? [], true),
@@ -901,9 +915,11 @@ const expandIncludes: (
               sourceDocumentId,
             );
             const expanded = yield* expand(presets, visited);
-            Object.assign(merged, expanded);
+            merged = mergeIncludeFields(merged, expanded);
             visited.delete(path.toLowerCase());
           }
+          if (!isRecord(merged))
+            return yield* Effect.fail(new Error("Keyed includes must compose to a JSON object."));
           delete merged.$schema;
           return merged;
         }
