@@ -180,10 +180,10 @@ function convertProfiles() {
   writeFileSync(scriptPath, conversionScript(profilePath, definitionsPath));
   const result = pea(["script", "execute", "--host", host, "--bridge-session-id", session, "--file", scriptPath, "--permission-mode", "ReadOnly", "--timeout-seconds", "600"], "conversion");
   const marker = "\ndata      ";
-  const output = `\n${result.stdout}`;
-  const offset = output.lastIndexOf(marker);
+  const stdoutText = `\n${result.stdout}`;
+  const offset = stdoutText.lastIndexOf(marker);
   if (offset < 0) fail("Pea conversion script returned no structured data.");
-  return JSON.parse(output.slice(offset + marker.length).trim());
+  return JSON.parse(stdoutText.slice(offset + marker.length).trim());
 }
 
 function hostCall(label, key, request) {
