@@ -13,6 +13,11 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 
 /// <summary>Export selected company definitions and source rules as portable native patch intent, without resolving against one family.</summary>
 public static class FamilyProfileConverter {
+    private static readonly IReadOnlyDictionary<string, string> LegacyParameterNames =
+        new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["PE_G___Url"] = "PE_G___URL"
+        };
+
     private static readonly IReadOnlyDictionary<string, (ForgeTypeId Spec, ForgeTypeId Unit)> LegacyLiteralUnits =
         new Dictionary<string, (ForgeTypeId, ForgeTypeId)>(StringComparer.Ordinal) {
             ["PE_G___Weight"] = (SpecTypeId.Mass, UnitTypeId.PoundsMass),
@@ -71,22 +76,24 @@ public static class FamilyProfileConverter {
             if (!assignments.OverrideExistingValues && (assignments.GlobalAssignments.Count > 0 || assignments.PerTypeAssignmentsTable.Count > 0))
                 throw new InvalidOperationException("Blank-only legacy assignments require retained per-family rules; they cannot become unconditional values.");
             foreach (var assignment in assignments.GetGlobalAssignmentsByParameter().Values) {
-                if (parameters[assignment.Parameter] is null) parameters[assignment.Parameter] =
-                    exported.Run?.ParametersIfSourceExists?.TryGetValue(assignment.Parameter, out var conditional) == true
+                var parameter = CanonicalParameterName(assignment.Parameter);
+                if (parameters[parameter] is null) parameters[parameter] =
+                    exported.Run?.ParametersIfSourceExists?.TryGetValue(parameter, out var conditional) == true
                         ? JObject.FromObject(conditional, JsonSerializer.Create(FamilyModelJson.Settings)) : new JObject();
-                parameters[assignment.Parameter]![assignment.Kind == ParamAssignmentKind.Formula ? "formula" : "value"] =
-                    assignment.Kind == ParamAssignmentKind.Formula ? assignment.Value : Literal(assignment.Parameter, assignment.Value, specs, sourceUnits);
+                parameters[parameter]![assignment.Kind == ParamAssignmentKind.Formula ? "formula" : "value"] =
+                    assignment.Kind == ParamAssignmentKind.Formula ? assignment.Value : Literal(parameter, assignment.Value, specs, sourceUnits);
             }
             var types = new JObject();
             foreach (var (parameter, cells) in assignments.GetPerTypeAssignmentsByParameter())
                 foreach (var (type, value) in cells) {
                     types[type] ??= new JObject();
-                    types[type]![parameter] = Literal(parameter, value, specs, sourceUnits);
+                    var canonical = CanonicalParameterName(parameter);
+                    types[type]![canonical] = Literal(canonical, value, specs, sourceUnits);
                 }
             if (types.HasValues) exported.Patch["types"] = types;
         }
         if (composed["DeleteParams"]?.ToObject<DeleteParamsSettings>() is { Enabled: true } deletes)
-            foreach (var name in deletes.Names) parameters[name] = JValue.CreateNull();
+            foreach (var name in deletes.Names) parameters[CanonicalParameterName(name)] = JValue.CreateNull();
         if (composed["AddRoomDingler"]?.ToObject<AddRoomDinglerSettings>() is { Enabled: true } room)
             exported.Patch["roomCalculationPoint"] = JObject.FromObject(new FamilyModelRoomCalculationPoint { Enabled = true, Offset = PortableLength.FromFeet(room.OffsetFeet) }, JsonSerializer.Create(FamilyModelJson.Settings));
         ConvertReferencePlanes(composed["MakeRefPlaneAndDims"], exported.Patch);
@@ -591,7 +598,8 @@ public static class FamilyProfileConverter {
     };
 
     private static bool Matches(string name, JToken? rules, bool empty) {
-        var equal = (rules?["Equaling"] ?? rules?["Names"])?.Values<string>().ToList() ?? [];
+        var equal = (rules?["Equaling"] ?? rules?["Names"])?.Values<string>()
+            .Select(CanonicalParameterName).ToList() ?? [];
         var starts = rules?["StartingWith"]?.Values<string>().ToList() ?? [];
         var contains = rules?["Containing"]?.Values<string>().ToList() ?? [];
         return equal.Count + starts.Count + contains.Count == 0 ? empty : equal.Contains(name) ||
@@ -605,11 +613,13 @@ public static class FamilyProfileConverter {
             return value;
         }
         if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
-            var normalized = NormalizeLegacyLiteral(name, value);
             var legacyUnits = new Units(UnitSystem.Imperial);
             legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));
-            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, normalized, out var legacyRaw))
-                throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");
+            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, value, out var legacyRaw)) {
+                var normalized = NormalizeLegacyLiteral(name, value);
+                if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, normalized, out legacyRaw))
+                    throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");
+            }
             if (spec == SpecTypeId.Number)
                 return UnitUtils.ConvertFromInternalUnits(legacyRaw, legacy.Unit).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
             return ParameterPortableFormat.ForSpec(spec)(legacyRaw);
@@ -656,6 +666,9 @@ public static class FamilyProfileConverter {
             throw new InvalidOperationException($"Legacy literal does not match the known alias grammar: {name}={value}");
         return match.Groups["value"].Value;
     }
+
+    private static string CanonicalParameterName(string name) =>
+        LegacyParameterNames.TryGetValue(name, out var canonical) ? canonical : name;
 
     public static FamilyPatch ExportSharedMappings(MapParamsSettings settings,
         IEnumerable<ParametersApi.Parameters.ParametersResult> selectedDefinitions, bool fillBlanksFromSources = false,

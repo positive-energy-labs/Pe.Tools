@@ -279,6 +279,14 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(patch.Patch["parameters"]!["Manufacturer"]!.Value<bool?>("isInstance"), Is.False,
                     "Explicit legacy scope remains authoritative.");
             }
+            if (profilePath.EndsWith("/AprilAire 800 Series.json", StringComparison.Ordinal)) {
+                var url = (JObject)patch.Patch["parameters"]!["PE_G___URL"]!;
+                var definition = definitions.Single(d => d.Name == "PE_G___URL");
+                Assert.That(patch.Patch["parameters"]!["PE_G___Url"], Is.Null);
+                Assert.That(url.Value<bool>("shared"), Is.True);
+                Assert.That(url.Value<string>("sharedGuid"), Is.EqualTo(definition.DownloadOptions.GetGuid().ToString()));
+                Assert.That(url.Value<string>("value"), Does.StartWith("https://"));
+            }
             evidence["parameterPatch"] = patch.Patch.DeepClone();
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
