@@ -13,11 +13,11 @@ PID88932 exited with exact settings restoration, empty quarantine, and protected
 preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
 
 Current native proof is controlled dev ff-profile-proof-25 on the disposable old template.
-Latest completed payload checkpoint is PID79148, generation20260907153529058, sourceb5d3cbf;
-P is refreshing to e180b2f for full AprilAire Apply/reapply. SDK candidate f59ceb7 retained quarantine
+Latest completed payload checkpoint is PID47944, generation20260907155847757, sourcee180b2f.
+AprilAire Apply and guarded reapply converged; both following Plans were empty. SDK candidate f59ceb7 retained quarantine
 across restart. Its saved original has identical85 add-in rows and disable flags to the prior
 baseline, but different JSON bytes; final stop/restoration remains owed. Protected sessions stay
-untouched. P owns all lifecycle. Plan6 is terminal; neither AprilAire Apply has converged yet.
+untouched. P owns all lifecycle. Plan6 is terminal; one real company profile now has full Host Apply/reapply proof.
 
 Request-file binding, empty/Other parameter groups, and unitless sone conversion are repaired.
 Plan6 completed all45 profiles:43 converted,2 literal conversion failures;37 native Plan operations
@@ -31,9 +31,11 @@ plan for3813845; its fresh Apply refused hash drift12DF8B5967B8A884 to98AFB19C77
 Hash repair962cfc2 passed the native guard on the second Apply. That run reached residue5:
 regeneration after dimension labels copied current-type values into another type. Whole-family
 rollback preserved the captured model. Native alphabetical-first-type control preserved all values,
-unset states, formulas, and original current type; shared two-line fix e180b2f awaits full Apply proof.
-Duplicate-key cause was a built-in/local name collision; canonical identity fix468706e compiles.
-No successful no-op reapply has run. Historical request
+unset states, formulas, and original current type. Shared two-line fix e180b2f passed full Apply3;
+replacement family6150263 was followed through empty Plan, converged reapply, and final empty Plan
+with stable hashE3E349A6E82E15B5. Evidence: monthly45-host-apply-aprilaire800-3.
+Canonical identity fix468706e repairs the formula supplement; native Linear LED capture still
+finds another duplicate-name lookup. P owns its exact failing caller and feature-preserving repair. Historical request
 and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
 Plan6 later exposed destructive native-copy warnings at journal3673 10:06:33: dimensions could
 not be copied and elements were deleted. That affected capture cannot certify safe Apply even
