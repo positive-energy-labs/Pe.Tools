@@ -86,7 +86,7 @@ public static class Verbs {
         RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
         var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
             header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
-        var proposals = Proposals(document, level, phaseId, knee.Solids.Stamp);
+        var proposals = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
         var detail = knee.Merged.Pieces == 0 && header.Merged.Pieces == 0
             ? HoldWithCensus(document, clip, source, knee.Solids.Stamp) : null;
         RequireCurrent(document, knee.Solids.Stamp);
@@ -128,7 +128,7 @@ public static class Verbs {
         return phase.Id;
     }
 
-    private static IReadOnlyList<RoomProposal> Proposals(Document host, Level level, ElementId phase, Stamp stamp) {
+    private static IReadOnlyList<RoomProposal> Proposals(Document host, Level level, ElementId phase, Stamp stamp, Aabb clip) {
         var result = new List<RoomProposal>();
         Collect(host, null, Transform.Identity);
         var sources = 1;
@@ -149,7 +149,7 @@ public static class Verbs {
             if (!stamp.Sources.Any(s => s.DocumentKey == documentKey && s.LinkInstanceId == linkId && !s.Dirty))
                 throw new PartitionException($"stale capture: source {documentKey}, link {linkId} is absent or dirty");
             var rooms = new FilteredElementCollector(doc).WherePasses(new Autodesk.Revit.DB.Architecture.RoomFilter())
-                .Cast<ArchitecturalRoom>().Where(r => r.Location is not null)
+                .Cast<ArchitecturalRoom>().Where(r => r.Location is not null && InScope(r, transform))
                 .OrderBy(r => r.UniqueId, StringComparer.Ordinal).ToList();
             if (rooms.Count == 0) return; // Unplaced Rooms have no spatial proposal or phase-mapping requirement.
             var sourcePhase = phase;
@@ -174,12 +174,23 @@ public static class Verbs {
                     throw new PartitionException($"malformed capture: Room {room.UniqueId} has nonfinite transformed level");
                 if (link is null ? roomLevel.Id != level.Id : Math.Abs(hostZ - level.ProjectElevation) > LoopTolFt)
                     continue;
-                var key = $"{Uri.EscapeDataString(documentKey)}|{Uri.EscapeDataString(link?.UniqueId ?? "host")}|{Uri.EscapeDataString(room.UniqueId)}";
+                // The host plus link instance resolves the source even when Revit gives a loaded link no path.
+                var key = $"{Uri.EscapeDataString(stamp.HostDocumentKey)}|{Uri.EscapeDataString(link?.UniqueId ?? "host")}|{Uri.EscapeDataString(room.UniqueId)}";
                 var boundaries = room.GetBoundarySegments(options);
                 var loops = boundaries?.Select(b => Loop(b.Select(s => s.GetCurve()), transform, key)).ToArray() ?? [];
                 // Empty, self-intersecting, or conflicting proposal topology belongs to Solve; do not repair or drop it here.
                 result.Add(new RoomProposal(key, room.Name, room.Number, loops));
             }
+        }
+
+        bool InScope(ArchitecturalRoom room, Transform transform) {
+            if (room.get_BoundingBox(null) is not { } box) return true;
+            var corners = (from x in new[] { box.Min.X, box.Max.X }
+                           from y in new[] { box.Min.Y, box.Max.Y }
+                           from z in new[] { box.Min.Z, box.Max.Z }
+                           select transform.OfPoint(box.Transform.OfPoint(new XYZ(x, y, z)))).ToArray();
+            return corners.Min(p => p.X) <= clip.MaxX && corners.Max(p => p.X) >= clip.MinX
+                && corners.Min(p => p.Y) <= clip.MaxY && corners.Max(p => p.Y) >= clip.MinY;
         }
     }
 
