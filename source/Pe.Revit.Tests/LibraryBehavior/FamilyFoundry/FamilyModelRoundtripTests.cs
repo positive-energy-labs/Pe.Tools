@@ -94,6 +94,21 @@ public sealed class FamilyModelRoundtripTests {
         }
         Assert.That(b.DimensionCount, Is.EqualTo(a.DimensionCount), a.TypeName);
         Assert.That(b.ExtrusionCount, Is.EqualTo(a.ExtrusionCount), a.TypeName);
+        foreach (var prism in a.Prisms) {
+            var match = b.Prisms.SingleOrDefault(p => p.SketchPlaneName == prism.SketchPlaneName
+                && p.IsSolid == prism.IsSolid && p.Min.DistanceTo(prism.Min) < 1e-7 && p.Max.DistanceTo(prism.Max) < 1e-7);
+            Assert.That(match, Is.Not.Null, $"Missing extrusion bounds in {a.TypeName} on {prism.SketchPlaneName}");
+            Assert.That(match!.StartOffset, Is.EqualTo(prism.StartOffset).Within(1e-7));
+            Assert.That(match.EndOffset, Is.EqualTo(prism.EndOffset).Within(1e-7));
+        }
+        foreach (var cylinder in a.Cylinders) {
+            var match = b.Cylinders.SingleOrDefault(c => c.SketchPlaneName == cylinder.SketchPlaneName
+                && c.IsSolid == cylinder.IsSolid && c.Min.DistanceTo(cylinder.Min) < 1e-7 && c.Max.DistanceTo(cylinder.Max) < 1e-7);
+            Assert.That(match, Is.Not.Null, $"Missing cylinder bounds in {a.TypeName} on {cylinder.SketchPlaneName}");
+            Assert.That(match!.Diameter, Is.EqualTo(cylinder.Diameter).Within(1e-7));
+            Assert.That(match.StartOffset, Is.EqualTo(cylinder.StartOffset).Within(1e-7));
+            Assert.That(match.EndOffset, Is.EqualTo(cylinder.EndOffset).Within(1e-7));
+        }
         Assert.That(b.ConnectorCount, Is.EqualTo(a.ConnectorCount), a.TypeName);
         var remaining = b.Connectors.ToList();
         foreach (var connector in a.Connectors) {

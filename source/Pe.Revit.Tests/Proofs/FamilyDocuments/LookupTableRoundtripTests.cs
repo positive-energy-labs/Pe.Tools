@@ -78,6 +78,8 @@ public sealed class LookupTableRoundtripTests {
 
             Assert.That(savedTable.Rows, Is.EqualTo(sourceTable.Rows),
                 "Expected the embedded lookup CSV to roundtrip unchanged.");
+            Assert.That(savedTable.HeaderColumns, Is.EqualTo(sourceTable.HeaderColumns),
+                "Column order, spec and units must survive alongside the data rows.");
 
             var parameterProbes = RevitFamilyFixtureHarness.CollectFamilyParameterProbes(savedDocument)
                 .Where(probe => !string.IsNullOrWhiteSpace(probe.Formula))
@@ -97,6 +99,14 @@ public sealed class LookupTableRoundtripTests {
                         [LookupTypeName]).Single();
                     Assert.That(valueSnapshot.HasValue, Is.True,
                         $"Expected '{lookupCase.ParameterName}' to evaluate after replay.");
+                    var sourceType = sourceDocument.FamilyManager.Types.Cast<FamilyType>()
+                        .Single(type => type.Name == LookupTypeName);
+                    var sourceParameter = sourceDocument.FamilyManager.get_Parameter(lookupCase.ParameterName);
+                    var expected = sourceParameter.StorageType == StorageType.Integer
+                        ? (double?)sourceType.AsInteger(sourceParameter)
+                        : sourceType.AsDouble(sourceParameter);
+                    Assert.That(Convert.ToDouble(valueSnapshot.RawValue), Is.EqualTo(expected).Within(1e-7),
+                        $"'{lookupCase.ParameterName}' must retain its evaluated internal value.");
                 }
 
                 _ = transaction.RollBack();
