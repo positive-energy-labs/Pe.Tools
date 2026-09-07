@@ -28,7 +28,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyFoundryProjectData> Project(FamilyFoundryProjectRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => ProjectFamilies(request, document.Value), cancellationToken);
 
-    private static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request, Document document) {
+    internal static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request, Document document) {
         var (patch, diagnostics) = ParsePatch(request.PatchJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
 
@@ -40,7 +40,8 @@ internal static class FamilyFoundryBridgeOps {
         if (families.Count == 0)
             return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", request.FamilyId is { } x ? $"Element id {x} is not a loaded family." : "The patch selects no loaded family.")]);
 
-        return new FamilyFoundryPlanData(families.Select(family => WithFamilyDocument(document, family, famDoc => {
+        return new FamilyFoundryPlanData(families.Select(family => {
+            try { return WithFamilyDocument(document, family, famDoc => {
             var current = famDoc.CaptureFamilyModel();
             var desired = FamilyReconciler.Desired(current, patch);
             if (desired.Value is null || desired.Diagnostics.Count > 0)
@@ -52,10 +53,14 @@ internal static class FamilyFoundryBridgeOps {
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList());
             var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions);
             return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, plan.PlanHash, plan.Changes.Select(ToChange).ToList(), plan.RunEffects, plan.Refusals.Select(ToDiagnostic).ToList());
-        })).ToList(), []);
+            }); } catch (Autodesk.Revit.Exceptions.InvalidOperationException exception) {
+                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [],
+                    [new FamilyFoundryDiagnostic("FamilyEditRefused", "$.familyId", exception.Message)]);
+            }
+        }).ToList(), []);
     }
 
-    private static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request, Document document) {
+    internal static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request, Document document) {
         var (patch, diagnostics) = ParsePatch(request.PatchJson);
         if (patch is null) return new FamilyFoundryApplyData([], diagnostics);
         if (request.ExpectedPlanHashes is not { Count: > 0 })
@@ -71,6 +76,7 @@ internal static class FamilyFoundryBridgeOps {
                 receipts.Add(Failed(familyId, null, $"Element id {familyId} is not a loaded family."));
                 continue;
             }
+            var familyName = family.Name;
             try {
                 var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash);
                 var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-patch").WithReconcile(op);
@@ -82,17 +88,17 @@ internal static class FamilyFoundryBridgeOps {
                 var receipt = op.LastReceipt;
                 {
                     var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                    receipts.Add(new FamilyFoundryApplyReceipt(familyId, family.Name, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                    receipts.Add(new FamilyFoundryApplyReceipt(context.LoadedFamilyId ?? familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
                         receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null));
                 }
             } catch (Exception exception) {
-                receipts.Add(Failed(familyId, family.Name, exception.Message));
+                receipts.Add(Failed(familyId, familyName, exception.Message));
             }
         }
         return new FamilyFoundryApplyData(receipts, []);
     }
 
-    private static FamilyFoundryProjectData ProjectFamilies(FamilyFoundryProjectRequest request, Document document) {
+    internal static FamilyFoundryProjectData ProjectFamilies(FamilyFoundryProjectRequest request, Document document) {
         if (request.FamilyIds is not { Count: > 0 })
             return new FamilyFoundryProjectData([], [new FamilyFoundryDiagnostic("FamilyIdsRequired", "$.familyIds", "At least one explicit family id is required.")]);
         return new FamilyFoundryProjectData(request.FamilyIds.Distinct().Select(familyId => {
@@ -110,13 +116,12 @@ internal static class FamilyFoundryBridgeOps {
         }).ToList(), []);
     }
 
-    /// <summary>Read-only EditFamily (VERDICTS-R1 §7): reuse an already-open family document, else open and close without saving.</summary>
+    /// <summary>Read the explicitly targeted family document, or an independent copy of the exact project-loaded family.</summary>
     private static T WithFamilyDocument<T>(Document project, Family family, Func<Document, T> read) {
         if (project.IsFamilyDocument) return read(project);
-        var open = project.Application.FindOpenFamilyDocument(family);
-        var famDoc = open ?? project.EditFamily(family);
+        var famDoc = project.EditFamily(family);
         try { return read(famDoc); }
-        finally { if (open is null) _ = famDoc.Close(false); }
+        finally { _ = famDoc.Close(false); }
     }
 
     private static (FamilyPatch? Patch, IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics) ParsePatch(string? json) {

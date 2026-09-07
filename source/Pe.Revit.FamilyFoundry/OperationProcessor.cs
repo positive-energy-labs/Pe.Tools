@@ -183,6 +183,7 @@ public class OperationProcessor(
                         .Select((d, i) => d.IsError ? new LogEntry($"{d.Edit} {i + 1}").Error(d.Message) : new LogEntry($"{d.Edit} {i + 1}").Skip(d.Message)).ToList()));
                 if (saveOpts.LoadFamily && !result.Verified)
                     logs.Add(new OperationLog("LoadFamily", [new LogEntry("post-verify").Error(result.Message ?? "unverified")]));
+                if (result.Verified) context.LoadedFamilyId = result.Loaded?.Id.Value();
                 context.OperationLogs = logs;
                 CompleteReconciliation(queue, !logs.Any(l => l.ErrorCount > 0));
             } catch (Exception ex) {

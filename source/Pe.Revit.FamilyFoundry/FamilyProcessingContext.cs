@@ -77,6 +77,8 @@ public class OperationContext {
 public class FamilyProcessingContext {
     public string FamilyName { get; init; } = string.Empty;
 
+    public long? LoadedFamilyId { get; internal set; }
+
     /// <summary>Artifact manifest generated for this family run, when output writing is enabled.</summary>
     public FamilyArtifactManifest? Artifacts { get; internal set; }
 

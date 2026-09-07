@@ -39,8 +39,7 @@ public static class FamilySnapshotExtractor {
     }
 
     /// <summary>
-    ///     Extracts a loaded family's authored truth from a project document: reuses an already-open family
-    ///     document when present, otherwise EditFamily (must be called outside any transaction), always
+    ///     Extracts a loaded family's authored truth from its exact project via EditFamily (outside any transaction), always
     ///     Close(false) when we opened it. Failure degrades to an IsPartial record with an issue.
     /// </summary>
     public static FamilySnapshotRecord ExtractFromProjectFamily(Document projectDocument, Family family) {
@@ -49,11 +48,8 @@ public static class FamilySnapshotExtractor {
         IReadOnlyList<string> typeNames = [];
 
         Document? familyDocument = null;
-        var shouldClose = false;
         try {
-            var existingFamilyDocument = projectDocument.Application.FindOpenFamilyDocument(family);
-            familyDocument = existingFamilyDocument ?? projectDocument.EditFamily(family);
-            shouldClose = existingFamilyDocument == null;
+            familyDocument = projectDocument.EditFamily(family);
 
             var famDoc = new FamilyDocument(familyDocument);
             parameters = ExtractParameters(famDoc, issues, out typeNames);
@@ -64,7 +60,7 @@ public static class FamilySnapshotExtractor {
                 $"Could not extract family document truth for '{family.Name}': {ex.Message}"
             ));
         } finally {
-            if (shouldClose && familyDocument != null) {
+            if (familyDocument != null) {
                 try {
                     _ = familyDocument.Close(false);
                 } catch {
