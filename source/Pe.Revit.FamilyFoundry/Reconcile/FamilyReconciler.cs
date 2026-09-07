@@ -88,9 +88,10 @@ public static class FamilyReconciler {
 
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
     public static FamilyModelParseResult Desired(FamilyModel current, FamilyPatch patch) {
+        var effective = patch.ResolveParameterRules(current);
         var captured = JObject.Parse(FamilyModelJson.Serialize(current));
         JObject merged;
-        try { merged = FamilyPatch.Apply(captured, patch.Patch); }
+        try { merged = FamilyPatch.Apply(captured, effective); }
         catch (JsonException exception) {
             return new FamilyModelParseResult(null, [new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.InvalidJson, "$", exception.Message)]);
         }
@@ -101,7 +102,7 @@ public static class FamilyReconciler {
             var observed = StructuralEntries(current).ToList();
             var renamed = false;
             foreach (var (section, key, spec) in StructuralEntries(candidate)) {
-                if (patch.Patch[section] is not JObject authored || authored[key] is not JObject || captured[section]?[key] is not null) continue;
+                if (effective[section] is not JObject authored || authored[key] is not JObject || captured[section]?[key] is not null) continue;
                 var matches = observed.Where(entry => entry.Section == section && authored[entry.Key] is null &&
                     StructuralIdentity(entry.Spec) == StructuralIdentity(spec)).ToList();
                 if (matches.Count != 1) continue;
@@ -114,14 +115,14 @@ public static class FamilyReconciler {
                 renamed = true;
             }
             if (renamed) {
-                merged = FamilyPatch.Apply(captured, patch.Patch);
+                merged = FamilyPatch.Apply(captured, effective);
                 merged.Remove("coverage");
                 merged.Remove("unmodeled");
                 parsed = FamilyModelJson.Parse(merged.ToString());
             }
         }
         var existingDiagnostics = FamilyModelValidator.Validate(current);
-        var authoredSections = patch.Patch.Properties().Where(p => p.Value is not JObject o || o.HasValues)
+        var authoredSections = effective.Properties().Where(p => p.Value is not JObject o || o.HasValues)
             .Select(p => "$." + p.Name).ToList();
         return parsed with { Diagnostics = parsed.Diagnostics.Where(d => !existingDiagnostics.Contains(d) ||
             authoredSections.Any(section => d.Path == section || d.Path.StartsWith(section + ".", StringComparison.Ordinal))).ToList() };
@@ -444,12 +445,12 @@ public static class FamilyReconciler {
         if (Of("roomCalculationPoint", ChangeKind.Update).Length > 0 && d.RoomCalculationPoint is { } rcp)
             q.Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = true }, rcp));
         // 20 run: after every add; clean never deletes a desired parameter
-        if (run?.Clean == true) {
-            q.Add(new CleanFamilyDocument(new CleanFamilyDocumentSettings(), d.Parameters.Keys));
+        if (RunSettings<CleanFamilyDocumentSettings>(run?.Clean) is { Enabled: true } clean) {
+            q.Add(new CleanFamilyDocument(clean, d.Parameters.Keys));
             effects.Add("run.clean");
         }
-        if (run?.Sort == true) {
-            q.Add(new SortParams(new SortParamsSettings()));
+        if (RunSettings<SortParamsSettings>(run?.Sort) is { Enabled: true } sort) {
+            q.Add(new SortParams(sort));
             effects.Add("run.sort");
         }
         // 21 type deletes, last; never the last type (gotcha 11)
@@ -459,6 +460,13 @@ public static class FamilyReconciler {
 
     private static int FormulaLength(object? before) =>
         before is JObject o ? o.Value<string>("formula")?.Length ?? 0 : (before as FamilyModelParameter)?.Formula?.Length ?? 0;
+
+    private static T? RunSettings<T>(JToken? policy) where T : class, IOperationSettings, new() => policy switch {
+        null or { Type: JTokenType.Null } => null,
+        { Type: JTokenType.Boolean } => policy.Value<bool>() ? new T() : null,
+        JObject settings => settings.ToObject<T>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })),
+        _ => throw new JsonSerializationException($"Run policy for {typeof(T).Name} must be a boolean or a settings object.")
+    };
 
     private static SetKnownParamsSettings Values(FamilyChange[] cells) {
         var rows = new Dictionary<string, PerTypeAssignmentRow>(StringComparer.Ordinal);

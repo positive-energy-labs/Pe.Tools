@@ -42,6 +42,43 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [TestCase(false, false)]
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public void Product_export_retains_conditional_mapping_and_explicit_state_wins(bool sourceExists, bool explicitValue) {
+        var definition = CompanyDefinitions().Single(d => d.Name == "PE_G_Dim_Width1");
+        var exported = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.ExportSharedMappings(
+            new Pe.Revit.FamilyFoundry.OperationSettings.MapParamsSettings { MappingData = [new() {
+                NewName = definition.Name!, CurrNames = [sourceExists ? "Width" : "Absent source"], OnlyAddIfSourceExists = true }] }, [definition]);
+        Assert.That(exported.Patch["parameters"]![definition.Name!], Is.Null);
+        Assert.That(exported.Run!.ParametersIfSourceExists, Contains.Key(definition.Name!));
+        var patch = FamilyPatch.Parse(JsonConvert.SerializeObject(exported, FamilyPatch.Settings));
+        if (explicitValue) {
+            var explicitParameter = JObject.FromObject(patch.Run!.ParametersIfSourceExists![definition.Name!], JsonSerializer.Create(FamilyModelJson.Settings));
+            explicitParameter["value"] = "3ft";
+            patch.Patch["parameters"]![definition.Name!] = explicitParameter;
+        }
+        var document = this.NewFamily("Conditional exported mapping");
+        try {
+            using var processor = new OperationProcessor(document);
+            for (var pass = 0; pass < (explicitValue ? 1 : 2); pass++) {
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, []));
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+                var target = document.FamilyManager.get_Parameter(definition.Name);
+                Assert.That(target is not null, Is.EqualTo(sourceExists || explicitValue));
+                if (target is not null) {
+                    Assert.That(target.GUID, Is.EqualTo(definition.DownloadOptions.GetGuid()));
+                    foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
+                        Assert.That(type.AsDouble(target), Is.EqualTo(explicitValue ? 3d : type.Name == "A" ? 1d : 2d));
+                }
+                if (pass == 1) Assert.That(operation.LastPlan!.Changes, Is.Empty);
+            }
+        } finally { document.Close(false); }
+    }
+
     public static IEnumerable<string> CompanyProfiles() => JArray.Parse(File.ReadAllText(
         RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).Select(p => (string)p["source"]!);
 
@@ -67,7 +104,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             evidence["error"] = error?.ToString();
             if (error is not null) {
                 var after = document.CaptureFamilyModel();
-                Assert.That(FamilyModelJson.Serialize(after), Is.EqualTo(FamilyModelJson.Serialize(before)), "Failed parameter migration must fully roll back.");
+                Assert.That(JToken.DeepEquals(JToken.Parse(FamilyModelJson.Serialize(after)), JToken.Parse(FamilyModelJson.Serialize(before))),
+                    Is.True, "Failed parameter migration must fully roll back.");
             }
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(operation.LastReceipt?.Converged, Is.True);

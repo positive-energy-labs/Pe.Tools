@@ -27,6 +27,18 @@ public sealed class FamilyPatch {
     [JsonProperty("run", NullValueHandling = NullValueHandling.Ignore)]
     public PatchRun? Run { get; init; }
 
+    /// <summary>Evaluate creation rules against this family; explicit patch fields always take precedence.</summary>
+    public JObject ResolveParameterRules(FamilyModel current) {
+        var conditional = new JObject();
+        foreach (var (name, parameter) in this.Run?.ParametersIfSourceExists ?? [])
+            if (current.Parameters.ContainsKey(name) || parameter.WasNamed?.Any(current.Parameters.ContainsKey) == true)
+                conditional[name] = JToken.FromObject(parameter, JsonSerializer.Create(FamilyModelJson.Settings));
+        var resolved = new JObject();
+        if (conditional.HasValues) resolved["parameters"] = conditional;
+        resolved.Merge(this.Patch, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace, MergeNullValueHandling = MergeNullValueHandling.Merge });
+        return resolved;
+    }
+
     public static readonly JsonSerializerSettings Settings = new() {
         MissingMemberHandling = MissingMemberHandling.Error,
         NullValueHandling = NullValueHandling.Ignore,
@@ -132,6 +144,10 @@ public sealed class PatchSelect {
 /// <summary>Non-document rules applied after the merge, per family, per type.</summary>
 [JsonObject(MemberSerialization.OptIn)]
 public sealed class PatchRun {
+    /// <summary>Ensure each target only when it or a named source exists in the current family. Retained in exported intent.</summary>
+    [JsonProperty("parametersIfSourceExists", NullValueHandling = NullValueHandling.Ignore)]
+    public Dictionary<string, FamilyModelParameter>? ParametersIfSourceExists { get; init; }
+
     /// <summary>
     ///     Blank cells (per type: `HasValue(FamilyType, FamilyParameter)` false) of parameters whose
     ///     <see cref="DataType" /> is in <see cref="BlankRule.Specs" /> become <see cref="BlankRule.Value" />.
@@ -142,10 +158,10 @@ public sealed class PatchRun {
     public List<BlankRule>? BlanksBecome { get; init; }
 
     [JsonProperty("clean", NullValueHandling = NullValueHandling.Ignore)]
-    public bool? Clean { get; init; }
+    public JToken? Clean { get; init; }
 
     [JsonProperty("sort", NullValueHandling = NullValueHandling.Ignore)]
-    public bool? Sort { get; init; }
+    public JToken? Sort { get; init; }
 }
 
 [JsonObject(MemberSerialization.OptIn)]

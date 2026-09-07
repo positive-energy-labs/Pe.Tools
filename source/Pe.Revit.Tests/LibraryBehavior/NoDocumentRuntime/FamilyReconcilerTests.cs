@@ -6,6 +6,23 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 /// <summary>Deterministic proof of the pure half of the reconciler: no Document, no Revit.</summary>
 [TestFixture]
 public sealed class FamilyReconcilerTests {
+    [Test]
+    public void Structured_run_policies_retain_native_clean_and_sort_settings() {
+        var model = new FamilyModel { Family = new FamilyModelHeader { Name = "Policies", Category = FamilyCategory.GenericModels,
+            Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased } };
+        var patch = FamilyPatch.Parse("""{"patch":{},"run":{"clean":{"Enabled":true,"EnablePurgeParams":false,"EnablePurgeNestedFamilies":false,"EnablePurgeModelLines":false,"EnablePurgeReferencePlanes":false},"sort":{"ParamNameSortOrder":"Descending","ParamTypeSortOrder":"FamilyParamsFirst","ParamValueSortOrder":"ValuesFirst"}}}""");
+        var plan = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable, patch.Run);
+        var sort = plan.Queue.Operations.OfType<Pe.Revit.FamilyFoundry.Operations.SortParams>().Single().Settings;
+        Assert.That(sort.ParamNameSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamNameSortOrder.Descending));
+        Assert.That(sort.ParamTypeSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamTypeSortOrder.FamilyParamsFirst));
+        Assert.That(sort.ParamValueSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamValueSortOrder.ValuesFirst));
+        Assert.That(plan.Queue.Operations.Where(o => o.Name.StartsWith("Purge")).All(o => !o.Settings.Enabled), Is.True);
+        var defaults = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable, new PatchRun { Clean = true, Sort = true });
+        Assert.That(plan.PlanHash, Is.Not.EqualTo(defaults.PlanHash));
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable,
+            FamilyPatch.Parse("""{"patch":{},"run":{"sort":{"MisspelledPolicy":true}}}""").Run));
+    }
+
     private static readonly string[] Fixtures = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
 
     /// <summary>The DAG of r2-reconcile §4, as op type names; a plan's OpOrder must be a subsequence of this.</summary>

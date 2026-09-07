@@ -17,6 +17,29 @@ public sealed class FamilyModelContractTests {
     /// <summary>Wraps a `{...}` fragment of sections into a document with a header and the three stock datums.</summary>
     private static string Doc(string sections) => "{\"family\":" + Head + ",\"datums\":" + Datums + "," + sections.Substring(1);
 
+    [TestCase(false, false, false)]
+    [TestCase(true, false, true)]
+    [TestCase(false, true, true)]
+    public void Exported_source_condition_is_evaluated_per_family(bool source, bool destination, bool expected) {
+        var current = FamilyModelJson.Parse(Doc("{\"parameters\":{" + (source ? "\"Source\":{\"dataType\":\"Text\"}" :
+            destination ? "\"Target\":{\"dataType\":\"Text\"}" : "") + "}}")).Value!;
+        const string json = """{"patch":{},"run":{"parametersIfSourceExists":{"Target":{"dataType":"Text","wasNamed":["Source"]}}}}""";
+        var patch = FamilyPatch.Parse(json);
+        Assert.That(patch.ResolveParameterRules(current)["parameters"]?["Target"] is not null, Is.EqualTo(expected));
+        Assert.That(patch.Run!.ParametersIfSourceExists!.ContainsKey("Target"), Is.True, "Resolution must not erase exported rules.");
+        var roundtrip = FamilyPatch.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(patch));
+        Assert.That(JToken.DeepEquals(roundtrip.ResolveParameterRules(current), patch.ResolveParameterRules(current)), Is.True);
+    }
+
+    [Test]
+    public void Explicit_parameter_state_and_deletion_override_conditional_defaults() {
+        var current = FamilyModelJson.Parse(Doc("""{"parameters":{"Source":{"dataType":"Text"}}}""")).Value!;
+        var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Target":{"value":"explicit"}}},"run":{"parametersIfSourceExists":{"Target":{"dataType":"Text","value":"default","wasNamed":["Source"]}}}}""");
+        Assert.That((string?)patch.ResolveParameterRules(current)["parameters"]?["Target"]?["value"], Is.EqualTo("explicit"));
+        patch.Patch["parameters"]!["Target"] = JValue.CreateNull();
+        Assert.That(patch.ResolveParameterRules(current)["parameters"]!["Target"]!.Type, Is.EqualTo(JTokenType.Null));
+    }
+
     [Test]
     public void Explicit_uniform_value_replaces_captured_cells_but_keeps_explicit_type_override() {
         var current = Doc("""{"parameters":{"W":{"dataType":"Length"},"Keep":{"dataType":"Text"}},"types":{"A":{"W":"1ft","Keep":"unchanged"},"B":{"W":"2ft"}}}""");

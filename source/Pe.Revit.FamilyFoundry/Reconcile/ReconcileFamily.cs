@@ -63,7 +63,8 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
         this.Reset();
         var current = this._capture(doc.Document);
-        var patch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
+        var authoredPatch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
+        var patch = new FamilyPatch { Select = authoredPatch.Select, Run = authoredPatch.Run, Patch = authoredPatch.ResolveParameterRules(current) };
         using var source = this._sharedSource?.Invoke(doc.Document) ?? new FamilySharedParameterSource(doc.Document);
         FamilyModel? desired;
         {
@@ -73,7 +74,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             desired = source.Resolve(parsed.Value, patch.Patch);
         }
 
-        foreach (var parameter in (patch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
+        foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
             if (parameter.Value is Newtonsoft.Json.Linq.JObject fields && fields["tooltip"] is { Type: not Newtonsoft.Json.Linq.JTokenType.Null } &&
                 current.Parameters.TryGetValue(parameter.Name, out var existing) && existing.Shared == true)
                 throw new InvalidOperationException($"Explicit tooltip replacement for existing shared parameter '{parameter.Name}' cannot be verified through the Revit read API. Unrequested tooltips are preserved.");
