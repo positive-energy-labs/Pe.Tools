@@ -59,7 +59,7 @@ public sealed class FamilyModelRoundtripTests {
               "parameters": { "Show": { "dataType": "YesNo", "value": "Yes" }, "Hide": { "dataType": "YesNo", "value": "No" }, "Diameter": { "dataType": "Length", "value": "1ft" } },
               "types": { "Standard": {} },
               "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
-              "refPlanes": { "left": { "normal": "X", "at": "-1ft" }, "right": { "normal": "X", "at": "1ft" }, "front": { "normal": "Y", "at": "-1ft" }, "back": { "normal": "Y", "at": "1ft" } },
+              "refPlanes": { "left": { "normal": "PlusX", "at": "-1ft" }, "right": { "normal": "PlusX", "at": "1ft" }, "front": { "normal": "PlusY", "at": "-1ft" }, "back": { "normal": "PlusY", "at": "1ft" } },
               "details": { "Authored outline": { "view": "RefLevel", "curves": [{ "curves": {{curveJson}} }], "visible": "param:Show" } } }
             """);
         Assert.That(parsed.Diagnostics, Is.Empty);
