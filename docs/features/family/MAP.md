@@ -8,6 +8,15 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
+Latest focused native checkpoint: wave17 at c6b34a1 ran 13 cases, 8 passed and 5 failed.
+Box roundtrip and driven-circle checks passed. Connector definition ordering, array sidecar
+resolution, reusable seed capture, and bath nested placement repairs are integrated after it;
+their native rerun is owed. Wave18 ran two new probes, both failed before intended behavior:
+JoinGeometryUtils is project-only; the full-profile probe resolved installed Pe.App 0.6.26
+and hit MissingMethodException. Profile coverage is 0/45, not a planning failure census.
+R repairs the family-native combination probe; P prepares current-payload controlled dev proof.
+Both wave17/18 cleaned up their owned processes and restored settings exactly.
+
 Latest broad native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
 123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
 Wave12 reused stale Debug.R25.Tests binaries because root compiled Debug.R25 and passed
