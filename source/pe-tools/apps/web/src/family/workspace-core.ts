@@ -384,8 +384,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    */
   // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
   //
-  // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
-  // arithmetic on the draft — a page-local move that becomes real when `save profile` writes it.
+  // Capture and build below cross into Revit. The targeting header also runs native Plan/Apply
+  // through the store, using the saved composed profile and expected plan hash.
   //
   //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
   //                  and stamps the result into the evidence slice. It moves nothing into the
@@ -396,8 +396,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   //                  which materializes an .rfa and returns evidence pinned to that revision. It
   //                  is the whole reason the arming ceremony exists — see `#/family/build`.
   //
-  // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
-  // and the apply verbs above stay page-local and honest about it.
+  // Cell-level apply above simulates only in the explicit fixture lane. Native profile-wins
+  // writes use the header's reviewed familyfoundry plan/apply, not family.editor.apply.
 
   const capturing = busy?.id === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */

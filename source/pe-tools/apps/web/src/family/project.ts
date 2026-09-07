@@ -353,6 +353,7 @@ function projectEvidence(
       familyName: evidence.familyName,
       worldLabel: evidence.rfaPath ?? evidence.origin,
       readAgo: timeAgo(evidence.reading.observedAt) || "just now",
+      typeNames: Object.keys(captured.types ?? {}),
       values,
       extraParams: Object.keys(reported).filter((name) => !authored.has(name)),
       missingParams:

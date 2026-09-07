@@ -79,7 +79,12 @@ export function buildPageWorld(source: ProtoWorld): PageWorld {
    * the link is the document's claim rather than a hand-authored map. */
   const paramsOf = (description: string) =>
     params.map((param) => param.name).filter((name) => description.includes(name));
-  const typeNames = Object.keys(source.profile.types);
+  const typeNames = [
+    ...new Set([
+      ...Object.keys(source.profile.types),
+      ...(live?.typeNames ?? Object.values(live?.values ?? {}).flatMap(Object.keys)),
+    ]),
+  ];
   return {
     source,
     path: source.profile.path,

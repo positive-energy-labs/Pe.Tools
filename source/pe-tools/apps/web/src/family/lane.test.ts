@@ -90,6 +90,20 @@ test("native capture projects only read values and gates missing claims on cover
   };
   const partial = familyLane(input, evidence).world.live!;
   expect(partial.values).toEqual({ Width: { Standard: { value: "12" } } });
+  const parameterOnly = snapshot(
+    '{"family":{"name":"Box"},"parameters":{"Width":{"value":"42in"}}}',
+  );
+  const lane = familyLane(parameterOnly, {
+    ...evidence,
+    modelJson: '{"parameters":{"Width":{}},"types":{"Standard":{"Width":"24in"},"Empty":{}}}',
+  });
+  expect(lane.world.typeNames).toEqual(["Standard", "Empty"]);
+  expect(lane.world.live?.values.Width?.Standard?.value).toBe("24in");
+  expect(lane.world.source.profile.types).toEqual({});
+  const draft = initialDraft(lane.world);
+  expect(draft.types).toEqual({});
+  expect(draftToPatches(lane.document!.model, draft, draft)).toEqual([]);
+  expect(JSON.parse(parameterOnly.rawContent).types).toBeUndefined();
   expect(partial.missingParams).toEqual([]);
   expect(
     familyLane(input, { ...evidence, coverage: { parameters: "Read" } }).world.live?.missingParams,

@@ -119,9 +119,10 @@ import { scopePin } from "@pe/agent-contracts";
  *                  file rather than the table, it is armed rather than pressed — the ceremony, its
  *                  refusal predicates and its receipt live in `#/family/build`.
  *
- * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: `apply` in both its bulk and per-type shapes
- * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet),
- * and the proposals with their accept/deny (they need `route:settings` field
+ * The targeting header runs native familyfoundry Plan/Apply against the saved composed JSON,
+ * guarded by the reviewed plan hash. Bulk/per-type cell apply simulates only in the explicit
+ * fixture lane; native callers are directed to that header. Proposals remain page-local
+ * with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
 import { useCallback } from "react";
