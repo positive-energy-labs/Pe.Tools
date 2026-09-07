@@ -4,6 +4,23 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
+Wave25 at 3a64a1b ran five fresh controlled Revit 2025 checks: metadata and whole-family
+rollback passed; three diagnostic cases failed. LinearArray.Create is the exact first call
+that overwrites Type A with current Type C values. Native pipe Demand plus regeneration
+enables Fixture Units association for cold/hot/sanitary connectors. Local Keep values exist
+on symbols and native filters select correctly, but no schedulable field exposes them.
+PID88932 exited with exact settings restoration, empty quarantine, and protected identities
+preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
+
+Demand support is integrated at 149a556/61d28ba; full bath apply/reopen acceptance remains owed.
+The array prevention control and mixed local/shared/instance selector repair are in progress.
+Controlled dev snapshot ff-profile-proof-25 PID63944 now holds an unmodified disposable old
+template at monthly45-dev. Its loaded source is still 3a64a1b. First Host attempt refused a
+bridge-ID versus canonical-session-ID comparison; canonical targeting now succeeds. The next
+attempt stopped before profiles because script compilation lacks Newtonsoft.Json references
+required by FF public API types. P owns the shared scripting reference repair and runtime.
+No company profile has run through Host yet; the snapshot quarantine remains leased until stop.
+
 Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
 are correct after each seed and before topology, then Type A takes Type C values during
 topology construction. SaveAs/reopen/load do not introduce that first change. P is bracketing
