@@ -25,7 +25,7 @@ internal static class FamilyFoundryRoundtripHarness {
         Document? buildB = null;
         Document? reopenedB = null;
         try {
-            var first = FamilyModelBuild.Build(application, authored);
+            var first = FamilyModelBuild.Build(application, authored, modelDirectory: Path.GetDirectoryName(fixturePath));
             buildA = first.Document;
             Assert.That(first.Receipt?.Converged, Is.True, "The authored build must converge before saving.");
             var savedAPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildA, outputDirectory, "A");
@@ -35,7 +35,7 @@ internal static class FamilyFoundryRoundtripHarness {
             reopenedA = RevitFamilyFixtureHarness.OpenFamilyDocument(application, savedAPath);
             // This is the black-box boundary: capture receives only the reopened RFA, never authored/compiler state.
             var captured = reopenedA.CaptureFamilyModel();
-            var second = FamilyModelBuild.Build(application, captured);
+            var second = FamilyModelBuild.Build(application, captured, modelDirectory: Path.GetDirectoryName(fixturePath));
             buildB = second.Document;
             Assert.That(second.Receipt?.Converged, Is.True, "The captured build must converge before saving.");
             var savedBPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildB, outputDirectory, "B");

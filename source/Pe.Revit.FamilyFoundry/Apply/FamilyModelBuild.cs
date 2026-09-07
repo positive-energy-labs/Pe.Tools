@@ -10,11 +10,18 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 ///     an open family document, and select the families a patch names in a project (r2-reconcile §6).
 /// </summary>
 public static class FamilyModelBuild {
-    /// <summary>Fresh document from the header's template, reconciled to the model; the caller owns the document.</summary>
-    public static (Document Document, FamilyReceipt? Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options = null) {
+    /// <summary>Fresh document from the header's template; caller owns it. Nested dependencies resolve from modelDirectory: sibling .family.json before .rfa.</summary>
+    public static (Document Document, FamilyReceipt? Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options = null, string? modelDirectory = null) =>
+        Build(application, model, options, modelDirectory, []);
+
+    private static (Document Document, FamilyReceipt? Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options, string? modelDirectory, List<string> ancestors) {
+        var name = model.Family.Name;
+        if (ancestors.Contains(name, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Nested family dependency cycle: {string.Join(" -> ", ancestors.Append(name))}");
         var templatePath = FamilyTemplate.ResolveTemplatePath(application, model.Family.Template);
         var document = FamilyTemplate.NewDocument(application, model.Family);
         try {
+            LoadDependencies(application, document, model, options, modelDirectory, [.. ancestors, name]);
             var receipt = Reconcile(document, model, options);
             return (document, receipt, templatePath);
         } catch {
@@ -24,14 +31,52 @@ public static class FamilyModelBuild {
     }
 
     /// <summary>Build, save to `outputPath`, close. Returns the receipt (residue 0 is convergence).</summary>
-    public static (FamilyReceipt? Receipt, string TemplatePath, Pe.Shared.RevitData.Reading Reading) BuildAndSave(Application application, FamilyModel model, string outputPath, bool overwrite = false) {
-        var (document, receipt, templatePath) = Build(application, model);
+    public static (FamilyReceipt? Receipt, string TemplatePath, Pe.Shared.RevitData.Reading Reading) BuildAndSave(Application application, FamilyModel model, string outputPath, bool overwrite = false, string? modelDirectory = null) {
+        var (document, receipt, templatePath) = Build(application, model, modelDirectory: modelDirectory);
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             document.SaveAs(outputPath, new SaveAsOptions { OverwriteExistingFile = overwrite, Compact = true, MaximumBackups = 1 });
             return (receipt, templatePath, DocumentReading.Here(document));
         } finally {
             _ = document.Close(false);
+        }
+    }
+
+    // Fresh builds resolve portable sibling dependencies here, before any placement operations run.
+    private static void LoadDependencies(Application application, Document target, FamilyModel model, ExecutionOptions? options, string? directory, List<string> ancestors) {
+        foreach (var group in model.Nested.Values.GroupBy(n => n.Family, StringComparer.Ordinal)) {
+            var name = group.Key;
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
+                throw new InvalidOperationException($"Nested family '{name}' must be a portable sibling file name.");
+            if (string.IsNullOrWhiteSpace(directory))
+                throw new InvalidOperationException($"ModelDirectory is required to resolve nested family '{name}'.");
+            var jsonPath = Path.Combine(directory, name + ".family.json");
+            var nativePath = Path.Combine(directory, name + ".rfa");
+            Document? child = null;
+            try {
+                if (File.Exists(jsonPath)) {
+                    var parsed = FamilyModelJson.Parse(File.ReadAllText(jsonPath));
+                    if (parsed.Value is null || parsed.Diagnostics.Count != 0)
+                        throw new InvalidOperationException($"Invalid dependency '{jsonPath}': {string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}"))}");
+                    if (parsed.Value.Family.Name != name)
+                        throw new InvalidOperationException($"Dependency '{jsonPath}' declares family '{parsed.Value.Family.Name}', expected '{name}'.");
+                    child = Build(application, parsed.Value, options, directory, ancestors).Document;
+                } else if (File.Exists(nativePath)) {
+                    child = application.OpenDocumentFile(nativePath);
+                    if (!child.IsFamilyDocument || child.OwnerFamily.Name != name)
+                        throw new InvalidOperationException($"Dependency '{nativePath}' must contain family '{name}'.");
+                } else {
+                    throw new FileNotFoundException($"Nested family '{name}' requires sibling '{jsonPath}' or '{nativePath}'.");
+                }
+                var loaded = child.LoadFamily(target, new DefaultFamilyLoadOptions())
+                             ?? throw new InvalidOperationException($"Revit did not load nested family '{name}'.");
+                var types = loaded.GetFamilySymbolIds().Select(id => target.GetElement(id).Name).ToHashSet(StringComparer.Ordinal);
+                foreach (var required in group.Select(n => n.Type).Distinct(StringComparer.Ordinal))
+                    if (!types.Contains(required))
+                        throw new InvalidOperationException($"Nested family '{name}' has no type '{required}'. Available: {string.Join(", ", types)}");
+            } finally {
+                if (child is not null) _ = child.Close(false);
+            }
         }
     }
 

@@ -43,7 +43,8 @@ internal static class FamilyModelBridgeOps {
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
 
         try {
-            var (receipt, templatePath, reading) = FamilyModelBuild.BuildAndSave(RevitUiSession.CurrentUIApplication.Application, parsed.Value, outputPath, request.Overwrite);
+            var (receipt, templatePath, reading) = FamilyModelBuild.BuildAndSave(RevitUiSession.CurrentUIApplication.Application, parsed.Value, outputPath, request.Overwrite,
+                request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory)));
             return new FamilyModelBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath,
                 receipt?.Converged ?? false, receipt?.Residue.Count ?? 0);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
