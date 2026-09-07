@@ -12,24 +12,29 @@ on symbols and native filters select correctly, but no schedulable field exposes
 PID88932 exited with exact settings restoration, empty quarantine, and protected identities
 preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
 
-Demand support is integrated at 149a556/61d28ba; full bath apply/reopen acceptance remains owed.
-The array prevention control and mixed local/shared/instance selector repair are integrated
-through 87cee69; their native acceptance remains owed. Controlled dev snapshot
-ff-profile-proof-25 PID108004, generation20260907140624373, runs immutable source915790e
-against the disposable old template. Newtonsoft support now allows public FF conversion in
-scripts. The monthly45-host-plan-4 artifact contains all45 profiles: nine conversion failures
-and36 converted requests rejected with PatchJsonRequired. These are request admission failures,
-not evidence of missing families. P is tracing the shared request path; N owns conversion
-failures. No Apply ran. The snapshot quarantine remains leased until stop. Restart lost the
-previous quarantine policy; isolated SDK candidate cf98d13 repairs hold precedence and passes
-focused deterministic vectors, but native restart acceptance remains owed.
+Current native proof is controlled dev ff-profile-proof-25 PID89376, generation20260907143006678,
+immutable source6620376, on the disposable old template. SDK candidate f59ceb7 retained quarantine
+across restart. Its saved original has identical85 add-in rows and disable flags to the prior
+baseline, but different JSON bytes; final stop/restoration remains owed. Protected sessions stay
+untouched. No company Apply has run. P owns all lifecycle and the active monthly45-host-plan-6.
 
-Request binding is repaired at9ba0234. Corrected monthly45-host-plan-5 completed45 profiles:
-24 native Plan exceptions for empty parameter group, eight conversion failures for empty/Other
-group, one conversion FormatOptions failure, and12 FamilyNotFound results. No Apply ran.
-N owns shared group identity and literal conversion; P is checking the12 selectors against
-loaded families, then proving NoTransaction script/library ownership on the current snapshot.
-The next required refresh can test isolated SDK f59ceb7 without changing installed SDK state.
+Request-file binding, empty/Other parameter groups, and unitless sone conversion are repaired.
+Plan6 is progressing after exact owned warning acknowledgements: recursive EditFamily on nested
+Alternator exposed pre-existing geometry-constraint warnings and blocked capture. N owns the
+shared capture failure boundary; no constraints were removed. Two timed-out electrical requests
+have recovered terminal native results for14 and27 families. AprilAire800 has a reviewed clean
+plan for3813845; bounded Apply/capture/no-op reapply follows the current queue. Historical request
+and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
+
+NoTransaction script-owned rollback plus public FF Build passed in controlled915790e. Browser
+proved the shared Instances selector repair6eb667d. Explicit scope parser d7016d4 passes route
+checks; actual scoped family/families mounting waits for the native queue. Modine Fahrenheit
+repair c63fa31 compiles, with native proof owed. Name matching and Grinder80dBi rulings are pending.
+
+Demand support149a556/61d28ba, mixed local/shared/instance selectors87cee69, array prevention
+controls, and restored combined box acceptancee1587be remain native-proof obligations. The
+preservation census in PROOF-NORMALIZATION.md records full profile effects, positive matrix,
+GRD seed behavior, and operator evidence gaps; no feature is retired by a passing compile.
 
 Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
 are correct after each seed and before topology, then Type A takes Type C values during
