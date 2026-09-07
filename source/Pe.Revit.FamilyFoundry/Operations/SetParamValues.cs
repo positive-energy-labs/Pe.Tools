@@ -32,6 +32,7 @@ public class SetParamValues(SetKnownParamsSettings settings)
         while (incomplete.Count > 0) {
             // Revit does not update an earlier dependent when a later size_lookup formula is assigned.
             var next = incomplete.FindIndex(entry => !assignmentsByName.TryGetValue(entry.Key, out var value)
+                || !this.Settings.OverrideExistingValues && fm.FindParameter(entry.Key) is { } existing && doc.HasValue(existing)
                 || value.Kind != ParamAssignmentKind.Formula
                 || !fm.Parameters.GetReferencedIn(value.Value).Any(reference =>
                     incomplete.Any(other => other.Key == reference.Definition.Name && assignmentsByName.ContainsKey(other.Key))));

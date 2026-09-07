@@ -2,7 +2,7 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
-Latest checkpoint: **wave4-formula: 2 tests, 1 passed, 1 failed**. Per-formula regeneration did not repair the lookup zero and was removed in **a9c66e1**. Dimension diagnosis proved regeneration before NewLinearDimension sufficient in all six trials. Five runtime assembly hashes/MVIDs match; owned PID 45104 exited, native settings restored exactly, protected PID 71484 unchanged. Dependency closure **5f93b79** compiles (0 errors / 117 warnings); runtime tests await root READY. Capture formatting belongs N; geometry fixes belong root.
+Latest checkpoint: **wave 5 at frozen root 324d797: 37 tests, 15 passed, 22 failed**. The dependency-order probe proves the lookup zero cause; production repair 62ea38b is compiled, not yet rerun. Loader name correction f0784b7 is also queued. Actual runtime PID 34632 and five assembly hashes/MVIDs are proven, but the SDK custody receipt incorrectly claimed existing PID 80052 through reused parent PID 31684. CLI was interrupted to prevent its force-stop path; adapter still completed the TRX. Exact native settings restoration and protected PID 71484 are verified. SDK repair is c643103 plus 90c9f86; no further launch until custody is resolved and root READY.
 
 ## Identity and evidence
 
@@ -259,3 +259,43 @@ Commit **5f93b79** closes Build/BuildAndSave nested dependency loading and passe
 The lookup failure diagnostic now isolates same-formula reassignment, dependent-only refresh, carrier-only refresh, and all-formula refresh in separate rolled-back SubTransactions. The original numerical assertion and failure are retained. No new runtime has been started after wave4-formula cleanup.
 
 Formula-order probe queued after root narrowing: LookupTableRoundtripTests now compares ordinal captured order with dependency order derived from the existing FamilyParameterSet.GetReferencedIn helper. Each independent SubTransaction clears all formulas and explicitly zeros their retained numeric values before assigning the same formulas; neither order regenerates between assignments. Both regenerate once at the end and record actual order, discovered references, starting values, and resulting values. Trials roll back and preserve the original failing numeric assertion. This distinguishes ordering from the previous refresh probe's retained-value advantage. Compile log `formula-order-build.log`: 0 errors / 117 warnings. No production ordering change and no new runtime launch; next combined root READY run supplies the measurement.
+Wave 5 started 2026-09-07T05:51:55.7287531Z : frozen root324d797; broad seven-class filter; fresh controlled SDK ec55df2 bytes95EDE677; no-build;300seconds. Source hold active.
+
+
+## Broad wave 5 — root 324d797
+
+Frozen source **324d797fd58584378f8a6c5f76a912343abf156a**, clean before run; root build exit 0 / 118 warnings. Absolute root project and the prior SDK CLI command were used with `--year 25 --no-build --timeout-seconds 300` and filter:
+
+```text
+FullyQualifiedName~FamilyModelRoundtripTests|FullyQualifiedName~LookupTableRoundtripTests|FullyQualifiedName~FamilyFoundryBulkMigrationHarnessTests|FullyQualifiedName~FamilyModelDependencyTests|FullyQualifiedName~FamilyRenameAcrossFamiliesTests|FullyQualifiedName~OperationGroupLogTests|FullyQualifiedName~AssemblyLoadDiagnosticsTests
+```
+
+Plan, pre-run settings and sessions, five build hashes/MVIDs were captured first under `wave5/`. TRX `kaitp_KP-PC_2026-09-07_00_52_44.trx` records **37 executed, 15 passed, 22 failed**, zero aborted/skipped; **05:51:56.513–05:53:51.851 UTC (115.338 s)**. `results.json` retains every full trace, `distinct-causes.json` maps tests to causes, and `fixture-output/` retains diagnostic files. Root source hold was released after actual PID 34632 exited; no retry.
+
+| Distinct red | Count | Owner / evidence |
+|---|---:|---|
+| Family-to-family ReplaceParameter rejected; native says use RenameParameter | 8 | N; NormalizeParameter.cs:16 |
+| NewAlignment references not geometrically aligned | 4 | Root; box, vane, two rename fixtures |
+| Reconcile residue 2, no pending entries | 3 | Portable values, explicit units, stub; full traces retained |
+| Shared AddParameter creation failed | 2 | N; plumbing CWFU and offline FLA |
+| Invalid object after rollback | 1 | Batch failure harness |
+| NormalizeParamSources null reference | 1 | N; line 50, multiple targets |
+| Lookup derived outputs zero | 1 | FF proof; ordered probe below |
+| Loaded nested family name mismatch | 1 | FF proof; leaf loaded/type validated but placement cannot find leaf |
+| Native puck internal name mismatch | 1 | FF proof; preflight refused |
+
+**Lookup cause measured:** `fixture-output/81e0739e/order-*-before.json` proves identical zeroed formula parameters with unchanged scalar inputs. Captured order sets derived outputs before carriers and leaves voltage/airflow/enabled **0 / 0 / 0**. GetReferencedIn dependency order sets carriers first and yields **1291.6692500051665 / 7.5 / 1**. Neither trial regenerates between assignments. Output-only or unchanged-formula reassignment also repairs the values; carrier-only refresh does not. Production **62ea38b** schedules formula assignments after pending referenced inputs, without extra regeneration. The original numeric assertion remains unchanged; full build/reopen acceptance is still pending.
+
+**Loader:** cycles/missing dependencies/missing types test passed and verified no leaked documents. Successful-load test exposed native naming, not resolution/type lookup. **f0784b7** names the loaded Family in a target-document transaction using its portable sidecar identity; it stops treating an RFA's internal OwnerFamily name as the filename contract. It never saves a dependency document. Root owns the vane geometry/stub residue causes. Fix builds have zero errors (`formula-fix-build.log`, `loader-fix-build.log`, `final-fixes-build.log`); these are compile claims only.
+
+### Custody incident and cleanup
+
+Actual adapter child **34632**, start **05:51:58.1812013 UTC**, parent **42476** (`ricaun.RevitTest.Console.exe --open --close` targeting the root test DLL). `assembly-load.txt` reports PID 34632; five runtime hashes and MVIDs match pre-run build output in `assembly-identity.json`.
+
+The launch/hold instead stamped pre-existing **80052**, start **05:44:33.4627509 UTC**, parent PID **31684**. That obsolete parent PID had been reused by this test invocation. The old SDK ancestry traversal compared bare PIDs; it claimed 80052 before the actual child launched. Consequently this is **not a valid SDK custody receipt**, although actual test-process/assembly identity and completed test results are retained. The original receipts remain unchanged as evidence.
+
+At discovery, only FF SDK CLI **89104** was stopped to prevent `TestCommand.Complete -> session stop --force` targeting the wrong PID. No direct Revit process command was issued. Its envelope is empty and wrapper exit is -1; the adapter continued and wrote the complete TRX. Both 34632 and 80052 subsequently exited. PID 80052 recorded graceful PayloadStopped/DocumentTrackerStopped/BridgeShutdown events at **05:53:40.049–05:53:40.052 UTC**; its exit attribution remains unconfirmed with the takeoffs owner. Do not report that session as preserved.
+
+SDK `session list` swept the ended hold, restoring native settings byte-exactly to this lease Original: **68A23340FA6C62DC388A0A133BBE166B8E2A60DACC5800CB787721DAF6DC415B**. No active holds remain. `session stop --id pe.revit.tests-25-test` then retired the already-dead receipt (`cleanup.json`); it targeted no live process. Protected user **71484** retains **04:20:36.3844230 UTC** start. Restoration was performed by the SDK lease owner only.
+
+SDK **c643103 + 90c9f86** compares creation times on every ancestry edge, rejects reused intermediate/ancestor PIDs and missing ancestry, and retains the held launcher's known start identity after it dies so its living descendants still own settings. Focused temp-root lease/ancestry vectors pass; source main is untouched. Latest compiled SDK bytes **3103B2C26794AE17E5EC1379490D742F500AA37AF0732C1C72F277D3EEC6CDA2** were built before the final commit (informational version may retain c643103). No fresh launch has validated this ancestry repair yet. R's ff-route-25 lane must coordinate after this custody checkpoint; no new runtime was started here.
