@@ -57,7 +57,7 @@ function context(document: SettingsRouteDocument) {
   };
 }
 
-test("settings opens with no world bound and persists no file snapshot", async () => {
+test("settings open returns the real authored and composed profile without persisting a snapshot", async () => {
   await withHost(
     (key) => {
       if (key !== "settings.document.open") throw new Error(`unexpected operation ${key}`);
@@ -70,7 +70,7 @@ test("settings opens with no world bound and persists no file snapshot", async (
         fields: {},
         savedAt: null,
       };
-      await createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }).open(
+      const result = await createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }).open(
         { documentId: DOCUMENT_ID },
         context(document),
       );
@@ -84,6 +84,49 @@ test("settings opens with no world bound and persists no file snapshot", async (
         documentId: DOCUMENT_ID,
       });
       expect(document).not.toHaveProperty("snapshot");
+      expect(result).toMatchObject({
+        documentId: DOCUMENT_ID,
+        path: DOCUMENT_PATH,
+        rawContent: '{"x":1}',
+        composedContent: 'composed:{"x":1}',
+        validation: { isValid: true, issues: [] },
+      });
+    },
+  );
+});
+
+test("settings validate applies a Pea proposal to the freshly read real profile", async () => {
+  await withHost(
+    (key, request) => {
+      if (key === "settings.document.open")
+        return openResponse('{"parameters":{"Width":{"dataType":"Length","value":"24in"}}}');
+      if (key === "settings.document.validate") {
+        expect(JSON.parse((request as { rawContent: string }).rawContent)).toEqual({
+          parameters: { Width: { dataType: "Length", value: "42in" } },
+        });
+        return { isValid: true, issues: [] };
+      }
+      throw new Error(`unexpected operation ${key}`);
+    },
+    async (calls) => {
+      const document: SettingsRouteDocument = {
+        bindings: { file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH } },
+        documentId: DOCUMENT_ID,
+        fields: {
+          "/parameters/Width/value": {
+            proposal: { value: "42in", by: "pea", confidence: "high", sources: null },
+          },
+        },
+        savedAt: null,
+      };
+      const result = await createSettingsCommandHandlers({
+        hostBaseUrl: "http://host.test",
+      }).validate({ includeProposals: true }, context(document));
+      expect(result).toEqual({ isValid: true, issues: [] });
+      expect(calls.map(({ key }) => key)).toEqual([
+        "settings.document.open",
+        "settings.document.validate",
+      ]);
     },
   );
 });

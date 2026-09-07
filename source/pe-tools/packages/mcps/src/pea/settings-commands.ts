@@ -59,7 +59,7 @@ export function createSettingsCommandHandlers(
       document.fields = {};
       document.savedAt = new Date().toISOString();
       await ctx.setDoc(document);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     open: async (input, ctx) => {
@@ -79,7 +79,7 @@ export function createSettingsCommandHandlers(
       document.bindings.file = { id: snapshot.path, label: snapshot.path };
       document.documentId = documentId;
       await ctx.setDoc(document);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     refresh: async (_input, ctx) => {
@@ -91,7 +91,7 @@ export function createSettingsCommandHandlers(
         );
       }
       const snapshot = await openSnapshot(caller, documentId);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     validate: async (input, ctx) => {
@@ -272,16 +272,6 @@ function toRouteValidation(validation: SettingsValidationResult): SettingsSnapsh
   return {
     isValid: validation.isValid,
     issues: validation.issues.map((issue) => ({ ...issue })),
-  };
-}
-
-function summarizeSnapshot(snapshot: SettingsSnapshot) {
-  return {
-    documentId: snapshot.documentId,
-    versionToken: snapshot.versionToken,
-    isValid: snapshot.validation?.isValid ?? null,
-    issueCount: snapshot.validation?.issues.length ?? 0,
-    dependencies: snapshot.dependencies,
   };
 }
 
