@@ -617,3 +617,22 @@ Profile rendering, `/families` project census, and native plan/receipt flows rem
 proof owner's monthly plan was still nonterminal, so no direct `?doc` binding was attempted because
 mounting the live stores can read Revit. No lifecycle, Apply, native request, or document mutation
 occurred. The name-filter product question remains pending.
+
+## Explicit scope browser wait - 2026-09-07
+
+Root `d7016d4` contains the shared scope-parser repair. Source inspection confirms both
+`familySearch` and `familiesSearch` now spread the existing `routeScopeSearch`, preserving their
+thread, fixture, and capture keys. The isolated implementation proof passed both actual route test
+files, 4/4 tests total, and targeted `vp check` passed all four changed route/test files.
+
+The explicit-URL browser repeat did not start because P's authoritative
+`monthly45-host-plan-6/monthly-host-proof.json` remained `status: running` with 20 profile rows. A
+bounded recheck at `2026-09-07T14:54:05.2212612Z` found the same nonterminal status and the artifact
+had not advanced since `2026-09-07T14:50:42.6402708Z`. Mounting either live Family Foundry store can
+enqueue Revit reads, so the browser stayed off `?doc=&target=` while that queue was unresolved.
+
+The existing browser state remains selected on `ff-profile-proof-25` with the exact disposable
+document staged; Open was not pressed. No Host request, native call, lifecycle action, Apply, state
+clear, or document mutation occurred. Raw wait evidence is
+`.artifacts/runs/browser-20260906-ff/actual-route-readiness-d7016d4/wait.json`. Actual profile and
+project-census rendering remain unproven until P records a terminal queue receipt.
