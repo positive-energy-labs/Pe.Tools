@@ -116,8 +116,12 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         doc.Document.Regenerate();
         desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document);
         var observed = this._capture(doc.Document);
+        var connectorRule = this._patch?.Run?.ElectricalConnectorParameters;
+        var authoredConnectorAssociations = (this._patch?.Patch["connectors"] as Newtonsoft.Json.Linq.JObject)?.Properties()
+            .Any(connector => connector.Value is Newtonsoft.Json.Linq.JObject fields && fields["associate"] is not null) == true;
         var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document))
-            .Where(change => this._patch?.Run?.ElectricalConnectorParameters is null || !RunOwnedConnectorResidue(change, desired!)).ToList();
+            .Where(change => connectorRule is null || !RunOwnedConnectorResidue(
+                change, desired!, observed, connectorRule, authoredConnectorAssociations)).ToList();
         var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
@@ -129,17 +133,30 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         return new OperationLog(this.Name, logs.SelectMany(l => l.Entries).ToList());
     }
 
-    private static bool RunOwnedConnectorResidue(FamilyChange change, FamilyModel desired) {
-        if (change.Section != "connectors") return false;
-        if (change.Kind == ChangeKind.Delete && change.Before is FamilyModelConnector { Domain: ConnectorDomain.Electrical })
-            return desired.Connectors.Values.All(connector => connector.Domain != ConnectorDomain.Electrical);
+    private static bool RunOwnedConnectorResidue(FamilyChange change, FamilyModel desired, FamilyModel captured,
+        ElectricalConnectorParameterRule rule, bool authoredConnectorAssociations) {
+        if (change.Section != "connectors" || authoredConnectorAssociations) return false;
+        var intended = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["Voltage"] = $"param:{rule.Voltage}", ["Number of Poles"] = $"param:{rule.NumberOfPoles}", ["Apparent Power"] = $"param:{rule.ApparentPower}"
+        };
+        if (change.Kind == ChangeKind.Delete && change.Before is FamilyModelConnector created)
+            return desired.Connectors.Values.All(connector => connector.Domain != ConnectorDomain.Electrical)
+                   && captured.Connectors.Values.Count(connector => connector.Domain == ConnectorDomain.Electrical) == 1
+                   && created is { Domain: ConnectorDomain.Electrical, SystemType: ConnectorSystemType.PowerBalanced }
+                   && ExactAssociations(created, intended);
         if (change.Kind != ChangeKind.Recreate || change.Before is not FamilyModelConnector { Domain: ConnectorDomain.Electrical } before ||
-            change.After is not FamilyModelConnector { Domain: ConnectorDomain.Electrical } after) return false;
+            change.After is not FamilyModelConnector { Domain: ConnectorDomain.Electrical } after ||
+            !intended.All(mapping => before.Associate?.GetValueOrDefault(mapping.Key) == mapping.Value)) return false;
         var beforeJson = Newtonsoft.Json.Linq.JObject.FromObject(before, Newtonsoft.Json.JsonSerializer.Create(FamilyModelJson.Settings));
         var afterJson = Newtonsoft.Json.Linq.JObject.FromObject(after, Newtonsoft.Json.JsonSerializer.Create(FamilyModelJson.Settings));
-        beforeJson.Remove("associate");
-        afterJson.Remove("associate");
+        foreach (var target in intended.Keys) {
+            (beforeJson["associate"] as Newtonsoft.Json.Linq.JObject)?.Remove(target);
+            (afterJson["associate"] as Newtonsoft.Json.Linq.JObject)?.Remove(target);
+        }
         return Newtonsoft.Json.Linq.JToken.DeepEquals(beforeJson, afterJson);
     }
+
+    private static bool ExactAssociations(FamilyModelConnector connector, IReadOnlyDictionary<string, string> intended) =>
+        connector.Associate?.Count == intended.Count && intended.All(mapping => connector.Associate.GetValueOrDefault(mapping.Key) == mapping.Value);
 
 }
