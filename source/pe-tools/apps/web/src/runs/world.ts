@@ -116,7 +116,7 @@ export type TsvRoom = {
   lx: number;
   ly: number;
   ceil: number | null;
-  disposition: "accepted" | "held" | null;
+  disposition: "accepted" | "held" | "void" | "excluded" | null;
 };
 export type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
 export type ZoneGeometry = {
@@ -512,7 +512,13 @@ export function parseZoneTsv(text: string): ZoneGeometry {
         lx: Number(parts[4]),
         ly: Number(parts[5]),
         ceil: parts[6]?.trim() ? Number(parts[6]) : null,
-        disposition: parts[7] === "accepted" || parts[7] === "held" ? parts[7] : null,
+        disposition:
+          parts[7] === "accepted" ||
+          parts[7] === "held" ||
+          parts[7] === "void" ||
+          parts[7] === "excluded"
+            ? parts[7]
+            : null,
       });
     } else if (parts[0] === "POLY") {
       const rings = polys.get(parts[1]!) ?? [];
@@ -540,7 +546,11 @@ export type ZoneViewport = {
   heightPx: number;
 };
 
-export function zoneViewport(zone: ZoneRecord, pxPerFt: number, padFt = 4): ZoneViewport {
+export function zoneViewport(
+  zone: Pick<ZoneRecord, "MinX" | "MinY" | "MaxX" | "MaxY">,
+  pxPerFt: number,
+  padFt = 4,
+): ZoneViewport {
   const minX = zone.MinX - padFt;
   const minY = zone.MinY - padFt;
   const maxX = zone.MaxX + padFt;
@@ -643,7 +653,7 @@ export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string 
         ring
           .map((point, index) => {
             const [x, y] = toPx(vp, point[0], point[1]);
-            return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+            return `${index === 0 ? "M" : "L"}${x} ${y}`;
           })
           .join(" ") + " Z",
     )

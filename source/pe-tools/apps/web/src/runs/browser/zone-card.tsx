@@ -1,6 +1,6 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
-import { itemKey, type StagedItem } from "../feedback/staging";
+import { fb, itemKey, type StagedItem } from "../feedback/staging";
 import { type RunIndexEntry, type ZoneRecord } from "../world";
 import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown";
@@ -35,6 +35,8 @@ export function ZoneCard(props: {
   const locatable = b ?? a;
   const knobs = b ? adaptedKnobs(b) : [];
   const fbKey = itemKey(name, runA, runB);
+  const stage = () =>
+    fb.toggleStage({ key: fbKey, zone: name, level: (b ?? a)?.Level ?? "?", runA, runB, a, b });
 
   return (
     <div
@@ -162,6 +164,7 @@ export function ZoneCard(props: {
                 maxH={panelH}
                 underlay={underlay}
                 fbKey={fbKey}
+                onStage={stage}
               />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
@@ -175,6 +178,7 @@ export function ZoneCard(props: {
             maxH={panelH}
             underlay={underlay}
             fbKey={fbKey}
+            onStage={stage}
           />
         ) : (
           <MissingPanel w={panelFullW} h={panelH} label="not in run" />

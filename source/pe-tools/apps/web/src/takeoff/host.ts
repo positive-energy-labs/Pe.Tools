@@ -1,3 +1,4 @@
+import { partitionReviewSchema } from "@pe/agent-contracts";
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
@@ -230,6 +231,10 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     );
     return {
       ...response,
+      review:
+        "review" in response && response.review != null
+          ? partitionReviewSchema.parse(response.review)
+          : null,
       rooms: response.rooms.map((room) => ({
         ...room,
         label: toPoint(room.label),

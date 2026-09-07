@@ -1,19 +1,8 @@
-import {
-  candidateTone,
-  CLOSE_M,
-  HELD_HATCH,
-  INK_M,
-  LABEL,
-  LABEL_SIZE,
-  PLAN_LAW,
-  RESIDUE_TREATMENT,
-  type ResidueKind,
-  SEAL_DOOR,
-  SEAL_RUN,
-  ZONE_STROKE,
-  ZONE_WIDTH,
-} from "../palette";
-import { dash, token } from "../../lib/token";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ReviewShapes, reviewShapes, reviewLabel } from "../review";
+import { CLOSE_M, INK_M, PLAN_LAW, SEAL_DOOR, SEAL_RUN, ZONE_STROKE, ZONE_WIDTH } from "../palette";
+import { dash, token as designToken } from "../../lib/token";
 import {
   loadPlan,
   loadRaster,
@@ -32,8 +21,17 @@ import {
 
 import { flagLabel, type StagedItem } from "./staging";
 
-const TEXT = token("ink");
-const MUTED = token("ink-2");
+// Canvas and a standalone SVG cannot inherit the page's light-dark() color scheme.
+function token(role: string): string {
+  const value = designToken(role);
+  if (typeof document === "undefined") return value;
+  const probe = document.createElement("span");
+  probe.style.color = value;
+  document.body.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
 
 const PANEL_W = 1024;
 const PANEL_H = 768;
@@ -41,110 +39,38 @@ const GAP = 12;
 const FONT = "12px Consolas, monospace";
 const LINE_H = 18;
 
-function svgEscape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function overlaySvg(
+export function overlaySvg(
   vp: ZoneViewport,
   zone: ZoneRecord,
   geom: ZoneGeometry,
   flags: Set<string>,
 ): string {
-  const alarm = token("alarm");
-  const defs: string[] = [];
-  const parts: string[] = [];
-  const hatch = (
-    id: string,
-    treatment: { angleDeg: number; color: string; spacingPx: number; widthPx: number },
-  ) => {
-    defs.push(
-      `<pattern id="${id}" width="${treatment.spacingPx}" height="${treatment.spacingPx}" patternUnits="userSpaceOnUse" patternTransform="rotate(${treatment.angleDeg})"><line y2="${treatment.spacingPx}" stroke="${treatment.color}" stroke-width="${treatment.widthPx}"/></pattern>`,
-    );
-  };
-  for (const room of geom.rooms) {
-    const rings = geom.polys.get(room.id);
-    if (!rings) continue;
-    const flagged = flags.has(`room:${room.id}`);
-    // a dashed neutral, never the accepted blue (SHIMS.md #3 close).
-    const tone = candidateTone(zone.Zone, room.id);
-    const residue = room.disposition === null ? RESIDUE_TREATMENT.void : null;
-    const d = ringPath(
-      vp,
-      rings.map((r) => r.points),
-    );
-    parts.push(
-      `<path d="${d}" fill="${residue ? "none" : tone.fill}" stroke="${flagged ? alarm : (residue?.outline.color ?? "none")}" stroke-width="${flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}"/>`,
-    );
-    if (residue) {
-      const id = `void-room-${room.id}`;
-      hatch(id, residue.hatch);
-      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
-    }
-    if (room.disposition === "held") {
-      const id = `held-room-${room.id}`;
-      hatch(id, { ...HELD_HATCH, color: tone.dark });
-      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
-    }
-    if (room.disposition) {
-      parts.push(
-        `<text x="${(room.lx - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - room.ly) * vp.pxPerFt}" fill="${LABEL}" font-family="var(--font-mono)" font-size="${LABEL_SIZE}" text-anchor="middle">${room.disposition === "held" ? "H" : "A"} ${svgEscape(room.id)}</text>`,
-      );
-    }
-    if (flagged) {
-      const first = rings[0]?.points[0];
-      if (first) {
-        const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
-        parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-small-size)" font-weight="var(--weight-bold)">⚑ ${svgEscape(room.id)}</text>`,
-        );
-      }
-    }
-  }
-  for (const res of geom.residues) {
-    const flagged = flags.has(`residue:${res.id}`);
-    const held = res.reason === "rejected";
-    const kind: ResidueKind = res.reason === "excluded" ? "excluded" : "void";
-    const residue = held ? null : RESIDUE_TREATMENT[kind];
-    const tone = candidateTone(zone.Zone, res.id);
-    const d = ringPath(vp, res.loops);
-    parts.push(
-      `<path d="${d}" fill="${held ? tone.fill : "none"}" stroke="${flagged ? alarm : (residue?.outline.color ?? "none")}" stroke-width="${flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}"/>`,
-    );
-    if (residue) {
-      const id = `${kind}-residue-${res.id}`;
-      hatch(id, residue.hatch);
-      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
-    }
-    if (held) {
-      const id = `held-residue-${res.id}`;
-      hatch(id, { ...HELD_HATCH, color: tone.dark });
-      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
-      const point = res.loops[0]?.[0];
-      if (point) {
-        parts.push(
-          `<text x="${(point[0] - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - point[1]) * vp.pxPerFt}" fill="${LABEL}" font-family="var(--font-mono)" font-size="${LABEL_SIZE}">H ${svgEscape(res.id)}</text>`,
-        );
-      }
-    }
-    if (flagged) {
-      const first = res.loops[0]?.[0];
-      if (first) {
-        const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
-        parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-small-size)" font-weight="var(--weight-bold)">⚑ residue ${svgEscape(res.id)}</text>`,
-        );
-      }
-    }
-  }
-  parts.push(
-    `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="${ZONE_WIDTH}" stroke-dasharray="${dash("reference")}"/>`,
-  );
-  return `<svg xmlns="http://www.w3.org/2000/svg" fill-rule="evenodd" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}"><defs>${defs.join("")}</defs>${parts.join("")}</svg>`;
+  return renderToStaticMarkup(
+    createElement(
+      "svg",
+      {
+        xmlns: "http://www.w3.org/2000/svg",
+        width: vp.widthPx,
+        height: vp.heightPx,
+        fillRule: "evenodd",
+        viewBox: `0 0 ${vp.widthPx} ${vp.heightPx}`,
+      },
+      createElement(ReviewShapes, {
+        shapes: reviewShapes(geom, zone),
+        zone: zone.Zone,
+        runId: "export",
+        vp,
+        flags: [...flags],
+      }),
+      createElement("path", {
+        d: ringPath(vp, zone.ZoneLoops as [number, number][][]),
+        fill: "none",
+        stroke: ZONE_STROKE,
+        strokeWidth: ZONE_WIDTH,
+        strokeDasharray: dash("reference"),
+      }),
+    ),
+  ).replaceAll(designToken("alarm"), token("alarm"));
 }
 
 function svgToImage(svg: string): Promise<HTMLImageElement> {
@@ -199,7 +125,7 @@ async function paintPanelTile(
       PLAN_LAW.outsideZoneOpacity,
     );
   } else {
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = token("ink-2");
     ctx.font = FONT;
     ctx.fillText("plan unavailable in this package", 12, 22);
   }
@@ -232,7 +158,7 @@ function missingTile(label: string): HTMLCanvasElement {
   const ctx = tile.getContext("2d")!;
   ctx.fillStyle = token("page");
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-  ctx.fillStyle = MUTED;
+  ctx.fillStyle = token("ink-2");
   ctx.font = FONT;
   ctx.textAlign = "center";
   ctx.fillText(label, PANEL_W / 2, PANEL_H / 2);
@@ -289,6 +215,15 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   );
 
   const lines = captionLines(item);
+  for (const [runId, zone, side] of [
+    [item.runA, item.a, "A"],
+    [item.runB, item.b, "B"],
+  ] as const) {
+    if (!runId || !zone) continue;
+    const geom = await loadZoneGeometry(runId, zone.Tsv);
+    for (const shape of reviewShapes(geom, zone))
+      lines.push({ text: `${side}: ${reviewLabel(shape)}`, tone: "text" });
+  }
   const captionH = lines.length * LINE_H + 14;
   const w = tiles.length * PANEL_W + (tiles.length - 1) * GAP + 2 * GAP;
   const h = PANEL_H + captionH + 2 * GAP + 20;
@@ -304,7 +239,7 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   ctx.textBaseline = "top";
   tiles.forEach((tile, i) => {
     const x = GAP + i * (PANEL_W + GAP);
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = token("ink-2");
     ctx.fillText(
       comparing ? (i === 0 ? "A · baseline" : "B · current") : "B · current",
       x,
@@ -317,7 +252,8 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
 
   const alarm = token("alarm");
   lines.forEach((line, i) => {
-    ctx.fillStyle = line.tone === "alarm" ? alarm : line.tone === "muted" ? MUTED : TEXT;
+    ctx.fillStyle =
+      line.tone === "alarm" ? alarm : line.tone === "muted" ? token("ink-2") : token("ink");
     ctx.fillText(line.text, GAP, GAP + 14 + PANEL_H + 10 + i * LINE_H, w - 2 * GAP);
   });
   return out;
@@ -334,7 +270,7 @@ export function stitchSheet(canvases: HTMLCanvasElement[], header: string): HTML
   ctx.fillRect(0, 0, w, h);
   ctx.font = FONT;
   ctx.textBaseline = "top";
-  ctx.fillStyle = TEXT;
+  ctx.fillStyle = token("ink");
   ctx.fillText(header, GAP, 10, w - 2 * GAP);
   let y = 34;
   for (const c of canvases) {

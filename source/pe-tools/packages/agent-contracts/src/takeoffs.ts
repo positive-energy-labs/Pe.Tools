@@ -199,7 +199,30 @@ const detectedResidueSchema = z.object({
   outer: z.array(pointSchema),
 });
 
+export const partitionReviewSchema = z.object({
+  source: z.object({
+    runId: z.string().min(1),
+    documentKey: z.string().min(1),
+    scopeKey: z.string().min(1),
+  }),
+  zone: z.object({ key: z.string(), name: z.string(), loops: z.array(z.array(pointSchema)) }),
+  shapes: z.array(
+    z.object({
+      id: z.string(),
+      kind: z.enum(["room", "residue"]),
+      disposition: z.enum(["accepted", "held", "void", "excluded"]).nullable(),
+      reason: z.string().nullable(),
+      sqft: z.number().nullable(),
+      label: pointSchema.nullable(),
+      loops: z.array(z.array(pointSchema)),
+    }),
+  ),
+});
+export type PartitionReviewData = z.infer<typeof partitionReviewSchema>;
+
 const partitionRunSchema = z.object({
+  /** Exact returned geometry; absent until the partition producer supplies this projection. */
+  review: partitionReviewSchema.nullable().optional(),
   levelName: z.string(),
   elevation: z.number(),
   created: z.number(),

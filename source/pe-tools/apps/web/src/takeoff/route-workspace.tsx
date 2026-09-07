@@ -1,3 +1,4 @@
+import { PartitionReview } from "#/takeoff/partition-review";
 import { token } from "#/lib/token";
 import { Workspace } from "#/components/anatomy";
 import { useMemo, useState } from "react";
@@ -69,6 +70,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const busyState = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
   const panel = useAtomValue(store.atoms.panel);
+  const review = useAtomValue(store.atoms.review);
   const targetingOpen = useAtomValue(store.atoms.targetingOpen);
   const targetingLevel = useAtomValue(store.atoms.targetingLevel);
   const targetingQuery = useAtomValue(store.atoms.targetingQuery);
@@ -350,6 +352,12 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       <AdoptPanel store={store} />
     ) : scope && panel === "sync" ? (
       <SyncPanel store={store} />
+    ) : review ? (
+      <PartitionReview
+        key={review.data?.source.runId ?? review.zone}
+        review={review}
+        onFlag={(key) => store.actions.flagReview(key)}
+      />
     ) : null;
   if (live && !session)
     return (

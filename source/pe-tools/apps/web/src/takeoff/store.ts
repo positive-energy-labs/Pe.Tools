@@ -12,6 +12,7 @@ import {
   type StagedRoomEdit,
   type TakeoffCarrierPreflight,
   type TakeoffSnapshot,
+  type PartitionReviewData,
   type TakeoffsRouteDocument,
   type ViewFacts,
 } from "@pe/agent-contracts";
@@ -424,6 +425,11 @@ export function createTakeoffStore(deps: {
     sorts: [],
     query: "",
   }).pipe(owned("page/atlas-table"));
+  const reviewAtom = Atom.make<{
+    zone: string;
+    data: PartitionReviewData | null;
+    flags: string[];
+  } | null>(null).pipe(owned("page/partition-review"));
   const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(owned("page/panel"));
   const adoptPatchesAtom = Atom.make<Readonly<Record<string, Partial<AdoptDraft>>>>({}).pipe(
     Atom.autoDispose,
@@ -1136,6 +1142,18 @@ export function createTakeoffStore(deps: {
         ["snapshot"],
       ).catch(() => undefined);
     },
+    flagReview(key: string) {
+      const review = registry.get(reviewAtom);
+      if (!review) return;
+      write("flag-review", "page/partition-review", () =>
+        registry.set(reviewAtom, {
+          ...review,
+          flags: review.flags.includes(key)
+            ? review.flags.filter((flag) => flag !== key)
+            : [...review.flags, key],
+        }),
+      );
+    },
     partition(zone: WorldZone) {
       return runVerb(
         "partition",
@@ -1144,6 +1162,13 @@ export function createTakeoffStore(deps: {
           if (zoneRegion === null) throw Error(`adopt ${zone.zone.key} first`);
           const session = await activeSession();
           const result = await deps.host.partition(session, partitionInput(zone, zoneRegion));
+          write("partition", "page/partition-review", () =>
+            registry.set(reviewAtom, {
+              zone: zone.zone.key,
+              data: result.review ?? null,
+              flags: [],
+            }),
+          );
           return { ...result, text: `partitioned ${zone.zone.key}` };
         },
         ["snapshot", "takeoff-views"],
@@ -1261,6 +1286,7 @@ export function createTakeoffStore(deps: {
       visibleRows: visibleRowsAtom,
       decisions: decisionsAtom,
       panel: panelAtom,
+      review: reviewAtom,
       syncPlan: syncPlanAtom,
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,

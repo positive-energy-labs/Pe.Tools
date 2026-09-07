@@ -277,6 +277,59 @@ const ProjectA_SCOPE = {
 };
 
 describe("takeoff route store", () => {
+  it("retains the producer's immutable review ID after partition", async () => {
+    const h = harness();
+    const fixtureRegistry = AtomRegistry.make();
+    registries.push(fixtureRegistry);
+    const fixture = createFixtureTakeoffStore(fixtureRegistry, ProjectA_SCOPE);
+    const original = fixtureRegistry.get(fixture.atoms.world).zones[0]!;
+    const zone = { ...original, zone: { ...original.zone, elementId: 123 } };
+    const host: TakeoffHost = {
+      ...h.host,
+      async partition() {
+        return {
+          review: {
+            source: { runId: "immutable-captured-run", documentKey: "document", scopeKey: "scope" },
+            zone: { key: "zone", name: "zone", loops: [] },
+            shapes: [],
+          },
+          levelName: "Main",
+          elevation: 0,
+          created: 0,
+          held: 6,
+          rebound: 0,
+          orphaned: 0,
+          domainSqft: 0,
+          claimedWallSqft: 0,
+          excludedResidueSqft: 0,
+          totalSqft: 0,
+          profile: "test",
+          failures: [],
+          rooms: [],
+          residues: [],
+          regions: [],
+        };
+      },
+    };
+    const store = createStore({ host, sessions: h.sessions });
+    await store.actions.partition(zone);
+    expect(store.registry.get(store.atoms.review)).toEqual({
+      zone: zone.zone.key,
+      data: {
+        source: { runId: "immutable-captured-run", documentKey: "document", scopeKey: "scope" },
+        zone: { key: "zone", name: "zone", loops: [] },
+        shapes: [],
+      },
+      flags: [],
+    });
+    await store.actions.refresh();
+    expect(store.registry.get(store.atoms.review)?.data?.source.runId).toBe(
+      "immutable-captured-run",
+    );
+    store.dispose();
+    fixture.dispose();
+  });
+
   it("starts the fixture lane with the dense project-a world before Host transport", () => {
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
     registries.push(registry);
