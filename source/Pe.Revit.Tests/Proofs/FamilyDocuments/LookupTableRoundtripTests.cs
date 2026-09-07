@@ -1,6 +1,7 @@
 using Pe.Revit.FamilyFoundry.Apply;
 using Newtonsoft.Json;
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.Extensions.FamParameter.Formula;
 
 namespace Pe.Revit.Tests;
 
@@ -160,6 +161,36 @@ public sealed class LookupTableRoundtripTests {
             var formulas = fm.GetParameters().Where(p => !string.IsNullOrEmpty(p.Formula))
                 .Select(p => (Parameter: p, Formula: p.Formula!))
                 .OrderBy(p => p.Formula.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
+            var capturedOrder = formulas.OrderBy(p => p.Parameter.Definition.Name, StringComparer.Ordinal).ToArray();
+            var pending = capturedOrder.ToList();
+            var dependencyOrder = new List<(FamilyParameter Parameter, string Formula)>();
+            while (pending.Count > 0) {
+                var ready = pending.Where(p => !fm.Parameters.GetReferencedIn(p.Formula)
+                    .Any(reference => pending.Any(other => other.Parameter.Id == reference.Id))).ToArray();
+                if (ready.Length == 0) throw new InvalidOperationException("Formula order probe found a dependency cycle.");
+                foreach (var item in ready) { dependencyOrder.Add(item); pending.Remove(item); }
+            }
+            foreach (var order in new[] { (Name: "captured", Items: capturedOrder), (Name: "dependencies", Items: dependencyOrder.ToArray()) }) {
+                using var trial = new SubTransaction(document);
+                trial.Start();
+                try {
+                    // Equal starting values: clearing a formula alone retains its last evaluated value.
+                    foreach (var (parameter, _) in formulas) fm.SetFormula(parameter, null);
+                    foreach (var (parameter, _) in formulas) {
+                        if (parameter.StorageType == StorageType.Integer) fm.Set(parameter, 0);
+                        else fm.Set(parameter, 0d);
+                    }
+                    File.WriteAllText(Path.Combine(output, $"order-{order.Name}-plan.json"), JsonConvert.SerializeObject(
+                        order.Items.Select(p => new { Parameter = p.Parameter.Definition.Name, p.Formula,
+                            References = fm.Parameters.GetReferencedIn(p.Formula).Select(r => r.Definition.Name).ToArray() }), Formatting.Indented));
+                    WriteValues(document, output, $"order-{order.Name}-before.json");
+                    foreach (var (parameter, formula) in order.Items) fm.SetFormula(parameter, formula);
+                    document.Regenerate();
+                    WriteValues(document, output, $"order-{order.Name}-after.json");
+                } catch (Exception ex) {
+                    File.WriteAllText(Path.Combine(output, $"order-{order.Name}-error.txt"), ex.ToString());
+                } finally { trial.RollBack(); }
+            }
             foreach (var mode in new[] { "same-formulas", "outputs-only", "lookups-only", "all-formulas" }) {
                 using var trial = new SubTransaction(document);
                 trial.Start();
