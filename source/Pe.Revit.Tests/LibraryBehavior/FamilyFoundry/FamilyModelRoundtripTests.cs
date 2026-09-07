@@ -223,11 +223,15 @@ public sealed class FamilyModelRoundtripTests {
             readback = RevitFamilyFixtureHarness.OpenFamilyDocument(this._ui.Application, artifact.SavedBPath);
             Assert.That(readback.FamilyManager.CurrentType.AsDouble(readback.FamilyManager.get_Parameter("_diameter")),
                 Is.EqualTo(diameter).Within(1e-9));
-            var arcs = new FilteredElementCollector(readback).OfClass(typeof(Extrusion)).Cast<Extrusion>().Single()
-                .Sketch.Profile.Cast<CurveArray>().SelectMany(loop => loop.Cast<Curve>()).OfType<Arc>().ToList();
-            Assert.That(arcs, Is.Not.Empty);
-            foreach (var arc in arcs) Assert.That(arc.Radius * 2, Is.EqualTo(diameter).Within(1e-9));
-            var recaptured = readback.CaptureFamilyModel().Forms.Values.Single().Profile!.Single().Curves.Single();
+            var circularExtrusions = new FilteredElementCollector(readback).OfClass(typeof(Extrusion)).Cast<Extrusion>()
+                .Select(extrusion => extrusion.Sketch.Profile.Cast<CurveArray>()
+                    .SelectMany(loop => loop.Cast<Curve>()).OfType<Arc>().ToList())
+                .Where(arcs => arcs.Count > 0).ToList();
+            Assert.That(circularExtrusions, Has.Count.EqualTo(1), "Support geometry must not be mistaken for the driven cylinder.");
+            foreach (var arc in circularExtrusions.Single()) Assert.That(arc.Radius * 2, Is.EqualTo(diameter).Within(1e-9));
+            var recaptured = readback.CaptureFamilyModel().Forms.Values
+                .SelectMany(form => form.Profile ?? []).SelectMany(loop => loop.Curves)
+                .Single(curve => curve.Kind == CurveKind.Circle);
             Assert.That(recaptured.Diameter?.Parameter, Is.EqualTo("_diameter"));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(readback);
