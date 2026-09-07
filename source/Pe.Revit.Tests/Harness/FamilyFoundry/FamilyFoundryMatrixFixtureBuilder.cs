@@ -72,7 +72,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     public static Family BuildAndLoadSetValueMatrixFamily(
         Application application,
         Document projectDocument,
-        string outputDirectory
+        string outputDirectory,
+        Action<string, Document>? observe = null
     ) {
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
@@ -81,16 +82,18 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
 
         try {
             var nestedFamily = BuildAndLoadNestedFamily(application, familyDocument, outputDirectory);
-            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily);
+            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily, observe);
             var familyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(
                 familyDocument,
                 outputDirectory,
                 SetValueMatrixFamilyName);
+            observe?.Invoke("afterSaveAs", familyDocument);
             return RevitFamilyFixtureHarness.LoadFamilyIntoProject(
                 application,
                 projectDocument,
                 familyPath,
-                new DefaultFamilyLoadOptions());
+                new DefaultFamilyLoadOptions(),
+                document => observe?.Invoke("afterReopen", document));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
         }
@@ -201,7 +204,11 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         }
     }
 
-    private static void BuildSetValueMatrixFamilyDocument(Document familyDocument, Family nestedFamily) {
+    private static void BuildSetValueMatrixFamilyDocument(
+        Document familyDocument,
+        Family nestedFamily,
+        Action<string, Document>? observe
+    ) {
         using var transaction = new Transaction(familyDocument, "Build FF set-value matrix family");
         _ = transaction.Start();
 
@@ -231,7 +238,9 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         AssertFormulaSet(familyDoc, sourceFormulaNested, $"{SourceFormulaBase} * 2");
         AssertFormulaSet(familyDoc, targetExistingFormulaLength, $"{SourceFormulaBase} + 1");
 
+        observe?.Invoke("beforeSeed", familyDocument);
         SeedMatrixValues(
+            familyDocument,
             manager,
             sourceText,
             sourceBlankText,
@@ -247,8 +256,10 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             sourceAngularDimension,
             sourceRadialDimension,
             sourceArrayCount,
-            sourceNestedWidth);
+            sourceNestedWidth,
+            observe);
 
+        observe?.Invoke("beforeTopology", familyDocument);
         CreateLabeledDimensionTopology(
             familyDocument,
             sourceLinearDimension,
@@ -256,9 +267,12 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             sourceRadialDimension);
         CreateLabeledArrayTopology(familyDocument, sourceArrayCount);
         CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth);
+        observe?.Invoke("afterTopology", familyDocument);
 
         familyDocument.Regenerate();
+        observe?.Invoke("afterRegenerate", familyDocument);
         _ = transaction.Commit();
+        observe?.Invoke("afterCommit", familyDocument);
     }
 
     private static void BuildMetadataStateFamilyDocument(Document familyDocument) {
@@ -334,6 +348,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     }
 
     private static void SeedMatrixValues(
+        Document familyDocument,
         FamilyManager manager,
         FamilyParameter sourceText,
         FamilyParameter sourceBlankText,
@@ -349,9 +364,11 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         FamilyParameter sourceAngularDimension,
         FamilyParameter sourceRadialDimension,
         FamilyParameter sourceArrayCount,
-        FamilyParameter sourceNestedWidth
+        FamilyParameter sourceNestedWidth,
+        Action<string, Document>? observe
     ) {
         for (var index = 0; index < MatrixTypeNames.Length; index++) {
+            observe?.Invoke($"beforeSeed:{MatrixTypeNames[index]}", familyDocument);
             manager.CurrentType = manager.Types.Cast<FamilyType>()
                 .First(type => string.Equals(type.Name, MatrixTypeNames[index], StringComparison.Ordinal));
             manager.Set(sourceText, $"matrix-text-{index + 1}");
@@ -369,6 +386,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             manager.Set(sourceRadialDimension, 0.5 + index);
             manager.Set(sourceArrayCount, index + 2);
             manager.Set(sourceNestedWidth, 1.25 + index);
+            observe?.Invoke($"afterSeed:{MatrixTypeNames[index]}", familyDocument);
         }
     }
 

@@ -256,7 +256,8 @@ internal static class RevitFamilyFixtureHarness {
         Application application,
         Document projectDocument,
         string familyPath,
-        IFamilyLoadOptions? loadOptions = null
+        IFamilyLoadOptions? loadOptions = null,
+        Action<Document>? inspectOpenedFamily = null
     ) {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
@@ -275,6 +276,7 @@ internal static class RevitFamilyFixtureHarness {
             familyDocument = application.OpenDocumentFile(familyPath);
             if (familyDocument == null || !familyDocument.IsFamilyDocument)
                 throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
+            inspectOpenedFamily?.Invoke(familyDocument);
 
             return PeToolsFailureHandling.ExecuteWithFailureHandling(
                 projectDocument,
