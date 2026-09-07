@@ -11,7 +11,8 @@ internal static class FamilyFoundryRoundtripHarness {
         string fixtureRelativePath,
         string testName
     ) {
-        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(fixtureRelativePath);
+        var fixturePath = Path.Combine(Path.GetDirectoryName(typeof(FamilyFoundryRoundtripHarness).Assembly.Location)!,
+            "Fixtures", "FamilyModel", fixtureRelativePath);
         var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
         Assert.That(parsed.Value, Is.Not.Null,
             string.Join(Environment.NewLine, parsed.Diagnostics.Select(diagnostic => diagnostic.Message)));
@@ -24,7 +25,9 @@ internal static class FamilyFoundryRoundtripHarness {
         Document? buildB = null;
         Document? reopenedB = null;
         try {
-            buildA = FamilyModelBuild.Build(application, authored).Document;
+            var first = FamilyModelBuild.Build(application, authored);
+            buildA = first.Document;
+            Assert.That(first.Receipt?.Converged, Is.True, "The authored build must converge before saving.");
             var savedAPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildA, outputDirectory, "A");
             RevitFamilyFixtureHarness.CloseDocument(buildA);
             buildA = null;
@@ -32,7 +35,9 @@ internal static class FamilyFoundryRoundtripHarness {
             reopenedA = RevitFamilyFixtureHarness.OpenFamilyDocument(application, savedAPath);
             // This is the black-box boundary: capture receives only the reopened RFA, never authored/compiler state.
             var captured = reopenedA.CaptureFamilyModel();
-            buildB = FamilyModelBuild.Build(application, captured).Document;
+            var second = FamilyModelBuild.Build(application, captured);
+            buildB = second.Document;
+            Assert.That(second.Receipt?.Converged, Is.True, "The captured build must converge before saving.");
             var savedBPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildB, outputDirectory, "B");
             RevitFamilyFixtureHarness.CloseDocument(buildB);
             buildB = null;

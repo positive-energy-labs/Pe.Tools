@@ -10,6 +10,14 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 
 ## Decided
 
+- 2026-09-06, user correction: explicit JSON specifications must be manifested and unmentioned content stays untouched; filling blank destination cells from migration sources is an optional flag and never overrides an explicit desired value.
+- 2026-09-06, user correction: each family rolls back fully on failure; partial completion applies only across the batch of families, so progress remains trustworthy.
+- 2026-09-06, bulk parameter migration is the primary acceptance gate; unknown geometry must not block parameter-only work, while requested connectors and room calculation points remain required results.
+- 2026-09-06, existing specified destination parameters win source selection; remove old sources only after safe value/formula/association handling, without inferring historical FF ownership.
+- 2026-09-06, portability permits referenced files and sidecars but forbids ExtensibleStorage and persistent roundtrip metadata; Apply does not implicitly save existing documents.
+- 2026-09-06, Pea authors JSON or route state for now; FF primitives remain public and reusable through scripts and Pods, without restricting those execution surfaces.
+- 2026-09-06, the old template and company OneDrive settings are mandatory migration acceptance inputs; retarget or cleanroom the deleted tests, and do not delete features or unfinished features without asking.
+- 2026-09-06, temporary selector formulas are a candidate to measure against one batched type-switching pass; cheap parameter creation does not by itself establish correctness or overall speed.
 - 2026-07-04 — one addressing/units/result-record language spans all four family surfaces (loaded / instance / famdoc / nested); proven 3/3 by the mutation-spike pods. Two engine seams only: family-doc reconciler vs instance setter, and geometry as a payload-envelope tenant with its own dialect.
 - 2026-07-04 — front door is declarative desired-state with a small imperative verb escape hatch; parked-transaction is the substrate choreography (edits families in place, one protocol) — re-derives the MEP-round verdict independently.
 - 2026-07-16 — /family is THE one-family surface (authored + live lanes); /family-model, /family-types, and the POC routes are retired. Evidence carries a `from` stamp compared against the live versionToken — stale is shown, never silently trusted.

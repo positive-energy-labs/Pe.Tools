@@ -1,80 +1,103 @@
-# Family rewrite — live effort map (2026-09-06)
+# Family Foundry completion map
 
-Delete this file when the effort ends; verdicts fold into LEDGER.md. The previous map (portability
-oracle waves + review board rounds, 2026-08-18/19) was swept on 2026-09-06; its surviving items are
-Owed lines in LEDGER.md and git history holds the rest.
+Current effort: 2026-09-06, demiurge with proof-first implementation. The integration tree is
+`C:/Users/kaitp/source/repos/Pe.Tools-family`, branch `family/rewrite`, baseline `d2e19ce`.
+This map owns the current frontier. Product decisions live in [LEDGER.md](LEDGER.md).
+Delete the map when the effort closes. No merge to main or live-product completion is claimed.
 
-Effort: demiurge + purge rewrite of the Family Foundry compiler and Revit-to-json roundtrip.
-Orchestrator session notes and every line report: `.artifacts/handoffs/family-rewrite-20260906/`.
-Herdr session `famrw` on the main checkout; Revit session `pe.app-25` (2025) holds `PE Bath-Shower.rfa`
-and `PE GRD Exhaust.rfa`.
+## Completion contract
 
-## Rounds
+- Explicit family.json specifications are manifested. Unmentioned content stays untouched.
+- Bulk parameter migration is the primary acceptance gate. Geometry support stays in scope.
+- One family either completes or rolls back. A batch retains successful families and continues.
+- No ExtensibleStorage or persistent roundtrip metadata. References and sidecars may travel.
+- Apply does not save existing documents. Save/export is explicit.
+- /family and /families, their route state, Pea authoring, and script/Pod primitives must agree.
+- Restore meaningful deleted tests through cleanroom behavioral acceptance, not obsolete scaffolding.
+- Preserve every feature, including unfinished ones, unless the user approves its removal.
 
-- Round 1 (paper, nine lines) — DONE 2026-09-06. Verdicts in LEDGER.md under "Family rewrite".
-  Shapes: s-typed KILL (verbosity, worse errors), s-dsl ADOPT for slot grammar, s-native ADOPT for
-  geometry substrate with macros, s-reconcile ADOPT.
-- Round 2 (paper) — schema as C# records + JSON Schema + the three examples (r2-schema); reconciler
-  refit to the native schema, transaction flag, `run` block (r2-reconcile); live proof of the
-  reference-line rotation path and read-only `EditFamily` (r2-revit); adversarial critic on a clean
-  line (r2-critic).
-- Round 3 — pea re-authors the three families against the round-2 schema; then code lands on the
-  dirty tree (arch on paper, then feel).
+## Wave 1 owners and proof gates
 
-## Frontier (decisions whose prerequisites are settled)
+Every agent is Astra medium. One writer per tree. Only proof owns Revit runtime runs this wave.
+Initial agent time box is 25 minutes; an intermediate report is due by 8 minutes.
 
-- `parameters` merge (`familyParameters` + `sharedParameters` into one map with `shared: true`)
-  versus two maps. Both Opus lines merged; the ledger's name-first shared law holds either way.
-- `dataType` closed token set (14 tokens proposed) versus Revit UI labels. The corpus spread is
-  unknown; c-corpus can count it.
-- Localization of template plane names (`Center (Left/Right)` is English). Alias table or
-  `plane:family.*` tokens kept as the only invented names.
-- Whether the SVG oracle survives (native needs a 1-D solver per axis) or dies with frames.
-- Sweeps, blends, revolves: the 2026-08-18 "unmodeled forever" ruling is reopened by the native
-  substrate; keep closed until a checked-in family forces one.
+| ID | Owner / Herdr session | Worktree / branch | Claim and first gate | State |
+|---|---|---|---|---|
+| P1 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Diagnose zero-result fresh run; execute a real 2025 specimen | OPEN |
+| P2 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Compare temporary selector formulas, source formula baking, and one batched type pass; reopen and verify | OPEN |
+| P3 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Distinguish unset, explicit zero, numeric/temperature defaults, and clearing limits | OPEN |
+| N1 | normalize / ffnorm0906 | Pe.Tools-ff-normalize / family/normalize | Restore bulk migration acceptance; explicit values and destination priority; safe source cleanup | OPEN |
+| N2 | normalize / ffnorm0906 | Pe.Tools-ff-normalize / family/normalize | Family rollback, pre-mutation plan checks, post-commit/load receipts | OPEN |
+| R1 | routes / ffroutes0906 | Pe.Tools-ff-routes / family/routes | Reuse settings composition at execution boundaries; retain raw authoring and diagnostics | OPEN |
+| R2 | routes / ffroutes0906 | Pe.Tools-ff-routes / family/routes | Native model loading and truthful route state in /family and /families | OPEN |
+| G1 | root | Pe.Tools-family / family/rewrite | Reconcile capture rulings; restore roundtrip and lookup acceptance without hidden metadata | OPEN |
 
-## Round 2 findings (2026-09-06, reports r2-*.md)
+Agent reports are `docs/features/family/PROOF-VALUES.md`, `PROOF-NORMALIZATION.md`, and
+`PROOF-ROUTES.md` in the named worktrees. Their claims require independent integration checks.
+Raw wave evidence is `.artifacts/runs/fresh-20260906-ff/`; route evidence uses its browser lane.
+The prior source census is `.artifacts/ff-census-0906/{core,routes,environment}-report.txt`.
 
-Live-proven in `pe.app-25` (r2-revit): puck rotation is a labeled `AngularDimension` between a fixed plane
-and a reference line whose start is pinned by two alignments, with the extrusion sketched on the line's
-endpoint plane; `SketchPlane.Create` on a reference line or its endpoint is refused by all three public
-signatures (gotcha 27 reconfirmed), so that geometry is UI-only; a work-plane-based nested instance hosted
-on a line endpoint follows the endpoint position but does NOT rotate under API placement; host alignments
-to a nested instance resolve by `FamilyInstanceReferenceType` and `GetReferenceByName`, no `EditFamily`
-needed; every GRD sketch line is locked to exactly one named plane; `BaseArray.Name` is not persisted and
-`ArrayAnchorMember` is create-time only.
+## User stories and closure evidence
 
-Critic (r2-critic) findings that amend round-1 verdicts, each PROVEN against code or corpus:
-- F5 `Diff` compares a portable literal to a Revit display string (`GetValueString` emits `1' - 0"`);
-  550 of 561 corpus per-type cells fail the portable regex. Normalize both sides through
-  `UnitFormatUtils` with the parameter spec; pass a `UnitResolver` into `Reconcile`.
-- F6/F9 capture emits no unmodeled entry for what it did not read (non-array nested families return early
-  at `FamilyModelCaptureExtensions.cs:104`). Add a per-section `coverage` record beside `unmodeled`; any
-  change in a `not-read`/`partial` section is Unverifiable by construction.
-- F7 capture hoists a uniform per-type value onto the parameter; canonicalize cells on both sides before
-  diffing.
-- F1 fold-back by plane name matches zero real families and fails quiet; macros expand at parse time and
-  never fold back.
-- F2 `Ref. Level` is a Level, not a ReferencePlane; split `datums` (levels + template planes, alias table)
-  from `refPlanes` (author planes, `DATUM_PLANE_DEFINES_ORIGIN == 0`).
-- F10/F11 four Zehnder duct connectors share one face; a connector's face is its own stub's face and may be a
-  tangent plane. Connectors address their sketch plane plus two positioning planes: `{ on, at: [a, b] }`.
-- F13/F14 `select` needs `categories[]` and `placedOnly`; `blanksBecome` is a spec-keyed list, never one
-  scalar (a blank Length would become minus one foot; a blank Yes/No would flip on).
-- F15/F16 a transaction flag cannot deliver scripts: `EditFamily` and `LoadFamily` throw under a caller-held
-  project transaction (gotcha 25). The missing primitive is `FamilyVisit` (park or defer, coalesce, verify
-  load); the ops library is unproven inventory until one pod renames a parameter across three families
-  through it, live.
-- F17/F18 the length grammar must accept feet-inches; `dataType` is a canonical spec token with labels and
-  forge ids accepted on input (corpus: two spellings of one spec plus 35 nulls).
-- F19 `refLines` has no proven compiler and no corpus instance; keep it as a capture noun, refuse
-  `forms` sketched on a line.
+| Story | Necessary evidence still owed |
+|---|---|
+| BIM manager authors one portable family | Native JSON and sidecars create a family on each supported year; machine-dependent roots absent |
+| BIM manager bulk-normalizes a model | Old unmigrated template plus converted company standards, per-family receipts, exact shared identity, per-type values, associations, connectors and room point |
+| BIM manager audits/manages all families | /families snapshot, matrix, selector, plan, apply, drift, failure and repeat-run journeys on Revit |
+| Revit user asks Pea to author a family | Pea updates actual route-state/native JSON through current context/capability and target contract |
+| Engineer normalizes a third-party family | Text-to-electrical-unit mapping, populated destination preservation under mapping, explicit value override, safe association transfer |
+| Developer/Pea uses FF in scripts/Pods | One-family and multi-family mutations through public primitives, transaction/document targeting and load-back proof |
+| User reapplies a changed specification | Existing extras preserved, new connector added, explicit value changed, repeated run has no required changes |
+| User needs honest partial batch progress | Injected failure fully restores that family; successful siblings persist; failed family has actionable receipt |
+| User roundtrips supported content | Capture/parse/rebuild/reopen preserves supported semantics, omissions reported, no persistent metadata |
 
-## Needs kaitpw
+## Primitive and integration backlog
 
-- Macros: parse-time sugar only (capture emits the expanded form; the reconciler still converges) versus
-  fold-back by name (quiet failure, zero real matches).
-- `FamilyVisit` in scope for this rewrite, or Owed with the ops library marked unproven inventory.
-- `refLines` kept capture-only, or cut until a live probe proves a compiler.
-- Recreate-on-any-change for planes, dims, forms, nested, arrays, connectors versus in-place edits for the
-  few fields Revit allows (strength, subcategory, label, association).
+These are assigned to the current owner or queued behind a named prerequisite; none is waived.
+
+- P1: SDK test discovery/load/adapter diagnosis; fix the owning layer, not another watchdog.
+- N1: shared-definition resolution, GUID/tooltip fidelity, ranked source mapping, ReplaceParameter,
+  formula/type-cell/reference renames, coercion, association graph stability, safe source removal.
+- N1/P3: blank/default policy keyed by spec; fill-blank-from-source flag separate from explicit JSON values.
+- N2: unified per-family transaction boundary, result/error propagation, pre-apply hash, residue and load receipt.
+- R1: includes/presets at module/global scopes, native keyed-map composition, nested directives, sidecar paths;
+  desktop raw-file execution is root's follow-up after the shared composition contract is settled.
+- R2: stale TS contracts, fixture fallbacks, local fake apply, old build evidence, profile picker,
+  durable targeting/binding, scope head and Pea capability context; no second competing route-state owner.
+- G1: capture rulings (connector face plane, positional refLines, unsigned datums), native identity,
+  dependency-aware deletion/recreation, nested dependency loading, connectors/room point, lookup tables.
+- G1: restore FamilyModelRoundtripTests and lookup proof; preserve other rejected deletions until retargeted.
+- G2 after P1/N1: full company JSON conversion on copies with behavior census; wire complete route fixtures.
+- G3 after N2/R2: end-to-end /family and /families Revit proof; rename Pod with valued and associated params.
+- G4: Space/Partition, SDK, targeting and chat-scope changes on other branches are integration dependencies,
+  not permission to overwrite concurrent work. Census their concrete effect when a consumer needs them.
+- Final: compare feature census before/after, tally architectural/behavior changes, fold findings to ledger,
+  retire only this effort's spent processes/worktrees, and merge only coherent proven changes.
+
+## Candidate value-write strategies
+
+| Candidate | Falsifier |
+|---|---|
+| One type pass with all assignments | Correctness failure or measured unacceptable mechanical-family runtime |
+| Uniform set/unset formula | Wrong units, per-type values overwritten contrary to policy, or formula/association loss |
+| Source-parameter formula baking | Differing type results fail to survive clear/commit/reopen; unsupported conversions |
+| Temporary integer selector plus generated formulas | Setup + evaluation + cleanup loses to the batched pass, leaves metadata, or fails atomic cleanup |
+
+The user favors the temporary selector. Parameter creation speed alone does not settle the result;
+selector population, evaluation, clear, regeneration, and cleanup must be timed separately.
+No permanent strategy flag or formula compiler is authorized merely by this experiment.
+
+## Protected state and evidence boundaries
+
+- Main has substantial concurrent Space/Partition/takeoff and route work. Do not reset/stage it.
+- `pe.app-25` is the user's expensive session; previous PID 65356 and modified project-a document.
+  Read current registry before any action, but never mutate this session for the wave.
+- Main-only ignored fixture: `source/Pe.Revit.Tests/Fixtures/Projects/Old_Template.rvt`, SHA256
+  `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`.
+- Downloads candidate: `MEP_Architect_Project Name_R25_Copy_2025.07.11.rte`, user says likely old
+  unmigrated template. Both originals stay unchanged; proof opens disposable copies.
+- OneDrive Documents/Pe.Tools settings and workspaces are in scope; originals stay unchanged until
+  converted replacements are checked against the company behavior. Cloud template is already migrated.
+- The four prior native fixture tests have no accepted fresh proof. Green build is not Revit evidence.
+- `family/rulings` 9d130a5, `family/pod` 80fa435, `family/critic-purge` 6c5fcae are sibling feeders
+  from b578789, not a proven merge chain. Do not merge the critic's test deletions.
