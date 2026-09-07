@@ -264,6 +264,44 @@ public sealed class FamilyModelRoundtripTests {
         }
     }
 
+    [Test]
+    public void Bath_nested_instances_follow_authored_host_geometry() {
+        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
+        Document? bath = null;
+        Document? hinged = null;
+        try {
+            bath = FamilyModelBuild.Build(this._ui.Application,
+                RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower"), modelDirectory: directory).Document;
+            var pucks = new FilteredElementCollector(bath).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .Where(instance => instance.Symbol.Family.Name == "puck").ToList();
+            Assert.That(pucks, Has.Count.EqualTo(3));
+            Assert.That(pucks.All(instance => Math.Abs(Math.Abs(instance.HandOrientation.DotProduct(XYZ.BasisX)) - 1) < 1e-7),
+                Is.True, "Puck Center (Left/Right) references must remain parallel to X-normal host planes.");
+            var points = pucks.Select(instance => ((LocationPoint)instance.Location).Point).ToList();
+            Assert.That(points.Any(point => Math.Abs(point.X + 0.25) < 1e-7), Is.True, "Cold puck must lie on conn (left).");
+            Assert.That(points.Any(point => Math.Abs(point.X - 0.25) < 1e-7), Is.True, "Hot puck must lie on conn (right).");
+            Assert.That(points.Any(point => Math.Abs(point.Y - 2.0) < 1e-7), Is.True, "Drain puck must lie on drain y.");
+
+            hinged = FamilyModelBuild.Build(this._ui.Application,
+                RevitFamilyFixtureHarness.LoadFamilyModelFixture("d-bath-shower-refline"), modelDirectory: directory).Document;
+            var lines = new FilteredElementCollector(hinged).OfClass(typeof(CurveElement)).Cast<CurveElement>()
+                .OfType<ModelCurve>().Where(line => line.IsReferenceLine).OrderBy(line => line.Id.Value()).ToList();
+            var endpoints = lines.Select(line => line.GeometryCurve.GetEndPoint(1)).ToList();
+            var stubs = new FilteredElementCollector(hinged).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .Where(instance => instance.Symbol.Family.Name == "stub").ToList();
+            Assert.That(stubs, Has.Count.EqualTo(2));
+            Assert.That(stubs.Select(instance => ((LocationPoint)instance.Location).Point)
+                .All(point => endpoints.Any(end => point.IsAlmostEqualTo(end))), Is.True,
+                "Each stub must remain at its authored reference-line endpoint.");
+            var visibleAssociations = stubs.Count(instance => hinged.FamilyManager.GetAssociatedFamilyParameter(
+                instance.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))?.Definition.Name == "_hot conn visible");
+            Assert.That(visibleAssociations, Is.EqualTo(1), "Only the hot stub visibility is authored.");
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(bath);
+            RevitFamilyFixtureHarness.CloseDocument(hinged);
+        }
+    }
+
     [TestCase("a-box")]
     [TestCase("b-grd")]
     [TestCase("c-bath-shower")]

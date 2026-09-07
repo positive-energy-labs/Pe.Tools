@@ -499,7 +499,6 @@ public static class FamilyReconciler {
         if (After<FamilyModelDetail>("details") is { Length: > 0 } details) q.Add(new PlaceDetails(details, d));
         // 18 visibility: the element and the Yes/No parameter both exist now
         var visible = After<FamilyModelForm>("forms").Where(f => f.Spec.Visible is not null).Select(f => (f.Slug, "forms", f.Spec.Visible!))
-            .Concat(After<FamilyModelNested>("nested").Where(n => n.Spec.Visible is not null).Select(n => (n.Slug, "nested", n.Spec.Visible!)))
             .Concat(After<FamilyModelDetail>("details").Where(x => x.Spec.Visible is not null).Select(x => (x.Slug, "details", x.Spec.Visible!)))
             .ToArray();
         if (visible.Length > 0) q.Add(new SetVisibility(visible, d));
