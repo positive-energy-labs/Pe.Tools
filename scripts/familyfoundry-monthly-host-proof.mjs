@@ -183,7 +183,10 @@ function convertProfiles() {
   const marker = "\ndata      ";
   const stdoutText = `\n${result.stdout}`;
   const offset = stdoutText.lastIndexOf(marker);
-  if (offset < 0) fail("Pea conversion script returned no structured data.");
+  if (offset < 0) {
+    const compileErrors = result.stderr.split(/\r?\n/).filter((line) => line.startsWith("Error ")).join("\n");
+    fail(`Pea conversion script returned no structured data.\n${result.stdout.trim()}\n${compileErrors || result.stderr.trim()}`);
+  }
   return JSON.parse(stdoutText.slice(offset + marker.length).trim());
 }
 
