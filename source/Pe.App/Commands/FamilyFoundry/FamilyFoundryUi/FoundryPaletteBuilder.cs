@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData.Families;
@@ -60,13 +61,16 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
         var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
             if (item.Kind == FoundryFileKind.Patch) {
-                var patch = FamilyPatch.Parse(json);
+                var patch = new ModuleSettingsStorage<FamilyPatch>(context.Documents)
+                    .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
                 var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
                     ? []
                     : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
                 return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-            var parsed = FamilyModelJson.Parse(json);
+            var composed = new ModuleSettingsStorage<FamilyModel>(context.Documents)
+                .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.RootKey);
+            var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };
             var m = parsed.Value;

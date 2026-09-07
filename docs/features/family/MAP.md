@@ -18,6 +18,18 @@ Delete the map when the effort closes. No merge to main or live-product completi
 
 ## Wave 1 owners and proof gates
 
+Checkpoint: integration HEAD `f576a5a` contains the three capture rulings, restored native
+roundtrip/lookup acceptance, named-plane deletion repair, and the first normalization slice.
+Model contract checks passed 56/56 in the deterministic lane. The restored Revit tests compiled;
+their runtime assertions remain unproven. Root is closing the desktop composed-input consumer.
+
+P1 diagnosis is independently corroborated: native settings disabled ricaun and journals 3608/3610
+recorded the disabled test application. No pre-existing active quarantine appeared at 04:45:59 UTC.
+The proof owner's scoped SDK repair ran one fresh controlled diagnostic in PID 42800: 1/1 passed.
+Pe.Revit, FamilyFoundry and test assemblies loaded from the adapter test directory; Pe.App used the
+installed shell. The native settings and original fixture hashes were restored/unchanged afterward.
+The SDK repair and its cleanup behavior still require final review before adoption.
+
 Every agent is Astra medium. One writer per tree. Only proof owns Revit runtime runs this wave.
 Initial agent time box is 25 minutes; an intermediate report is due by 8 minutes.
 
@@ -86,6 +98,13 @@ These are assigned to the current owner or queued behind a named prerequisite; n
 The user favors the temporary selector. Parameter creation speed alone does not settle the result;
 selector population, evaluation, clear, regeneration, and cleanup must be timed separately.
 No permanent strategy flag or formula compiler is authorized merely by this experiment.
+
+## Current user frontier
+
+- Edit inherited content in its shared fragment by default. Raw profile JSON holds the reference;
+  an expanded editor must make that origin clear. User ruled 2026-09-06.
+- Later included fragments win conflicting values. Preserve existing explicit profile composition
+  behavior; do not add a conflict-resolution gate. User ruled 2026-09-06.
 
 ## Protected state and evidence boundaries
 

@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
 using Pe.Revit.SettingsRuntime.Json;
@@ -37,8 +38,9 @@ public static class FamilyModelSettingsRegistration {
     public static void RegisterValidator() {
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyModel>(Validate);
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyPatch>(ValidatePatch);
-        foreach (var slot in new[] { typeof(PortableLength), typeof(PortableAngle), typeof(PortableValue) })
-            JsonTypeSchemaBindingRegistry.Shared.Register(slot, StringSlotSchemaBinding.Instance);
+        foreach (var slot in new[] { typeof(PortableLength), typeof(PortableAngle) })
+            JsonTypeSchemaBindingRegistry.Shared.Register(slot, ScalarSlotSchemaBinding.String);
+        JsonTypeSchemaBindingRegistry.Shared.Register(typeof(PortableValue), ScalarSlotSchemaBinding.Value);
     }
 
     private static IReadOnlyList<SettingsDocumentValidationIssue> ValidatePatch(SettingsDocumentValidationContext context) {
@@ -53,10 +55,12 @@ public static class FamilyModelSettingsRegistration {
     private static IReadOnlyList<SettingsDocumentValidationIssue> Validate(
         SettingsDocumentValidationContext context
     ) {
-        var raw = FamilyModelJson.Parse(context.RawContent);
-        var result = raw.Value == null
-            ? raw
-            : FamilyModelJson.Parse(context.ComposedContent);
+        try {
+            _ = JToken.Parse(context.RawContent, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+        } catch (JsonException ex) {
+            return [new SettingsDocumentValidationIssue("$", FamilyModelDiagnosticCodes.InvalidJson, "error", ex.Message)];
+        }
+        var result = FamilyModelJson.Parse(context.ComposedContent);
         return result.Diagnostics
             .Select(issue => new SettingsDocumentValidationIssue(
                 issue.Path,
@@ -69,25 +73,26 @@ public static class FamilyModelSettingsRegistration {
 
 /// <summary>
 ///     A <see cref="PortableLength" />/<see cref="PortableAngle" />/<see cref="PortableValue" /> is one JSON
-///     string parsed by its own converter; the generator must not expand the record struct into an object.
+///     scalar parsed by its own converter; the generator must not expand the record struct into an object.
 /// </summary>
-internal sealed class StringSlotSchemaBinding : IJsonTypeSchemaBinding {
-    public static readonly StringSlotSchemaBinding Instance = new();
+internal sealed class ScalarSlotSchemaBinding(JsonObjectType types) : IJsonTypeSchemaBinding {
+    public static readonly ScalarSlotSchemaBinding String = new(JsonObjectType.String);
+    public static readonly ScalarSlotSchemaBinding Value = new(JsonObjectType.String | JsonObjectType.Number | JsonObjectType.Boolean);
 
-    public JsonObjectType SchemaType => JsonObjectType.String;
+    public JsonObjectType SchemaType => types;
 
     public JsonConverter? CreateConverter(PropertyInfo propertyInfo) => null;
 
-    public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) => AsString(schema, false);
+    public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) => Configure(schema, false);
 
     public void ConfigurePropertySchema(JsonSchema schema, PropertyInfo propertyInfo, JsonSchemaBuildOptions options) {
         var nullable = schema.OneOf.Any(c => c.Type == JsonObjectType.Null) || Nullable.GetUnderlyingType(propertyInfo.PropertyType) != null;
         if (schema.HasReference) schema.Reference = null;
-        AsString(schema, nullable);
+        Configure(schema, nullable);
     }
 
-    private static void AsString(JsonSchema schema, bool nullable) {
-        schema.Type = nullable ? JsonObjectType.String | JsonObjectType.Null : JsonObjectType.String;
+    private void Configure(JsonSchema schema, bool nullable) {
+        schema.Type = nullable ? types | JsonObjectType.Null : types;
         schema.OneOf.Clear();
         schema.AnyOf.Clear();
         schema.AllOf.Clear();
