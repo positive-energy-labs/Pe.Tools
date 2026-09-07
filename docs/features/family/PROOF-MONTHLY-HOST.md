@@ -99,3 +99,28 @@ Deterministic route checks cover option forwarding through plan and apply, persi
 - Type/format checks: `@pe/mcps` and `@pe/host-contracts` passed; targeted checks for `agent-contracts/src/family.ts` and `families.ts` passed.
 - Driver syntax and repository whitespace: `node --check scripts/familyfoundry-monthly-host-proof.mjs` and `git diff --check` passed.
 - The package-wide `@pe/agent-contracts` check remains red in unchanged `tests/settings-fields.test.ts:62`: its union-typed parse result accesses `.parameters`. The two changed route-contract files pass their targeted check, and the focused agent-contract test set passes.
+Raw evidence is under `.artifacts/runs/monthly45-host-plan/`: the exact request, successful response envelope, driver stdout/stderr and exit code, terminal checkpoint, and post-failure custody receipt. The checkpoint contains **0 profiles**. Controlled PID 63944 remains active for a corrected driver; the disposable document reports unmodified, the owned quarantine remains active, and protected PIDs 71484/98976 retain their exact start identities.
+
+## Canonical-selector retry and compiler diagnosis
+
+Driver commit **`91c5e06e0fa4d4be14df4632eacf7be7bec6000b`** preserves the target guard while accepting the Host's documented canonical selector `session:<pe-revit-id>`: it routes with `session:ff-profile-proof-25` and compares the response with canonical SDK ID `ff-profile-proof-25`. A single retry in `.artifacts/runs/monthly45-host-plan-2/` passed the context/document guard, then stopped before conversion or the profile loop with **0 profiles** and no Apply.
+
+The exact second cause is a missing shared scripting reference. The read-only inline compiler resolved the frozen Family Foundry assembly, whose public converter API exposes Newtonsoft types, but did not resolve sibling `Newtonsoft.Json.dll`. Compilation returned `CompilationFailed` with `CS0246`, `CS0103`, and `CS0012` for `Newtonsoft.Json`, `JObject`, `JArray`, `JsonConvert`, and `JsonSerializerSettings`.
+
+Both sanctioned callers—workspace bootstrap and inline execution canonicalization—use `ScriptProjectGenerator.GenerateProjectContent`. That generator already has one curated loaded-or-sibling support list; it contains the three `Pe.Shared.*` support assemblies and deliberately avoids general transitive closure. Isolated commit **`5f9dcfd8ef35f186dea28a81c146c40b6c2ebe81`**, based on `3a64a1b`, adds only `Newtonsoft.Json` to that catalog and one assertion to the existing generated-reference test. Exact `Debug.R25.Tests` compile: **0 errors / 130 warnings**. No runtime payload was changed or refreshed.
+
+Driver-only commit **`0a9cec49c8542739be626ac20c649cee1465037c`** now places `CompilationFailed` and every `Error compile:` line in the terminal checkpoint instead of the generic missing-data message; raw streams remain separate artifacts. Controlled PID 63944 still runs generation `20260907134906083` from source `3a64a1b`. Root review/integration and an SDK-owned cold snapshot refresh are required before another Plan attempt.
+
+## Current-payload Plan result at `915790e`
+
+The SDK reminted `ff-profile-proof-25` as controlled snapshot generation **`20260907140624373`**, build stamp **`cc33bfa2cb55`**, PID **108004** (start `2026-09-07T14:06:51.7485233Z`). Host runtime inventory resolves `Pe.App.dll`, `Pe.Revit.FamilyFoundry.dll`, and `Pe.Revit.Scripting.dll` from that generation. Their MVIDs are respectively `0215ca59-c777-4e1b-aa3e-306a59b2576b`, `9404a22c-a927-4d5c-9fcc-710517d543b8`, and `fb3cdfd0-6079-4e3c-a001-e4cf7ee6e246`. `Newtonsoft.Json.dll` is generation-local, SHA-256 `22C649F75FCE5BE7C7CCDA8880473B634EF69ECF33F5D1AB8AD892CAF47D5A07`. The exact disposable Old Template copy is active and reports unmodified. The SDK lists one owned 2025 quarantine for this session; protected PIDs 71484 and 98976 retain their original start identities.
+
+Attempt 3 (`.artifacts/runs/monthly45-host-plan-3/`) proved the Newtonsoft compiler repair: conversion compiled and returned structured data. It then exposed the next boundary defect: the driver passed each full patch through `--request`, and 31 profiles exceeded Windows' argv limit. The terminal checkpoint contains all 45 rows: 31 command-line failures, 9 converter failures, 4 other operation errors, and 1 Plan response. No Apply ran.
+
+Commit **`5bc489d8c26d3b8f167db26c1ddad4764ef867f0`** adds the ledger-owed `pea host operations call --request-file` input and makes the driver pass its already-written request artifact. A small request-file call against the pinned session passed before retry. Attempt 4 (`.artifacts/runs/monthly45-host-plan-4/`) then completed all **45** profiles: **36** converted and returned Family Foundry Plan responses; **9** failed conversion. Every returned Plan selected zero families and reported `FamilyNotFound`, so this is complete profile/converter and Plan-envelope coverage, but it does not prove a family migration plan. The converter failures are:
+
+- 1 `FormatOptions cannot be modified for specTypeId` (`DBF-DEDPV`);
+- 1 unknown group `Other` (`Grinder Pump Basin`);
+- 7 empty parameter-group labels (Modine, three WaterFurnace profiles, two Wine Guardian profiles, and Zehnder).
+
+No Apply ran. Post-pass `revit.context.summary` still reports the exact disposable project, `isModifiable: false`; the controlled session and its quarantine remain active for root review and an eventual selected Apply.
