@@ -2,6 +2,10 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
+## Current monthly Host checkpoint
+
+Controlled payload `e180b2f`, PID 47944, now proves the AprilAire 800 profile through Plan, Apply, native replacement family **6150263**, empty repeated Plan, no-op repeat Apply, and final empty Plan. A Generator read-only Plan then falsified the c55 warning guard: `EditFamily` raised failures on the transient empty-path family copy rather than the project document, leaving an exact two-warning modal. Guarded ID 1 recovery touched no constraints. SDK scope commit **`9091b5c`** and product caller commit **`8c2f79a`** are isolated and await package-family adoption/native acceptance. The focused `7cc0706` fresh gate did not dispatch because this controlled session still owns the R25 settings lease and preserves the unsaved migrated disposable state. Full receipts, runtime hashes, Linear LED collision evidence, and custody are in [PROOF-MONTHLY-HOST.md](PROOF-MONTHLY-HOST.md).
+
 ## Wave25 focused fresh acceptance at `3a64a1b`
 
 Frozen root **`3a64a1b19a884bf75cbb2561a9b058e6168a6ae4`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **5 executed, 2 passed, 3 failed, 0 skipped**. Fresh controlled Revit PID **88932**, start **2026-09-07T13:42:14.5148686Z**, dispatched exactly the requested methods through official adapter 1.11.1. Adapter test execution took **90.53 s**; total lifecycle was **1m53.59s**.
