@@ -128,12 +128,15 @@ function Up {
       continue
     }
 
+    # ponytail: one tab per agent, labeled by agent name; splits made a fibonacci of panes
     $agents = @((HdJson agent list).result.agents)
     $pane = $root
     if (@($agents | Where-Object { $_.pane_id -eq $root }).Count -gt 0) {
-      $direction = if ($agents.Count % 2 -eq 1) { 'right' } else { 'down' }
-      $pane = (HdJson pane split $root --direction $direction --cwd $cwd --no-focus).result.pane.pane_id
+      $tab = (HdJson tab create --workspace $ws --cwd $cwd --label $name --no-focus).result.tab
+      if (-not $tab) { Warn "tab for $name could not be created" }
+      $pane = @((HdJson pane list --workspace $ws).result.panes | Where-Object { $_.tab_id -eq $tab.tab_id })[0].pane_id
     }
+    else { HdJson tab rename $panes[0].tab_id $name | Out-Null }
     if (-not $pane) { Warn "no available pane for $name" }
 
     $args = @('agent', 'start', $name, '--kind', $kind, '--pane', $pane)

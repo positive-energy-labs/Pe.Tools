@@ -62,13 +62,51 @@ def text_of(content):
         )
     return ""
 
-def judge(rec, out_text, is_error_flag=None, exit_code=None):
+def unpack_output(value):
+    """Inspect known tool envelopes; keep stdout as diagnostic text, not evidence."""
+    envelopes, texts = [], []
+    def visit(v, depth=0):
+        if depth > 16:
+            return
+        if isinstance(v, str):
+            try:
+                visit(json.loads(v), depth + 1)
+            except (ValueError, TypeError):
+                texts.append(v)
+                for line in v.splitlines():
+                    if line.lstrip().startswith(("{", "[")):
+                        try:
+                            visit(json.loads(line), depth + 1)
+                        except ValueError:
+                            pass
+        elif isinstance(v, list):
+            for item in v:
+                visit(item, depth + 1)
+        elif isinstance(v, dict):
+            if any(k in v for k in ("exit_code", "isError", "is_error", "timeout", "timed_out", "wall_time_seconds")):
+                envelope = {k: v[k] for k in ("exit_code", "isError", "is_error", "timeout", "timed_out") if k in v}
+                if "output" in v:
+                    output = v["output"]
+                    envelope["_diagnostic_text"] = output if isinstance(output, str) else json.dumps(output)
+                    texts.append(envelope["_diagnostic_text"])
+                    envelopes.append(envelope)
+                    return
+                envelopes.append(envelope)
+            if isinstance(v.get("metadata"), dict) and "exit_code" in v["metadata"]:
+                envelopes.append({"exit_code": v["metadata"]["exit_code"]})
+            for key in ("text", "output", "content", "value", "result", "reason"):
+                if key in v:
+                    visit(v[key], depth + 1)
+    visit(value)
+    return envelopes, "\n".join(texts)
+
+def judge(rec, out_text, is_error_flag=None, exit_code=None, timeout_flag=None):
     t = (out_text or "")[:4000]
     if exit_code is None:
         m = EXIT_LINE.search(t)
         if m:
             exit_code = int(m.group(1))
-    timeout = bool(TIMEOUT_LINE.search(t))
+    timeout = bool(timeout_flag) or bool(TIMEOUT_LINE.search(t))
     err = bool(is_error_flag) or (exit_code not in (None, 0)) or timeout
     # rg/grep exit 1 = no matches, not an error (unless it also timed out)
     if exit_code == 1 and RG_LIKE.search(rec["cmd"] or "") and not timeout:
@@ -152,16 +190,15 @@ def mine_codex(path, since, until, calls):
                 rec = pending.pop(p.get("call_id"), None)
                 if rec is None:
                     continue
-                out = p.get("output")
-                txt, exit_code = (out if isinstance(out, str) else text_of(out)), None
-                if isinstance(out, str) and out.startswith("{"):
-                    try:
-                        oo = json.loads(out)
-                        exit_code = (oo.get("metadata") or {}).get("exit_code")
-                        txt = oo.get("output") or txt
-                    except Exception:
-                        pass
-                judge(rec, txt, exit_code=exit_code)
+                envelopes, txt = unpack_output(p.get("output"))
+                if envelopes:
+                    exit_codes = [e.get("exit_code") for e in envelopes if e.get("exit_code") is not None]
+                    judge(rec, txt,
+                          is_error_flag=any(e.get("isError") or e.get("is_error") for e in envelopes),
+                          exit_code=next((code for code in exit_codes if code != 0), exit_codes[0] if exit_codes else None),
+                          timeout_flag=any(e.get("timeout") or e.get("timed_out") for e in envelopes))
+                else:
+                    judge(rec, txt)
                 calls.append(rec)
     for rec in pending.values():
         rec.update(err=True, exit=None, timeout=True, err_snippet="<no result recorded>")
@@ -227,5 +264,16 @@ def main():
             f.write(f"- {n}x [{fm}] {s}\n")
     print(f"{len(calls)} calls -> {out}")
 
+def self_test():
+    fixture = json.dumps({"content": [{"text": json.dumps({"output": "", "exit_code": 7,
+                                                              "isError": True, "timeout": True})}]})
+    envelopes, text = unpack_output(fixture)
+    rec = {"cmd": "python broken.py"}
+    judge(rec, text, is_error_flag=envelopes[0]["isError"],
+          exit_code=envelopes[0]["exit_code"], timeout_flag=envelopes[0]["timeout"])
+    assert rec == {"cmd": "python broken.py", "err": True, "exit": 7,
+                   "timeout": True, "err_snippet": ""}
+
 if __name__ == "__main__":
+    self_test()
     main()
