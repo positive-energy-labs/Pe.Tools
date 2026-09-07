@@ -64,6 +64,7 @@ for (const [index, profile] of converted.profiles.entries()) {
   const row = { source: profile.source, conversion: profile.error ? "failed" : "converted", executionOptions: profile.executionOptions, plan: null };
   evidence.profiles.push(row);
   if (profile.error) row.error = profile.error;
+  else if (mode === "apply-one" && profile.source !== args.profile) row.skipped = "not-requested";
   else {
     try {
       row.plan = hostCall(`${pad(index + 1)}-plan`, "familyfoundry.plan", { patchJson: profile.patchJson, executionOptions: profile.executionOptions }).response;
@@ -78,7 +79,10 @@ for (const [index, profile] of converted.profiles.entries()) {
 
 if (mode === "apply-one") applyOne(converted.profiles);
 const applyFailed = mode === "apply-one" && evidence.applyOne?.status !== "completed";
-evidence.status = evidence.profiles.some((row) => row.error) || applyFailed ? "failed" : "completed";
+const planFailed = mode === "apply-one"
+  ? evidence.profiles.find((row) => row.source === args.profile)?.error
+  : evidence.profiles.some((row) => row.error);
+evidence.status = planFailed || applyFailed ? "failed" : "completed";
 evidence.finishedAt = new Date().toISOString();
 checkpoint();
 if (evidence.status !== "completed") process.exitCode = 1;
