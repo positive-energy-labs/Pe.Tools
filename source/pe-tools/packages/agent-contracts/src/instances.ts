@@ -1,6 +1,15 @@
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
-const sdkSessionSelectorSchema = z.templateLiteral(["session:", z.string().min(1)]);
+const SDK_SESSION_SELECTOR_PREFIX = "session:";
+export const sdkSessionSelectorSchema = z.templateLiteral([
+  SDK_SESSION_SELECTOR_PREFIX,
+  z.string().min(1),
+]);
+export type SdkSessionSelector = z.infer<typeof sdkSessionSelectorSchema>;
+export const sdkSessionSelectorOf = (target: string): SdkSessionSelector =>
+  sdkSessionSelectorSchema.parse(`${SDK_SESSION_SELECTOR_PREFIX}${target}`);
+export const sdkSessionTargetOf = (selector: SdkSessionSelector): string =>
+  selector.slice(SDK_SESSION_SELECTOR_PREFIX.length);
 
 const documentSelector = z.string().trim().min(1);
 export const instancesDocumentSchema = z.object({

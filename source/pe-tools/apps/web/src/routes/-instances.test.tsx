@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { SdkSessionSelector } from "@pe/agent-contracts";
 import type { useFleet, WorldFacts } from "#/host/fleet";
 
 const fleet = vi.hoisted(() => {
+  const session = {
+    sessionId: "bridge-pe-app-25",
+    sdkSessionId: "pe.app-25",
+    processId: 25,
+    year: "2025",
+    lane: "dev" as const,
+    custody: "controlled" as const,
+    activeDocumentId: "C:\\Models\\A.rvt",
+    activeDocumentTitle: "A",
+    openDocumentCount: 1,
+    observedAtUnixMs: Date.parse("2026-08-30T12:00:00.000Z"),
+  };
   const value: ReturnType<typeof useFleet> = {
     worlds: [
       {
@@ -13,6 +26,7 @@ const fleet = vi.hoisted(() => {
         phase: "ready",
         detail: "ready detail",
         pid: 25,
+        session,
         row: {
           case: "controlled-active",
           bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
@@ -68,7 +82,7 @@ const fleet = vi.hoisted(() => {
         },
       },
     ],
-    sessions: [],
+    sessions: [session],
     unreadableReceipts: [],
     processReadErrors: [],
     registryRoot: "C:\\registry",
@@ -80,6 +94,23 @@ const fleet = vi.hoisted(() => {
   };
   return { value, useFleet: vi.fn(() => value) };
 });
+
+const route = vi.hoisted(() => ({
+  apply: vi.fn(async () => ({ ok: true })),
+  command: vi.fn(async () => ({ ok: true })),
+  handle: {
+    hydrated: true,
+    slice: {
+      selectedSession: null as SdkSessionSelector | null,
+      staged: null,
+      observation: { years: [], recents: [] },
+      outcome: null,
+    },
+    busy: null,
+    failure: null,
+    outcomeUnknown: false,
+  },
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -98,6 +129,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 vi.mock("#/host/fleet", () => fleet);
+vi.mock("#/workbench/route-state", () => ({
+  useRouteState: () => ({ ...route.handle, apply: route.apply, command: route.command }),
+}));
 
 vi.mock("#/host/use-target", () => ({ useWorldLog: () => [] }));
 vi.mock("#/host/queries", () => ({ HOST_QUERY_KEY: ["host"] }));
@@ -144,6 +178,47 @@ describe("instances route", () => {
     );
 
     expect(screen.getByTestId("instances-workspace")).toBeTruthy();
+  });
+
+  it("stores canonical route selectors while keeping raw Host targets", () => {
+    route.apply.mockClear();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesPage target="" setTarget={() => {}} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /pe\.app-25 controlled ready/ }));
+    expect(route.apply).toHaveBeenLastCalledWith([
+      { path: ["selectedSession"], value: "session:pe.app-25" },
+      { path: ["staged"], value: null },
+    ]);
+
+    fireEvent.click(screen.getByRole("row", { name: /A 2025 pe\.app-25 C:\\Models\\A\.rvt/ }));
+    expect(route.apply).toHaveBeenLastCalledWith([
+      {
+        path: ["staged"],
+        value: {
+          kind: "open",
+          session: "session:pe.app-25",
+          document: "C:\\Models\\A.rvt",
+        },
+      },
+    ]);
+  });
+
+  it("resolves a canonical stored selector back to the raw Host target", () => {
+    route.handle.slice.selectedSession = "session:pe.app-25";
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesPage target="" setTarget={() => {}} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole("row", { name: /pe\.app-25 controlled ready/ }).className).toContain(
+      "on-select",
+    );
+    route.handle.slice.selectedSession = null;
   });
 
   it("uses the URL target in fixture mode", () => {
