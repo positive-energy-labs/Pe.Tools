@@ -2,6 +2,24 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
+## Wave24 seed and plumbing boundary proof at `2ce664d`
+
+Frozen root **`2ce664dfb4c38b6019aab17b9142d2c944f3e849`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **2 executed, 0 passed, 2 failed, 0 skipped**. Fresh controlled Revit PID **40944**, start **2026-09-07T13:32:40.0032970Z**, executed exactly the two requested methods through official adapter 1.11.1. The SDK CLI remained SHA256 **`2E75869B142B62D7D1CF8FCA5E0A7947A965321761CB50D0885E957B7CE5A8AD`**. Adapter execution took 39.62 s; total adapter lifecycle was 58.03 s.
+
+`matrix-seed-boundaries.json` settles the first bad boundary. Each explicit A/B/C write is correct through `beforeTopology`: text `matrix-text-1/2/3`, integer `2/3/4`, radial length `0.5/1.5/2.5` ft. At `afterTopology`, before the builder's explicit `Regenerate`, A changes to C's text/integer values and radial becomes 1 ft; C radial also becomes 1 ft; B remains correct. Commit, SaveAs/open, and project load/EditFamily preserve that already-corrupt state without further change. The test then fails only because its final artifact lookup uses `stages[^1]`, which Newtonsoft treats as an invalid object key; the complete artifact was written first. No migration operation ran in this test.
+
+The Bath test still refuses all three `Fixture Units` associations. The requested plumbing prerequisite artifact contains zero connector rows: its reduced native-only setup fails before connector creation because reconciliation leaves `datums:Center (Left/Right) (Add)` plus an unmodeled wall-face dimension. Consequently Demand configuration and `CanElementParameterBeAssociated` remain **unproven** in this wave; this is a probe-fixture blocker rather than evidence that Demand succeeds or fails.
+
+All four runtime assemblies match the frozen build byte-for-byte. `Pe.Revit.Tests.dll` is SHA256 **`65815FC2B78106E7735D43B7FFCFCA833F94D38C15E5900C7DE9DED589CB015F`**, MVID **`08a1f5b1-eec7-4108-a5d4-3eaae1ef3979`**. No TRX was emitted; `adapter.log`, `journal.3668.txt`, `run.json`, both requested JSON artifacts, the Bath diagnostic, and the saved matrix RFA are under `.artifacts/runs/wave24/`.
+
+Cleanup is exact and the source hold is released: owned PID 40944 is gone, quarantines are empty, native settings restored byte-for-byte to SHA256 **`5549535F9DC399AC994EB941D2FB881D0DDFC282E2FEA835ECE4879679CC87C9`**, and protected PIDs 71484/98976 retain their recorded start identities. Host attach PID **105596** remains live because it predates and is independent of this fresh test, still runs the owned `vp run @pe/host#attach` service, and was not a disposable child of the Revit test lifecycle.
+
+Exact command, preceded by the same command with `--plan`:
+
+```powershell
+dotnet C:/Users/kaitp/source/repos/Pe.Revit.Sdk-ff-proof/source/Pe.Revit.Cli/bin/Debug/net8.0/Pe.Revit.Cli.dll test --project C:/Users/kaitp/source/repos/Pe.Tools-family/source/Pe.Revit.Tests/Pe.Revit.Tests.csproj --year 25 --filter 'FullyQualifiedName~FamilyFoundryMatrixFixtureTests.SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries|FullyQualifiedName~FamilyModelRoundtripTests.Bath_nested_instances_follow_authored_host_geometry' --timeout-seconds 900 --no-build --json
+```
+
 ## Wave23 focused fresh acceptance at `81f486f`
 
 Frozen root **`81f486fb502cf25f458aa967d5894738572ecdac`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **6 executed, 3 passed, 3 failed, 0 skipped**. The SDK plan selected fresh mode with official adapter 1.11.1 and CLI SHA256 **`2E75869B142B62D7D1CF8FCA5E0A7947A965321761CB50D0885E957B7CE5A8AD`**. Owned Revit PID **102556** started at **2026-09-07T13:18:47.3554690Z**. Adapter execution took **84.70 s** and total native execution took **1m54.78s**.
