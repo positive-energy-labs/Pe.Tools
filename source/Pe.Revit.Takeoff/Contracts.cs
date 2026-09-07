@@ -14,7 +14,7 @@ namespace Pe.Revit.Takeoff;
 // as the A/B control that makes Hybrid's contribution measurable rather than assumed.
 public enum TakeoffSeedSource { RegionCores, Hybrid, DistanceMaxima }
 public enum TakeoffSource { Detector, Native }
-public enum ResidueReason { Border, Crumb, Rejected, Excluded }
+public enum ResidueReason { Border, Crumb, Rejected, Excluded, Held, Void }
 
 // ADR 0011: the raster is gone and 43 of the 80 knobs went with it — every one existed to repair
 // damage the renderer did. What survives is the nine SHAPE.md knobs, which are physical or law, plus
@@ -38,6 +38,7 @@ public sealed class TakeoffOptions {
 }
 
 public sealed class RoomResult {
+    public Pe.Revit.Partition.Room? Partition;
     public string Id = "";                  // R01, R02, ... (area-descending)
     public double RawSqft;                  // cell-count area (finish-face-ish)
     public double PerimeterFt;
@@ -51,6 +52,7 @@ public sealed class RoomResult {
 }
 
 public sealed class ResidueResult {
+    public Pe.Revit.Partition.Room? Partition;
     public string Id = "";
     public ResidueReason Reason;
     public double RawSqft;

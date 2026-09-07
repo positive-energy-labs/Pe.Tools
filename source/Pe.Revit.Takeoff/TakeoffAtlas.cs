@@ -136,6 +136,7 @@ public static class TakeoffAtlas
             if (r.Disposition == Pe.Revit.Partition.Disposition.Accepted)
             {
                 rooms.Add(new RoomResult {
+                    Partition = r,
                     Id = $"R{r.Index + 1:D2}", RawSqft = r.AreaSqft, PerimeterFt = Perimeter(poly),
                     LabelX = r.LabelX, LabelY = r.LabelY,
                     MeanCeilingFt = r.CeilingZ is { } cz && r.FloorZ is { } fz ? cz - fz : 0.0,
@@ -146,8 +147,9 @@ public static class TakeoffAtlas
             }
 
             residues.Add(new ResidueResult {
-                Id = $"H{r.Index + 1:D2}",
-                Reason = r.Disposition == Pe.Revit.Partition.Disposition.Void ? ResidueReason.Excluded : ResidueReason.Rejected,
+                Partition = r,
+                Id = $"R{r.Index + 1:D2}",
+                Reason = r.Disposition == Pe.Revit.Partition.Disposition.Void ? ResidueReason.Void : ResidueReason.Held,
                 RawSqft = r.AreaSqft, LabelX = r.LabelX, LabelY = r.LabelY,
                 MeanCeilingFt = r.CeilingZ is { } cz2 && r.FloorZ is { } fz2 ? cz2 - fz2 : 0.0,
                 Polygon = poly,
@@ -314,7 +316,7 @@ public static class TakeoffAtlas
         return result;
     }
 
-    private static List<List<double[]>> Boundaries(FilledRegion fr) =>
+    internal static List<List<double[]>> Boundaries(FilledRegion fr) =>
         fr.GetBoundaries().Select(loop =>
         {
             var points = new List<double[]>();

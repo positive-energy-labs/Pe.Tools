@@ -14,6 +14,9 @@ public sealed record RegionProvenance(
     string SourceRoomId,
     double SourceSqft)
 {
+    // The solver's original answer, not a designer acceptance or current edited boundary.
+    public Pe.Revit.Partition.Room? Partition { get; init; }
+
     [JsonProperty("resolutions")]
     public List<TakeoffResolution> Resolutions { get; init; } = [];
 
@@ -44,7 +47,7 @@ public sealed record RegionProvenance(
     }
 }
 
-public sealed record ExistingRegion(long ElementId, Guid Guid, List<double[]> Polygon, double Sqft);
+public sealed record ExistingRegion(long ElementId, Guid Guid, List<List<double[]>> Loops, double Sqft);
 
 public sealed record ZoneRebind(
     IReadOnlyList<(RoomResult Room, ExistingRegion Existing)> Matched,
@@ -67,7 +70,7 @@ public static class ZoneMaterializer
             if (region.Sqft <= 0 || room.RawSqft <= 0) continue;
             double ratio = room.RawSqft / region.Sqft;
             if (ratio < 0.8 || ratio > 1.25) continue;
-            if (!ZoneScope.ContainsEvenOdd(new List<List<double[]>> { region.Polygon },
+            if (!ZoneScope.ContainsEvenOdd(region.Loops,
                     room.LabelX, room.LabelY)) continue;
             claims.Add((room, region, Math.Abs(1 - ratio)));
         }
@@ -98,18 +101,11 @@ public static class ZoneMaterializer
             if (frRole != role || frGuid == null) continue;
             string? blob = TakeoffCarriers.ReadProvenance(region);
             if (blob == null || RegionProvenance.FromJson(blob).ZoneGuid != zoneGuid) continue;
-            var boundary = region.GetBoundaries();
-            if (boundary.Count == 0) continue;
-            var outer = boundary
-                .Select(loop => loop.Select(curve => {
-                    var p = curve.GetEndPoint(0);
-                    return new[] { p.X, p.Y };
-                }).ToList())
-                .OrderByDescending(pts => Math.Abs(Kernel.Shoelace(pts)))
-                .First();
+            var loops = TakeoffAtlas.Boundaries(region);
+            if (loops.Count == 0) continue;
             double sqft = region.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
-                          ?? Math.Abs(Kernel.Shoelace(outer));
-            found.Add(new ExistingRegion(region.Id.Value(), frGuid.Value, outer, sqft));
+                          ?? new ZoneScope { Loops = loops }.ExactGeometry().Area;
+            found.Add(new ExistingRegion(region.Id.Value(), frGuid.Value, loops, sqft));
         }
         return found;
     }
@@ -145,7 +141,7 @@ public static class ZoneMaterializer
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
                     (new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft)
-                        { Flags = room.Flags.ToList() }).ToJson());
+                        { Flags = room.Flags.ToList(), Partition = room.Partition }).ToJson());
                 TakeoffCarriers.WriteRoomType(region, "hall");
                 createdRegions.Add(region);
                 created++;
@@ -167,7 +163,8 @@ public static class ZoneMaterializer
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                     TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     TakeoffCarriers.WriteProvenance(region,
-                        new RegionProvenance(1, zoneGuid, runId, residue.Id, residue.RawSqft).ToJson());
+                        (new RegionProvenance(1, zoneGuid, runId, residue.Id, residue.RawSqft)
+                            { Partition = residue.Partition }).ToJson());
                     heldDrawn++;
                 }
                 catch (Exception ex)
