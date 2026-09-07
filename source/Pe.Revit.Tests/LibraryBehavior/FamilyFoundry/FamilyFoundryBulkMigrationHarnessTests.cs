@@ -189,6 +189,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
                     .Where(instance => loadedFamilyIds.Contains(instance.Symbol.Family.Id)), Is.Empty,
                 "IncludeUnusedFamilies=true must retain unplaced loaded families.");
+            WriteLocalConditionSelectorProbe(project, output);
             var settings = JObject.Parse("""
                 {"FilterFamilies":{
                   "IncludeUnusedFamilies":true,
@@ -222,6 +223,80 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(() => project.FamiliesMatching(converted.Patch.Select),
                 Throws.InvalidOperationException.With.Message.Contains("could not apply every filter"));
         } finally { project.Close(false); }
+    }
+
+    private static void WriteLocalConditionSelectorProbe(Document project, string output) {
+        const string familyName = "Prefix Fan Keep";
+        const string fieldName = "Keep";
+        const string expected = "selected";
+        var evidence = new JObject { ["family"] = familyName, ["field"] = fieldName, ["expected"] = expected };
+        using var transaction = new Transaction(project, "Probe local family condition selection");
+        transaction.Start();
+        try {
+            var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
+                .Single(candidate => candidate.Name == familyName);
+            var rows = new JArray();
+            evidence["symbols"] = rows;
+            foreach (var symbol in family.GetFamilySymbolIds().Select(project.GetElement).OfType<FamilySymbol>()
+                         .OrderBy(candidate => candidate.Name, StringComparer.Ordinal)) {
+                if (!symbol.IsActive) symbol.Activate();
+                var instance = project.Create.NewFamilyInstance(XYZ.Zero, symbol,
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                project.Regenerate();
+                var row = new JObject {
+                    ["symbolId"] = symbol.Id.Value(),
+                    ["symbolName"] = symbol.Name,
+                    ["symbolParameter"] = ParameterFacts(symbol.LookupParameter(fieldName)),
+                    ["instanceId"] = instance.Id.Value(),
+                    ["instanceParameter"] = ParameterFacts(instance.LookupParameter(fieldName))
+                };
+                rows.Add(row);
+                try {
+                    var parameter = symbol.LookupParameter(fieldName)
+                                    ?? throw new InvalidOperationException($"Loaded symbol '{symbol.Name}' has no '{fieldName}' parameter.");
+                    var rule = ParameterFilterRuleFactory.CreateEqualsRule(parameter.Id, expected);
+                    var filter = new ElementParameterFilter(rule);
+                    row["filterRuleSymbolPasses"] = rule.ElementPasses(symbol);
+                    row["filterRuleInstancePasses"] = rule.ElementPasses(instance);
+                    row["elementFilterSymbolPasses"] = filter.PassesFilter(project, symbol.Id);
+                    row["elementFilterInstancePasses"] = filter.PassesFilter(project, instance.Id);
+                } catch (Exception exception) {
+                    row["filterError"] = exception.ToString();
+                }
+            }
+
+            var categoryId = Category.GetCategory(project, BuiltInCategory.OST_MechanicalEquipment).Id;
+            var schedule = ViewSchedule.CreateSchedule(project, categoryId);
+            var fields = schedule.Definition.GetSchedulableFields();
+            evidence["schedulableFieldCount"] = fields.Count;
+            evidence["schedulableMatches"] = new JArray(fields
+                .Where(field => field.GetName(project).Equals(fieldName, StringComparison.OrdinalIgnoreCase))
+                .Select(field => new JObject {
+                    ["name"] = field.GetName(project),
+                    ["parameterId"] = field.ParameterId.Value(),
+                    ["fieldType"] = field.FieldType.ToString()
+                }));
+        } catch (Exception exception) {
+            evidence["probeError"] = exception.ToString();
+        } finally {
+            if (transaction.GetStatus() == TransactionStatus.Started) transaction.RollBack();
+            File.WriteAllText(Path.Combine(output, "local-condition-selector-prerequisites.json"), evidence.ToString());
+        }
+
+        static JObject ParameterFacts(Parameter? parameter) {
+            if (parameter is null) return new JObject { ["missing"] = true };
+            var builtIn = (parameter.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID;
+            return new JObject {
+                ["id"] = parameter.Id.Value(),
+                ["builtInParameter"] = builtIn.ToString(),
+                ["name"] = parameter.Definition.Name,
+                ["storage"] = parameter.StorageType.ToString(),
+                ["spec"] = parameter.Definition.GetDataType().TypeId,
+                ["shared"] = parameter.IsShared,
+                ["readOnly"] = parameter.IsReadOnly,
+                ["value"] = parameter.AsValueString() ?? parameter.AsString()
+            };
+        }
     }
 
     [TestCase("CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json", 4, 4)]
