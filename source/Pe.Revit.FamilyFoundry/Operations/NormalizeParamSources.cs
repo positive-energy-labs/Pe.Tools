@@ -6,7 +6,8 @@ using Pe.Shared.RevitData.Families;
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>Source migration precedes explicit authored writes. Destination state wins; source references transfer before removal.</summary>
-public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource, IReadOnlyCollection<string>? targets = null)
+public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource,
+    IReadOnlyCollection<string>? targets = null, ElectricalConnectorParameterRule? connectorRule = null)
     : DocOperation<DefaultOperationSettings>(new()) {
     public override string Description => "Normalize explicit parameter sources and shared identities";
 
@@ -86,7 +87,11 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     logs.Add(new LogEntry(sourceName).Skip("Revit-owned built-in source is read-only to removal; destination state wins."));
                     continue;
                 }
-                doc.TransferAndRemoveParameter(source, target);
+                doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {
+                    [BuiltInParameter.RBS_ELEC_VOLTAGE] = connectorRule.Voltage,
+                    [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
+                    [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
+                });
                 doc.Document.Regenerate();
                 fm = doc.FamilyManager;
                 logs.Add(new LogEntry(sourceName).Success($"Transferred references to '{targetName}' and removed source; destination values win."));
