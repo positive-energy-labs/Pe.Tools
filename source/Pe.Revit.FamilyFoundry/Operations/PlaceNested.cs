@@ -39,10 +39,10 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
             instance = doc.Document.FamilyCreate.NewFamilyInstance(point, symbol, line.SketchPlane.GetPlane().Normal, line, StructuralType.NonStructural);
         } else {
             var (hostReference, plane) = FamilyRefs.Resolve(doc, spec.Host);
-            instance = FamilyRefs.FindLevel(doc, spec.Host) is { } level
-                ? doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol, level, StructuralType.NonStructural)
-                : symbol.Family.FamilyPlacementType == FamilyPlacementType.WorkPlaneBased
-                    ? doc.Document.FamilyCreate.NewFamilyInstance(hostReference, plane.Origin, plane.XVec, symbol)
+            instance = symbol.Family.FamilyPlacementType == FamilyPlacementType.WorkPlaneBased
+                ? doc.Document.FamilyCreate.NewFamilyInstance(hostReference, plane.Origin, plane.XVec, symbol)
+                : FamilyRefs.FindLevel(doc, spec.Host) is { } level
+                    ? doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol, level, StructuralType.NonStructural)
                     : doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol,
                         doc.Document.GetElement(hostReference.ElementId), StructuralType.NonStructural);
         }
@@ -57,6 +57,11 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
         foreach (var (target, source) in spec.Associate ?? []) {
             var p = instance.LookupParameter(target) ?? throw new InvalidOperationException($"'{spec.Family}' has no parameter '{target}'.");
             FamilyRefs.Associate(doc, p, source, logs, slug);
+        }
+        if (spec.Visible is { } visible) {
+            var parameter = instance.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM)
+                            ?? throw new InvalidOperationException($"'{spec.Family}' has no IS_VISIBLE_PARAM.");
+            FamilyRefs.Associate(doc, parameter, visible, logs, slug);
         }
         logs.Add(new LogEntry(slug).Success($"Placed {spec.Family}:{spec.Type} on {spec.Host}, {spec.Align?.Count ?? 0} alignments."));
         return instance;
