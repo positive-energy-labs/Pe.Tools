@@ -171,7 +171,19 @@ public sealed class FamilyModelCaptureTests {
                 ["nestedFaceHosted"] = DescribeConnector(faceConnector)
             };
             File.WriteAllText(Path.Combine(output, "connector-host-identity.json"), evidence.ToString());
-            transaction.RollBack();
+            transaction.Commit();
+
+            document = RevitFamilyFixtureHarness.ReopenDocument(this._application, document, output, "connector-host-identity");
+            var captured = document.CaptureFamilyModel();
+            Assert.Multiple(() => {
+                Assert.That(captured.Connectors.Values.Select(connector => connector.SystemType),
+                    Is.EquivalentTo(new[] { ConnectorSystemType.ExhaustAir }),
+                    "The coincident reference-plane connector must remain modeled after reopen.");
+                Assert.That(captured.Unmodeled.Where(fact => fact.Reason == UnmodeledReason.ConnectorOnNestedFace)
+                        .Select(fact => fact.Facts.GetValueOrDefault("systemType")),
+                    Is.EquivalentTo(new[] { ConnectorSystemType.SupplyAir.ToString() }),
+                    "Only the connector natively dependent on the nested instance is refused.");
+            });
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
 

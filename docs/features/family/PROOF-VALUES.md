@@ -2,6 +2,12 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
+## Connector host identity repair at `866a7aa`
+
+Wave22's native control falsified geometric overlap as connector-host identity. At the same origin, reference plane **4023** owns dependent connector **4024**, while nested instance **4022** owns dependent connector **4025**. The raw artifact is `C:/Users/kaitp/AppData/Local/Temp/727cdfc6-235b-4225-ac05-5f5c511bc121/petrt/nativeconnec/0f53cc9a/connector-host-identity.json` and is retained under `.artifacts/runs/wave22/fixture-output/` in the proof tree.
+
+The capture repair now checks connector IDs against the already-captured nested instances' native `GetDependentElements` results. It deletes the solid/face projection heuristic, so a named-plane connector is no longer refused merely because a nested face is coincident. The existing two-control probe now saves, closes, reopens, and asserts that Exhaust remains a modeled connector while Supply is the sole `ConnectorOnNestedFace` refusal. `Debug.R25.Tests` compile: **0 errors / 130 warnings**. Post-fix native execution is deliberately pending the next root-owned wave.
+
 Latest checkpoint: **route session ready from root ca353e9**, controlled dev snapshot `ff-route-25`, PID 96920, generation `20260907062428752`, build stamp `ed915890270c`. Root source hold is released. PE Box was built with zero residue, loaded into the independent project, and read back as Width 24 in / old count 3 before saving. The family is active for R's browser journey; browser Apply/readback remains pending. Latest fresh wave remains **47 executed, 25 passed, 22 failed** at 3dc0dcb.
 
 Route evidence is in `runs/route/`. `session-start.json` identifies the repaired beta150 CLI (SHA256 `3103B2C26794AE17E5EC1379490D742F500AA37AF0732C1C72F277D3EEC6CDA2`); `payload.deps.json` separately records SDK `0.1.0-beta.151.ff.1` dependencies. `loaded-assembly-identity.json` records actual mapped paths, hashes, MVIDs and versions: Pe.App maps to the immutable generation (SHA256 `5ACC8DD724721F9F8B6A0F9EF358C144DB07FF09935322D6740C3FC9C4D11754`, MVID `3f5806f7-dd6e-415d-a9d6-110f8f9bb20d`); the installed bootstrap/loader remain beta150. Package resolution is not a claim that every loaded SDK assembly is beta151.

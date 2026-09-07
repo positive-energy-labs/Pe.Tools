@@ -709,12 +709,11 @@ internal sealed class FamilyModelCapturer {
             }
 
             var normal = c.CoordinateSystem.BasisZ.Normalize();
-            // kaitpw ruling 2026-09-06: a connector riding a nested instance's face is unmodeled, whatever plane
-            // happens to be coplanar with it; the host names no plane for it.
-            var nestedFace = this.NestedFaceUnder(c.Origin, normal);
-            if (nestedFace != null) {
+            // A connector hosted by a nested instance is unmodeled, whatever plane happens to be coplanar with it.
+            var nestedHost = this.NestedHostOf(c);
+            if (nestedHost != null) {
                 this.Add(UnmodeledReason.ConnectorOnNestedFace, "$.connectors", ("domain", domain.ToString()!), ("systemType", system.ToString()!),
-                    ("family", nestedFace.Symbol.Family.Name), ("instance", this._nestedSlug.TryGetValue(nestedFace.Id, out var nestedSlug) ? nestedSlug : ""), ("origin", Fmt(c.Origin)));
+                    ("family", nestedHost.Symbol.Family.Name), ("instance", this._nestedSlug[nestedHost.Id]), ("origin", Fmt(c.Origin)));
                 continue;
             }
 
@@ -793,20 +792,10 @@ internal sealed class FamilyModelCapturer {
         p == null || p.StorageType != StorageType.Integer ? null
         : Enum.TryParse<TOut>(((TIn)(object)p.AsInteger()).ToString(), out var v) ? v : null;
 
-    private FamilyInstance? NestedFaceUnder(XYZ point, XYZ normal) {
-        var options = new Options { DetailLevel = ViewDetailLevel.Fine };
-        foreach (var fi in Collect<FamilyInstance>().Where(f => f.Symbol?.Family != null)) {
-            var geometry = fi.get_Geometry(options);
-            if (geometry == null) continue;
-            var solids = geometry.SelectMany(g => g is GeometryInstance gi ? gi.GetInstanceGeometry().OfType<Solid>() : g is Solid s ? [s] : []);
-            if (solids.SelectMany(s => s.Faces.OfType<PlanarFace>()).Any(f =>
-                    Math.Abs(Math.Abs(f.FaceNormal.DotProduct(normal)) - 1) < Tol && Math.Abs((point - f.Origin).DotProduct(f.FaceNormal)) < FaceTol &&
-                    Try(() => f.Project(point)?.Distance < FaceTol)))
-                return fi;
-        }
-
-        return null;
-    }
+    private FamilyInstance? NestedHostOf(ConnectorElement connector) => this._nestedSlug.Keys
+        .Select(id => this._d.GetElement(id))
+        .OfType<FamilyInstance>()
+        .FirstOrDefault(instance => instance.GetDependentElements(null).Contains(connector.Id));
 
     // ───────────────────────────── settings, lookup tables, room point, template ─────────────────────────────
 
