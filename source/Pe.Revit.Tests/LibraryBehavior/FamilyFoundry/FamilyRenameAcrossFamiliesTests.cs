@@ -3,6 +3,8 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamParameter;
 
 namespace Pe.Revit.Tests;
 
@@ -89,8 +91,8 @@ public sealed class FamilyRenameAcrossFamiliesTests {
                     Assert.That(type.AsDouble(renamed), Is.EqualTo(expected).Within(1e-9));
                     Assert.That(type.AsDouble(dependent), Is.EqualTo(expected * 2).Within(1e-9));
                 }
-                Assert.That(new FilteredElementCollector(familyDocument).OfClass(typeof(Dimension)).Cast<Dimension>()
-                    .Any(d => d.FamilyLabel?.Id == renamed.Id), Is.True, "Width dimension label must survive rename.");
+                Assert.That(renamed.AssociatedDimensions(new FamilyDocument(familyDocument)), Is.Not.Empty,
+                    "Width dimension label must survive rename.");
             }
             return familyDocument.FamilyManager.Parameters.Cast<FamilyParameter>()
                 .Select(p => p.Definition.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();

@@ -639,11 +639,13 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var (_, firstError) = contexts[0].OperationLogs;
             Assert.That(firstError?.Message, Does.Contain("injected failure"));
             Assert.That(receipts, Is.EqualTo(new[] { false, true }));
-            foreach (var familyId in familyIds) {
-                var family = project.GetElement(familyId) as Family ?? throw new InvalidOperationException($"Loaded family {familyId} disappeared.");
+            for (var index = 0; index < familyNames.Length; index++) {
+                var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
+                    .Single(f => f.Name == familyNames[index]);
+                if (index == 0) Assert.That(family.Id, Is.EqualTo(familyIds[0]), "Failed family must retain its original project identity.");
                 var document = project.EditFamily(family);
                 try {
-                    if (familyId == familyIds[0]) AssertOriginalWidths(document);
+                    if (index == 0) AssertOriginalWidths(document);
                     else foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
                         Assert.That(type.AsDouble(document.FamilyManager.FindParameter("Width")), Is.EqualTo(3.0));
                 } finally { document.Close(false); }

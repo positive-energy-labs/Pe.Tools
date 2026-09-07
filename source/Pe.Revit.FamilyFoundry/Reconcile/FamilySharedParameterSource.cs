@@ -43,7 +43,7 @@ public sealed class FamilySharedParameterSource(Document document,
             SharedDefinitionSpec definition;
             if (parameter.Value<string>("sharedSpecId") is { } specId) {
                 definition = new SharedDefinitionSpec(property.Name, new ForgeTypeId(specId),
-                    Guid: parameter.Value<Guid?>("sharedGuid") ?? throw new InvalidOperationException("Embedded shared definition requires sharedGuid."),
+                    Guid: parameter["sharedGuid"]?.ToObject<Guid?>() ?? throw new InvalidOperationException("Embedded shared definition requires sharedGuid."),
                     Description: parameter.Value<string>("tooltip") ?? "",
                     Visible: parameter.Value<bool?>("sharedVisible") ?? true,
                     UserModifiable: parameter.Value<bool?>("sharedUserModifiable") ?? true);
@@ -55,7 +55,7 @@ public sealed class FamilySharedParameterSource(Document document,
                 target["isInstance"] ??= options.IsInstance;
                 if (options.GetGroupTypeId().TypeId is { Length: > 0 } groupId) target["propertiesGroup"] ??= groupId;
             }
-            if (parameter.Value<Guid?>("sharedGuid") is { } requested && requested != definition.Guid)
+            if (parameter["sharedGuid"]?.ToObject<Guid?>() is { } requested && requested != definition.Guid)
                 throw new InvalidOperationException($"Shared parameter '{property.Name}' requested GUID {requested}, source defines {definition.Guid}.");
             this._resolved[property.Name] = definition;
             this.ResolvedDefinitions[property.Name] = definition;

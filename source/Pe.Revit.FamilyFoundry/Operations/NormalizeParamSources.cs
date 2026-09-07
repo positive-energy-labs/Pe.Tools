@@ -45,6 +45,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 } else if (spec.Shared == false && existing.IsShared) {
                     existing = doc.ReplaceDefinition(existing, name, null, propertiesGroup, spec.IsInstance ?? existing.IsInstance);
                 }
+                fm = doc.FamilyManager;
                 if (dataType is not null && existing.Definition.GetDataType() != dataType)
                     throw new InvalidOperationException($"'{name}' has an incompatible destination datatype.");
                 if (!existed || spec.FillBlanksFromSources == true)
@@ -54,6 +55,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
             }
             // Definitions are stable before value copying. A source used by multiple targets cannot be consumed early.
             if (mappings.Count > 0) doc.Document.Regenerate();
+            fm = doc.FamilyManager;
             var work = transfers.Select(t => (Target: fm.FindParameter(t.Target) ?? throw new InvalidOperationException($"Created target '{t.Target}' is unavailable after regeneration."),
                 Sources: t.Sources.Select(fm.FindParameter).OfType<FamilyParameter>().ToList(), t.Strategy, t.PreservePopulated)).ToList();
             foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {

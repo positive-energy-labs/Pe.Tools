@@ -13,7 +13,11 @@ public static class FamilyParameterGetAssociated {
     public static IEnumerable<Dimension> AssociatedDimensions(this FamilyParameter param, FamilyDocument doc) {
         return new FilteredElementCollector(doc)
             .OfClass(typeof(Dimension))
-            .Cast<Dimension>().Where(dimension => dimension.FamilyLabel?.Id == param.Id).ToList();
+            .Cast<Dimension>().Where(dimension => {
+                try { return dimension.FamilyLabel?.Id == param.Id; }
+                // Native dimensions that cannot be labeled have no family-parameter association.
+                catch (Autodesk.Revit.Exceptions.InvalidOperationException) { return false; }
+            }).ToList();
     }
 
 
