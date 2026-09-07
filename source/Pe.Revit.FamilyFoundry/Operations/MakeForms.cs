@@ -78,6 +78,7 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
                 }
                 if (spec.Material is { } material && extrusion.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM) is { } mp)
                     FamilyRefs.Associate(doc, mp, material, logs, slug);
+                SetVisibility.ApplyViews(extrusion, spec.Visibility);
                 logs.Add(new LogEntry(slug).Success($"Extrusion on {spec.SketchPlane}, {locks.Count} locked lines, {spec.Start} → {spec.End}."));
             } catch (Exception ex) { logs.Add(new LogEntry(slug).Error(ex)); }
         }

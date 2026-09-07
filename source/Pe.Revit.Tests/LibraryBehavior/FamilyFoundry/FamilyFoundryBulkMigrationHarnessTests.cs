@@ -43,6 +43,29 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
     [Test]
+    public void Authored_form_view_flags_survive_build_save_and_reopen() {
+        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.family.json")));
+        var flags = JObject.Parse("""{"planRcp":false,"frontBack":false,"leftRight":true,"onlyWhenCut":false,"coarse":false,"medium":true,"fine":true}""");
+        foreach (var form in ((JObject)json["forms"]!).Properties()) form.Value["visibility"] = flags.DeepClone();
+        var model = FamilyModelJson.Parse(json.ToString()).Value!;
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Authored_form_view_flags_survive_build_save_and_reopen));
+        var path = Path.Combine(output, "Visibility.rfa");
+        var built = Pe.Revit.FamilyFoundry.Apply.FamilyModelBuild.BuildAndSave(this._application, model, path);
+        Assert.That(built.Receipt?.Converged, Is.True);
+        var document = this._application.OpenDocumentFile(path);
+        try {
+            var forms = new FilteredElementCollector(document).OfClass(typeof(Extrusion)).Cast<Extrusion>().ToList();
+            Assert.That(forms, Is.Not.Empty);
+            foreach (var form in forms) {
+                var visibility = form.GetVisibility();
+                Assert.That(new[] { visibility.IsShownInPlanRCPCut, visibility.IsShownInFrontBack, visibility.IsShownInLeftRight,
+                    visibility.IsShownOnlyWhenCut, visibility.IsShownInCoarse, visibility.IsShownInMedium, visibility.IsShownInFine },
+                    Is.EqualTo(new[] { false, false, true, false, false, true, true }));
+            }
+        } finally { document.Close(false); }
+    }
+
+    [Test]
     public void Omitted_new_parameter_scope_resolves_to_native_type_default_and_reapplies_empty() {
         var document = this.NewFamily("FF parameter scope defaults");
         try {
@@ -163,28 +186,33 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var patch = CompanyNormalizationFixture.Convert(mappings, names);
             var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
                 .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
-                .OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
+                .Select(f => f.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
             Assert.That(families, Is.Not.Empty, "The real template must provide migration candidates.");
-            foreach (var family in families) {
+            foreach (var familyName in families) {
+                var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
+                var originalId = family.Id;
                 var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
                 var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
                 var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
                 var (_, error) = contexts.Single().OperationLogs;
-                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
-                var entry = new JObject { ["family"] = family.Name, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt), ["error"] = error?.ToString() };
+                var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().SingleOrDefault(f => f.Name == familyName);
+                var entry = new JObject { ["family"] = familyName, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt), ["error"] = error?.ToString() };
                 evidence.Add(entry);
+                if (loaded is null) { failures.Add($"{familyName}: loaded family disappeared"); continue; }
+                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
                 if (error is not null || operation.LastReceipt?.Converged != true) {
-                    failures.Add($"{family.Name}: {error?.Message ?? "No committed converged receipt"}");
+                    failures.Add($"{familyName}: {error?.Message ?? "No committed converged receipt"}");
+                    if (loaded.Id != originalId) failures.Add($"{familyName}: failed migration changed project identity");
                     if (!JToken.DeepEquals(JToken.FromObject(before.Parameters), JToken.FromObject(after.Parameters)))
-                        failures.Add($"{family.Name}: failed migration changed the loaded parameter matrix");
+                        failures.Add($"{familyName}: failed migration changed the loaded parameter matrix");
                     continue;
                 }
-                if (before.Issues.Count != 0 || after.Issues.Count != 0) failures.Add($"{family.Name}: incomplete parameter evidence");
+                if (before.Issues.Count != 0 || after.Issues.Count != 0) failures.Add($"{familyName}: incomplete parameter evidence");
                 foreach (var definition in definitions) {
                     var parameter = after.Parameters.SingleOrDefault(p => p.Definition.Identity.Name == definition.Name);
                     if (parameter?.Definition.Identity.SharedGuid != definition.DownloadOptions.GetGuid().ToString())
-                        failures.Add($"{family.Name}: exact shared identity missing for {definition.Name}");
+                        failures.Add($"{familyName}: exact shared identity missing for {definition.Name}");
                 }
             }
             File.WriteAllText(Path.Combine(output, "company-template-migration.json"), evidence.ToString());

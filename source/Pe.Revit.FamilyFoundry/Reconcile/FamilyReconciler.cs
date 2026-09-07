@@ -56,6 +56,9 @@ public static class FamilyReconciler {
         var refusals = desired.Unmodeled
             .Select(f => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, f.Path, "A desired document may not carry unmodeled facts."))
             .ToList();
+        if (desired.RoomCalculationPoint is { Enabled: true, Offset.Parameter: not null })
+            refusals.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, "$.roomCalculationPoint.offset",
+                "Room calculation point offset requires an explicit length; parameter binding is not supported."));
         if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([]));
         var changes = Diff(desired, current, units);
         var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
@@ -124,7 +127,12 @@ public static class FamilyReconciler {
         Structural(changes, "details", desired.Details, current.Details, units,
             x => $"{x.View}|{x.Family}|{x.Type}|{string.Join(",", x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? [])}");
         Singleton(changes, "settings", desired.Settings, current.Settings, units);
-        Singleton(changes, "roomCalculationPoint", desired.RoomCalculationPoint, current.RoomCalculationPoint, units);
+        if (desired.RoomCalculationPoint is { } roomPoint) {
+            var actual = current.RoomCalculationPoint;
+            var same = roomPoint.Enabled == (actual?.Enabled == true) && (!roomPoint.Enabled ||
+                Same(roomPoint.Offset ?? PortableLength.FromFeet(1), actual?.Offset ?? PortableLength.FromFeet(1), units, null));
+            if (!same) changes.Add(new FamilyChange("roomCalculationPoint", "roomCalculationPoint", ChangeKind.Update, null, actual, roomPoint));
+        }
 
         Cascade(changes, desired);
         return Verifiability(changes, current);
@@ -388,7 +396,7 @@ public static class FamilyReconciler {
         // 19 family-level
         if (Of("settings", ChangeKind.Update).Length > 0 && d.Settings is { } settings) q.Add(new SetFamilySettings(settings));
         if (Of("roomCalculationPoint", ChangeKind.Update).Length > 0 && d.RoomCalculationPoint is { } rcp)
-            q.Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = rcp.Enabled, OffsetFeet = rcp.Offset?.Feet ?? 1.0 }));
+            q.Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = true }, rcp));
         // 20 run: after every add; clean never deletes a desired parameter
         if (run?.Clean == true) {
             q.Add(new CleanFamilyDocument(new CleanFamilyDocumentSettings(), d.Parameters.Keys));

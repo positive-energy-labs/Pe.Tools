@@ -16,6 +16,45 @@ public sealed class RoomDinglerTests {
     private const string RoomName = "Room Dingler Proof Room";
 
     [Test]
+    public void Reconciler_enables_moves_disables_and_reapplies_room_point(UIApplication uiApplication) {
+        var document = CreateFamilyDocument(uiApplication.Application, RoomDinglerHostKind.Unhosted, "Room point desired state");
+        try {
+            using var processor = new OperationProcessor(document);
+            foreach (var state in new[] { "{\"enabled\":true,\"offset\":\"1ft\"}", "{\"enabled\":true,\"offset\":\"2ft\"}", "{\"enabled\":false}" }) {
+                for (var pass = 0; pass < 2; pass++) {
+                    var operation = new ReconcileFamily(FamilyPatch.Parse("{\"patch\":{\"roomCalculationPoint\":" + state + "}}"));
+                    var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                    var (_, error) = contexts.Single().OperationLogs;
+                    Assert.That(error, Is.Null, error?.Message);
+                    Assert.That(operation.LastReceipt?.Converged, Is.True);
+                    if (pass == 1) Assert.That(operation.LastPlan!.Changes, Is.Empty);
+                }
+                var enabled = !state.Contains("false");
+                Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.EqualTo(enabled));
+                if (enabled) Assert.That(new FilteredElementCollector(document).OfClass(typeof(SpatialElementCalculationPoint))
+                    .Cast<SpatialElementCalculationPoint>().Single().Position.Z, Is.EqualTo(state.Contains("2ft") ? 2d : 1d).Within(1e-9));
+                if (state.Contains("2ft")) {
+                    var change = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"roomCalculationPoint":{"enabled":true,"offset":"4ft"}}}"""));
+                    var (failed, _) = processor.ProcessQueue(new OperationQueue().Add(change).Add(new RenameParams([("missing parameter", "never created")])));
+                    var (_, error) = failed.Single().OperationLogs;
+                    Assert.That(error, Is.Not.Null);
+                    Assert.That(change.LastReceipt?.Converged ?? false, Is.False);
+                    Assert.That(new FilteredElementCollector(document).OfClass(typeof(SpatialElementCalculationPoint))
+                        .Cast<SpatialElementCalculationPoint>().Single().Position.Z, Is.EqualTo(2d).Within(1e-9));
+                }
+            }
+            processor.ProcessQueue(new OperationQueue().Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = false })));
+            Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.False, "Legacy Enabled=false must still skip the operation.");
+            var rejected = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Room Offset":{"dataType":"Length","value":"3ft"}},"roomCalculationPoint":{"enabled":true,"offset":"param:Room Offset"}}}"""));
+            var (refused, _) = processor.ProcessQueue(new OperationQueue().Add(rejected));
+            var (_, refusal) = refused.Single().OperationLogs;
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(document.FamilyManager.get_Parameter("Room Offset"), Is.Null, "Refuse before mutation.");
+            Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.False);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
     public void Reconcile_plan_includes_room_dingler_only_when_the_document_declares_the_point() {
         var header = new FamilyModelHeader { Name = "T", Category = FamilyCategory.GenericModels, Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased };
         var with = new FamilyModel { Family = header, RoomCalculationPoint = new FamilyModelRoomCalculationPoint { Enabled = true } };
