@@ -4,7 +4,17 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
-Latest native checkpoint: wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed.
+Wave23 at 81f486f ran six fresh controlled Revit 2025 checks: three passed, three failed.
+Production schema capture, all seven metadata cases, and connector-host capture after reopen
+passed. The selector, positive value matrix, and GRD pre-array checks failed. Native matrix
+stage evidence shows Type A already contains Type C values before normalization; fixture
+creation/topology/save/load is the next boundary to diagnose, not a guessed migrator repair.
+Owned PID102556 exited, quarantine is empty, native settings restored exactly, and protected
+71484/98976 start identities were preserved. The source hold is released. Evidence is
+Pe.Tools-ff-proof/.artifacts/runs/wave23/run.json, cleanup-verification.json, and retained
+matrix-value-stages.json. No TRX was found; exact selector failure detail remains owed.
+
+Wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed.
 Extraction parity, schema evidence, exact-alias refusal rollback, invalid-matrix rollback,
 and connector-host identity probe passed. Raw internal parameter schemas contain descriptions
 under constants entries with id=description; N owns the production reader correction.
