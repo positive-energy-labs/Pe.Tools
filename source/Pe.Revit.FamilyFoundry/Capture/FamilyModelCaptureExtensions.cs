@@ -1,9 +1,11 @@
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using DataStorage = Autodesk.Revit.DB.ExtensibleStorage.DataStorage;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
@@ -34,6 +36,7 @@ internal sealed class FamilyModelCapturer {
     private readonly Document _d;
     private readonly FamilyManager _fm;
     private readonly List<FamilyModelUnmodeledFact> _un = [];
+    private readonly List<RevitDataIssue> _issues = [];
     private readonly Dictionary<ElementId, string> _planeName = [];
     private readonly List<ReferencePlane> _refPlanes;
     private readonly List<Level> _levels;
@@ -127,7 +130,8 @@ internal sealed class FamilyModelCapturer {
             LookupTables = this.LookupTables(snapshot),
             RoomCalculationPoint = this.RoomCalculationPoint(placement),
             Coverage = coverage,
-            Unmodeled = this._un
+            Unmodeled = this._un,
+            CaptureIssues = this._issues
         };
     }
 
@@ -616,16 +620,23 @@ internal sealed class FamilyModelCapturer {
 
     private IReadOnlyList<string> NestedPlaneNames(Family family) {
         if (this._nestedPlaneNames.TryGetValue(family.Id, out var cached)) return cached;
-        Document? nested = null;
+        var editDiagnostics = new List<(bool IsError, string Message)>();
         try {
-            nested = this._d.EditFamily(family);
-            cached = new FilteredElementCollector(nested).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
-                .Select(p => p.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.Ordinal).ToList();
+            cached = this._d.ReadFamilyCopy(family, nested =>
+                new FilteredElementCollector(nested.Document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                    .Select(p => p.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.Ordinal).ToList(),
+                editDiagnostics);
         } catch (Exception ex) {
+            if (editDiagnostics.Any(diagnostic => diagnostic.IsError))
+                throw new InvalidOperationException(
+                    $"Native errors prevented read-only capture of nested family '{family.Name}': " +
+                    string.Join("; ", editDiagnostics.Where(diagnostic => diagnostic.IsError).Select(diagnostic => diagnostic.Message)), ex);
             this.Add(UnmodeledReason.HingePlaneNotConstructible, "$.nested", ("family", family.Name), ("editFamily", ex.Message));
             cached = [];
         } finally {
-            nested?.Close(false);
+            foreach (var warning in editDiagnostics.Where(diagnostic => !diagnostic.IsError))
+                this._issues.Add(new RevitDataIssue("FamilyEditWarning", RevitDataIssueSeverity.Warning,
+                    $"EditFamily for nested family '{family.Name}': {warning.Message}", FamilyName: family.Name));
         }
 
         return this._nestedPlaneNames[family.Id] = cached;

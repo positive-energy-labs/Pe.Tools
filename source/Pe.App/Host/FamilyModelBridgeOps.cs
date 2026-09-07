@@ -26,7 +26,8 @@ internal static class FamilyModelBridgeOps {
             model.Family.Name,
             FamilyModelJson.Serialize(model),
             model.Unmodeled.Count,
-            model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()));
+            model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()),
+            model.CaptureIssues);
     }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {

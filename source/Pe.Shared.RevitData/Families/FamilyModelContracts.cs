@@ -146,6 +146,10 @@ public sealed class FamilyModel {
     [JsonProperty("unmodeled")]
     public List<FamilyModelUnmodeledFact> Unmodeled { get; init; } = [];
 
+    /// <summary>Native read diagnostics for this capture. Never authored, serialized, diffed, or hashed.</summary>
+    [JsonIgnore]
+    public List<Pe.Shared.RevitData.RevitDataIssue> CaptureIssues { get; init; } = [];
+
     /// <summary>The section names <see cref="Coverage" /> may key on.</summary>
     public static readonly string[] SectionNames = [
         "parameters", "types", "datums", "refPlanes", "refLines", "dimensions", "forms", "nested", "arrays",

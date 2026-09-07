@@ -223,6 +223,8 @@ export namespace FamilyfoundryPlan {
     }
   }
   export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
     export interface Response {
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
@@ -234,6 +236,7 @@ export namespace FamilyfoundryPlan {
       changes: FamilyFoundryChangeData[];
       runEffects: string[];
       refusals: FamilyFoundryDiagnostic[];
+      warnings: RevitDataIssue[];
     }
     /**
      * One change the reconciler would make: section + key is the address, kind is the verb.
@@ -253,6 +256,14 @@ export namespace FamilyfoundryPlan {
       message: string;
       suggestion?: null | string;
     }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
   }
 }
 
@@ -267,6 +278,8 @@ export namespace FamilyfoundryProject {
     }
   }
   export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
     export interface Response {
       families: FamilyFoundryFamilyModelData[];
       diagnostics: FamilyFoundryDiagnostic[];
@@ -280,7 +293,16 @@ export namespace FamilyfoundryProject {
         [k: string]: string;
       };
       unmodeledCount: number;
+      issues: RevitDataIssue[];
       error?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -3133,6 +3155,8 @@ export namespace RevitDetailFamilyModel {
     export interface Request {}
   }
   export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
     export interface Response {
       reading: Reading;
       familyName: string;
@@ -3141,11 +3165,20 @@ export namespace RevitDetailFamilyModel {
       coverage: {
         [k: string]: string;
       };
+      issues: RevitDataIssue[];
     }
     export interface Reading {
       at: string;
       version?: null | string;
       observedAt: string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
     }
   }
 }

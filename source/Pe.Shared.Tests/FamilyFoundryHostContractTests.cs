@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Shared.Tests;
 
@@ -11,13 +12,15 @@ public sealed class FamilyFoundryHostContractTests {
             [new FamilyFoundryFamilyPlanData(12, "PE Box", "ABCDEF0123456789",
                 [new FamilyFoundryChangeData("parameters", "PE_M_Equip_Tag", "Rename", "Tag")],
                 ["run.sort"],
-                [])],
+                [],
+                [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")])],
             [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", "Element id 9 is not a loaded family.")]);
 
         var back = JsonConvert.DeserializeObject<FamilyFoundryPlanData>(JsonConvert.SerializeObject(data))!;
         Assert.Multiple(() => {
             Assert.That(back.Families[0].Changes[0].MappedFrom, Is.EqualTo("Tag"));
             Assert.That(back.Families[0].RunEffects, Is.EqualTo(new[] { "run.sort" }));
+            Assert.That(back.Families[0].Warnings[0].Code, Is.EqualTo("FamilyEditWarning"));
             Assert.That(back.Diagnostics[0].Code, Is.EqualTo("FamilyNotFound"));
         });
     }
@@ -39,10 +42,22 @@ public sealed class FamilyFoundryHostContractTests {
     [Test]
     public void Project_contract_round_trips_model_json_and_coverage() {
         var data = new FamilyFoundryProjectData(
-            [new FamilyFoundryFamilyModelData(12, "PE Box", true, "{}", new Dictionary<string, string> { ["parameters"] = "Read" }, 0, null)],
+            [new FamilyFoundryFamilyModelData(12, "PE Box", true, "{}", new Dictionary<string, string> { ["parameters"] = "Read" }, 0,
+                [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")], null)],
             []);
 
         var back = JsonConvert.DeserializeObject<FamilyFoundryProjectData>(JsonConvert.SerializeObject(data))!;
         Assert.That(back.Families[0].Coverage["parameters"], Is.EqualTo("Read"));
+        Assert.That(back.Families[0].Issues[0].Severity, Is.EqualTo(Pe.Shared.RevitData.RevitDataIssueSeverity.Warning));
+    }
+
+    [Test]
+    public void Capture_issues_are_not_authored_family_state() {
+        var model = new FamilyModel {
+            CaptureIssues = [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning,
+                "transient element 6150368")]
+        };
+
+        Assert.That(FamilyModelJson.Serialize(model), Does.Not.Contain("FamilyEditWarning").And.Not.Contain("6150368"));
     }
 }
