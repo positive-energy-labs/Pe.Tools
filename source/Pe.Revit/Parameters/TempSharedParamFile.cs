@@ -3,9 +3,8 @@ using Autodesk.Revit.ApplicationServices;
 namespace Pe.Revit.Parameters;
 
 /// <summary>
-///     Wrapper for temporary shared parameter files that automatically cleans up on disposal.
-///     Use with 'using' statement for automatic file cleanup.
-///     Implicitly converts to DefinitionGroup for direct usage.
+///     Keeps the temporary shared parameter file active until disposal, including native add,
+///     replace and bind calls using its definitions. Dispose nested scopes in reverse order.
 /// </summary>
 public class TempSharedParamFile : IDisposable {
     public TempSharedParamFile(Document doc) {
@@ -20,9 +19,10 @@ public class TempSharedParamFile : IDisposable {
             this.DefinitionFile = this.App.OpenSharedParameterFile()
                 ?? throw new InvalidOperationException("Revit could not open the temporary shared parameter file.");
         } catch {
+            this.App.SharedParametersFilename = this.OriginalFileName;
             File.Delete(tempSharedParamFile);
             throw;
-        } finally { this.App.SharedParametersFilename = this.OriginalFileName; }
+        }
     }
 
     public DefinitionFile DefinitionFile { get; }
@@ -35,6 +35,7 @@ public class TempSharedParamFile : IDisposable {
     private Application App { get; }
 
     public void Dispose() {
+        this.App.SharedParametersFilename = this.OriginalFileName;
         try {
             if (!string.IsNullOrWhiteSpace(this.TempFileName) && File.Exists(this.TempFileName))
                 File.Delete(this.TempFileName);

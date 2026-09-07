@@ -84,14 +84,22 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Single(d => d.Name == name);
             var options = data.DownloadOptions;
             using var file = new TempSharedParamFile(document);
-            if (activeTemporaryFile) this._application.SharedParametersFilename = file.TempFileName;
+            Assert.That(this._application.SharedParametersFilename, Is.EqualTo(file.TempFileName));
             var definition = SharedParameterBinder.EnsureDefinition(file, new SharedDefinitionSpec(name, options.GetSpecTypeId(),
                 Guid: options.GetGuid(), Description: data.Description ?? "", Visible: options.Visible, UserModifiable: !data.ReadOnly));
+            if (!activeTemporaryFile) this._application.SharedParametersFilename = originalFile;
             try {
                 evidence["guid"] = definition.GUID.ToString();
                 evidence["spec"] = definition.GetDataType().TypeId;
                 using var transaction = new Transaction(document, "Probe exact native shared creation");
                 transaction.Start();
+                if (!activeTemporaryFile) {
+                    Assert.Throws<Autodesk.Revit.Exceptions.InvalidOperationException>(() =>
+                        document.FamilyManager.AddParameter(definition, otherGroup ? new ForgeTypeId("") : GroupTypeId.Data, options.IsInstance));
+                    evidence["inactiveFileRejected"] = true;
+                    transaction.RollBack();
+                    return;
+                }
                 var parameter = document.FamilyManager.AddParameter(definition, otherGroup ? new ForgeTypeId("") : GroupTypeId.Data, options.IsInstance);
                 Assert.That(parameter, Is.Not.Null);
                 evidence["created"] = true;
