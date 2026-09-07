@@ -201,6 +201,41 @@ public sealed class FamilyModelRoundtripTests {
     }
 
     [Test]
+    public void Native_stub_circle_roundtrips_and_remains_diameter_driven() {
+        var artifact = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
+            this._ui.Application, "stub.family.json", "native-roundtrip-stub-circle");
+        Document? readback = null;
+        try {
+            var capturedCircle = artifact.CapturedFromA.Forms.Values.Single().Profile!.Single().Curves.Single();
+            Assert.That(capturedCircle.Kind, Is.EqualTo(CurveKind.Circle));
+            Assert.That(capturedCircle.Diameter?.Parameter, Is.EqualTo("_diameter"));
+
+            const double diameter = 1.5 / 12.0;
+            using (var perturb = new Transaction(artifact.ReopenedB, "Verify native circle diameter driver")) {
+                perturb.Start();
+                artifact.ReopenedB.FamilyManager.Set(artifact.ReopenedB.FamilyManager.get_Parameter("_diameter"), diameter);
+                artifact.ReopenedB.Regenerate();
+                perturb.Commit();
+            }
+            artifact.ReopenedB.Save();
+            RevitFamilyFixtureHarness.CloseDocument(artifact.ReopenedB);
+
+            readback = RevitFamilyFixtureHarness.OpenFamilyDocument(this._ui.Application, artifact.SavedBPath);
+            Assert.That(readback.FamilyManager.CurrentType.AsDouble(readback.FamilyManager.get_Parameter("_diameter")),
+                Is.EqualTo(diameter).Within(1e-9));
+            var arcs = new FilteredElementCollector(readback).OfClass(typeof(Extrusion)).Cast<Extrusion>().Single()
+                .Sketch.Profile.Cast<CurveArray>().SelectMany(loop => loop.Cast<Curve>()).OfType<Arc>().ToList();
+            Assert.That(arcs, Is.Not.Empty);
+            foreach (var arc in arcs) Assert.That(arc.Radius * 2, Is.EqualTo(diameter).Within(1e-9));
+            var recaptured = readback.CaptureFamilyModel().Forms.Values.Single().Profile!.Single().Curves.Single();
+            Assert.That(recaptured.Diameter?.Parameter, Is.EqualTo("_diameter"));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(readback);
+            artifact.CloseDocuments();
+        }
+    }
+
+    [Test]
     public void Portable_values_preserve_units_and_literal_text_and_reapply_without_changes() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Portable angle", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },

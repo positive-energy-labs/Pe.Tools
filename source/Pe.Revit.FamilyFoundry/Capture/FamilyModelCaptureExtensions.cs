@@ -292,21 +292,29 @@ internal sealed class FamilyModelCapturer {
             var loops = new List<FamilyModelLoop>();
             var lockedTo = new List<string>();
             var ok = true;
+            var remaining = curves.ToList();
             foreach (CurveArray loop in ext.Sketch.Profile) {
-                var portable = new List<FamilyModelSketchCurve>();
+                var native = new List<CurveElement>();
                 foreach (Curve curve in loop) {
-                    var mc = curves.FirstOrDefault(c => FamilyRefs.SameCurve(c.GeometryCurve, curve));
-                    var item = mc is null ? null : this.SketchCurve(mc, "$.forms");
-                    if (item is null) {
-                        if (mc is null) this.Add(UnmodeledReason.CurveNotLineOrCircle, "$.forms", ("reason", "No matching native sketch curve."));
+                    var mc = remaining.FirstOrDefault(c => FamilyRefs.SameCurve(c.GeometryCurve, curve));
+                    if (mc is null) {
+                        this.Add(UnmodeledReason.CurveNotLineOrCircle, "$.forms", ("reason", "No matching native sketch curve."));
                         ok = false;
                         break;
                     }
-                    if (item.On is { } on) lockedTo.Add(on); else lockedTo.AddRange(item.Center!);
-                    portable.Add(item);
+                    native.Add(mc);
+                    remaining.Remove(mc);
                 }
-
                 if (!ok) break;
+
+                var portable = this.SketchLoop(native, "$.forms");
+                if (portable is null) {
+                    ok = false;
+                    break;
+                }
+                foreach (var item in portable) {
+                    if (item.On is { } on) lockedTo.Add(on); else lockedTo.AddRange(item.Center!);
+                }
                 loops.Add(new FamilyModelLoop { Curves = portable });
             }
 
@@ -350,17 +358,35 @@ internal sealed class FamilyModelCapturer {
         return result;
     }
 
-    private FamilyModelSketchCurve? SketchCurve(CurveElement element, string path) {
-        if (element.GeometryCurve is Line && this.LockPlane(element.Id) is { } on)
-            return new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on };
-        if (element.GeometryCurve is Arc arc && FamilyRefs.IsCircle(arc) && this.CrossingPlanesThrough(arc.Center, arc.Normal) is { } center) {
-            var label = this._dimensions.Where(d => d.References.Cast<Reference>().Any(r => r.ElementId == element.Id))
+    private List<FamilyModelSketchCurve>? SketchLoop(IReadOnlyList<CurveElement> elements, string path) {
+        if (elements.All(element => element.GeometryCurve is Arc)) {
+            var circle = this.SketchCircle(elements, path);
+            return circle is null ? null : [circle];
+        }
+        var curves = elements.Select(element => this.SketchCurve(element, path)).ToList();
+        return curves.Any(curve => curve is null) ? null : curves.Select(curve => curve!).ToList();
+    }
+
+    private FamilyModelSketchCurve? SketchCircle(IReadOnlyList<CurveElement> elements, string path) {
+        var arcs = elements.Select(element => element.GeometryCurve).OfType<Arc>().ToList();
+        if (arcs.Count == elements.Count && FamilyRefs.IsCompleteCircle(arcs) && this.CrossingPlanesThrough(arcs[0].Center, arcs[0].Normal) is { } center) {
+            var ids = elements.Select(element => element.Id).ToHashSet();
+            var label = this._dimensions.Where(d => d.References.Cast<Reference>().Any(r => ids.Contains(r.ElementId)))
                 .Select(SafeLabel).FirstOrDefault(name => name is not null);
             return new FamilyModelSketchCurve {
                 Kind = CurveKind.Circle, Center = center,
-                Diameter = label is not null ? PortableLength.Parse($"param:{label}") : PortableLength.FromFeet(arc.Radius * 2)
+                Diameter = label is not null ? PortableLength.Parse($"param:{label}") : PortableLength.FromFeet(arcs[0].Radius * 2)
             };
         }
+        this.Add(UnmodeledReason.CurveNotLineOrCircle, path,
+            ("elements", string.Join(",", elements.Select(element => element.Id))), ("curve", "Incomplete circle"));
+        return null;
+    }
+
+    private FamilyModelSketchCurve? SketchCurve(CurveElement element, string path) {
+        if (element.GeometryCurve is Line && this.LockPlane(element.Id) is { } on)
+            return new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on };
+        if (element.GeometryCurve is Arc) return this.SketchCircle([element], path);
         this.Add(element.GeometryCurve is Line ? UnmodeledReason.SketchLineUnlocked : UnmodeledReason.CurveNotLineOrCircle,
             path, ("element", element.Id.ToString()), ("curve", element.GeometryCurve.GetType().Name));
         return null;
@@ -405,9 +431,13 @@ internal sealed class FamilyModelCapturer {
                     this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "Symbolic lines do not form an unambiguous closed loop."));
                     continue;
                 }
+            } else if (first.GeometryCurve is Arc firstArc) {
+                var parts = pending.Where(curve => curve.GeometryCurve is Arc arc && FamilyRefs.SameCircle(firstArc, arc)).ToList();
+                loop.AddRange(parts);
+                foreach (var part in parts) pending.Remove(part);
             }
-            var curves = loop.Select(curve => this.SketchCurve(curve, "$.details")).ToList();
-            if (curves.Any(curve => curve is null)) continue;
+            var curves = this.SketchLoop(loop, "$.details");
+            if (curves is null) continue;
             var visibility = loop.Select(curve => this.Assoc(curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))).Distinct().ToList();
             if (visibility.Count != 1) {
                 this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "One connected loop has different curve visibility bindings."));
@@ -417,7 +447,7 @@ internal sealed class FamilyModelCapturer {
             if (view is null) continue;
             var key = Unique("detail", result.ContainsKey);
             result[key] = new FamilyModelDetail {
-                View = view.Value, Curves = [new FamilyModelLoop { Curves = curves.Select(c => c!).ToList() }], Visible = visibility[0]
+                View = view.Value, Curves = [new FamilyModelLoop { Curves = curves }], Visible = visibility[0]
             };
             this._elements.Add(result[key], loop.Select(curve => curve.Id).ToArray());
         }
