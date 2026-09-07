@@ -59,13 +59,33 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 projectDocument,
                 outputDirectory);
             familyDocument = projectDocument.EditFamily(loadedFamily);
+            var stages = new JArray();
+            var captureIndex = 0;
+            FamilyModel CaptureStage(Document document) {
+                var names = new[] { "beforeNormalization", "afterNormalization", "afterValueApply" };
+                stages.Add(new JObject {
+                    ["stage"] = captureIndex < names.Length ? names[captureIndex] : $"unexpected-{captureIndex}",
+                    ["currentType"] = document.FamilyManager.CurrentType?.Name,
+                    ["typeOrder"] = new JArray(document.FamilyManager.Types.Cast<FamilyType>().Select(type => type.Name)),
+                    ["sourceValues"] = NativeMatrixValues(document, MatrixSourceParameters),
+                    ["targetValues"] = NativeMatrixValues(document, MatrixTargetParameters)
+                });
+                captureIndex++;
+                return document.CaptureFamilyModel();
+            }
             using var processor = new OperationProcessor(familyDocument);
             var patch = SetValueMatrixPatch();
-            var operation = new ReconcileFamily(patch);
+            var operation = new ReconcileFamily(patch, capture: CaptureStage);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            File.WriteAllText(Path.Combine(outputDirectory, "matrix-value-stages.json"), stages.ToString());
             var (_, error) = contexts.Single().OperationLogs;
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(stages.Select(stage => stage.Value<string>("stage")),
+                Is.EqualTo(new[] { "beforeNormalization", "afterNormalization", "afterValueApply" }));
+            AssertMatrixStage(stages[0]!["sourceValues"]!, ExpectedSeedMatrix(), "saved/reopened fixture seed");
+            AssertMatrixStage(stages[1]!["targetValues"]!, ExpectedTargetMatrix(), "source normalization");
+            AssertMatrixStage(stages[2]!["targetValues"]!, ExpectedTargetMatrix(), "explicit value apply");
 
             AssertMigratedMatrixEndState(familyDocument, patch);
 
@@ -410,6 +430,113 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 .Select(parameter => $"nested:{parameter!.Element.Id}:{manager.GetAssociatedFamilyParameter(parameter)?.Definition.Name}"))
             .OrderBy(value => value, StringComparer.Ordinal).ToArray();
     }
+
+    private static readonly string[] MatrixSourceParameters = [
+        FamilyFoundryMatrixFixtureBuilder.SourceText,
+        FamilyFoundryMatrixFixtureBuilder.SourceBlankText,
+        FamilyFoundryMatrixFixtureBuilder.SourceFallbackText,
+        FamilyFoundryMatrixFixtureBuilder.SourceInteger,
+        FamilyFoundryMatrixFixtureBuilder.SourceYesNo,
+        FamilyFoundryMatrixFixtureBuilder.SourceNumberText,
+        FamilyFoundryMatrixFixtureBuilder.SourceLengthText,
+        FamilyFoundryMatrixFixtureBuilder.SourceVoltageText,
+        FamilyFoundryMatrixFixtureBuilder.SourceCurrentText,
+        FamilyFoundryMatrixFixtureBuilder.SourceFormulaBase,
+        FamilyFoundryMatrixFixtureBuilder.SourceFormulaNested,
+        FamilyFoundryMatrixFixtureBuilder.SourceLinearDimension,
+        FamilyFoundryMatrixFixtureBuilder.SourceAngularDimension,
+        FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension,
+        FamilyFoundryMatrixFixtureBuilder.SourceArrayCount,
+        FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth,
+        FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength
+    ];
+
+    private static readonly string[] MatrixTargetParameters = [
+        FamilyFoundryMatrixFixtureBuilder.TargetText,
+        FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber,
+        FamilyFoundryMatrixFixtureBuilder.TargetInteger,
+        FamilyFoundryMatrixFixtureBuilder.TargetYesNo,
+        FamilyFoundryMatrixFixtureBuilder.TargetNumber,
+        FamilyFoundryMatrixFixtureBuilder.TargetLength,
+        FamilyFoundryMatrixFixtureBuilder.TargetVoltage,
+        FamilyFoundryMatrixFixtureBuilder.TargetCurrent,
+        FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength,
+        FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength,
+        FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension,
+        FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension,
+        FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension,
+        FamilyFoundryMatrixFixtureBuilder.TargetArrayCount,
+        FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth
+    ];
+
+    private static JObject NativeMatrixValues(Document document, IEnumerable<string> parameterNames) {
+        var manager = document.FamilyManager;
+        var familyDocument = new FamilyDocument(document);
+        var values = new JObject();
+        foreach (var typeName in FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames) {
+            var type = manager.Types.Cast<FamilyType>().Single(item => item.Name == typeName);
+            var row = new JObject();
+            foreach (var name in parameterNames) {
+                var parameter = manager.FindParameter(name);
+                var value = parameter is null ? null : familyDocument.GetValue(type, parameter);
+                row[name] = value is null ? JValue.CreateNull() : JToken.FromObject(value);
+            }
+            values[typeName] = row;
+        }
+        return values;
+    }
+
+    private static JObject ExpectedSeedMatrix() => ExpectedMatrix((index, row) => {
+        row[FamilyFoundryMatrixFixtureBuilder.SourceText] = $"matrix-text-{index + 1}";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceBlankText] = "";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceFallbackText] = (index + 20).ToString();
+        row[FamilyFoundryMatrixFixtureBuilder.SourceInteger] = index + 2;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceYesNo] = index % 2 == 0 ? 1 : 0;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceNumberText] = index == 0 ? "42.5" : index == 1 ? "0" : "-7.25";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceLengthText] = index == 0 ? "18 in" : index == 1 ? "2\"" : "2' - 6\"";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceVoltageText] = index == 0 ? "208V" : index == 1 ? "240 V" : "120V";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceCurrentText] = index == 0 ? "12 A" : index == 1 ? "0 A" : "18.5 A";
+        row[FamilyFoundryMatrixFixtureBuilder.SourceFormulaBase] = index + 1d;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceFormulaNested] = (index + 1d) * 2;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceLinearDimension] = index + 2d;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceAngularDimension] = Math.PI / (index + 4);
+        row[FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension] = .5 + index;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceArrayCount] = index + 2;
+        row[FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth] = 1.25 + index;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength] = index + 2d;
+    });
+
+    private static JObject ExpectedTargetMatrix() => ExpectedMatrix((index, row) => {
+        row[FamilyFoundryMatrixFixtureBuilder.TargetText] = $"matrix-text-{index + 1}";
+        row[FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber] = index + 20d;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetInteger] = index + 2;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetYesNo] = index % 2 == 0 ? 1 : 0;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetNumber] = index == 0 ? 42.5 : index == 1 ? 0 : -7.25;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetLength] = index == 0 ? 1.5 : index == 1 ? 2d / 12 : 2.5;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetVoltage] = UnitUtils.ConvertToInternalUnits(index == 0 ? 208 : index == 1 ? 240 : 120, UnitTypeId.Volts);
+        row[FamilyFoundryMatrixFixtureBuilder.TargetCurrent] = UnitUtils.ConvertToInternalUnits(index == 0 ? 12 : index == 1 ? 0 : 18.5, UnitTypeId.Amperes);
+        row[FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength] = (index + 1d) * 2;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength] = index + 2d;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension] = index + 2d;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension] = Math.PI / (index + 4);
+        row[FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension] = .5 + index;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetArrayCount] = index + 2;
+        row[FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth] = 1.25 + index;
+    });
+
+    private static JObject ExpectedMatrix(Action<int, JObject> populate) {
+        var values = new JObject();
+        for (var index = 0; index < FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames.Length; index++) {
+            var row = new JObject();
+            populate(index, row);
+            values[FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[index]] = row;
+        }
+        return values;
+    }
+
+    private static void AssertMatrixStage(JToken actual, JToken expected, string stage) =>
+        Assert.That(JToken.DeepEquals(actual, expected), Is.True,
+            $"Native {stage} values differ. Expected: {expected} Actual: {actual}");
 
     private static Dictionary<string, object?> MetadataValues(Document familyDocument, IEnumerable<string> names) {
         var manager = familyDocument.FamilyManager;
