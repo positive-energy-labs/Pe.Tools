@@ -646,7 +646,6 @@ The deleted matrix's 16th mapping deliberately sends Text to Number. `Public_rec
 
 Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal --no-restore` exited 0 with 25 warnings and 0 errors. No Revit/session/runtime command ran.
 
-<<<<<<< HEAD
 ## Legacy family selector preservation - 2026-09-07
 
 At `b578789^`, `FilterFamiliesSettings.Filter` applied four ordered constraints: native `BuiltInCategory`, case-sensitive name inclusion/exclusion (`Equaling`, `Containing`, `StartingWith`), placed-instance presence, then an optional `ScheduleFilterSpec`. The current `PatchSelect` retained exact names, category tokens, and placed-only selection, while `FamilyProfileConverter` rejected every exclusion, substring/prefix include, and active condition.
@@ -656,7 +655,6 @@ At `b578789^`, `FilterFamiliesSettings.Filter` applied four ordered constraints:
 `Public_converter_selects_name_patterns_exclusions_and_native_category_identity` is the highest-surface native check: it loads seven synthetic families, converts legacy JSON, and requires the exact three-family result after all inclusion forms, all exclusion forms, and a cross-category name match. It also proves an active `IncludeByCondition` is still refused rather than omitted. That condition remains owed because its old shape is a full `ScheduleFilterSpec` (`FieldName`, filter operator, typed value) evaluated by temporary native schedules; the current patch selector has no reusable condition contract or evaluator.
 
 Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal --no-restore` exited 0 with 21 existing warnings and 0 errors after the fresh-worktree restore build. No Revit/session/runtime command ran. Native owed command: `pe-revit test --project source/Pe.Revit.Tests/Pe.Revit.Tests.csproj --filter "FullyQualifiedName~FamilyFoundryBulkMigrationHarnessTests.Public_converter_selects_name_patterns_exclusions_and_native_category_identity"`.
-=======
 ## Wave 19 parameter metadata and rollback evidence - 2026-09-07
 
 Wave 19 separated three preservation failures. First, `SetParamMetadata.Group` accepted an unknown label by constructing an arbitrary `ForgeTypeId`; the matrix fixtures' authored `"Geometry"` was not a native label and consequently never matched captured metadata. Group resolution now accepts only Revit's reflected labels or exact native group ids, and those fixtures author `GroupTypeId.Geometry.TypeId`. Unknown strings fail before mutation; no label alias was invented.
@@ -671,4 +669,3 @@ Compile lane: exact `Debug.R25.Tests` test-project build exited 0 (115 existing 
 - `FullyQualifiedName~FamilyFoundryMatrixFixtureTests.Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid`
 - `FullyQualifiedName~FamilyFoundryMatrixFixtureTests.Public_reconciler_applies_all_seven_metadata_cases_and_preserves_values`
 - `FullyQualifiedName~FamilyFoundryBulkMigrationHarnessTests.Nontrivial_destination_dependency_refuses_without_dropping_formula`
->>>>>>> eb83e04 (Preserve parameter metadata and rollback evidence)
