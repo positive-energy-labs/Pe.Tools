@@ -2,6 +2,9 @@ using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
+using Newtonsoft.Json.Linq;
+using System.Reflection;
+using System.Security.Cryptography;
 
 namespace Pe.Revit.Tests;
 
@@ -113,6 +116,122 @@ public sealed class FamilySnapshotExtractorParityTests {
             Assert.That(formulaSnapshot.FormulaState, Is.EqualTo(FormulaState.Present));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+        }
+    }
+
+    [Test]
+    public void Internal_parameter_schema_probe_records_local_and_shared_description_evidence() {
+        const string localDescription = "Known local family parameter description.";
+        const string sharedDescription = "Known shared family parameter description.";
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(Internal_parameter_schema_probe_records_local_and_shared_description_evidence));
+        var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
+            this._dbApplication,
+            BuiltInCategory.OST_GenericModel,
+            "Parameter schema description probe");
+        try {
+            FamilyParameter local;
+            FamilyParameter shared;
+            using (var transaction = new Transaction(familyDocument, "Build parameter schema probe")) {
+                _ = transaction.Start();
+                local = RevitFamilyFixtureHarness.AddFamilyParameter(
+                    familyDocument,
+                    new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
+                        "Schema Probe Local", SpecTypeId.String.Text, GroupTypeId.IdentityData, false));
+                familyDocument.FamilyManager.SetDescription(local, localDescription);
+                shared = RevitFamilyFixtureHarness.AddSharedFamilyParameter(
+                    familyDocument,
+                    new SharedDefinitionSpec(
+                        "Schema Probe Shared",
+                        SpecTypeId.String.Text,
+                        Description: sharedDescription,
+                        Guid: Guid.NewGuid()),
+                    GroupTypeId.IdentityData,
+                    false);
+                _ = transaction.Commit();
+            }
+
+            var apiAssembly = typeof(ParameterUtils).Assembly;
+            var method = typeof(ParameterUtils).GetMethod(
+                "GetParameterSchema",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                [typeof(ElementId), typeof(Document)],
+                null);
+            var parameters = new JArray(
+                Probe(local, "local", localDescription),
+                Probe(shared, "shared", sharedDescription));
+            var evidence = new JObject {
+                ["revit"] = new JObject {
+                    ["versionNumber"] = this._dbApplication.VersionNumber,
+                    ["versionBuild"] = this._dbApplication.VersionBuild
+                },
+                ["api"] = new JObject {
+                    ["assemblyName"] = apiAssembly.FullName,
+                    ["version"] = apiAssembly.GetName().Version?.ToString(),
+                    ["moduleVersionId"] = apiAssembly.ManifestModule.ModuleVersionId.ToString("D"),
+                    ["path"] = apiAssembly.Location,
+                    ["sha256"] = Sha256(apiAssembly.Location)
+                },
+                ["method"] = method == null
+                    ? null
+                    : new JObject {
+                        ["name"] = method.Name,
+                        ["isStatic"] = method.IsStatic,
+                        ["isPublic"] = method.IsPublic,
+                        ["isAssembly"] = method.IsAssembly,
+                        ["returnType"] = method.ReturnType.FullName
+                    },
+                ["parameters"] = parameters
+            };
+            var path = Path.Combine(output, "family-parameter-schema-description.json");
+            File.WriteAllText(path, evidence.ToString());
+
+            Assert.That(File.Exists(path), Is.True);
+            var emitted = JObject.Parse(File.ReadAllText(path));
+            Assert.That(emitted["api"]?["version"]?.Value<string>(), Is.Not.Empty);
+            Assert.That(emitted["api"]?["sha256"]?.Value<string>(), Has.Length.EqualTo(64));
+            Assert.That(emitted["parameters"], Has.Count.EqualTo(2));
+            foreach (var parameter in emitted["parameters"]!.OfType<JObject>()) {
+                Assert.That(parameter["id"]?.Value<long>(), Is.Not.Zero);
+                Assert.That(parameter["kind"]?.Value<string>(), Is.AnyOf("local", "shared"));
+                Assert.That(parameter["rawJson"] != null ^ parameter["error"] != null, Is.True,
+                    $"Probe '{parameter["name"]}' must emit raw JSON or one exact unwrapped error.");
+                if (parameter["rawJson"]?.Value<string>() is not { } rawJson) continue;
+                var schema = JObject.Parse(rawJson);
+                if (schema["description"] is { Type: not JTokenType.Null } observed)
+                    Assert.That(observed.Value<string>(), Is.EqualTo(parameter["expectedDescription"]?.Value<string>()),
+                        $"Observed schema description for '{parameter["name"]}' did not preserve the authored value.");
+            }
+
+            JObject Probe(FamilyParameter parameter, string kind, string expectedDescription) {
+                var row = new JObject {
+                    ["id"] = parameter.Id.Value(),
+                    ["kind"] = kind,
+                    ["name"] = parameter.Definition.Name,
+                    ["expectedDescription"] = expectedDescription
+                };
+                try {
+                    if (method == null)
+                        throw new MissingMethodException(typeof(ParameterUtils).FullName, "GetParameterSchema");
+                    row["rawJson"] = (string?)method.Invoke(null, [parameter.Id, familyDocument]);
+                } catch (Exception error) {
+                    var cause = error is TargetInvocationException { InnerException: { } inner } ? inner : error;
+                    row["errorType"] = cause.GetType().FullName;
+                    row["errorMessage"] = cause.Message;
+                    row["error"] = cause.ToString();
+                }
+
+                return row;
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+        }
+
+        static string Sha256(string path) {
+            using var stream = File.OpenRead(path);
+            using var hash = SHA256.Create();
+            return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", string.Empty);
         }
     }
 }
