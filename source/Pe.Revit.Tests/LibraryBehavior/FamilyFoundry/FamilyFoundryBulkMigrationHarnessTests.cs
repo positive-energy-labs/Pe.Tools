@@ -136,6 +136,39 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void Public_converter_preserves_supported_real_param_driven_solids_and_refuses_the_rest() {
+        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+            .Where(p => p["settings"]!["ParamDrivenSolids"] is not null).ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
+        var document = this.NewFamily("Param driven solids conversion proof");
+        try {
+            FamilyPatch Convert(string source) => Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
+                new JObject { ["ParamDrivenSolids"] = profiles[source]["settings"]!["ParamDrivenSolids"]!.DeepClone() }, [], document.GetUnits()).Patch;
+
+            var box = Convert("CmdFFManager/profiles/SavedEquip/Constrained Box.json");
+            Assert.That(((JObject)box.Patch["forms"]!).Properties().Single().Name, Is.EqualTo("Box"));
+            Assert.That(((JObject)box.Patch["refPlanes"]!).Properties().Select(p => p.Name), Is.EquivalentTo(
+                new[] { "width (Back)", "width (Front)", "length (Left)", "length (Right)", "top" }));
+            var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), box.Patch);
+            Assert.That(FamilyModelJson.Parse(merged.ToString()).Diagnostics, Is.Empty);
+
+            var hpwh = Convert("CmdFFMigrator/profiles/PlumbEquip/HPWH.json");
+            Assert.That(hpwh.Patch["forms"], Is.Null, "The frozen empty HPWH operation is a validated no-op.");
+
+            var refused = new Dictionary<string, string>(StringComparer.Ordinal) {
+                ["CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json"] = "Frame, Planes, Spans, Prisms",
+                ["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"] = "Frame",
+                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json"] = "Connectors",
+                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json"] = "Connectors",
+                ["CmdFFManager/profiles/SavedEquip/Zehnder ComfoAir 550 R Luxe ERV.json"] = "Frame, Planes, Spans, Prisms"
+            };
+            foreach (var (source, fields) in refused) {
+                var error = Assert.Throws<InvalidOperationException>(() => Convert(source));
+                Assert.That(error!.Message, Does.Contain(fields), source);
+            }
+        } finally { document.Close(false); }
+    }
+
     [TestCaseSource(nameof(CompanyProfiles))]
     [Category("CompanyCorpus")]
     public void Each_company_profile_parameter_intent_uses_public_reconciler(string profilePath) {

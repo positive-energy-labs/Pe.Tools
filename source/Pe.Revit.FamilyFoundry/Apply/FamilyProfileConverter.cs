@@ -22,7 +22,7 @@ public static class FamilyProfileConverter {
     public static FamilyProfileConversion Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
         var supported = new HashSet<string>(StringComparer.Ordinal) { "$schema", "ExecutionOptions", "FilterFamilies", "FilterApsParams",
             "AddAndMapSharedParams", "AddFamilyParams", "SetKnownParams", "CleanFamilyDocument", "SortParams", "DeleteParams",
-            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims" };
+            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims", "ParamDrivenSolids" };
         foreach (var field in composed.Properties().Where(p => !supported.Contains(p.Name)))
             if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false)
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
@@ -89,11 +89,103 @@ public static class FamilyProfileConverter {
         if (composed["AddRoomDingler"]?.ToObject<AddRoomDinglerSettings>() is { Enabled: true } room)
             exported.Patch["roomCalculationPoint"] = JObject.FromObject(new FamilyModelRoomCalculationPoint { Enabled = true, Offset = PortableLength.FromFeet(room.OffsetFeet) }, JsonSerializer.Create(FamilyModelJson.Settings));
         ConvertReferencePlanes(composed["MakeRefPlaneAndDims"], exported.Patch);
+        ConvertParamDrivenSolids(composed["ParamDrivenSolids"], exported.Patch);
         return new FamilyProfileConversion(new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
             Names = familyFilter?["IncludeNames"]?["Equaling"]?.ToObject<List<string>>(),
             Categories = familyFilter?["IncludeCategoriesEqualing"]?.ToObject<List<FamilyCategory>>(JsonSerializer.Create(FamilyModelJson.Settings)),
             PlacedOnly = familyFilter?.Value<bool?>("IncludeUnusedFamilies") == false ? true : null
         } }, executionOptions);
+    }
+
+    private static void ConvertParamDrivenSolids(JToken? token, JObject patch) {
+        if (token is null) return;
+        if (token is not JObject operation) throw new InvalidOperationException("ParamDrivenSolids must be an object.");
+        if (!operation.HasValues) return; // Frozen HPWH deliberately authors the validated empty/no-op shape.
+        RequireOnly(operation, "ParamDrivenSolids", "Enabled", "Rectangles", "Cylinders", "Connectors");
+        if (operation["Enabled"] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException("ParamDrivenSolids.Enabled must be a boolean.");
+        if (operation.Value<bool?>("Enabled") == false) return;
+        foreach (var field in new[] { "Rectangles", "Cylinders", "Connectors" })
+            if (operation[field] is { } value && value is not JArray)
+                throw new InvalidOperationException($"ParamDrivenSolids.{field} must be an array.");
+        var rectangles = operation["Rectangles"] as JArray ?? [];
+        var cylinders = operation["Cylinders"] as JArray ?? [];
+        var connectors = operation["Connectors"] as JArray ?? [];
+        if (cylinders.Count > 0 || connectors.Count > 0)
+            throw new InvalidOperationException($"ParamDrivenSolids fields require lossless native conversion: {string.Join(", ", new[] { ("Cylinders", cylinders.Count), ("Connectors", connectors.Count) }.Where(x => x.Item2 > 0).Select(x => x.Item1))}.");
+        if (rectangles.Count == 0) throw new InvalidOperationException("Active ParamDrivenSolids has no populated geometry.");
+        if (rectangles.Any(x => x is not JObject)) throw new InvalidOperationException("ParamDrivenSolids.Rectangles entries must be objects.");
+
+        var planes = patch["refPlanes"] as JObject ?? new JObject();
+        var dimensions = patch["dimensions"] as JObject ?? new JObject();
+        var forms = patch["forms"] as JObject ?? new JObject();
+        var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
+        var index = 0;
+        foreach (var rectangle in rectangles.OfType<JObject>()) {
+            RequireOnly(rectangle, "ParamDrivenSolids.Rectangle", "Name", "IsSolid", "Sketch", "Width", "Length", "Height");
+            if (rectangle["IsSolid"] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException("ParamDrivenSolids.Rectangle.IsSolid must be a boolean.");
+            var name = Required(rectangle, "Name", "ParamDrivenSolids.Rectangle");
+            var sketch = RequiredObject(rectangle, "Sketch", "ParamDrivenSolids.Rectangle");
+            RequireOnly(sketch, "ParamDrivenSolids.Rectangle.Sketch", "Kind", "Plane");
+            if (Required(sketch, "Kind", "ParamDrivenSolids.Rectangle.Sketch") != "ReferencePlane")
+                throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Sketch.Kind requires native conversion.");
+            var width = LegacyMirror(RequiredObject(rectangle, "Width", "ParamDrivenSolids.Rectangle"), "Width");
+            var length = LegacyMirror(RequiredObject(rectangle, "Length", "ParamDrivenSolids.Rectangle"), "Length");
+            var height = LegacyOffset(RequiredObject(rectangle, "Height", "ParamDrivenSolids.Rectangle"));
+            var widthAxis = AxisFor(width.Anchor);
+            var lengthAxis = AxisFor(length.Anchor);
+            if (widthAxis == lengthAxis) throw new InvalidOperationException($"ParamDrivenSolids.Rectangle '{name}' width and length use the same axis.");
+            var (w0, w1) = PlanePair(width.Base, widthAxis);
+            var (l0, l1) = PlanePair(length.Base, lengthAxis);
+            AddPlane(planes, w0, new FamilyModelRefPlane { Normal = widthAxis, At = PortableLength.FromFeet(-0.5), IsReference = width.Strength }, serializer);
+            AddPlane(planes, w1, new FamilyModelRefPlane { Normal = widthAxis, At = PortableLength.FromFeet(0.5), IsReference = width.Strength }, serializer);
+            AddPlane(planes, l0, new FamilyModelRefPlane { Normal = lengthAxis, At = PortableLength.FromFeet(-0.5), IsReference = length.Strength }, serializer);
+            AddPlane(planes, l1, new FamilyModelRefPlane { Normal = lengthAxis, At = PortableLength.FromFeet(0.5), IsReference = length.Strength }, serializer);
+            AddPlane(planes, height.Name, new FamilyModelRefPlane { Normal = AxisFor(height.Anchor), At = PortableLength.FromFeet(height.Positive ? 1 : -1), IsReference = height.Strength }, serializer);
+            AddUnique(dimensions, $"legacy-solid-{index}-width", JObject.FromObject(new FamilyModelDim { Between = [w0, w1], Label = width.Parameter }, serializer));
+            AddUnique(dimensions, $"legacy-solid-{index}-width-eq", JObject.FromObject(new FamilyModelDim { Between = [w0, width.Anchor, w1], Equality = true }, serializer));
+            AddUnique(dimensions, $"legacy-solid-{index}-length", JObject.FromObject(new FamilyModelDim { Between = [l0, l1], Label = length.Parameter }, serializer));
+            AddUnique(dimensions, $"legacy-solid-{index}-length-eq", JObject.FromObject(new FamilyModelDim { Between = [l0, length.Anchor, l1], Equality = true }, serializer));
+            AddUnique(dimensions, $"legacy-solid-{index++}-height", JObject.FromObject(new FamilyModelDim { Between = [height.Anchor, height.Name], Label = height.Parameter }, serializer));
+            AddUnique(forms, name, JObject.FromObject(new FamilyModelForm {
+                Kind = FormKind.Extrusion, Void = rectangle.Value<bool?>("IsSolid") == false,
+                SketchPlane = Required(sketch, "Plane", "ParamDrivenSolids.Rectangle.Sketch"), Start = height.Anchor, End = height.Name,
+                Profile = [new FamilyModelLoop { Curves = new[] { w0, l1, w1, l0 }.Select(p => new FamilyModelSketchCurve { Kind = CurveKind.Line, On = p }).ToList() }]
+            }, serializer));
+        }
+        patch["refPlanes"] = planes;
+        patch["dimensions"] = dimensions;
+        patch["forms"] = forms;
+    }
+
+    private static (string Base, string Anchor, string Parameter, RefStrength Strength) LegacyMirror(JObject value, string axis) {
+        RequireOnly(value, $"ParamDrivenSolids.Rectangle.{axis}", "Mode", "Parameter", "CenterAnchor", "PlaneNameBase", "Strength");
+        if (Required(value, "Mode", $"ParamDrivenSolids.Rectangle.{axis}") != "Mirror")
+            throw new InvalidOperationException($"ParamDrivenSolids.Rectangle.{axis}.Mode requires native conversion.");
+        return (Required(value, "PlaneNameBase", $"ParamDrivenSolids.Rectangle.{axis}"), Required(value, "CenterAnchor", $"ParamDrivenSolids.Rectangle.{axis}"),
+            Required(value, "Parameter", $"ParamDrivenSolids.Rectangle.{axis}"), Strength(value));
+    }
+
+    private static (string Name, string Anchor, string Parameter, bool Positive, RefStrength Strength) LegacyOffset(JObject value) {
+        RequireOnly(value, "ParamDrivenSolids.Rectangle.Height", "Mode", "Parameter", "Anchor", "Direction", "PlaneNameBase", "Strength");
+        if (Required(value, "Mode", "ParamDrivenSolids.Rectangle.Height") != "Offset")
+            throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Height.Mode requires native conversion.");
+        var direction = Required(value, "Direction", "ParamDrivenSolids.Rectangle.Height");
+        if (direction is not "Positive" and not "Negative") throw new InvalidOperationException($"Unknown ParamDrivenSolids height direction '{direction}'.");
+        return (Required(value, "PlaneNameBase", "ParamDrivenSolids.Rectangle.Height"), Required(value, "Anchor", "ParamDrivenSolids.Rectangle.Height"),
+            Required(value, "Parameter", "ParamDrivenSolids.Rectangle.Height"), direction == "Positive", Strength(value));
+    }
+
+    private static (string Negative, string Positive) PlanePair(string name, Axis axis) => axis switch {
+        Axis.PlusX => ($"{name} (Left)", $"{name} (Right)"), Axis.PlusY => ($"{name} (Back)", $"{name} (Front)"),
+        Axis.PlusZ => ($"{name} (Bottom)", $"{name} (Top)"), _ => throw new InvalidOperationException($"Unsupported ParamDrivenSolids axis '{axis}'.")
+    };
+
+    private static JObject RequiredObject(JObject value, string field, string path) =>
+        value[field] is JObject result ? result : throw new InvalidOperationException($"{path} requires object {field}.");
+
+    private static void AddUnique(JObject values, string name, JToken value) {
+        if (values.ContainsKey(name)) throw new InvalidOperationException($"ParamDrivenSolids generates duplicate native name '{name}'.");
+        values[name] = value;
     }
 
     private static ExecutionOptions ConvertExecutionOptions(JToken? token) {
@@ -160,9 +252,13 @@ public static class FamilyProfileConverter {
     private static string Required(JObject value, string field) =>
         value.Value<string>(field) is { Length: > 0 } result ? result : throw new InvalidOperationException($"MakeRefPlaneAndDims requires {field}.");
 
+    private static string Required(JObject value, string field, string path) =>
+        value[field]?.Type == JTokenType.String && (string?)value[field] is { Length: > 0 } result
+            ? result : throw new InvalidOperationException($"{path} requires string {field}.");
+
     private static void RequireOnly(JObject value, string kind, params string[] fields) {
         var unknown = value.Properties().Where(p => !fields.Contains(p.Name, StringComparer.Ordinal)).Select(p => p.Name).ToList();
-        if (unknown.Count > 0) throw new InvalidOperationException($"MakeRefPlaneAndDims {kind} fields require native conversion: {string.Join(", ", unknown)}.");
+        if (unknown.Count > 0) throw new InvalidOperationException($"{kind} fields require native conversion: {string.Join(", ", unknown)}.");
     }
 
     private static void AddPlane(JObject planes, string name, FamilyModelRefPlane plane, JsonSerializer serializer) {
