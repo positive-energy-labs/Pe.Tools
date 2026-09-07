@@ -2,6 +2,43 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
+## Wave25 focused fresh acceptance at `3a64a1b`
+
+Frozen root **`3a64a1b19a884bf75cbb2561a9b058e6168a6ae4`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **5 executed, 2 passed, 3 failed, 0 skipped**. Fresh controlled Revit PID **88932**, start **2026-09-07T13:42:14.5148686Z**, dispatched exactly the requested methods through official adapter 1.11.1. Adapter test execution took **90.53 s**; total lifecycle was **1m53.59s**.
+
+Passed: all seven metadata cases now apply while preserving values, and the invalid sixteenth mapping rolls back the whole matrix.
+
+| Failed case | First measured cause |
+|---|---|
+| Matrix seed boundary | Explicit A/B/C values remain correct through every dimension create/label call. `LinearArray.Create(...)` is the first corrupting call, before array labeling: with C current, A text changes `matrix-text-1` to `matrix-text-3`, A integer `2` to `4`, A radial `0.5` ft to `1.0` ft, and C radial `2.5` ft to `1.0` ft; B remains unchanged. Later array labeling, nested creation/association, regeneration, commit, SaveAs/reopen, and load/EditFamily do not first corrupt the observed values. |
+| Bath plumbing | The native-only control creates all three connectors. Immediately after creation and after setting direction, each is `Calculated` and `CanElementParameterBeAssociated` is false. Setting `FlowConfiguration=Demand` makes association possible for cold, hot, and drain and all three control associations succeed. Production reconciliation still refuses all three `Fixture Units` associations, so the failing path does not establish Demand before association. |
+| Local selector | Native element filters correctly distinguish type B (`Keep=selected`) from type A, but the local type parameter is absent from the 180 schedulable fields (`schedulableMatches=[]`). The temporary schedule path therefore throws at `ScheduleHelper.cs:303`; the condition itself and native element filtering are sound. |
+
+Runtime bytes exactly match the frozen build: `Pe.Revit.Tests.dll` SHA256 **`DFD9D881EB64A7C104D1C26CB9F5CC47FE439206501A5E0C4E36EECEBD3A8653`**, MVID **`20563f3a-2116-4f32-a3c6-17544e75cd5e`**; `Pe.Revit.FamilyFoundry.dll` **`D3332742C6771BA093901130EE237C5FB7A89F3C45AC7C2F01C117F15ADC8C3D`**; `Pe.Revit.dll` **`F597B45D9170E606C2297103C4A69676FE829E2C62874D691F26CE7302168381`**; `Pe.Shared.RevitData.dll` **`5FB8C55444B5191D5F152CD210028EFAD442AA5BA178B6C2DD103C65D03362B9`**. The SDK CLI is SHA256 **`2E75869B142B62D7D1CF8FCA5E0A7947A965321761CB50D0885E957B7CE5A8AD`**. No TRX was emitted; `adapter.log`, `run.json`, `journal.3669.txt`, identity/custody receipts, and all three native probes are under `.artifacts/runs/wave25/`.
+
+Cleanup is exact and the source hold is released: PID 88932 is gone, quarantines are empty, native settings restored byte-for-byte to SHA256 **`5549535F9DC399AC994EB941D2FB881D0DDFC282E2FEA835ECE4879679CC87C9`**, and protected PIDs 71484/98976 retain exact start identities. Host attach PID 105596 remains live because it predates this fresh run and is retained for the requested later controlled-session route.
+
+Exact command, preceded by the same command with `--plan`:
+
+```powershell
+dotnet C:/Users/kaitp/source/repos/Pe.Revit.Sdk-ff-proof/source/Pe.Revit.Cli/bin/Debug/net8.0/Pe.Revit.Cli.dll test --project C:/Users/kaitp/source/repos/Pe.Tools-family/source/Pe.Revit.Tests/Pe.Revit.Tests.csproj --year 25 --filter 'FullyQualifiedName~FamilyFoundryMatrixFixtureTests.SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries|FullyQualifiedName~FamilyModelRoundtripTests.Bath_nested_instances_follow_authored_host_geometry|FullyQualifiedName~FamilyFoundryBulkMigrationHarnessTests.Public_converter_selects_name_patterns_exclusions_and_native_category_identity|FullyQualifiedName~FamilyFoundryMatrixFixtureTests.Public_reconciler_applies_all_seven_metadata_cases_and_preserves_values|FullyQualifiedName~FamilyFoundryMatrixFixtureTests.Public_reconciler_rolls_back_the_whole_matrix_when_the_sixteenth_mapping_is_invalid' --timeout-seconds 900 --no-build --json
+```
+
+## Monthly 45-profile controlled dev handoff
+
+The frozen **`3a64a1b19a884bf75cbb2561a9b058e6168a6ae4`** checkout is materialized as controlled dev snapshot **`ff-profile-proof-25`**, generation **`20260907134906083`**, build stamp **`a5bcd39811e4`**. Revit PID **63944** started at **2026-09-07T13:49:40.3187299Z**; its bridge ID is **`session-ab3cc74686a004da`**. The existing compatible Host is PID **92360**, URL **`http://127.0.0.1:52068`**, source root `Pe.Tools-family/source/pe-tools`, and reports the bridge connected. Host calls should target header `x-pe-bridge-session-id: session:ff-profile-proof-25` (or the bridge ID), because the bare SDK session ID is not a valid selector.
+
+The active document is the disposable, non-workshared, unmodified copy **`C:/Users/kaitp/source/repos/Pe.Tools-ff-proof/.artifacts/runs/monthly45-dev/Old_Template-monthly45-disposable.rvt`**. Source and copy are both SHA256 **`8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`**. No Family Foundry operation has run.
+
+The Host runtime summary independently reports the loaded generation assemblies:
+
+| Assembly | SHA256 | Runtime MVID |
+|---|---|---|
+| `Pe.App.dll` | `2594A150C547AB65CA05B1A3843135C15CCC5C5FB099B209FFC2B291A5C508D3` | `ab793f02-6f62-44f1-908f-895b427a34c4` |
+| `Pe.Revit.FamilyFoundry.dll` | `60BAACD477D67493E6E522F595113399BAFE9111ADA84B0A0B6926C8AA95BADE` | `795a7731-666c-4093-8d95-1cd69a1dfe46` |
+
+The session intentionally remains active for the monthly plan driver. Its SDK quarantine lease is active; the exact native original is retained as SHA256 **`5549535F9DC399AC994EB941D2FB881D0DDFC282E2FEA835ECE4879679CC87C9`** and must be restored by SDK session cleanup. Protected PIDs 71484 and 98976 were not touched. Machine-readable handoff, start/bridge/document receipts, template-copy receipt, and loaded assembly inventory are under `.artifacts/runs/monthly45-dev/`.
+
 ## Wave24 seed and plumbing boundary proof at `2ce664d`
 
 Frozen root **`2ce664dfb4c38b6019aab17b9142d2c944f3e849`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **2 executed, 0 passed, 2 failed, 0 skipped**. Fresh controlled Revit PID **40944**, start **2026-09-07T13:32:40.0032970Z**, executed exactly the two requested methods through official adapter 1.11.1. The SDK CLI remained SHA256 **`2E75869B142B62D7D1CF8FCA5E0A7947A965321761CB50D0885E957B7CE5A8AD`**. Adapter execution took 39.62 s; total adapter lifecycle was 58.03 s.
