@@ -112,9 +112,12 @@ public static class TakeoffAtlas
     // maps its answer onto the materializer exactly as the raster result was mapped — Accepted to
     // Room Regions, Held and Void to held regions, Excluded drawn as nothing — and the
     // rebind-by-geometry rule in ZoneMaterializer is untouched.
-    public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) =>
-        MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
+    public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) {
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
+        Pe.Revit.Space.SpaceWorld.Prepare(doc);
+        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
             doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion)));
+    }
 
     public static TakeoffPartitionResult MaterializePartition(
         Document doc,

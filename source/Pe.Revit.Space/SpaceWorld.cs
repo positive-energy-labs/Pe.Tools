@@ -36,6 +36,15 @@ public static class SpaceWorld {
         return world;
     }
 
+    /// <summary>Explicit operation preparation: patch host edits and rebuild unbuilt or dirty linked sources.</summary>
+    public static World Prepare(Document document) {
+        var world = Resident(document);
+        world.ApplyQueued();
+        if (world.BuiltUtc == default || world.Partitions.Any(partition => partition.Dirty))
+            world.BuildAll(document);
+        return world;
+    }
+
     /// <summary>The world for this host document, created empty if it does not exist yet.</summary>
     public static World Resident(Document document) {
         lock (Sync) {

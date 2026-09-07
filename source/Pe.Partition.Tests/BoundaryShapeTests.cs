@@ -53,7 +53,8 @@ public sealed class BoundaryShapeTests {
     [TestCase("project-c-live")]
     public void Saved_geometry_regularizes_without_replaying_moved_probes(string fixture) {
         var input = Load<PartitionInput>(fixture, "partition-input");
-        var saved = Load<PartitionAnswer>(fixture, "answer");
+        // Keep the unregularized control fixed as live probe fixtures are recaptured.
+        var saved = Load<PartitionAnswer>(fixture, fixture == "project-a-live" ? "shape-before" : "answer");
         var before = saved.Rooms.Select(Polygon).ToArray();
         var indices = Enumerable.Range(0, before.Length).Where(i => saved.Rooms[i].Proposal is null
             && saved.Rooms[i].Disposition != Disposition.Excluded && saved.Rooms[i].Reason != "native-overlap").ToArray();
