@@ -7,8 +7,13 @@ namespace Pe.Revit.Tests;
 /// <summary>Native family.json acceptance through saved RFAs, with no authored state available to capture.</summary>
 [TestFixture]
 public sealed class FamilyModelRoundtripTests {
+    private UIApplication _ui = null!;
+
+    [OneTimeSetUp]
+    public void SetUp(UIApplication ui) => this._ui = ui;
+
     [Test]
-    public void Reapply_moves_a_named_plane_in_the_same_family(UIApplication ui) {
+    public void Reapply_moves_a_named_plane_in_the_same_family() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Plane reapply", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
               "types": { "Standard": {} }, "refPlanes": { "Service clearance": { "normal": "PlusX", "at": "1ft" } } }
@@ -17,7 +22,7 @@ public sealed class FamilyModelRoundtripTests {
         var desired = parsed.Value!;
         Document? document = null;
         try {
-            var built = FamilyModelBuild.Build(ui.Application, desired);
+            var built = FamilyModelBuild.Build(this._ui.Application, desired);
             document = built.Document;
             Assert.That(built.Receipt?.Converged, Is.True);
             desired.RefPlanes["Service clearance"] = new FamilyModelRefPlane { Normal = Axis.PlusX, At = PortableLength.FromFeet(2) };
@@ -35,9 +40,9 @@ public sealed class FamilyModelRoundtripTests {
     [TestCase("b-grd")]
     [TestCase("c-bath-shower")]
     [TestCase("d-bath-shower-refline")]
-    public void Authored_family_survives_capture_rebuild_and_reopen(string fixture, UIApplication ui) {
+    public void Authored_family_survives_capture_rebuild_and_reopen(string fixture) {
         var artifact = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
-            ui.Application, $"{fixture}.family.json", $"native-roundtrip-{fixture}");
+            this._ui.Application, $"{fixture}.family.json", $"native-roundtrip-{fixture}");
         try {
             AssertNativeContent(artifact.ReopenedA, artifact.Authored);
             AssertNativeContent(artifact.ReopenedB, artifact.Authored);

@@ -21,7 +21,8 @@ Delete the map when the effort closes. No merge to main or live-product completi
 Checkpoint: integration HEAD `f576a5a` contains the three capture rulings, restored native
 roundtrip/lookup acceptance, named-plane deletion repair, and the first normalization slice.
 Model contract checks passed 56/56 in the deterministic lane. The restored Revit tests compiled;
-their runtime assertions remain unproven. Root is closing the desktop composed-input consumer.
+their runtime assertions remain unproven. Commit `540154e` closes the desktop composed-input
+consumer and accepts native numeric/boolean scalar values in generated settings schemas.
 
 P1 diagnosis is independently corroborated: native settings disabled ricaun and journals 3608/3610
 recorded the disabled test application. No pre-existing active quarantine appeared at 04:45:59 UTC.
@@ -29,6 +30,21 @@ The proof owner's scoped SDK repair ran one fresh controlled diagnostic in PID 4
 Pe.Revit, FamilyFoundry and test assemblies loaded from the adapter test directory; Pe.App used the
 installed shell. The native settings and original fixture hashes were restored/unchanged afterward.
 The SDK repair and its cleanup behavior still require final review before adoption.
+
+P2/P3 now have fresh controlled Revit 2025 evidence in the proof tree, code `39cde8f`:
+three alternating repetitions on a 12-type Mitsubishi filter-box family from the old template,
+five target parameters, zero commit/reopen mismatches. Median mutation times: batched setters
+4867.6862 ms; source-parameter formulas 924.2989 ms; temporary selector 4133.6719 ms.
+Source parameters were already populated, so that timing applies to migration from existing data.
+Selector creation/population/cleanup are included. Existing formulas and associations survived;
+injected failure rolled back the selector and values. No selector optimization is adopted yet.
+New Number/Integer/Temperature parameters reported HasValue=true/raw zero; blank writes were
+rejected. The existing uniform helper falsely succeeded with a rounded 0 K literal; `39cde8f`
+repairs formatting and clear-error reporting. Broader units/cultures remain unproven.
+
+R1/R2 first consumer slice `8c36c0d` is ready in the route tree: composed native payloads,
+native parameter projection, four direct fixture links, per-family hashes and receipts.
+Deterministic checks pass there; current-family Apply, browser and runtime proof remain open.
 
 Every agent is Astra medium. One writer per tree. Only proof owns Revit runtime runs this wave.
 Initial agent time box is 25 minutes; an intermediate report is due by 8 minutes.
@@ -103,8 +119,10 @@ No permanent strategy flag or formula compiler is authorized merely by this expe
 
 - Edit inherited content in its shared fragment by default. Raw profile JSON holds the reference;
   an expanded editor must make that origin clear. User ruled 2026-09-06.
-- Later included fragments win conflicting values. Preserve existing explicit profile composition
-  behavior; do not add a conflict-resolution gate. User ruled 2026-09-06.
+- Included fragments merge recursively by field. Later values win; an earlier Width data type
+  survives a later Width value-only fragment. User ruled 2026-09-07.
+- Measurable authored values require explicit units; Number/Integer stay unitless. Normalize owns
+  validation and portable capture, root owns native fixture conversion after the frozen proof run.
 
 ## Protected state and evidence boundaries
 
