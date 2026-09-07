@@ -101,6 +101,69 @@ public sealed class ElectricalConnectorAssociationTests {
         } finally { document.Close(false); }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Phase_values_and_number_of_poles_association_follow_their_explicit_destinations(bool unresolvedRoute) {
+        var document = this.NewFamily("Electrical connector source routing");
+        try {
+            ElementId connectorId;
+            using (var transaction = new Transaction(document, "Seed legacy Phase association")) {
+                transaction.Start();
+                var manager = document.FamilyManager;
+                var phase = manager.AddParameter("Phase", GroupTypeId.Electrical, SpecTypeId.Int.NumberOfPoles, false);
+                foreach (var type in manager.Types.Cast<FamilyType>()) {
+                    manager.CurrentType = type;
+                    manager.Set(phase, 3);
+                }
+                var plane = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                    .OrderBy(item => item.Id.Value()).First();
+                var connector = ConnectorElement.CreateElectricalConnector(document, ElectricalSystemType.PowerBalanced, plane.GetReference());
+                document.Regenerate();
+                manager.AssociateElementParameterToFamilyParameter(
+                    connector.get_Parameter(BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES), phase);
+                connectorId = connector.Id;
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var parameters = new Newtonsoft.Json.Linq.JObject {
+                ["PE_E___Phase"] = new Newtonsoft.Json.Linq.JObject {
+                    ["dataType"] = SpecTypeId.Number.TypeId,
+                    ["wasNamed"] = new Newtonsoft.Json.Linq.JArray("Phase")
+                }
+            };
+            if (!unresolvedRoute)
+                parameters["PE_E___NumberOfPoles"] = new Newtonsoft.Json.Linq.JObject { ["dataType"] = SpecTypeId.Int.NumberOfPoles.TypeId };
+            var patch = new FamilyPatch {
+                Patch = new Newtonsoft.Json.Linq.JObject { ["parameters"] = parameters },
+                Run = new PatchRun { ElectricalConnectorParameters = new ElectricalConnectorParameterRule {
+                    Voltage = "Voltage", NumberOfPoles = "PE_E___NumberOfPoles", ApparentPower = "Apparent Power", MinimumCircuitAmpacity = "MCA"
+                } }
+            };
+            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var operation = new ReconcileFamily(patch);
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            var connectorAfter = ElectricalConnectors(document).Single();
+            if (unresolvedRoute) {
+                Assert.That(error?.ToString(), Does.Contain("Cannot route connector association").And.Contain("PE_E___NumberOfPoles"));
+                Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+                Assert.That(connectorAfter.Id, Is.EqualTo(connectorId));
+                Assert.That(document.FamilyManager.GetAssociatedFamilyParameter(
+                    connectorAfter.get_Parameter(BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES))?.Definition.Name, Is.EqualTo("Phase"));
+                return;
+            }
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(document.FamilyManager.get_Parameter("Phase"), Is.Null);
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                Assert.That(type.AsDouble(document.FamilyManager.get_Parameter("PE_E___Phase")), Is.EqualTo(3d));
+            Assert.That(connectorAfter.Id, Is.EqualTo(connectorId));
+            Assert.That(document.FamilyManager.GetAssociatedFamilyParameter(
+                connectorAfter.get_Parameter(BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES))?.Definition.Name,
+                Is.EqualTo("PE_E___NumberOfPoles"));
+        } finally { document.Close(false); }
+    }
+
     private static readonly IReadOnlyDictionary<BuiltInParameter, string> Mappings = new Dictionary<BuiltInParameter, string> {
         [BuiltInParameter.RBS_ELEC_VOLTAGE] = "Voltage",
         [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = "Number of Poles",

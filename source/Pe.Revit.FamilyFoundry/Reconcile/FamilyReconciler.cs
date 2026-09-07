@@ -101,7 +101,8 @@ public static class FamilyReconciler {
         var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
         var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && NeedsNormalization(p.Key, p.Value, current, names)).ToList();
         var normalization = mappings.Count == 0 ? null : new NormalizeParamSources(desired, names,
-            sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source.")), mappings.Select(p => p.Key).ToList());
+            sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source.")), mappings.Select(p => p.Key).ToList(),
+            run?.ElectricalConnectorParameters);
         var (queue, effects) = Lower(changes, desired, current, run, sharedSource, normalization);
         if (mappings.Count > 0) {
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
