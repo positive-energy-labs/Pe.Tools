@@ -376,6 +376,15 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That((string)power["associate"]!["Number of Poles"]!, Is.EqualTo("param:PE_E___NumberOfPoles"));
             Assert.That(power["diameter"], Is.Null, "Electrical connector size belongs to its retained stub form.");
 
+            var demandProfile = (JObject)profiles["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"]
+                ["settings"]!["ParamDrivenSolids"]!.DeepClone();
+            demandProfile["Connectors"]![0]!["Config"]!["Pipe"]!["FlowConfiguration"] = "Demand";
+            var demand = (JObject)Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
+                ["ParamDrivenSolids"] = demandProfile
+            }, [], document.GetUnits()).Patch.Patch["connectors"]!["SupplyWater"]!;
+            Assert.That((string)demand["flowConfiguration"]!, Is.EqualTo("Demand"),
+                "Legacy pipe connector conversion must retain explicitly authored Demand intent.");
+
             var grinderLookup = profiles["CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json"]["settings"]!["SetLookupTables"]!;
             var lookup = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject { ["SetLookupTables"] = grinderLookup.DeepClone() }, [], document.GetUnits()).Patch;
             Assert.That(lookup.Patch["lookupTables"], Is.Null, "The frozen active Tables:[] operation is a validated no-op.");

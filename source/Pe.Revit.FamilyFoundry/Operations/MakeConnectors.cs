@@ -36,7 +36,17 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                 Size(connector, BuiltInParameter.CONNECTOR_WIDTH, spec.Width, doc, slug, logs);
                 Size(connector, BuiltInParameter.CONNECTOR_HEIGHT, spec.Height, doc, slug, logs);
                 if (spec.FlowDirection is { } fd) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM))?.Set((int)(FlowDirectionType)Enum.Parse(typeof(FlowDirectionType), fd.ToString()));
-                if (spec.FlowConfiguration is { } fc) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM))?.Set((int)(DuctFlowConfigurationType)Enum.Parse(typeof(DuctFlowConfigurationType), fc.ToString()));
+                if (spec.FlowConfiguration is { } fc) {
+                    var (parameter, value) = spec.Domain switch {
+                        ConnectorDomain.Duct => (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM),
+                            (int)(DuctFlowConfigurationType)Enum.Parse(typeof(DuctFlowConfigurationType), fc.ToString())),
+                        ConnectorDomain.Pipe => (connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM),
+                            (int)(PipeFlowConfigurationType)Enum.Parse(typeof(PipeFlowConfigurationType), fc.ToString())),
+                        _ => throw new InvalidOperationException($"{spec.Domain} connectors do not support flow configuration.")
+                    };
+                    if (parameter?.Set(value) != true)
+                        throw new InvalidOperationException($"Connector '{slug}' could not set flow configuration '{fc}'.");
+                }
                 if (spec.LossMethod is { } lm) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM))?.Set((int)(DuctLossMethodType)Enum.Parse(typeof(DuctLossMethodType), lm.ToString()));
                 if (spec.Angle is { Degrees: { } deg }) _ = connector.get_Parameter(BuiltInParameter.CONNECTOR_ANGLE)?.Set(deg * Math.PI / 180);
                 foreach (var (target, source) in spec.Associate ?? []) {

@@ -1,7 +1,9 @@
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.SettingsRuntime.Json;
 using Pe.Shared.RevitData.Families;
+using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 
@@ -179,6 +181,32 @@ public sealed class FamilyReconcilerTests {
     public void Same_document_diffs_empty(string fixture) {
         var model = Load(fixture);
         Assert.That(FamilyReconciler.Diff(model, model, UnitResolvers.Portable), Is.Empty);
+    }
+
+    [Test]
+    public void Demand_flow_configuration_is_portable_and_pipe_only() {
+        var pipe = Load("c-bath-shower");
+        Assert.That(pipe.Connectors.Values.Select(connector => connector.FlowConfiguration),
+            Is.All.EqualTo(FlowConfiguration.Demand));
+        var json = FamilyModelJson.Serialize(pipe);
+        Assert.That(FamilyModelJson.Parse(json).Diagnostics, Is.Empty);
+        var schema = Newtonsoft.Json.Linq.JObject.Parse(JsonSchemaFactory.CreateEditorSchemaJson(
+            typeof(FamilyModel), new JsonSchemaBuildOptions(SettingsRuntimeMode.HostOnly)));
+        var flowValues = schema.SelectTokens("$..enum").OfType<Newtonsoft.Json.Linq.JArray>()
+            .Single(values => values.Values<string>().Contains(nameof(FlowConfiguration.Demand)));
+        Assert.That(flowValues.Values<string>(), Is.EquivalentTo(Enum.GetNames(typeof(FlowConfiguration))));
+
+        foreach (var (domain, systemType) in new[] {
+                     ("Duct", "SupplyAir"), ("Electrical", "PowerCircuit")
+                 }) {
+            var invalid = Newtonsoft.Json.Linq.JObject.Parse(json);
+            invalid["connectors"]!["cold"]!["domain"] = domain;
+            invalid["connectors"]!["cold"]!["systemType"] = systemType;
+            Assert.That(FamilyModelJson.Parse(invalid.ToString()).Diagnostics,
+                Has.Some.Matches<FamilyModelDiagnostic>(diagnostic =>
+                    diagnostic.Code == FamilyModelDiagnosticCodes.SlotNotLegalForKind &&
+                    diagnostic.Path == "$.connectors.cold.flowConfiguration"), domain);
+        }
     }
 
     [Test]
