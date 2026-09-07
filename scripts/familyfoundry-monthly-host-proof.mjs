@@ -33,7 +33,7 @@ const evidence = {
   requestedSession: session,
   startedAt: new Date().toISOString(),
   sourceCommit: git(["rev-parse", "HEAD"]),
-  executionOptionsTransported: false,
+  executionOptionsTransported: true,
   profiles: [],
 };
 checkpoint();
@@ -55,7 +55,7 @@ for (const [index, profile] of converted.profiles.entries()) {
   if (profile.error) row.error = profile.error;
   else {
     try {
-      row.plan = hostCall(`${pad(index + 1)}-plan`, "familyfoundry.plan", { patchJson: profile.patchJson }).response;
+      row.plan = hostCall(`${pad(index + 1)}-plan`, "familyfoundry.plan", { patchJson: profile.patchJson, executionOptions: profile.executionOptions }).response;
       row.patchSha256 = sha(profile.patchJson);
       row.selectedCount = row.plan.families?.length ?? 0;
     } catch (error) {
@@ -66,7 +66,8 @@ for (const [index, profile] of converted.profiles.entries()) {
 }
 
 if (mode === "apply-one") applyOne(converted.profiles);
-evidence.status = evidence.profiles.some((row) => row.error) ? "failed" : "completed";
+const applyFailed = mode === "apply-one" && evidence.applyOne?.status !== "completed";
+evidence.status = evidence.profiles.some((row) => row.error) || applyFailed ? "failed" : "completed";
 evidence.finishedAt = new Date().toISOString();
 checkpoint();
 if (evidence.status !== "completed") process.exitCode = 1;
@@ -86,11 +87,12 @@ function applyOne(profiles) {
   evidence.applyOne = run;
   checkpoint();
   run.before = hostCall("90-before", "familyfoundry.project", { familyIds: [familyId] }).response;
+  const beforeModel = capturedModel(run.before, familyId, "before");
   checkpoint();
 
   let applied;
   try {
-    applied = hostCall("91-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [familyId]: selected.planHash } });
+    applied = hostCall("91-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [familyId]: selected.planHash }, executionOptions: converted.executionOptions });
   } catch (error) {
     run.status = "outcomeUnknown";
     run.error = String(error.stack ?? error);
@@ -98,30 +100,43 @@ function applyOne(profiles) {
     throw new Error("Apply transport outcome is unknown; retry is blocked. Inspect 91-apply command evidence.");
   }
   run.apply = applied.response;
-  const receipt = applied.response?.receipts?.[0];
-  if (!receipt) {
+  let receipt;
+  try {
+    receipt = exactReceipt(applied.response, "apply", selected.planHash, familyId);
+  } catch (error) {
     run.status = "outcomeUnknown";
+    run.error = String(error.stack ?? error);
     checkpoint();
-    throw new Error("Apply returned no family receipt; retry is blocked.");
+    throw new Error("Apply returned no valid exact receipt; retry is blocked.");
   }
   run.authoritativeFamilyId = receipt.familyId;
   checkpoint();
 
   run.after = hostCall("92-after", "familyfoundry.project", { familyIds: [receipt.familyId] }).response;
+  const afterModel = capturedModel(run.after, receipt.familyId, "after");
   if (!receipt.success || !receipt.converged) {
     run.status = "failed";
-    run.rollbackModelJsonEqual = modelJson(run.before, familyId) === modelJson(run.after, receipt.familyId);
+    run.rollbackModelJsonEqual = beforeModel === afterModel;
     checkpoint();
     return;
   }
 
-  const noop = hostCall("93-noop-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: receipt.familyId }).response;
+  const noop = hostCall("93-noop-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: receipt.familyId, executionOptions: converted.executionOptions }).response;
   run.noopPlan = noop;
-  const family = noop.families?.[0];
-  if (!family || family.changes?.length || family.refusals?.length) fail("Post-apply plan is not a no-change plan.");
-  let repeated;
+  const family = exactPlan(noop, receipt.familyId, "post-apply");
   try {
-    repeated = hostCall("94-noop-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [receipt.familyId]: family.planHash } }).response;
+    requireNoop(family, "Post-apply");
+  } catch (error) {
+    run.status = "failed";
+    run.error = String(error.stack ?? error);
+    checkpoint();
+    return;
+  }
+  let repeated;
+  let repeatReceipt;
+  try {
+    repeated = hostCall("94-noop-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [receipt.familyId]: family.planHash }, executionOptions: converted.executionOptions }).response;
+    repeatReceipt = exactReceipt(repeated, "reapply", family.planHash, receipt.familyId);
   } catch (error) {
     run.status = "outcomeUnknown";
     run.error = String(error.stack ?? error);
@@ -129,11 +144,22 @@ function applyOne(profiles) {
     throw new Error("No-change reapply transport outcome is unknown; retry is blocked.");
   }
   run.repeat = repeated;
-  const repeatReceipt = repeated.receipts?.[0];
-  if (!repeatReceipt?.success || !repeatReceipt.converged) fail("No-change reapply did not converge.");
+  if (!repeatReceipt.success || !repeatReceipt.converged) {
+    run.status = "failed";
+    checkpoint();
+    return;
+  }
   run.final = hostCall("95-final", "familyfoundry.project", { familyIds: [repeatReceipt.familyId] }).response;
-  run.finalPlan = hostCall("96-final-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: repeatReceipt.familyId }).response;
-  run.status = run.finalPlan.families?.[0]?.changes?.length === 0 ? "completed" : "failed";
+  capturedModel(run.final, repeatReceipt.familyId, "final");
+  run.finalPlan = hostCall("96-final-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: repeatReceipt.familyId, executionOptions: converted.executionOptions }).response;
+  const finalPlan = exactPlan(run.finalPlan, repeatReceipt.familyId, "final");
+  try {
+    requireNoop(finalPlan, "Final");
+    run.status = "completed";
+  } catch (error) {
+    run.status = "failed";
+    run.error = String(error.stack ?? error);
+  }
   checkpoint();
 }
 
@@ -172,7 +198,7 @@ function pea(commandArgs, label) {
 
 function conversionScript(profilePath, definitionsPath) {
   const literal = (value) => `@"${resolve(value).replaceAll('"', '""')}"`;
-  return `using Newtonsoft.Json;\nusing Newtonsoft.Json.Linq;\nusing Pe.Revit.FamilyFoundry.Apply;\nusing Pe.Revit.Global.Services.Aps;\nusing Pe.Shared.RevitData.Families;\nusing System.Collections.Generic;\nusing System.IO;\nusing System.Linq;\nif (doc == null || doc.IsFamilyDocument) throw new System.InvalidOperationException("Activate the disposable Old Template project copy.");\nvar profiles = JArray.Parse(File.ReadAllText(${literal(profilePath)})).OfType<JObject>().ToList();\nvar definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(${literal(definitionsPath)}))!;\nvar rows = new JArray();\nforeach (var profile in profiles) {\n  ct.ThrowIfCancellationRequested();\n  var row = new JObject { ["source"] = (string)profile["source"]! }; rows.Add(row);\n  try { var converted = FamilyProfileConverter.Convert((JObject)profile["settings"]!, definitions, doc.GetUnits()); row["patchJson"] = JsonConvert.SerializeObject(converted.Patch); row["executionOptions"] = JObject.FromObject(converted.Options); }\n  catch (System.Exception ex) { row["error"] = ex.ToString(); }\n}\nResult(new JObject { ["documentTitle"] = doc.Title, ["documentPath"] = doc.PathName, ["profiles"] = rows });\n`;
+  return `using Newtonsoft.Json;\nusing Newtonsoft.Json.Linq;\nusing Pe.Revit.FamilyFoundry.Apply;\nusing Pe.Revit.Global.Services.Aps;\nusing Pe.Shared.RevitData.Families;\nusing System.Collections.Generic;\nusing System.IO;\nusing System.Linq;\nif (doc == null || doc.IsFamilyDocument) throw new System.InvalidOperationException("Activate the disposable Old Template project copy.");\nvar profiles = JArray.Parse(File.ReadAllText(${literal(profilePath)})).OfType<JObject>().ToList();\nvar definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(${literal(definitionsPath)}))!;\nvar rows = new JArray();\nforeach (var profile in profiles) {\n  ct.ThrowIfCancellationRequested();\n  var row = new JObject { ["source"] = (string)profile["source"]! }; rows.Add(row);\n  try { var converted = FamilyProfileConverter.Convert((JObject)profile["settings"]!, definitions, doc.GetUnits()); row["patchJson"] = JsonConvert.SerializeObject(converted.Patch); row["executionOptions"] = JObject.FromObject(converted.Options, JsonSerializer.Create(FamilyModelJson.Settings)); }\n  catch (System.Exception ex) { row["error"] = ex.ToString(); }\n}\nResult(new JObject { ["documentTitle"] = doc.Title, ["documentPath"] = doc.PathName, ["profiles"] = rows });\n`;
 }
 
 function parseArgs(values) {
@@ -190,7 +216,33 @@ function git(commandArgs) { const result = spawnSync("git", commandArgs, { cwd: 
 function sha(value) { return createHash("sha256").update(value).digest("hex"); }
 function samePath(left, right) { return resolve(left).toLowerCase() === resolve(right).toLowerCase(); }
 function pad(value) { return String(value).padStart(2, "0"); }
-function modelJson(response, id) { return response?.families?.find((family) => family.familyId === id)?.modelJson ?? null; }
+function capturedModel(response, id, stage) {
+  const rows = response?.families;
+  const family = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
+  if (response?.diagnostics?.length || !family?.success || family.familyId !== id || typeof family.modelJson !== "string") fail(`${stage} capture did not return family ${id} with modelJson.`);
+  return family.modelJson;
+}
+function exactReceipt(response, stage, expectedPlanHash, requestedFamilyId) {
+  if (response?.diagnostics?.length || !Array.isArray(response?.receipts) || response.receipts.length !== 1)
+    throw new Error(`${stage} did not return exactly one receipt without global diagnostics.`);
+  const receipt = response.receipts[0];
+  if (!Number.isSafeInteger(receipt.familyId) || typeof receipt.success !== "boolean" || typeof receipt.converged !== "boolean" || !Array.isArray(receipt.residue) || !Array.isArray(receipt.errors))
+    throw new Error(`${stage} returned a malformed receipt.`);
+  if (receipt.success && receipt.planHash !== expectedPlanHash)
+    throw new Error(`${stage} receipt plan hash does not match the reviewed plan.`);
+  if ((!receipt.success || !receipt.converged) && receipt.familyId !== requestedFamilyId)
+    throw new Error(`${stage} failed for a different family identity than requested.`);
+  return receipt;
+}
+function exactPlan(response, id, stage) {
+  if (response?.diagnostics?.length || !Array.isArray(response?.families) || response.families.length !== 1 || response.families[0].familyId !== id)
+    fail(`${stage} plan did not return exactly family ${id} without global diagnostics.`);
+  return response.families[0];
+}
+function requireNoop(plan, stage) {
+  if (plan.changes.length || plan.refusals.length || plan.runEffects.length)
+    throw new Error(`${stage} plan contains changes, refusals, or run effects.`);
+}
 function writeJson(path, value) { writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`); }
 function checkpoint() { writeJson(evidencePath, evidence); }
 function fail(message) { evidence.status = "refused"; evidence.error = message; checkpoint(); throw new Error(message); }

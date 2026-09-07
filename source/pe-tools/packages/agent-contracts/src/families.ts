@@ -37,6 +37,16 @@ export const ffReceiptSchema = z.object({
 });
 export type FfReceipt = z.infer<typeof ffReceiptSchema>;
 
+export const familyExecutionOptionsSchema = z
+  .object({
+    singleTransaction: z.boolean().optional(),
+    optimizeTypeOperations: z.boolean().optional(),
+    enableCollectors: z.boolean().optional(),
+    suppressWarnings: z.boolean().optional(),
+  })
+  .strict();
+export type FamilyExecutionOptions = z.infer<typeof familyExecutionOptionsSchema>;
+
 const appliedScopeSchema = z.object({
   categoryNames: z.array(z.string()),
   familyNames: z.array(z.string()),
@@ -51,6 +61,7 @@ const familiesDocumentSchema = z.object({
     .object({
       reading: readingSchema.optional(),
       entries: z.array(ffPlanEntrySchema),
+      executionOptions: familyExecutionOptionsSchema.optional(),
     })
     .nullable()
     .default(null),
@@ -79,6 +90,7 @@ export const familiesRouteState = {
       input: z.object({
         profilePath: z.string(),
         scope: appliedScopeSchema,
+        executionOptions: familyExecutionOptionsSchema.optional(),
         target: z.string().optional(),
       }),
       actor: "any",

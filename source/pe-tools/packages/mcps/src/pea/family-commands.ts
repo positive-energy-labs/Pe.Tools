@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import {
   readingSchema,
   type FamilyDocument,
+  type FamilyExecutionOptions,
   type RouteStateCommandHandlers,
   type SettingsDocumentId,
   bridgeSelector,
@@ -20,7 +21,10 @@ export function createFamilyCommandHandlers(
 
   return {
     plan: async (input, ctx) => {
-      const { documentId } = input as { documentId: SettingsDocumentId };
+      const { documentId, executionOptions } = input as {
+        documentId: SettingsDocumentId;
+        executionOptions?: FamilyExecutionOptions;
+      };
       const rpc = caller(bridgeSelector(ctx.scope));
       // The capture operation requires a family document; a project must use /families.
       await rpc.call("revit.detail.family-model", {});
@@ -29,14 +33,17 @@ export function createFamilyCommandHandlers(
         includeComposedContent: true,
       });
       const patchJson = JSON.stringify({ patch: JSON.parse(executionContent(opened)) });
-      const planned = await rpc.call("familyfoundry.plan", { patchJson });
+      const planned = await rpc.call("familyfoundry.plan", {
+        patchJson,
+        ...(executionOptions ? { executionOptions } : {}),
+      });
       if (planned.diagnostics.length || planned.families.length !== 1)
         throw new Error(
           planned.diagnostics.map((d) => d.message).join("; ") ||
             "Expected one current family plan.",
         );
       const document = ctx.getDoc();
-      document.plan = { documentId, patchJson, entry: planned.families[0] };
+      document.plan = { documentId, patchJson, entry: planned.families[0], executionOptions };
       document.apply = null;
       await ctx.setDoc(document);
       return planned;
@@ -66,6 +73,7 @@ export function createFamilyCommandHandlers(
       const applied = await rpc.call("familyfoundry.apply", {
         patchJson: plan.patchJson,
         expectedPlanHashes: { [plan.entry.familyId]: expectedPlanHash },
+        ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
       });
       document.apply = applied;
       await ctx.setDoc(document);

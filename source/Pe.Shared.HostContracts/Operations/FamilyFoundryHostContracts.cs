@@ -1,10 +1,12 @@
+using Pe.Shared.RevitData.Families;
+
 namespace Pe.Shared.HostContracts.Operations;
 
 /// <summary>Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.</summary>
 public sealed record FamilyFoundryDiagnostic(string Code, string Path, string Message, string? Suggestion = null);
 
 /// <summary>Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.</summary>
-public sealed record FamilyFoundryPlanRequest(string PatchJson, long? FamilyId = null);
+public sealed record FamilyFoundryPlanRequest(string PatchJson, long? FamilyId = null, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
 public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom);
@@ -24,7 +26,7 @@ public sealed record FamilyFoundryPlanData(
 );
 
 /// <summary>Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.</summary>
-public sealed record FamilyFoundryApplyRequest(string PatchJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes);
+public sealed record FamilyFoundryApplyRequest(string PatchJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.</summary>
 public sealed record FamilyFoundryApplyReceipt(

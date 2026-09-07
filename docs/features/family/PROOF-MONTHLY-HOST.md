@@ -8,7 +8,7 @@
 2. A `ReadOnly` `pea script execute` call reads the frozen 45-profile composed corpus and company definitions, then calls the public production `FamilyProfileConverter.Convert` against the active project's units. It returns each native `patchJson`, source path, and `ExecutionOptions`; it does not mutate the document.
 3. `familyfoundry.plan` receives each complete native patch without `familyId`, so production `FamiliesMatching` evaluates the authored selector across every eligible project family. One failed profile is recorded and the remaining profiles continue. The checkpoint is rewritten after every profile.
 4. `apply-one` requires an explicit source and a family ID that appeared in that profile's selector-driven plan. It captures before state, applies with the exact plan hash, trusts the receipt's replacement family ID, captures again, replans, applies the no-change plan once, captures, and replans a final time.
-5. A failed receipt records exact before/after `modelJson` equality as rollback evidence. A missing response/receipt or target mismatch is `outcomeUnknown` and blocks replay.
+5. A failed receipt records exact before/after `modelJson` equality as rollback evidence only after both exact captures succeeded. A missing or malformed response/receipt, receipt hash mismatch, or target mismatch is `outcomeUnknown` and blocks replay.
 
 The production seams are `FamilyFoundryBridgeOps.PlanFamilies` and `ApplyFamilies` (`source/Pe.App/Host/FamilyFoundryBridgeOps.cs:31,64`). Apply creates one `OperationProcessor` per selected family and consumes the expected plan hash (`:80-87`); project capture is the readback seam (`:102`). The converter is the public corpus adapter (`source/Pe.Revit.FamilyFoundry/Apply/FamilyProfileConverter.cs:30`) and returns both patch and options (`:723`). The existing native test uses this same converter plus `FamiliesMatching` for all 45 profiles (`source/Pe.Revit.Tests/LibraryBehavior/FamilyFoundry/FamilyFoundryBulkMigrationHarnessTests.cs:815-870`).
 
@@ -41,8 +41,9 @@ The driver calls no `pe-revit session` or `pe-revit doc` verb and never saves, c
 
 - `sourceCommit`, `requestedSession`, and `document` bind source, target, and disposable document identity.
 - `profiles[45]` records source, conversion status, native patch SHA-256, converted execution options, full selector plan, selected count, and any error.
-- `applyOne` records the requested and authoritative family IDs, before/apply/after/no-op/reapply/final responses, rollback comparison, and terminal status.
-- `executionOptionsTransported` is deliberately `false` until the Host apply contract carries the converter result's options.
+- `applyOne` records the requested and authoritative family IDs, before/apply/after/no-op/reapply/final responses, rollback comparison, and terminal status. The overall run cannot complete unless `applyOne` completes.
+- Every capture must contain exactly the requested authoritative family and a non-null `modelJson`. Every successful receipt must contain the reviewed plan hash. Both no-op plans must have zero changes, refusals, and run effects; the final capture and plan follow the latest replacement family ID.
+- `executionOptionsTransported` is `true`: every profile plan and apply carries the converter result's four serialized options.
 
 `requests/*.json` contains the exact operation key/request/session fixtures. `responses/*.json` contains parsed Host envelopes, while adjacent stdout/stderr files preserve raw CLI evidence. `convert-company-profiles.cs` is the exact generated ReadOnly script submitted to the controlled snapshot.
 
@@ -50,6 +51,28 @@ The driver calls no `pe-revit session` or `pe-revit doc` verb and never saves, c
 
 This prepares all 45 composed profiles and preserves every converted operation. It does not replace them with the older 38-parameter mapping. The frozen selector census remains 36 exact-name, six empty/all, one category, one placed-only, and one exact-name-plus-category selector. The six SavedEquip `__CURRENT_FAMILY__` profiles legitimately select no Old Template family because the source contains no project assignment; the driver records that result and invents no target.
 
-The current Host apply request contains only `patchJson` and `expectedPlanHashes` (`source/Pe.Shared.HostContracts/Operations/FamilyFoundryHostContracts.cs:27`). It does not thread the converter's `ExecutionOptions` into `OperationProcessor`, which is constructed with defaults. Thirteen corpus profiles author non-default option objects: six disable both `SingleTransaction` and type optimization, three disable `SingleTransaction`, and four have other explicit combinations. Full-family rollback remains owned by the outer family visit, as settled, but this Host proof cannot claim the remaining authored option choices were consumed. The driver exposes rather than hides that dependency.
+The serialized `ExecutionOptions` contract now lives once in the neutral `Pe.Shared.RevitData.Families` namespace. Family Foundry, Host contracts, scripts/Pods, DA callers, and the profile converter consume that type directly; the public Family Foundry package no longer depends on the Host adapter. This is a public namespace/signature migration with no compatibility shim. Runtime-only `FamilyVisitOptions` remains separate so its transaction, Park, and warning behavior cannot leak into desired family JSON.
 
-No native run was performed in this preparation slice. Plan, apply, receipt, rollback, and reapply remain pending P's controlled disposable session.
+Thirteen corpus profiles author option objects: six disable both `SingleTransaction` and type optimization, three disable `SingleTransaction`, and four have other explicit combinations. `OptimizeTypeOperations` controls consecutive type-operation batching inside native reconciliation. `SuppressWarnings` participates in the native visit failure policy. Those two behavior-changing Host fields are bound into the plan hash. `SingleTransaction` is still honored by public `OperationProcessor` calls with multi-operation queues, but the Host queues one `ReconcileFamily` operation inside one `FamilyVisitScope.Edit`; changing the inner callback bundle cannot change its native transaction count, so it is transported but moot on this Host path and is not hash-bound. Full-family rollback remains owned by the outer `FamilyVisit` transaction group. `EnableCollectors` is transported and still controls an optional caller-supplied snapshot pipeline, but Host reconciliation supplies no such optional pipeline and performs its own mandatory before/after capture; changing that field therefore does not change Host behavior or its plan hash.
+
+The exact authored shapes are six `{ SingleTransaction:false, OptimizeTypeOperations:false }`, three `{ SingleTransaction:false }`, one explicit all-default object, one `{ SuppressWarnings:true }`, one `{ SingleTransaction:false }` with the other three defaults written explicitly, and one `{ SingleTransaction:true }`. Missing fields retain the existing defaults: single transaction, type optimization, and collectors enabled; warning suppression disabled.
+
+Route state persists the reviewed options with the plan and reuses them for apply on both `/family` and `/families`. The generated Host contracts expose the same optional object on plan and apply. Unknown route option fields are refused by the strict route schema; legacy profile conversion already refuses unknown or non-boolean fields.
+
+Deterministic route checks cover option forwarding through plan and apply, persistence across the reviewed-plan boundary, replacement-family receipts, and replay refusal after apply. A Family Reconciler check proves which fields change the plan hash. Compile remains distinct from native proof. No native run was performed in this preparation slice; plan, apply, receipt, rollback, and reapply remain pending P's controlled disposable session.
+
+## Architectural tally
+
+- The public type moves from `Pe.Revit.FamilyFoundry.ExecutionOptions` to `Pe.Shared.RevitData.Families.ExecutionOptions`; callers must import the neutral namespace. No compatibility type remains.
+- `OperationProcessor` retains its first two arguments and adds an optional third `FamilyVisitOptions` argument for runtime transaction ownership and parking. The only prior in-repo `ExecutionOptions.Visit` initializer was `RenameParamAcross`; its public `Owned`/`Sandbox` choice now flows through that third argument. `OperationProcessor` still copies `Park`, and no in-repo caller initializes a park directly. Direct multi-operation queues retain the established `SingleTransaction` behavior.
+- Family Foundry replaces its transient Host-contract reference with a direct `Pe.Shared.RevitData` reference. Host contracts already depend on RevitData and refer to the same type; there is no adapter copy or mapping.
+- `FamilyModelBuild`, benchmarks, commands, converter harnesses, and other tests either pass the neutral options unchanged or use the same defaults. Desired `FamilyModel` and `FamilyPatch` serialization are unchanged; execution options remain beside the patch.
+
+## Validation in this slice
+
+- Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal` passed with 0 errors and 46 warnings on the final incremental build.
+- Deterministic lane: `vp test packages/mcps/tests/family-commands.test.ts packages/agent-contracts/tests` passed 5 files and 16 tests.
+- Contract generation: `pnpm --filter @pe/host-contracts codegen:check` passed with 67 operations in sync.
+- Type/format checks: `@pe/mcps` and `@pe/host-contracts` passed; targeted checks for `agent-contracts/src/family.ts` and `families.ts` passed.
+- Driver syntax and repository whitespace: `node --check scripts/familyfoundry-monthly-host-proof.mjs` and `git diff --check` passed.
+- The package-wide `@pe/agent-contracts` check remains red in unchanged `tests/settings-fields.test.ts:62`: its union-typed parse result accesses `.parameters`. The two changed route-contract files pass their targeted check, and the focused agent-contract test set passes.

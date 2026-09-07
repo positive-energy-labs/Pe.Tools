@@ -21,6 +21,7 @@ const opened = {
 
 test("native fleet keeps the replacement receipt and requires a fresh no-op plan", async () => {
   const doc = familiesRouteState.schema.parse({});
+  const executionOptions = { singleTransaction: false, suppressWarnings: true };
   const entry = {
     familyId: 1,
     familyName: "Box",
@@ -68,8 +69,22 @@ test("native fleet keeps the replacement receipt and requires a fresh no-op plan
     },
   };
   const handlers = createFamiliesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
-  await handlers.plan({ profilePath: "width", scope: { familyNames: ["Box", "Other"] } }, ctx);
-  expect(call.mock.calls[1]).toEqual(["familyfoundry.plan", { patchJson: opened.composedContent }]);
+  const planInput = familiesRouteState.commands.plan.input.parse({
+    profilePath: "width",
+    scope: { categoryNames: [], familyNames: ["Box", "Other"], placementScope: "AllLoaded" },
+    executionOptions,
+  });
+  await handlers.plan(planInput, ctx);
+  expect(() =>
+    familiesRouteState.commands.plan.input.parse({
+      profilePath: "width",
+      executionOptions: { singleTransaction: false, invented: true },
+    }),
+  ).toThrow();
+  expect(call.mock.calls[1]).toEqual([
+    "familyfoundry.plan",
+    { patchJson: opened.composedContent, executionOptions },
+  ]);
   await expect(handlers.apply({ expectedPlanHashes: { "1": "stale" } }, ctx)).rejects.toThrow(
     "reviewed family plans",
   );
@@ -83,6 +98,7 @@ test("native fleet keeps the replacement receipt and requires a fresh no-op plan
     {
       patchJson: opened.composedContent,
       expectedPlanHashes: { "1": "hash-1", "3": "hash-3" },
+      executionOptions,
     },
   ]);
   expect(doc.apply?.receipts).toEqual([receipt, failedReceipt]);
@@ -148,6 +164,7 @@ test("native build stores convergence separately and invalid composition cannot 
 
 test("current-family apply consumes its reviewed hash, preserves receipts and recaptures native evidence", async () => {
   const doc = familyRouteState.schema.parse({});
+  const executionOptions = { optimizeTypeOperations: false };
   const entry = {
     familyId: 7,
     familyName: "Box",
@@ -185,10 +202,18 @@ test("current-family apply consumes its reviewed hash, preserves receipts and re
     },
   };
   const handlers = createFamilyCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
-  await handlers.plan(
-    { documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" } },
-    ctx,
-  );
+  const planInput = familyRouteState.commands.plan.input.parse({
+    documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" },
+    executionOptions,
+  });
+  await handlers.plan(planInput, ctx);
+  expect(call.mock.calls[2]).toEqual([
+    "familyfoundry.plan",
+    {
+      patchJson: JSON.stringify({ patch: JSON.parse(model.composedContent) }),
+      executionOptions,
+    },
+  ]);
   await expect(handlers.apply({ expectedPlanHash: "stale" }, ctx)).rejects.toThrow(
     "Review a valid",
   );
@@ -199,6 +224,7 @@ test("current-family apply consumes its reviewed hash, preserves receipts and re
     {
       patchJson: JSON.stringify({ patch: JSON.parse(model.composedContent) }),
       expectedPlanHashes: { 7: "h7" },
+      executionOptions,
     },
   ]);
   expect(doc.plan).toBeNull();

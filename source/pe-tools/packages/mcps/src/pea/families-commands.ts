@@ -1,5 +1,6 @@
 import {
   bridgeSelector,
+  type FamilyExecutionOptions,
   type FamiliesRouteDocument,
   type RouteStateCommandHandlers,
 } from "@pe/agent-contracts";
@@ -21,6 +22,7 @@ export function createFamiliesCommandHandlers(
       const input = raw as {
         profilePath: string;
         scope: { familyNames: string[] };
+        executionOptions?: FamilyExecutionOptions;
       };
       const rpc = caller(bridgeSelector(ctx.scope));
       const opened = await rpc.call("settings.document.open", {
@@ -29,6 +31,7 @@ export function createFamiliesCommandHandlers(
       });
       const result = await rpc.call("familyfoundry.plan", {
         patchJson: executionContent(opened),
+        ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
       });
       if (result.diagnostics.length > 0)
         throw new Error(result.diagnostics.map(diagnosticLine).join(" · "));
@@ -38,6 +41,7 @@ export function createFamiliesCommandHandlers(
       document.profilePath = input.profilePath;
       document.plan = {
         entries: result.families.filter((entry) => allowed.has(entry.familyName)),
+        executionOptions: input.executionOptions,
       };
       document.excludedIds = [];
       document.apply = null;
@@ -78,6 +82,7 @@ export function createFamiliesCommandHandlers(
       const result = await rpc.call("familyfoundry.apply", {
         patchJson: executionContent(opened),
         expectedPlanHashes,
+        ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
       });
 
       const latest = ctx.getDoc();

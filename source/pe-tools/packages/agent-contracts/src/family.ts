@@ -13,7 +13,12 @@
  * lifecycle already exists.
  */
 import { z } from "zod";
-import { diagnosticSchema, ffPlanEntrySchema, ffReceiptSchema } from "./families.ts";
+import {
+  diagnosticSchema,
+  familyExecutionOptionsSchema,
+  ffPlanEntrySchema,
+  ffReceiptSchema,
+} from "./families.ts";
 import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
@@ -96,6 +101,7 @@ const familyDocumentSchema = z.object({
       documentId: settingsDocumentIdSchema,
       patchJson: z.string(),
       entry: ffPlanEntrySchema,
+      executionOptions: familyExecutionOptionsSchema.optional(),
     })
     .nullish(),
   apply: z
@@ -126,7 +132,10 @@ export const familyRouteState = {
     plan: {
       description:
         "Plan the saved composed family.json against the current family document. Review changes and refusals before applying. Omitted sections remain untouched.",
-      input: z.object({ documentId: settingsDocumentIdSchema }),
+      input: z.object({
+        documentId: settingsDocumentIdSchema,
+        executionOptions: familyExecutionOptionsSchema.optional(),
+      }),
       actor: "any",
     },
     apply: {

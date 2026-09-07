@@ -5,3 +5,4 @@ global using Pe.Revit.FamilyFoundry.Capture;
 global using Pe.Revit.FamilyFoundry.OperationSettings;
 global using Pe.Revit.FamilyFoundry.Snapshots;
 global using Pe.Revit.Parameters;
+global using Pe.Shared.RevitData.Families;

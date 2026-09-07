@@ -89,14 +89,16 @@ public static class FamilyReconciler {
     }
 
     public static FamilyPlan Reconcile(FamilyModel desired, FamilyModel current, UnitResolver units, PatchRun? run = null,
-        Func<string, ExternalDefinition?>? sharedSource = null, JObject? authored = null, object? sharedDefinitions = null) {
+        Func<string, ExternalDefinition?>? sharedSource = null, JObject? authored = null, object? sharedDefinitions = null,
+        ExecutionOptions? executionOptions = null) {
+        executionOptions ??= new ExecutionOptions();
         var refusals = desired.Unmodeled
             .Select(f => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, f.Path, "A desired document may not carry unmodeled facts."))
             .ToList();
         if (desired.RoomCalculationPoint is { Enabled: true, Offset.Parameter: not null })
             refusals.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, "$.roomCalculationPoint.offset",
                 "Room calculation point offset requires an explicit length; parameter binding is not supported."));
-        if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([]));
+        if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([], executionOptions: executionOptions));
         var changes = Diff(desired, current, units);
         var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
         var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && NeedsNormalization(p.Key, p.Value, current, names)).ToList();
@@ -115,7 +117,7 @@ public static class FamilyReconciler {
         }
         var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
         var definitionEffects = sharedDefinitions is null || mappings.Count == 0 ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
-        return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions));
+        return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions, executionOptions));
     }
 
     private static bool NeedsNormalization(string name, FamilyModelParameter desired, FamilyModel current, IReadOnlyCollection<string> authoredNames) {
@@ -429,9 +431,13 @@ public static class FamilyReconciler {
     private static IEnumerable<string> OnPlanes(FamilyModelForm form) =>
         form.Profile?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", (c.Center ?? []).OrderBy(p => p, StringComparer.Ordinal))) ?? [];
 
-    private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null, FamilyModel? desired = null, JObject? authored = null, object? sharedDefinitions = null) {
+    private static string Hash(IReadOnlyList<FamilyChange> changes, FamilyModel? current = null, PatchRun? run = null, FamilyModel? desired = null, JObject? authored = null, object? sharedDefinitions = null, ExecutionOptions? executionOptions = null) {
+        var executionBehavior = executionOptions is null ? null : new {
+            executionOptions.OptimizeTypeOperations,
+            executionOptions.SuppressWarnings
+        };
         var json = JsonConvert.SerializeObject(
-            new { Changes = changes, Current = current, Run = run, Desired = desired, Authored = authored, SharedDefinitions = sharedDefinitions }, FamilyModelJson.Settings);
+            new { Changes = changes, Current = current, Run = run, Desired = desired, Authored = authored, SharedDefinitions = sharedDefinitions, ExecutionBehavior = executionBehavior }, FamilyModelJson.Settings);
         using var sha = SHA256.Create();
         return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-", "")[..16];
     }
