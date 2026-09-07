@@ -3,6 +3,7 @@ import { type StagedItem, useFb } from "../feedback/staging";
 import { type Lens } from "../feedback/tray";
 import {
   boardSummary,
+  comparableRuns,
   pairZones,
   partiality,
   type RunIndexEntry,
@@ -114,9 +115,15 @@ export function useRunBrowserModel() {
 
   const prevId = useMemo(() => {
     if (!runs || !curId || baseline === null) return null;
-    if (baseline !== "auto") return baseline === curId ? null : baseline;
     const idx = runs.findIndex((r) => r.id === curId);
-    return idx >= 0 ? (runs[idx + 1]?.id ?? null) : null;
+    const current = runs[idx];
+    if (!current) return null;
+    const candidates =
+      baseline === "auto" ? runs.slice(idx + 1) : runs.filter((r) => r.id === baseline);
+    return (
+      candidates.find((r) => r.id !== curId && comparableRuns(current.meta ?? {}, r.meta ?? {}))
+        ?.id ?? null
+    );
   }, [runs, curId, baseline]);
 
   useEffect(() => {
@@ -214,7 +221,11 @@ export function useRunBrowserModel() {
   }, []);
 
   // (SHIMS.md #2 close). Orphans under key pairing are honest orphans, never name-matched.
-  const comparing = prevId !== null && reportPrev !== null;
+  const comparing =
+    prevId !== null &&
+    reportPrev !== null &&
+    reportCur !== null &&
+    comparableRuns(reportCur, reportPrev);
 
   const pairs = useMemo(
     () => (reportCur ? pairZones(reportCur, comparing ? reportPrev : null) : []),
@@ -312,7 +323,7 @@ export function useRunBrowserModel() {
 
   const panelH = review ? 440 : 220;
 
-  const lens: Lens = { curId, prevId };
+  const lens: Lens = { curId, prevId: comparing ? prevId : null };
   return {
     runs,
     pool,
@@ -336,11 +347,18 @@ export function useRunBrowserModel() {
     planLevel,
     focus,
     reportCur,
-    linkNote,
+    linkNote:
+      linkNote ??
+      ((baseline !== null && baseline !== "auto" && !prevId) ||
+      (reportPrev && reportCur && !comparableRuns(reportCur, reportPrev))
+        ? "Baseline refused: document or captured zone scope differs."
+        : comparing && !reportCur?.documentKey
+          ? "Historical comparison: document identity is unavailable in these packages."
+          : null),
     stagedItems,
     scoresCur,
     scoresPrev,
-    prevId,
+    prevId: comparing ? prevId : null,
     pickCur,
     pickBaseline,
     swingLens,

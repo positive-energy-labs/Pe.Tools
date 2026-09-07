@@ -105,10 +105,10 @@ public static class ZoneMaterializer
                     var p = curve.GetEndPoint(0);
                     return new[] { p.X, p.Y };
                 }).ToList())
-                .OrderByDescending(pts => Math.Abs(Detector.Shoelace(pts)))
+                .OrderByDescending(pts => Math.Abs(Kernel.Shoelace(pts)))
                 .First();
             double sqft = region.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
-                          ?? Math.Abs(Detector.Shoelace(outer));
+                          ?? Math.Abs(Kernel.Shoelace(outer));
             found.Add(new ExistingRegion(region.Id.Value(), frGuid.Value, outer, sqft));
         }
         return found;
@@ -139,8 +139,8 @@ public static class ZoneMaterializer
         {
             try
             {
-                var loops = new List<CurveLoop> { Annotate.ToLoop(room.Polygon, elevation) };
-                loops.AddRange(room.Holes.Select(hole => Annotate.ToLoop(hole, elevation)));
+                var loops = new List<CurveLoop> { Kernel.ToLoop(room.Polygon, elevation) };
+                loops.AddRange(room.Holes.Select(hole => Kernel.ToLoop(hole, elevation)));
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
@@ -162,7 +162,7 @@ public static class ZoneMaterializer
             {
                 try
                 {
-                    var loops = new List<CurveLoop> { Annotate.ToLoop(residue.Polygon, elevation) };
+                    var loops = new List<CurveLoop> { Kernel.ToLoop(residue.Polygon, elevation) };
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                     TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     TakeoffCarriers.WriteProvenance(region,

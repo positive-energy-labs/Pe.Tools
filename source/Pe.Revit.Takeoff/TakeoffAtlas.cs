@@ -58,21 +58,6 @@ public static class TakeoffAtlas
         return new TakeoffSnapshotData(status, zones, grouped);
     }
 
-    public static List<TakeoffViewFacts> Views(Document doc)
-    {
-        var counts = new FilteredElementCollector(doc)
-            .OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .GroupBy(fr => fr.OwnerViewId.Value())
-            .ToDictionary(g => g.Key, g => g.Count());
-        return new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-            .Where(v => !v.IsTemplate)
-            .Select(v => new TakeoffViewFacts(
-                v.Id.Value(),
-                counts.GetValueOrDefault(v.Id.Value())))
-            .ToList();
-    }
-
     public static List<TakeoffRegionFacts> CandidateRegions(Document doc, TakeoffCandidatesRequest request)
     {
         var view = FindView(doc, request.View);
@@ -123,94 +108,97 @@ public static class TakeoffAtlas
         return new TakeoffAdoptResult(adopted);
     }
 
-    public static TakeoffCapturePrepared PrepareCapture(
-        Document doc,
-        TakeoffPrepareCaptureRequest request)
-    {
-        var view = FindView(doc, request.View);
-        string level = view.GenLevel?.Name
-                       ?? throw new InvalidOperationException($"view '{request.View}' has no level");
-        RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = level }, static _ => { });
-        return new TakeoffCapturePrepared(level);
-    }
+    // ADR 0011: the partition runs on Pe.Revit.Space. The solver never writes to the document; this
+    // maps its answer onto the materializer exactly as the raster result was mapped — Accepted to
+    // Room Regions, Held and Void to held regions, Excluded drawn as nothing — and the
+    // rebind-by-geometry rule in ZoneMaterializer is untouched.
+    public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) =>
+        MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
+            doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion)));
 
-    public static TakeoffCaptureResult DetectCapture(
+    public static TakeoffPartitionResult MaterializePartition(
         Document doc,
-        TakeoffDetectCaptureRequest request)
-    {
-        var result = RoomTakeoff.Detect(doc, request.Level, static _ => { });
-        string token = string.Concat(result.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
-        string replay = Path.Combine(RoomTakeoff.DefaultArtifactDir, $"replay_{token}.bin");
-        if (!File.Exists(replay))
-            throw new InvalidOperationException($"detect ran but no replay exists at {replay}");
-        return new TakeoffCaptureResult(result.LevelName, replay, result.Rooms.Count, result.TotalSqft);
-    }
-
-    public static TakeoffPlanReferencePrepared PreparePlanReference(
-        Document doc,
-        TakeoffPlanReferenceArgs args,
-        Action<string> log)
-    {
-        return Annotate.PreparePlanReference(doc, args.View, args.Token, args.Loops, log);
-    }
-
-    public static TakeoffPlanReferenceExported ExportPlanReference(
-        Document doc,
-        string sourceView,
-        string token,
-        string outDir,
-        Action<string> log) =>
-        Annotate.ExportPlanReference(doc, sourceView, token, outDir, log);
-
-    public static TakeoffPartitionResult Partition(
-        Document doc,
-        TakeoffPartitionRequest request)
+        TakeoffPartitionRequest request,
+        Pe.Revit.Partition.PartitionAnswer answer)
     {
         TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         Action<string> log = static _ => { };
-        var zone = new ZoneScope { Name = request.ZoneName, Loops = request.Loops };
-        var snapshot = DetectSnapshot.Load(Environment.ExpandEnvironmentVariables(request.ReplayPath));
-        log($"[partition] replaying zone '{request.ZoneName}'");
-        var result = snapshot.ReplayInferred(log, null, zone.CellMask(snapshot.Field));
-        var profile = TakeoffPolicy.InferLevelProfile(snapshot);
-        var promotion = TakeoffPromotion.PromoteZone(
-            result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log,
-            distanceToWallInk: snapshot.SeedInkDistance(),
-            heuristicClosureAt: snapshot.HeuristicClosureAt(profile));
-        result = promotion.Result;
-
         var view = FindView(doc, request.View);
-        var level = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
-            .FirstOrDefault(l => l.Name.Contains(request.LevelFragment, StringComparison.OrdinalIgnoreCase));
-        double elevation = level?.Elevation ?? snapshot.LevelElevation;
+        var level = view.GenLevel;
+        double elevation = level?.Elevation ?? 0.0;
+
+        var rooms = new List<RoomResult>();
+        var residues = new List<ResidueResult>();
+        foreach (var r in answer.Rooms)
+        {
+            var poly = Outer(r.Loop);
+            if (r.Disposition == Pe.Revit.Partition.Disposition.Excluded) continue;   // wall: drawn as nothing
+            if (r.Disposition == Pe.Revit.Partition.Disposition.Accepted)
+            {
+                rooms.Add(new RoomResult {
+                    Id = $"R{r.Index + 1:D2}", RawSqft = r.AreaSqft, PerimeterFt = Perimeter(poly),
+                    LabelX = r.LabelX, LabelY = r.LabelY,
+                    MeanCeilingFt = r.CeilingZ is { } cz && r.FloorZ is { } fz ? cz - fz : 0.0,
+                    Polygon = poly,
+                    Holes = (r.Holes ?? []).Select(Outer).ToList(),
+                });
+                continue;
+            }
+
+            residues.Add(new ResidueResult {
+                Id = $"H{r.Index + 1:D2}",
+                Reason = r.Disposition == Pe.Revit.Partition.Disposition.Void ? ResidueReason.Excluded : ResidueReason.Rejected,
+                RawSqft = r.AreaSqft, LabelX = r.LabelX, LabelY = r.LabelY,
+                MeanCeilingFt = r.CeilingZ is { } cz2 && r.FloorZ is { } fz2 ? cz2 - fz2 : 0.0,
+                Polygon = poly,
+                Holes = (r.Holes ?? []).Select(Outer).ToList(),
+            });
+        }
+
         var materialized = ZoneMaterializer.Materialize(
-            doc, view, elevation, request.ZoneGuid, request.RunId, result.Rooms, result.Residues, log);
+            doc, view, elevation, request.ZoneGuid, request.RunId, rooms, residues, log);
         doc.Regenerate();
 
+        var acc = answer.Accounting;
         return new TakeoffPartitionResult(
-            result.LevelName,
+            level?.Name ?? "",
             elevation,
             materialized.Created,
             materialized.Held,
             materialized.Rebound,
             materialized.Orphaned,
-            new TakeoffPromotionFacts(
-                promotion.Diagnostics.AcceptedRooms,
-                promotion.Diagnostics.HeldRooms,
-                promotion.Diagnostics.IsStrictlyEditable),
-            result.DomainSqft,
-            result.ClaimedWallSqft,
-            result.ExcludedResidueSqft,
-            result.TotalSqft,
-            result.ProfileProvenance ?? "",
+            new TakeoffPromotionFacts(rooms.Count, residues.Count, answer.Hold == null),
+            acc.ZoneSqft,
+            acc.Excluded,
+            acc.Void,
+            acc.Accepted + acc.Held + acc.Void + acc.Excluded,
+            answer.EnclosureSource + (answer.Hold is null ? "" : " | hold: " + answer.Hold),
             materialized.Failures,
-            result.Rooms.Select(r => new TakeoffDetectedRoom(
+            rooms.Select(r => new TakeoffDetectedRoom(
                 r.Id, r.RawSqft, r.PerimeterFt, r.MeanCeilingFt,
                 [r.LabelX, r.LabelY], r.Flags, r.Polygon)).ToList(),
-            result.Residues.Select(r => new TakeoffDetectedResidue(
+            residues.Select(r => new TakeoffDetectedResidue(
                 r.Id, r.Reason.ToString(), r.RawSqft,
                 [r.LabelX, r.LabelY], r.Polygon)).ToList(),
             ReadLiveRegions(doc, view, request.ZoneGuid));
+    }
+
+    private static List<double[]> Outer(double[] loop)
+    {
+        var pts = new List<double[]>(loop.Length / 2);
+        for (int i = 0; i < loop.Length; i += 2) pts.Add([loop[i], loop[i + 1]]);
+        return pts;
+    }
+
+    private static double Perimeter(List<double[]> pts)
+    {
+        double p = 0;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            var a = pts[i]; var b = pts[(i + 1) % pts.Count];
+            p += Math.Sqrt(((a[0] - b[0]) * (a[0] - b[0])) + ((a[1] - b[1]) * (a[1] - b[1])));
+        }
+        return p;
     }
 
     public static TakeoffWriteResult WriteDecisions(Document doc, TakeoffDecisionsRequest request) =>
@@ -292,7 +280,7 @@ public static class TakeoffAtlas
         Document doc, FilledRegion fr, string role, Guid guid, string blob)
     {
         var loops = Boundaries(fr);
-        var outer = loops.OrderByDescending(loop => Math.Abs(Detector.Shoelace(loop))).FirstOrDefault()
+        var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).FirstOrDefault()
                     ?? throw new InvalidOperationException($"FilledRegion {fr.Id} has no boundary");
         return new TakeoffLiveRegion(fr.Id.Value(), role, guid, Area(fr, loops),
             role == TakeoffCarriers.RoleRoomRegion ? TakeoffCarriers.ReadRoomType(fr) : "", blob, outer);
@@ -330,5 +318,5 @@ public static class TakeoffAtlas
 
     private static double Area(FilledRegion fr, IReadOnlyList<List<double[]>> loops) =>
         fr.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
-        ?? loops.Sum(loop => Math.Abs(Detector.Shoelace(loop)));
+        ?? loops.Sum(loop => Math.Abs(Kernel.Shoelace(loop)));
 }

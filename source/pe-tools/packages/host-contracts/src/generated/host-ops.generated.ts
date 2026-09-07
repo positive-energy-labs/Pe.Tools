@@ -4989,23 +4989,6 @@ export namespace TakeoffsDecisions {
   }
 }
 
-/** Capture one level, detect room geometry, and write replay evidence without committing Revit changes. */
-export namespace TakeoffsDetectCapture {
-  export namespace Req {
-    export interface Request {
-      level: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      level: string;
-      replayPath: string;
-      rooms: number;
-      totalSqft: number;
-    }
-  }
-}
-
 /** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
 export namespace TakeoffsInitializeCarrier {
   export namespace Req {
@@ -5024,17 +5007,15 @@ export namespace TakeoffsInitializeCarrier {
   }
 }
 
-/** Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction. */
+/** Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
     export interface Request {
-      replayPath: string;
+      zoneRegion: number;
       view: string;
-      levelFragment: string;
       zoneName: string;
       zoneGuid: string;
       runId: string;
-      loops: number[][][];
     }
   }
   export namespace Res {
@@ -5085,20 +5066,6 @@ export namespace TakeoffsPartition {
       roomType: string;
       blob: string;
       outer: number[][];
-    }
-  }
-}
-
-/** Prepare the capture views for one Takeoff plan view in one transaction. */
-export namespace TakeoffsPrepareCapture {
-  export namespace Req {
-    export interface Request {
-      view: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      level: string;
     }
   }
 }
@@ -5208,22 +5175,6 @@ export namespace TakeoffsSnapshot {
   }
 }
 
-/** Read non-template plan views with the Filled Region count for each view. */
-export namespace TakeoffsViews {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export interface Response {
-      views: TakeoffViewFacts[];
-    }
-    export interface TakeoffViewFacts {
-      elementId: number;
-      regions: number;
-    }
-  }
-}
-
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
@@ -5285,14 +5236,11 @@ export interface HostOps {
   "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
   "takeoffs.decisions": { request: TakeoffsDecisions.Req.Request; response: TakeoffsDecisions.Res.Response };
-  "takeoffs.detect-capture": { request: TakeoffsDetectCapture.Req.Request; response: TakeoffsDetectCapture.Res.Response };
   "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
-  "takeoffs.prepare-capture": { request: TakeoffsPrepareCapture.Req.Request; response: TakeoffsPrepareCapture.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
   "takeoffs.room-type": { request: TakeoffsRoomType.Req.Request; response: TakeoffsRoomType.Res.Response };
   "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
-  "takeoffs.views": { request: TakeoffsViews.Req.Request; response: TakeoffsViews.Res.Response };
 }
 
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
@@ -5356,12 +5304,9 @@ export const hostOpKeys = [
   "takeoffs.adopt",
   "takeoffs.candidates",
   "takeoffs.decisions",
-  "takeoffs.detect-capture",
   "takeoffs.initialize-carrier",
   "takeoffs.partition",
-  "takeoffs.prepare-capture",
   "takeoffs.rhvac-links",
   "takeoffs.room-type",
   "takeoffs.snapshot",
-  "takeoffs.views",
 ] as const satisfies readonly (keyof HostOps)[];

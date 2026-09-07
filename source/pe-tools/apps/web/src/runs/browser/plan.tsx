@@ -315,6 +315,7 @@ export function PlanPane(props: {
           />
         )}
         <svg
+          fillRule="evenodd"
           width={vp.widthPx}
           height={vp.heightPx}
           viewBox={`0 0 ${vp.widthPx} ${vp.heightPx}`}
@@ -325,6 +326,7 @@ export function PlanPane(props: {
           {underLayer}
         </svg>
         <svg
+          fillRule="evenodd"
           width={vp.widthPx}
           height={vp.heightPx}
           viewBox={`0 0 ${vp.widthPx} ${vp.heightPx}`}

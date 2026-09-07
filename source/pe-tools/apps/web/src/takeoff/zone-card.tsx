@@ -120,23 +120,11 @@ export function ZoneCard({
               <VerbGroup title="zone verbs" radius="document · model">
                 <Verb
                   tone="commit"
-                  label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
-                  disabled={busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    `Prepares cropped seed views on ${zone.zone.lane.label}, exports ink, and detects rooms — writes replay_<level>.bin and touches the document`,
-                    "fixture · nothing to capture",
-                  )}
-                  onClick={() => actions.capture(zone.zone.lane)}
-                />
-                <Verb
-                  tone="commit"
                   label="partition zone"
-                  disabled={busy !== null || !zone.zone.lane.replayPath}
+                  disabled={busy !== null || zone.zone.elementId === null}
                   reason={
-                    zone.zone.lane.replayPath == null
-                      ? "capture the level first — the partition replays that snapshot, it cannot invent one"
+                    zone.zone.elementId === null
+                      ? "adopt this zoning region first — the partition reads its loop and level"
                       : hostReason(
                           live,
                           busy,

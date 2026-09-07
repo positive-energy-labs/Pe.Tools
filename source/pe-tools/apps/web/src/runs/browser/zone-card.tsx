@@ -28,7 +28,10 @@ export function ZoneCard(props: {
 }) {
   const { name, a, b, pairedBy, runA, runB, panelFullW, panelHalfW, panelH, underlay } = props;
   const comparing = runA !== null;
-  const deltaSf = comparing && a && b ? Math.round(b.AcceptedSqft - a.AcceptedSqft) : null;
+  const deltaSf =
+    comparing && a && b && a.AcceptedSqft !== null && b.AcceptedSqft !== null
+      ? Math.round(b.AcceptedSqft - a.AcceptedSqft)
+      : null;
   const locatable = b ?? a;
   const knobs = b ? adaptedKnobs(b) : [];
   const fbKey = itemKey(name, runA, runB);
@@ -44,7 +47,13 @@ export function ZoneCard(props: {
         </span>
         {b ? (
           <Chip
-            tone={b.triage.verdict === "solve" ? "done" : "caution"}
+            tone={
+              b.triage.verdict === "error"
+                ? "alarm"
+                : b.triage.verdict === "solve"
+                  ? "done"
+                  : "caution"
+            }
             title={`Triage verdict for the current run: ${b.triage.verdict} — ${b.triage.reason}`}
           >
             {b.triage.verdict}
@@ -91,6 +100,45 @@ export function ZoneCard(props: {
           ) : null}
         </span>
       </div>
+
+      {b?.capture && (
+        <div className="flex flex-wrap gap-2">
+          <span>
+            {b.capture.capturedUtc} ·{" "}
+            {b.capture.stamp.Fresh ? "fresh at capture" : "stale at capture"} · epoch{" "}
+            {b.capture.stamp.Epoch}
+          </span>
+          <a href={`/api/runs-data/${runB}/${b.capture.result}`} target="_blank" rel="noreferrer">
+            {b.triage.verdict === "error" ? "failure" : "answer / room reasons"}
+          </a>
+          <a href={`/api/runs-data/${runB}/${b.capture.manifest}`} target="_blank" rel="noreferrer">
+            source hashes
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/zone.json`} target="_blank" rel="noreferrer">
+            scope
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/knee.json`} target="_blank" rel="noreferrer">
+            knee input
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/header.json`} target="_blank" rel="noreferrer">
+            header input
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/probes.json`} target="_blank" rel="noreferrer">
+            actual probes
+          </a>
+          {b.capture.input && (
+            <a href={`/api/runs-data/${runB}/${b.capture.input}`} target="_blank" rel="noreferrer">
+              full input / Room proposals
+            </a>
+          )}
+          <span>{b.capture.note}</span>
+        </div>
+      )}
+      {b?.triage.verdict === "error" && (
+        <pre className="whitespace-pre-wrap break-words" data-tone="alarm">
+          {b.triage.reason}
+        </pre>
+      )}
 
       <div className="flex gap-2">
         {comparing ? (

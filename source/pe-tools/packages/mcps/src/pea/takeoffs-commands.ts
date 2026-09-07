@@ -54,25 +54,23 @@ export function createTakeoffsCommandHandlers(
       const input = raw as Selection;
       const caller = runtime(ctx);
       const before = await readSnapshot(caller);
-      const prepared = await caller.call("takeoffs.prepare-capture", { view: input.view });
-      const capture = await caller.call("takeoffs.detect-capture", { level: prepared.level });
       const zones = before.world.zones.filter((zone) => input.zones.includes(zone.zone.guid));
+      // ADR 0011: no capture pass. The adopted Zoning Region carries its own loop and level.
       for (const zone of zones) {
+        if (zone.zone.elementId === null) throw Error(`adopt ${zone.zone.key} before partitioning`);
         await caller.call("takeoffs.partition", {
-          replayPath: capture.replayPath,
+          zoneRegion: zone.zone.elementId,
           view: zone.zone.lane.view,
-          levelFragment: zone.zone.lane.label,
           zoneName: zone.name,
           zoneGuid: zone.zone.guid,
           runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-          loops: zone.zone.loops.map((loop) => loop.map(([x, y]) => [x, y])),
         });
       }
       const snapshot = await readSnapshot(caller);
       const document = ctx.getDoc();
       document.snapshot = snapshot;
       await ctx.setDoc(document);
-      return { captured: prepared.level, partitioned: zones.length };
+      return { partitioned: zones.length };
     },
 
     sync: async (raw, ctx) => {
@@ -110,19 +108,14 @@ export function createTakeoffsCommandHandlers(
 }
 
 async function readSnapshot(caller: HostRpcCaller) {
-  const [snapshot, documents, projectIndex, viewCounts] = await Promise.all([
+  const [snapshot, documents, projectIndex] = await Promise.all([
     caller.call("takeoffs.snapshot"),
     caller.call("revit.context.document-session"),
     caller.call("revit.catalog.project-index", takeoffProjectIndexRequest),
-    caller.call("takeoffs.views"),
   ]);
   const document = documents.activeDocument;
   if (!document) throw Error("The bound Revit session has no active document.");
-  return projectTakeoffSnapshot(
-    snapshot,
-    document.title,
-    projectTakeoffViews(viewCounts, projectIndex),
-  );
+  return projectTakeoffSnapshot(snapshot, document.title, projectTakeoffViews(projectIndex));
 }
 
 function applyStaged<A extends Record<string, unknown>>(room: A, edit: StagedRoomEdit): A {

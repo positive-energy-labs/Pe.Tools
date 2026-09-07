@@ -1,6 +1,7 @@
 import { cn } from "#/lib/utils";
+import { token } from "#/lib/token";
 import { type ZoneRecord } from "../world";
-import { adaptedKnobs, fmtPct, fmtSqft, topRejections } from "./unknown";
+import { adaptedKnobs, fmtPct, fmtSqft, topRejections, closureText, roomCount } from "./unknown";
 
 export function ZonePeekFloater(props: {
   zoneName: string;
@@ -12,15 +13,11 @@ export function ZonePeekFloater(props: {
   const { a, b, comparing } = props;
   const rows: [string, (z: ZoneRecord) => string][] = [
     ["verdict", (z) => `${z.triage.verdict} (${z.triage.reason})`],
-    ["accepted", (z) => `${z.AcceptedRooms}/${z.OracleRooms}r · ${fmtSqft(z.AcceptedSqft)}`],
-    ["held", (z) => `${z.HeldRooms}r · ${fmtSqft(z.HeldSqft)}`],
+    ["accepted", (z) => `${roomCount(z)} · ${fmtSqft(z.AcceptedSqft)}`],
+    ["held", (z) => `${z.HeldRooms ?? "?"}r · ${fmtSqft(z.HeldSqft)}`],
     ["ink-backed", (z) => fmtPct(z.InkBackedEdgeFraction)],
-    ["ink ratio", (z) => z.census.inkRatio.toFixed(2)],
-    [
-      "closure",
-      (z) =>
-        `dh ${Math.round(z.closure.doorHeadSqft)} · wall ${Math.round(z.closure.wallRunGapSqft)} · gap ${Math.round(z.closure.gapCloseSqft)} sf`,
-    ],
+    ["ink ratio", (z) => z.census?.inkRatio.toFixed(2) ?? "unavailable"],
+    ["closure", (z) => closureText(z)],
   ];
   const rejList = (z: ZoneRecord | null | undefined, alignEnd: boolean) =>
     z ? (
@@ -30,7 +27,9 @@ export function ZonePeekFloater(props: {
             {k} ×{n}
           </span>
         ))}
-        {Object.keys(z.Rejections).length === 0 && <span>none</span>}
+        {Object.keys(z.Rejections).length === 0 && (
+          <span>{z.triage.verdict === "error" ? "unavailable" : "none"}</span>
+        )}
       </span>
     ) : (
       "—"
@@ -39,7 +38,7 @@ export function ZonePeekFloater(props: {
   return (
     <div
       className="pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 p-2"
-      style={{ borderRadius: "var(--radius)" }}
+      style={{ borderRadius: "var(--radius)", backgroundColor: token("page") }}
     >
       <div className="mb-1 flex flex-col items-center">
         <span className="">{props.zoneName}</span>

@@ -203,8 +203,8 @@ function harness() {
     async readViews() {
       calls.views += 1;
       return [
-        { name: bound.views[0]!, level: "Main", regions: 1 },
-        { name: "Zero Regions", level: "Roof", regions: 0 },
+        { name: bound.views[0]!, level: "Main" },
+        { name: "Zero Regions", level: "Roof" },
       ];
     },
     async listRhvac(dir) {
@@ -237,9 +237,6 @@ function harness() {
         bound: "b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001",
         remaining: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002"],
       };
-    },
-    async capture() {
-      return { replayPath: "C:\\Takeoffs\\replay_Main.bin", rooms: 1, totalSqft: 100 };
     },
     async partition() {
       throw new Error("partition is outside this harness");
@@ -352,22 +349,6 @@ describe("takeoff route store", () => {
     expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
     await store.actions.openAdopt();
     expect(registry.get(store.atoms.panel)).toBe("adopt");
-    store.dispose();
-  });
-
-  it("does not offer a view with zero filled regions", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-    });
-    store.actions.setSelection(bound);
-
-    await store.actions.settle(store.atoms.viewFacts);
-
-    expect(store.atoms.registry.get(store.feeds.views).options).toEqual([
-      { id: bound.views[0], label: bound.views[0], sub: "Main · 1 region" },
-    ]);
     store.dispose();
   });
 
@@ -780,28 +761,6 @@ describe("takeoff route store", () => {
       dirty: true,
       conflict: false,
     });
-    store.dispose();
-  });
-
-  it("brackets capture and publishes its replay through the store world", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-    });
-    store.actions.setSelection(bound);
-    await store.actions.settle(store.atoms.snapshot);
-
-    await store.actions.capture({ view: bound.views[0]!, label: "Main" });
-
-    expect(store.atoms.registry.get(store.atoms.busy)).toBeNull();
-    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
-      verb: "capture",
-      text: "captured Main: 1 rooms",
-    });
-    expect(store.atoms.registry.get(store.atoms.world).lanes[0]?.replayPath).toBe(
-      "C:\\Takeoffs\\replay_Main.bin",
-    );
     store.dispose();
   });
 

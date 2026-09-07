@@ -10,7 +10,6 @@ import {
   STAGE_ORDER,
   type RoomEdit,
   type Stage,
-  type WorldLane,
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
@@ -23,7 +22,6 @@ export type Verdict = "accept" | "dismiss";
 export interface AtlasActions {
   patch: (guid: string, patch: RoomEdit) => void;
   decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  capture: (lane: WorldLane) => void;
   partition: (zone: WorldZone) => void;
   refresh: () => void;
 }
@@ -38,7 +36,6 @@ export interface AtlasProps {
 const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-  capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
   partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
   refresh: () => void store.actions.refresh().catch(() => undefined),
 });

@@ -120,7 +120,7 @@ export function AtlasTable() {
                 ) : (
                   <EmptyState
                     story="scope"
-                    exit="capture a level, then partition a zone — rooms are materialized by partition"
+                    exit="adopt a zoning region, then partition it — rooms are materialized by partition"
                   >
                     no rooms anywhere yet — zones before partitioned have no rooms
                   </EmptyState>

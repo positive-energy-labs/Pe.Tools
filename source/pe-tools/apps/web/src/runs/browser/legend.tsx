@@ -1,3 +1,4 @@
+import { difference, sumKnown } from "../world";
 import { dash, token } from "#/lib/token";
 import { type CSSProperties, type ReactNode } from "react";
 import { cn } from "#/lib/utils";
@@ -15,7 +16,11 @@ import { Press } from "#/components/lang/press";
 import type { LevelData } from "./frame";
 import { Delta, HatchPattern, UNKNOWN_TITLE, fmtSqft } from "./unknown";
 
-export function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
+export function LegendFloater(props: {
+  underlay: boolean;
+  sliceEvidence?: boolean;
+  onClose: () => void;
+}) {
   const sw = (bg: string, extra?: CSSProperties) => (
     <span className="inline-block h-2.5 w-4 shrink-0" style={{ backgroundColor: bg, ...extra }} />
   );
@@ -74,10 +79,14 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
   return (
     <div
       className="absolute right-2 top-2 flex w-52 flex-col gap-1 px-2 py-1.5"
-      style={{ borderRadius: "var(--radius)" }}
+      style={{ borderRadius: "var(--radius)", backgroundColor: token("page") }}
     >
       <span className="flex items-baseline">
-        <span>evidence — the run's raster{props.underlay ? "" : " (hidden)"}</span>
+        <span>
+          {props.sliceEvidence
+            ? "evidence — raw knee/header projection"
+            : `evidence — the run's raster${props.underlay ? "" : " (hidden)"}`}
+        </span>
         <Press
           type="button"
           tone="quiet"
@@ -90,20 +99,30 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
         </Press>
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "")}>
-        {row(
-          sw(`rgba(${INK_M.join(",")})`),
-          "received ink (solid)",
-          "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.",
-        )}
-        {row(
-          sw(`rgba(${SEAL_DOOR.join(",")})`),
-          "door-head seal (invented)",
-          "Closure the solver INVENTED across door openings. Pale + translucent = synthetic — it can never read as a drawn wall.",
-        )}
-        {row(
-          sw(`rgba(${CLOSE_M.join(",")})`),
-          "gap-close (invented)",
-          "Closure the solver INVENTED across wall-run gaps. Pale + translucent = synthetic.",
+        {props.sliceEvidence ? (
+          row(
+            sw(token("ink")),
+            "captured geometry",
+            "Actual slice pieces; the image contains no inferred closures.",
+          )
+        ) : (
+          <>
+            {row(
+              sw(`rgba(${INK_M.join(",")})`),
+              "received ink (solid)",
+              "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.",
+            )}
+            {row(
+              sw(`rgba(${SEAL_DOOR.join(",")})`),
+              "door-head seal (invented)",
+              "Closure the solver INVENTED across door openings. Pale + translucent = synthetic — it can never read as a drawn wall.",
+            )}
+            {row(
+              sw(`rgba(${CLOSE_M.join(",")})`),
+              "gap-close (invented)",
+              "Closure the solver INVENTED across wall-run gaps. Pale + translucent = synthetic.",
+            )}
+          </>
         )}
       </div>
       <span className="mt-0.5">decisions — drawn on top</span>
@@ -137,8 +156,14 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
         )}
       </div>
       <span className="mt-0.5 pt-1" style={{ borderColor: token("line-2") }}>
-        solid dark = received · pale translucent = invented
-        {props.underlay ? "" : " · underlay hidden"}
+        {props.sliceEvidence ? (
+          "Grey = captured input · colours = solver decisions"
+        ) : (
+          <>
+            solid dark = received · pale translucent = invented
+            {props.underlay ? "" : " · underlay hidden"}
+          </>
+        )}
       </span>
     </div>
   );
@@ -152,7 +177,7 @@ export function LevelStatsFloater(props: {
 }) {
   const { level, cur, prev } = props;
   const agg = (data: LevelData | null) => {
-    if (!data) return null;
+    if (!data || data.zones.length === 0) return null;
     const zones = data.zones;
     const rej = new Map<string, number>();
     for (const z of zones) {
@@ -161,8 +186,8 @@ export function LevelStatsFloater(props: {
     return {
       zones: zones.length,
       solved: zones.filter((z) => z.triage.verdict === "solve").length,
-      acceptedSqft: zones.reduce((s, z) => s + z.AcceptedSqft, 0),
-      heldSqft: zones.reduce((s, z) => s + z.HeldSqft, 0),
+      acceptedSqft: sumKnown(zones.map((z) => z.AcceptedSqft)),
+      heldSqft: sumKnown(zones.map((z) => z.HeldSqft)),
       rejTop: [...rej.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3),
     };
   };
@@ -172,7 +197,7 @@ export function LevelStatsFloater(props: {
   return (
     <div
       className="absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 px-2 py-1.5"
-      style={{ borderRadius: "var(--radius)" }}
+      style={{ borderRadius: "var(--radius)", backgroundColor: token("page") }}
     >
       <span className="flex items-baseline">
         {level} — this run
@@ -197,11 +222,13 @@ export function LevelStatsFloater(props: {
       </span>
       <span>
         accepted {fmtSqft(b.acceptedSqft)}{" "}
-        {a ? <Delta value={b.acceptedSqft - a.acceptedSqft} suffix=" sf" /> : null}
+        {a ? <Delta value={difference(b.acceptedSqft, a.acceptedSqft)} suffix=" sf" /> : null}
       </span>
       <span>
         held {fmtSqft(b.heldSqft)}{" "}
-        {a ? <Delta value={b.heldSqft - a.heldSqft} goodWhenUp={false} suffix=" sf" /> : null}
+        {a ? (
+          <Delta value={difference(b.heldSqft, a.heldSqft)} goodWhenUp={false} suffix=" sf" />
+        ) : null}
       </span>
       {b.rejTop.length > 0 && (
         <span className="mt-0.5 flex flex-col">

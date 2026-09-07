@@ -144,7 +144,7 @@ function overlaySvg(
   parts.push(
     `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="${ZONE_WIDTH}" stroke-dasharray="${dash("reference")}"/>`,
   );
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}"><defs>${defs.join("")}</defs>${parts.join("")}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" fill-rule="evenodd" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}"><defs>${defs.join("")}</defs>${parts.join("")}</svg>`;
 }
 
 function svgToImage(svg: string): Promise<HTMLImageElement> {
@@ -184,10 +184,8 @@ async function paintPanelTile(
   ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
   const [geom, plan] = await Promise.all([
-    loadZoneGeometry(runId, zone.Tsv).catch(
-      (): ZoneGeometry => ({ rooms: [], polys: new Map(), residues: [] }),
-    ),
-    loadPlan(runId, zone.Ink).catch(() => null),
+    loadZoneGeometry(runId, zone.Tsv),
+    loadPlan(runId, zone.Ink, zone.plan).catch(() => null),
   ]);
   if (plan) {
     paintPlan(
@@ -207,7 +205,7 @@ async function paintPanelTile(
   }
   try {
     const [ink, seals, close, sealClasses] = await Promise.all([
-      loadReplaySeedInk(runId, zone.Ink).catch(() => null),
+      zone.Ink ? loadReplaySeedInk(runId, zone.Ink).catch(() => null) : null,
       zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
       zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
       zone.Seals ? loadSealClasses(runId, zone.Seals).catch(() => null) : null,
@@ -241,24 +239,26 @@ function missingTile(label: string): HTMLCanvasElement {
   return tile;
 }
 
-const fmtSqft = (v: number) => `${Math.round(v).toLocaleString()} sf`;
+const fmtSqft = (v: number | null) =>
+  v === null ? "unavailable" : `${Math.round(v).toLocaleString()} sf`;
 
 function captionLines(item: StagedItem): { text: string; tone: "text" | "muted" | "alarm" }[] {
   const { a, b } = item;
   const lines: { text: string; tone: "text" | "muted" | "alarm" }[] = [];
   lines.push({ text: `${item.zone} — A ${item.runA ?? "(none)"} | B ${item.runB}`, tone: "text" });
   if (b) {
-    const delta = a
-      ? ` · Δ ${Math.round(b.AcceptedSqft - a.AcceptedSqft) >= 0 ? "+" : ""}${Math.round(b.AcceptedSqft - a.AcceptedSqft)} sf vs A`
-      : "";
+    const delta =
+      a && a.AcceptedSqft !== null && b.AcceptedSqft !== null
+        ? ` · Δ ${Math.round(b.AcceptedSqft - a.AcceptedSqft) >= 0 ? "+" : ""}${Math.round(b.AcceptedSqft - a.AcceptedSqft)} sf vs A`
+        : "";
     lines.push({
-      text: `B: ${b.triage.verdict} (${b.triage.reason}) · ${b.AcceptedRooms}/${b.OracleRooms}r · ${fmtSqft(b.AcceptedSqft)} accepted · ${fmtSqft(b.HeldSqft)} held · ink-backed ${Math.round(b.InkBackedEdgeFraction * 100)}%${delta}`,
+      text: `B: ${b.triage.verdict} (${b.triage.reason}) · ${b.AcceptedRooms ?? "?"}/${b.OracleRooms ?? "?"}r · ${fmtSqft(b.AcceptedSqft)} accepted · ${fmtSqft(b.HeldSqft)} held · ink-backed ${b.InkBackedEdgeFraction === null ? "unavailable" : `${Math.round(b.InkBackedEdgeFraction * 100)}%`}${delta}`,
       tone: "muted",
     });
   }
   if (a) {
     lines.push({
-      text: `A: ${a.triage.verdict} (${a.triage.reason}) · ${a.AcceptedRooms}/${a.OracleRooms}r · ${fmtSqft(a.AcceptedSqft)} accepted · ${fmtSqft(a.HeldSqft)} held`,
+      text: `A: ${a.triage.verdict} (${a.triage.reason}) · ${a.AcceptedRooms ?? "?"}/${a.OracleRooms ?? "?"}r · ${fmtSqft(a.AcceptedSqft)} accepted · ${fmtSqft(a.HeldSqft)} held`,
       tone: "muted",
     });
   }

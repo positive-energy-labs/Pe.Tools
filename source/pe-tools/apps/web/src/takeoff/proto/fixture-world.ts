@@ -121,7 +121,6 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return world.lanes.map((lane) => ({
       name: lane.view,
       level: lane.label,
-      regions: world.zones.filter((zone) => zone.zone.lane.view === lane.view).length,
     }));
   },
   async listRhvac(dir) {
@@ -153,9 +152,6 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return { text: `fixture adopted ${input.items.length} zoning regions` };
   },
   async initializeCarrier() {
-    throw new Error("fixture takeoff host is read-only");
-  },
-  async capture() {
     throw new Error("fixture takeoff host is read-only");
   },
   async partition() {

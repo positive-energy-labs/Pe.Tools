@@ -268,14 +268,21 @@ function geometry(runId: string, path: string): ZoneGeometry {
   const report = reports.get(runId);
   const source = report?.Zones.find((item) => item.Tsv === path);
   if (!source) return { rooms: [], polys: new Map(), residues: [] };
+  if (
+    source.AcceptedRooms === null ||
+    source.HeldRooms === null ||
+    source.AcceptedSqft === null ||
+    source.HeldSqft === null
+  )
+    throw new Error("fixture geometry requires measured values");
   const count = source.AcceptedRooms + source.HeldRooms;
   const rooms = Array.from({ length: count }, (_, index) => {
-    const accepted = index < source.AcceptedRooms;
+    const accepted = index < source.AcceptedRooms!;
     return {
       id: `R${String(index + 1).padStart(2, "0")}`,
       sqft: accepted
-        ? source.AcceptedSqft / Math.max(1, source.AcceptedRooms)
-        : source.HeldSqft / Math.max(1, source.HeldRooms),
+        ? source.AcceptedSqft! / Math.max(1, source.AcceptedRooms!)
+        : source.HeldSqft! / Math.max(1, source.HeldRooms!),
       lx: source.MinX + 8 + index * 8,
       ly: source.MinY + 12,
       ceil: 9,

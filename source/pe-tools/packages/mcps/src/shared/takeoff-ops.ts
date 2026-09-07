@@ -8,11 +8,7 @@ import type {
   WorldRoom,
   WorldZone,
 } from "@pe/agent-contracts";
-import type {
-  RevitCatalogProjectIndex,
-  TakeoffsSnapshot,
-  TakeoffsViews,
-} from "@pe/host-contracts/generated";
+import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 
 export const takeoffProjectIndexRequest = {
   sections: ["Views"],
@@ -23,19 +19,15 @@ export const takeoffProjectIndexRequest = {
 
 const PLAN_VIEW_TYPES = new Set(["FloorPlan", "CeilingPlan", "EngineeringPlan", "AreaPlan"]);
 
+// ADR 0011 deleted takeoffs.views with the raster. The view list comes from the project index; the
+// per-view FilledRegion count went with the op rather than being faked at zero.
 export function projectTakeoffViews(
-  response: TakeoffsViews.Res.Response,
   projectIndex: RevitCatalogProjectIndex.Res.Response,
 ): ViewFacts[] {
-  const regionsByView = new Map(response.views.map((view) => [view.elementId, view.regions]));
-  const views = projectIndex.views.flatMap((view) => {
+  return projectIndex.views.flatMap((view) => {
     if (!PLAN_VIEW_TYPES.has(view.viewType) || view.handle.elementId == null) return [];
-    const regions = regionsByView.get(view.handle.elementId);
-    return regions === undefined ? [] : [{ name: view.name, level: view.levelName ?? "", regions }];
+    return [{ name: view.name, level: view.levelName ?? "" }];
   });
-  if (response.views.length > 0 && views.length === 0)
-    throw Error("takeoffs.views did not match any project-index view elementId");
-  return views;
 }
 
 export function projectTakeoffSnapshot(

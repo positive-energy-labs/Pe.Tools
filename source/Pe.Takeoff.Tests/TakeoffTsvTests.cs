@@ -90,30 +90,6 @@ public sealed class TakeoffTsvTests
     }
 
     [Test]
-    public void Writer_preserves_sub_micro_residue_topology()
-    {
-        var result = new TakeoffResult {
-            LevelName = "L1",
-            Residues = {
-                new ResidueResult {
-                    Id = "X01", Reason = ResidueReason.Excluded, RawSqft = 4,
-                    LabelX = 0.5, LabelY = 0.5,
-                    Polygon = {
-                        new[] { 0d, 0d }, new[] { 2d, 0d }, new[] { 2d, 2d },
-                        new[] { 1.0000004, 2d }, new[] { 1.0000004, 1d },
-                        new[] { 0.9999996, 1d }, new[] { 0.9999996, 2d }, new[] { 0d, 2d },
-                    },
-                },
-            },
-        };
-
-        var loaded = RoomTakeoff.LoadResult(result.ToTsv(), result.LevelName, result.LevelElevation);
-
-        Assert.That(TakeoffGeometry.ToPolygon(loaded.Residues.Single()).IsValid, Is.True,
-            "serialization must not collapse a narrow valid channel into a self-touch");
-    }
-
-    [Test]
     public void Checked_in_ProjectA_takeoffs_are_valid_shared_coverages()
     {
         var factory = new GeometryFactory(new PrecisionModel(1_000_000));

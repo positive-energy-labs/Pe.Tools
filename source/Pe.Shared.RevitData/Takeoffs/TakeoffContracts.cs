@@ -1,7 +1,5 @@
 namespace Pe.Shared.RevitData.Takeoffs;
 
-public sealed record TakeoffViewFacts(long ElementId, int Regions);
-public sealed record TakeoffViewsData(IReadOnlyList<TakeoffViewFacts> Views);
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
 {
@@ -52,23 +50,15 @@ public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Ite
 public sealed record TakeoffAdopted(long ElementId, Guid Guid);
 public sealed record TakeoffAdoptResult(IReadOnlyList<TakeoffAdopted> Adopted);
 
-public sealed record TakeoffPrepareCaptureRequest(string View);
-public sealed record TakeoffCapturePrepared(string Level);
-public sealed record TakeoffDetectCaptureRequest(string Level);
-public sealed record TakeoffCaptureResult(
-    string Level,
-    string ReplayPath,
-    int Rooms,
-    double TotalSqft);
 
+// The partition runs on Pe.Revit.Space, not on rendered pixels (ADR 0011). The zone region element
+// carries its own loop and level, so the replay path, the level fragment and the loops are gone.
 public sealed record TakeoffPartitionRequest(
-    string ReplayPath,
+    long ZoneRegion,
     string View,
-    string LevelFragment,
     string ZoneName,
     Guid ZoneGuid,
-    string RunId,
-    List<List<double[]>> Loops);
+    string RunId);
 public sealed record TakeoffDetectedRoom(
     string Id,
     double RawSqft,

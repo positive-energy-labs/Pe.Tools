@@ -160,10 +160,11 @@ const liveRegionSchema = z.object({
 
 export type LiveRegion = z.infer<typeof liveRegionSchema>;
 
+// ADR 0011 deleted takeoffs.views with the raster, and with it the per-view FilledRegion count.
+// A field that is always 0 is a lie, so it is gone rather than restored.
 const viewFactsSchema = z.object({
   name: z.string(),
   level: z.string(),
-  regions: z.number(),
 });
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 

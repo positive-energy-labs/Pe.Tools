@@ -183,34 +183,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         label: "audit",
         verbs: [
           {
-            key: "capture",
-            label: "capture level",
-            demands: ["views"],
-            kind: live ? "act" : "seam",
-            run: live
-              ? async () => {
-                  for (const view of views) {
-                    const lane = world.lanes.find((candidate) => candidate.view === view);
-                    if (!lane) throw new Error(`unknown zoning view ${view}`);
-                    await store.actions.capture(lane);
-                  }
-                }
-              : async () => {
-                  throw Error("a live document — the fixture is already captured");
-                },
-            refuse: () => null,
-            needs: "a live document — the fixture is already captured",
-          },
-          {
             key: "partition",
             label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
             demands: ["zones"],
             kind: live ? "act" : "seam",
             refuse: () => {
-              const uncaptured = boundZones.find((zone) => !zone.zone.lane.replayPath);
-              return uncaptured
-                ? `capture ${uncaptured.zone.lane.label} first — the partition replays its snapshot`
-                : null;
+              // ADR 0011: no capture pass. The partition reads the adopted Zoning Region directly.
+              const unadopted = boundZones.find((zone) => zone.zone.elementId === null);
+              return unadopted ? `adopt ${unadopted.zone.key} first` : null;
             },
             run: live
               ? async () => {

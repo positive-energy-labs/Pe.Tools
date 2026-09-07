@@ -183,12 +183,14 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     return snapshot;
   },
   async readViews(session) {
-    const scope = { bridgeSessionId: session.sessionId };
-    const [views, projectIndex] = await Promise.all([
-      callHostRpc("takeoffs.views", undefined, scope),
-      callHostRpc("revit.catalog.project-index", takeoffProjectIndexRequest, scope),
-    ]);
-    return projectTakeoffViews(views, projectIndex);
+    const projectIndex = await callHostRpc(
+      "revit.catalog.project-index",
+      takeoffProjectIndexRequest,
+      {
+        bridgeSessionId: session.sessionId,
+      },
+    );
+    return projectTakeoffViews(projectIndex);
   },
   async listRhvac(dir) {
     const response = await callHostRpc("rhvac.list", { dir });
@@ -218,19 +220,13 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
   },
   initializeCarrier: (session, stage) =>
     callHostRpc("takeoffs.initialize-carrier", { stage }, { bridgeSessionId: session.sessionId }),
-  async capture(session, lane) {
-    const scope = { bridgeSessionId: session.sessionId };
-    const prepared = await callHostRpc("takeoffs.prepare-capture", { view: lane.view }, scope);
-    return callHostRpc("takeoffs.detect-capture", { level: prepared.level }, scope);
-  },
   async partition(session, input) {
     const response = await callHostRpc(
       "takeoffs.partition",
+      { ...input },
       {
-        ...input,
-        loops: input.loops.map((loop) => loop.map(([x, y]) => [x, y])),
+        bridgeSessionId: session.sessionId,
       },
-      { bridgeSessionId: session.sessionId },
     );
     return {
       ...response,

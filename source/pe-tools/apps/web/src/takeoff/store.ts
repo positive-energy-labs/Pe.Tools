@@ -44,7 +44,6 @@ import {
   STAGE_ORDER,
   type RoomEdit,
   type World,
-  type WorldLane,
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
@@ -100,14 +99,14 @@ interface AdoptItem {
   readonly systemTag: string;
 }
 
+// ADR 0011: the partition runs on the resident Space soup. The adopted Zoning Region carries its
+// own loop and level, so the replay path, the level fragment and the loops are gone.
 interface PartitionArgs {
-  readonly replayPath: string;
+  readonly zoneRegion: number;
   readonly view: string;
-  readonly levelFragment: string;
   readonly zoneName: string;
   readonly zoneGuid: string;
   readonly runId: string;
-  readonly loops: readonly (readonly (readonly [number, number])[])[];
 }
 
 export interface TakeoffHost {
@@ -134,10 +133,6 @@ export interface TakeoffHost {
     readonly bound?: string | null;
     readonly remaining: readonly string[];
   }>;
-  capture(
-    session: SessionFacts,
-    lane: Pick<WorldLane, "view" | "label">,
-  ): Promise<{ readonly replayPath: string; readonly rooms: number; readonly totalSqft: number }>;
   partition(session: SessionFacts, input: PartitionArgs): Promise<PartitionRun>;
   writeDecisions(
     session: SessionFacts,
@@ -262,14 +257,12 @@ const roomEdit = (room: WorldRoom): RoomEdit => ({
   ventilationCfm: room.data?.ventilationCfm,
 });
 
-const partitionInput = (zone: WorldZone, replayPath: string): PartitionArgs => ({
-  replayPath,
+const partitionInput = (zone: WorldZone, zoneRegion: number): PartitionArgs => ({
+  zoneRegion,
   view: zone.zone.lane.view,
-  levelFragment: zone.zone.lane.label,
   zoneName: zone.name,
   zoneGuid: zone.zone.guid,
   runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-  loops: zone.zone.loops,
 });
 
 export function atlasRoomState(room: WorldRoom, open: number): AtlasRoomState {
@@ -431,7 +424,6 @@ export function createTakeoffStore(deps: {
     sorts: [],
     query: "",
   }).pipe(owned("page/atlas-table"));
-  const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(Atom.autoDispose);
   const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(owned("page/panel"));
   const adoptPatchesAtom = Atom.make<Readonly<Record<string, Partial<AdoptDraft>>>>({}).pipe(
     Atom.autoDispose,
@@ -665,13 +657,11 @@ export function createTakeoffStore(deps: {
     feed(
       get(viewFactsResult),
       (views) =>
-        views
-          .filter((view) => view.regions > 0)
-          .map((view) => ({
-            id: view.name,
-            label: view.name,
-            sub: `${view.level} · ${view.regions} region${view.regions === 1 ? "" : "s"}`,
-          })),
+        views.map((view) => ({
+          id: view.name,
+          label: view.name,
+          sub: view.level,
+        })),
       "read",
       { needs: TAKEOFF_SLOTS.views.needs },
     ),
@@ -717,7 +707,7 @@ export function createTakeoffStore(deps: {
       ...authority,
       lanes: authority.lanes.map((lane) => ({
         ...lane,
-        replayPath: get(replaysAtom)[lane.label] ?? lane.replayPath,
+        replayPath: lane.replayPath,
       })),
       zones: authority.zones.map((zone) => ({
         ...zone,
@@ -725,7 +715,7 @@ export function createTakeoffStore(deps: {
           ...zone.zone,
           lane: {
             ...zone.zone.lane,
-            replayPath: get(replaysAtom)[zone.zone.lane.label] ?? zone.zone.lane.replayPath,
+            replayPath: zone.zone.lane.replayPath,
           },
         },
         rooms: zone.rooms.map((room) => applyEdit(room, staged[room.guid]?.next)),
@@ -1146,27 +1136,14 @@ export function createTakeoffStore(deps: {
         ["snapshot"],
       ).catch(() => undefined);
     },
-    capture(lane: Pick<WorldLane, "view" | "label">) {
-      return runVerb("capture", async () => {
-        const session = await activeSession();
-        const result = await deps.host.capture(session, lane);
-        write("capture", "page/replays", () =>
-          registry.update(replaysAtom, (replays) => ({
-            ...replays,
-            [lane.label]: result.replayPath,
-          })),
-        );
-        return { ...result, text: `captured ${lane.label}: ${result.rooms} rooms` };
-      });
-    },
     partition(zone: WorldZone) {
       return runVerb(
         "partition",
         async () => {
-          const replayPath = registry.get(replaysAtom)[zone.zone.lane.label];
-          if (!replayPath) throw Error(`capture ${zone.zone.lane.label} first`);
+          const zoneRegion = zone.zone.elementId;
+          if (zoneRegion === null) throw Error(`adopt ${zone.zone.key} first`);
           const session = await activeSession();
-          const result = await deps.host.partition(session, partitionInput(zone, replayPath));
+          const result = await deps.host.partition(session, partitionInput(zone, zoneRegion));
           return { ...result, text: `partitioned ${zone.zone.key}` };
         },
         ["snapshot", "takeoff-views"],

@@ -1,3 +1,4 @@
+import { sumKnown } from "../world";
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -72,16 +73,13 @@ export default function RunBrowser() {
   if (runs.length === 0 || !curId) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-2 p-8">
-        <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
+        <EmptyState story="scope" exit="publish a Partition capture to fill the pool">
           No runs captured yet
         </EmptyState>
         <p className="t-small t-upper text-ink-2">
-          Every run of{" "}
-          <span className="face-mono text-ink">
-            ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
-          </span>{" "}
-          auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
-          reads whatever is there. Nothing to configure.
+          Publish a completed capture with{" "}
+          <code>python eval/rhvac/partition-run.py CAPTURE --label LABEL --zone-name ZONE</code>,
+          then reload.
         </p>
         {pool && (
           <p
@@ -193,7 +191,9 @@ export default function RunBrowser() {
             });
             const hidden = zonePairs.length - visible.length;
             const solved = zonePairs.filter((pair) => pair.b?.triage.verdict === "solve").length;
-            const sf = zonePairs.reduce((sum, pair) => sum + (pair.b?.AcceptedSqft ?? 0), 0);
+            const sf = sumKnown(
+              zonePairs.filter((pair) => pair.b).map((pair) => pair.b!.AcceptedSqft),
+            );
             return (
               <section
                 key={level}

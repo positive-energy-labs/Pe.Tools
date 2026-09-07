@@ -76,14 +76,17 @@ export function ZonePanel(props: {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [geom, setGeom] = useState<ZoneGeometry | null>(null);
+  const [geometryError, setGeometryError] = useState<string | null>(null);
   const [plan, setPlan] = useState<RegisteredPlan | null>();
 
   useEffect(() => {
     let live = true;
+    setGeom(null);
+    setGeometryError(null);
     source
       .loadZoneGeometry(runId, zone.Tsv)
       .then((g) => live && setGeom(g))
-      .catch(() => live && setGeom({ rooms: [], polys: new Map(), residues: [] }));
+      .catch((err: unknown) => live && setGeometryError(String(err)));
     return () => {
       live = false;
     };
@@ -93,13 +96,13 @@ export function ZonePanel(props: {
     let live = true;
     setPlan(undefined);
     source
-      .loadPlan(runId, zone.Ink)
+      .loadPlan(runId, zone.Ink, zone.plan)
       .then((value) => live && setPlan(value))
       .catch(() => live && setPlan(null));
     return () => {
       live = false;
     };
-  }, [runId, zone.Ink, source]);
+  }, [runId, zone.Ink, zone.plan, source]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,7 +111,7 @@ export function ZonePanel(props: {
     void (async () => {
       const [ink, seals, close, sealClasses] = underlay
         ? await Promise.all([
-            source.loadReplaySeedInk(runId, zone.Ink).catch(() => null),
+            zone.Ink ? source.loadReplaySeedInk(runId, zone.Ink).catch(() => null) : null,
             zone.Seals ? source.loadRaster(runId, zone.Seals).catch(() => null) : null,
             zone.Close ? source.loadRaster(runId, zone.Close).catch(() => null) : null,
             zone.Seals ? source.loadSealClasses(runId, zone.Seals).catch(() => null) : null,
@@ -167,7 +170,18 @@ export function ZonePanel(props: {
         }}
       >
         <canvas ref={canvasRef} width={vp.widthPx} height={vp.heightPx} />
-        <svg className="absolute inset-0" width={vp.widthPx} height={vp.heightPx} aria-hidden>
+        {geometryError && (
+          <span className="absolute inset-x-0 top-0" data-tone="alarm">
+            Geometry unavailable: {geometryError}
+          </span>
+        )}
+        <svg
+          fillRule="evenodd"
+          className="absolute inset-0"
+          width={vp.widthPx}
+          height={vp.heightPx}
+          aria-hidden
+        >
           <defs>
             {geom?.rooms
               .filter((room) => room.disposition === "held")

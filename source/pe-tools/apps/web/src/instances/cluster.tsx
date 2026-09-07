@@ -175,12 +175,12 @@ function InstancesClusterView({
   const [yearPick, setYearPick] = useState<string | null>(null);
   const [localStaged, setLocalStaged] = useState<Staged | null>(null);
   const intent = route?.slice;
-  target = intent?.selectedSession ?? target;
+  target = intent?.selectedSession?.slice("session:".length) ?? target;
   const originalSetTarget = setTarget;
   setTarget = (next) => {
     if (route)
       void route.apply([
-        { path: ["selectedSession"], value: next || null },
+        { path: ["selectedSession"], value: next ? `session:${next}` : null },
         { path: ["staged"], value: null },
       ]);
     else originalSetTarget(next);
@@ -198,7 +198,9 @@ function InstancesClusterView({
       })
     : null;
   const storedWorld =
-    stored?.kind === "open" ? worldTrunk.resolve(liveWorlds, stored.session) : undefined;
+    stored?.kind === "open"
+      ? worldTrunk.resolve(liveWorlds, stored.session.slice("session:".length))
+      : undefined;
   const staged: Staged | null = route
     ? stored
       ? stored.kind === "start"
@@ -222,7 +224,7 @@ function InstancesClusterView({
             : next.kind === "open"
               ? {
                   kind: "open",
-                  session: worldTrunk.option(next.world).id,
+                  session: `session:${worldTrunk.option(next.world).id}`,
                   document: next.doc.selector,
                 }
               : {
