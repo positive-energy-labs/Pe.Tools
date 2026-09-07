@@ -8,9 +8,9 @@ The Revit 2025 public API exposes `ConnectorElement.ChangeHostReference(Referenc
 
 ## Native control probe
 
-`FamilyModelCaptureTests.Native_connector_host_probe_compares_plane_with_coincident_nested_face` builds the real b-grd model without its authored connector, then creates two rectangular duct connectors at the same point:
+`FamilyModelCaptureTests.Native_connector_host_probe_compares_plane_with_coincident_nested_face` creates a fresh family from the b-grd header, builds and loads only the real `vane.family.json` dependency, places one vane on `Ref. Level`, and creates a reference plane directly on one referenced vane face. Full b-grd forms, arrays, dimensions, values, and reconciliation are absent from the precondition. It then creates two rectangular duct connectors at the same point:
 
-1. Exhaust-air connector created from the real `flange.top` reference-plane reference.
+1. Exhaust-air connector created from the coincident control reference-plane reference.
 2. Supply-air connector created from a referenced planar face of the real nested `vane` instance.
 
 The distinct systems label the controls without adding metadata. After regeneration the test verifies coincident origins and writes `connector-host-identity.json` containing every public connector parameter, any parameter `ElementId`, built-in parameter name, connector dependents, host dependents, and the supplied reference element IDs. The transaction is rolled back and the document is closed in `finally`.
