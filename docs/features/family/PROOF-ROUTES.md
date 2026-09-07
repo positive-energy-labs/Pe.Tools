@@ -584,3 +584,36 @@ entries and no warning or error. Raw identity, state, route, and console observa
 Unproven because of this blocker: composed profile rendering, profile selection, loaded-family
 census inside `/families`, and every Plan/receipt/recapture path. No Apply was attempted. The
 pending name-filter product question above remains pending and no selector behavior changed.
+
+## Actual browser repeat after selector repair - 2026-09-07
+
+Root `6eb667d` was loaded by the existing source Host at `http://127.0.0.1:52068` without a Host or
+Revit restart. `/host/status` remained connected at PID 92360 with source root
+`Pe.Tools-family/source/pe-tools`; `/instances` rendered controlled `ff-profile-proof-25`, Revit PID
+89376, and the exact open `Old_Template-monthly45-disposable` path.
+
+The selector repair is **PROVEN in the actual browser**. Clicking the controlled session produced
+no `selectedSession` validation error. Clicking the existing document row produced the staged card
+`open Old_Template-monthly45-disposable in ff-profile-proof-25` with an enabled Open button and no
+`staged.session` validation error. Open was not pressed, so the browser sent no document or native
+operation. The selected session and staged document remain intact rather than clearing concurrent
+state.
+
+The next blocker is standalone Family Foundry scope binding. `/family` and `/families` still render
+`no document named`. This is separate from Instances state: `RouteScope` accepts only the page's
+`?doc=&target=` search or a chat thread Head (`workbench/route-scope.tsx:18-47`), while
+`familySearch` and `familiesSearch` omit the existing `routeScopeSearch` parser
+(`routes/family.tsx:15-29`, `routes/families.tsx:17-26`). Instances staging deliberately writes only
+its route document and does not name either Family Foundry page's scope. The existing Takeoffs
+route demonstrates the shared parser at `routes/takeoffs.tsx:9-12`.
+
+CUA captured visible screenshots of the staged Instances card and both fail-closed Family Foundry
+pages. Its current browser API displayed the PNGs but did not provide a filesystem writer; the
+browser clipboard remained user-owned and was not overwritten. Browser console errors and warnings
+were empty. Structured evidence is
+`.artifacts/runs/browser-20260906-ff/actual-route-readiness-6eb667d/receipt.json`.
+
+Profile rendering, `/families` project census, and native plan/receipt flows remain unproven. The
+proof owner's monthly plan was still nonterminal, so no direct `?doc` binding was attempted because
+mounting the live stores can read Revit. No lifecycle, Apply, native request, or document mutation
+occurred. The name-filter product question remains pending.
