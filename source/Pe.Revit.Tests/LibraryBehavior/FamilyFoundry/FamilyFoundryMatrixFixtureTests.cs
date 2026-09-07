@@ -101,8 +101,9 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         }
     }
 
-    [Test]
-    public void SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries() {
+    [TestCase(false, TestName = "SetValue_matrix_fixture_native_array_baseline")]
+    [TestCase(true, TestName = "SetValue_matrix_fixture_native_array_with_first_type_selected")]
+    public void SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries(bool selectFirstTypeForArrayCreate) {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.SetValue_matrix_fixture_preserves_seed_values_across_native_boundaries));
         var projectDocument = this.OpenOldTemplateProjectCopy(outputDirectory);
@@ -113,6 +114,13 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             ["currentType"] = document.FamilyManager.CurrentType?.Name,
             ["values"] = NativeMatrixValues(document, [
                 FamilyFoundryMatrixFixtureBuilder.SourceText,
+                FamilyFoundryMatrixFixtureBuilder.SourceUnsetText,
+                FamilyFoundryMatrixFixtureBuilder.SourceInteger,
+                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension
+            ]),
+            ["hasValues"] = NativeMatrixHasValues(document, [
+                FamilyFoundryMatrixFixtureBuilder.SourceText,
+                FamilyFoundryMatrixFixtureBuilder.SourceUnsetText,
                 FamilyFoundryMatrixFixtureBuilder.SourceInteger,
                 FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension
             ])
@@ -123,12 +131,14 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 this._dbApplication,
                 projectDocument,
                 outputDirectory,
-                Observe);
+                Observe,
+                selectFirstTypeForArrayCreate);
             familyDocument = projectDocument.EditFamily(loadedFamily);
             Observe("afterLoadEditFamily", familyDocument);
-            File.WriteAllText(Path.Combine(outputDirectory, "matrix-seed-boundaries.json"), stages.ToString());
+            File.WriteAllText(Path.Combine(outputDirectory,
+                $"matrix-seed-boundaries-{(selectFirstTypeForArrayCreate ? "first-type" : "baseline")}.json"), stages.ToString());
 
-            Assert.That(stages.Select(stage => stage.Value<string>("stage")), Is.EqualTo(new[] {
+            var expectedStages = new List<string> {
                 "beforeSeed",
                 "beforeSeed:Matrix Type A", "afterSeed:Matrix Type A",
                 "beforeSeed:Matrix Type B", "afterSeed:Matrix Type B",
@@ -137,17 +147,43 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 "beforeLinearDimensionCreate", "afterLinearDimensionCreate", "afterLinearDimensionLabel",
                 "beforeAngularDimensionCreate", "afterAngularDimensionCreate", "afterAngularDimensionLabel",
                 "beforeRadialDimensionCreate", "afterRadialDimensionCreate", "afterRadialDimensionLabel",
-                "beforeArrayCreate", "afterArrayCreate", "afterArrayLabel",
+                "beforeArrayCreate",
+            };
+            if (selectFirstTypeForArrayCreate)
+                expectedStages.Add("beforeArrayCreate:firstType");
+            expectedStages.AddRange([
+                "afterArrayCreate", "afterArrayLabel",
                 "beforeNestedActivate", "afterNestedActivate",
                 "beforeNestedCreate", "afterNestedCreate",
                 "beforeNestedAssociation", "afterNestedAssociation",
                 "afterTopology", "afterRegenerate", "afterCommit",
                 "afterSaveAs", "afterReopen", "afterLoadEditFamily"
-            }));
-            AssertSeedProbeValues(stages[stages.Count - 1]!["values"]!);
+            ]);
+            Assert.That(stages.Select(stage => stage.Value<string>("stage")), Is.EqualTo(expectedStages));
+            var beforeArray = stages.Single(stage => stage.Value<string>("stage") == "beforeArrayCreate");
+            AssertSeedProbeValues(beforeArray!["values"]!, beforeArray["hasValues"]!);
+            if (selectFirstTypeForArrayCreate) {
+                Assert.That(stages.Single(item => item.Value<string>("stage") == "beforeArrayCreate:firstType")
+                    .Value<string>("currentType"), Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[0]));
+                foreach (var stageName in new[] { "afterArrayCreate", "afterArrayLabel", "afterReopen", "afterLoadEditFamily" }) {
+                    var stage = stages.Single(item => item.Value<string>("stage") == stageName);
+                    AssertSeedProbeValues(stage!["values"]!, stage["hasValues"]!);
+                }
+            } else {
+                var afterArray = stages.Single(stage => stage.Value<string>("stage") == "afterArrayCreate");
+                Assert.That(JToken.DeepEquals(afterArray!["values"], beforeArray["values"]), Is.False,
+                    "The unchanged native-array path must reproduce the Wave 25 value mutation for this control.");
+                var afterLoad = stages.Single(stage => stage.Value<string>("stage") == "afterLoadEditFamily");
+                Assert.That(JToken.DeepEquals(afterLoad!["values"], afterArray["values"]), Is.True,
+                    "The baseline control mutation must remain observable after save, reopen, load, and family edit.");
+                Assert.That(JToken.DeepEquals(afterLoad["hasValues"], afterArray["hasValues"]), Is.True);
+            }
+            AssertArrayProbe(familyDocument);
         } finally {
-            if (stages.Count > 0 && !File.Exists(Path.Combine(outputDirectory, "matrix-seed-boundaries.json")))
-                File.WriteAllText(Path.Combine(outputDirectory, "matrix-seed-boundaries.json"), stages.ToString());
+            var evidencePath = Path.Combine(outputDirectory,
+                $"matrix-seed-boundaries-{(selectFirstTypeForArrayCreate ? "first-type" : "baseline")}.json");
+            if (stages.Count > 0 && !File.Exists(evidencePath))
+                File.WriteAllText(evidencePath, stages.ToString());
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
             RevitFamilyFixtureHarness.CloseDocument(projectDocument);
         }
@@ -538,6 +574,19 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         return values;
     }
 
+    private static JObject NativeMatrixHasValues(Document document, IEnumerable<string> parameterNames) {
+        var manager = document.FamilyManager;
+        var values = new JObject();
+        foreach (var typeName in FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames) {
+            var type = manager.Types.Cast<FamilyType>().Single(item => item.Name == typeName);
+            var row = new JObject();
+            foreach (var name in parameterNames)
+                row[name] = type.HasValue(manager.FindParameter(name)!);
+            values[typeName] = row;
+        }
+        return values;
+    }
+
     private static JObject ExpectedSeedMatrix() => ExpectedMatrix((index, row) => {
         row[FamilyFoundryMatrixFixtureBuilder.SourceText] = $"matrix-text-{index + 1}";
         row[FamilyFoundryMatrixFixtureBuilder.SourceBlankText] = "";
@@ -558,17 +607,36 @@ public sealed class FamilyFoundryMatrixFixtureTests {
         row[FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength] = index + 2d;
     });
 
-    private static void AssertSeedProbeValues(JToken values) {
+    private static void AssertSeedProbeValues(JToken values, JToken hasValues) {
         for (var index = 0; index < FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames.Length; index++) {
-            var row = values[FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[index]]!;
+            var typeName = FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[index];
+            var row = values[typeName]!;
+            var hasValue = hasValues[typeName]!;
             Assert.Multiple(() => {
                 Assert.That(row.Value<string>(FamilyFoundryMatrixFixtureBuilder.SourceText),
                     Is.EqualTo($"matrix-text-{index + 1}"));
                 Assert.That(row.Value<int>(FamilyFoundryMatrixFixtureBuilder.SourceInteger), Is.EqualTo(index + 2));
                 Assert.That(row.Value<double>(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension),
                     Is.EqualTo(.5 + index).Within(1e-9));
+                Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceText), Is.True);
+                Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceInteger), Is.True);
+                Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension), Is.True);
+                Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceUnsetText), Is.False);
+                Assert.That(row[FamilyFoundryMatrixFixtureBuilder.SourceUnsetText]!.Type, Is.EqualTo(JTokenType.Null));
             });
         }
+    }
+
+    private static void AssertArrayProbe(Document document) {
+        var array = new FilteredElementCollector(document).OfClass(typeof(LinearArray)).Cast<LinearArray>().Single();
+        Assert.Multiple(() => {
+            Assert.That(array.NumMembers, Is.EqualTo(3));
+            Assert.That(array.Label?.Definition.Name, Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount));
+            Assert.That(array.GetOriginalMemberIds(), Has.Count.EqualTo(1));
+            Assert.That(array.GetCopiedMemberIds(), Has.Count.EqualTo(1));
+            Assert.That(array.GetOriginalMemberIds().Select(document.GetElement), Is.All.Not.Null);
+            Assert.That(array.GetCopiedMemberIds().Select(document.GetElement), Is.All.Not.Null);
+        });
     }
 
     private static JObject ExpectedTargetMatrix() => ExpectedMatrix((index, row) => {
