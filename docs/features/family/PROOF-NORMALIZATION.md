@@ -512,6 +512,12 @@ Known legacy weight and pressure fields now try `UnitFormatUtils` against the or
 
 The existing real-profile corpus check now asserts the canonical AprilAire key, absence of the legacy-cased key, exact shared GUID, and URL value. Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25 -v minimal` succeeded with 124 warnings and 0 errors. Raw output: `.artifacts/runs/fresh-20260906-ff/compile-wave11-aprilaire-url.log`. No Revit/session/runtime command ran and no authored profile bytes changed.
 
+## Wave 13 DBF sound level - 2026-09-07
+
+Wave 13 applied DBF's immutable `PE_G___SoundLevel = 4 sones` to the APS `Number` definition. Revit stored and captured the correct scalar `4`, but the converter retained the legacy domain suffix in desired state, leaving repeat residue for both types. The existing named legacy-literal path now recognizes only `PE_G___SoundLevel` with the anchored `<number> sones` grammar and converts it through `SpecTypeId.Number` / `UnitTypeId.General`; unrelated strings and Number parameters remain untouched. The real DBF profile test now independently asserts native Number spec and raw value 4 for every family type while retaining its pressure assertion.
+
+The separate connector-rule census failed only for `CmdFFMigrator/profiles/MechEquip/ALL PARAMS.json`: the retained rule names `PE_E___MCA`, but neither exported parameters nor conditional parameter intent governs that name. This is not the sound-literal path and was not changed. Final `Debug.R25.Tests --no-restore` compile exited 0 with 21 warnings and 0 errors. Native DBF execution remains owed.
+
 ## Extrusion cap constraint capture - 2026-09-07
 
 Wave 11 Constrained Box authored its start cap against `Reference Plane`, but capture returned coincident `Ref. Level`. `MakeForms.AlignCaps` creates native alignment dimensions from each cap face to its requested named plane; capture already collects those dimensions and uses the same reference ownership pattern for sketch locks. Cap capture now resolves the extrusion-owned alignment reference to its planar face, matches the signed start/end offset, and returns the other named reference. Geometry is used only when exactly one named plane occupies that cap; coincident candidates are no longer guessed.

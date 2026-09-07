@@ -21,6 +21,7 @@ public static class FamilyProfileConverter {
     private static readonly IReadOnlyDictionary<string, (ForgeTypeId Spec, ForgeTypeId Unit)> LegacyLiteralUnits =
         new Dictionary<string, (ForgeTypeId, ForgeTypeId)>(StringComparer.Ordinal) {
             ["PE_G___Weight"] = (SpecTypeId.Mass, UnitTypeId.PoundsMass),
+            ["PE_G___SoundLevel"] = (SpecTypeId.Number, UnitTypeId.General),
             ["PE_M_Fan_ExternalStaticPressure"] = (SpecTypeId.HvacPressure, UnitTypeId.InchesOfWater60DegreesFahrenheit)
         };
 
@@ -615,7 +616,8 @@ public static class FamilyProfileConverter {
         if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
             var legacyUnits = new Units(UnitSystem.Imperial);
             legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));
-            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, value, out var legacyRaw)) {
+            var source = legacy.Spec == SpecTypeId.Number ? NormalizeLegacyLiteral(name, value) : value;
+            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, source, out var legacyRaw)) {
                 var normalized = NormalizeLegacyLiteral(name, value);
                 if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, normalized, out legacyRaw))
                     throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");
@@ -657,6 +659,7 @@ public static class FamilyProfileConverter {
     private static string NormalizeLegacyLiteral(string name, string value) {
         var pattern = name switch {
             "PE_G___Weight" => @"^(?<value>[0-9]+(?:\.[0-9]+)?) lbs$",
+            "PE_G___SoundLevel" => @"^(?<value>[0-9]+(?:\.[0-9]+)?) sones$",
             "PE_M_Fan_ExternalStaticPressure" => "^(?<value>[0-9]+(?:\\.[0-9]+)?)\\\"(?: w\\.g\\.)?$",
             _ => throw new InvalidOperationException($"No legacy literal grammar is registered for '{name}'.")
         };
