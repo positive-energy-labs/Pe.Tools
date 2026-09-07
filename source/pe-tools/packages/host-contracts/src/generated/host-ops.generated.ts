@@ -825,6 +825,9 @@ export namespace RevitCatalogConceptEvidence {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1008,6 +1011,9 @@ export namespace RevitCatalogElectricalCircuits {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1446,6 +1452,9 @@ export namespace RevitCatalogParameterBindings {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1548,6 +1557,9 @@ export namespace RevitCatalogParameterEvidence {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -2127,6 +2139,9 @@ export namespace RevitCatalogSchedules {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -2969,6 +2984,9 @@ export namespace RevitDetailElements {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -3331,6 +3349,9 @@ export namespace RevitDetailSchedules {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -3913,6 +3934,9 @@ export namespace RevitMatrixLoadedFamilies {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4004,6 +4028,9 @@ export namespace RevitMatrixParameterCoverage {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4351,6 +4378,9 @@ export namespace RevitMatrixScheduleProfiles {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ScheduleCatalogCustomParameterValue {
       definition: ParameterDefinitionDescriptor;
@@ -4466,7 +4496,7 @@ export namespace ScriptingCancel {
   }
 }
 
-/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction. */
+/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
 export namespace ScriptingExecute {
   export namespace Req {
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
@@ -4800,6 +4830,9 @@ export namespace SettingsParameterCatalog {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
