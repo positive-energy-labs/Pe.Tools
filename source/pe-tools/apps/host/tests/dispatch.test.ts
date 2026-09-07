@@ -288,10 +288,39 @@ test("composition preserves authored JSON, substitutes keyed presets, and fails 
       parameters: { Width: { dataType: "Length", value: "42in" }, Enabled: { value: true } },
     });
     expect(keyed.dependencies).toHaveLength(2);
+    writeFileSync(
+      join(root, "_fragments", "defaults.json"),
+      JSON.stringify({
+        parameters: { $include: ["@local/_fragments/parameters", "@local/_fragments/later"] },
+        filter: {
+          IncludeNames: { Equaling: ["earlier"], Containing: ["preserved"] },
+          ExcludeNames: { Equaling: ["excluded"] },
+        },
+      }),
+    );
+    const overrideRaw = JSON.stringify({
+      $preset: "@local/_fragments/defaults",
+      parameters: { Width: { value: "48in" } },
+      filter: { IncludeNames: { Equaling: ["profile"] }, ExcludeNames: {} },
+    });
+    const overridden = await open(overrideRaw);
+    expect(overridden.validation.isValid).toBe(true);
+    expect(overridden.rawContent).toBe(overrideRaw);
+    expect(JSON.parse(overridden.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "48in" }, Enabled: { value: true } },
+      filter: {
+        IncludeNames: { Equaling: ["profile"], Containing: ["preserved"] },
+        ExcludeNames: { Equaling: ["excluded"] },
+      },
+    });
+    expect(overridden.dependencies.map((d) => d.directivePath)).toEqual([
+      "@local/_fragments/defaults",
+      "@local/_fragments/parameters",
+      "@local/_fragments/later",
+    ]);
     for (const invalid of [
       '{"parameters":{"$include":"@local/_fragments/parameters","Width":{}}}',
       '{"parameters":{"$include":"@local/_fragments/list"}}',
-      '{"parameters":{"$preset":"@local/_fragments/parameters","Width":{}}}',
       '{"items":[{"$include":"@local/_fragments/list","ignored":true}]}',
       '{"items":[{"$include":"@local/_fragments/cycle"}]}',
       '{"parameters":{"$preset":"@local/forbidden/parameters"}}',

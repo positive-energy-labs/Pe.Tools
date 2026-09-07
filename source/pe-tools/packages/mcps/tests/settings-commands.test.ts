@@ -158,3 +158,39 @@ test("settings save preserves staged inherited edits and never writes through a 
     },
   );
 });
+
+test("settings saves explicit preset overrides locally but keeps omitted fields inherited", async () => {
+  const raw = { parameters: { $preset: "@global/_parameters/base", Width: { value: "42in" } } };
+  await withHost(
+    (key, request) => {
+      if (key === "settings.document.open") return openResponse(JSON.stringify(raw));
+      if (key !== "settings.document.save") throw new Error(`unexpected operation ${key}`);
+      const saved = JSON.parse((request as { rawContent: string }).rawContent);
+      expect(saved).toEqual({
+        parameters: { $preset: raw.parameters.$preset, Width: { value: "48in" } },
+      });
+      return {
+        conflictDetected: false,
+        writeApplied: true,
+        validation: { isValid: true, issues: [] },
+      };
+    },
+    async (calls) => {
+      const document: SettingsRouteDocument = {
+        bindings: { file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH } },
+        documentId: DOCUMENT_ID,
+        fields: { "/parameters/Width/value": { staged: { value: "48in" } } },
+      };
+      const handlers = createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" });
+      await handlers.save({}, context(document));
+      expect(calls.map(({ key }) => key)).toEqual([
+        "settings.document.open",
+        "settings.document.save",
+      ]);
+      document.fields = { "/parameters/Width/dataType": { staged: { value: "Number" } } };
+      await expect(handlers.save({}, context(document))).rejects.toThrow("shared fragment");
+      expect(calls.at(-1)?.key).toBe("settings.document.open");
+      expect(calls.filter(({ key }) => key === "settings.document.save")).toHaveLength(1);
+    },
+  );
+});

@@ -746,13 +746,6 @@ const expandPresets: (
     }
     if (!isRecord(value)) return value;
     if ("$preset" in value) {
-      const keys = Object.keys(value);
-      if (keys.some((key) => key !== "$preset"))
-        return yield* Effect.fail(
-          new Error(
-            "Invalid '$preset' usage. Preset composition does not support inline overrides.",
-          ),
-        );
       const directive = yield* Effect.try(() =>
         resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? [], false),
       );
@@ -779,7 +772,33 @@ const expandPresets: (
       );
       visited.delete(path.toLowerCase());
       if (isRecord(expanded)) delete expanded.$schema;
-      return expanded;
+      const inline = Object.fromEntries(Object.entries(value).filter(([key]) => key !== "$preset"));
+      if (!Object.keys(inline).length) return expanded;
+      const overrides = yield* expandPresets(
+        inline,
+        localRootDirectory,
+        options,
+        dependencies,
+        sourceDocumentId,
+        visited,
+      );
+      // Resolve referenced fields before merging, so overrides can refine included objects too.
+      return mergeCompositionFields(
+        yield* expandIncludes(
+          expanded,
+          localRootDirectory,
+          options,
+          dependencies,
+          sourceDocumentId,
+        ),
+        yield* expandIncludes(
+          overrides,
+          localRootDirectory,
+          options,
+          dependencies,
+          sourceDocumentId,
+        ),
+      );
     }
     const next: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value))
@@ -795,15 +814,15 @@ const expandPresets: (
   },
 );
 
-// Keyed includes merge object fields; arrays and scalar leaves keep the later value.
-function mergeIncludeFields(earlier: unknown, later: unknown): unknown {
+// Preset overrides and keyed includes share recursive fields; later arrays/scalars replace.
+function mergeCompositionFields(earlier: unknown, later: unknown): unknown {
   if (!isRecord(earlier) || !isRecord(later)) return later;
   return {
     ...earlier,
     ...Object.fromEntries(
       Object.entries(later).map(([key, value]) => [
         key,
-        mergeIncludeFields(Object.hasOwn(earlier, key) ? earlier[key] : undefined, value),
+        mergeCompositionFields(Object.hasOwn(earlier, key) ? earlier[key] : undefined, value),
       ]),
     ),
   };
@@ -915,7 +934,7 @@ const expandIncludes: (
               sourceDocumentId,
             );
             const expanded = yield* expand(presets, visited);
-            merged = mergeIncludeFields(merged, expanded);
+            merged = mergeCompositionFields(merged, expanded);
             visited.delete(path.toLowerCase());
           }
           if (!isRecord(merged))
