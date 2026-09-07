@@ -15,14 +15,24 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
-Latest focused native checkpoint: wave17 at c6b34a1 ran 13 cases, 8 passed and 5 failed.
-Box roundtrip and driven-circle checks passed. Connector definition ordering, array sidecar
-resolution, reusable seed capture, and bath nested placement repairs are integrated after it;
-their native rerun is owed. Wave18 ran two new probes, both failed before intended behavior:
-JoinGeometryUtils is project-only; the full-profile probe resolved installed Pe.App 0.6.26
-and hit MissingMethodException. Profile coverage is 0/45, not a planning failure census.
-R repairs the family-native combination probe; P prepares current-payload controlled dev proof.
-Both wave17/18 cleaned up their owned processes and restored settings exactly.
+Latest focused native checkpoint: wave19 at e44aa8e ran 21 cases: 10 passed and 11 failed.
+Explicit Phase-to-poles connector routing and exact destination alias materialization passed.
+Parameter metadata, matrix rollback evidence, bath placement/capture and GRD residue remained red.
+The parameter repair is integrated at 54cce83; exact Debug.R25.Tests compilation passed with
+0 errors and 129 warnings. Its schema-based tooltip capture and tightened rollback checks
+still require native proof. Native group ids replace invalid Geometry labels in the fixtures.
+
+Wave20 at 0247a29 reached the real MSZ-GL join-loss warning and stalled in its modal dialog
+until SDK timeout. No TRX or NUnit verdict was produced; connector-host and selector checks
+remain unproven. PID 77028 exited through SDK cleanup, settings restored byte-for-byte,
+and protected PIDs 71484/98976 retained their identities. The source hold is released.
+P owns the isolated handler diagnosis; N owns nested placement before alignment.
+
+Attached proof is suspended: the SDK previously dispatched to protected PID 71484 instead
+of selected PID 98840. Both tests failed during type loading before their mutation bodies.
+The exact PID/start adapter repair is isolated in Pe.Revit.Sdk-ff-targeted; old/stale adapter
+refusal and native targeting acceptance remain required before attached tests resume.
+Full monthly-profile planning remains 0/45 because the fresh installed Pe.App lacks the method.
 
 Latest broad native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
 123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
