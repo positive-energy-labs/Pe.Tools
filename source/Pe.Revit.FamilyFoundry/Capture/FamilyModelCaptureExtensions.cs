@@ -512,7 +512,10 @@ internal sealed class FamilyModelCapturer {
 
     private Dictionary<string, FamilyModelNested> Nested(ISet<string> known) {
         var result = new Dictionary<string, FamilyModelNested>(StringComparer.Ordinal);
-        var copies = Collect<LinearArray>().SelectMany(a => a.GetCopiedMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
+        var arrays = Collect<LinearArray>().ToList();
+        var seeds = arrays.SelectMany(a => a.GetOriginalMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
+        var seedDefinitions = new Dictionary<string, string>(StringComparer.Ordinal);
+        var copies = arrays.SelectMany(a => a.GetCopiedMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
         foreach (var fi in Collect<FamilyInstance>().Where(f => f.Symbol?.Family != null && f.Symbol.Family.FamilyPlacementType is not (FamilyPlacementType.ViewBased or FamilyPlacementType.CurveBasedDetail) && !copies.Contains(f.Id)).OrderBy(f => f.Id.Value())) {
             var family = fi.Symbol.Family.Name;
             var slug = Unique(Slug(family), result.ContainsKey);
@@ -534,8 +537,7 @@ internal sealed class FamilyModelCapturer {
                 else associate[p.Definition.Name] = source;
             }
 
-            this._nestedSlug[fi.Id] = slug;
-            result[slug] = new FamilyModelNested {
+            var spec = new FamilyModelNested {
                 Family = family,
                 Type = fi.Symbol.Name,
                 Host = host,
@@ -543,7 +545,17 @@ internal sealed class FamilyModelCapturer {
                 Associate = associate.Count == 0 ? null : associate,
                 Visible = visible
             };
-            this._elements.Add(result[slug], [fi.Id]);
+            // Array seeds are reusable specifications; equal standalone placements remain distinct.
+            var definition = Newtonsoft.Json.JsonConvert.SerializeObject(spec, FamilyModelJson.Settings);
+            if (seeds.Contains(fi.Id) && seedDefinitions.TryGetValue(definition, out var existing)) {
+                this._nestedSlug[fi.Id] = existing;
+                this._elements[result[existing]] = this._elements[result[existing]].Append(fi.Id).ToArray();
+                continue;
+            }
+            this._nestedSlug[fi.Id] = slug;
+            result[slug] = spec;
+            this._elements.Add(spec, [fi.Id]);
+            if (seeds.Contains(fi.Id)) seedDefinitions[definition] = slug;
         }
 
         return result;
