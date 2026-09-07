@@ -45,7 +45,7 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
                     var (hostRef, hostPlane) = FamilyRefs.Resolve(doc, align.To);
                     var nestedRef = instance.GetReferenceByName(align.Instance)
                                     ?? throw new InvalidOperationException($"'{spec.Family}' exposes no '{align.Instance}' reference; set its Is Reference name.");
-                    FamilyRefs.Align(doc, FamilyRefs.ViewFor(doc, null, hostPlane.Normal), hostRef, nestedRef);
+                    FamilyRefs.Align(doc, FamilyRefs.ViewForPlaneCreation(doc, hostPlane.Normal), hostRef, nestedRef);
                 }
                 foreach (var (target, source) in spec.Associate ?? []) {
                     var p = instance.LookupParameter(target) ?? throw new InvalidOperationException($"'{spec.Family}' has no parameter '{target}'.");

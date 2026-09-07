@@ -498,3 +498,9 @@ Wave11 ran 122 cases: 77 passed and 45 failed. This bounded slice addresses the 
 All three WaterFurnace profiles explicitly author `Manufacturer.IsInstance=false` and omit `Model.IsInstance`. `RevitParameterDefinition.IsInstance` is nullable, but the converter changed every omission to `true`, causing an illegal built-in `Model` scope conversion. The converter now emits `isInstance` only when the legacy field is present. The highest public company-corpus test asserts omitted `Model` scope and explicit `Manufacturer=false` for all three inputs.
 
 Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25 -v minimal` exited 0 with 123 warnings and 0 errors. Raw output: `.artifacts/runs/fresh-20260906-ff/compile-wave11-converter.log`. No Revit, session, Host, or authored fixture ran or changed. The repaired native cases require the proof owner's next fresh wave.
+
+## Nested alignment view selection - 2026-09-07
+
+Wave 11 failed both `Authored_family_survives_capture_rebuild_and_reopen("b-grd")` and `Generated_grd_opens_into_the_room_and_exports_visual_proof` while aligning the nested vane in `Left`. `PlaceNested` passed the host-plane normal to `FamilyRefs.ViewFor`, which selects a view along that normal and presents the two planes face-on. `MakeDims`, extrusion cap alignment, and array alignment select a view perpendicular to the constrained direction. `PlaceNested` now reuses `FamilyRefs.ViewForPlaneCreation`, which applies that same perpendicular choice. It still creates both requested alignments and preserves the existing fail-fast behavior.
+
+The isolated `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25 -v minimal` exited 0 with 118 existing warnings and 0 errors. The two Wave 11 GRD tests remain the native regression gate; no Revit or session command ran.
