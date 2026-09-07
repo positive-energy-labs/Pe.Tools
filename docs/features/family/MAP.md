@@ -13,13 +13,16 @@ PID88932 exited with exact settings restoration, empty quarantine, and protected
 preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
 
 Demand support is integrated at 149a556/61d28ba; full bath apply/reopen acceptance remains owed.
-The array prevention control and mixed local/shared/instance selector repair are in progress.
-Controlled dev snapshot ff-profile-proof-25 PID63944 now holds an unmodified disposable old
-template at monthly45-dev. Its loaded source is still 3a64a1b. First Host attempt refused a
-bridge-ID versus canonical-session-ID comparison; canonical targeting now succeeds. The next
-attempt stopped before profiles because script compilation lacks Newtonsoft.Json references
-required by FF public API types. P owns the shared scripting reference repair and runtime.
-No company profile has run through Host yet; the snapshot quarantine remains leased until stop.
+The array prevention control and mixed local/shared/instance selector repair are integrated
+through 87cee69; their native acceptance remains owed. Controlled dev snapshot
+ff-profile-proof-25 PID108004, generation20260907140624373, runs immutable source915790e
+against the disposable old template. Newtonsoft support now allows public FF conversion in
+scripts. The monthly45-host-plan-4 artifact contains all45 profiles: nine conversion failures
+and36 converted requests rejected with PatchJsonRequired. These are request admission failures,
+not evidence of missing families. P is tracing the shared request path; N owns conversion
+failures. No Apply ran. The snapshot quarantine remains leased until stop. Restart lost the
+previous quarantine policy; isolated SDK candidate cf98d13 repairs hold precedence and passes
+focused deterministic vectors, but native restart acceptance remains owed.
 
 Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
 are correct after each seed and before topology, then Type A takes Type C values during
