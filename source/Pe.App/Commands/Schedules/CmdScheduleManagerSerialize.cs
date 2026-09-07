@@ -1,4 +1,5 @@
-﻿using Autodesk.Revit.Attributes;
+using System.Windows.Media;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Schedules.Ui;
@@ -10,7 +11,6 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using SharedScheduleFieldSpec = Pe.Shared.RevitData.Schedules.ScheduleFieldSpec;
 using SharedScheduleSortGroupSpec = Pe.Shared.RevitData.Schedules.ScheduleSortGroupSpec;
@@ -170,7 +170,7 @@ public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListI
                $"\nDiscipline: {this.TextPill}";
     };
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 }
 

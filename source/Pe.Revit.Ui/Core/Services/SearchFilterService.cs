@@ -112,22 +112,25 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
     ///     Builds searchable metadata for a single item.
     /// </summary>
     public SearchableItemMetadata BuildMetadata(TItem item) {
+        var primary = item.TextPrimary ?? string.Empty;
+        var secondary = item.TextSecondary ?? string.Empty;
+        var pill = item.TextPill ?? string.Empty;
         // Only evaluate TextInfo if it's actually needed for search
         var infoText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
             ? item.GetTextInfo?.Invoke() ?? string.Empty
             : string.Empty;
 
         var allText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
-            ? $"{item.TextPrimary} {item.TextSecondary} {item.TextPill} {infoText}"
-            : $"{item.TextPrimary} {item.TextSecondary} {item.TextPill}";
+            ? $"{primary} {secondary} {pill} {infoText}"
+            : $"{primary} {secondary} {pill}";
 
         return new SearchableItemMetadata {
-            PrimaryLower = (item.TextPrimary ?? string.Empty).ToLowerInvariant(),
-            SecondaryLower = (item.TextSecondary ?? string.Empty).ToLowerInvariant(),
-            PillLower = (item.TextPill ?? string.Empty).ToLowerInvariant(),
+            PrimaryLower = primary.ToLowerInvariant(),
+            SecondaryLower = secondary.ToLowerInvariant(),
+            PillLower = pill.ToLowerInvariant(),
             InfoLower = infoText.ToLowerInvariant(),
-            PrimaryWords = SplitIntoWords(item.TextPrimary ?? string.Empty),
-            PrimaryAcronym = BuildAcronym(item.TextPrimary ?? string.Empty),
+            PrimaryWords = SplitIntoWords(primary),
+            PrimaryAcronym = BuildAcronym(primary),
             AllWords = SplitIntoWords(allText)
         };
     }

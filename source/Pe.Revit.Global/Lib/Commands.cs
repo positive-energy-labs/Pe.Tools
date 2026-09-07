@@ -1,6 +1,3 @@
-using Pe.Revit.Global.Ui;
-using Serilog.Events;
-
 namespace Pe.Revit.Global.Lib;
 
 /// <summary>
@@ -67,10 +64,8 @@ public class Commands {
 
     /// <summary> Checks if a command is available for execution. </summary>
     public static bool IsAvailable(UIApplication uiApp, CommandRef command) {
-        var (validId, validIdErr) = command.GetPostableCommandId(uiApp);
-        if (validIdErr is not null)
-            new Ballogger().AddDebug(LogEventLevel.Error, new StackFrame(), validIdErr, true).Show();
-        return validId is not null && validIdErr is null;
+        var (id, error) = command.GetCommandId();
+        return error is null && id is not null && uiApp.CanPostCommand(id);
     }
 }
 

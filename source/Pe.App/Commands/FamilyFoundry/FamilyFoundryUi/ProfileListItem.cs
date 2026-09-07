@@ -1,7 +1,7 @@
+using System.Windows.Media;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using System.IO;
-using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
@@ -45,7 +45,7 @@ public class ProfileListItem : IPaletteListItem {
 
     public Func<string> GetTextInfo => () => string.Empty; // Tooltip disabled - info shown in preview panel
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
 
     public static List<ProfileListItem> DiscoverProfiles(

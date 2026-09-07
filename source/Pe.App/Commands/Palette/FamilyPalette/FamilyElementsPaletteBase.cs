@@ -60,9 +60,16 @@ public abstract class FamilyElementsPaletteBase : IExternalCommand {
                     Tabs = tabs,
                     DefaultTabIndex = defaultTabIndex,
                     SidebarPanel = previewPanel,
-                    OnSelectionChanged = item => {
-                        if (item?.ElementId != null)
-                            highlighter.Highlight(item.ElementId);
+                    ViewModelMutator = vm => vm.SelectionChangedDebounced += async (_, _) => {
+                        var item = vm.SelectedItem;
+                        if (item?.ElementId == null) return;
+                        try {
+                            await RevitTaskAccessor.RunAsync!(() => {
+                                if (ReferenceEquals(item, vm.SelectedItem)) highlighter.Highlight(item.ElementId);
+                            });
+                        } catch (Exception ex) {
+                            Log.Error(ex, "Family element highlight failed");
+                        }
                     }
                 });
 

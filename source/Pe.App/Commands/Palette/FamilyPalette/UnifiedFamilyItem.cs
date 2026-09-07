@@ -1,5 +1,5 @@
+using System.Windows.Media;
 using Pe.Revit.Ui.Core;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -18,6 +18,11 @@ public enum FamilyItemType {
 ///     Enables a single tabbed palette for all family-related elements in project documents.
 /// </summary>
 public class UnifiedFamilyItem : IPaletteListItem {
+    // Metadata captures these once in Revit context for this item snapshot.
+    private string? _textPrimary;
+    private string? _textSecondary;
+    private string? _textPill;
+
     public UnifiedFamilyItem(Family family) {
         this.ItemType = FamilyItemType.Family;
         this.Family = family;
@@ -63,24 +68,24 @@ public class UnifiedFamilyItem : IPaletteListItem {
         _ => string.Empty
     };
 
-    public string TextPrimary => this.ItemType switch {
+    public string TextPrimary => this._textPrimary ??= this.ItemType switch {
         FamilyItemType.Family => this.GetFamily()?.Name ?? "Unknown",
         FamilyItemType.FamilyType => this.GetFamilySymbol()?.Name ?? "Unknown",
         FamilyItemType.FamilyInstance => $"{this.GetFamilySymbol()?.Name ?? "Unknown"}",
         _ => string.Empty
     };
 
-    public string TextSecondary => this.ItemType switch {
+    public string TextSecondary => this._textSecondary ??= this.ItemType switch {
         FamilyItemType.Family => this.GetFamilyTypeNames(),
         FamilyItemType.FamilyType => this.GetFamily()?.Name ?? "Unknown",
         _ => string.Empty
     };
 
-    public string? TextPill => this.GetFamily()?.FamilyCategory?.Name ?? "Unknown";
+    public string TextPill => this._textPill ??= this.GetFamily()?.FamilyCategory?.Name ?? "Unknown";
 
     public Func<string> GetTextInfo => () => string.Empty; // Sidebar preview provides detailed info
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 
     /// <summary>

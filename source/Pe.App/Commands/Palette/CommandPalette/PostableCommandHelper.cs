@@ -75,10 +75,11 @@ public class PostableCommandHelper(ModuleStorage storage) {
 
         // Get all commands from the ribbon
         var ribbonCommands = Ribbon.GetAllCommands();
+        var usage = this._state.Read();
 
         foreach (var command in ribbonCommands) {
             var commandId = command.Id;
-            var usageData = this._state.ReadRow(commandId);
+            usage.TryGetValue(commandId, out var usageData);
 
             var commandItem = new PostableCommandItem {
                 Command = command.Id,
