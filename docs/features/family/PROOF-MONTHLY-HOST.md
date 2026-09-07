@@ -2,7 +2,7 @@
 
 ## Prepared chain
 
-`scripts/familyfoundry-monthly-host-proof.mjs` removes the test-adapter dependency from the next monthly-profile run. It uses the checkout-pinned Pea CLI (`vp run @pe/pea#pea`) for every Revit call:
+`scripts/familyfoundry-monthly-host-proof.mjs` removes the test-adapter dependency from the next monthly-profile run. It uses the checkout-pinned Pea source CLI (`vp exec jiti apps/pea/src/main.ts`) for every Revit call:
 
 1. `revit.context.summary` refuses a family document, read-only/modifiable document, session mismatch, or any active path other than the explicitly supplied disposable Old Template copy.
 2. A `ReadOnly` `pea script execute` call reads the frozen 45-profile composed corpus and company definitions, then calls the public production `FamilyProfileConverter.Convert` against the active project's units. It returns each native `patchJson`, source path, and `ExecutionOptions`; it does not mutate the document.
@@ -21,19 +21,42 @@ P owns session lifecycle and document custody. Before either command, P must pro
 - an activated, writable, unmodifiable **copy** of Old Template and its absolute path; the original must remain unopened by this workflow;
 - a fresh artifact directory. `pe-revit doc current --id <session-id>` is the SDK-side identity receipt; the driver independently verifies the same active path through Host.
 
-From the same checkout whose payload is loaded:
+From the integrated checkout whose payload is loaded, P fills the six values supplied by the controlled snapshot and disposable-document preparation:
 
 ```powershell
-node scripts/familyfoundry-monthly-host-proof.mjs --host dev --bridge-session-id <bridge-id> --document-path <absolute-disposable-Old_Template.rvt> --original-document-path <absolute-original-Old_Template.rvt> --artifact-dir <absolute-artifact-dir> --mode plan
+$repoRoot = 'C:\Users\kaitp\source\repos\Pe.Tools-family'
+$hostSelector = '<dev-or-explicit-host-url>'
+$bridgeSession = '<exact-bridge-session-id>'
+$disposableProject = '<absolute-disposable-Old_Template.rvt>'
+$originalProject = '<absolute-original-Old_Template.rvt>'
+$planArtifacts = '<absolute-new-plan-artifact-directory>'
+node "$repoRoot\scripts\familyfoundry-monthly-host-proof.mjs" --repo-root $repoRoot --host $hostSelector --bridge-session-id $bridgeSession --document-path $disposableProject --original-document-path $originalProject --artifact-dir $planArtifacts --mode plan
 ```
 
 After reviewing one selector result, run the bounded mutation against that exact pair:
 
 ```powershell
-node scripts/familyfoundry-monthly-host-proof.mjs --host dev --bridge-session-id <bridge-id> --document-path <absolute-disposable-Old_Template.rvt> --original-document-path <absolute-original-Old_Template.rvt> --artifact-dir <new-absolute-artifact-dir> --mode apply-one --profile <exact-corpus-source> --family-id <selected-family-id>
+$applyArtifacts = '<absolute-new-apply-artifact-directory>'
+$profileSource = '<exact-source-from-plan-artifact>'
+$familyId = '<exact-selected-family-id-from-that-profile-plan>'
+node "$repoRoot\scripts\familyfoundry-monthly-host-proof.mjs" --repo-root $repoRoot --host $hostSelector --bridge-session-id $bridgeSession --document-path $disposableProject --original-document-path $originalProject --artifact-dir $applyArtifacts --mode apply-one --profile $profileSource --family-id $familyId
 ```
 
 The driver calls no `pe-revit session` or `pe-revit doc` verb and never saves, closes, opens, or copies a Revit document. All JSON reaches Pea as process argv entries rather than a PowerShell JSON command line. The operation-call CLI currently uses `--bridgeSessionId`; script execution uses its kebab-cased `--bridge-session-id`.
+
+## CLI preflight
+
+The checkout CLI was exercised without a Revit operation or document read:
+
+- Windows Node 25.7 `spawnSync("vp", ..., { shell:false })` resolved `vp` and returned status/output normally.
+- `vp run @pe/pea#pea -- ...` was falsified: the extra separator reaches Pea as a leading argument and routes to the wrong command. Even without that separator, `vp run` prefixes stdout with its task line. The driver now invokes the package script body directly through `vp exec jiti apps/pea/src/main.ts`, avoiding the task prefix.
+- Pea itself prints `Pea product/operator CLI. (pea v0.1.0)` before operation output. A real dead-host `host.status` call then printed a valid `{ ok:false, key:"host.status", ... }` envelope and exited 0. The driver now parses the first JSON object and still rejects `ok:false`; it does not mistake process success for operation success.
+- A real invalid `script execute` invocation exited 1, proving `pea()` propagates CLI terminal failures. Successful script output is source-defined with `data      ` as its final structured line; the driver parses the last line-start marker so script output containing that text cannot shadow the result.
+- The complete driver was pointed at `http://127.0.0.1:1` with a fake session and distinct disposable/original paths. It exited nonzero and checkpointed `status:"failed"`, the exact transport error, and `finishedAt` in `.artifacts/monthly-host-preflight/monthly-host-proof.json`; an early transport failure can no longer leave a truthful-looking `running` artifact.
+- `host operations call --help` confirms `--bridgeSessionId`; `script execute --help` confirms `--bridge-session-id`. Generated request JSON confirms camel-case `executionOptions`, `singleTransaction`, `optimizeTypeOperations`, `enableCollectors`, and `suppressWarnings`.
+- Host discovery resolved the installed Host as `http://127.0.0.1:5180`; it returned no Family Foundry rows, so it is not a valid payload for this proof. This worktree's `--host dev` correctly refused because no worktree Host is running. P must supply the new controlled snapshot's Host selector or URL.
+
+Every operation call sends the explicit bridge session and rejects a missing or different `resolvedTarget.session`. The initial context call also verifies the exact disposable document path. The ReadOnly conversion call sends the same bridge selector and now requires its returned `documentPath` to equal that disposable path before any plan begins.
 
 ## Artifact contract
 
