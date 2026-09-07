@@ -1,4 +1,5 @@
 using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -17,7 +18,8 @@ public sealed record FamilyFoundryFamilyPlanData(
     string PlanHash,
     IReadOnlyList<FamilyFoundryChangeData> Changes,
     IReadOnlyList<string> RunEffects,
-    IReadOnlyList<FamilyFoundryDiagnostic> Refusals
+    IReadOnlyList<FamilyFoundryDiagnostic> Refusals,
+    IReadOnlyList<RevitDataIssue> Warnings
 );
 
 public sealed record FamilyFoundryPlanData(
@@ -56,6 +58,7 @@ public sealed record FamilyFoundryFamilyModelData(
     string? ModelJson,
     IReadOnlyDictionary<string, string> Coverage,
     int UnmodeledCount,
+    IReadOnlyList<RevitDataIssue> Issues,
     string? Error
 );
 

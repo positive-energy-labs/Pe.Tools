@@ -48,27 +48,25 @@ public static class FamilySnapshotExtractor {
         var issues = new List<RevitDataIssue>();
         IReadOnlyList<FamilyParameterSnapshot> parameters = [];
         IReadOnlyList<string> typeNames = [];
-
-        Document? familyDocument = null;
+        var editDiagnostics = new List<(bool IsError, string Message)>();
         try {
-            familyDocument = projectDocument.EditFamily(family);
-
-            var famDoc = new FamilyDocument(familyDocument);
-            parameters = ExtractParameters(famDoc, issues, out typeNames);
+            _ = projectDocument.ReadFamilyCopy(family, famDoc => {
+                parameters = ExtractParameters(famDoc, issues, out typeNames);
+                return true;
+            }, editDiagnostics);
         } catch (Exception ex) {
-            issues.Add(new RevitDataIssue(
-                "FamilySnapshotExtractionFailed",
-                RevitDataIssueSeverity.Error,
-                $"Could not extract family document truth for '{family.Name}': {ex.Message}"
-            ));
+            if (!editDiagnostics.Any(diagnostic => diagnostic.IsError))
+                issues.Add(new RevitDataIssue(
+                    "FamilySnapshotExtractionFailed",
+                    RevitDataIssueSeverity.Error,
+                    $"Could not extract family document truth for '{family.Name}': {ex.Message}"
+                ));
         } finally {
-            if (familyDocument != null) {
-                try {
-                    _ = familyDocument.Close(false);
-                } catch {
-                    // Best effort only; extraction must not fail because a temp family doc could not close.
-                }
-            }
+            issues.AddRange(editDiagnostics.Select(diagnostic => new RevitDataIssue(
+                diagnostic.IsError ? "FamilyEditError" : "FamilyEditWarning",
+                diagnostic.IsError ? RevitDataIssueSeverity.Error : RevitDataIssueSeverity.Warning,
+                $"EditFamily for '{family.Name}': {diagnostic.Message}"
+            )));
         }
 
         return new FamilySnapshotRecord(

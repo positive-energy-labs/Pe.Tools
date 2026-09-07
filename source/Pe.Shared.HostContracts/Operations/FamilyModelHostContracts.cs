@@ -9,7 +9,8 @@ public sealed record FamilyModelCaptureData(
     string FamilyName,
     string ModelJson,
     int UnmodeledCount,
-    IReadOnlyDictionary<string, string> Coverage
+    IReadOnlyDictionary<string, string> Coverage,
+    IReadOnlyList<RevitDataIssue> Issues
 );
 
 public sealed record FamilyModelBuildRequest(

@@ -97,4 +97,55 @@ public sealed class FamilyProjectIdentityTests {
         }
         Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(before));
     }
+
+    [Test, Timeout(300000)]
+    public void Project_capture_acknowledges_Alternator_warning_and_refuses_destructive_copy() {
+        const string familyName = "Generator (150 kW - 200 kW)";
+        const string patch = """{"patch":{}}""";
+        var application = this._ui.Application;
+        var before = application.Documents.Cast<Document>().ToArray();
+        var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Project_capture_acknowledges_Alternator_warning_and_refuses_destructive_copy));
+        var path = Path.Combine(directory, "Old_Template.rvt");
+        File.Copy(RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt"), path, true);
+        Document? project = null;
+        try {
+            project = application.OpenDocumentFile(path);
+            var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().ToList();
+            var family = families.Single(candidate => candidate.Name == familyName);
+            var titleBlock = families.Single(candidate => candidate.Name == "PE - Title Block");
+
+            var generatorPlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            var generatorRepeat = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            var generatorCapture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([family.Id.Value()]), project).Families.Single();
+            var refusedPlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, titleBlock.Id.Value()), project).Families.Single();
+            var refusedCapture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([titleBlock.Id.Value()]), project).Families.Single();
+            var lostDimensionId = BuiltInFailures.DimensionFailures.SomeDimensionsLostOnPaste.Guid.ToString();
+            var deletedElementsId = BuiltInFailures.EditingFailures.ElementsDeleted.Guid.ToString();
+
+            Assert.Multiple(() => {
+                Assert.That(generatorPlan.Refusals, Is.Empty);
+                Assert.That(generatorPlan.Changes, Is.Empty);
+                Assert.That(generatorPlan.PlanHash, Is.Not.Empty.And.EqualTo(generatorRepeat.PlanHash));
+                Assert.That(generatorPlan.Warnings.Any(warning => warning.FamilyName == "Alternator" &&
+                    warning.Message.Contains("Acknowledged warning:", StringComparison.Ordinal) &&
+                    warning.Message.Contains("elements:", StringComparison.Ordinal)), Is.True);
+                Assert.That(generatorCapture.Success, Is.True, generatorCapture.Error);
+                Assert.That(generatorCapture.Issues.Any(issue => issue.FamilyName == "Alternator"), Is.True);
+                Assert.That(generatorCapture.ModelJson, Does.Not.Contain("FamilyEditWarning").And.Not.Contain("NativeEditWarning"));
+                Assert.That(refusedPlan.PlanHash, Is.Empty);
+                Assert.That(refusedPlan.Changes, Is.Empty);
+                Assert.That(refusedPlan.Refusals.Single().Code, Is.EqualTo("FamilyEditRefused"));
+                Assert.That(refusedPlan.Refusals.Single().Message, Does.Contain("Rejected warning:").And.Contain("elements:")
+                    .And.Contain(lostDimensionId).And.Contain(deletedElementsId));
+                Assert.That(refusedCapture.Success, Is.False);
+                Assert.That(refusedCapture.ModelJson, Is.Null);
+                Assert.That(refusedCapture.Error, Does.Contain("Rejected warning:").And.Contain("elements:")
+                    .And.Contain(lostDimensionId).And.Contain(deletedElementsId));
+                Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(before.Append(project)));
+            });
+        } finally {
+            if (project is { IsValidObject: true }) project.Close(false);
+        }
+        Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(before));
+    }
 }
