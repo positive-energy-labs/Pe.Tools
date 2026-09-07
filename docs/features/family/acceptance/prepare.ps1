@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ProjectDocument,
     [Parameter(Mandatory = $true)][string]$SessionId,
     [string]$SourceFixture,
+    [switch]$ParametersOnly,
     [string]$RunName = (Get-Date -Format 'yyyyMMdd-HHmmss')
 )
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,9 @@ if ($model.datums.'Ref. Level'.normal -ne 'Z' -or $model.parameters.Voltage.valu
 $patch = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'parameters.patch.json') -Raw | ConvertFrom-Json
 foreach ($parameter in $patch.patch.parameters.PSObject.Properties) {
     $model.parameters | Add-Member -MemberType NoteProperty -Name $parameter.Name -Value $parameter.Value -Force
+}
+if ($ParametersOnly) {
+    $model = [ordered]@{ family = $model.family; parameters = $patch.patch.parameters }
 }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 function Write-Request([string]$Name, $Value) {
@@ -44,6 +48,7 @@ foreach ($route in @('family', 'families')) {
 }
 Write-Request 'expected.json' @{
     sourceFixture = $fixture; sourceSha256 = (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash
+    parametersOnly = [bool]$ParametersOnly
     familyName = 'PE Box'; width = '42in'; sharedCount = 7
     sharedGuid = $patch.patch.parameters.FF_Route_Proof_Count.sharedGuid
     sharedSpecId = $patch.patch.parameters.FF_Route_Proof_Count.sharedSpecId
