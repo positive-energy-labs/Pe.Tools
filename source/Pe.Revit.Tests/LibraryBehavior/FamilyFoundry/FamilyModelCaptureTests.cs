@@ -94,15 +94,17 @@ public sealed class FamilyModelCaptureTests {
         try {
             document = FamilyTemplate.NewDocument(this._application, host.Family);
             Document? dependencyDocument = null;
+            Family? loaded = null;
             try {
                 dependencyDocument = FamilyModelBuild.Build(this._application, dependency, modelDirectory: modelDirectory).Document;
-                _ = dependencyDocument.LoadFamily(document, new DefaultFamilyLoadOptions());
+                loaded = dependencyDocument.LoadFamily(document, new DefaultFamilyLoadOptions());
             } finally { RevitFamilyFixtureHarness.CloseDocument(dependencyDocument); }
+            Assert.That(loaded, Is.Not.Null, "The control's nested family must be loaded.");
 
             using var transaction = new Transaction(document, "Probe connector host identity");
             transaction.Start();
-            var symbol = new FilteredElementCollector(document).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
-                .Single(candidate => candidate.Family.Name == "vane" && candidate.Name == "type one");
+            var symbol = loaded!.GetFamilySymbolIds().Select(id => (FamilySymbol)document.GetElement(id))
+                .Single(candidate => candidate.Name == "type one");
             if (!symbol.IsActive) symbol.Activate();
             var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
                 .Single(candidate => candidate.Name == "Ref. Level");

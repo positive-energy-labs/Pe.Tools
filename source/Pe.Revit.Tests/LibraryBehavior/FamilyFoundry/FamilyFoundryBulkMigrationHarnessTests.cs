@@ -629,7 +629,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         try {
             static string Describe(CombinableElement element) =>
                 $"{element.UniqueId}|{element.GetType().Name}|{element.Category?.Name ?? "<none>"}";
-            return new FilteredElementCollector(document).OfClass(typeof(CombinableElement)).Cast<CombinableElement>()
+            return new FilteredElementCollector(document).WhereElementIsNotElementType().OfType<CombinableElement>()
                 .SelectMany(element => element.Combinations.Cast<GeomCombination>())
                 .DistinctBy(combination => combination.Id)
                 .Select(combination => combination.AllMembers.Cast<CombinableElement>()
