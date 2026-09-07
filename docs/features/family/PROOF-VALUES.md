@@ -2,7 +2,7 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
-Latest checkpoint: **wave 5 at frozen root 324d797: 37 tests, 15 passed, 22 failed**. The dependency-order probe proves the lookup zero cause; production repair 62ea38b is compiled, not yet rerun. Loader name correction f0784b7 is also queued. Actual runtime PID 34632 and five assembly hashes/MVIDs are proven, but the SDK custody receipt incorrectly claimed existing PID 80052 through reused parent PID 31684. CLI was interrupted to prevent its force-stop path; adapter still completed the TRX. Exact native settings restoration and protected PID 71484 are verified. SDK repair is c643103 plus 90c9f86; no further launch until custody is resolved and root READY.
+Latest checkpoint: **wave 6 at frozen root 7479a63: diagnostic 1/1 passed; authorized functional followup 4 passed / 8 failed**. Lookup formula ordering now passes full save/reopen. Both repaired-SDK launches have matching process/receipt/lease identities and exact settings restoration; protected PIDs 71484 and 86872 remain unchanged. Root source hold is released and the fresh lane is idle. Remaining reds are geometry, shared creation, portable-value residue, and nested-host capture residue.
 
 ## Identity and evidence
 
@@ -299,3 +299,29 @@ At discovery, only FF SDK CLI **89104** was stopped to prevent `TestCommand.Comp
 SDK `session list` swept the ended hold, restoring native settings byte-exactly to this lease Original: **68A23340FA6C62DC388A0A133BBE166B8E2A60DACC5800CB787721DAF6DC415B**. No active holds remain. `session stop --id pe.revit.tests-25-test` then retired the already-dead receipt (`cleanup.json`); it targeted no live process. Protected user **71484** retains **04:20:36.3844230 UTC** start. Restoration was performed by the SDK lease owner only.
 
 SDK **c643103 + 90c9f86** compares creation times on every ancestry edge, rejects reused intermediate/ancestor PIDs and missing ancestry, and retains the held launcher's known start identity after it dies so its living descendants still own settings. Focused temp-root lease/ancestry vectors pass; source main is untouched. Latest compiled SDK bytes **3103B2C26794AE17E5EC1379490D742F500AA37AF0732C1C72F277D3EEC6CDA2** were built before the final commit (informational version may retain c643103). No fresh launch has validated this ancestry repair yet. R's ff-route-25 lane must coordinate after this custody checkpoint; no new runtime was started here.
+
+Final custody checkpoint **06:00:55 UTC** (`wave5/custody-final-checkpoint.json`): root source hold remains released; no runtime READY. Saved restored native bytes exactly equal the lease Original (68A23340...). A later read has hash EC189B6A3CD4958C4E16F4F1D09E49215E61761F50371241AECB2FD8B92B2913; `native-post-restore-diff.json` shows only 12 LoadTime telemetry fields changed, with no add-in enable/disable setting changes. These later bytes were left untouched. Actual test PID 34632 remains gone and protected PID 71484 retains its original start identity. This separate custody audit does not block root edits. Attribution of PID 80052's graceful exit remains pending its owner's timeline.
+Wave6 diagnostic start 2026-09-07T06:03:43.7317015Z; frozen root7479a63; SDK90c9f86; diagnostic only; source hold active for diagnostic and authorized conditional functional followup.
+Wave6 functional start 2026-09-07T06:04:55.4862578Z; diagnostic custody passed; root7479a63 frozen; four-class filter; no bulk/corpus; source hold active.
+
+
+## Wave 6: repaired custody accepted, lookup roundtrip passes
+
+Root **7479a63b9a4a6d33cc724ae577e198fd2343bb26** was clean and stayed frozen across both authorized runs. Root supplied Debug.R25.Tests build **0 errors / 118 warnings**. SDK source **90c9f86** including c643103; answering binary SHA256 **3103B2C26794AE17E5EC1379490D742F500AA37AF0732C1C72F277D3EEC6CDA2**, informational stamp c643103 because the final source was compiled before its commit. Both used the absolute root test project, `--year 25 --no-build --timeout-seconds 300`, and a saved --plan. No bulk or old-template corpus tests ran.
+
+1. `wave6-diagnostic/`: filter `FullyQualifiedName~AssemblyLoadDiagnosticsTests`; **1 passed / 0 failed**, exit 0. TRX `kaitp_KP-PC_2026-09-07_01_04_04.trx`; **06:03:44.603–06:04:07.482 UTC, 22.879 s**. Actual PID **33636**, start **06:03:46.0168344 UTC**, ticks **639243578260168344**, matches both launch and lease. Runtime diagnostic MVIDs and hashes match all five checkout assemblies. Owned process exited, zero holds, exact native restore, both pre-existing processes preserved. This valid custody checkpoint authorized the next run without another permission round.
+2. `wave6-functional/`: filter `FullyQualifiedName~FamilyModelRoundtripTests|FullyQualifiedName~LookupTableRoundtripTests|FullyQualifiedName~FamilyModelDependencyTests|FullyQualifiedName~FamilyRenameAcrossFamiliesTests`; **4 passed / 8 failed / 12 executed**, exit 1. TRX `kaitp_KP-PC_2026-09-07_01_05_20.trx`; **06:04:56.387–06:05:38.428 UTC, 42.041 s**. Actual PID **87408**, start **06:04:57.8810490 UTC**, ticks **639243578978810490**, matches launch and lease. Read-only Process.Modules inspection while it ran identified all five actual loaded DLL paths; their SHA256 and MVIDs match the frozen build (`loaded-modules.json`, `runtime-identity.json`, `assembly-identity.json`).
+
+**Passed:** lookup snapshot/formula/CSV/value save-reopen roundtrip, dependency refusal/cycle/type cleanup, named-plane reapply, rejected-template cleanup. Therefore formula fix 62ea38b is now native save/reopen proven, without extra regeneration or numeric assertion changes. Native puck/name loading advanced beyond the wave5 refusal, but complete recursive dependency acceptance remains red.
+
+| Failure | Exact first cause |
+|---|---|
+| a-box; b-grd/vane; both rename fixtures (4) | NewAlignment: references are not geometrically aligned, `FamilyRefs.cs:116` through `MakeForms.cs:59`. |
+| d-bath-shower-refline/stub | Residue `dimensions:body.height (Recreate); forms:body (Add)`. |
+| c-bath-shower | Native shared AddParameter fails for `PE_P_LoadCalc_CWFU`. |
+| Portable units/literal text | Residue `parameters:Rotation (Update); parameters:Note (Update)`. |
+| Successful recursive dependency test | Branch residue `nested:child (Add)`, after loading and placement no longer report missing family/type. |
+
+Nested source diagnosis for the next owner: `PlaceNested`'s plane branch uses the unhosted NewFamilyInstance(point, symbol, StructuralType) overload and discards its resolved host reference. Capture HostOf accepts a sketch plane, native Host, or LevelId; otherwise it omits the instance. This is the next boundary to probe/fix; no capture or geometry-owner production change was made here. Loader failure tests still prove closure of child documents on refusal.
+
+Both runs restored the exact held Original SHA256 **EC189B6A3CD4958C4E16F4F1D09E49215E61761F50371241AECB2FD8B92B2913**. `verification.json` in each directory checks zero holds, owned PID gone, preserved user **71484** start **04:20:36.3844230 UTC**, and preserved existing **86872** start **05:54:06.6822430 UTC**. Root source hold was released immediately after functional cleanup, before further analysis. The fresh lane is idle for R's separately coordinated ff-route-25; no additional runtime is authorized or active here. Prior PID 80052 exit attribution remains a separate historical question and does not block root source edits.
