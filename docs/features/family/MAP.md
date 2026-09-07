@@ -14,10 +14,20 @@ active operations instead of omitting them. Owned Revit exited, zero quarantines
 and native settings were restored byte-for-byte. Formula canonicalization and its rollback
 regression plus the wall-template census are integrated at `dc524dd`, not yet native proven.
 
-Current bounded dispatch: Sol high implements approved NoTransaction ownership and the
-script assembly-loading repair in `Pe.Tools-ff-details`; Sol medium censuses missing legacy
-conversion in the route tree; Sol medium diagnoses three remaining native geometry/rename
-failures in the proof tree. No native source hold is active. No new Revit run is queued.
+Current bounded dispatch: Sol medium owns cloud-template mechanical-family value benchmarking
+in the proof tree and the sole Revit lifecycle lane. Sol high repairs the three company literal
+failures in the normalization tree. Sol medium implements legacy plane/dimension conversion
+in `Pe.Tools-ff-convert`. No integration source hold is active; benchmark bytes are isolated.
+Integrated `09a19a3` permits explicit NoTransaction ownership and repairs script loading:
+R25.Tests compile passes, and ScriptPolicyAnalyzerTests pass 3/3 deterministic. Native script
+execution remains owed. `64c9239` fixes empty explicit rename sources; native proof is owed.
+`ae8021f` exposes curve and alignment diagnostics without masking either alignment attempt.
+
+The user-supplied `close-0907-review/SYNTHESIS.md` reviews takeoffs/Partition, not FF.
+Its transferable closure checks are actual-native versus reported results, mutation/replay
+guards, save/reopen persistence, and proof pinned to executed bytes. No takeoffs finding is
+adopted as an FF defect without tracing the FF path. Final simplification must redistill state,
+contracts, compilers and serialization while retaining all features and native acceptance.
 
 ## Completion contract
 
