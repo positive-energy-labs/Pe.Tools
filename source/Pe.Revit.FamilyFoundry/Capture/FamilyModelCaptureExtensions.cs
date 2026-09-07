@@ -967,8 +967,8 @@ internal sealed class FamilyModelCapturer {
     private static RefStrength? Strength(int? value) => value switch {
         0 => RefStrength.Left, 1 => RefStrength.CenterLeftRight, 2 => RefStrength.Right, 3 => RefStrength.Front,
         4 => RefStrength.CenterFrontBack, 5 => RefStrength.Back, 6 => RefStrength.Bottom, 7 => RefStrength.CenterElevation,
-        8 => RefStrength.Top, 13 => RefStrength.StrongReference, 14 => RefStrength.WeakReference,
-        _ => null // 12 = Not a Reference, the portable default
+        8 => RefStrength.Top, 12 => RefStrength.NotAReference, 13 => RefStrength.StrongReference, 14 => RefStrength.WeakReference,
+        _ => null
     };
 
     private static Axis? ToAxis(XYZ v) {

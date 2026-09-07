@@ -202,6 +202,7 @@ public static class FamilyReconciler {
             var a = JObject.FromObject(want, Serializer);
             var b = JObject.FromObject(have, Serializer);
             if (drivenPlanes.Contains(name)) { a.Remove("at"); b.Remove("at"); }
+            if (want.IsReference is null) { a.Remove("isReference"); b.Remove("isReference"); }
             return Same(a, b, units, null);
         });
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
