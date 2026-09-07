@@ -42,6 +42,7 @@ public sealed class FamilyPatch {
 
     /// <summary>Merge the fragment onto one current document. Pure; returns the merged JSON to parse.</summary>
     public static JObject Apply(JObject current, JObject patch) {
+        patch = ExpandMacros(current, patch);
         var result = (JObject)current.DeepClone();
         Merge(result, patch);
         foreach (var parameter in (patch["parameters"] as JObject)?.Properties() ?? []) {
@@ -62,6 +63,34 @@ public sealed class FamilyPatch {
                 (type.Value as JObject)?.Remove(parameter.Name);
             }
         }
+        return result;
+    }
+
+    private static JObject ExpandMacros(JObject current, JObject patch) {
+        var forms = (patch["forms"] as JObject)?.Properties().Where(p => p.Value is JObject form &&
+            Enum.TryParse((string?)form["kind"], true, out FormKind kind) && kind is FormKind.Prism or FormKind.Cylinder).ToList() ?? [];
+        var details = (patch["details"] as JObject)?.Properties().Where(p => p.Value is JObject detail && detail["curves"] is JArray { Count: > 1 }).ToList() ?? [];
+        if (forms.Count == 0 && details.Count == 0) return patch;
+
+        // Expand authored shorthand before it encounters the native expanded representation.
+        var parameters = (JObject?)current["parameters"]?.DeepClone() ?? new JObject();
+        if (patch["parameters"] is JObject authoredParameters) Merge(parameters, authoredParameters);
+        var input = new JObject { ["family"] = (current["family"] ?? patch["family"])?.DeepClone(), ["parameters"] = parameters, ["forms"] = new JObject(forms.Select(p => new JProperty(p.Name, p.Value.DeepClone()))) };
+        foreach (var section in new[] { "datums", "refPlanes", "dimensions", "details" })
+            if (patch[section] is JObject declarations)
+                input[section] = new JObject(declarations.Properties().Where(p => p.Value is JObject).Select(p => new JProperty(p.Name, p.Value.DeepClone())));
+        var model = input.ToObject<FamilyModel>(JsonSerializer.Create(FamilyModelJson.Settings))!;
+        var diagnostics = FamilyModelMacros.Expand(model);
+        if (diagnostics.Count > 0)
+            throw new JsonSerializationException(string.Join("; ", diagnostics.Select(d => $"{d.Path} {d.Code}: {d.Message}")));
+        var expanded = JObject.Parse(FamilyModelJson.Serialize(model));
+        var result = (JObject)patch.DeepClone();
+        foreach (var detail in details) ((JObject)result["details"]!).Remove(detail.Name);
+        foreach (var section in new[] { "forms", "refPlanes", "dimensions", "details" })
+            foreach (var entry in ((JObject)expanded[section]!).Properties()) {
+                result[section] ??= new JObject();
+                result[section]![entry.Name] = entry.Value.DeepClone();
+            }
         return result;
     }
 

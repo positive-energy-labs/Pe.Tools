@@ -258,6 +258,9 @@ public sealed class FamilyModelContractTests {
         Assert.That(form.Kind, Is.EqualTo(FormKind.Extrusion));
         Assert.That((form.SketchPlane, form.Start, form.End), Is.EqualTo(("Ref. Level", "Ref. Level", "body.top")));
         Assert.That(form.Profile![0].Curves.Select(c => c.On), Is.EqualTo(new[] { "body.left", "body.back", "body.right", "body.front" }));
+        var reapplied = FamilyPatch.Apply(FamilyModelJson.Serialize(m), "{\"forms\":{\"body\":" + Box.Replace("\"width\":\"6in\"", "\"width\":\"param:W\"") + "}}");
+        Assert.That(reapplied.Diagnostics, Is.Empty);
+        Assert.That(JToken.DeepEquals(JToken.Parse(FamilyModelJson.Serialize(m)), JToken.Parse(FamilyModelJson.Serialize(reapplied.Value!))), Is.True);
     }
 
     [Test]

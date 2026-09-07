@@ -89,7 +89,11 @@ public static class FamilyReconciler {
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
     public static FamilyModelParseResult Desired(FamilyModel current, FamilyPatch patch) {
         var captured = JObject.Parse(FamilyModelJson.Serialize(current));
-        var merged = FamilyPatch.Apply(captured, patch.Patch);
+        JObject merged;
+        try { merged = FamilyPatch.Apply(captured, patch.Patch); }
+        catch (JsonException exception) {
+            return new FamilyModelParseResult(null, [new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.InvalidJson, "$", exception.Message)]);
+        }
         merged.Remove("coverage");
         merged.Remove("unmodeled");
         var parsed = FamilyModelJson.Parse(merged.ToString());
