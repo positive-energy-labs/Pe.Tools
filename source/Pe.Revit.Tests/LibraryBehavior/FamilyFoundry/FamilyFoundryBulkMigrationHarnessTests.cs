@@ -70,6 +70,25 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
+    public void Multiple_targets_receive_a_shared_source_before_cleanup() {
+        var document = this.NewFamily("FF batched fallback");
+        try {
+            var originalType = document.FamilyManager.CurrentType.Name;
+            var operation = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Mapped A":{"dataType":"Length","wasNamed":["Width"]},"Mapped B":{"dataType":"Length","wasNamed":["Width"]}}}}"""));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
+                foreach (var name in new[] { "Mapped A", "Mapped B" })
+                    Assert.That(type.AsDouble(document.FamilyManager.FindParameter(name)), Is.EqualTo(type.Name == "A" ? 1d : 2d));
+            Assert.That(document.FamilyManager.CurrentType.Name, Is.EqualTo(originalType));
+            Assert.That(document.FamilyManager.FindParameter("Keep"), Is.Not.Null);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
     public void Company_numeric_literals_use_known_legacy_units_and_number_stays_unitless() {
         var assignments = new Pe.Revit.FamilyFoundry.OperationSettings.SetKnownParamsSettings {
             GlobalAssignments = [new() { Parameter = "Voltage", Kind = Pe.Revit.FamilyFoundry.OperationSettings.ParamAssignmentKind.Value, Value = "480" },

@@ -16,9 +16,13 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         var logs = new List<LogEntry>();
         var cleanup = new List<(string Source, string Target)>();
         var ranking = new MapParamsSettings();
+        var mappings = desired.Parameters.Where(p => authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+        var sharedCandidates = mappings.SelectMany(p => (p.Value.WasNamed ?? []).Distinct()).GroupBy(n => n)
+            .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
+        var transfers = new List<(string Target, List<string> Sources, string Strategy, bool PreservePopulated)>();
         context.PreProcessSnapshot ??= doc.Document.CaptureFamilySnapshot();
         try {
-            foreach (var (name, spec) in desired.Parameters.Where(p => authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue))) {
+            foreach (var (name, spec) in mappings) {
                 var existing = fm.FindParameter(name);
                 var existed = existing is not null;
                 var nativeReplacement = false;
@@ -30,7 +34,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var propertiesGroup = spec.PropertiesGroup is { } pg ? SetParamMetadata.Group(pg) : new ForgeTypeId(string.Empty);
                 var strategy = spec.MappingStrategy ?? "CoerceByStorageType";
                 var first = candidates.Select(fm.FindParameter).FirstOrDefault(p => p is not null);
-                if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
+                if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !sharedCandidates.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
                     strategy is "Strict" or "CoerceByStorageType") {
                     existing = doc.ReplaceDefinition(first, name, definition, propertiesGroup, spec.IsInstance ?? false);
                     nativeReplacement = true;
@@ -45,28 +49,33 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 }
                 if (dataType is not null && existing.Definition.GetDataType() != dataType)
                     throw new InvalidOperationException($"'{name}' has an incompatible destination datatype.");
-                if (!existed || spec.FillBlanksFromSources == true) {
-                    foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
-                        fm.CurrentType = type;
-                        if ((existed || nativeReplacement) && !Blank(doc, type, existing)) continue;
-                        Exception? failure = null;
-                        foreach (var sourceName in candidates) {
-                            var source = fm.FindParameter(sourceName);
-                            if (source is null || Blank(doc, type, source)) continue;
-                            using var attempt = new SubTransaction(doc.Document);
-                            attempt.Start();
-                            try {
-                                if (doc.SetValue(existing, source, strategy) is null) throw new InvalidOperationException("Coercion produced no value.");
-                                if (attempt.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Value transfer did not commit.");
-                                failure = null;
-                                break;
-                            } catch (Exception exception) { failure = exception; }
-                        }
-                        if (failure is not null) throw new InvalidOperationException($"All sources failed for '{name}' in '{type.Name}'.", failure);
-                    }
-                }
+                if (!existed || spec.FillBlanksFromSources == true)
+                    transfers.Add((name, candidates, strategy, existed || nativeReplacement));
                 cleanup.AddRange(candidates.Select(source => (source, name)));
                 logs.Add(new LogEntry(name).Success(existed ? "Existing destination preferred; explicit writes follow." : "Destination created from explicit source rules."));
+            }
+            // Definitions are stable before value copying. A source used by multiple targets cannot be consumed early.
+            var work = transfers.Select(t => (Target: fm.FindParameter(t.Target)!,
+                Sources: t.Sources.Select(fm.FindParameter).OfType<FamilyParameter>().ToList(), t.Strategy, t.PreservePopulated)).ToList();
+            foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
+                var pending = work.Where(t => (!t.PreservePopulated || Blank(doc, type, t.Target)) &&
+                    t.Sources.Any(source => !Blank(doc, type, source))).ToList();
+                if (pending.Count == 0) continue;
+                if (fm.CurrentType != type) fm.CurrentType = type;
+                foreach (var transfer in pending) {
+                    Exception? failure = null;
+                    foreach (var source in transfer.Sources.Where(source => !Blank(doc, type, source))) {
+                        using var attempt = new SubTransaction(doc.Document);
+                        attempt.Start();
+                        try {
+                            if (doc.SetValue(transfer.Target, source, transfer.Strategy) is null) throw new InvalidOperationException("Coercion produced no value.");
+                            if (attempt.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Value transfer did not commit.");
+                            failure = null;
+                            break;
+                        } catch (Exception exception) { failure = exception; }
+                    }
+                    if (failure is not null) throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}'.", failure);
+                }
             }
             foreach (var (sourceName, targetName) in cleanup.Distinct()) {
                 var source = fm.FindParameter(sourceName);
@@ -75,7 +84,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var removed = doc.TryMergeEquivalentParameter(source, target);
                 logs.Add(new LogEntry(sourceName).Skip(removed ? $"Transferred dependencies and removed equivalent source into '{targetName}'." : "Retained source: values, formula, scope or datatype are not equivalent."));
             }
-        } finally { if (originalType is not null) fm.CurrentType = originalType; }
+        } finally { if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType; }
         return new OperationLog(this.Name, logs);
     }
 
