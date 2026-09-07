@@ -160,12 +160,22 @@ public sealed class LookupTableRoundtripTests {
             var formulas = fm.GetParameters().Where(p => !string.IsNullOrEmpty(p.Formula))
                 .Select(p => (Parameter: p, Formula: p.Formula!))
                 .OrderBy(p => p.Formula.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
-            foreach (var (parameter, formula) in formulas) {
-                fm.SetFormula(parameter, null);
-                fm.SetFormula(parameter, formula);
+            foreach (var mode in new[] { "same-formulas", "outputs-only", "lookups-only", "all-formulas" }) {
+                using var trial = new SubTransaction(document);
+                trial.Start();
+                try {
+                    foreach (var (parameter, formula) in formulas) {
+                        var lookup = formula.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase);
+                        if (mode == "outputs-only" && lookup || mode == "lookups-only" && !lookup) continue;
+                        if (mode != "same-formulas") fm.SetFormula(parameter, null);
+                        fm.SetFormula(parameter, formula);
+                    }
+                    document.Regenerate();
+                    WriteValues(document, output, $"refresh-{mode}-values.json");
+                } catch (Exception ex) {
+                    File.WriteAllText(Path.Combine(output, $"refresh-{mode}-error.txt"), ex.ToString());
+                } finally { trial.RollBack(); }
             }
-            document.Regenerate();
-            WriteValues(document, output, "refreshed-formula-values.json");
         } catch (Exception ex) {
             File.WriteAllText(Path.Combine(output, "formula-refresh-error.txt"), ex.ToString());
         } finally { transaction.RollBack(); }
