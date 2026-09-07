@@ -42,6 +42,36 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [Test]
+    public void Native_resolution_converts_local_and_shared_group_labels_before_pure_diff() {
+        var document = this.NewFamily("FF native group resolution");
+        try {
+            var label = LabelUtils.GetLabelForGroup(GroupTypeId.IdentityData);
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject {
+                ["Width"] = new JObject { ["propertiesGroup"] = label, ["value"] = "4ft" },
+                ["Group Shared"] = new JObject { ["shared"] = true, ["sharedGuid"] = Guid.NewGuid().ToString(),
+                    ["sharedSpecId"] = SpecTypeId.Length.TypeId, ["isInstance"] = false, ["propertiesGroup"] = label, ["value"] = "5ft" }
+            } } };
+            var current = document.CaptureFamilyModel();
+            var desired = FamilyReconciler.Desired(current, patch).Value!;
+            using var source = new FamilySharedParameterSource(document, []);
+            var resolved = source.Resolve(desired, patch.Patch);
+            Assert.That(resolved.Parameters["Width"].PropertiesGroup, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
+            Assert.That(resolved.Parameters["Group Shared"].PropertiesGroup, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
+            Assert.That(patch.Patch["parameters"]!["Width"]!["propertiesGroup"]!.Value<string>(), Is.EqualTo(label), "Exact authored intent remains available for plan hashing.");
+            using var processor = new OperationProcessor(document);
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, []));
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            var captured = document.CaptureFamilyModel();
+            Assert.That(captured.Parameters["Width"].PropertiesGroup, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
+            Assert.That(captured.Parameters["Group Shared"].PropertiesGroup, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
+            Assert.That(FamilyReconciler.Diff(resolved, captured, UnitResolvers.Revit(document)), Is.Empty);
+        } finally { document.Close(false); }
+    }
+
     [Test, Timeout(600000)]
     public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
         var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");

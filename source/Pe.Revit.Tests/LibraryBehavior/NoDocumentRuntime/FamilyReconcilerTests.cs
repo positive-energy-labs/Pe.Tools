@@ -41,11 +41,17 @@ public sealed class FamilyReconcilerTests {
     private const string Header = """ "family": { "name": "T", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" } """;
 
     [Test]
-    public void Authored_group_label_and_captured_native_group_id_diff_empty() {
-        var label = LabelUtils.GetLabelForGroup(GroupTypeId.Geometry);
-        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "{{label}}" } } }""");
-        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "{{GroupTypeId.Geometry.TypeId}}" } } }""");
+    public void Empty_group_and_omitted_group_diff_empty_without_native_resolution() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } } }""");
         Assert.That(FamilyReconciler.Diff(desired, current, UnitResolvers.Portable), Is.Empty);
+    }
+
+    [Test]
+    public void Pure_diff_does_not_resolve_group_labels() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "Dimensions" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "autodesk.parameter.group:geometry-1.0.0" } } }""");
+        Assert.That(FamilyReconciler.Diff(desired, current, UnitResolvers.Portable).Single().Section, Is.EqualTo("parameters"));
     }
 
     [TestCaseSource(nameof(Fixtures))]

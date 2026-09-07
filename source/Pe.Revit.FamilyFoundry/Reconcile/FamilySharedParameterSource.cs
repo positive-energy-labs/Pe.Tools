@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Parameters;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
@@ -31,8 +32,11 @@ public sealed class FamilySharedParameterSource(Document document,
     public FamilyModel Resolve(FamilyModel model, JObject authored) {
         var json = JObject.Parse(FamilyModelJson.Serialize(model));
         foreach (var property in (authored["parameters"] as JObject)?.Properties() ?? []) {
-            if (property.Value is not JObject parameter || parameter.Value<bool?>("shared") != true) continue;
+            if (property.Value is not JObject parameter) continue;
             var target = (JObject)json["parameters"]![property.Name]!;
+            if (target.Value<string>("propertiesGroup") is { } group)
+                target["propertiesGroup"] = SetParamMetadata.Group(group).TypeId;
+            if (parameter.Value<bool?>("shared") != true) continue;
             SharedDefinitionSpec definition;
             if (parameter.Value<string>("sharedSpecId") is { } specId) {
                 definition = new SharedDefinitionSpec(property.Name, new ForgeTypeId(specId),

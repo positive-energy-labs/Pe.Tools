@@ -144,11 +144,7 @@ public static class FamilyReconciler {
                 foreach (var type in m.Types.Keys) cells.TryAdd($"{type}/{name}", v.Text);
         var parameters = m.Parameters.ToDictionary(p => p.Key, p => {
             var o = JObject.FromObject(p.Value, Serializer);
-            if (p.Value.PropertiesGroup is { } group) {
-                var id = SetParamMetadata.Group(group).TypeId;
-                if (string.IsNullOrEmpty(id)) o.Remove("propertiesGroup");
-                else o["propertiesGroup"] = id;
-            }
+            if (string.IsNullOrEmpty(p.Value.PropertiesGroup)) o.Remove("propertiesGroup");
             o.Remove("value");
             if (p.Value.Shared == false) o.Remove("shared");
             if (p.Value.Shared == true) o.Remove("tooltip");
