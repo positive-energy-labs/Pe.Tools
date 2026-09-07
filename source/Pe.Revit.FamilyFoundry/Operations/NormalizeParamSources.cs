@@ -26,7 +26,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var existing = fm.FindParameter(name);
                 var existed = existing is not null;
                 var nativeReplacement = false;
-                var candidates = ranking.GetRankedCurrParams(spec.WasNamed ?? [], fm, context)
+                var candidates = ranking.GetRankedCurrParams(spec.WasNamed ?? [], fm, context, includeEmpty: true)
                     .Where(p => p.Definition.Name != name).Select(p => p.Definition.Name).ToList();
                 var needsShared = spec.Shared == true && (existing is null || !existing.IsShared || existing.GUID != spec.SharedGuid || spec.SharedSpecId is { } specId && existing.Definition.GetDataType() != new ForgeTypeId(specId) || spec.SharedVisible is { } visible && (existing.Definition as InternalDefinition)?.Visible != visible || spec.SharedUserModifiable is { } modifiable && existing.UserModifiable != modifiable);
                 var definition = needsShared ? sharedSource(name) ?? throw new InvalidOperationException($"No shared definition for '{name}'.") : null;

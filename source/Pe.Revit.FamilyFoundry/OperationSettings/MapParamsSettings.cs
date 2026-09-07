@@ -46,11 +46,13 @@ public class MapParamsSettings : IOperationSettings {
     /// <param name="currNames">Ordered list of candidate parameter names (priority order)</param>
     /// <param name="fm">FamilyManager instance for resolving parameters</param>
     /// <param name="processingContext">Optional context for snapshot data and value counts; may be null</param>
+    /// <param name="includeEmpty">Retain explicitly named empty parameters while preserving populated-first ranking</param>
     /// <returns>FamilyParameters ranked by data quality (most populated types first) and user priority</returns>
     public List<FamilyParameter> GetRankedCurrParams(
         List<string> currNames,
         FamilyManager fm,
-        FamilyProcessingContext? processingContext = null
+        FamilyProcessingContext? processingContext = null,
+        bool includeEmpty = false
     ) {
         // No context? Return params in user priority order
         if (processingContext == null) {
@@ -74,7 +76,7 @@ public class MapParamsSettings : IOperationSettings {
         var candidateSnapshots = currNames
             .Select(processingContext.FindParameterSnapshot)
             .OfType<ParameterSnapshot>()
-            .Where(x => x.GetTypesWithValue().Count > 0);
+            .Where(x => includeEmpty || x.GetTypesWithValue().Count > 0);
 
         var paramSnapshots = candidateSnapshots.ToList();
         if (paramSnapshots.Count == 0) return [];

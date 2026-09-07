@@ -55,7 +55,7 @@ public sealed class FamilyRenameAcrossFamiliesTests {
             // The receipts and the before/after snapshots are the library's own account of itself. The proof is
             // what Revit holds: re-open each LOADED family and read its FamilyManager.
             foreach (var name in FamilyNames) {
-                var parameters = ParameterNamesOf(project, name, to, dataType);
+                var parameters = ParameterNamesOf(project, name, from, to, dataType);
                 Assert.That(parameters, Does.Contain(to), $"{name}: {string.Join(", ", parameters)}");
                 Assert.That(parameters, Does.Not.Contain(from), $"{name}: {string.Join(", ", parameters)}");
             }
@@ -76,11 +76,14 @@ public sealed class FamilyRenameAcrossFamiliesTests {
         return parsed.Value!;
     }
 
-    private static List<string> ParameterNamesOf(Document project, string familyName, string to, DataType dataType) {
+    private static List<string> ParameterNamesOf(Document project, string familyName, string from, string to, DataType dataType) {
         var family = project.FamiliesMatching(new PatchSelect { Names = [familyName] }).Single();
         Document? familyDocument = null;
         try {
             familyDocument = project.EditFamily(family);
+            Assert.That(familyDocument.FamilyManager.Parameters.Cast<FamilyParameter>()
+                    .Any(parameter => parameter.Definition.Name == from), Is.False,
+                $"{familyName}: native source parameter '{from}' survived rename.");
             if (dataType == DataType.Length) {
                 var manager = familyDocument.FamilyManager;
                 var renamed = manager.Parameters.Cast<FamilyParameter>().Single(p => p.Definition.Name == to);
