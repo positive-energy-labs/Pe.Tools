@@ -179,8 +179,7 @@ public static class FamilyModelBuild {
         var parameters = elements
             .SelectMany(element => element.GetParameters(condition.FieldName).Select(parameter => (element, parameter)))
             .Where(pair => !pair.parameter.IsShared &&
-                           (pair.parameter.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.INVALID &&
-                           project.GetElement(pair.parameter.Id) == null)
+                           (pair.parameter.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.INVALID)
             .ToList();
         fieldFound = parameters.Count > 0;
         if (parameters.Select(pair => pair.parameter.Id.Value()).Distinct().Count() > 1)

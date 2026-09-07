@@ -249,8 +249,11 @@ public static class ScheduleHelper {
         out List<long> familyIds
     ) {
         familyIds = [];
+        if (profile.Filters.Count > 8)
+            throw new InvalidOperationException($"Schedule filter evaluation supports at most 8 filters; '{profile.Name}' requested {profile.Filters.Count}.");
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
+        schedule.Definition.IsItemized = true;
         if (profile.Filters.Any(filter => ScheduleFieldNameValueDomain.ResolveSchedulableField(
                 schedule.Definition, doc, Pe.Shared.RevitData.ParameterReference.FromName(filter.FieldName)) == null))
             return false;
