@@ -11,6 +11,8 @@ public static class FamilyDocumentLabelDimensions {
             Cells: parameters.Select(parameter => (Parameter: parameter, Value: document.GetValue(type, parameter))).Where(c => c.Value is not null).ToList())).ToList();
         var original = manager.CurrentType;
         try {
+            var first = manager.Types.Cast<FamilyType>().OrderBy(type => type.Name, StringComparer.Ordinal).FirstOrDefault();
+            if (first is not null && manager.CurrentType != first) manager.CurrentType = first;
             foreach (var (dimension, parameter) in assignments) dimension.FamilyLabel = parameter;
             document.Document.Regenerate();
             foreach (var (type, cells) in values) {
