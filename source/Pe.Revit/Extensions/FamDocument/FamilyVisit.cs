@@ -94,9 +94,10 @@ public sealed class FamilyVisitScope {
             }
         } finally {
             doc.Application.FailuresProcessing -= OnFailures;
+            this.Diagnostics.AddRange(diagnostics.Select(d => (name, d.IsError, d.Message)));
         }
-        this.Diagnostics.AddRange(diagnostics.Select(d => (name, d.IsError, d.Message)));
-        if (diagnostics.Any(d => d.IsError)) throw new InvalidOperationException($"'{name}' reported commit errors.");
+        if (diagnostics.Any(d => d.IsError))
+            throw new InvalidOperationException($"'{name}' reported commit errors: {string.Join("; ", diagnostics.Where(d => d.IsError).Select(d => d.Message))}");
     }
 
     internal static void RequireCommitted(TransactionStatus status, string name) {
@@ -107,7 +108,7 @@ public sealed class FamilyVisitScope {
     private void Suppress(Transaction transaction, List<(bool IsError, string Message)> diagnostics) {
         var options = transaction.GetFailureHandlingOptions();
         _ = options.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
-            PeToolsFailureHandling.RejectErrors(accessor, diagnostics, this._options.SuppressWarnings)));
+            PeToolsFailureHandling.RejectJoinLoss(accessor, diagnostics, this._options.SuppressWarnings)));
         _ = options.SetClearAfterRollback(true);
         _ = options.SetForcedModalHandling(true);
         transaction.SetFailureHandlingOptions(options);
@@ -159,10 +160,14 @@ public static class FamilyVisit {
             if (!options.Load) return new FamilyVisitResult(FamilyVisitRefusal.None, null, null, false, scope.Diagnostics);
 
             var loadDiagnostics = new List<(bool IsError, string Message)>();
-            var loaded = RevitFailureScope.Execute(project,
-                accessor => PeToolsFailureHandling.RejectErrors(accessor, loadDiagnostics, options.SuppressWarnings),
-                () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
-            scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
+            Family? loaded;
+            try {
+                loaded = RevitFailureScope.Execute(project,
+                    accessor => PeToolsFailureHandling.RejectJoinLoss(accessor, loadDiagnostics, options.SuppressWarnings),
+                    () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
+            } finally {
+                scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
+            }
             // post-verify: the family is in the project by name and is the element LoadFamily handed back
             var verified = loaded is not null && project.GetElement(loaded.Id) is Family reread && reread.Name == familyName;
             if (verified && !scope.Diagnostics.Any(d => d.IsError))
