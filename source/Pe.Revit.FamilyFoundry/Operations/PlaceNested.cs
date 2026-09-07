@@ -31,8 +31,13 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
                     // ponytail: gotcha 27, the end work plane is not publicly constructible; position only, hosted on the line's sketch plane
                     instance = doc.Document.FamilyCreate.NewFamilyInstance(point, symbol, line.SketchPlane.GetPlane().Normal, line, StructuralType.NonStructural);
                 } else {
-                    var (_, plane) = FamilyRefs.Resolve(doc, spec.Host);
-                    instance = doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol, StructuralType.NonStructural);
+                    var (hostReference, plane) = FamilyRefs.Resolve(doc, spec.Host);
+                    instance = FamilyRefs.FindLevel(doc, spec.Host) is { } level
+                        ? doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol, level, StructuralType.NonStructural)
+                        : symbol.Family.FamilyPlacementType == FamilyPlacementType.WorkPlaneBased
+                            ? doc.Document.FamilyCreate.NewFamilyInstance(hostReference, plane.Origin, plane.XVec, symbol)
+                            : doc.Document.FamilyCreate.NewFamilyInstance(plane.Origin, symbol,
+                                doc.Document.GetElement(hostReference.ElementId), StructuralType.NonStructural);
                 }
                 doc.Document.Regenerate();
 

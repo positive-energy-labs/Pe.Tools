@@ -434,12 +434,22 @@ internal sealed class FamilyModelCapturer {
     }
 
     private string? HostOf(FamilyInstance fi) {
-        if (fi.Host is ModelCurve line && fi.HostFace != null && this._planeName.TryGetValue(line.Id, out var lineName))
-            return $"line:{lineName}.{(StableOf(fi.HostFace).EndsWith("/1", StringComparison.Ordinal) ? "end" : "start")}";
-        var sketchPlane = fi.get_Parameter(BuiltInParameter.SKETCH_PLANE_PARAM)?.AsString();
-        if (!string.IsNullOrWhiteSpace(sketchPlane)) return sketchPlane;
+        if (fi.Host is ModelCurve line && this._planeName.TryGetValue(line.Id, out var lineName)) {
+            if (fi.Location is not LocationPoint location) return null;
+            if (location.Point.IsAlmostEqualTo(line.GeometryCurve.GetEndPoint(0))) return $"line:{lineName}.start";
+            return location.Point.IsAlmostEqualTo(line.GeometryCurve.GetEndPoint(1)) ? $"line:{lineName}.end" : null;
+        }
+        if (fi.HostFace is { } face && this.NameOf(face) is { } faceName) return faceName;
         if (fi.Host != null && this._planeName.TryGetValue(fi.Host.Id, out var hostName)) return hostName;
-        return fi.LevelId != null && this._planeName.TryGetValue(fi.LevelId, out var level) ? level : null;
+        if (fi.LevelId != null && this._planeName.TryGetValue(fi.LevelId, out var level)) return level;
+        var sketchPlane = fi.get_Parameter(BuiltInParameter.SKETCH_PLANE_PARAM);
+        if (sketchPlane?.StorageType == StorageType.ElementId && this._planeName.TryGetValue(sketchPlane.AsElementId(), out var planeName))
+            return planeName;
+        var display = sketchPlane?.StorageType == StorageType.String ? sketchPlane.AsString() : null;
+        // Native display text can be qualified (e.g. "Reference Plane: Name"); emit only a known plane name.
+        var names = this._planeName.Values.Distinct(StringComparer.Ordinal)
+            .Where(name => display == name || display?.EndsWith(": " + name, StringComparison.Ordinal) == true).ToArray();
+        return names.Length == 1 ? names[0] : null;
     }
 
     /// <summary>
