@@ -16,19 +16,25 @@ Current native proof is controlled dev ff-profile-proof-25 PID89376, generation2
 immutable source6620376, on the disposable old template. SDK candidate f59ceb7 retained quarantine
 across restart. Its saved original has identical85 add-in rows and disable flags to the prior
 baseline, but different JSON bytes; final stop/restoration remains owed. Protected sessions stay
-untouched. No company Apply has run. P owns all lifecycle and the active monthly45-host-plan-6.
+untouched. P owns all lifecycle. Plan6 is terminal; first AprilAire Apply was refused before migration.
 
 Request-file binding, empty/Other parameter groups, and unitless sone conversion are repaired.
-Plan6 is progressing after exact owned warning acknowledgements: recursive EditFamily on nested
+Plan6 completed all45 profiles:43 converted,2 literal conversion failures;37 native Plan operations
+completed (including19 zero-selected responses),6 failed on duplicate Default Elevation keys.
+The37 include two recovered transport timeouts. This is planning evidence, not migration success.
+Recursive EditFamily on nested
 Alternator exposed pre-existing geometry-constraint warnings and blocked capture. N owns the
 shared capture failure boundary; no constraints were removed. Two timed-out electrical requests
 have recovered terminal native results for14 and27 families. AprilAire800 has a reviewed clean
-plan for3813845; bounded Apply/capture/no-op reapply follows the current queue. Historical request
+plan for3813845; its fresh Apply refused hash drift12DF8B5967B8A884 to98AFB19C7704BE06.
+Before/after captures are semantically identical despite different property order. N owns the
+hash-input diagnosis and repair; P owns duplicate-key diagnosis. No no-op reapply has run. Historical request
 and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
 Plan6 later exposed destructive native-copy warnings at journal3673 10:06:33: dimensions could
 not be copied and elements were deleted. That affected capture cannot certify safe Apply even
-if its current Plan returns no refusals. N must distinguish this from the known constraint warning
-at the shared EditFamily boundary; P preserves the exact affected-family evidence and never loads it back.
+if its current Plan returns no refusals. Shared capture guard c55cc19 distinguishes this from the
+known constraint warning; native proof is owed. Transport7501c47 preserves warnings/issues through
+route parsing. Affected family5982572 PE - Title Block remains excluded from Apply.
 
 NoTransaction script-owned rollback plus public FF Build passed in controlled915790e. Browser
 proved the shared Instances selector repair6eb667d. Explicit scope parser d7016d4 passes route
