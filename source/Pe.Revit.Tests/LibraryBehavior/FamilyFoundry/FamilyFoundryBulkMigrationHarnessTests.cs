@@ -561,7 +561,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(requested, Is.Not.Empty, $"{selectionVariable} must name at least one family.");
             Assert.That(requested.Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(requested.Count), "Selection contains duplicate family names.");
             Assert.That(requested.Except(families, StringComparer.Ordinal), Is.Empty, "Selection contains ineligible or missing family names.");
-            var selected = families.Where(requested.ToHashSet(StringComparer.Ordinal).Contains).ToList();
+            var selected = requested;
             evidence["status"] = "running";
             evidence["eligible"] = new JArray(families);
             evidence["selected"] = new JArray(selected);
