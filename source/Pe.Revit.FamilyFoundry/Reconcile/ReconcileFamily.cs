@@ -76,8 +76,9 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         }
 
         foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
-            if (parameter.Value is Newtonsoft.Json.Linq.JObject fields && fields["tooltip"] is { Type: not Newtonsoft.Json.Linq.JTokenType.Null } &&
-                current.Parameters.TryGetValue(parameter.Name, out var existing) && existing.Shared == true)
+            if (parameter.Value is Newtonsoft.Json.Linq.JObject fields && fields["tooltip"] is { Type: not Newtonsoft.Json.Linq.JTokenType.Null } tooltip &&
+                current.Parameters.TryGetValue(parameter.Name, out var existing) && existing.Shared == true &&
+                !source.IsSourceDescription(parameter.Name, (string?)tooltip))
                 throw new InvalidOperationException($"Explicit tooltip replacement for existing shared parameter '{parameter.Name}' cannot be verified through the Revit read API. Unrequested tooltips are preserved.");
         var unitDiagnostics = FamilyModelUnitValidation.Validate(desired!, patch.Patch, source.GetDefinition);
         if (unitDiagnostics.Count > 0)

@@ -11,8 +11,11 @@ namespace Pe.Revit.FamilyFoundry.Reconcile;
 
 public enum ChangeKind { Add, Update, Delete, Rename, Recreate, Unverifiable }
 
+public sealed record FamilyCellKey(string Type, string Parameter);
+
 /// <summary>One difference between desired and current. Section + Key is the address; Kind is the verb.</summary>
-public sealed record FamilyChange(string Section, string Key, ChangeKind Kind, string? MappedFrom, object? Before, object? After);
+public sealed record FamilyChange(string Section, string Key, ChangeKind Kind, string? MappedFrom, object? Before, object? After,
+    FamilyCellKey? Cell = null);
 
 /// <summary>Diff, queue, refusals, run effects, hash. Refusals non-empty means the queue is empty.</summary>
 public sealed record FamilyPlan(
@@ -174,8 +177,8 @@ public static class FamilyReconciler {
             changes.Add(new FamilyChange("types", type, ChangeKind.Delete, null, current.Types[type], null));
         foreach (var (cell, want) in dCells) {
             cCells.TryGetValue(cell, out var have);
-            if (have is null || !ScalarSame(want, have, units, cell[(cell.IndexOf('/') + 1)..]))
-                changes.Add(new FamilyChange("types.cell", cell, ChangeKind.Update, null, have, want));
+            if (have is null || !ScalarSame(want, have, units, cell.Parameter))
+                changes.Add(new FamilyChange("types.cell", $"{cell.Type}/{cell.Parameter}", ChangeKind.Update, null, have, want, cell));
         }
 
         Keyed(changes, "datums", desired.Datums, current.Datums, units);
@@ -231,13 +234,13 @@ public static class FamilyReconciler {
 
     // ── canonical form (F7): the uniform value becomes a cell in every type; parameters diff without it ──
 
-    private static (Dictionary<string, JObject> Params, Dictionary<string, string> Cells) Canonical(FamilyModel m) {
-        var cells = new Dictionary<string, string>(StringComparer.Ordinal);
+    private static (Dictionary<string, JObject> Params, Dictionary<FamilyCellKey, string> Cells) Canonical(FamilyModel m) {
+        var cells = new Dictionary<FamilyCellKey, string>();
         foreach (var (type, row) in m.Types)
-            foreach (var (param, value) in row) cells[$"{type}/{param}"] = value.Text;
+            foreach (var (param, value) in row) cells[new FamilyCellKey(type, param)] = value.Text;
         foreach (var (name, p) in m.Parameters)
             if (p.Value is { } v)
-                foreach (var type in m.Types.Keys) cells.TryAdd($"{type}/{name}", v.Text);
+                foreach (var type in m.Types.Keys) cells.TryAdd(new FamilyCellKey(type, name), v.Text);
         var parameters = m.Parameters.ToDictionary(p => p.Key, p => {
             var o = JObject.FromObject(p.Value, Serializer);
             if (string.IsNullOrEmpty(p.Value.PropertiesGroup)) o.Remove("propertiesGroup");
@@ -519,8 +522,7 @@ public static class FamilyReconciler {
     private static SetKnownParamsSettings Values(FamilyChange[] cells) {
         var rows = new Dictionary<string, PerTypeAssignmentRow>(StringComparer.Ordinal);
         foreach (var cell in cells) {
-            var slash = cell.Key.IndexOf('/');
-            var (type, param) = (cell.Key[..slash], cell.Key[(slash + 1)..]);
+            var (type, param) = cell.Cell ?? throw new InvalidOperationException("A type-cell change requires typed identity.");
             if (!rows.TryGetValue(param, out var row)) rows[param] = row = new PerTypeAssignmentRow { Parameter = param };
             row.ValuesByType[type] = (string)cell.After!;
         }

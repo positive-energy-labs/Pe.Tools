@@ -145,6 +145,17 @@ public sealed class FamilyReconcilerTests {
     }
 
     [Test]
+    public void Type_names_with_slashes_remain_whole_when_cells_are_lowered() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "PE_E___MCA": { "dataType": "Current" } }, "types": { "800 - 120v - 11.5 gal/day": { "PE_E___MCA": "11.5" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "PE_E___MCA": { "dataType": "Current" } }, "types": { "800 - 120v - 11.5 gal/day": {} } }""");
+        var row = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable).Queue.Operations
+            .OfType<Pe.Revit.FamilyFoundry.OperationGroups.SetKnownParams>().Single().Operations
+            .OfType<Pe.Revit.FamilyFoundry.Operations.SetParamValuesPerType>().Single().Settings.PerTypeAssignmentsTable.Single();
+        Assert.That(row.ValuesByType.Keys, Is.EqualTo(new[] { "800 - 120v - 11.5 gal/day" }));
+        Assert.That(row.Parameter, Is.EqualTo("PE_E___MCA"));
+    }
+
+    [Test]
     public void A_not_read_section_makes_every_change_in_it_unverifiable() {
         var desired = Load("a-box");
         var current = Parse($$"""{ "family": { "name": "PE Box", "category": "ElectricalEquipment", "template": "Electrical Equipment", "placement": "OneLevelBased" }, "coverage": { "parameters": "Read", "types": "Read" } }""");
