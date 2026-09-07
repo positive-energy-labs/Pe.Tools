@@ -49,10 +49,10 @@ public sealed class FamilyModelRoundtripTests {
     }
 
     [Test]
-    public void Portable_angle_values_use_radians_and_reapply_without_changes() {
+    public void Portable_values_preserve_units_and_literal_text_and_reapply_without_changes() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Portable angle", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
-              "parameters": { "Rotation": { "dataType": "Angle", "value": "90deg" } },
+              "parameters": { "Rotation": { "dataType": "Angle", "value": "90deg" }, "Note": { "dataType": "Text", "value": "Rotation" } },
               "types": { "Quarter turn": {}, "Half turn": { "Rotation": "180deg" } } }
             """);
         Assert.That(parsed.Diagnostics, Is.Empty);
@@ -60,8 +60,10 @@ public sealed class FamilyModelRoundtripTests {
         try {
             document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!).Document;
             var parameter = document.FamilyManager.get_Parameter("Rotation");
-            foreach (FamilyType type in document.FamilyManager.Types)
+            foreach (FamilyType type in document.FamilyManager.Types) {
                 Assert.That(type.AsDouble(parameter), Is.EqualTo(type.Name == "Half turn" ? Math.PI : Math.PI / 2).Within(1e-9));
+                Assert.That(type.AsString(document.FamilyManager.get_Parameter("Note")), Is.EqualTo("Rotation"));
+            }
             var receipt = FamilyModelBuild.Reconcile(document, parsed.Value!);
             Assert.That(receipt?.Converged, Is.True);
             Assert.That(receipt!.Outcomes, Is.Empty);

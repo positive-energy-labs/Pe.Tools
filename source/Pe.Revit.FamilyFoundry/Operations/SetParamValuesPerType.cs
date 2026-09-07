@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.Extensions.FamParameter.Formula;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -119,19 +118,11 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
     }
 
     private static IReadOnlyDictionary<string, string> SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {
-        var fm = famDoc.FamilyManager;
         var trimmedUserValue = userValue.Trim();
 
         var actualValue = IsQuotedStringLiteral(userValue)
             ? trimmedUserValue.Substring(1, trimmedUserValue.Length - 2)
             : userValue;
-
-        var referencedParams = fm.Parameters.GetReferencedIn(actualValue).ToList();
-        if (referencedParams.Count != 0) {
-            throw new InvalidOperationException(
-                $"Per-type value '{actualValue}' contains parameter references. " +
-                $"Use {nameof(SetKnownParamsSettings.GlobalAssignments)} with Kind=Formula for formulas, not {nameof(SetKnownParamsSettings.PerTypeAssignmentsTable)}.");
-        }
 
         var details = famDoc.DescribeSetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
         _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
