@@ -166,13 +166,22 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 var familyDocument = this.NewFamily(name, category);
                 string path;
                 try {
-                    if (name == "Prefix Fan Keep") {
+                    if (name is "Prefix Fan Keep" or "Exact Pump" or "Middle Coil Keep") {
                         using var transaction = new Transaction(familyDocument, "Seed condition selector");
                         transaction.Start();
-                        var keep = familyDocument.FamilyManager.get_Parameter("Keep");
+                        var manager = familyDocument.FamilyManager;
+                        var keep = manager.get_Parameter("Keep");
+                        if (name != "Prefix Fan Keep") {
+                            manager.RemoveParameter(keep);
+                            keep = name == "Exact Pump"
+                                ? RevitFamilyFixtureHarness.AddSharedFamilyParameter(familyDocument,
+                                    new SharedDefinitionSpec("Keep", SpecTypeId.String.Text,
+                                        Guid: new Guid("8be6c9e0-ce6e-43d3-a536-2b83e60ce7de")), GroupTypeId.Data, false)
+                                : manager.AddParameter("Keep", GroupTypeId.Data, SpecTypeId.String.Text, true);
+                        }
                         foreach (var type in familyDocument.FamilyManager.Types.Cast<FamilyType>()) {
-                            familyDocument.FamilyManager.CurrentType = type;
-                            familyDocument.FamilyManager.Set(keep, type.Name == "B" ? "selected" : "other");
+                            manager.CurrentType = type;
+                            manager.Set(keep, name == "Prefix Fan Keep" && type.Name == "A" ? "other" : "selected");
                         }
                         Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
                     }
@@ -216,14 +225,15 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             };
             converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
             Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
-                Is.EqualTo(new[] { "Prefix Fan Keep" }));
+                Is.EqualTo(new[] { "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep" }),
+                "Local type, local instance-default, and shared fields with one name must all participate.");
 
             settings["FilterFamilies"]!["IncludeByCondition"] = new JObject {
                 ["FieldName"] = "Keep", ["FilterType"] = "BeginsWith", ["Value"] = "sel"
             };
             converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
             Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
-                Is.EqualTo(new[] { "Prefix Fan Keep" }),
+                Is.EqualTo(new[] { "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep" }),
                 "A native local string rule must retain any-type semantics without a placed instance.");
 
             settings["FilterFamilies"]!["IncludeByCondition"]!["FieldName"] = "Missing condition field";

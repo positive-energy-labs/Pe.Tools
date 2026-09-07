@@ -1,6 +1,7 @@
 using Autodesk.Revit.ApplicationServices;
 using System.Globalization;
 using Pe.Revit.Compat;
+using Pe.Revit.DocumentData.Families.Loaded;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.OperationSettings;
@@ -138,38 +139,55 @@ public static class FamilyModelBuild {
         if (!Enum.IsDefined(typeof(ScheduleAuthoredFilterType), condition.FilterType))
             throw new InvalidOperationException($"IncludeByCondition has unknown FilterType '{condition.FilterType}'.");
 
-        var localMatches = MatchLocalFamilyParameter(project, candidates, condition);
-        if (localMatches is not null)
-            return candidates.Where(f => localMatches.Contains(f.Id.Value())).ToList();
+        using var context = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(project,
+            candidates.Select(family => family.Id.Value()).ToHashSet());
+        context.BeginTransaction("Family Foundry condition selection");
+        try {
+            LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(context);
+            var matchingIds = new HashSet<long>();
+            var fieldFound = false;
+            foreach (var group in candidates.GroupBy(f => f.FamilyCategory?.Id.Value() ??
+                         throw new InvalidOperationException($"Family '{f.Name}' has no category for condition selection."))) {
+                var placements = group.SelectMany(family => context.GetPlacedInstancesForFamily(family.Id.Value())).ToList();
+                foreach (var family in group) {
+                    var localMatches = MatchLocalFamilyParameter(project, family, condition,
+                        context.GetPlacedInstancesForFamily(family.Id.Value()), out var familyHasField);
+                    fieldFound |= familyHasField;
+                    if (localMatches) matchingIds.Add(family.Id.Value());
+                }
 
-        var matchingIds = candidates
-            .GroupBy(f => f.FamilyCategory?.Id.Value() ?? throw new InvalidOperationException($"Family '{f.Name}' has no category for condition selection."))
-            .SelectMany(group => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(project,
-                new ScheduleProfile("Family Foundry condition", group.First().FamilyCategory!.Name) { Filters = [condition] }, group))
-            .ToHashSet();
-        return candidates.Where(f => matchingIds.Contains(f.Id.Value())).ToList();
+                var profile = new ScheduleProfile("Family Foundry condition", group.First().FamilyCategory!.Name) {
+                    Filters = [condition]
+                };
+                if (ScheduleHelper.TryGetFamilyIdsMatchingFiltersAnyType(project, profile, placements, out var scheduleMatches)) {
+                    fieldFound = true;
+                    matchingIds.UnionWith(scheduleMatches);
+                }
+            }
+            if (!fieldFound)
+                throw new InvalidOperationException("Schedule filter evaluation could not apply every filter for 'Family Foundry condition'.");
+            return candidates.Where(f => matchingIds.Contains(f.Id.Value())).ToList();
+        } finally {
+            context.RollBackTransaction();
+        }
     }
 
-    private static HashSet<long>? MatchLocalFamilyParameter(Document project, List<Family> candidates,
-        ScheduleFilterSpec condition) {
-        var parameters = candidates.ToDictionary(f => f, f => f.GetFamilySymbolIds()
-            .Select(project.GetElement).OfType<FamilySymbol>()
-            .SelectMany(symbol => symbol.GetParameters(condition.FieldName).Select(parameter => (symbol, parameter)))
+    private static bool MatchLocalFamilyParameter(Document project, Family family, ScheduleFilterSpec condition,
+        IReadOnlyList<TempPlacedSymbolRecord> placements, out bool fieldFound) {
+        var elements = family.GetFamilySymbolIds().Select(project.GetElement)
+            .Concat(placements.Select(placement => (Element)placement.Instance));
+        var parameters = elements
+            .SelectMany(element => element.GetParameters(condition.FieldName).Select(parameter => (element, parameter)))
             .Where(pair => !pair.parameter.IsShared &&
-                           (pair.parameter.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.INVALID)
-            .ToList());
-        if (parameters.Values.All(found => found.Count == 0)) return null;
-
-        var matches = new HashSet<long>();
-        foreach (var (family, found) in parameters) {
-            if (found.Select(pair => pair.parameter.Id.Value()).Distinct().Count() > 1)
-                throw new InvalidOperationException(
-                    $"IncludeByCondition field '{condition.FieldName}' resolves to multiple local parameters in family '{family.Name}'.");
-            if (found.Any(pair => condition.FilterType == ScheduleAuthoredFilterType.HasParameter ||
-                                  LocalRule(project, pair.parameter, condition).ElementPasses(pair.symbol)))
-                matches.Add(family.Id.Value());
-        }
-        return matches;
+                           (pair.parameter.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.INVALID &&
+                           project.GetElement(pair.parameter.Id) == null)
+            .ToList();
+        fieldFound = parameters.Count > 0;
+        if (parameters.Select(pair => pair.parameter.Id.Value()).Distinct().Count() > 1)
+            throw new InvalidOperationException(
+                $"IncludeByCondition field '{condition.FieldName}' resolves to multiple local parameters in family '{family.Name}'.");
+        return parameters.Any(pair => condition.FilterType == ScheduleAuthoredFilterType.HasParameter ||
+                                      LocalRule(project, pair.parameter, condition).ElementPasses(pair.element));
     }
 
     private static FilterRule LocalRule(Document project, Parameter parameter, ScheduleFilterSpec condition) {
