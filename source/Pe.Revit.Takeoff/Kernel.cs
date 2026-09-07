@@ -47,6 +47,17 @@ public static class Kernel
         }
 
         if (clean.Count > 1 && clean[0].DistanceTo(clean[^1]) <= 0.01) clean.RemoveAt(clean.Count - 1);
+        // Overlays can retrace a line within floating-point noise; Revit treats that as self-intersection.
+        for (int i = 0; clean.Count > 3 && i < clean.Count; i++)
+        {
+            var a = clean[(i + clean.Count - 1) % clean.Count];
+            var b = clean[i];
+            var c = clean[(i + 1) % clean.Count];
+            var chord = c - a;
+            if (chord.GetLength() <= 1e-9 || chord.CrossProduct(b - a).GetLength() / chord.GetLength() > 1e-9) continue;
+            clean.RemoveAt(i);
+            i = -1;
+        }
         return clean;
     }
 }
