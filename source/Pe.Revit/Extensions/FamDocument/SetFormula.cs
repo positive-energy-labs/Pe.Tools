@@ -37,50 +37,6 @@ public static class Formula {
             if (TryValidateSizeLookupFormula(famDoc, targetParam, formula, lookupContext, out errorMessage))
                 return false;
 
-            var invalidParams = parameters.GetInvalidReferences(formulaForReferenceValidation).ToList();
-            var invalidUnitSuffixes = invalidParams.Where(FormulaUtils.LooksLikeUnitSuffix).ToList();
-            if (lookupContext != null && invalidParams.Count == invalidUnitSuffixes.Count)
-                invalidParams.Clear();
-
-            if (invalidParams.Count != 0) {
-                var likelyUnitSuffixes = invalidParams.Where(FormulaUtils.LooksLikeUnitSuffix).ToList();
-
-                if (likelyUnitSuffixes.Count > 0) {
-                    var dataType = targetParam.Definition.GetDataType();
-                    var isParsableAsValue = UnitUtils.IsMeasurableSpec(dataType)
-                                            && UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, formula, out _);
-
-                    if (isParsableAsValue) {
-                        errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                                       $"The value '{formula}' appears to be a literal with unit suffix, not a valid Revit formula. " +
-                                       $"Revit formulas don't support unit suffixes like {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
-                                       $"Consider using SetAsFormula: false to set this as a value instead.";
-                    } else {
-                        errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                                       $"Found tokens that look like unit suffixes: {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
-                                       $"If this is intended as a literal value, use SetAsFormula: false. " +
-                                       $"If it's a formula, these may be misspelled parameter names.";
-                    }
-                } else {
-                    errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                                   $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
-                }
-
-                return false;
-            }
-
-            if (!targetParam.IsInstance) {
-                var referencedParams = parameters.GetReferencedIn(formulaForReferenceValidation);
-                var instanceParams = referencedParams.Where(p => p.IsInstance).ToList();
-
-                if (instanceParams.Count > 0) {
-                    var instanceNames = instanceParams.Select(p => $"'{p.Name()}'");
-                    errorMessage = $"Cannot set formula on type parameter '{targetParam.Name()}'. " +
-                                   $"Type parameter formulas cannot reference instance parameters: {string.Join(", ", instanceNames)}";
-                    return false;
-                }
-            }
-
             var suspiciousTokens = parameters.GetSuspiciousTokens(formulaForReferenceValidation).ToList();
 
             var success = famDoc.TrySetFormulaFast(targetParam, formula, out var fastErrorMessage);

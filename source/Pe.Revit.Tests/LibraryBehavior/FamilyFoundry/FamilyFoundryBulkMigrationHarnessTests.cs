@@ -59,6 +59,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var current = document.CaptureFamilyModel();
             var native = current.Parameters["PE_E___NumberOfPoles"].Formula!;
             Assert.That(native, Is.Not.EqualTo(raw));
+            using (var transaction = new Transaction(document, "Accept native formula grammar")) {
+                transaction.Start();
+                Assert.That(document.GetFamilyDocument().TrySetFormula(
+                    document.FamilyManager.get_Parameter("PE_E___NumberOfPoles"), native, out var error), Is.True, error);
+                Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
+            }
             var before = FamilyModelJson.Serialize(current);
             var currentType = document.FamilyManager.CurrentType.Name;
             var modified = document.IsModified;
@@ -205,7 +211,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var enabled = profiles.Where(HasEnabledConnectorRule).ToList();
         Assert.Multiple(() => {
             Assert.That(enabled, Has.Count.EqualTo(19));
-            Assert.That(profiles.Except(enabled), Has.Count.EqualTo(9));
+            Assert.That(profiles.Except(enabled).Count(), Is.EqualTo(9));
         });
         var definitions = CompanyDefinitions();
         var document = this.NewFamily("Company connector conversion census");
