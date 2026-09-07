@@ -78,8 +78,15 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
             if (parameter.Value is Newtonsoft.Json.Linq.JObject fields && fields["tooltip"] is { Type: not Newtonsoft.Json.Linq.JTokenType.Null } tooltip &&
                 current.Parameters.TryGetValue(parameter.Name, out var existing) && existing.Shared == true &&
-                !source.IsSourceDescription(parameter.Name, (string?)tooltip))
-                throw new InvalidOperationException($"Explicit tooltip replacement for existing shared parameter '{parameter.Name}' cannot be verified through the Revit read API. Unrequested tooltips are preserved.");
+                desired.Parameters.TryGetValue(parameter.Name, out var target) && target.Shared == true &&
+                existing.SharedGuid == target.SharedGuid &&
+                !string.Equals(existing.Tooltip, (string?)tooltip, StringComparison.Ordinal)) {
+                var unreadable = current.Unmodeled.Any(fact => fact.Reason == UnmodeledReason.ParameterMetadataUnreadable &&
+                    fact.Path == $"$.parameters.{parameter.Name}.tooltip");
+                throw new InvalidOperationException(unreadable
+                    ? $"Explicit tooltip for existing shared parameter '{parameter.Name}' cannot be verified because its native tooltip could not be read."
+                    : $"Explicit tooltip for existing shared parameter '{parameter.Name}' is '{(string?)tooltip}', but its captured native tooltip is '{existing.Tooltip ?? ""}'. Shared tooltip replacement is unsupported.");
+            }
         var unitDiagnostics = FamilyModelUnitValidation.Validate(desired!, patch.Patch, source.GetDefinition);
         if (unitDiagnostics.Count > 0)
             return new OperationLog(this.Name, unitDiagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());

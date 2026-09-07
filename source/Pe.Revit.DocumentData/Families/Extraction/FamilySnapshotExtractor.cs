@@ -5,6 +5,7 @@ using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Newtonsoft.Json.Linq;
+using System.Reflection;
 
 namespace Pe.Revit.DocumentData.Families.Extraction;
 
@@ -164,10 +165,15 @@ public static class FamilySnapshotExtractor {
         try {
             var getSchema = typeof(Autodesk.Revit.DB.ParameterUtils).GetMethod(
                 "GetParameterSchema",
-                [typeof(ElementId), typeof(Document)]
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                [typeof(ElementId), typeof(Document)],
+                null
             ) ?? throw new MissingMethodException(typeof(Autodesk.Revit.DB.ParameterUtils).FullName, "GetParameterSchema");
             var json = (string)getSchema.Invoke(null, [parameter.Id, document])!;
-            return JObject.Parse(json)["description"]?.Value<string>();
+            return JObject.Parse(json)["constants"]?.OfType<JObject>()
+                .SingleOrDefault(constant => constant.Value<string>("id") == "description")?
+                .Value<string>("value");
         } catch (Exception ex) {
             var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
             issues.Add(new RevitDataIssue(
