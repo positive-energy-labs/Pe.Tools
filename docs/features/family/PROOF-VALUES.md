@@ -2,7 +2,7 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
-Latest checkpoint: **wave 6 at frozen root 7479a63: diagnostic 1/1 passed; authorized functional followup 4 passed / 8 failed**. Lookup formula ordering now passes full save/reopen. Both repaired-SDK launches have matching process/receipt/lease identities and exact settings restoration; protected PIDs 71484 and 86872 remain unchanged. Root source hold is released and the fresh lane is idle. Remaining reds are geometry, shared creation, portable-value residue, and nested-host capture residue.
+Latest checkpoint: **wave 7 at frozen root 3dc0dcb: 47 executed, 25 passed, 22 failed**. Lookup and recursive dependency save/reopen now pass, including native sidecar fallback and cleanup. All eight shared-creation probes ran: active temporary shared-parameter file succeeds in four cases, inactive file fails in four, independently of group. Both new scope-default and portable-value tests pass. Custody/assembly identity/settings restoration are verified; root source hold is released and the fresh lane is idle for R's dedicated route proof.
 
 ## Identity and evidence
 
@@ -325,3 +325,34 @@ Root **7479a63b9a4a6d33cc724ae577e198fd2343bb26** was clean and stayed frozen ac
 Nested source diagnosis for the next owner: `PlaceNested`'s plane branch uses the unhosted NewFamilyInstance(point, symbol, StructuralType) overload and discards its resolved host reference. Capture HostOf accepts a sketch plane, native Host, or LevelId; otherwise it omits the instance. This is the next boundary to probe/fix; no capture or geometry-owner production change was made here. Loader failure tests still prove closure of child documents on refusal.
 
 Both runs restored the exact held Original SHA256 **EC189B6A3CD4958C4E16F4F1D09E49215E61761F50371241AECB2FD8B92B2913**. `verification.json` in each directory checks zero holds, owned PID gone, preserved user **71484** start **04:20:36.3844230 UTC**, and preserved existing **86872** start **05:54:06.6822430 UTC**. Root source hold was released immediately after functional cleanup, before further analysis. The fresh lane is idle for R's separately coordinated ff-route-25; no additional runtime is authorized or active here. Prior PID 80052 exit attribution remains a separate historical question and does not block root source edits.
+Wave7 start 2026-09-07T06:14:21.2697691Z; root3dc0dcb frozen; seven classes minus Old_template_all_editable; current shared-creation method has eight TestCase vectors; SDK90c9f86 exactbytes3103B2C2; source hold active.
+
+
+## Wave 7: nested closure passes; shared-file lifetime isolated
+
+Root **3dc0dcb091bce36594b56b8bed82f0ae9f8f569e** was clean; root Debug.R25.Tests build **0 errors / 120 warnings**. Same validated SDK source **90c9f86**, exact binary SHA256 **3103B2C26794AE17E5EC1379490D742F500AA37AF0732C1C72F277D3EEC6CDA2**. Absolute root test project, `--year 25 --no-build --timeout-seconds 300`, saved --plan, exact filter:
+
+```text
+(FullyQualifiedName~FamilyModelRoundtripTests|FullyQualifiedName~LookupTableRoundtripTests|FullyQualifiedName~FamilyFoundryBulkMigrationHarnessTests|FullyQualifiedName~FamilyModelDependencyTests|FullyQualifiedName~FamilyRenameAcrossFamiliesTests|FullyQualifiedName~OperationGroupLogTests|FullyQualifiedName~AssemblyLoadDiagnosticsTests)&FullyQualifiedName!~Old_template_all_editable
+```
+
+TRX `wave7/kaitp_KP-PC_2026-09-07_01_14_41.trx`: **47 executed, 25 passed, 22 failed**, no skipped/aborted tests; **06:14:22.110–06:15:52.668 UTC, 90.558 s**, exit 1. Current source contains eight shared-creation vectors, all confirmed executed; Old_template_all_editable is confirmed absent. Full traces are authoritative in `results.json` (SDK summary FailedTests also misidentifies some multiline error text as test names; its numeric counters agree with TRX).
+
+**Now green:** both dependency tests (recursive JSON preference, save/reopen, native RFA fallback, unchanged dependency file bytes, cycle/missing/type refusal cleanup); lookup formula/CSV/value roundtrip; omitted-new-parameter native type-scope/default/no-op reapply; portable angle/unit/literal-text capture/reapply. Host fix **70e0368** is native proven for the recursive dependency fixture. This does not claim every work-plane/reference-line placement variant is proven.
+
+Shared-creation matrix (`shared-creation-matrix.json`, with eight raw `shared-creation-probe.json` files):
+
+| Definition | Data, inactive file | Other, inactive file | Data, active file | Other, active file |
+|---|---|---|---|---|
+| PE_P_LoadCalc_CWFU | fail | fail | pass | pass |
+| PE_E___FLA | fail | fail | pass | pass |
+
+The active factor sets Application.SharedParametersFilename to the still-live TempSharedParamFile before native AddParameter. Definitions/specs/GUIDs and grouping are otherwise the same; all probes restore the original property in finally. This isolates temporary shared-file scope rather than group selection. N owns its production repair; no shared-definition code was edited here.
+
+Remaining 22 reds, exact test mapping in `distinct-causes.json`: six native Parameter replacement failures; four inactive-file probe failures; three product shared-creation failures (offline FLA, plumbing group test, bath CWFU); five geometry residues (box, vane, stub, both rename fixtures); one dimension-cannot-be-labeled; one loaded family disappeared; one Mapped A target unavailable after regeneration; one String-to-Guid InvalidCastException.
+
+Geometry advanced past the prior alignment exception. Box residue includes **Wide/Width expected 36in, observed 2ft** and omitted view versus observed **RefLevel**; vane/rename dimensions have the same view discrepancy. Stub now has only `forms:body (Add)` remaining, with explicit unmodeled reasons including SketchLineUnlocked and CurveNotLineOrCircle. Complete expected/observed/unmodeled data is retained in TRX/results; root owns these geometry/capture repairs.
+
+Actual PID **38396**, start **06:14:23.5811075 UTC**, ticks **639243584635811075**, agrees with launch receipt, lease and runtime diagnostic. All five assembly SHA256/MVIDs match frozen root outputs. SDK cleanup removed the owned process and all holds; native settings exactly restored to Original **EC189B6A3CD4958C4E16F4F1D09E49215E61761F50371241AECB2FD8B92B2913**. Protected **71484** retains **04:20:36.3844230 UTC**, and existing **86872** retains **05:54:06.6822430 UTC**. `wave7/verification.json` asserts these facts.
+
+Root source hold was released immediately after cleanup, before failure analysis. The fresh lane is idle and handed back for R's separately coordinated **ff-route-25**, parameter-only actual-route proof with fresh payload verification. No source hold carries into that durable session; no additional fresh run is queued without root READY. SDK package-family adoption for R24/R26 remains the separate root-owned isolated pack worktree; validated proof SDK source/build bytes were not changed during this wave.
