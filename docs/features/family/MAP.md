@@ -4,6 +4,20 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
+Budget posture revised by user: Sol medium/high for bounded work; Opus high when useful;
+Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
+cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
+
+Latest checkpoint: native wave9 at `46f22a5` ran 105 tests: 61 passed, 44 failed; company
+parameter cases 14/45 passed. Cleanup and native settings byte restoration passed. The
+electrical connector reference-plane probe succeeded, allowing removal of the support
+extrusion. Symbolic loop tests and raw Prism reapply are no longer in the failure set.
+Wave10 is assigned to retained proof context resumed as Sol medium, frozen at `4200a91`;
+R25.Tests compilation passed (0 errors, 119 warnings). It includes native connector hosts,
+driven-plane seed comparison, legacy conversion, conditional parameter rules and shared
+replacement lifetime repairs. Formula canonicalization remains a separate Sol-high task.
+The former Astra lines are retained idle, not discarded. Current source hold belongs to P.
+
 ## Completion contract
 
 - Explicit JSON specifications are manifested; unmentioned content stays untouched.
