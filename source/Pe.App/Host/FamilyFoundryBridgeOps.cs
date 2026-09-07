@@ -48,7 +48,7 @@ internal static class FamilyFoundryBridgeOps {
             if (desired.Value is null || desired.Diagnostics.Count > 0)
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], desired.Diagnostics.Select(ToDiagnostic).ToList());
             using var source = new FamilySharedParameterSource(famDoc);
-            var resolved = source.Resolve(desired.Value, effective);
+            var resolved = FamilyReconciler.ResolveNativeFormulas(source.Resolve(desired.Value, effective), famDoc);
             var unitDiagnostics = FamilyModelUnitValidation.Validate(resolved, effective, source.GetDefinition);
             if (unitDiagnostics.Count > 0)
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList());

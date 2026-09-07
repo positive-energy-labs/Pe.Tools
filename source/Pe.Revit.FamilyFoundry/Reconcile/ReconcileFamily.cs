@@ -72,6 +72,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return new OperationLog(this.Name, parsed.Diagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
             desired = source.Resolve(parsed.Value, patch.Patch);
+            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document);
         }
 
         foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
@@ -103,6 +104,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             if (afterMigration.Value is null || afterMigration.Diagnostics.Count > 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, afterMigration.Diagnostics.Select(d => d.Message)));
             desired = source.Resolve(afterMigration.Value, patch.Patch);
+            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition);
         }
         if (applyPlan.Refusals.Count > 0 || applyPlan.Changes.Any(c => c.Kind == ChangeKind.Unverifiable))
@@ -112,6 +114,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             OperationProcessor.ThrowOnErrors(logs);
         }
         doc.Document.Regenerate();
+        desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document);
         var observed = this._capture(doc.Document);
         var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document));
         var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,

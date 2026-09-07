@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
@@ -50,6 +51,38 @@ public sealed record FamilyReceipt(
 public static class FamilyReconciler {
     private const double Tolerance = 1e-9;
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(FamilyModelJson.Settings);
+
+    /// <summary>Ask Revit to canonicalize formulas without retaining any document mutation. Missing add-then-formula references remain authored until apply.</summary>
+    public static FamilyModel ResolveNativeFormulas(FamilyModel desired, Document document) {
+        var pending = desired.Parameters.Where(p => p.Value.Formula is not null).ToList();
+        if (pending.Count == 0) return desired;
+        var fm = document.FamilyManager;
+        var json = JObject.Parse(FamilyModelJson.Serialize(desired));
+        Transaction? transaction = null;
+        SubTransaction? subTransaction = null;
+        var started = false;
+        try {
+            if (document.IsModifiable) { subTransaction = new SubTransaction(document); subTransaction.Start(); }
+            else { transaction = new Transaction(document, "Interpret family formulas"); transaction.Start(); }
+            started = true;
+            foreach (var (name, parameter) in pending) {
+                var target = fm.FindParameter(name);
+                if (target is null || FamilyModelValidator.FormulaNames(parameter.Formula!).Any(reference => fm.FindParameter(reference) is null)) continue;
+                fm.SetFormula(target, parameter.Formula);
+                document.Regenerate();
+                json["parameters"]![name]!["formula"] = target.Formula
+                    ?? throw new InvalidOperationException($"Revit did not retain formula for '{name}'.");
+            }
+        } finally {
+            if (started) {
+                if (subTransaction is not null) subTransaction.RollBack();
+                else transaction!.RollBack();
+            }
+            subTransaction?.Dispose();
+            transaction?.Dispose();
+        }
+        return FamilyModelJson.Parse(json.ToString()).Value!;
+    }
 
     public static FamilyPlan Reconcile(FamilyModel desired, FamilyModel current, UnitResolver units, PatchRun? run = null,
         Func<string, ExternalDefinition?>? sharedSource = null, JObject? authored = null, object? sharedDefinitions = null) {
