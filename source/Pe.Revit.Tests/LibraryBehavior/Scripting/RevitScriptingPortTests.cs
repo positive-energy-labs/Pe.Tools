@@ -176,6 +176,7 @@ public sealed class RevitScriptingPortTests {
             runtimeAssemblyPath
         );
 
+        Assert.That(generated, Does.Contain("""<Reference Include="Newtonsoft.Json">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.HostContracts">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.Product">"""));
         Assert.That(generated, Does.Not.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));

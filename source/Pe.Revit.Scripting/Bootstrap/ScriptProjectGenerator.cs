@@ -9,6 +9,7 @@ public sealed class ScriptProjectGenerator(
 ) {
     private const string RuntimeAssemblyName = "Pe.Revit.Scripting";
     private static readonly string[] DefaultSupportAssemblyNames = [
+        "Newtonsoft.Json",
         "Pe.Shared.HostContracts",
         "Pe.Shared.Product",
         "Pe.Shared.RevitData"
