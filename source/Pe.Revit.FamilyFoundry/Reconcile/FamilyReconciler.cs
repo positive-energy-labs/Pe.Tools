@@ -163,8 +163,13 @@ public static class FamilyReconciler {
             .SelectMany(p => p.Name == "parameters" && p.Value is JObject parameters
                 ? parameters.Properties().Select(parameter => $"$.parameters.{parameter.Name}")
                 : ["$." + p.Name]).ToList();
+        var authoredFormulas = (effective["parameters"] as JObject)?.Properties()
+            .Where(parameter => parameter.Value is JObject fields && fields.ContainsKey("formula"))
+            .Select(parameter => $"$.parameters.{parameter.Name}.formula").ToHashSet(StringComparer.Ordinal) ?? [];
         return parsed with { Diagnostics = parsed.Diagnostics.Where(d => !existingDiagnostics.Contains((d.Code, d.Path)) ||
-            authoredSections.Any(section => d.Path == section || d.Path.StartsWith(section + ".", StringComparison.Ordinal))).ToList() };
+            (d.Code == FamilyModelDiagnosticCodes.FormulaUnknownName
+                ? authoredFormulas.Contains(d.Path)
+                : authoredSections.Any(section => d.Path == section || d.Path.StartsWith(section + ".", StringComparison.Ordinal)))).ToList() };
     }
 
     public static IReadOnlyList<FamilyChange> Diff(FamilyModel desired, FamilyModel current, UnitResolver units) {
