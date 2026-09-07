@@ -1,0 +1,105 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Meter_Individual Socket_FB",
+        "Bollards",
+        "Wireway_FB",
+        "Battery Energy Storage System (BESS)",
+        "BESS_HomeGrid_Stack'd Series",
+        "Plug Mould (Multioutlet Assembly)",
+        "zzShared Nested Power Connector - Do Not Delete",
+        "Receptacles_Ceiling",
+        "Receptacles_Floor",
+        "Emergency Stop Button",
+        "Stub-Up_UH",
+        "Switch_Single",
+        "Switch_Single_Horizontal",
+        "Receptacles_Wall_Horizontal_UH",
+        "Receptacles_Wall_Vertical_UH",
+        "Photovoltaic Panel (PV)_FB",
+        "MID_Tesla_Gateway",
+        "BESS_Tesla_Powerwall",
+        "Panelboard_Lighting Control Panelboard (LCP)_FB_2",
+        "Junction Boxes",
+        "Power Connector",
+        "SEPARATOR NAME FOR project-c",
+        "NestedShared_Balanced Cx",
+        "ME-Wire Mold",
+        "Power Data Floorbox",
+        "TV",
+        "Junction Boxes - Load",
+        "Plug Mould (Multioutlet Assembly)",
+        "zzShared Nested Power Connector - Do Not Delete",
+        "Receptacles_Ceiling",
+        "Receptacles_Floor",
+        "Field Connections",
+        "Emergency Stop Button",
+        "Sensor_Occpancy_Photocell",
+        "Stub-Up_UH",
+        "Switch_Single",
+        "Switch_Single_Horizontal",
+        "Receptacles_Wall_Horizontal_UH",
+        "Receptacles_Wall_Vertical_UH",
+        "Photovoltaic Panel (PV)_FB",
+        "MID_Tesla_Gateway",
+        "BESS_Tesla_Powerwall",
+        "Panelboard_Lighting Control Panelboard (LCP)_FB_2",
+        "Power Connector",
+        "Meter_Individual Socket_FB",
+        "Bollards",
+        "Wireway_FB"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_E_LoadCalc_Status",
+        "PE_E_LoadCalc_PercentProtected",
+        "PE_E_LoadCalc_LoadDescription",
+        "PE_E_LoadCalc_LoadCategory",
+        {
+          "$include": "@global/_shared-parameter-names/elec-equip-base"
+        }
+      ],
+      "StartingWith": [
+        "PE_G___"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {
+    "Enabled": false
+  },
+  "AddFamilyParams": {
+    "Parameters": [],
+    "Enabled": false
+  },
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "Enabled": false
+  },
+  "MakeElectricalConnector": {
+    "Enabled": false
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

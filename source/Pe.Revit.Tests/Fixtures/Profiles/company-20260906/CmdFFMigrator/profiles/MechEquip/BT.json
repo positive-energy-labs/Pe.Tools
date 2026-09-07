@@ -1,0 +1,53 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": ["Lochcnivar_HydronicBufferTanks"]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        },
+        "PE_G_Perf_TankVolume"
+      ],
+      "StartingWith": ["PE_G___"]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType"
+      ],
+      "StartingWith": ["PE_M", "PE_E"]
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "BT-#",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "Enabled": false
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

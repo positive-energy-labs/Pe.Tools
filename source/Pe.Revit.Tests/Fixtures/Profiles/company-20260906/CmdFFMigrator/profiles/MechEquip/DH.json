@@ -1,0 +1,61 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Santa Fe - Ultra98 - TOP CONNECTION Dehumidifier",
+        "Santa Fe - Ultra70 - TOP CONNECTION Dehumidifier",
+        "Santa Fe - Ultra98 Dehumidifier",
+        "Santa Fe - Ultra155 Dehumidifier",
+        "Santa Fe - Ultra205 Dehumidifier",
+        "Santa Fe - Ultra70 - Dehumidifier",
+        "Aprilaire - Dehumidifier - e Series - Top Discharge",
+        "Aprilaire - Dehumidifier - e070",
+        "Aprilaire - Dehumidifier - e Series - End Discharge"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "$preset": "@global/_filter-aps-params/Dehumidifier"
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___ApparentPower",
+        "Value": "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Value": "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "DH-#",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "SourceParameterNames": {
+      "NumberOfPoles": "PE_E___NumberOfPoles",
+      "ApparentPower": "PE_E___ApparentPower",
+      "Voltage": "PE_E___Voltage",
+      "MinimumCircuitAmpacity": "PE_E___MCA"
+    }
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

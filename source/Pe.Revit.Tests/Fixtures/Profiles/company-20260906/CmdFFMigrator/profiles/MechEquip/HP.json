@@ -1,0 +1,130 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": true
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Mitsubishi_PFFY-NRMU",
+        "Mitsubishi_PKFY-NKMU",
+        "Mitsubishi_PKA-HA",
+        "Mitsubishi_PKA-KA",
+        "Mitsubishi_PLA-BA",
+        "Mitsubishi_SLZ-KA",
+        "Mitsubishi_MFZ_KJ",
+        "Mitsubishi_MUFZ-KJ",
+        "Mitsubishi_PUMY-NKMU",
+        "Mitsubishi_SUZ-KA09NAHZ",
+        "Mitsubishi_SUZ-KA12NAHZ",
+        "Mitsubishi_SUZ-KA15NAHZ",
+        "Mitsubishi_MXZ-SM36NAMHZ-U1",
+        "Mitsubishi_MXZ-SM36NAM-U1",
+        "Mitsubishi_MXZ-SM42NAMHZ-U1",
+        "Mitsubishi_MXZ-SM48NAMHZ-U1",
+        "Mitsubishi_MXZ-SM48NAM-U1",
+        "Mitsubishi_MXZ-SM60NAM-U1",
+        "Mitsubishi_MXZ-C",
+        "Mitsubishi_MXZ-C H2i",
+        "Mitsubishi_PUY-A-NKA7",
+        "Mitsubishi_PUZ-A-NHA7",
+        "Mitsubishi_PUZ-HA",
+        "Mitsubishi_SVZ-KP",
+        "Mitsubishi_PVFY-NAMU-E1",
+        "Mitsubishi_PEAD_A",
+        "Mitsubishi_SEZ-KDR1",
+        "Mitsubishi_SUZ-KA24NAHZ",
+        "Mitsubishi_SUZ-KA30NAHZ",
+        "Mitsubishi_SUZ-KA36NAHZ",
+        "Mitsubishi_PVA-AA7",
+        "Mitsubishi_MSZ-GL",
+        "Mitsubishi_SUZ-KA18NAHZ",
+        "Mitsubishi_SUZ_KA18-36_Series",
+        "Mitsubishi_PEFY-NMAU-E4",
+        "Mitsubishi_SUZ_KA09-15_Series",
+        "Mitsubishi_PUZ-A-NKA7",
+        "CellarCool - Fully Ducted (FD) Split Series - Condenser",
+        "CellarCool - Magnum Fully Ducted Split Series - Condenser",
+        "SUZ-AA09NL-U1",
+        "SUZ-AA18NLHZ-U1",
+        "SUZ-AK48NLHZ-U1"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        },
+        "PE_M_Eff_SEER",
+        "PE_M_Eff_EER",
+        "PE_M_Eff_HSPF",
+        "PE_M_Eff_COP47",
+        "PE_M_Eff_COP17",
+        "PE_M_Eff_EnergyStar"
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G___",
+        "PE_M_Fan",
+        "PE_M___Serves",
+        "PE_M_PerfHeat_Capacity",
+        "PE_M_PerfCool_Capacity",
+        "PE_G___RefrigerantType"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___ApparentPower",
+        "Value": "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Value": "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "HP-#",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "SourceParameterNames": {
+      "NumberOfPoles": "PE_E___NumberOfPoles",
+      "ApparentPower": "PE_E___ApparentPower",
+      "Voltage": "PE_E___Voltage",
+      "MinimumCircuitAmpacity": "PE_E___MCA"
+    }
+  },
+  "SortParams": {},
+  "$schema": "../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

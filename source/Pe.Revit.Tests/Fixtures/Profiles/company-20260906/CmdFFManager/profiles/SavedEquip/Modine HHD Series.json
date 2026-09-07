@@ -1,0 +1,540 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_M_PerfCool_CapacityDesignSensible",
+        "PE_M_PerfCool_CapacityDesignLatent",
+        "PE_M_PerfCool_CapacityDesignTotal",
+        "PE_M_PerfCool_CapacityRated",
+        "PE_M_PerfHeat_CapacityDesignSensible",
+        "PE_M_PerfHeat_CapacityDesignLatent",
+        "PE_M_PerfHeat_CapacityDesignTotal",
+        "PE_M_PerfHeat_CapacityRated",
+        "PE_M_PerfHeat_FluidFlowLoadSide",
+        "PE_M_PerfHeat_FluidEWT",
+        "PE_M_PerfHeat_FluidLWT",
+        "PE_M_PerfCool_FluidFlowLoadSide",
+        "PE_M_PerfCool_FluidEWT",
+        "PE_M_PerfCool_FluidLwT"
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G_",
+        "PE_M_Fan",
+        "PE_M___Serves"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ],
+      "StartingWith": [
+        "PE_G_DesignTemp"
+      ]
+    }
+  },
+  "MakeRefPlaneAndDims": {
+    "Enabled": true,
+    "MirrorSpecs": [],
+    "OffsetSpecs": [
+      {
+        "Name": "Service Connection Plane",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "ServiceConnectionBackOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Supply Pipe Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "SupplyPipeElevation",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Return Pipe Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "ReturnPipeElevation",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Electrical Connection Plane",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "ElectricalConnectionBackOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Electrical Connection Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "ElectricalConnectionElevation",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Left Intake Clearance",
+        "AnchorName": "Left",
+        "Direction": "Negative",
+        "Parameter": "PE_G_Dim_ClearanceLength1",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Right Intake Clearance",
+        "AnchorName": "Right",
+        "Direction": "Positive",
+        "Parameter": "PE_G_Dim_ClearanceLength2",
+        "Strength": "StrongRef"
+      }
+    ]
+  },
+  "AddFamilyParams": {
+    "Parameters": [
+      {
+        "Name": "PipeConnectionDepth",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ServiceConnectionBackOffset",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "SupplyPipeElevation",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ReturnPipeElevation",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "PipeConnectionDiameter",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ElectricalConnectionDepth",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ElectricalConnectionBackOffset",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ElectricalConnectionElevation",
+        "DataType": "Length (Common)"
+      },
+      {
+        "Name": "ElectricalConduitDiameter",
+        "DataType": "Length (Common)"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G___Manufacturer",
+        "Kind": "Value",
+        "Value": "Modine"
+      },
+      {
+        "Parameter": "PE_G___Description",
+        "Kind": "Value",
+        "Value": "Low-profile hydronic unit heater"
+      },
+      {
+        "Parameter": "PE_G___URL",
+        "Kind": "Value",
+        "Value": "https://modine.worksmartsuite.com/PORTAL/io_modules/IOGETIMAGE.php?type=stream&filename=1-115.pdf"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Kind": "Value",
+        "Value": "HHD-#"
+      },
+      {
+        "Parameter": "PE_G___Fluid",
+        "Kind": "Value",
+        "Value": "Hot water / water-glycol"
+      },
+      {
+        "Parameter": "PE_G___Controller",
+        "Kind": "Value",
+        "Value": "Solid-state fan speed control with field thermostat/control valve"
+      },
+      {
+        "Parameter": "PE_E___EquipmentConnection",
+        "Kind": "Value",
+        "Value": "Hardwired"
+      },
+      {
+        "Parameter": "PE_E___Voltage",
+        "Kind": "Value",
+        "Value": "115 V"
+      },
+      {
+        "Parameter": "PE_E___Frequency",
+        "Kind": "Value",
+        "Value": "60 Hz"
+      },
+      {
+        "Parameter": "PE_E___Phase",
+        "Kind": "Value",
+        "Value": "1"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Kind": "Value",
+        "Value": "1"
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      {
+        "Parameter": "PE_G___Model",
+        "HHD45": "HHD45"
+      },
+      {
+        "Parameter": "PE_G___Weight",
+        "HHD45": "70 lbs"
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "HHD45": "32\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "HHD45": "16\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "HHD45": "11.42\""
+      },
+      {
+        "Parameter": "PE_G_Dim_ClearanceLength1",
+        "HHD45": "6\""
+      },
+      {
+        "Parameter": "PE_G_Dim_ClearanceLength2",
+        "HHD45": "6\""
+      },
+      {
+        "Parameter": "PE_G_Perf_Horsepower",
+        "HHD45": "0.40"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowDesign",
+        "HHD45": "425 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMax",
+        "HHD45": "710 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMin",
+        "HHD45": "280 CFM"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_CapacityRated",
+        "HHD45": "44800 BTU/h"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_FluidEWT",
+        "HHD45": "180 F"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_FluidFlowLoadSide",
+        "HHD45": "2 GPM"
+      },
+      {
+        "Parameter": "PipeConnectionDepth",
+        "HHD45": "1\""
+      },
+      {
+        "Parameter": "ServiceConnectionBackOffset",
+        "HHD45": "5.75\""
+      },
+      {
+        "Parameter": "SupplyPipeElevation",
+        "HHD45": "8.42\""
+      },
+      {
+        "Parameter": "ReturnPipeElevation",
+        "HHD45": "1.92\""
+      },
+      {
+        "Parameter": "PipeConnectionDiameter",
+        "HHD45": "0.50\""
+      },
+      {
+        "Parameter": "ElectricalConnectionDepth",
+        "HHD45": "1\""
+      },
+      {
+        "Parameter": "ElectricalConnectionBackOffset",
+        "HHD45": "6.38\""
+      },
+      {
+        "Parameter": "ElectricalConnectionElevation",
+        "HHD45": "8.50\""
+      },
+      {
+        "Parameter": "ElectricalConduitDiameter",
+        "HHD45": "0.85\""
+      }
+    ]
+  },
+  "ParamDrivenSolids": {
+    "Enabled": true,
+    "Frame": {
+      "Kind": "NonHosted"
+    },
+    "Rectangles": [
+      {
+        "Name": "Cabinet",
+        "IsSolid": true,
+        "Sketch": {
+          "Frame": {
+            "Plane": "Bottom"
+          }
+        },
+        "Width": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Width1",
+          "CenterAnchor": {
+            "Frame": {
+              "Plane": "CenterFB"
+            }
+          },
+          "PlaneNameBase": "cabinet width",
+          "Strength": "StrongRef"
+        },
+        "Length": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Length1",
+          "CenterAnchor": {
+            "Frame": {
+              "Plane": "CenterLR"
+            }
+          },
+          "PlaneNameBase": "cabinet length",
+          "Strength": "StrongRef"
+        },
+        "Height": {
+          "Mode": "Offset",
+          "Parameter": "PE_G_Dim_Height1",
+          "Anchor": {
+            "Frame": {
+              "Plane": "Bottom"
+            }
+          },
+          "Direction": "Positive",
+          "PlaneNameBase": "cabinet top",
+          "Strength": "StrongRef"
+        }
+      }
+    ],
+    "Cylinders": [],
+    "Connectors": [
+      {
+        "Name": "SupplyWater",
+        "Domain": "Pipe",
+        "Host": {
+          "SketchPlane": {
+            "Derived": {
+              "Solid": "Cabinet",
+              "Face": "Right"
+            }
+          },
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "PipeConnectionDepth",
+            "Anchor": {
+              "Derived": {
+                "Solid": "Cabinet",
+                "Face": "Right"
+              }
+            },
+            "Direction": "Positive",
+            "PlaneNameBase": "supply water face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": {
+            "Semantic": {
+              "Name": "Service Connection Plane"
+            }
+          },
+          "CenterFrontBackPlane": {
+            "Semantic": {
+              "Name": "Supply Pipe Elevation"
+            }
+          },
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "PipeConnectionDiameter",
+            "CenterAnchor": {
+              "Semantic": {
+                "Name": "Service Connection Plane"
+              }
+            },
+            "PlaneNameBase": "supply water diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Pipe": {
+            "SystemType": "SupplyHydronic",
+            "FlowDirection": "In"
+          }
+        }
+      },
+      {
+        "Name": "ReturnWater",
+        "Domain": "Pipe",
+        "Host": {
+          "SketchPlane": {
+            "Derived": {
+              "Solid": "Cabinet",
+              "Face": "Right"
+            }
+          },
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "PipeConnectionDepth",
+            "Anchor": {
+              "Derived": {
+                "Solid": "Cabinet",
+                "Face": "Right"
+              }
+            },
+            "Direction": "Positive",
+            "PlaneNameBase": "return water face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": {
+            "Semantic": {
+              "Name": "Service Connection Plane"
+            }
+          },
+          "CenterFrontBackPlane": {
+            "Semantic": {
+              "Name": "Return Pipe Elevation"
+            }
+          },
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "PipeConnectionDiameter",
+            "CenterAnchor": {
+              "Semantic": {
+                "Name": "Service Connection Plane"
+              }
+            },
+            "PlaneNameBase": "return water diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Pipe": {
+            "SystemType": "ReturnHydronic",
+            "FlowDirection": "Out"
+          }
+        }
+      },
+      {
+        "Name": "Power",
+        "Domain": "Electrical",
+        "Host": {
+          "SketchPlane": {
+            "Derived": {
+              "Solid": "Cabinet",
+              "Face": "Left"
+            }
+          },
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "ElectricalConnectionDepth",
+            "Anchor": {
+              "Derived": {
+                "Solid": "Cabinet",
+                "Face": "Left"
+              }
+            },
+            "Direction": "Negative",
+            "PlaneNameBase": "power face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": {
+            "Semantic": {
+              "Name": "Electrical Connection Plane"
+            }
+          },
+          "CenterFrontBackPlane": {
+            "Semantic": {
+              "Name": "Electrical Connection Elevation"
+            }
+          },
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "ElectricalConduitDiameter",
+            "CenterAnchor": {
+              "Semantic": {
+                "Name": "Electrical Connection Plane"
+              }
+            },
+            "PlaneNameBase": "power conduit diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Bindings": {
+          "Parameters": [
+            {
+              "Target": "Voltage",
+              "SourceParameter": "PE_E___Voltage"
+            },
+            {
+              "Target": "NumberOfPoles",
+              "SourceParameter": "PE_E___NumberOfPoles"
+            }
+          ]
+        },
+        "Config": {
+          "Electrical": {
+            "SystemType": "PowerBalanced"
+          }
+        }
+      }
+    ]
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+}

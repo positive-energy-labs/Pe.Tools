@@ -1,0 +1,14 @@
+{
+  "Items": [
+    "PE_E___NEMAEnclosureRating",
+    "PE_E___Voltage",
+    "PE_E___VoltageLtoN",
+    "PE_E___VoltageLtoL",
+    "PE_E___Phase",
+    "PE_E___NumberOfPoles",
+    "PE_E___Frequency",
+    "PE_E___FedFromOverrideText",
+    "PE_E___FedFromOverrideYesNo"
+  ],
+  "$schema": "../../schemas/global/fragments/include/_shared-parameter-names/_shared-parameter-names.schema.json"
+}

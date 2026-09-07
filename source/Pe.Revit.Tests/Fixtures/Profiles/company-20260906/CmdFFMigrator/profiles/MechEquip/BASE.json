@@ -1,0 +1,53 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": []
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        }
+      ],
+      "StartingWith": [
+        "PE_G___",
+        "PE_E___"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___Fluid",
+        "PE_G___RefrigerantType"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddFamilyParams": {
+    "Parameters": [],
+    "Enabled": false
+  },
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "Enabled": false
+  },
+  "MakeElectricalConnector": {
+    "Enabled": false
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

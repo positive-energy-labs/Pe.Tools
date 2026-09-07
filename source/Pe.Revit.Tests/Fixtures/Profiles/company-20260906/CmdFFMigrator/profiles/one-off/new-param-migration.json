@@ -1,0 +1,134 @@
+{
+  "ExecutionOptions": {
+    "SuppressWarnings": true
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [
+      "Plumbing Fixtures"
+    ],
+    "IncludeByCondition": {},
+    "IncludeNames": {},
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_G_Perf_TankPressure",
+        "PE_G_Perf_TankVolume",
+        "PE_G_Perf_FluidFlowDesign",
+        "PE_M_Fan_AirFlowDesign",
+        "PE_M_Fan_AirFlowMax",
+        "PE_M_Fan_AirFlowMin"
+      ],
+      "StartingWith": [
+        "PE_G___"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "CleanFamilyDocument": {
+    "Enabled": false
+  },
+  "DeleteParams": {
+    "Names": [
+      "PE_M___ServesEquip",
+      "PE_M___ServesRoom",
+      "PE_M___ServesSystem",
+      "PE_P___TankGallonCapacity",
+      "PE_P___TankWorkingPressure",
+      "PE_G_Perf_FluidFlow",
+      "PE_M_Fan_AirFlow",
+      "PE_M_Fan_FlowRate",
+      "PE_M_Fan_FlowRateMax",
+      "PE_M_Fan_FlowRateMin",
+      "PE-G_Dim_ClearanceLength2",
+      "PE_E___Current",
+      "PE_G___Horsepower",
+      "PE_G___Notes",
+      "PE_G___SummerDesignTemp",
+      "PE_G___WinterDesignTemp",
+      "PE_M_GRDDim_DeviceLength",
+      "PE_M_GRDDim_DeviceWidth",
+      "PE_M_GRDDim_NeckOuterLength",
+      "PE_M_GRDDim_NeckOuterWidth",
+      "PE_M_GRDDim_OpeningLength",
+      "PE_M_GRDDim_OpeningWidth",
+      "PE_M_GRDDim_RoughOpeningLength",
+      "PE_M_GRDDim_RoughOpeningWidth",
+      "PE_M_PerfCool_DesignCapacityTotal",
+      "PE_M_PerfCool_DesignTempOutdoor",
+      "PE_M_PerfCool_FlowRate",
+      "PE_M_PerfCool_FlowRateLoadSide",
+      "PE_M_PerfCool_FlowRateSourceSide",
+      "PE_M_PerfCool_RatedCapacity",
+      "PE_M_PerfHeat_DesignCapacityTotal",
+      "PE_M_PerfHeat_DesignTempOutdoor",
+      "PE_M_PerfHeat_FlowRate",
+      "PE_M_PerfHeat_FlowRateLoadSide",
+      "PE_M_PerfHeat_FlowRateSourceSide",
+      "PE_M_PerfHeat_RatedCapacity",
+      "PE_M_PerfStd_FlowRate",
+      "PE_P_LoadCalc_MinPipeSize"
+    ]
+  },
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "CurrNames": [
+          "PE_P___TankWorkingPressure"
+        ],
+        "NewName": "PE_G_Perf_TankPressure",
+        "OnlyAddIfSourceExists": true
+      },
+      {
+        "CurrNames": [
+          "PE_P___TankGallonCapacity"
+        ],
+        "NewName": "PE_G_Perf_TankVolume",
+        "OnlyAddIfSourceExists": true
+      },
+      {
+        "CurrNames": [
+          "PE_G_Perf_FluidFlow"
+        ],
+        "NewName": "PE_G_Perf_FluidFlowDesign",
+        "OnlyAddIfSourceExists": true
+      },
+      {
+        "CurrNames": [
+          "PE_M_Fan_FlowRate",
+          "PE_M_Fan_AirFlow"
+        ],
+        "NewName": "PE_M_Fan_AirFlowDesign",
+        "OnlyAddIfSourceExists": true
+      },
+      {
+        "CurrNames": [
+          "PE_M_Fan_FlowRateMax"
+        ],
+        "NewName": "PE_M_Fan_AirFlowMax",
+        "OnlyAddIfSourceExists": true
+      },
+      {
+        "CurrNames": [
+          "PE_M_Fan_FlowRateMin"
+        ],
+        "NewName": "PE_M_Fan_AirFlowMin",
+        "OnlyAddIfSourceExists": true
+      }
+    ]
+  },
+  "AddFamilyParams": {
+    "Enabled": false
+  },
+  "SetKnownParams": {
+    "Enabled": false
+  },
+  "MakeElectricalConnector": {
+    "Enabled": false
+  },
+  "SortParams": {
+    "Enabled": false
+  },
+  "$schema": "../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

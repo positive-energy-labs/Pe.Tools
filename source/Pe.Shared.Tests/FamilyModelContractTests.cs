@@ -61,6 +61,20 @@ public sealed class FamilyModelContractTests {
         Assert.That(local.Value!.Parameters["W"].SharedGuid, Is.Null);
     }
 
+    [Test]
+    public void Company_corpus_retains_original_bytes_and_all_saved_equipment() {
+        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles", "company-20260906"));
+        var manifest = JObject.Parse(File.ReadAllText(Path.Combine(root, "manifest.json")));
+        var files = manifest["files"]!.Children<JObject>().ToList();
+        Assert.That(files.Count, Is.EqualTo(52));
+        Assert.That(files.Count(f => ((string)f["path"]!).Contains("/SavedEquip/", StringComparison.Ordinal)), Is.EqualTo(14));
+        foreach (var file in files) {
+            var bytes = File.ReadAllBytes(Path.Combine(root, (string)file["path"]!));
+            Assert.That(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), Is.EqualTo((string)file["sha256"]!), (string)file["path"]!);
+        }
+        Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "Unresolved original presets remain explicit blockers.");
+    }
+
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

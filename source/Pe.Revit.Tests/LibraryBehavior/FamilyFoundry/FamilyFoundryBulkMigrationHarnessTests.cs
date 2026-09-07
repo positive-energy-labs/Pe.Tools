@@ -49,9 +49,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var definitions = CompanyDefinitions();
             var requested = definitions.Single(p => p.Name == "PE_G_Dim_Width1");
             var originalSetting = this._application.SharedParametersFilename;
-            var operation = new ReconcileFamily(FamilyPatch.Parse("""
-                {"patch":{"parameters":{"PE_G_Dim_Width1":{"shared":true,"wasNamed":["Mech Equip Width","Width","PE_Width","Width (mm)"],"value":"5ft"}}}}
-                """), sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            var converted = CompanyNormalizationFixture.Convert(CompanyNormalizationFixture.MechanicalMappings(), [requested.Name!]);
+            converted.Patch["parameters"]![requested.Name!]!["value"] = "5ft";
+            var operation = new ReconcileFamily(converted, sharedSource: d => new FamilySharedParameterSource(d, definitions));
             using var processor = new OperationProcessor(document);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
             var (_, error) = contexts.Single().OperationLogs;

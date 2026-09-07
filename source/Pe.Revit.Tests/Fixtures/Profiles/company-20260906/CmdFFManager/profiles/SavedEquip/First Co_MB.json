@@ -1,0 +1,233 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "First Co_MB.rfa"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_E___FLA",
+        "PE_E___Frequency",
+        "PE_E___MCA",
+        "PE_E___MOCP",
+        "PE_E___Phase",
+        "PE_E___Voltage",
+        "PE_G___Description",
+        "PE_G___Fluid",
+        "PE_G___Horsepower",
+        "PE_G___Manufacturer",
+        "PE_G___Model",
+        "PE_G___SoundLevel",
+        "PE_G___TagInstance",
+        "PE_G___URL",
+        "PE_G___Weight",
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1",
+        "PE_M_Fan_AirFlowMax",
+        "PE_M_Fan_AirFlowMin",
+        "PE_M_Fan_ExternalStaticPressure",
+        "PE_M_Fan_Filter",
+        "PE_M_Fan_AirFlowDesign",
+        "PE_M_PerfCool_CapacityDesignLatent",
+        "PE_M_PerfCool_CapacityDesignSensible",
+        "PE_M_PerfCool_CapacityDesignTotal",
+        "PE_M_PerfCool_CapacityRated",
+        "PE_M_PerfCool_FluidFlowSourceSide",
+        "PE_M_PerfHeat_CapacityDesignLatent",
+        "PE_M_PerfHeat_CapacityDesignSensible",
+        "PE_M_PerfHeat_CapacityDesignTotal",
+        "PE_M_PerfHeat_CapacityRated",
+        "PE_M_PerfHeat_FluidFlowSourceSide"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "MakeRefPlaneAndDims": {
+    "Enabled": false
+  },
+  "AddFamilyParams": {
+    "Parameters": []
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___MOCP",
+        "Kind": "Value",
+        "Value": "15.00 A"
+      },
+      {
+        "Parameter": "PE_E___Voltage",
+        "Kind": "Value",
+        "Value": "120.00 V"
+      },
+      {
+        "Parameter": "PE_E___Frequency",
+        "Kind": "Value",
+        "Value": "60 Hz"
+      },
+      {
+        "Parameter": "PE_E___Phase",
+        "Kind": "Value",
+        "Value": "1"
+      },
+      {
+        "Parameter": "PE_G___Manufacturer",
+        "Kind": "Value",
+        "Value": "First Co."
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Kind": "Value",
+        "Value": "FC-#"
+      },
+      {
+        "Parameter": "PE_G___Fluid",
+        "Kind": "Value",
+        "Value": "Water"
+      },
+      {
+        "Parameter": "PE_G___URL",
+        "Kind": "Value",
+        "Value": "https://firstco.com/wp-content/uploads/2021/08/VMB-Spec-11-8-2022-1.pdf"
+      },
+      {
+        "Parameter": "PE_G___Description",
+        "Kind": "Value",
+        "Value": "2-Pipe Hydronic Fan Coil"
+      },
+      {
+        "Parameter": "PE_M_Fan_ExternalStaticPressure",
+        "Kind": "Value",
+        "Value": "0.5\""
+      },
+      {
+        "Parameter": "PE_M_Fan_Filter",
+        "Kind": "Value",
+        "Value": "1\" Pleated?"
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      {
+        "Parameter": "PE_E___MCA",
+        "8MB": "6.00 A",
+        "12MB": "10.00 A",
+        "16MB": "14.00 A",
+        "20MB": "15.00 A"
+      },
+      {
+        "Parameter": "PE_E___FLA",
+        "8MB": "4.80 A",
+        "12MB": "7.30 A",
+        "16MB": "10.50 A",
+        "20MB": "11.50 A"
+      },
+      {
+        "Parameter": "PE_G___Horsepower",
+        "8MB": "0.333",
+        "12MB": "0.5",
+        "16MB": "0.75",
+        "20MB": "1"
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "8MB": "40\"",
+        "12MB": "42\"",
+        "16MB": "48\"",
+        "20MB": "48\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "8MB": "20\"",
+        "12MB": "23\"",
+        "16MB": "28\"",
+        "20MB": "28\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "8MB": "20\"",
+        "12MB": "20\"",
+        "16MB": "21 1/4\"",
+        "20MB": "21 1/4\""
+      },
+      {
+        "Parameter": "PE_G___Weight"
+      },
+      {
+        "Parameter": "PE_G___SoundLevel"
+      },
+      {
+        "Parameter": "PE_G___Model",
+        "8MB": "8VMB",
+        "12MB": "12VMB",
+        "16MB": "16VMB",
+        "20MB": "20VMB"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMax",
+        "8MB": "800 CFM",
+        "12MB": "1200 CFM",
+        "16MB": "1600 CFM",
+        "20MB": "1825 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMin",
+        "8MB": "500 CFM",
+        "12MB": "750 CFM",
+        "16MB": "1000 CFM",
+        "20MB": "1400 CFM"
+      },
+      {
+        "Parameter": "PE_M_PerfCool_CapacityRated",
+        "8MB": "24000 BTU/h",
+        "12MB": "36000 BTU/h",
+        "16MB": "48000 BTU/h",
+        "20MB": "60000 BTU/h"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_CapacityRated",
+        "8MB": "24000 BTU/h",
+        "12MB": "36000 BTU/h",
+        "16MB": "48000 BTU/h",
+        "20MB": "60000 BTU/h"
+      },
+      {
+        "Parameter": "PE_M_PerfCool_CapacityDesignLatent"
+      },
+      {
+        "Parameter": "PE_M_PerfCool_CapacityDesignSensible"
+      },
+      {
+        "Parameter": "PE_M_PerfCool_CapacityDesignTotal"
+      },
+      {
+        "Parameter": "PE_M_PerfCool_FluidFlowSourceSide"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_CapacityDesignLatent"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_CapacityDesignSensible"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_CapacityDesignTotal"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_FluidFlowSourceSide"
+      }
+    ]
+  },
+  "MakeConstrainedExtrusions": {
+    "Enabled": false
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+}

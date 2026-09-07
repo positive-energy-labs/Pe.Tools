@@ -1,0 +1,79 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Fantech - Duct Silencer_LD Series"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        }
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G___",
+        "PE_M_Fan",
+        "PE_M___Serves"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___ApparentPower",
+        "Value": "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Value": "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "DS-#",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "SourceParameterNames": {
+      "NumberOfPoles": "PE_E___NumberOfPoles",
+      "ApparentPower": "PE_E___ApparentPower",
+      "Voltage": "PE_E___Voltage",
+      "MinimumCircuitAmpacity": "PE_E___MCA"
+    }
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}
