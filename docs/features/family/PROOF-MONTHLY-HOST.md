@@ -139,7 +139,7 @@ The controlled runtime remained pinned to native source **`6620376d0057389f06153
 
 Plan6 ran all **45** composed profiles from `2026-09-07T14:34:02.551Z` through `15:20:31.786Z`. Conversion produced 43 requests and two literal failures (`80 dBi alarm`, and `180 F`; the Fahrenheit repair is newer than the loaded payload). Native outcomes were:
 
-- **37 successful Plan operations**: 35 returned through Host and two outlived the five-minute HTTP clients. The direct responses contain 199 family-plan rows and 35,480 changes; the two recovered SDK results add 41 family-plan rows and 2,738 changes. All successful rows reported zero refusals.
+- **37 successful Plan operations**: 35 returned through Host and two outlived the five-minute HTTP clients. This is operation success, not 37 migrations: 19 structured responses selected no family. The direct responses contain 199 family-plan rows and 35,480 changes; the two recovered SDK results add 41 family-plan rows and 2,738 changes. All successful rows reported zero refusals.
 - **19** direct structured responses selected no family and reported `FamilyNotFound`.
 - **6** native Plan operations failed on duplicate `Default Elevation` keys.
 - `ElecEquip/Equip` and `ElecEquip/Fixtures` are transport failures only. Their Host clients returned `fetch failed`, while durable native requests `6fac65c1-3e58-4706-9370-e149fbef8153` and `692a8555-779a-4d1d-9fbf-4f40b1c2ee82` completed `ok`, covering 14 and 27 families respectively. Exact recovered results are `responses/15-plan-sdk-result.json` and `responses/16-plan-sdk-result.json`.
@@ -151,3 +151,14 @@ Driver commit **`8eb4780a660496b8bf10ff0ef97c63319ee2ad9c`** retained conversion
 The driver's raw-string rollback comparison reported false because capture property order changed. Independent recursive key canonicalization proves the before and after models are semantically identical: both canonical SHA-256 values are **`69BE50D4D21644BEDEA0931BC0F2C8A64259E12B425D53415956876C1FA6A360`**. The open disposable file's shared-read SHA-256 remains **`8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`**, exactly matching the untouched original fixture. The AprilAire evidence is `.artifacts/runs/monthly45-host-apply-aprilaire800/`; see `responses/91-apply.json`, `capture-comparison.json`, `journal3673-apply-tail.txt`, and `post-apply-custody.json`.
 
 The controlled session remains active and quarantined for a later payload refresh; this checkpoint does not claim the newer capture guard, Fahrenheit parser, or box changes are loaded. After the hash-drift repair lands in a clean root, the prepared SDK sequence is: record the final root SHA and build identities; run `dotnet <candidate-cli> session hr --id ff-profile-proof-25 --restart --timeout-seconds 300 --json`; verify the replacement PID/start, generation, loaded Pe.App/FamilyFoundry/Scripting hashes, active disposable path, quarantine hold, and protected identities; then run the same Apply-one driver into a new artifact directory. The next run must use a newly planned hash and must not reuse or retry the failed receipt.
+
+## `Default Elevation` duplicate-key diagnosis
+
+The six Plan failures are one capture defect, not six profile defects. Each traversed the same 237 family documents and failed immediately after `Linear LED_Lighting Channel Wire.rfa` (project family **4469843**, unique id `70a85d4f-1536-4dd0-893c-9ef4753212dc-00443453`). A `NoTransaction` read-only probe opened that edit copy, recorded its parameters, and closed it without saving. The family contains two legitimate type parameters with the same display name:
+
+- built-in id **-1154647**, identity `builtin:-1154647`, Double length;
+- local id **4471086**, identity `parameter-element:4471086`, String.
+
+`ParameterSnapshotCollector.SupplementWithFormulas` builds a dictionary using only `name|isInstance`; both parameters become `Default Elevation|False`, so `ToDictionary` throws before a Plan is produced. The snapshots already carry canonical identities. The smallest feature-preserving repair is to join formula supplements by `ParameterIdentityFactory.FromFamilyParameter(...).Key` and the snapshot identity key. `GroupBy(...).First()` would silently discard one authored parameter and is rejected. `FamilyModelParameterProjection` already excludes built-ins from the writable model, leaving the local String parameter available downstream.
+
+Raw probe source, streams, and exit receipts are in `.artifacts/runs/monthly45-default-elevation/`. The first `ReadOnly` attempt is retained: its rollback transaction made the project modifiable, and Revit correctly refused `EditFamily`. The corrected `NoTransaction` probe succeeded and performed no writes.
