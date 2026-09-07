@@ -236,7 +236,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(enabled, Has.Count.EqualTo(19));
             Assert.That(profiles.Except(enabled).Count(), Is.EqualTo(9));
         });
-        var definitions = CompanyDefinitions();
+        var definitions = CompanyCorpusDefinitions();
         var document = this.NewFamily("Company connector conversion census");
         try {
             foreach (var profile in profiles)
