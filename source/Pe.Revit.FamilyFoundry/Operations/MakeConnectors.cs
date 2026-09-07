@@ -46,6 +46,7 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                     };
                     if (parameter?.Set(value) != true)
                         throw new InvalidOperationException($"Connector '{slug}' could not set flow configuration '{fc}'.");
+                    doc.Document.Regenerate();
                 }
                 if (spec.LossMethod is { } lm) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM))?.Set((int)(DuctLossMethodType)Enum.Parse(typeof(DuctLossMethodType), lm.ToString()));
                 if (spec.Angle is { Degrees: { } deg }) _ = connector.get_Parameter(BuiltInParameter.CONNECTOR_ANGLE)?.Set(deg * Math.PI / 180);
