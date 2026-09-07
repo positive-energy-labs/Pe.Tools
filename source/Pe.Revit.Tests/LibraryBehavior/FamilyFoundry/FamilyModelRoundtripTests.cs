@@ -402,6 +402,35 @@ public sealed class FamilyModelRoundtripTests {
     }
 
     [Test]
+    public void Grd_values_and_driven_opening_planes_are_correct_before_arrays() {
+        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
+        var json = JObject.Parse(File.ReadAllText(fixturePath));
+        foreach (var section in new[] { "forms", "nested", "arrays", "connectors" }) json.Remove(section);
+        foreach (var plane in ((JObject)json["refPlanes"]!).Properties())
+            ((JObject)plane.Value).Remove("isReference");
+        var parsed = FamilyModelJson.Parse(json.ToString());
+        Assert.That(parsed.Diagnostics, Is.Empty);
+
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!).Document;
+            var fm = document.FamilyManager;
+            var spacing = fm.get_Parameter("_vane spacing")!;
+            var values = fm.Types.Cast<FamilyType>().Where(type => type.Name is "24x12" or "Slot")
+                .ToDictionary(type => type.Name, type => type.AsDouble(spacing));
+            var planes = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                .Where(plane => plane.Name is "opening (Front)" or "opening (Back)")
+                .ToDictionary(plane => plane.Name, plane => plane.GetPlane().Origin.Y);
+            Assert.Multiple(() => {
+                Assert.That(values["24x12"], Is.EqualTo(2.0 / 12.0).Within(1e-9));
+                Assert.That(values["Slot"], Is.Zero.Within(1e-9));
+                Assert.That(planes["opening (Front)"], Is.EqualTo(-0.5).Within(1e-9));
+                Assert.That(planes["opening (Back)"], Is.EqualTo(0.5).Within(1e-9));
+            });
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    [Test]
     public void Grd_arrays_own_independent_nested_seeds_under_count_and_spacing_perturbation() {
         var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
         var json = JObject.Parse(File.ReadAllText(fixturePath));
