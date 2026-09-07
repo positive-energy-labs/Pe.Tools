@@ -156,6 +156,7 @@ const liveRegionSchema = z.object({
   roomType: z.string().optional(),
   blob: z.string(),
   outer: z.array(pointSchema),
+  holes: z.array(z.array(pointSchema)),
 });
 
 export type LiveRegion = z.infer<typeof liveRegionSchema>;

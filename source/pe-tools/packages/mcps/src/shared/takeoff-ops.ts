@@ -45,7 +45,11 @@ export function projectTakeoffSnapshot(
   const regionsByZone = Object.fromEntries(
     Object.entries(snapshot.regionsByZone).map(([key, regions]) => [
       key,
-      regions.map((region) => ({ ...region, outer: points(region.outer) })),
+      regions.map((region) => ({
+        ...region,
+        outer: points(region.outer),
+        holes: region.holes.map(points),
+      })),
     ]),
   );
   const levelByView = new Map(views.map((view) => [view.name, view.level]));
@@ -78,7 +82,7 @@ export function projectTakeoffSnapshot(
         rawSqft: item.sqft,
         label: centroid(item.outer),
         outer: item.outer,
-        holes: [],
+        holes: item.holes,
       }));
     const tags = meta.systemTag ? [meta.systemTag] : [];
     const stage =
@@ -201,6 +205,6 @@ function room(region: LiveRegion): WorldRoom {
     r10: value.r10 ?? null,
     data: null,
     outer: region.outer,
-    holes: [],
+    holes: region.holes,
   };
 }

@@ -35,7 +35,8 @@ public sealed record TakeoffLiveRegion(
     double Sqft,
     string RoomType,
     string Blob,
-    List<double[]> Outer);
+    List<double[]> Outer,
+    List<List<double[]>> Holes);
 public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,

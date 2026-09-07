@@ -14,6 +14,9 @@ import {
   type PartitionRun,
 } from "#/takeoff/model";
 import { projectTakeoffSnapshot } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ZonePeek } from "#/takeoff/zone-peek";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -69,6 +72,7 @@ const region = (elementId: number, blob: string, outer = square(0, 0, 10)): Live
   sqft: 100,
   blob,
   outer,
+  holes: [],
 });
 
 const provenance = (extra = "") =>
@@ -179,6 +183,12 @@ describe("decision queue", () => {
   it("does not bind a room to a region it is not inside", () => {
     expect(regionForRoom(room("R01", [], [500, 500]), [region(42, provenance())])).toBeUndefined();
   });
+
+  it("does not bind a room inside a current edited hole", () => {
+    const edited = { ...region(42, provenance()), holes: [square(4, 4, 2)] };
+    expect(regionForRoom(room("R01", [], [5, 5]), [edited])).toBeUndefined();
+    expect(regionForRoom(room("R01", [], [1, 1]), [edited])).toBe(edited);
+  });
 });
 
 describe("typed snapshot projection", () => {
@@ -202,6 +212,7 @@ describe("typed snapshot projection", () => {
           zoneFrs: [
             {
               elementId: 42,
+              guid: "zone-guid",
               typeName: "Zone",
               view: "Mechanical Zoning Plan",
               color: "1,2,3",
@@ -214,7 +225,22 @@ describe("typed snapshot projection", () => {
               loops: [square(0, 0, 10)],
             },
           ],
-          regionsByZone: {},
+          regionsByZone: {
+            "zone-guid": [
+              {
+                ...region(43, provenance(',"partition":{"holes":[[90,90,91,90,91,91]]}')),
+                roomType: "hall",
+                holes: [square(4.123456789012345, 4, 2)],
+              },
+              {
+                ...region(44, provenance()),
+                guid: "held-guid",
+                roomType: "",
+                role: "held-residue",
+                holes: [square(2, 2, 1)],
+              },
+            ],
+          },
         },
       },
       "project-a",
@@ -233,5 +259,24 @@ describe("typed snapshot projection", () => {
     });
     expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });
     expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });
+    expect(snapshot.regionsByZone["zone-guid"]![0]!.holes).toEqual([
+      square(4.123456789012345, 4, 2),
+    ]);
+    expect(snapshot.world.zones[0]!.rooms[0]!.holes).toEqual([square(4.123456789012345, 4, 2)]);
+    expect(snapshot.world.zones[0]!.residues[0]!.holes).toEqual([square(2, 2, 1)]);
+    const markup = renderToStaticMarkup(
+      createElement(ZonePeek, {
+        zone: snapshot.world.zones[0]!,
+        cursorRoom: null,
+        geoReady: true,
+        stateOf: () => "unreviewed" as const,
+      }),
+    );
+    const paths = [...markup.matchAll(/<path\b[^>]*\bd="([^"]*)"[^>]*>/g)];
+    expect(paths).toHaveLength(3);
+    for (const path of paths.slice(1)) {
+      expect(path[1]!.match(/M/g)).toHaveLength(2);
+      expect(path[0]).toContain('fill-rule="evenodd"');
+    }
   });
 });

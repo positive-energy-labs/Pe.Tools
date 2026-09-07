@@ -248,6 +248,7 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
       regions: response.regions.map((region) => ({
         ...region,
         outer: toPoints(region.outer),
+        holes: region.holes.map(toPoints),
       })),
     };
   },

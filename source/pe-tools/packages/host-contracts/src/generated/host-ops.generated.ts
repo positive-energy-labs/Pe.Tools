@@ -5067,6 +5067,7 @@ export namespace TakeoffsPartition {
       roomType: string;
       blob: string;
       outer: number[][];
+      holes: number[][][];
     }
     export interface TakeoffPartitionReview {
       source: TakeoffReviewSource;
@@ -5196,6 +5197,7 @@ export namespace TakeoffsSnapshot {
       roomType: string;
       blob: string;
       outer: number[][];
+      holes: number[][][];
     }
   }
 }
