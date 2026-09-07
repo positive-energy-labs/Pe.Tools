@@ -1,10 +1,8 @@
 using Pe.Revit.Global.Lib;
 using Pe.Revit.Ui.Core;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.CommandPalette;
@@ -99,38 +97,7 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
     public string? TextPill => this.PrimaryShortcut;
     public Func<string> GetTextInfo => () => this.AllPaths;
 
-    public BitmapImage? Icon {
-        get {
-            if (this.ImageSource is BitmapImage bitmapImage)
-                return bitmapImage;
-
-            // Try to convert ImageSource to BitmapImage
-            if (this.ImageSource is BitmapSource bitmapSource) {
-                try {
-                    // Convert BitmapSource (including BitmapFrame) to BitmapImage
-                    var encoder = new PngBitmapEncoder();
-                    encoder.Frames.Add(BitmapFrame.Create(bitmapSource));
-
-                    using var stream = new MemoryStream();
-                    encoder.Save(stream);
-                    stream.Position = 0;
-
-                    var result = new BitmapImage();
-                    result.BeginInit();
-                    result.CacheOption = BitmapCacheOption.OnLoad;
-                    result.StreamSource = stream;
-                    result.EndInit();
-                    result.Freeze();
-
-                    return result;
-                } catch {
-                    return null;
-                }
-            }
-
-            return null;
-        }
-    }
+    public ImageSource? Icon => this.ImageSource;
 
     public Color? ItemColor => null;
 

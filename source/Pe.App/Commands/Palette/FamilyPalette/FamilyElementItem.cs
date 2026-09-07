@@ -1,8 +1,8 @@
+using System.Windows.Media;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Ui.Core;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -16,6 +16,11 @@ public enum FamilyElementType {
 }
 
 public class FamilyElementItem : IPaletteListItem {
+    // Metadata captures these once in Revit context for this item snapshot.
+    private string? _textPrimary;
+    private string? _textSecondary;
+    private string? _textPill;
+
     public FamilyElementItem(FamilyParameter param, FamilyDocument familyDoc) {
         this.FamilyDoc = familyDoc;
         this.FamilyParam = param;
@@ -70,7 +75,7 @@ public class FamilyElementItem : IPaletteListItem {
     public bool HasAnyAssociation => this.ElementType == FamilyElementType.Parameter &&
                                      this.FamilyParam!.HasAnyAssociation(this.FamilyDoc);
 
-    public string TextPrimary => this.ElementType switch {
+    public string TextPrimary => this._textPrimary ??= this.ElementType switch {
         FamilyElementType.Parameter => this.FamilyParam!.Definition.Name,
         FamilyElementType.Connector => $"{this.Connector!.Domain} Connector",
         FamilyElementType.Dimension => this.GetDimensionName(),
@@ -79,7 +84,7 @@ public class FamilyElementItem : IPaletteListItem {
         _ => "Unknown"
     };
 
-    public string TextSecondary => this.ElementType switch {
+    public string TextSecondary => this._textSecondary ??= this.ElementType switch {
         FamilyElementType.Parameter => this.GetParameterSecondary(),
         FamilyElementType.Connector => this.GetConnectorSecondary(),
         FamilyElementType.Dimension => this.GetDimensionSecondary(),
@@ -88,7 +93,7 @@ public class FamilyElementItem : IPaletteListItem {
         _ => string.Empty
     };
 
-    public string TextPill => this.ElementType switch {
+    public string TextPill => this._textPill ??= this.ElementType switch {
         FamilyElementType.Parameter => this.FamilyParam!.GetTypeInstanceDesignation(),
         FamilyElementType.Connector => "Connector",
         FamilyElementType.Dimension => "Dimension",
@@ -106,7 +111,7 @@ public class FamilyElementItem : IPaletteListItem {
         _ => string.Empty
     };
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 
     #region Associated Elements Helpers

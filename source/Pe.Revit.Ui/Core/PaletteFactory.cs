@@ -184,14 +184,6 @@ public static class PaletteFactory {
             onCtrlReleased = options.OnCtrlReleased(vmRef);
         }
 
-        // Wire up selection changed callback if provided (immediate, for highlighting)
-        if (options.OnSelectionChanged != null) {
-            viewModel.PropertyChanged += (_, e) => {
-                if (e.PropertyName == nameof(viewModel.SelectedItem))
-                    options.OnSelectionChanged(viewModel.SelectedItem);
-            };
-        }
-
         // Wire up SidebarPanel if provided
         PaletteSidebar? sidebar = null;
         if (options.SidebarPanel != null) {
@@ -199,6 +191,7 @@ public static class PaletteFactory {
 
             // Track cancellation for async loading - cancelled on each selection change
             CancellationTokenSource? updateCts = null;
+            var previewCleared = false;
 
             // Wire IMMEDIATE clear on selection change (pre-debounce) for responsive UI
             viewModel.PropertyChanged += (_, e) => {
@@ -210,7 +203,8 @@ public static class PaletteFactory {
                 updateCts = null;
 
                 // Clear immediately so stale content doesn't persist during navigation
-                options.SidebarPanel.Clear();
+                if (!previewCleared) options.SidebarPanel.Clear();
+                previewCleared = true;
             };
 
             // Auto-wire debounced selection for ISidebarPanel with cancellation
@@ -225,12 +219,8 @@ public static class PaletteFactory {
 
                 var updateToken = updateCts.Token;
 
-                void RunUpdate() {
-                    if (updateToken.IsCancellationRequested) return;
-                    options.SidebarPanel.Update(viewModel.SelectedItem, updateToken);
-                }
-
-                _ = palette.Dispatcher.BeginInvoke(RunUpdate, DispatcherPriority.ApplicationIdle);
+                previewCleared = false;
+                options.SidebarPanel.Update(viewModel.SelectedItem, updateToken);
             };
         }
 
@@ -353,21 +343,6 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public Func<PaletteViewModel<TItem>, Action>? OnCtrlReleased { get; init; }
-
-    /// <summary>
-    ///     Callback invoked when the selected item changes in the palette.
-    ///     Useful for highlighting or previewing the currently selected element.
-    ///     Default: null (no selection change behavior)
-    /// </summary>
-    /// <example>
-    ///     <code>
-    ///     OnSelectionChanged = item => {
-    ///         if (item?.ElementId != null)
-    ///             highlighter.Highlight(item.ElementId);
-    ///     }
-    ///     </code>
-    /// </example>
-    public Action<TItem?>? OnSelectionChanged { get; init; }
 
     /// <summary>
     ///     Sidebar panel implementing <see cref="ISidebarPanel{TItem}" />.

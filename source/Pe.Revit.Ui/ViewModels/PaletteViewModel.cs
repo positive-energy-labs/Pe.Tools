@@ -70,6 +70,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
     private int _selectedTabIndex;
     private int _snapshotTabIndex = -1;
+    private int _snapshotRevision;
 
     public PaletteViewModel(
         SearchFilterService<TItem> searchService,
@@ -82,8 +83,9 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         var tabCount = tabs?.Count ?? 0;
         this._selectedTabIndex = tabCount > 1 ? BclCompat.Clamp(defaultTabIndex, 0, tabCount - 1) : 0;
 
-        // Initialize debounce timer for search (100ms delay)
-        this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        this._debounceTimer = new DispatcherTimer(DispatcherPriority.Render) {
+            Interval = TimeSpan.FromMilliseconds(50)
+        };
         this._debounceTimer.Tick += (_, _) => {
             this._debounceTimer.Stop();
             this.FilterItems();
@@ -163,6 +165,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 this.OnPropertyChanged(nameof(this.SelectedFilterValue));
 
                 // Invalidate snapshot when switching tabs
+                this._snapshotRevision++;
                 this._snapshotTabIndex = -1;
                 this._currentSnapshot = [];
 
@@ -225,6 +228,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private async Task UpdateAvailableFilterValuesForCurrentTabAsync() {
         if (this.AvailableFilterValues == null) return;
 
+        var revision = this._snapshotRevision;
         var snapshot = await this.GetSnapshotForCurrentTabAsync(CancellationToken.None);
         var values = snapshot
             .Select(s => s.FilterKey)
@@ -234,6 +238,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
             .ToList();
 
         await this._dispatcher.InvokeAsync(() => {
+            if (revision != this._snapshotRevision) return;
             this.AvailableFilterValues.Clear();
             foreach (var value in values)
                 this.AvailableFilterValues.Add(value);
@@ -245,8 +250,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ///     Used by long-lived (docked) palettes that never rebuild on open.
     /// </summary>
     public void RefreshItems() {
+        this._snapshotRevision++;
         this._currentSnapshot = [];
         this._snapshotTabIndex = -1;
+        this.UpdateAvailableFilterValuesForCurrentTab();
         this.FilterItems();
     }
 
@@ -269,12 +276,14 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     /// </summary>
     private async Task<List<PaletteSearchSnapshot<TItem>>> GetSnapshotForCurrentTabAsync(CancellationToken ct) {
         var tabIndex = this._selectedTabIndex;
-        if (this._snapshotTabIndex == tabIndex && this._currentSnapshot.Count > 0)
+        var revision = this._snapshotRevision;
+        if (this._snapshotTabIndex == tabIndex)
             return this._currentSnapshot;
 
         await this._snapshotGate.WaitAsync(ct);
         try {
-            if (this._snapshotTabIndex == tabIndex && this._currentSnapshot.Count > 0)
+            if (revision != this._snapshotRevision) return [];
+            if (this._snapshotTabIndex == tabIndex)
                 return this._currentSnapshot;
 
             var tab = GetActiveTab(this.Tabs, tabIndex);
@@ -294,9 +303,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 }
 
                 return list;
-            }, ct);
+            }, CancellationToken.None);
 
-            if (ct.IsCancellationRequested || snapshot == null) return [];
+            // Query cancellation does not invalidate completed document acquisition.
+            if (revision != this._snapshotRevision || snapshot == null) return [];
 
             this._currentSnapshot = snapshot;
             this._snapshotTabIndex = tabIndex;
@@ -344,19 +354,15 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
             if (token.IsCancellationRequested) return;
 
-            // Use higher priority for initial load (Render), lower for subsequent filter updates (Background)
-            // This ensures list items appear quickly on first open, while keeping UI responsive during typing
-            var priority = this._isInitialLoad ? DispatcherPriority.Render : DispatcherPriority.Background;
-
             await this._dispatcher.InvokeAsync(() => {
                 if (token.IsCancellationRequested) return;
                 if (sequence != this._filterSequence) return;
 
-                // Use efficient differential update instead of Clear/Add
                 UpdateCollectionEfficiently(this.FilteredItems, filteredItems);
 
                 // Reset selection to first item
                 this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
+                this.SelectedItem = this.FilteredItems.FirstOrDefault();
 
                 // Run initial load callback if set (e.g., to select a different item)
                 if (this._isInitialLoad && this._onInitialLoadComplete != null) {
@@ -369,25 +375,26 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
                 // Mark initial load as complete
                 this._isInitialLoad = false;
-            }, priority);
+            }, DispatcherPriority.Render);
         } catch (OperationCanceledException) {
             // Swallow cancellations
         }
     }
 
     /// <summary>
-    ///     Updates the bound collection using a reset-style flow.
-    ///     WPF list views can occasionally throw internal index exceptions when they
-    ///     process dense, mixed add/remove/replace batches from rapid filtering.
-    ///     This favors stability over micro-optimizing change notifications.
+    ///     Retains row slots without Reset or Move notifications. Tail edits avoid
+    ///     the index-shifting mixed batches that previously broke WPF virtualization.
     /// </summary>
     private static void UpdateCollectionEfficiently(ObservableCollection<TItem> target, List<TItem> source) {
         if (ReferenceEquals(target, source)) return;
         if (target.Count == source.Count && target.SequenceEqual(source)) return;
 
-        target.Clear();
-        foreach (var item in source)
-            target.Add(item);
+        while (target.Count > source.Count)
+            target.RemoveAt(target.Count - 1);
+        for (var i = 0; i < source.Count; i++) {
+            if (i == target.Count) target.Add(source[i]);
+            else if (!ReferenceEquals(target[i], source[i])) target[i] = source[i];
+        }
     }
 
     /// <summary>
@@ -402,6 +409,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     #region Property Change Handlers
 
     partial void OnSearchTextChanged(string value) {
+        this._filterCts?.Cancel();
         // "sh: 501" switches to the Sheets tab and searches "501" — scoping lives in the
         // search language (VSCode `>`/`@`, Raycast style) instead of extra chrome.
         if (this.TryApplyTabToken(value)) return;
@@ -462,6 +470,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ///     Useful when external state changes require refreshing the tab's data.
     /// </summary>
     public void InvalidateTabCache(int tabIndex) {
+        if (tabIndex == this._selectedTabIndex) this._snapshotRevision++;
         if (this._snapshotTabIndex == tabIndex) {
             this._snapshotTabIndex = -1;
             this._currentSnapshot = [];

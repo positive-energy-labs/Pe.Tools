@@ -1,4 +1,4 @@
-using System.Windows.Media.Imaging;
+using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.Revit.Ui.Core;
@@ -24,7 +24,7 @@ public interface IPaletteListItem {
     Func<string> GetTextInfo { get; }
 
     /// <summary> Item icon (optional, can be null) </summary>
-    BitmapImage? Icon { get; }
+    ImageSource? Icon { get; }
 
     /// <summary> Optional color indicator for the item (e.g., document color) </summary>
     WpfColor? ItemColor { get; }

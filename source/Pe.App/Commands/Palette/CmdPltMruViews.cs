@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.Extensions.RvtUiApplication;
@@ -7,7 +8,6 @@ using Pe.Revit.Ui.Core;
 using Serilog.Events;
 using System.Diagnostics;
 using System.Windows.Input;
-using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette;
@@ -122,6 +122,6 @@ public class MruViewPaletteItem : IPaletteListItem {
     public Func<string> GetTextInfo => () =>
         $"Document: {this.View.Document.Title}\nView Type: {this.View.ViewType}\nId: {this.View.Id}";
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public WpfColor? ItemColor { get; }
 }

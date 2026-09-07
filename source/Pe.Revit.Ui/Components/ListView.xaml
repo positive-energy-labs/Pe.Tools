@@ -10,7 +10,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
 
-            <!-- Override WPF.UI ListView template to use AnimatedScrollViewer -->
+            <!-- Keep native scrolling and the virtualizing items presenter. -->
             <Style x:Key="CustomListViewStyle" TargetType="{x:Type ui:ListView}">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
@@ -20,13 +20,13 @@
                             <Border Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}">
-                                <controls:AnimatedScrollViewer Padding="{TemplateBinding Padding}"
+                                <ScrollViewer Padding="{TemplateBinding Padding}"
                                                                Focusable="False"
                                                                HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
                                                                VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
                                                                CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
                                     <ItemsPresenter />
-                                </controls:AnimatedScrollViewer>
+                                </ScrollViewer>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
@@ -83,7 +83,7 @@
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
                  VirtualizingPanel.ScrollUnit="Pixel"
-                 VirtualizingPanel.CacheLength="2,2"
+                 VirtualizingPanel.CacheLength="0,1"
                  VirtualizingPanel.CacheLengthUnit="Page"
                  ItemContainerStyle="{StaticResource ListViewItemStyle}" />
 </core:RevitHostedUserControl>

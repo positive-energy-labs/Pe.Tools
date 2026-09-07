@@ -102,7 +102,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private ScaleTransform? _dockZoom;
     private IPaletteHost? _host;
     private bool _sidebarAutoExpanded;
-    private System.Windows.Media.Effects.Effect? _windowShadow;
 
     /// <summary> Per-tab action registry for dynamic action switching </summary>
     private Dictionary<int, object>? _tabActionBindings;
@@ -341,10 +340,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             viewModel.SelectedItem = item;
             this.OpenActions();
             e.Handled = true;
-        };
-
-        this.ItemListView.SelectionChanged += (_, _) => {
-            if (viewModel.SelectedItem != null) this.ItemListView.ScrollIntoView(viewModel.SelectedItem);
         };
 
         // Set up tooltip popover exit handler
@@ -706,7 +701,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         var listBorder = this.ItemListView.Parent as Border;
 
         if (docked) {
-            this._windowShadow ??= this.RootBackground.Effect;
+            this.WindowShadow.Visibility = Visibility.Collapsed;
 
             this.VerticalAlignment = VerticalAlignment.Stretch;
             // Palette column fills the pane width (Auto would hug natural width, leaving
@@ -715,7 +710,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.RootBackground.VerticalAlignment = VerticalAlignment.Stretch;
             this.RootBackground.CornerRadius = new CornerRadius(0);
             this.RootBackground.BorderThickness = new Thickness(0);
-            this.RootBackground.Effect = null;
             this.RootGrid.VerticalAlignment = VerticalAlignment.Stretch;
             this.PaletteBackground.Width = double.NaN;
             this.PaletteBackground.VerticalAlignment = VerticalAlignment.Stretch;
@@ -737,7 +731,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.RootBackground.VerticalAlignment = VerticalAlignment.Top;
             this.RootBackground.CornerRadius = new CornerRadius(10);
             this.RootBackground.BorderThickness = new Thickness(1);
-            this.RootBackground.Effect = this._windowShadow;
+            this.WindowShadow.Visibility = Visibility.Visible;
             this.RootGrid.VerticalAlignment = VerticalAlignment.Top;
             this.PaletteBackground.Width = DefaultPaletteWidth;
             // List row stays star (matches XAML default): the list is capped by MaxHeight and

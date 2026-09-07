@@ -38,8 +38,11 @@ public abstract class PaletteSidebarPanel<TItem, TData> : UserControl, ISidebarP
             if (sequence != this._updateSequence) return;
 
             await this.Dispatcher.InvokeAsync(
-                () => this.RenderData(data),
-                DispatcherPriority.Background);
+                () => {
+                    if (!ct.IsCancellationRequested && sequence == this._updateSequence)
+                        this.RenderData(data);
+                },
+                DispatcherPriority.Render);
         }, ct);
     }
 

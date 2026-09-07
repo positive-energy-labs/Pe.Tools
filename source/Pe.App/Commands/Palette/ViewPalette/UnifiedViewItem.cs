@@ -1,5 +1,5 @@
+using System.Windows.Media;
 using Pe.Revit.Ui.Core;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.ViewPalette;
@@ -18,6 +18,11 @@ public enum ViewItemType {
 ///     Uses a single View property since ViewSchedule and ViewSheet inherit from View.
 /// </summary>
 public class UnifiedViewItem : IPaletteListItem {
+    // Metadata captures these once in Revit context for this item snapshot.
+    private string? _textPrimary;
+    private string? _textSecondary;
+    private string? _textPill;
+
     private readonly SheetLookupCache _sheetCache;
 
     public UnifiedViewItem(View view, ViewItemType itemType, SheetLookupCache sheetCache) {
@@ -47,19 +52,19 @@ public class UnifiedViewItem : IPaletteListItem {
     /// </summary>
     public ViewSheet? AsSheet => this.View as ViewSheet;
 
-    public string TextPrimary => this.ItemType switch {
+    public string TextPrimary => this._textPrimary ??= this.ItemType switch {
         ViewItemType.Sheet => $"{this.AsSheet?.SheetNumber} - {this.View.Name}",
         _ => this.View.Name
     };
 
-    public string TextSecondary => this.ItemType switch {
+    public string TextSecondary => this._textSecondary ??= this.ItemType switch {
         ViewItemType.View => this.GetViewSheetInfo(),
         ViewItemType.Schedule => this.GetScheduleSheetInfo(),
         ViewItemType.Sheet => this.GetSheetViewCount(),
         _ => string.Empty
     };
 
-    public string TextPill => this.ItemType switch {
+    public string TextPill => this._textPill ??= this.ItemType switch {
         ViewItemType.View => this.View.FindParameter("View Use")?.AsString() ?? string.Empty,
         ViewItemType.Schedule => this.View.FindParameter("Discipline")?.AsValueString() ?? string.Empty,
         ViewItemType.Sheet => this.GetSheetPrefix(),
@@ -69,7 +74,7 @@ public class UnifiedViewItem : IPaletteListItem {
     // Tooltip not used - sidebar preview panel displays detailed info
     public Func<string> GetTextInfo => static () => string.Empty;
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 
     private string GetViewSheetInfo() {

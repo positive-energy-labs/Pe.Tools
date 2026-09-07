@@ -1,10 +1,10 @@
+using System.Windows.Media;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime;
 using System.IO;
-using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Schedules.Ui;
@@ -56,7 +56,7 @@ public class BatchScheduleListItem : IPaletteListItem {
 
     public Func<string> GetTextInfo => () => string.Empty;
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
 
     /// <summary>

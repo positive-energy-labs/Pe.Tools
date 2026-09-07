@@ -1,6 +1,6 @@
+using System.Windows.Media;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Scripting;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.TaskPalette;
@@ -25,6 +25,6 @@ public sealed class PodScriptTaskItem : IPaletteListItem {
         (string.IsNullOrWhiteSpace(this.Entrypoint.Description)
             ? string.Empty
             : $"\n\n{this.Entrypoint.Description}");
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 }

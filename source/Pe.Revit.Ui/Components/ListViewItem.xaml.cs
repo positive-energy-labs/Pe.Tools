@@ -85,8 +85,9 @@ public partial class ListViewItem : Border {
     ///     Shows the item's icon, or a monogram tile fallback so all rows stay aligned.
     /// </summary>
     private void UpdateIcon(IPaletteListItem item) {
-        var hasIcon = item.Icon != null;
-        this.IconImage.Source = item.Icon;
+        var icon = item.Icon;
+        var hasIcon = icon != null;
+        this.IconImage.Source = icon;
         this.IconImage.Opacity = Theme.IconOpacity;
         this.IconImage.Visibility = hasIcon ? Visibility.Visible : Visibility.Collapsed;
         this.IconFallback.Visibility = hasIcon ? Visibility.Collapsed : Visibility.Visible;

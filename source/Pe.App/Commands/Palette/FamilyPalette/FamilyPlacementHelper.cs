@@ -1,4 +1,5 @@
-﻿using Autodesk.Revit.DB.Structure;
+using System.Windows.Media;
+using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Global.Ui;
@@ -6,7 +7,6 @@ using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Serilog.Events;
 using System.Diagnostics;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -296,7 +296,7 @@ public class FamilyPlacementItem : IPaletteListItem {
         $"Types: {this.Family.GetFamilySymbolIds().Count}\n" +
         $"Id: {this.Family.Id}";
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 
     public FamilySymbol? GetFirstSymbol() {
@@ -328,6 +328,6 @@ public class FamilyTypePlacementItem : IPaletteListItem {
         $"Active: {this.FamilySymbol.IsActive}\n" +
         $"Id: {this.FamilySymbol.Id}";
 
-    public BitmapImage? Icon => null;
+    public ImageSource? Icon => null;
     public Color? ItemColor => null;
 }

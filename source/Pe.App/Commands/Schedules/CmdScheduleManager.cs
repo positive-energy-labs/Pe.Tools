@@ -1,4 +1,5 @@
-﻿using Autodesk.Revit.Attributes;
+using System.Windows.Media;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
@@ -16,7 +17,6 @@ using Serilog;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using JsonValidationException = Pe.Revit.SettingsRuntime.Json.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
@@ -653,6 +653,6 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
     public string TextSecondary => this._inner.TextSecondary;
     public string? TextPill => this._inner.TextPill;
     public Func<string> GetTextInfo => this._inner.GetTextInfo;
-    public BitmapImage? Icon => this._inner.Icon;
+    public ImageSource? Icon => this._inner.Icon;
     public Color? ItemColor => this._inner.ItemColor;
 }

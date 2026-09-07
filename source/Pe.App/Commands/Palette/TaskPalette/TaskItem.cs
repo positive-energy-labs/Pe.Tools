@@ -1,5 +1,5 @@
+using System.Windows.Media;
 using Pe.Revit.Ui.Core;
-using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.TaskPalette;
@@ -35,6 +35,6 @@ public class TaskItem : IPaletteListItem {
     public string TextSecondary => this.Task.Description ?? string.Empty;
     public string TextPill => this.Task.Category ?? string.Empty;
     public Func<string> GetTextInfo => () => this.Task.Description ?? string.Empty;
-    public BitmapImage? Icon => null; // Future: custom icons per task
+    public ImageSource? Icon => null; // Future: custom icons per task
     public Color? ItemColor => null; // Future: category-based colors
 }

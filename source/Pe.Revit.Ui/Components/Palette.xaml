@@ -14,6 +14,14 @@
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
+    <Grid>
+    <!-- Shadow only the surface, so changing row content does not enter the effect subtree. -->
+    <Border x:Name="WindowShadow" IsHitTestVisible="False"
+            CornerRadius="10" Background="{ui:ThemeResource ApplicationBackgroundBrush}">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="6" BlurRadius="28" Opacity="0.45" />
+        </Border.Effect>
+    </Border>
     <!-- Single window surface: palette + optional detail panel, divided by a hairline -->
     <Border x:Name="RootBackground"
             HorizontalAlignment="Stretch"
@@ -23,9 +31,6 @@
             BorderThickness="1"
             BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
             Background="{ui:ThemeResource ApplicationBackgroundBrush}">
-        <Border.Effect>
-            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="6" BlurRadius="28" Opacity="0.45" />
-        </Border.Effect>
     <Grid x:Name="RootGrid"
           HorizontalAlignment="Stretch"
           VerticalAlignment="Top">
@@ -372,4 +377,5 @@
         </Border>
     </Grid>
     </Border>
+    </Grid>
 </core:RevitHostedUserControl>
