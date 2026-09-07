@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using Pe.App.Host;
 using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Shared.HostContracts.Operations;
@@ -147,5 +148,23 @@ public sealed class FamilyProjectIdentityTests {
             if (project is { IsValidObject: true }) project.Close(false);
         }
         Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(before));
+    }
+
+    [Test, Timeout(300000)]
+    public void Project_capture_preserves_local_parameter_when_builtin_has_same_name() {
+        const string familyName = "Linear LED_Lighting Channel Wire";
+        var application = this._ui.Application;
+        var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Project_capture_preserves_local_parameter_when_builtin_has_same_name));
+        var path = Path.Combine(directory, "Old_Template.rvt");
+        File.Copy(RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt"), path, true);
+        var project = application.OpenDocumentFile(path);
+        try {
+            var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(candidate => candidate.Name == familyName);
+            var capture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([family.Id.Value()]), project).Families.Single();
+            Assert.That(capture.Success, Is.True, capture.Error);
+            var parameter = JObject.Parse(capture.ModelJson!)["parameters"]!["Default Elevation"];
+            Assert.That(parameter, Is.Not.Null, "The authored String parameter must not be dropped with the same-named built-in length parameter.");
+            Assert.That(parameter!.Value<string>("dataType"), Is.EqualTo("Text"));
+        } finally { project.Close(false); }
     }
 }
