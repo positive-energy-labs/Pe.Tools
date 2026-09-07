@@ -8,8 +8,12 @@ Latest native checkpoint: wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed
 Extraction parity, schema evidence, exact-alias refusal rollback, invalid-matrix rollback,
 and connector-host identity probe passed. Raw internal parameter schemas contain descriptions
 under constants entries with id=description; N owns the production reader correction.
-Native host dependencies distinguish coincident plane/nested-face connectors; P owns removal
-of the overlap inference. Matrix per-type values, GRD spacing before arrays, Fixture Units
+Native host dependencies distinguish coincident plane/nested-face connectors. Integrated
+d2b40a2 reads native description constants and 129e1a5 replaces geometric host inference
+with native dependencies. Their production readback/reopen checks await wave23. Integrated
+fbd2aca records native matrix values before normalization, after normalization, and after
+value application; no production value fix is justified until the first bad stage is known.
+Matrix per-type values, GRD spacing before arrays, Fixture Units
 association, selector fixture instance filtering, and metadata readback remain red.
 PID 97760 exited, native settings restored exactly, and protected identities were preserved.
 Evidence: Pe.Tools-ff-proof/.artifacts/runs/wave22, including TRX and cleanup verification.
@@ -18,7 +22,8 @@ Wave21 at 141877b ran eight independent native checks: 0 passed, 8 failed.
 Installed API metadata identifies GetParameterSchema as internal: the public reflection
 lookup cannot find it. Integrated 3294fbb retains parameter rows on optional tooltip errors
 and blocks reconciliation on incomplete required-field capture. Internal schema invocation
-remains a native probe, not a production dependency or accepted tooltip readback.
+was subsequently proven in wave22 and adopted at d2b40a2. Other-year runtime compatibility
+and integrated tooltip acceptance remain unproven.
 Selector fixture naming (0fdf8f7), pipe Fixture Units identity (dd67073), and explicit
 NotAReference capture (4f4ca9e) are repaired in source. Native acceptance remains owed.
 Exact integrated Debug.R25.Tests compilation at 4f4ca9e passed with 0 errors/129 warnings.
@@ -62,6 +67,9 @@ of selected PID 98840. Both tests failed during type loading before their mutati
 The exact PID/start adapter repair is isolated in Pe.Revit.Sdk-ff-targeted; old/stale adapter
 refusal and native targeting acceptance remain required before attached tests resume.
 Full monthly-profile planning remains 0/45 because the fresh installed Pe.App lacks the method.
+R prepared a public Host driver at 6e70c49 to remove that adapter dependency. It exposed
+13 profiles whose authored ExecutionOptions do not reach Host Apply. R owns tracing and
+closing that contract gap while preserving full-family rollback. No monthly Host run is claimed.
 
 Latest broad native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
 123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
