@@ -203,6 +203,7 @@ export class PeaCliCommands {
           default: "compact",
         },
       },
+      toKebab: true,
       run: async (ctx) => {
         const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
