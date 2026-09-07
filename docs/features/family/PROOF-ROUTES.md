@@ -2,6 +2,28 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Root payload compile and production preset census - 2026-09-07
+
+Root released the build lane after wave5 cleanup. From integration root `324d797fd58584378f8a6c5f76a912343abf156a`, isolated `dotnet build source/Pe.App/Pe.App.csproj -c Debug.R25 -p:DeployAddin=false -p:LaunchRevit=false` completed exit 0, 104 warnings, 0 errors (05:57:38–05:57:47 UTC). Herdr `ffroutes0906/w1:p3` owns the terminal. No Debug.R25.Tests build, deployment, or Revit lifecycle was performed. Output is root `.artifacts/build/Pe.App/Debug.R25/Pe.App.dll`, SHA256 `05AABA8AAB806CC7A2734A36CADB8AD481830B62B0CCA82616C4D2F773233715`. Build receipt/log/stderr are `root-pe-app-build.*` in this report's evidence directory.
+
+Root was clean before compilation; subsequent inspection found the announced concurrent FF edits. This is **compile proof only**, not final payload freshness. The proof owner must launch from final coordinated source. Repeated SDK `session start ... --snapshot --plan --json` succeeded at 06:00:32 UTC, with no mutations, PID, or build stamp (`ff-route-25-start-plan-324d797.json`). It planned checkout Pe.App/year2025/id ff-route-25; it did not launch it. Actual host/web URL and family/project identities have been requested for browser click-through. The existing 5180 fixture host still belongs to this routes checkout, not integration root. This supersedes the earlier build hold below.
+
+Production preset census supersedes earlier wording that C# composition parity requires another resolver:
+
+| Consumer / seam | Observed current rule |
+|---|---|
+| C# `Modules/TypedModuleStorage.cs:28` | ReadRequired calls TsSettingsDocumentClient, refuses invalid snapshot, then deserializes composed content. |
+| C# `Modules/TsSettingsDocumentClient.cs:11` | Calls Host settings.document.open-with-module, with composed content enabled, registered roots and generated schema. There is no independent C# expansion/override engine in this path. |
+| C# `Json/SchemaProcessors/SchemaPresetsProcessor.cs:60` | Preset directive schema requires $preset and sets AllowAdditionalProperties=false. Authoring schema does not declare inline overrides. |
+| Host `settings.ts:748` | Rejects every sibling of $preset **before resolving the preset file**; otherwise whole-object substitution, recursive presets, then includes. |
+| Host `settings.ts:807` | mergeIncludeFields recursively combines keyed include objects; later scalar/array leaves win. This helper is used only by keyed includes, not presets. Array include splicing remains unchanged. |
+
+The original frozen N sandbox `CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json` has `FilterApsParams.$preset = @global/_filter-aps-params/Dehumidifier` plus explicit `IncludeNames.Equaling` (16 names) and `ExcludeNames: {}`. Current Host reproduces CompositionError for inline overrides, retains exact raw JSON, and returns null composed content. `census-preset.mjs` and `preset-census.json` record the read-only replay, original filter object and identical before/after SHA. A permissive schema isolates the resolver; this is not live provider proof. No company settings or N sandbox file was changed.
+
+N's existing `company-compose-result.json` independently records a missing Dehumidifier preset for another profile. AprilAire fails before lookup, so adding override support alone would not establish that its dependency exists. Root owns that pending definition question. Do not remove AprilAire's authored siblings or fabricate the definition to make composition green. Supporting them extends current preset semantics and must settle explicit profile override behavior; the shared deep-merge helper exists if that is selected. Shared-fragment editing remains the default for inherited edits and does not erase already explicit profile intent.
+
+Validation: current Host `vp test tests/dispatch.test.ts`, **20/20 passed**, including nested keyed Width override with preserved datatype, raw preservation, cycles and preset-sibling rejection (`preset-census-tests.txt`). No new resolver, transport DTO, profile rewrite or UX semantics were introduced by this census. Fragment-origin editing and fragment-aware validation remain the concrete source seams documented below; actual route Apply/receipts still require the coordinated fresh session.
+
 ## Integrated dev session preparation and fragment UX census - 2026-09-07
 
 Integration root inspected read-only at `0bcab493f6a78ff5b2879ae137ff1b964e55afdb`. SDK beta.150 start-plan succeeded from that root:
