@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.FamilyFoundry.OperationGroups;
+using Pe.Revit.FamilyFoundry.Operations;
 
 namespace Pe.Shared.RevitData.Families;
 
@@ -48,7 +50,13 @@ public sealed class FamilyPatch {
     /// <summary>Strict parse of a patch file; the fragment itself is checked only when merged and parsed as a model.</summary>
     public static FamilyPatch Parse(string json) {
         var token = JToken.Parse(json, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
-        if (token is JObject o) o.Remove("$schema");
+        if (token is JObject o) {
+            o.Remove("$schema");
+            if (o["run"] is JObject run)
+                foreach (var name in new[] { "clean", "sort" })
+                    if (run[name] is JValue { Type: JTokenType.Boolean } shorthand)
+                        run[name] = new JObject { ["Enabled"] = shorthand.Value<bool>() };
+        }
         return token.ToObject<FamilyPatch>(JsonSerializer.Create(Settings)) ?? throw new JsonSerializationException("Patch deserialized to null.");
     }
 
@@ -161,10 +169,10 @@ public sealed class PatchRun {
     public List<BlankRule>? BlanksBecome { get; init; }
 
     [JsonProperty("clean", NullValueHandling = NullValueHandling.Ignore)]
-    public JToken? Clean { get; init; }
+    public CleanFamilyDocumentSettings? Clean { get; init; }
 
     [JsonProperty("sort", NullValueHandling = NullValueHandling.Ignore)]
-    public JToken? Sort { get; init; }
+    public SortParamsSettings? Sort { get; init; }
 }
 
 [JsonObject(MemberSerialization.OptIn)]

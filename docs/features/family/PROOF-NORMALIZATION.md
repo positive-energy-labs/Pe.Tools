@@ -534,3 +534,17 @@ Wave 11 Constrained Box remains a capture defect: `MakeForms.AlignCaps` explicit
 AprilAire 800 failed with `day/PE_E___MCA: Parameter not found` because canonical type cells flattened `(type, parameter)` into `type/parameter`, then lowering split at the first slash. The real type names `800 - 120v - 11.5 gal/day` and `800 - 120v - 16 gal/day` therefore became type `800 - 120v - 11.5 gal` and parameter `day/PE_E___MCA`. Canonical diff now uses `FamilyCellKey(Type, Parameter)` through lowering; the slash form remains display-only. `Type_names_with_slashes_remain_whole_when_cells_are_lowered` covers the exact AprilAire shape, and the existing real-profile case remains the native first-pass gate.
 
 The shared-tooltip failures came from APS descriptions exported as shared-definition metadata being mistaken for user-requested tooltip replacement. Existing shared parameters still reject a tooltip differing from the authoritative shared-definition source because Revit cannot verify that replacement. An exact source description is definition metadata, not replacement intent, and proceeds without discarding it. The existing real-profile corpus exercises the affected `PE_E___ApparentPower` profiles. Final exact `Debug.R25.Tests` compile exited 0 with 21 warnings and 0 errors after the initial test-access compile error was corrected; no Revit runtime ran.
+## Typed clean/sort run contract - 2026-09-07
+
+`FamilyPatch` now references the existing `CleanFamilyDocumentSettings` and `SortParamsSettings` contracts directly. Those settings, `IOperationSettings`, the purge settings, and the existing include/exclude filters moved unchanged by namespace into DA-safe `Pe.Shared.StorageRuntime`, which already owns their `Includable` metadata. Boolean shorthand is normalized at the strict patch parse boundary, objects deserialize with `MissingMemberHandling.Error`, omitted fields retain the existing defaults, and composed nested exclusion lists retain their fragment roots. `FamilyReconciler` no longer stores or reparses `JToken` run policies or copies them into parallel operation DTOs. No desired-family-model field, public scripting type name, execution order, transaction behavior, authored fixture, or other run shape changed.
+
+Validation:
+
+- Compile: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25 -v minimal` passed with 124 warnings and 0 errors after the contract relocation.
+- SDK plan: `pe-revit test --plan --project source/Pe.Shared.Tests/Pe.Shared.Tests.csproj --json` selected the deterministic rung because the project is year-neutral.
+- Deterministic parse/default/strictness and include-metadata check: 1/1 passed.
+- Deterministic composed company corpus check: 1/1 passed.
+- Deterministic AprilAire preset-plus-inline deep-field composition check: 1/1 passed.
+- The broader `FamilyModelContractTests` class run was 78 passed, 1 failed at the pre-existing `c-bath-shower.family.json` `dimensions.conn-z.view = "Placement Side"` fixture/parser mismatch. This slice does not alter dimensions, views, or that fixture.
+
+Ranks 2-5 from the contract census remain deferred until native behavior stabilizes. No Revit or product runtime was started or mutated.

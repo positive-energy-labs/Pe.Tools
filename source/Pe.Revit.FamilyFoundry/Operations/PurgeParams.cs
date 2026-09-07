@@ -1,8 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -91,7 +89,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
         var parameters = allParams
             .OfType<FamilyParameter>()
             .Where(p => !excludeSet.Contains(p.Definition.Name))
-            .Where(this.Settings.Filter)
+            .Where(p => !IsExcluded(p, this.Settings.ExcludeNames))
             .Where(p => !p.IsBuiltInParameter())
             .OrderByDescending(p => p.Formula?.Length ?? 0)
             .ToList();
@@ -154,32 +152,9 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
 
         if (deleteCount > 0) this.RecursiveDelete(doc, logs, processingContext);
     }
-}
 
-public class PurgeParamsSettings : PurgeParamsBase, IOperationSettings {
-    public bool Enabled { get; init; } = true;
-}
-
-public class PurgeParamsBase {
-    [Description(
-        "Whether to delete parameters that have no value for every family type, regardless of whether they are used in the family. This is rare but possible. This setting is useful for properties like url variations where there are often multiple url parameters with no value.")]
-    public bool DirectDeleteEmptyParameters { get; init; } = true;
-
-    [Description("Whether to consider zero value as \"empty\" when deleting empty parameters.")]
-    public bool ConsiderZeroValueAsEmpty { get; init; } = true;
-
-    [Description("Whether to consider empty string as \"empty\" when deleting empty parameters.")]
-    public bool ConsiderEmptyStringAsEmpty { get; init; } = true;
-
-    [Description(
-        "Exclude parameters from the deletion list. Parameters matching any exclude filter (Equaling, Containing, or StartingWith) will be protected from deletion.")]
-    [Required]
-    public ExcludeSharedParameter ExcludeNames { get; init; } = new();
-
-    public bool Filter(FamilyParameter p) => !this.IsExcluded(p);
-
-    private bool IsExcluded(FamilyParameter p) =>
-        this.ExcludeNames.Equaling.Any(p.Definition.Name.Equals) ||
-        this.ExcludeNames.Containing.Any(p.Definition.Name.Contains) ||
-        this.ExcludeNames.StartingWith.Any(p.Definition.Name.StartsWith);
+    private static bool IsExcluded(FamilyParameter parameter, ExcludeSharedParameter names) =>
+        names.Equaling.Any(parameter.Definition.Name.Equals) ||
+        names.Containing.Any(parameter.Definition.Name.Contains) ||
+        names.StartingWith.Any(parameter.Definition.Name.StartsWith);
 }

@@ -704,7 +704,7 @@ public static class FamilyProfileConverter {
             Run = conditional.Count == 0 && clean is null && sort is null && electricalConnectorParameters is null ? null : new PatchRun {
                 ParametersIfSourceExists = conditional.Count == 0 ? null : conditional,
                 ElectricalConnectorParameters = electricalConnectorParameters,
-                Clean = clean is null ? null : JObject.FromObject(clean), Sort = sort is null ? null : JObject.FromObject(sort)
+                Clean = clean, Sort = sort
             }
         };
     }

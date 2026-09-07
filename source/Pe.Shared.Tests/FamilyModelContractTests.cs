@@ -1,5 +1,8 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
+using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Shared.Tests;
 
@@ -38,6 +41,29 @@ public sealed class FamilyModelContractTests {
         Assert.That((string?)patch.ResolveParameterRules(current)["parameters"]?["Target"]?["value"], Is.EqualTo("explicit"));
         patch.Patch["parameters"]!["Target"] = JValue.CreateNull();
         Assert.That(patch.ResolveParameterRules(current)["parameters"]!["Target"]!.Type, Is.EqualTo(JTokenType.Null));
+    }
+
+    [Test]
+    public void Run_clean_and_sort_accept_boolean_shorthand_and_strict_typed_settings() {
+        var defaults = FamilyPatch.Parse("""{"patch":{},"run":{"clean":true,"sort":true}}""").Run!;
+        var disabled = FamilyPatch.Parse("""{"patch":{},"run":{"clean":false,"sort":false}}""").Run!;
+        var partial = FamilyPatch.Parse("""{"patch":{},"run":{"clean":{"EnablePurgeParams":false},"sort":{"ParamNameSortOrder":"Descending"}}}""").Run!;
+        Assert.Multiple(() => {
+            Assert.That(defaults.Clean!.EnablePurgeParams, Is.True);
+            Assert.That(defaults.Sort!.ParamTypeSortOrder, Is.EqualTo(ParamTypeSortOrder.SharedParamsFirst));
+            Assert.That(disabled.Clean!.Enabled, Is.False);
+            Assert.That(disabled.Sort!.Enabled, Is.False);
+            Assert.That(partial.Clean!.EnablePurgeParams, Is.False);
+            Assert.That(partial.Clean.EnablePurgeNestedFamilies, Is.True);
+            Assert.That(partial.Sort!.ParamNameSortOrder, Is.EqualTo(ParamNameSortOrder.Descending));
+            Assert.That(partial.Sort.ParamTypeSortOrder, Is.EqualTo(ParamTypeSortOrder.SharedParamsFirst));
+        });
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() =>
+            FamilyPatch.Parse("""{"patch":{},"run":{"clean":{"PurgeParamsSettings":{"Unknown":true}}}}"""));
+        Assert.That(typeof(ExcludeSharedParameter).GetProperties()
+                .Select(p => p.GetCustomAttributes(typeof(IncludableAttribute), false).SingleOrDefault())
+                .OfType<IncludableAttribute>().Select(a => a.FragmentSchemaName),
+            Is.EqualTo(Enumerable.Repeat("shared-parameter-names", 3)), "Clean exclusions retain fragment composition metadata.");
     }
 
     [Test]

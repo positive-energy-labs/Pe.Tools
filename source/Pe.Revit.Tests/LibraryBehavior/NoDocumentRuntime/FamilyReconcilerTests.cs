@@ -1,4 +1,6 @@
 using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Revit.FamilyFoundry.OperationGroups;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -13,14 +15,15 @@ public sealed class FamilyReconcilerTests {
         var patch = FamilyPatch.Parse("""{"patch":{},"run":{"clean":{"Enabled":true,"EnablePurgeParams":false,"EnablePurgeNestedFamilies":false,"EnablePurgeModelLines":false,"EnablePurgeReferencePlanes":false},"sort":{"ParamNameSortOrder":"Descending","ParamTypeSortOrder":"FamilyParamsFirst","ParamValueSortOrder":"ValuesFirst"}}}""");
         var plan = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable, patch.Run);
         var sort = plan.Queue.Operations.OfType<Pe.Revit.FamilyFoundry.Operations.SortParams>().Single().Settings;
-        Assert.That(sort.ParamNameSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamNameSortOrder.Descending));
-        Assert.That(sort.ParamTypeSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamTypeSortOrder.FamilyParamsFirst));
-        Assert.That(sort.ParamValueSortOrder, Is.EqualTo(Pe.Revit.FamilyFoundry.Operations.ParamValueSortOrder.ValuesFirst));
+        Assert.That(sort.ParamNameSortOrder, Is.EqualTo(ParamNameSortOrder.Descending));
+        Assert.That(sort.ParamTypeSortOrder, Is.EqualTo(ParamTypeSortOrder.FamilyParamsFirst));
+        Assert.That(sort.ParamValueSortOrder, Is.EqualTo(ParamValueSortOrder.ValuesFirst));
         Assert.That(plan.Queue.Operations.Where(o => o.Name.StartsWith("Purge")).All(o => !o.Settings.Enabled), Is.True);
-        var defaults = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable, new PatchRun { Clean = true, Sort = true });
+        var defaults = FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable,
+            FamilyPatch.Parse("""{"patch":{},"run":{"clean":true,"sort":true}}""").Run);
         Assert.That(plan.PlanHash, Is.Not.EqualTo(defaults.PlanHash));
-        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => FamilyReconciler.Reconcile(model, model, UnitResolvers.Portable,
-            FamilyPatch.Parse("""{"patch":{},"run":{"sort":{"MisspelledPolicy":true}}}""").Run));
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() =>
+            FamilyPatch.Parse("""{"patch":{},"run":{"sort":{"MisspelledPolicy":true}}}"""));
     }
 
     private static readonly string[] Fixtures = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
@@ -171,7 +174,8 @@ public sealed class FamilyReconcilerTests {
     public void Each_fixture_plans_against_an_empty_template_in_dag_order(string fixture) {
         var desired = Load(fixture);
         var template = new FamilyModel { Family = desired.Family, Datums = desired.Datums };
-        var plan = FamilyReconciler.Reconcile(desired, template, UnitResolvers.Portable, new PatchRun { Sort = true, Clean = true });
+        var plan = FamilyReconciler.Reconcile(desired, template, UnitResolvers.Portable,
+            new PatchRun { Sort = new SortParamsSettings(), Clean = new CleanFamilyDocumentSettings() });
         Assert.That(plan.Refusals, Is.Empty);
         Assert.That(plan.Changes.Select(c => c.Kind), Has.All.EqualTo(ChangeKind.Add).Or.All.EqualTo(ChangeKind.Update).Or.All.Not.EqualTo(ChangeKind.Unverifiable));
         var order = plan.OpOrder;

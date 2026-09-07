@@ -496,11 +496,11 @@ public static class FamilyReconciler {
         if (Of("roomCalculationPoint", ChangeKind.Update).Length > 0 && d.RoomCalculationPoint is { } rcp)
             q.Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = true }, rcp));
         // 20 run: after every add; clean never deletes a desired parameter
-        if (RunSettings<CleanFamilyDocumentSettings>(run?.Clean) is { Enabled: true } clean) {
+        if (run?.Clean is { Enabled: true } clean) {
             q.Add(new CleanFamilyDocument(clean, d.Parameters.Keys));
             effects.Add("run.clean");
         }
-        if (RunSettings<SortParamsSettings>(run?.Sort) is { Enabled: true } sort) {
+        if (run?.Sort is { Enabled: true } sort) {
             q.Add(new SortParams(sort));
             effects.Add("run.sort");
         }
@@ -511,13 +511,6 @@ public static class FamilyReconciler {
 
     private static int FormulaLength(object? before) =>
         before is JObject o ? o.Value<string>("formula")?.Length ?? 0 : (before as FamilyModelParameter)?.Formula?.Length ?? 0;
-
-    private static T? RunSettings<T>(JToken? policy) where T : class, IOperationSettings, new() => policy switch {
-        null or { Type: JTokenType.Null } => null,
-        { Type: JTokenType.Boolean } => policy.Value<bool>() ? new T() : null,
-        JObject settings => settings.ToObject<T>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })),
-        _ => throw new JsonSerializationException($"Run policy for {typeof(T).Name} must be a boolean or a settings object.")
-    };
 
     private static SetKnownParamsSettings Values(FamilyChange[] cells) {
         var rows = new Dictionary<string, PerTypeAssignmentRow>(StringComparer.Ordinal);
