@@ -86,11 +86,11 @@ export function projectTakeoffSnapshot(
       }));
     const tags = meta.systemTag ? [meta.systemTag] : [];
     const stage =
-      rooms.length === 0
+      materialized.length === 0
         ? tags.length > 0
           ? "registered"
           : "declared"
-        : rooms.some((item) => item.flags.length > 0)
+        : residues.length > 0 || rooms.some((item) => item.flags.length > 0)
           ? "partitioned"
           : "reviewed";
     return {

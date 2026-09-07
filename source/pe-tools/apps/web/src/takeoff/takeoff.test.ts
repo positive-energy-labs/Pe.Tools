@@ -263,7 +263,11 @@ describe("typed snapshot projection", () => {
       missingCarrierGuids: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001"],
     });
     expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });
-    expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });
+    expect(snapshot.world.zones[0]).toMatchObject({
+      name: "Main#01",
+      tags: ["FC-8"],
+      stage: "partitioned",
+    });
     expect(snapshot.regionsByZone["zone-guid"]![0]!.holes).toEqual([
       square(4.123456789012345, 4, 2),
     ]);

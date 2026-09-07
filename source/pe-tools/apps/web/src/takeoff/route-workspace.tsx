@@ -109,10 +109,13 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         folder: dir || null,
         r10: r10 || null,
       },
-      multi: { views: new Set(views), zones: new Set(zones) },
+      multi: {
+        views: new Set(views),
+        zones: new Set(zones.filter((id) => world.zones.some((zone) => zone.zone.guid === id))),
+      },
       stage,
     }),
-    [target, activeDocument?.documentId, views, dir, r10, zones, stage],
+    [target, activeDocument?.documentId, views, dir, r10, zones, world.zones, stage],
   );
   const moveToDocument = (documentId: string) => {
     const at = addressSchema.safeParse(documentId);
@@ -186,7 +189,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         verbs: [
           {
             key: "partition",
-            label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
+            label: `partition ${boundZones.length || ""} zone${boundZones.length === 1 ? "" : "s"}`,
             demands: ["zones"],
             kind: live ? "act" : "seam",
             refuse: () => {
