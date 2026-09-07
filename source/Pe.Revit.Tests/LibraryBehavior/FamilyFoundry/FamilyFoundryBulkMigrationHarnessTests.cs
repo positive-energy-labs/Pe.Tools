@@ -693,9 +693,10 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             WriteCheckpoint(checkpointPath, evidence);
             Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
         } finally {
-            if (evidence.Value<string>("status") is "starting" or "running") evidence["status"] = "interrupted";
-            WriteCheckpoint(checkpointPath, evidence);
-            project.Close(false);
+            try {
+                if (evidence.Value<string>("status") is "starting" or "running") evidence["status"] = "interrupted";
+                WriteCheckpoint(checkpointPath, evidence);
+            } finally { project.Close(false); }
         }
     }
 
