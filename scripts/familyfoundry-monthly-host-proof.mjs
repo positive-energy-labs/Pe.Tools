@@ -37,6 +37,14 @@ const evidence = {
   profiles: [],
 };
 checkpoint();
+process.once("uncaughtException", (error) => {
+  if (evidence.status === "running") evidence.status = "failed";
+  evidence.error ??= String(error.stack ?? error);
+  evidence.finishedAt ??= new Date().toISOString();
+  checkpoint();
+  console.error(error);
+  process.exit(1);
+});
 
 const context = hostCall("00-context", "revit.context.summary", {});
 const active = context.response?.documents?.activeDocument;
@@ -46,6 +54,8 @@ evidence.document = active;
 checkpoint();
 
 const converted = convertProfiles();
+if (!samePath(converted.documentPath ?? "", documentPath))
+  fail(`Conversion script target mismatch; expected '${documentPath}', got '${converted.documentPath ?? "none"}'.`);
 if (!Array.isArray(converted.profiles) || converted.profiles.length !== 45)
   fail(`Expected 45 converted profile rows, got ${converted.profiles?.length ?? "none"}.`);
 
@@ -169,16 +179,17 @@ function convertProfiles() {
   const scriptPath = join(output, "convert-company-profiles.cs");
   writeFileSync(scriptPath, conversionScript(profilePath, definitionsPath));
   const result = pea(["script", "execute", "--host", host, "--bridge-session-id", session, "--file", scriptPath, "--permission-mode", "ReadOnly", "--timeout-seconds", "600"], "conversion");
-  const marker = "data      ";
-  const offset = result.stdout.indexOf(marker);
+  const marker = "\ndata      ";
+  const output = `\n${result.stdout}`;
+  const offset = output.lastIndexOf(marker);
   if (offset < 0) fail("Pea conversion script returned no structured data.");
-  return JSON.parse(result.stdout.slice(offset + marker.length));
+  return JSON.parse(output.slice(offset + marker.length).trim());
 }
 
 function hostCall(label, key, request) {
   writeJson(join(output, "requests", `${label}.json`), { key, request, bridgeSessionId: session });
   const result = pea(["host", "operations", "call", "--host", host, "--bridgeSessionId", session, "--key", key, "--request", JSON.stringify(request), "--verbosity", "compact"], label);
-  const envelope = JSON.parse(result.stdout);
+  const envelope = parsePeaJson(result.stdout, label);
   writeJson(join(output, "responses", `${label}.json`), envelope);
   if (!envelope.ok) throw new Error(`${key}: ${envelope.message ?? "Host operation failed"}`);
   if (envelope.resolvedTarget?.session !== session)
@@ -187,7 +198,7 @@ function hostCall(label, key, request) {
 }
 
 function pea(commandArgs, label) {
-  const result = spawnSync(args.runner ?? "vp", ["run", "@pe/pea#pea", "--", ...commandArgs], {
+  const result = spawnSync(args.runner ?? "vp", ["exec", "jiti", "apps/pea/src/main.ts", ...commandArgs], {
     cwd: join(repo, "source", "pe-tools"), encoding: "utf8", timeout: 15 * 60 * 1000, maxBuffer: 32 * 1024 * 1024, shell: false,
   });
   writeFileSync(join(output, "responses", `${label}.stdout.txt`), result.stdout ?? "");
@@ -216,6 +227,11 @@ function git(commandArgs) { const result = spawnSync("git", commandArgs, { cwd: 
 function sha(value) { return createHash("sha256").update(value).digest("hex"); }
 function samePath(left, right) { return resolve(left).toLowerCase() === resolve(right).toLowerCase(); }
 function pad(value) { return String(value).padStart(2, "0"); }
+function parsePeaJson(stdout, label) {
+  const offset = stdout.indexOf("{");
+  if (offset < 0) throw new Error(`${label} returned no JSON envelope.`);
+  return JSON.parse(stdout.slice(offset).trim());
+}
 function capturedModel(response, id, stage) {
   const rows = response?.families;
   const family = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
