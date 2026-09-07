@@ -1,9 +1,11 @@
 using Autodesk.Revit.ApplicationServices;
+using System.Globalization;
 using Pe.Revit.Compat;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 
@@ -136,11 +138,128 @@ public static class FamilyModelBuild {
         if (!Enum.IsDefined(typeof(ScheduleAuthoredFilterType), condition.FilterType))
             throw new InvalidOperationException($"IncludeByCondition has unknown FilterType '{condition.FilterType}'.");
 
+        var localMatches = MatchLocalFamilyParameter(project, candidates, condition);
+        if (localMatches is not null)
+            return candidates.Where(f => localMatches.Contains(f.Id.Value())).ToList();
+
         var matchingIds = candidates
             .GroupBy(f => f.FamilyCategory?.Id.Value() ?? throw new InvalidOperationException($"Family '{f.Name}' has no category for condition selection."))
             .SelectMany(group => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(project,
                 new ScheduleProfile("Family Foundry condition", group.First().FamilyCategory!.Name) { Filters = [condition] }, group))
             .ToHashSet();
         return candidates.Where(f => matchingIds.Contains(f.Id.Value())).ToList();
+    }
+
+    private static HashSet<long>? MatchLocalFamilyParameter(Document project, List<Family> candidates,
+        ScheduleFilterSpec condition) {
+        var parameters = candidates.ToDictionary(f => f, f => f.GetFamilySymbolIds()
+            .Select(project.GetElement).OfType<FamilySymbol>()
+            .SelectMany(symbol => symbol.GetParameters(condition.FieldName).Select(parameter => (symbol, parameter)))
+            .Where(pair => !pair.parameter.IsShared &&
+                           (pair.parameter.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.INVALID)
+            .ToList());
+        if (parameters.Values.All(found => found.Count == 0)) return null;
+
+        var matches = new HashSet<long>();
+        foreach (var (family, found) in parameters) {
+            if (found.Select(pair => pair.parameter.Id.Value()).Distinct().Count() > 1)
+                throw new InvalidOperationException(
+                    $"IncludeByCondition field '{condition.FieldName}' resolves to multiple local parameters in family '{family.Name}'.");
+            if (found.Any(pair => condition.FilterType == ScheduleAuthoredFilterType.HasParameter ||
+                                  LocalRule(project, pair.parameter, condition).ElementPasses(pair.symbol)))
+                matches.Add(family.Id.Value());
+        }
+        return matches;
+    }
+
+    private static FilterRule LocalRule(Document project, Parameter parameter, ScheduleFilterSpec condition) {
+        var id = parameter.Id;
+        var value = condition.Value ?? string.Empty;
+        InvalidOperationException Invalid(string reason) => new(
+            $"IncludeByCondition cannot apply {condition.FilterType} to local field '{condition.FieldName}': {reason}");
+
+        if (condition.FilterType is ScheduleAuthoredFilterType.HasValue or ScheduleAuthoredFilterType.HasNoValue)
+            return condition.FilterType == ScheduleAuthoredFilterType.HasValue
+                ? ParameterFilterRuleFactory.CreateHasValueParameterRule(id)
+                : ParameterFilterRuleFactory.CreateHasNoValueParameterRule(id);
+        if (condition.FilterType is ScheduleAuthoredFilterType.IsAssociatedWithGlobalParameter or
+            ScheduleAuthoredFilterType.IsNotAssociatedWithGlobalParameter) {
+            var globalId = GlobalParametersManager.FindByName(project, value);
+            if (globalId == ElementId.InvalidElementId)
+                throw Invalid($"global parameter '{value}' was not found.");
+            return condition.FilterType == ScheduleAuthoredFilterType.IsAssociatedWithGlobalParameter
+                ? ParameterFilterRuleFactory.CreateIsAssociatedWithGlobalParameterRule(id, globalId)
+                : ParameterFilterRuleFactory.CreateIsNotAssociatedWithGlobalParameterRule(id, globalId);
+        }
+
+        return parameter.StorageType switch {
+            StorageType.String => StringRule(id, condition.FilterType, value, Invalid),
+            StorageType.Integer when int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) =>
+                NumericRule(id, condition.FilterType, parsed, Invalid),
+            StorageType.Double when TryParseDouble(project, parameter, value, out var parsed) =>
+                NumericRule(id, condition.FilterType, parsed, Invalid),
+            StorageType.ElementId when long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) =>
+                ElementIdRule(id, condition.FilterType, parsed.ToElementId(), Invalid),
+            StorageType.Integer or StorageType.Double or StorageType.ElementId =>
+                throw Invalid($"'{value}' is not a valid {parameter.StorageType} value."),
+            _ => throw Invalid($"StorageType.{parameter.StorageType} is unsupported.")
+        };
+    }
+
+    private static FilterRule StringRule(ElementId id, ScheduleAuthoredFilterType type, string value,
+        Func<string, InvalidOperationException> invalid) => type switch {
+        ScheduleAuthoredFilterType.Equal => ParameterFilterRuleFactory.CreateEqualsRule(id, value),
+        ScheduleAuthoredFilterType.NotEqual => ParameterFilterRuleFactory.CreateNotEqualsRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThan => ParameterFilterRuleFactory.CreateGreaterRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThanOrEqual => ParameterFilterRuleFactory.CreateGreaterOrEqualRule(id, value),
+        ScheduleAuthoredFilterType.LessThan => ParameterFilterRuleFactory.CreateLessRule(id, value),
+        ScheduleAuthoredFilterType.LessThanOrEqual => ParameterFilterRuleFactory.CreateLessOrEqualRule(id, value),
+        ScheduleAuthoredFilterType.Contains => ParameterFilterRuleFactory.CreateContainsRule(id, value),
+        ScheduleAuthoredFilterType.NotContains => ParameterFilterRuleFactory.CreateNotContainsRule(id, value),
+        ScheduleAuthoredFilterType.BeginsWith => ParameterFilterRuleFactory.CreateBeginsWithRule(id, value),
+        ScheduleAuthoredFilterType.NotBeginsWith => ParameterFilterRuleFactory.CreateNotBeginsWithRule(id, value),
+        ScheduleAuthoredFilterType.EndsWith => ParameterFilterRuleFactory.CreateEndsWithRule(id, value),
+        ScheduleAuthoredFilterType.NotEndsWith => ParameterFilterRuleFactory.CreateNotEndsWithRule(id, value),
+        _ => throw invalid($"{type} is unsupported for StorageType.String.")
+    };
+
+    private static FilterRule NumericRule(ElementId id, ScheduleAuthoredFilterType type, int value,
+        Func<string, InvalidOperationException> invalid) => type switch {
+        ScheduleAuthoredFilterType.Equal => ParameterFilterRuleFactory.CreateEqualsRule(id, value),
+        ScheduleAuthoredFilterType.NotEqual => ParameterFilterRuleFactory.CreateNotEqualsRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThan => ParameterFilterRuleFactory.CreateGreaterRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThanOrEqual => ParameterFilterRuleFactory.CreateGreaterOrEqualRule(id, value),
+        ScheduleAuthoredFilterType.LessThan => ParameterFilterRuleFactory.CreateLessRule(id, value),
+        ScheduleAuthoredFilterType.LessThanOrEqual => ParameterFilterRuleFactory.CreateLessOrEqualRule(id, value),
+        _ => throw invalid($"{type} is unsupported for StorageType.Integer.")
+    };
+
+    private static FilterRule NumericRule(ElementId id, ScheduleAuthoredFilterType type, double value,
+        Func<string, InvalidOperationException> invalid) => type switch {
+        ScheduleAuthoredFilterType.Equal => ParameterFilterRuleFactory.CreateEqualsRule(id, value, 1e-9),
+        ScheduleAuthoredFilterType.NotEqual => ParameterFilterRuleFactory.CreateNotEqualsRule(id, value, 1e-9),
+        ScheduleAuthoredFilterType.GreaterThan => ParameterFilterRuleFactory.CreateGreaterRule(id, value, 1e-9),
+        ScheduleAuthoredFilterType.GreaterThanOrEqual => ParameterFilterRuleFactory.CreateGreaterOrEqualRule(id, value, 1e-9),
+        ScheduleAuthoredFilterType.LessThan => ParameterFilterRuleFactory.CreateLessRule(id, value, 1e-9),
+        ScheduleAuthoredFilterType.LessThanOrEqual => ParameterFilterRuleFactory.CreateLessOrEqualRule(id, value, 1e-9),
+        _ => throw invalid($"{type} is unsupported for StorageType.Double.")
+    };
+
+    private static FilterRule ElementIdRule(ElementId id, ScheduleAuthoredFilterType type, ElementId value,
+        Func<string, InvalidOperationException> invalid) => type switch {
+        ScheduleAuthoredFilterType.Equal => ParameterFilterRuleFactory.CreateEqualsRule(id, value),
+        ScheduleAuthoredFilterType.NotEqual => ParameterFilterRuleFactory.CreateNotEqualsRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThan => ParameterFilterRuleFactory.CreateGreaterRule(id, value),
+        ScheduleAuthoredFilterType.GreaterThanOrEqual => ParameterFilterRuleFactory.CreateGreaterOrEqualRule(id, value),
+        ScheduleAuthoredFilterType.LessThan => ParameterFilterRuleFactory.CreateLessRule(id, value),
+        ScheduleAuthoredFilterType.LessThanOrEqual => ParameterFilterRuleFactory.CreateLessOrEqualRule(id, value),
+        _ => throw invalid($"{type} is unsupported for StorageType.ElementId.")
+    };
+
+    private static bool TryParseDouble(Document project, Parameter parameter, string value, out double parsed) {
+        var dataType = parameter.Definition.GetDataType();
+        return UnitUtils.IsMeasurableSpec(dataType)
+            ? ParameterStringIo.TryParseMeasuredValue(project.GetUnits(), dataType, value, out parsed)
+            : double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
     }
 }

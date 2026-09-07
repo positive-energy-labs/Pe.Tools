@@ -218,6 +218,14 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
                 Is.EqualTo(new[] { "Prefix Fan Keep" }));
 
+            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject {
+                ["FieldName"] = "Keep", ["FilterType"] = "BeginsWith", ["Value"] = "sel"
+            };
+            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
+                Is.EqualTo(new[] { "Prefix Fan Keep" }),
+                "A native local string rule must retain any-type semantics without a placed instance.");
+
             settings["FilterFamilies"]!["IncludeByCondition"]!["FieldName"] = "Missing condition field";
             converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
             Assert.That(() => project.FamiliesMatching(converted.Patch.Select),
