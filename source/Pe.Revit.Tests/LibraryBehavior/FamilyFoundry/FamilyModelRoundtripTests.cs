@@ -13,6 +13,18 @@ public sealed class FamilyModelRoundtripTests {
     public void SetUp(UIApplication ui) => this._ui = ui;
 
     [Test]
+    public void Rejected_template_placement_leaves_no_open_document() {
+        var application = this._ui.Application;
+        var before = application.Documents.Cast<Document>().ToArray();
+        var model = new FamilyModel { Family = new FamilyModelHeader {
+            Name = "Rejected placement", Category = FamilyCategory.GenericModels,
+            Template = "Generic Model", Placement = FamilyModelPlacement.ViewBased
+        } };
+        Assert.Throws<InvalidOperationException>(() => FamilyModelBuild.Build(application, model));
+        Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(before));
+    }
+
+    [Test]
     public void Reapply_moves_a_named_plane_in_the_same_family() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Plane reapply", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },

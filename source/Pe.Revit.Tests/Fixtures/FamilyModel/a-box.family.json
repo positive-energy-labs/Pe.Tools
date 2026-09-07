@@ -4,7 +4,7 @@
     "Width":   { "dataType": "Length", "value": "24in" },
     "Height":  { "dataType": "Length", "value": "36in" },
     "Depth":   { "dataType": "Length", "value": "8in" },
-    "Voltage": { "dataType": "ElectricalPotential", "value": 480 }
+    "Voltage": { "dataType": "ElectricalPotential", "value": "480 V" }
   },
   "types": { "Standard": {}, "Wide": { "Width": "36in" } },
   "datums": {

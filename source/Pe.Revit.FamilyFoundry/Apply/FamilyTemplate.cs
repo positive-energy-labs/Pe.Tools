@@ -36,11 +36,16 @@ public static class FamilyTemplate {
         var path = ResolveTemplatePath(application, header.Template);
         var document = application.NewFamilyDocument(path)
                        ?? throw new InvalidOperationException($"Revit did not create a family document from template '{path}'.");
-        var actual = document.OwnerFamily.FamilyPlacementType.ToString();
-        if (actual != header.Placement.ToString())
-            throw new InvalidOperationException($"Template '{header.Template}' creates {actual} families, but the model declares {header.Placement}.");
-        ConfigureFamily(document, header);
-        return document;
+        try {
+            var actual = document.OwnerFamily.FamilyPlacementType.ToString();
+            if (actual != header.Placement.ToString())
+                throw new InvalidOperationException($"Template '{header.Template}' creates {actual} families, but the model declares {header.Placement}.");
+            ConfigureFamily(document, header);
+            return document;
+        } catch {
+            _ = document.Close(false);
+            throw;
+        }
     }
 
     /// <summary>Sets category and name inside its own transaction; the document must not be modifiable.</summary>
@@ -52,7 +57,8 @@ public static class FamilyTemplate {
         _ = transaction.Start();
         document.OwnerFamily.FamilyCategory = category;
         document.OwnerFamily.Name = header.Name.Trim();
-        _ = transaction.Commit();
+        if (transaction.Commit() != TransactionStatus.Committed)
+            throw new InvalidOperationException($"Family header '{header.Name}' did not commit.");
     }
 
     /// <summary>Token → BuiltInCategory by squashed English label (`GenericModels` == `Generic Models`).</summary>
