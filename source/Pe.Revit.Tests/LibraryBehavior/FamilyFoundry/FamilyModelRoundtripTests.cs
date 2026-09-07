@@ -327,6 +327,9 @@ public sealed class FamilyModelRoundtripTests {
             });
             var originals = actual.Values.Select(a => a.GetOriginalMemberIds().Single()).ToArray();
             Assert.That(originals.Distinct(), Has.Count.EqualTo(2), "Each array must own a separately placed seed.");
+            var captured = document.CaptureFamilyModel();
+            Assert.That(captured.Arrays.Values.Select(array => array.Member).Distinct(), Has.Count.EqualTo(1),
+                "Identical array seeds must capture as one reusable definition without merging native instances.");
             Assert.That(actual.Values.SelectMany(a => Instances(document, a))
                 .All(i => document.FamilyManager.GetAssociatedFamilyParameter(i.LookupParameter("_vane length")) is not null &&
                           document.FamilyManager.GetAssociatedFamilyParameter(i.LookupParameter("_vane thickness")) is not null), Is.True,
