@@ -845,6 +845,63 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [TestCase("800 - 120v - 11.5 gal/day")]
+    [TestCase("800 - 120v - 16 gal/day")]
+    [TestCase("800 - 240v - 23.3 gal/day")]
+    [TestCase("800 - 240v - 34.6 gal/day")]
+    [Timeout(600000)]
+    public void AprilAire_dimension_labels_preserve_all_type_values_and_current_type(string currentType) {
+        const string familyName = "AprilAire 800 801 Series Humidifier";
+        const string profilePath = "CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json";
+        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
+        var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(AprilAire_dimension_labels_preserve_all_type_values_and_current_type));
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(original, copy);
+        var project = this._application.OpenDocumentFile(copy);
+        try {
+            var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+                .Single(profile => (string)profile["source"]! == profilePath)["settings"]!;
+            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, project, CompanyCorpusDefinitions());
+            var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(candidate => candidate.Name == familyName);
+            string CurrentTypeName(Family target) {
+                var document = project.EditFamily(target);
+                try { return document.FamilyManager.CurrentType.Name; }
+                finally { document.Close(false); }
+            }
+            var seed = project.EditFamily(family);
+            try {
+                using var transaction = new Transaction(seed, "Select initial type");
+                transaction.Start();
+                seed.FamilyManager.CurrentType = seed.FamilyManager.Types.Cast<FamilyType>().Single(type => type.Name == currentType);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                family = seed.LoadFamily(project, new DefaultFamilyLoadOptions());
+            } finally { seed.Close(false); }
+            Assert.That(CurrentTypeName(family), Is.EqualTo(currentType));
+
+            ReconcileFamily Apply(Family target) {
+                var operation = new ReconcileFamily(conversion.Patch,
+                    sharedSource: document => new FamilySharedParameterSource(document, CompanyCorpusDefinitions()));
+                using var processor = new OperationProcessor(project, conversion.Options);
+                var (contexts, _) = processor.SelectFamilies(() => [target]).ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True,
+                    "Every value, unset state, and formula must survive dimension-label regeneration without residue.");
+                return operation;
+            }
+
+            Apply(family);
+            var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(candidate => candidate.Name == familyName);
+            Assert.That(CurrentTypeName(loaded), Is.EqualTo(currentType));
+            var repeated = Apply(loaded);
+            Assert.That(repeated.LastPlan!.Changes, Is.Empty);
+        } finally {
+            project.Close(false);
+            Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash));
+        }
+    }
+
     [Test, Timeout(600000)]
     public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
         const string selectionVariable = "PE_FF_OLD_TEMPLATE_FAMILY_SELECTION";
