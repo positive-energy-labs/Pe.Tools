@@ -23,6 +23,23 @@ test("literal family fixture renders the canonical dense workspace without famil
   expect(familySearch({ source: "fixture" }).source).toBe("fixture");
   expect(familySearch({ source: "Fixture" }).source).toBeUndefined();
   expect(familySearch({ source: "fixture " }).source).toBeUndefined();
+  expect(
+    familySearch({
+      source: "fixture",
+      fixture: "box",
+      capture: "true",
+      thread: " review ",
+      doc: "C:\\Models\\A.rfa",
+      target: " ff-profile-proof-25 ",
+    }),
+  ).toEqual({
+    source: "fixture",
+    fixture: "box",
+    capture: true,
+    thread: "review",
+    doc: "C:\\Models\\A.rfa",
+    target: "ff-profile-proof-25",
+  });
 
   render(
     <QueryClientProvider client={new QueryClient()}>
