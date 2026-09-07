@@ -373,6 +373,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     private static void AssertCompanyLiteral(string profilePath, Document document) {
+        if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json") {
+            var sound = document.FamilyManager.get_Parameter("PE_G___SoundLevel");
+            Assert.That(sound.Definition.GetDataType(), Is.EqualTo(SpecTypeId.Number));
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                Assert.That(type.AsDouble(sound), Is.EqualTo(4d).Within(1e-9), $"{profilePath}: {type.Name}/PE_G___SoundLevel");
+        }
         var expected = profilePath.Replace('\\', '/') switch {
             "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json" => (Name: "PE_M_Fan_ExternalStaticPressure", Type: (string?)null,
                 Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.2, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
