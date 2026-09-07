@@ -475,13 +475,16 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     [Test, Timeout(600000)]
     public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
+        const string selectionVariable = "PE_FF_OLD_TEMPLATE_FAMILY_SELECTION";
         var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
         var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_all_editable_mechanical_families_migrate_company_mapping));
+        var checkpointPath = Path.Combine(output, "company-template-migration.json");
         var copy = Path.Combine(output, "Old_Template.rvt");
         File.Copy(original, copy);
         var project = this._application.OpenDocumentFile(copy);
-        var evidence = new JArray();
+        var evidence = new JObject { ["status"] = "starting", ["fixtureSha256"] = string.Concat(originalHash.Select(value => value.ToString("X2"))),
+            ["selectionInput"] = Environment.GetEnvironmentVariable(selectionVariable), ["completed"] = new JArray(), ["remaining"] = new JArray() };
         var failures = new List<string>();
         try {
             var mappings = CompanyNormalizationFixture.MechanicalMappings();
@@ -494,40 +497,78 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
                 .Select(f => f.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
             Assert.That(families, Is.Not.Empty, "The real template must provide migration candidates.");
-            foreach (var familyName in families) {
+            var selectionPath = Environment.GetEnvironmentVariable(selectionVariable);
+            var requested = selectionPath is null ? families : File.ReadAllLines(selectionPath)
+                .Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
+            Assert.That(requested, Is.Not.Empty, $"{selectionVariable} must name at least one family.");
+            Assert.That(requested.Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(requested.Count), "Selection contains duplicate family names.");
+            Assert.That(requested.Except(families, StringComparer.Ordinal), Is.Empty, "Selection contains ineligible or missing family names.");
+            var selected = families.Where(requested.ToHashSet(StringComparer.Ordinal).Contains).ToList();
+            evidence["status"] = "running";
+            evidence["eligible"] = new JArray(families);
+            evidence["selected"] = new JArray(selected);
+            evidence["unselected"] = new JArray(families.Except(selected, StringComparer.Ordinal));
+            evidence["remaining"] = new JArray(selected);
+            WriteCheckpoint(checkpointPath, evidence);
+            foreach (var familyName in selected) {
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                var familyFailures = new List<string>();
                 var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
                 var originalId = family.Id;
+                var originalUniqueId = family.UniqueId;
                 var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
                 var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
-                var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
+                var (contexts, processorMs) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
                 var (_, error) = contexts.Single().OperationLogs;
                 var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().SingleOrDefault(f => f.Name == familyName);
-                var entry = new JObject { ["family"] = familyName, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt), ["error"] = error?.ToString() };
-                evidence.Add(entry);
-                if (loaded is null) { failures.Add($"{familyName}: loaded family disappeared"); continue; }
-                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
-                if (error is not null || operation.LastReceipt?.Converged != true) {
-                    failures.Add($"{familyName}: {error?.Message ?? "No committed converged receipt"}");
-                    if (loaded.Id != originalId) failures.Add($"{familyName}: failed migration changed project identity");
-                    if (!JToken.DeepEquals(JToken.FromObject(before.Parameters), JToken.FromObject(after.Parameters)))
-                        failures.Add($"{familyName}: failed migration changed the loaded parameter matrix");
-                    continue;
+                var assertions = new JObject { ["loadedFamilyPresent"] = loaded is not null,
+                    ["committedConverged"] = error is null && operation.LastReceipt?.Converged == true };
+                if (loaded is null) familyFailures.Add("loaded family disappeared");
+                else {
+                    var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
+                    if (error is not null || operation.LastReceipt?.Converged != true) {
+                        familyFailures.Add(error?.Message ?? "No committed converged receipt");
+                        assertions["rollbackIdentityPreserved"] = loaded.Id == originalId && loaded.UniqueId == originalUniqueId;
+                        assertions["rollbackParameterMatrixPreserved"] = JToken.DeepEquals(JToken.FromObject(before.Parameters), JToken.FromObject(after.Parameters));
+                        if (assertions.Value<bool>("rollbackIdentityPreserved") != true) familyFailures.Add("failed migration changed project identity");
+                        if (assertions.Value<bool>("rollbackParameterMatrixPreserved") != true) familyFailures.Add("failed migration changed the loaded parameter matrix");
+                    } else {
+                        assertions["completeParameterEvidence"] = before.Issues.Count == 0 && after.Issues.Count == 0;
+                        if (assertions.Value<bool>("completeParameterEvidence") != true) familyFailures.Add("incomplete parameter evidence");
+                        var exact = definitions.Count(definition => after.Parameters.Any(parameter => parameter.Definition.Identity.Name == definition.Name &&
+                            parameter.Definition.Identity.SharedGuid == definition.DownloadOptions.GetGuid().ToString()));
+                        assertions["exactSharedIdentityCount"] = exact;
+                        assertions["all38SharedIdentities"] = exact == definitions.Count;
+                        if (exact != definitions.Count) familyFailures.Add($"exact shared identities: {exact}/{definitions.Count}");
+                    }
                 }
-                if (before.Issues.Count != 0 || after.Issues.Count != 0) failures.Add($"{familyName}: incomplete parameter evidence");
-                foreach (var definition in definitions) {
-                    var parameter = after.Parameters.SingleOrDefault(p => p.Definition.Identity.Name == definition.Name);
-                    if (parameter?.Definition.Identity.SharedGuid != definition.DownloadOptions.GetGuid().ToString())
-                        failures.Add($"{familyName}: exact shared identity missing for {definition.Name}");
-                }
+                timer.Stop();
+                failures.AddRange(familyFailures.Select(failure => $"{familyName}: {failure}"));
+                ((JArray)evidence["completed"]!).Add(new JObject { ["familyName"] = familyName, ["familyId"] = originalId.Value(),
+                    ["familyUniqueId"] = originalUniqueId, ["result"] = familyFailures.Count == 0 ? "passed" : "failed",
+                    ["elapsedMs"] = timer.Elapsed.TotalMilliseconds, ["processorMs"] = processorMs, ["contextMs"] = contexts.Single().TotalMs,
+                    ["assertions"] = assertions, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt),
+                    ["error"] = error?.ToString(), ["failures"] = new JArray(familyFailures) });
+                evidence["remaining"] = new JArray(selected.Skip(((JArray)evidence["completed"]!).Count));
+                WriteCheckpoint(checkpointPath, evidence);
             }
-            File.WriteAllText(Path.Combine(output, "company-template-migration.json"), evidence.ToString());
+            evidence["status"] = failures.Count == 0 ? "passed" : "completedWithFailures";
+            WriteCheckpoint(checkpointPath, evidence);
             Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
         } finally {
-            File.WriteAllText(Path.Combine(output, "company-template-migration.json"), evidence.ToString());
+            if (evidence.Value<string>("status") == "running") evidence["status"] = "interrupted";
+            WriteCheckpoint(checkpointPath, evidence);
             project.Close(false);
             Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash), "Original template fixture was modified.");
         }
+    }
+
+    private static void WriteCheckpoint(string path, JObject evidence) {
+        var pending = path + ".pending";
+        File.WriteAllText(pending, evidence.ToString());
+        if (File.Exists(path)) File.Replace(pending, path, null);
+        else File.Move(pending, path);
     }
 
     [Test]
