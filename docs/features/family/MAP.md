@@ -4,6 +4,16 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
+Latest native checkpoint: wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed.
+Extraction parity, schema evidence, exact-alias refusal rollback, invalid-matrix rollback,
+and connector-host identity probe passed. Raw internal parameter schemas contain descriptions
+under constants entries with id=description; N owns the production reader correction.
+Native host dependencies distinguish coincident plane/nested-face connectors; P owns removal
+of the overlap inference. Matrix per-type values, GRD spacing before arrays, Fixture Units
+association, selector fixture instance filtering, and metadata readback remain red.
+PID 97760 exited, native settings restored exactly, and protected identities were preserved.
+Evidence: Pe.Tools-ff-proof/.artifacts/runs/wave22, including TRX and cleanup verification.
+
 Wave21 at 141877b ran eight independent native checks: 0 passed, 8 failed.
 Installed API metadata identifies GetParameterSchema as internal: the public reflection
 lookup cannot find it. Integrated 3294fbb retains parameter rows on optional tooltip errors
