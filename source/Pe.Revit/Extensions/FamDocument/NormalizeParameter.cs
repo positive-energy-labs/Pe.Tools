@@ -13,8 +13,10 @@ public static class FamilyDocumentNormalizeParameter {
         if (shared is not null && source.Definition.GetDataType() != shared.GetDataType())
             throw new InvalidOperationException($"Cannot natively replace '{source.Definition.Name}' with a different data type.");
         var replacement = source;
-        // Only shared-to-shared replacement needs a temporary local definition.
-        if (source.IsShared)
+        // Shared replacement cannot create an external definition while another parameter owns its name.
+        if (!source.IsShared && shared is not null && source.Definition.Name == shared.Name)
+            fm.RenameParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"));
+        else if (source.IsShared)
             replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
         else {

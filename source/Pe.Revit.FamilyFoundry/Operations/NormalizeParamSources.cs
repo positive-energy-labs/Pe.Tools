@@ -87,6 +87,8 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     continue;
                 }
                 doc.TransferAndRemoveParameter(source, target);
+                doc.Document.Regenerate();
+                fm = doc.FamilyManager;
                 logs.Add(new LogEntry(sourceName).Success($"Transferred references to '{targetName}' and removed source; destination values win."));
             }
         } finally { if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType; }

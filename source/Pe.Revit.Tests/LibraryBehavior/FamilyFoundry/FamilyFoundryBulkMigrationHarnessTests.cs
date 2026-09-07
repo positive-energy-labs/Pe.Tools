@@ -332,8 +332,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(document.FamilyManager.FindParameter("Width"), Is.Null);
             foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
                 Assert.That(type.AsDouble(parameter), Is.EqualTo(5.0));
-            using var source = new FamilySharedParameterSource(document, definitions);
-            Assert.That(source.GetDefinition(requested.Name!).Description, Is.EqualTo(requested.Description), "native source tooltip; not a claim of internal-definition readback");
+            using (var source = new FamilySharedParameterSource(document, definitions))
+                Assert.That(source.GetDefinition(requested.Name!).Description, Is.EqualTo(requested.Description), "native source tooltip; not a claim of internal-definition readback");
             Assert.That(this._application.SharedParametersFilename, Is.EqualTo(originalSetting));
         } finally { document.Close(false); }
     }
