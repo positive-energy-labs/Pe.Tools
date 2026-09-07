@@ -79,10 +79,5 @@ public sealed class FamilySharedParameterSource(Document document,
         return SharedParameterBinder.EnsureDefinition(this._file, definition);
     }
 
-    internal bool IsSourceDescription(string name, string? description) {
-        try { return string.Equals(this.Find(name).Description ?? "", description ?? "", StringComparison.Ordinal); }
-        catch { return false; }
-    }
-
     public void Dispose() => this._file?.Dispose();
 }

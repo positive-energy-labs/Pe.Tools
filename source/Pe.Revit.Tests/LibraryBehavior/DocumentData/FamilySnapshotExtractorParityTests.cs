@@ -195,14 +195,23 @@ public sealed class FamilySnapshotExtractorParityTests {
             foreach (var parameter in emitted["parameters"]!.OfType<JObject>()) {
                 Assert.That(parameter["id"]?.Value<long>(), Is.Not.Zero);
                 Assert.That(parameter["kind"]?.Value<string>(), Is.AnyOf("local", "shared"));
-                Assert.That(parameter["rawJson"] != null ^ parameter["error"] != null, Is.True,
-                    $"Probe '{parameter["name"]}' must emit raw JSON or one exact unwrapped error.");
-                if (parameter["rawJson"]?.Value<string>() is not { } rawJson) continue;
+                Assert.That(parameter["error"], Is.Null, parameter["error"]?.Value<string>());
+                Assert.That(parameter["rawJson"]?.Value<string>(), Is.Not.Empty);
+                var rawJson = parameter["rawJson"]!.Value<string>()!;
                 var schema = JObject.Parse(rawJson);
-                if (schema["description"] is { Type: not JTokenType.Null } observed)
-                    Assert.That(observed.Value<string>(), Is.EqualTo(parameter["expectedDescription"]?.Value<string>()),
-                        $"Observed schema description for '{parameter["name"]}' did not preserve the authored value.");
+                var description = schema["constants"]?.OfType<JObject>()
+                    .SingleOrDefault(constant => constant.Value<string>("id") == "description");
+                Assert.That(description?.Value<string>("value"),
+                    Is.EqualTo(parameter["expectedDescription"]?.Value<string>()),
+                    $"Schema constants did not preserve the authored description for '{parameter["name"]}'.");
             }
+
+            var captured = FamilySnapshotExtractor.ExtractFromFamilyDocument(familyDocument);
+            Assert.That(captured.Issues.Where(issue => issue.Code == "FamilyParameterDescriptionReadFailed"), Is.Empty);
+            Assert.That(captured.Parameters.Single(parameter => parameter.Definition.Identity.Name == local.Definition.Name)
+                .Definition.Description, Is.EqualTo(localDescription));
+            Assert.That(captured.Parameters.Single(parameter => parameter.Definition.Identity.Name == shared.Definition.Name)
+                .Definition.Description, Is.EqualTo(sharedDescription));
 
             JObject Probe(FamilyParameter parameter, string kind, string expectedDescription) {
                 var row = new JObject {
