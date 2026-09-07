@@ -42,6 +42,46 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [TestCase("PE_P_LoadCalc_CWFU", false, false)]
+    [TestCase("PE_P_LoadCalc_CWFU", false, true)]
+    [TestCase("PE_P_LoadCalc_CWFU", true, false)]
+    [TestCase("PE_P_LoadCalc_CWFU", true, true)]
+    [TestCase("PE_E___FLA", false, false)]
+    [TestCase("PE_E___FLA", false, true)]
+    [TestCase("PE_E___FLA", true, false)]
+    [TestCase("PE_E___FLA", true, true)]
+    public void Shared_creation_native_group_and_file_scope_probe(string name, bool otherGroup, bool activeTemporaryFile) {
+        var document = this.NewFamily("FF shared creation probe");
+        var originalFile = this._application.SharedParametersFilename;
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Shared_creation_native_group_and_file_scope_probe));
+        var evidence = new JObject { ["name"] = name, ["otherGroup"] = otherGroup, ["activeTemporaryFile"] = activeTemporaryFile };
+        try {
+            var data = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+                RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Single(d => d.Name == name);
+            var options = data.DownloadOptions;
+            using var file = new TempSharedParamFile(document);
+            if (activeTemporaryFile) this._application.SharedParametersFilename = file.TempFileName;
+            var definition = SharedParameterBinder.EnsureDefinition(file, new SharedDefinitionSpec(name, options.GetSpecTypeId(),
+                Guid: options.GetGuid(), Description: data.Description ?? "", Visible: options.Visible, UserModifiable: !data.ReadOnly));
+            try {
+                evidence["guid"] = definition.GUID.ToString();
+                evidence["spec"] = definition.GetDataType().TypeId;
+                using var transaction = new Transaction(document, "Probe exact native shared creation");
+                transaction.Start();
+                var parameter = document.FamilyManager.AddParameter(definition, otherGroup ? new ForgeTypeId("") : GroupTypeId.Data, options.IsInstance);
+                Assert.That(parameter, Is.Not.Null);
+                evidence["created"] = true;
+                Assert.That(parameter.GUID, Is.EqualTo(options.GetGuid()));
+                transaction.RollBack();
+            } finally { this._application.SharedParametersFilename = originalFile; }
+        } catch (Exception error) { evidence["error"] = error.ToString(); throw; }
+        finally {
+            this._application.SharedParametersFilename = originalFile;
+            File.WriteAllText(Path.Combine(output, "shared-creation-probe.json"), evidence.ToString());
+            document.Close(false);
+        }
+    }
+
     [Test]
     public void Native_resolution_converts_local_and_shared_group_labels_before_pure_diff() {
         var document = this.NewFamily("FF native group resolution");
@@ -554,21 +594,24 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             var operation = WidthPatch();
             var receipts = new List<bool>();
-            var failure = new FailFamily(families[0].Name);
-            Assert.That(families.Select(f => f.Id).Distinct().Count(), Is.EqualTo(2));
+            var familyIds = families.Select(f => f.Id).ToArray();
+            var familyNames = families.Select(f => f.Name).ToArray();
+            var failure = new FailFamily(familyNames[0]);
+            Assert.That(familyIds.Distinct().Count(), Is.EqualTo(2));
             using var processor = new OperationProcessor(project, new ExecutionOptions { SingleTransaction = false });
             var (contexts, _) = processor.SelectFamilies(() => families)
                 .WithPerFamilyCallback(_ => receipts.Add(operation.LastReceipt?.Converged ?? false))
                 .ProcessQueue(new OperationQueue().Add(operation).Add(failure));
             Assert.That(contexts.Count, Is.EqualTo(2));
-            Assert.That(failure.Triggered, Is.True, $"Loaded names: {string.Join(", ", families.Select(f => f.Name))}; contexts: {string.Join(", ", contexts.Select(c => c.FamilyName))}");
+            Assert.That(failure.Triggered, Is.True, $"Loaded names: {string.Join(", ", familyNames)}; contexts: {string.Join(", ", contexts.Select(c => c.FamilyName))}");
             var (_, firstError) = contexts[0].OperationLogs;
             Assert.That(firstError?.Message, Does.Contain("injected failure"));
             Assert.That(receipts, Is.EqualTo(new[] { false, true }));
-            foreach (var family in families) {
+            foreach (var familyId in familyIds) {
+                var family = project.GetElement(familyId) as Family ?? throw new InvalidOperationException($"Loaded family {familyId} disappeared.");
                 var document = project.EditFamily(family);
                 try {
-                    if (family.Id == families[0].Id) AssertOriginalWidths(document);
+                    if (familyId == familyIds[0]) AssertOriginalWidths(document);
                     else foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
                         Assert.That(type.AsDouble(document.FamilyManager.FindParameter("Width")), Is.EqualTo(3.0));
                 } finally { document.Close(false); }

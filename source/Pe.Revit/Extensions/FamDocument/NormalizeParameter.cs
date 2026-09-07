@@ -12,10 +12,16 @@ public static class FamilyDocumentNormalizeParameter {
         var fm = document.FamilyManager;
         if (shared is not null && source.Definition.GetDataType() != shared.GetDataType())
             throw new InvalidOperationException($"Cannot natively replace '{source.Definition.Name}' with a different data type.");
-        // A temporary local name also handles shared-to-shared replacement with the same display name.
-        var replacement = fm.ReplaceParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
+        var replacement = source;
+        // Only shared-to-shared replacement needs a temporary local definition.
+        if (source.IsShared)
+            replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
-        else fm.RenameParameter(replacement, name);
+        else {
+            if (replacement.Definition.Name != name) fm.RenameParameter(replacement, name);
+            if (replacement.Definition is InternalDefinition definition && definition.GetGroupTypeId() != group) definition.SetGroupTypeId(group);
+            if (replacement.IsInstance != instance) { if (instance) fm.MakeInstance(replacement); else fm.MakeType(replacement); }
+        }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException($"Replacement of '{name}' did not commit.");
         return replacement;
     }
@@ -28,7 +34,8 @@ public static class FamilyDocumentNormalizeParameter {
         transaction.Start();
         var fm = document.FamilyManager;
         var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
-        source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
+        if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
+        else fm.RenameParameter(source, temporary);
         var dimensions = source.AssociatedDimensions(document).ToList();
         var arrays = source.AssociatedArrays(document).ToList();
         foreach (var parameter in source.AssociatedParameters.Cast<Parameter>().ToList()) {

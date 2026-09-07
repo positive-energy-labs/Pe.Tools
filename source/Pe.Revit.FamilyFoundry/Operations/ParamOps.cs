@@ -35,17 +35,19 @@ public sealed class AddParams((string Name, FamilyModelParameter Spec)[] paramet
         foreach (var (name, spec) in parameters) {
             try {
                 if (doc.FamilyManager.FindParameter(name) is not null) { logs.Add(new LogEntry(name).Skip("Already exists.")); continue; }
-                var group = spec.PropertiesGroup is { } pg ? SetParamMetadata.Group(pg) : new ForgeTypeId(string.Empty);
-                if (spec.Shared == true) {
-                    var definition = sharedSource?.Invoke(name) ?? throw new InvalidOperationException($"Shared parameter '{name}' has no definition source; supply one (APS cache or shared parameter file).");
-                    _ = doc.FamilyManager.AddParameter(definition, group, spec.IsInstance ?? false);
-                } else {
-                    _ = doc.FamilyManager.AddParameter(name, group, SetParamMetadata.Spec(spec.DataType ?? throw new InvalidOperationException($"'{name}' has no dataType.")), spec.IsInstance ?? false);
-                }
+                _ = Create(doc, name, spec, sharedSource);
                 logs.Add(new LogEntry(name).Success(spec.Shared == true ? "Added shared parameter." : $"Added {spec.DataType} parameter."));
             } catch (Exception ex) { logs.Add(new LogEntry(name).Error(ex)); }
         }
         return new OperationLog(this.Name, logs);
+    }
+
+    internal static FamilyParameter Create(FamilyDocument doc, string name, FamilyModelParameter spec, Func<string, ExternalDefinition?>? sharedSource) {
+        var group = spec.PropertiesGroup is { } pg ? SetParamMetadata.Group(pg) : new ForgeTypeId(string.Empty);
+        var parameter = spec.Shared == true
+            ? doc.FamilyManager.AddParameter(sharedSource?.Invoke(name) ?? throw new InvalidOperationException($"Shared parameter '{name}' has no definition source."), group, spec.IsInstance ?? false)
+            : doc.FamilyManager.AddParameter(name, group, SetParamMetadata.Spec(spec.DataType ?? throw new InvalidOperationException($"'{name}' has no dataType.")), spec.IsInstance ?? false);
+        return parameter ?? throw new InvalidOperationException($"Revit returned no parameter for '{name}' (group '{group.TypeId}', shared {spec.Shared == true}).");
     }
 }
 

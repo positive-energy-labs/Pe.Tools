@@ -39,9 +39,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     existing = doc.ReplaceDefinition(first, name, definition, propertiesGroup, spec.IsInstance ?? false);
                     nativeReplacement = true;
                 } else if (existing is null) {
-                    var added = new AddParams([(name, spec)], sharedSource).Execute(doc, context, group);
-                    OperationProcessor.ThrowOnErrors([added]);
-                    existing = fm.FindParameter(name)!;
+                    existing = AddParams.Create(doc, name, spec, sharedSource);
                 } else if (needsShared) {
                     existing = doc.ReplaceDefinition(existing, name, definition, propertiesGroup, spec.IsInstance ?? existing.IsInstance);
                 } else if (spec.Shared == false && existing.IsShared) {
@@ -55,7 +53,8 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 logs.Add(new LogEntry(name).Success(existed ? "Existing destination preferred; explicit writes follow." : "Destination created from explicit source rules."));
             }
             // Definitions are stable before value copying. A source used by multiple targets cannot be consumed early.
-            var work = transfers.Select(t => (Target: fm.FindParameter(t.Target)!,
+            if (mappings.Count > 0) doc.Document.Regenerate();
+            var work = transfers.Select(t => (Target: fm.FindParameter(t.Target) ?? throw new InvalidOperationException($"Created target '{t.Target}' is unavailable after regeneration."),
                 Sources: t.Sources.Select(fm.FindParameter).OfType<FamilyParameter>().ToList(), t.Strategy, t.PreservePopulated)).ToList();
             foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
                 var pending = work.Where(t => (!t.PreservePopulated || Blank(doc, type, t.Target)) &&
