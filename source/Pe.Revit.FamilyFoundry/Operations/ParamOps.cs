@@ -73,6 +73,8 @@ public sealed class SetParamMetadata((string Name, FamilyModelParameter Spec)[] 
     }
 
     public static ForgeTypeId Group(string label) {
+        if (label.Length == 0 || label.Equals("Other", StringComparison.OrdinalIgnoreCase))
+            return new ForgeTypeId(string.Empty);
         var labels = Pe.Revit.DocumentData.Parameters.RevitLabelCatalog.GetLabelToPropertyGroupMap();
         if (labels.TryGetValue(label, out var forge)) return forge;
         var requested = new ForgeTypeId(label);

@@ -64,12 +64,14 @@ public static class FamilyProfileConverter {
                 var label = (string?)local["DataType"] ?? "Text (Common)";
                 var spec = RevitLabelCatalog.ResolveSpec(label);
                 specs[name] = spec;
-                parameters[name] = new JObject {
-                    ["dataType"] = Enum.GetValues(typeof(DataType)).Cast<DataType>().First(t => SetParamMetadata.Spec(t) == spec).ToString(),
-                    ["propertiesGroup"] = SetParamMetadata.Group((string?)local["PropertiesGroup"] ?? "").TypeId
+                var parameter = new JObject {
+                    ["dataType"] = Enum.GetValues(typeof(DataType)).Cast<DataType>().First(t => SetParamMetadata.Spec(t) == spec).ToString()
                 };
-                if (local["IsInstance"] is not null) parameters[name]!["isInstance"] = local["IsInstance"]!.DeepClone();
-                if (local["Tooltip"] is { Type: JTokenType.String } tooltip) parameters[name]!["tooltip"] = tooltip.DeepClone();
+                if (local["PropertiesGroup"] is { Type: not JTokenType.Null } group)
+                    parameter["propertiesGroup"] = SetParamMetadata.Group(((string?)group)!).TypeId;
+                parameters[name] = parameter;
+                if (local["IsInstance"] is not null) parameter["isInstance"] = local["IsInstance"]!.DeepClone();
+                if (local["Tooltip"] is { Type: JTokenType.String } tooltip) parameter["tooltip"] = tooltip.DeepClone();
             }
         }
         var assignments = composed["SetKnownParams"]?.ToObject<SetKnownParamsSettings>();
@@ -622,10 +624,12 @@ public static class FamilyProfileConverter {
             return value;
         }
         if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
+            if (legacy.Spec == SpecTypeId.Number)
+                return spec == SpecTypeId.Number ? NormalizeLegacyLiteral(name, value)
+                    : throw new InvalidOperationException($"Legacy Number literal '{name}' cannot target {spec.TypeId}.");
             var legacyUnits = new Units(UnitSystem.Imperial);
             legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));
-            var source = legacy.Spec == SpecTypeId.Number ? NormalizeLegacyLiteral(name, value) : value;
-            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, source, out var legacyRaw)) {
+            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, value, out var legacyRaw)) {
                 var normalized = NormalizeLegacyLiteral(name, value);
                 if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, normalized, out legacyRaw))
                     throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");

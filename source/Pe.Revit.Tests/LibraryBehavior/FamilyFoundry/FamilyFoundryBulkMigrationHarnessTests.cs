@@ -5,6 +5,7 @@ using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 using Newtonsoft.Json;
@@ -455,6 +456,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var conversion = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
             var patch = conversion.Patch;
             AssertConnectorRule((JObject)profile, patch);
+            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json")
+                Assert.That(patch.Patch["parameters"]!["PE_G___SoundLevel"]!.Value<string>("value"), Is.EqualTo("4"));
             if (profilePath.Contains("/WaterFurnace-", StringComparison.Ordinal)) {
                 Assert.That(patch.Patch["parameters"]!["Model"]!["isInstance"], Is.Null,
                     "Omitted legacy scope must preserve the built-in parameter's current scope.");
@@ -533,6 +536,32 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private static bool HasEnabledConnectorRule(JObject profile) =>
         profile["settings"]?["MakeElectricalConnector"] is JObject settings && settings.Value<bool?>("Enabled") != false;
+
+    [Test, Category("CompanyCorpus")]
+    public void Public_converter_preserves_all_real_local_parameter_group_intent() {
+        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+            .OfType<JObject>().Where(profile => profile["settings"]?["AddFamilyParams"] is JObject).ToList();
+        var document = this.NewFamily("Company local parameter group conversion");
+        try {
+            foreach (var profile in profiles) {
+                var settings = new JObject { ["AddFamilyParams"] = profile["settings"]!["AddFamilyParams"]!.DeepClone() };
+                var patch = CompanyNormalizationFixture.ConvertProfileParameters(settings, document, []).Patch;
+                AssertLocalParameterGroups(settings, patch);
+            }
+        } finally { document.Close(false); }
+    }
+
+    private static void AssertLocalParameterGroups(JObject settings, FamilyPatch patch) {
+        if (settings["AddFamilyParams"] is not JObject add || add.Value<bool?>("Enabled") == false) return;
+        foreach (var local in add["Parameters"] ?? new JArray()) {
+            var parameter = patch.Patch["parameters"]![(string)local["Name"]!]!;
+            Assert.That(parameter["propertiesGroup"]?.Value<string>(),
+                Is.EqualTo(local["PropertiesGroup"] is { Type: not JTokenType.Null } group
+                    ? SetParamMetadata.Group(((string?)group)!).TypeId
+                    : null),
+                $"{local["Name"]}: omitted group must remain omitted; explicit Other must remain Revit's empty group id.");
+        }
+    }
 
     private static void AssertConnectorRule(JObject profile, FamilyPatch patch) {
         var settings = profile["settings"]?["MakeElectricalConnector"] as JObject;
