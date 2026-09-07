@@ -1,4 +1,5 @@
 import { define } from "gunshi";
+import { readFileSync } from "node:fs";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
@@ -192,6 +193,10 @@ export class PeaCliCommands {
           type: "string",
           description: "JSON request object. Omit for NoRequest operations.",
         },
+        requestFile: {
+          type: "string",
+          description: "Path to a JSON request object. Cannot be combined with --request.",
+        },
         verbosity: {
           type: "string",
           description: "Output size: compact, hints, or full.",
@@ -201,7 +206,7 @@ export class PeaCliCommands {
       run: async (ctx) => {
         const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
-        const request = parseOptionalJson(ctx.values.request);
+        const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
         const result = await this.createHostRpcCaller(ctx.values).callOperation(
           key,
           request,
@@ -536,8 +541,10 @@ function parseLogTarget(target: unknown): HostLogTarget {
   }
 }
 
-function parseOptionalJson(value: unknown): unknown {
+function parseOptionalJson(value: unknown, file: unknown): unknown {
   const text = firstNonBlank(value);
-  if (!text) return undefined;
-  return JSON.parse(text);
+  const path = firstNonBlank(file);
+  if (text && path) throw new Error("Use either --request or --request-file, not both.");
+  if (!text && !path) return undefined;
+  return JSON.parse(path ? readFileSync(path, "utf8") : text!);
 }

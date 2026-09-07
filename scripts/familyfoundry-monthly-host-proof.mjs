@@ -191,8 +191,9 @@ function convertProfiles() {
 }
 
 function hostCall(label, key, request) {
-  writeJson(join(output, "requests", `${label}.json`), { key, request, bridgeSessionId: session });
-  const result = pea(["host", "operations", "call", "--host", host, "--bridgeSessionId", session, "--key", key, "--request", JSON.stringify(request), "--verbosity", "compact"], label);
+  const requestPath = join(output, "requests", `${label}.json`);
+  writeJson(requestPath, request);
+  const result = pea(["host", "operations", "call", "--host", host, "--bridgeSessionId", session, "--key", key, "--request-file", requestPath, "--verbosity", "compact"], label);
   const envelope = parsePeaJson(result.stdout, label);
   writeJson(join(output, "responses", `${label}.json`), envelope);
   if (!envelope.ok) throw new Error(`${key}: ${envelope.message ?? "Host operation failed"}`);
