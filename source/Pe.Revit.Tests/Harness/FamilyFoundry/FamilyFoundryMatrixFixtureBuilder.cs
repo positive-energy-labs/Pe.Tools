@@ -264,9 +264,10 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             familyDocument,
             sourceLinearDimension,
             sourceAngularDimension,
-            sourceRadialDimension);
-        CreateLabeledArrayTopology(familyDocument, sourceArrayCount);
-        CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth);
+            sourceRadialDimension,
+            observe);
+        CreateLabeledArrayTopology(familyDocument, sourceArrayCount, observe);
+        CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth, observe);
         observe?.Invoke("afterTopology", familyDocument);
 
         familyDocument.Regenerate();
@@ -415,7 +416,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         Document familyDocument,
         FamilyParameter linearLabel,
         FamilyParameter angularLabel,
-        FamilyParameter radialLabel
+        FamilyParameter radialLabel,
+        Action<string, Document>? observe
     ) {
         var view = GetPlanView(familyDocument);
         var factory = familyDocument.FamilyCreate;
@@ -426,32 +428,45 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         var linearReferences = new ReferenceArray();
         linearReferences.Append(linearA.GeometryCurve.Reference);
         linearReferences.Append(linearB.GeometryCurve.Reference);
+        observe?.Invoke("beforeLinearDimensionCreate", familyDocument);
         var linearDimension = factory.NewLinearDimension(
             view,
             Line.CreateBound(new XYZ(0, -4, 0), new XYZ(4, -4, 0)),
             linearReferences);
+        observe?.Invoke("afterLinearDimensionCreate", familyDocument);
         linearDimension.FamilyLabel = linearLabel;
+        observe?.Invoke("afterLinearDimensionLabel", familyDocument);
 
         var angleA = factory.NewModelCurve(Line.CreateBound(XYZ.Zero, new XYZ(4, 0, 0)), sketchPlane);
         var angleB = factory.NewModelCurve(Line.CreateBound(XYZ.Zero, new XYZ(4, 4, 0)), sketchPlane);
+        observe?.Invoke("beforeAngularDimensionCreate", familyDocument);
         var angularDimension = factory.NewAngularDimension(
             view,
             Arc.Create(XYZ.Zero, 3.0, 0.0, Math.PI / 4.0, XYZ.BasisX, XYZ.BasisY),
             angleA.GeometryCurve.Reference,
             angleB.GeometryCurve.Reference);
+        observe?.Invoke("afterAngularDimensionCreate", familyDocument);
         angularDimension.FamilyLabel = angularLabel;
+        observe?.Invoke("afterAngularDimensionLabel", familyDocument);
 
         var radialModelCurve = factory.NewModelCurve(
             Arc.Create(new XYZ(8, 0, 0), 1.0, 0.0, Math.PI, XYZ.BasisX, XYZ.BasisY),
             sketchPlane);
+        observe?.Invoke("beforeRadialDimensionCreate", familyDocument);
         var radialDimension = factory.NewRadialDimension(
             view,
             radialModelCurve.GeometryCurve.Reference,
             new XYZ(9.0, 0.0, 0.0));
+        observe?.Invoke("afterRadialDimensionCreate", familyDocument);
         radialDimension.FamilyLabel = radialLabel;
+        observe?.Invoke("afterRadialDimensionLabel", familyDocument);
     }
 
-    private static void CreateLabeledArrayTopology(Document familyDocument, FamilyParameter arrayLabel) {
+    private static void CreateLabeledArrayTopology(
+        Document familyDocument,
+        FamilyParameter arrayLabel,
+        Action<string, Document>? observe
+    ) {
         var view = GetPlanView(familyDocument);
         var sketchPlane = SketchPlane.Create(familyDocument, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero));
         var seedLine = familyDocument.FamilyCreate.NewModelCurve(
@@ -461,6 +476,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         if (!LinearArray.IsElementArrayable(familyDocument, seedLine.Id))
             throw new InvalidOperationException("The FF matrix model line was not arrayable.");
 
+        observe?.Invoke("beforeArrayCreate", familyDocument);
         var array = LinearArray.Create(
             familyDocument,
             view,
@@ -468,30 +484,43 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             3,
             new XYZ(0, 1, 0),
             (ArrayAnchorMember)0);
+        observe?.Invoke("afterArrayCreate", familyDocument);
         array.Label = arrayLabel;
+        observe?.Invoke("afterArrayLabel", familyDocument);
     }
 
-    private static void CreateNestedParameterAssociation(Document familyDocument, Family nestedFamily, FamilyParameter hostLabel) {
+    private static void CreateNestedParameterAssociation(
+        Document familyDocument,
+        Family nestedFamily,
+        FamilyParameter hostLabel,
+        Action<string, Document>? observe
+    ) {
         var nestedSymbol = nestedFamily.GetFamilySymbolIds()
                                .Select(id => familyDocument.GetElement(id))
                                .OfType<FamilySymbol>()
                                .FirstOrDefault()
                            ?? throw new InvalidOperationException($"Nested family '{nestedFamily.Name}' has no symbols.");
 
+        observe?.Invoke("beforeNestedActivate", familyDocument);
         if (!nestedSymbol.IsActive)
             nestedSymbol.Activate();
+        observe?.Invoke("afterNestedActivate", familyDocument);
 
+        observe?.Invoke("beforeNestedCreate", familyDocument);
         var nestedInstance = familyDocument.FamilyCreate.NewFamilyInstance(
             new XYZ(0, 0, 0),
             nestedSymbol,
             StructuralType.NonStructural);
+        observe?.Invoke("afterNestedCreate", familyDocument);
         var nestedWidth = nestedInstance.LookupParameter(NestedWidth)
                           ?? throw new InvalidOperationException($"Nested parameter '{NestedWidth}' was not found.");
 
         if (!familyDocument.FamilyManager.CanElementParameterBeAssociated(nestedWidth))
             throw new InvalidOperationException($"Nested parameter '{NestedWidth}' cannot be associated.");
 
+        observe?.Invoke("beforeNestedAssociation", familyDocument);
         familyDocument.FamilyManager.AssociateElementParameterToFamilyParameter(nestedWidth, hostLabel);
+        observe?.Invoke("afterNestedAssociation", familyDocument);
     }
 
     private static void SetStrongReference(ReferencePlane referencePlane) =>
