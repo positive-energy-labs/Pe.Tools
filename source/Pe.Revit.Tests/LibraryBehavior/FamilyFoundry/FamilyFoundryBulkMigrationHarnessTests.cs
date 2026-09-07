@@ -619,8 +619,22 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     private static void WriteCheckpoint(string path, JObject evidence) {
         var pending = path + ".pending";
         File.WriteAllText(pending, evidence.ToString());
-        if (File.Exists(path)) File.Replace(pending, path, null);
-        else File.Move(pending, path);
+        if (!File.Exists(path)) {
+            File.Move(pending, path);
+            return;
+        }
+
+        const int attempts = 5;
+        for (var attempt = 1; ; attempt++) {
+            try {
+                File.Replace(pending, path, null);
+                return;
+            } catch (IOException ex) {
+                if (attempt == attempts)
+                    throw new IOException($"Checkpoint replace failed after {attempts} attempts (HResult 0x{ex.HResult:X8}). Previous and pending checkpoints were retained.", ex);
+                Thread.Sleep(25 * attempt);
+            }
+        }
     }
 
     [Test]
