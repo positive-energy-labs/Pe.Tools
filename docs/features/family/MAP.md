@@ -1,133 +1,106 @@
 # Family Foundry completion map
 
-Current effort: 2026-09-06, demiurge with proof-first implementation. The integration tree is
-`C:/Users/kaitp/source/repos/Pe.Tools-family`, branch `family/rewrite`, baseline `d2e19ce`.
-This map owns the current frontier. Product decisions live in [LEDGER.md](LEDGER.md).
-Delete the map when the effort closes. No merge to main or live-product completion is claimed.
+Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rewrite`.
+Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
+Nothing is merged to main or published. No whole user story is closed yet.
 
 ## Completion contract
 
-- Explicit family.json specifications are manifested. Unmentioned content stays untouched.
-- Bulk parameter migration is the primary acceptance gate. Geometry support stays in scope.
-- One family either completes or rolls back. A batch retains successful families and continues.
+- Explicit JSON specifications are manifested; unmentioned content stays untouched.
+- Bulk parameter migration is the primary gate. Geometry and unfinished features remain in scope.
+- Each family completes or rolls back; successful batch siblings persist.
 - No ExtensibleStorage or persistent roundtrip metadata. References and sidecars may travel.
-- Apply does not save existing documents. Save/export is explicit.
-- /family and /families, their route state, Pea authoring, and script/Pod primitives must agree.
-- Restore meaningful deleted tests through cleanroom behavioral acceptance, not obsolete scaffolding.
-- Preserve every feature, including unfinished ones, unless the user approves its removal.
+- Apply does not save existing documents; save/export is explicit.
+- `/family`, `/families`, Pea route-state authoring and public script/Pod primitives must agree.
+- Restore meaningful deleted tests at the highest surface. Green by deleting coverage is rejected.
+- Destination wins: rewire source references and remove the source, or roll back the family.
+- Shared fragments merge by field, later values win; profile fields override their preset.
+- Measurable authored literals require units. Number/Integer stay unitless.
 
-## Current checkpoint and proof gates
+## Checkpoint at 2026-09-07 06:32 UTC
 
-As of 2026-09-07 06:00 UTC, integration `324d797` plus root fixes is in `Pe.Tools-family`.
-Nothing is merged to main or published. No whole user story is closed yet.
+Integration `23dc97e` compiles Pe.Revit.Tests for R25 (0 errors, 120 warnings).
+SDK candidate `0.1.0-beta.151.ff.1` is a complete eleven-package graph from SDK `8fe90de`.
+Integration pins CLI and SDK together; all receipt hashes were checked before copying.
+R24 and R26 FamilyFoundry compiles now pass, resolving missing-companion/fallback failures.
+R23 compiled earlier; the latest integrated source still needs that year's check.
+The candidate is local to this branch/feed; no installed-product update or publication occurred.
 
-| Owner | Current gate | Evidence / next action |
-|---|---|---|
-| Root | Portable geometry and all supported years | Revit 2023 FF compile now passes after removing newer framework API calls. Revit 2024/2026 compile and runtime remain owed. Four geometry fixtures are still red. |
-| Normalize / ffnorm0906 | Company migration and per-family rollback | Production Host composition resolves 43/45 frozen profiles. Reconstruct the missing Dehumidifier fragment, checking git history first (user authorized). Preserve inline preset overrides. Fix wave 5 native parameter failures, then run the old template corpus. |
-| Routes / ffroutes0906 | /family and /families on real Revit | Four fixtures and fleet navigation exercised in browser. Native plan/apply receipts through a dedicated controlled dev session remain owed. Pe.App build and shared-fragment editing are in progress. |
-| Proof / ffproof0906 | SDK custody, lookup values, nested dependencies | Sole Revit lifecycle owner. Wave 5 test run finished; SDK stop returned stopped. Lookup formula ordering and dependency loading fixes await the next READY integration. |
+Fresh controlled wave 7 (`3dc0dcb`): 25 passed, 22 failed / 47. Lookup full roundtrip,
+nested dependency save/reopen, portable values and native scope defaults pass. All four
+geometry showcase roundtrips remain red. Native shared creation passes 4/4 with its temporary
+file active and fails 4/4 without it. The shared TempSharedParamFile lifetime is now repaired.
+Latest source also repairs GUID token parsing, non-labelable dimension reads, batch label value
+preservation, geometry loop ordering, closed bound circles, room-point disable and form view flags.
+Those repairs compile but await the next fresh acceptance. No geometry acceptance is inferred.
 
-Fresh controlled Revit 2025 wave 5, frozen root `324d797`, returned **15 passed / 22 failed**
-across 37 selected tests. Shared causes: local-to-local ReplaceParameter misuse (8), geometry
-alignment (4), residue (3), shared creation (2), plus lookup evaluation, nested naming/loading,
-invalid rollback objects and fallback mapping. Failures remain acceptance failures.
-Raw evidence: `Pe.Tools-ff-proof/.artifacts/runs/fresh-20260906-ff/wave5`.
+SDK custody is valid in wave 6 diagnostic, wave 6 functional and wave 7: exact child identity,
+settings restoration and cleanup. Wave 5 wrongly claimed pre-existing PID 80052; it exited and
+its exit cause remains unconfirmed. Do not describe that process as preserved.
 
-Passed runtime checks include raw-value capture under rounded, symbol-suppressed display units,
-stale-plan rejection, and dependency refusal/cleanup. Earlier controlled measurements established
-that fresh reference planes need regeneration before dimension creation. Root now also settles
-labeled dimensions before reading extrusion profile coordinates; alignment acceptance is pending.
-Reconciliation errors now name the residual sections/keys rather than only reporting a count.
+The `/family` + `/families` session is controlled `ff-route-25`, dev snapshot generation
+`20260907062428752`, build stamp `ed915890270c`, source `ca353e9`. It runs SDK151.ff.1
+payload dependencies. P owns lifecycle and document activation; R owns browser interaction.
+Disposable project/family baselines are being prepared; actual Plan/Apply/readback is pending.
+Root source edits do not refresh this immutable session.
 
-The SDK repair enables the required adapter without enabling unrelated add-ins, rejects overlapping
-leases, and restores the acquired native settings. A reused-parent-PID custody defect surfaced in
-wave 5 and is being repaired in `Pe.Revit.Sdk-ff-proof`; final runtime acceptance and adoption remain
-owed. User session `pe.app-25` PID 71484 is protected; no workflow may target it for this proof.
+All 45 frozen company profiles now compose, including reconstructed Dehumidifier and AprilAire
+inline override. All 52 original fixture files preserve their original bytes in Git; a scoped
+.gitattributes rule prevents newline normalization. OneDrive originals remain unchanged.
+Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [routes](PROOF-ROUTES.md).
 
-Value strategy experiment (fresh controlled Revit 2025, proof `39cde8f`): 12-type Mitsubishi family,
-five parameter specs, three alternating repetitions, zero commit/reopen mismatches. Median mutation
-cost: batched setters 4867.7 ms; prepopulated-source formulas 924.3 ms; temporary selector 4133.7 ms.
-Selector setup and cleanup were included; source seeding was excluded. No selector optimization is
-adopted. New numeric parameters report raw zero; blank writes do not restore an unset state.
+## User stories and remaining proof
 
-Root deterministic baseline: 135 web checks, 20 Host checks; routes has subsequent checks for
-shared fields/Pea scope. Combined validation is due after final integration. Agent reports live in
-PROOF-VALUES.md, PROOF-NORMALIZATION.md and PROOF-ROUTES.md; source and compile claims do not
-substitute for route or Revit proof.
-
-## User stories and closure evidence
-
-| Story | Necessary evidence still owed |
+| Story | Remaining highest-surface evidence |
 |---|---|
-| BIM manager authors one portable family | Native JSON and sidecars create a family on each supported year; machine-dependent roots absent |
-| BIM manager bulk-normalizes a model | Old unmigrated template plus converted company standards, per-family receipts, exact shared identity, per-type values, associations, connectors and room point |
-| BIM manager audits/manages all families | /families snapshot, matrix, selector, plan, apply, drift, failure and repeat-run journeys on Revit |
-| Revit user asks Pea to author a family | Pea updates actual route-state/native JSON through current context/capability and target contract |
-| Engineer normalizes a third-party family | Text-to-electrical-unit mapping, populated destination preservation under mapping, explicit value override, safe association transfer |
-| Developer/Pea uses FF in scripts/Pods | One-family and multi-family mutations through public primitives, transaction/document targeting and load-back proof |
-| User reapplies a changed specification | Existing extras preserved, new connector added, explicit value changed, repeated run has no required changes |
-| User needs honest partial batch progress | Injected failure fully restores that family; successful siblings persist; failed family has actionable receipt |
-| User roundtrips supported content | Capture/parse/rebuild/reopen preserves supported semantics, omissions reported, no persistent metadata |
+| Author one portable family | Native JSON + sidecars create on every supported year; no machine-specific paths |
+| Bulk normalize a model | Old unmigrated template, all company profile behaviors, exact shared identities, type values, references, connectors and room points |
+| Audit/manage a project's families | `/families` live snapshot, selection, plan, apply, drift, failure, repeat and receipts |
+| Ask Pea to author a family | Pea changes actual route state through current capability/scope/target contracts |
+| Normalize third-party electrical content | Text-to-measurable mapping, destination precedence, explicit writes, safe association transfer |
+| Use FF from scripts/Pods | Public one/many-family operations, targeting, transaction ownership and project load-back |
+| Reapply a changed specification | Preserve extras, add connector, change explicit values, subsequent run has no changes |
+| Trust partial batch progress | Failed family fully unchanged, successful sibling persisted, actionable receipt |
+| Roundtrip supported content | Capture/rebuild/reopen plus independent authored-intent and geometry perturbation checks, no stored metadata |
 
-## Primitive and integration backlog
+## Dispatch and primitive frontier
 
-These are assigned to the current owner or queued behind a named prerequisite; none is waived.
+- P: complete R's actual route session; then wave 8 acceptance on a declared source hold.
+  If shared/migration basics pass, run the full old-template mechanical-family acceptance.
+  That full corpus test has never run; the current 38-definition mapping is not all 45 profiles.
+- N: native parameter/source/association repairs; all-profile operation coverage and conversion;
+  native room-point parameter-binding investigation. Explicit rejection of an offset binding
+  is an interim honest boundary, not feature closure. Correct visibility test to exclude untouched
+  connector/template support geometry.
+- R: actual route Plan/Apply/receipt/no-op journeys; shared-fragment edit origin, native dependency
+  composition, Pea authoring and durable scope/target integration. Fixture browser proof is separate.
+- Root: geometry identity/capture and native value preservation acceptance; complete details capture
+  and application (currently NotRead); replace DeleteByName shape heuristics with exact capture-derived
+  native identity. Current form lookup by sketch plane and size-based stub exclusion are unsafe.
+- Root/P: circle/ref-line constraints, arrays, connector orientation/association and physical geometry
+  perturbation. Four self-consistent roundtrips alone do not prove authored intent.
+- Root: supported-year compilation/runtime and native sidecar availability; cross-year script/Pod
+  consumer checks; final combined Host/web/C# checks and exact SDK adoption evidence.
+- Root: census old frames-era/deleted test intent and all shims; preserve unruled feature coverage.
+- Root: inspect concrete Space/Partition, targeting/chat and SDK-main deltas at their consumer seams.
+  Concurrent source is protected, not a reason to waive integration.
+- Final: feature census before/after; architectural/behavior-change tally; fold ledger and reports;
+  retire only this effort's spent state and integrate coherent proven changes.
 
-- P1: finish SDK custody repair and acceptance, then adopt coherent SDK bytes through the normal consumer pin.
-- N1: shared-definition resolution, GUID/tooltip fidelity, ranked source mapping, ReplaceParameter,
-  formula/type-cell/reference renames, coercion, association graph stability, safe source removal.
-- N1/P3: blank/default policy keyed by spec; fill-blank-from-source flag separate from explicit JSON values.
-- N2: unified per-family transaction boundary, result/error propagation, pre-apply hash, residue and load receipt.
-- R1: includes/presets at module/global scopes, native keyed-map composition, nested directives, sidecar paths;
-  desktop composition is integrated; shared-fragment edit origin and native dependency composition remain owed.
-- R2: stale TS contracts, fixture fallbacks, local fake apply, old build evidence, profile picker,
-  durable targeting/binding, scope head and Pea capability context; no second competing route-state owner.
-- G1: capture rulings (connector face plane, positional refLines, unsigned datums), native identity,
-  dependency-aware deletion/recreation, nested dependency loading, connectors/room point, lookup tables.
-- G1: restore FamilyModelRoundtripTests and lookup proof; preserve other rejected deletions until retargeted.
-- G2 after P1/N1: full company JSON conversion on copies with behavior census; wire complete route fixtures.
-- G3 after N2/R2: end-to-end /family and /families Revit proof; rename Pod with valued and associated params.
-- G4: Space/Partition, SDK, targeting and chat-scope changes on other branches are integration dependencies,
-  not permission to overwrite concurrent work. Census their concrete effect when a consumer needs them.
-- Final: compare feature census before/after, tally architectural/behavior changes, fold findings to ledger,
-  retire only this effort's spent processes/worktrees, and merge only coherent proven changes.
+## Value strategy evidence
 
-## Candidate value-write strategies
+Fresh controlled Revit2025, proof `39cde8f`: 12-type Mitsubishi family, five specs, three repetitions,
+zero commit/reopen mismatches. Median mutation: batched setters 4867.7ms, prepopulated-source formulas
+924.3ms, temporary selector 4133.7ms. Selector setup/cleanup included; source seeding excluded.
+No selector optimization adopted. New numeric values are raw zero; blank writes do not restore unset.
 
-| Candidate | Falsifier |
-|---|---|
-| One type pass with all assignments | Correctness failure or measured unacceptable mechanical-family runtime |
-| Uniform set/unset formula | Wrong units, per-type values overwritten contrary to policy, or formula/association loss |
-| Source-parameter formula baking | Differing type results fail to survive clear/commit/reopen; unsupported conversions |
-| Temporary integer selector plus generated formulas | Setup + evaluation + cleanup loses to the batched pass, leaves metadata, or fails atomic cleanup |
+## Protected state
 
-The user favors the temporary selector. Parameter creation speed alone does not settle the result;
-selector population, evaluation, clear, regeneration, and cleanup must be timed separately.
-No permanent strategy flag or formula compiler is authorized merely by this experiment.
-
-## Current user frontier
-
-- Destination wins conflicting source values. Rewire references and remove the source; transfer failure
-  rolls back the family. User ruled 2026-09-07. No cleanup-policy question remains pending.
-- Edit inherited content in its shared fragment by default. Raw profile JSON holds the reference;
-  an expanded editor must make that origin clear. User ruled 2026-09-06.
-- Included fragments merge recursively by field. Later values win; an earlier Width data type
-  survives a later Width value-only fragment. User ruled 2026-09-07.
-- Measurable authored values require explicit units; Number/Integer stay unitless. Normalize owns
-  validation and portable capture, root owns native fixture conversion after the frozen proof run.
-
-## Protected state and evidence boundaries
-
-- Main has substantial concurrent Space/Partition/takeoff and route work. Do not reset/stage it.
-- `pe.app-25` is the user's expensive session; latest verified PID 71484, with protected user documents.
-  Read current registry before any action, but never mutate this session for the wave.
-- Main-only ignored fixture: `source/Pe.Revit.Tests/Fixtures/Projects/Old_Template.rvt`, SHA256
-  `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`.
-- Downloads candidate: `MEP_Architect_Project Name_R25_Copy_2025.07.11.rte`, user says likely old
-  unmigrated template. Both originals stay unchanged; proof opens disposable copies.
-- OneDrive Documents/Pe.Tools settings and workspaces are in scope; originals stay unchanged until
-  converted replacements are checked against the company behavior. Cloud template is already migrated.
-- All four native fixture tests have fresh failures; no complete geometry roundtrip is accepted.
-- `family/rulings` 9d130a5, `family/pod` 80fa435, `family/critic-purge` 6c5fcae are sibling feeders
-  from b578789, not a proven merge chain. Do not merge the critic's test deletions.
+- User `pe.app-25` PID71484 and other pre-existing PID86872 are protected; re-read identity before
+  runtime work. No FF mutation may target either.
+- Main has concurrent Space/Partition/takeoff/web changes. Never broad-stage, reset or overwrite it.
+- Old_Template.rvt SHA256 `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`.
+- Downloads `MEP_Architect_Project Name_R25_Copy_2025.07.11.rte` is the user's likely old clone.
+  Both original documents remain unchanged; proof opens disposable copies.
+- OneDrive Documents/Pe.Tools settings and workspaces are in scope. Convert/check copies before
+  replacing active standards. The cloud template is already migrated.
