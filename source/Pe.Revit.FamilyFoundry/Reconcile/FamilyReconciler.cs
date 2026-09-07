@@ -145,7 +145,15 @@ public static class FamilyReconciler {
         }
 
         Keyed(changes, "datums", desired.Datums, current.Datums, units);
-        Keyed(changes, "refPlanes", desired.RefPlanes, current.RefPlanes, units);
+        var drivenPlanes = desired.Dimensions.Values
+            .Where(d => d.Label is not null || d.Locked is not null || d.Equality == true)
+            .SelectMany(d => d.Between).ToHashSet(StringComparer.Ordinal);
+        Keyed(changes, "refPlanes", desired.RefPlanes, current.RefPlanes, units, same: (name, want, have) => {
+            var a = JObject.FromObject(want, Serializer);
+            var b = JObject.FromObject(have, Serializer);
+            if (drivenPlanes.Contains(name)) { a.Remove("at"); b.Remove("at"); }
+            return Same(a, b, units, null);
+        });
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
         Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units);
         Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units);
@@ -213,11 +221,12 @@ public static class FamilyReconciler {
     // ── section rules ──
 
     private static void Keyed<T>(List<FamilyChange> changes, string section, IReadOnlyDictionary<string, T> desired,
-        IReadOnlyDictionary<string, T> current, UnitResolver units, Func<string, List<string>?>? wasNamed = null) where T : class {
+        IReadOnlyDictionary<string, T> current, UnitResolver units, Func<string, List<string>?>? wasNamed = null,
+        Func<string, T, T, bool>? same = null) where T : class {
         var renamedAway = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (key, want) in desired) {
             if (current.TryGetValue(key, out var have)) {
-                if (!Same(want, have, units, section == "parameters" ? key : null))
+                if (!(same?.Invoke(key, want, have) ?? Same(want, have, units, section == "parameters" ? key : null)))
                     changes.Add(new FamilyChange(section, key, IsGeometry(section) ? ChangeKind.Recreate : ChangeKind.Update, null, have, want));
                 continue;
             }

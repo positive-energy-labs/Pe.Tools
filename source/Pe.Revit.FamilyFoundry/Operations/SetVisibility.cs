@@ -11,7 +11,7 @@ public sealed class SetVisibility((string Slug, string Section, string Parameter
         if (desired.PlanRcp is { } plan) visibility.IsShownInPlanRCPCut = plan;
         if (desired.FrontBack is { } front) visibility.IsShownInFrontBack = front;
         if (desired.LeftRight is { } side) visibility.IsShownInLeftRight = side;
-        if (desired.OnlyWhenCut is { } cut) visibility.IsShownOnlyWhenCut = cut;
+        if (desired.OnlyWhenCut is { } cut && visibility.IsShownOnlyWhenCut != cut) visibility.IsShownOnlyWhenCut = cut;
         if (desired.Coarse is { } coarse) visibility.IsShownInCoarse = coarse;
         if (desired.Medium is { } medium) visibility.IsShownInMedium = medium;
         if (desired.Fine is { } fine) visibility.IsShownInFine = fine;

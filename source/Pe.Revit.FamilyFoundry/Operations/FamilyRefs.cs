@@ -24,7 +24,7 @@ internal static class FamilyRefs {
             var radius = Feet(doc, circle.Diameter!.Value) / 2;
             var normal = plane.Normal.Normalize();
             var x = (Math.Abs(normal.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ).CrossProduct(normal).Normalize();
-            yield return (Ellipse.CreateCurve(center, radius, radius, x, normal.CrossProduct(x), -Math.PI, Math.PI), circle);
+            yield return (Arc.Create(center, radius, 0, 2 * Math.PI, x, normal.CrossProduct(x)), circle);
         }
     }
 
