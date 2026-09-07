@@ -151,6 +151,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     [Test]
     public void Public_converter_selects_name_patterns_exclusions_and_native_category_identity() {
         var project = RevitFamilyFixtureHarness.CreateProjectDocument(this._application);
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Public_converter_selects_name_patterns_exclusions_and_native_category_identity));
         try {
             foreach (var (name, category) in new[] {
                          ("Exact Pump", BuiltInCategory.OST_MechanicalEquipment),
@@ -162,6 +163,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                          ("Prefix Generic Keep", BuiltInCategory.OST_GenericModel)
                      }) {
                 var familyDocument = this.NewFamily(name, category);
+                string path;
                 try {
                     if (name == "Prefix Fan Keep") {
                         using var transaction = new Transaction(familyDocument, "Seed condition selector");
@@ -173,10 +175,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                         }
                         Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
                     }
-                    _ = familyDocument.LoadFamily(project, new DefaultFamilyLoadOptions());
+                    path = RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, output, name);
                 }
                 finally { familyDocument.Close(false); }
+                var loaded = RevitFamilyFixtureHarness.LoadFamilyIntoProject(this._application, project, path);
+                Assert.Multiple(() => {
+                    Assert.That(loaded.Name, Is.EqualTo(name));
+                    Assert.That(loaded.FamilyCategory?.Id.Value(), Is.EqualTo((long)category));
+                });
             }
+            Assert.That(new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)), Is.Empty,
+                "IncludeUnusedFamilies=true must retain unplaced loaded families.");
             var settings = JObject.Parse("""
                 {"FilterFamilies":{
                   "IncludeUnusedFamilies":true,
