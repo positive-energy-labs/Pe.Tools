@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Shared.RevitData.Families;
 using Pe.Revit.DocumentData.Parameters;
@@ -22,7 +23,7 @@ public static class FamilyProfileConverter {
     public static FamilyProfileConversion Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
         var supported = new HashSet<string>(StringComparer.Ordinal) { "$schema", "ExecutionOptions", "FilterFamilies", "FilterApsParams",
             "AddAndMapSharedParams", "AddFamilyParams", "SetKnownParams", "CleanFamilyDocument", "SortParams", "DeleteParams",
-            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims", "ParamDrivenSolids" };
+            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims", "ParamDrivenSolids", "SetLookupTables" };
         foreach (var field in composed.Properties().Where(p => !supported.Contains(p.Name)))
             if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false)
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
@@ -90,6 +91,7 @@ public static class FamilyProfileConverter {
             exported.Patch["roomCalculationPoint"] = JObject.FromObject(new FamilyModelRoomCalculationPoint { Enabled = true, Offset = PortableLength.FromFeet(room.OffsetFeet) }, JsonSerializer.Create(FamilyModelJson.Settings));
         ConvertReferencePlanes(composed["MakeRefPlaneAndDims"], exported.Patch);
         ConvertParamDrivenSolids(composed["ParamDrivenSolids"], exported.Patch);
+        ConvertLookupTables(composed["SetLookupTables"], exported.Patch);
         return new FamilyProfileConversion(new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
             Names = familyFilter?["IncludeNames"]?["Equaling"]?.ToObject<List<string>>(),
             Categories = familyFilter?["IncludeCategoriesEqualing"]?.ToObject<List<FamilyCategory>>(JsonSerializer.Create(FamilyModelJson.Settings)),
@@ -101,11 +103,15 @@ public static class FamilyProfileConverter {
         if (token is null) return;
         if (token is not JObject operation) throw new InvalidOperationException("ParamDrivenSolids must be an object.");
         if (!operation.HasValues) return; // Frozen HPWH deliberately authors the validated empty/no-op shape.
-        if (operation["Frame"] is not null || operation["Planes"] is not null || operation["Spans"] is not null || operation["Prisms"] is not null) {
+        if (operation["Rectangles"] is null && (operation["Frame"] is not null || operation["Planes"] is not null || operation["Spans"] is not null || operation["Prisms"] is not null)) {
             ConvertAuthoredParamDrivenSolids(operation, patch);
             return;
         }
-        RequireOnly(operation, "ParamDrivenSolids", "Enabled", "Rectangles", "Cylinders", "Connectors");
+        RequireOnly(operation, "ParamDrivenSolids", "Enabled", "Frame", "Rectangles", "Cylinders", "Connectors");
+        if (operation["Frame"] is JObject frame) {
+            RequireOnly(frame, "ParamDrivenSolids.Frame", "Kind");
+            if (Required(frame, "Kind", "ParamDrivenSolids.Frame") != "NonHosted") throw new InvalidOperationException("ParamDrivenSolids.Frame.Kind requires native conversion.");
+        } else if (operation["Frame"] is not null) throw new InvalidOperationException("ParamDrivenSolids.Frame must be an object.");
         if (operation["Enabled"] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException("ParamDrivenSolids.Enabled must be a boolean.");
         if (operation.Value<bool?>("Enabled") == false) return;
         foreach (var field in new[] { "Rectangles", "Cylinders", "Connectors" })
@@ -114,32 +120,34 @@ public static class FamilyProfileConverter {
         var rectangles = operation["Rectangles"] as JArray ?? [];
         var cylinders = operation["Cylinders"] as JArray ?? [];
         var connectors = operation["Connectors"] as JArray ?? [];
-        if (cylinders.Count > 0 || connectors.Count > 0)
-            throw new InvalidOperationException($"ParamDrivenSolids fields require lossless native conversion: {string.Join(", ", new[] { ("Cylinders", cylinders.Count), ("Connectors", connectors.Count) }.Where(x => x.Item2 > 0).Select(x => x.Item1))}.");
+        if (cylinders.Count > 0) throw new InvalidOperationException("ParamDrivenSolids.Cylinders require lossless native conversion.");
         if (rectangles.Count == 0) throw new InvalidOperationException("Active ParamDrivenSolids has no populated geometry.");
         if (rectangles.Any(x => x is not JObject)) throw new InvalidOperationException("ParamDrivenSolids.Rectangles entries must be objects.");
 
         var planes = patch["refPlanes"] as JObject ?? new JObject();
         var dimensions = patch["dimensions"] as JObject ?? new JObject();
         var forms = patch["forms"] as JObject ?? new JObject();
+        var nativeConnectors = patch["connectors"] as JObject ?? new JObject();
         var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
         var index = 0;
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var rectangle in rectangles.OfType<JObject>()) {
             RequireOnly(rectangle, "ParamDrivenSolids.Rectangle", "Name", "IsSolid", "Sketch", "Width", "Length", "Height");
             if (rectangle["IsSolid"] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException("ParamDrivenSolids.Rectangle.IsSolid must be a boolean.");
             var name = Required(rectangle, "Name", "ParamDrivenSolids.Rectangle");
             var sketch = RequiredObject(rectangle, "Sketch", "ParamDrivenSolids.Rectangle");
-            RequireOnly(sketch, "ParamDrivenSolids.Rectangle.Sketch", "Kind", "Plane");
-            if (Required(sketch, "Kind", "ParamDrivenSolids.Rectangle.Sketch") != "ReferencePlane")
-                throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Sketch.Kind requires native conversion.");
-            var width = LegacyMirror(RequiredObject(rectangle, "Width", "ParamDrivenSolids.Rectangle"), "Width");
-            var length = LegacyMirror(RequiredObject(rectangle, "Length", "ParamDrivenSolids.Rectangle"), "Length");
-            var height = LegacyOffset(RequiredObject(rectangle, "Height", "ParamDrivenSolids.Rectangle"));
+            var sketchPlane = LegacySketchPlane(sketch, aliases);
+            var width = LegacyMirror(RequiredObject(rectangle, "Width", "ParamDrivenSolids.Rectangle"), "Width", aliases);
+            var length = LegacyMirror(RequiredObject(rectangle, "Length", "ParamDrivenSolids.Rectangle"), "Length", aliases);
+            var height = LegacyOffset(RequiredObject(rectangle, "Height", "ParamDrivenSolids.Rectangle"), aliases);
             var widthAxis = AxisFor(width.Anchor);
             var lengthAxis = AxisFor(length.Anchor);
             if (widthAxis == lengthAxis) throw new InvalidOperationException($"ParamDrivenSolids.Rectangle '{name}' width and length use the same axis.");
             var (w0, w1) = PlanePair(width.Base, widthAxis);
             var (l0, l1) = PlanePair(length.Base, lengthAxis);
+            aliases[$"{name}.Width.Back"] = w0; aliases[$"{name}.Width.Front"] = w1;
+            aliases[$"{name}.Length.Left"] = l0; aliases[$"{name}.Length.Right"] = l1;
+            aliases[$"{name}.Height.Top"] = height.Name;
             AddPlane(planes, w0, new FamilyModelRefPlane { Normal = widthAxis, At = PortableLength.FromFeet(-0.5), IsReference = width.Strength }, serializer);
             AddPlane(planes, w1, new FamilyModelRefPlane { Normal = widthAxis, At = PortableLength.FromFeet(0.5), IsReference = width.Strength }, serializer);
             AddPlane(planes, l0, new FamilyModelRefPlane { Normal = lengthAxis, At = PortableLength.FromFeet(-0.5), IsReference = length.Strength }, serializer);
@@ -152,13 +160,15 @@ public static class FamilyProfileConverter {
             AddUnique(dimensions, $"legacy-solid-{index++}-height", JObject.FromObject(new FamilyModelDim { Between = [height.Anchor, height.Name], Label = height.Parameter }, serializer));
             AddUnique(forms, name, JObject.FromObject(new FamilyModelForm {
                 Kind = FormKind.Extrusion, Void = rectangle.Value<bool?>("IsSolid") == false,
-                SketchPlane = Required(sketch, "Plane", "ParamDrivenSolids.Rectangle.Sketch"), Start = height.Anchor, End = height.Name,
+                SketchPlane = sketchPlane, Start = height.Anchor, End = height.Name,
                 Profile = [new FamilyModelLoop { Curves = new[] { w0, l1, w1, l0 }.Select(p => new FamilyModelSketchCurve { Kind = CurveKind.Line, On = p }).ToList() }]
             }, serializer));
         }
+        ConvertLegacyConnectors(connectors, planes, dimensions, forms, nativeConnectors, aliases, serializer, ref index);
         patch["refPlanes"] = planes;
         patch["dimensions"] = dimensions;
         patch["forms"] = forms;
+        patch["connectors"] = nativeConnectors;
     }
 
     private static void ConvertAuthoredParamDrivenSolids(JObject operation, JObject patch) {
@@ -255,21 +265,93 @@ public static class FamilyProfileConverter {
         patch["connectors"] = connectors;
     }
 
-    private static (string Base, string Anchor, string Parameter, RefStrength Strength) LegacyMirror(JObject value, string axis) {
+    private static void ConvertLegacyConnectors(JArray authored, JObject planes, JObject dimensions, JObject forms, JObject connectors,
+        IReadOnlyDictionary<string, string> aliases, JsonSerializer serializer, ref int index) {
+        EnsureObjects(authored, "ParamDrivenSolids.Connectors");
+        foreach (var connector in authored.OfType<JObject>()) {
+            RequireOnly(connector, "ParamDrivenSolids.Connector", "Name", "Domain", "Host", "Geometry", "Bindings", "Config");
+            var name = Required(connector, "Name", "ParamDrivenSolids.Connector");
+            var host = RequiredObject(connector, "Host", "ParamDrivenSolids.Connector");
+            RequireOnly(host, "ParamDrivenSolids.Connector.Host", "SketchPlane", "Depth");
+            var sketch = LegacyReference(host["SketchPlane"] ?? throw new InvalidOperationException("ParamDrivenSolids.Connector.Host requires SketchPlane."), aliases);
+            var depth = LegacyOffset(RequiredObject(host, "Depth", "ParamDrivenSolids.Connector.Host"), aliases);
+            if (depth.Anchor != sketch) throw new InvalidOperationException($"ParamDrivenSolids connector '{name}' depth anchor differs from its sketch plane.");
+            var axis = PlaneAxis(planes, depth.Anchor, serializer);
+            AddPlane(planes, depth.Name, new FamilyModelRefPlane { Normal = axis, At = PortableLength.FromFeet(depth.Positive ? 1 : -1), IsReference = depth.Strength }, serializer);
+            AddDrivenDimension(dimensions, $"legacy-solid-{index++}-connector-depth", [depth.Anchor, depth.Name], PortableLength.Parse($"param:{depth.Parameter}"), serializer);
+
+            var geometry = RequiredObject(connector, "Geometry", "ParamDrivenSolids.Connector");
+            RequireOnly(geometry, "ParamDrivenSolids.Connector.Geometry", "Profile", "CenterLeftRightPlane", "CenterFrontBackPlane", "Diameter");
+            if (Required(geometry, "Profile", "ParamDrivenSolids.Connector.Geometry") != "Round") throw new InvalidOperationException("Only corpus round connector geometry is supported.");
+            var centers = new[] { "CenterLeftRightPlane", "CenterFrontBackPlane" }.Select(field =>
+                LegacyReference(geometry[field] ?? throw new InvalidOperationException($"ParamDrivenSolids.Connector.Geometry requires {field}."), aliases)).ToList();
+            var diameterSpec = RequiredObject(geometry, "Diameter", "ParamDrivenSolids.Connector.Geometry");
+            var diameter = LegacyMirror(diameterSpec, "Diameter", aliases);
+            if (!centers.Contains(diameter.Anchor, StringComparer.Ordinal)) throw new InvalidOperationException($"ParamDrivenSolids connector '{name}' diameter anchor is not a center plane.");
+            AddCircleForm(forms, $"{name} Stub", sketch, depth.Name, centers, PortableLength.Parse($"param:{diameter.Parameter}"), true, serializer);
+
+            var domain = Required(connector, "Domain", "ParamDrivenSolids.Connector");
+            var config = RequiredObject(connector, "Config", "ParamDrivenSolids.Connector");
+            RequireOnly(config, "ParamDrivenSolids.Connector.Config", domain);
+            var domainConfig = RequiredObject(config, domain, "ParamDrivenSolids.Connector.Config");
+            var allowed = domain == "Duct" ? new[] { "SystemType", "FlowConfiguration", "FlowDirection", "LossMethod" }
+                : domain == "Pipe" ? new[] { "SystemType", "FlowDirection" } : domain == "Electrical" ? new[] { "SystemType" }
+                : throw new InvalidOperationException($"ParamDrivenSolids connector domain '{domain}' requires native conversion.");
+            RequireOnly(domainConfig, $"ParamDrivenSolids.Connector.Config.{domain}", allowed);
+            var system = Required(domainConfig, "SystemType", $"ParamDrivenSolids.Connector.Config.{domain}") switch {
+                "SupplyHydronic" => "HydronicSupply", "ReturnHydronic" => "HydronicReturn", var value => value
+            };
+            var native = new JObject { ["domain"] = domain, ["systemType"] = system, ["on"] = depth.Name,
+                ["at"] = new JArray(centers) };
+            if (domain != "Electrical") { native["shape"] = "Round"; native["diameter"] = $"param:{diameter.Parameter}"; }
+            foreach (var field in new[] { "FlowConfiguration", "FlowDirection", "LossMethod" })
+                if (domainConfig[field] is { } value) {
+                    if (value.Type != JTokenType.String) throw new InvalidOperationException($"ParamDrivenSolids.Connector.Config.{domain}.{field} must be a string.");
+                    native[char.ToLowerInvariant(field[0]) + field[1..]] = value.DeepClone();
+                }
+            if (domain == "Pipe" && native["flowDirection"] is null) native["flowDirection"] = "Bidirectional";
+            if (connector["Bindings"] is JObject bindings) {
+                RequireOnly(bindings, "ParamDrivenSolids.Connector.Bindings", "Parameters");
+                var parameters = RequiredArray(bindings, "Parameters", "ParamDrivenSolids.Connector.Bindings");
+                EnsureObjects(parameters, "ParamDrivenSolids.Connector.Bindings.Parameters");
+                var associate = new JObject();
+                foreach (var binding in parameters.OfType<JObject>()) {
+                    RequireOnly(binding, "ParamDrivenSolids.Connector.Binding", "Target", "SourceParameter");
+                    var target = Required(binding, "Target", "ParamDrivenSolids.Connector.Binding") switch { "NumberOfPoles" => "Number of Poles", var value => value };
+                    AddUnique(associate, target,
+                        $"param:{Required(binding, "SourceParameter", "ParamDrivenSolids.Connector.Binding")}");
+                }
+                native["associate"] = associate;
+            }
+            AddUnique(connectors, name, native);
+        }
+    }
+
+    private static string LegacySketchPlane(JObject value, IReadOnlyDictionary<string, string> aliases) {
+        if (value["Frame"] is { } frame) {
+            RequireOnly(value, "ParamDrivenSolids.Rectangle.Sketch", "Frame");
+            return LegacyReference(new JObject { ["Frame"] = frame.DeepClone() }, aliases);
+        }
+        RequireOnly(value, "ParamDrivenSolids.Rectangle.Sketch", "Kind", "Plane");
+        if (Required(value, "Kind", "ParamDrivenSolids.Rectangle.Sketch") != "ReferencePlane") throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Sketch.Kind requires native conversion.");
+        return Required(value, "Plane", "ParamDrivenSolids.Rectangle.Sketch");
+    }
+
+    private static (string Base, string Anchor, string Parameter, RefStrength Strength) LegacyMirror(JObject value, string axis, IReadOnlyDictionary<string, string> aliases) {
         RequireOnly(value, $"ParamDrivenSolids.Rectangle.{axis}", "Mode", "Parameter", "CenterAnchor", "PlaneNameBase", "Strength");
         if (Required(value, "Mode", $"ParamDrivenSolids.Rectangle.{axis}") != "Mirror")
             throw new InvalidOperationException($"ParamDrivenSolids.Rectangle.{axis}.Mode requires native conversion.");
-        return (Required(value, "PlaneNameBase", $"ParamDrivenSolids.Rectangle.{axis}"), Required(value, "CenterAnchor", $"ParamDrivenSolids.Rectangle.{axis}"),
+        return (Required(value, "PlaneNameBase", $"ParamDrivenSolids.Rectangle.{axis}"), LegacyReference(value["CenterAnchor"] ?? throw new InvalidOperationException($"ParamDrivenSolids.Rectangle.{axis} requires CenterAnchor."), aliases),
             Required(value, "Parameter", $"ParamDrivenSolids.Rectangle.{axis}"), Strength(value));
     }
 
-    private static (string Name, string Anchor, string Parameter, bool Positive, RefStrength Strength) LegacyOffset(JObject value) {
+    private static (string Name, string Anchor, string Parameter, bool Positive, RefStrength Strength) LegacyOffset(JObject value, IReadOnlyDictionary<string, string> aliases) {
         RequireOnly(value, "ParamDrivenSolids.Rectangle.Height", "Mode", "Parameter", "Anchor", "Direction", "PlaneNameBase", "Strength");
         if (Required(value, "Mode", "ParamDrivenSolids.Rectangle.Height") != "Offset")
             throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Height.Mode requires native conversion.");
         var direction = Required(value, "Direction", "ParamDrivenSolids.Rectangle.Height");
         if (direction is not "Positive" and not "Negative") throw new InvalidOperationException($"Unknown ParamDrivenSolids height direction '{direction}'.");
-        return (Required(value, "PlaneNameBase", "ParamDrivenSolids.Rectangle.Height"), Required(value, "Anchor", "ParamDrivenSolids.Rectangle.Height"),
+        return (Required(value, "PlaneNameBase", "ParamDrivenSolids.Rectangle.Height"), LegacyReference(value["Anchor"] ?? throw new InvalidOperationException("ParamDrivenSolids.Rectangle.Height requires Anchor."), aliases),
             Required(value, "Parameter", "ParamDrivenSolids.Rectangle.Height"), direction == "Positive", Strength(value));
     }
 
@@ -277,6 +359,57 @@ public static class FamilyProfileConverter {
         Axis.PlusX => ($"{name} (Left)", $"{name} (Right)"), Axis.PlusY => ($"{name} (Back)", $"{name} (Front)"),
         Axis.PlusZ => ($"{name} (Bottom)", $"{name} (Top)"), _ => throw new InvalidOperationException($"Unsupported ParamDrivenSolids axis '{axis}'.")
     };
+
+    private static string LegacyReference(JToken value, IReadOnlyDictionary<string, string> aliases) {
+        if (value.Type == JTokenType.String) {
+            var name = (string)value;
+            return aliases.TryGetValue(name, out var resolved) ? resolved : name;
+        }
+        if (value is not JObject reference || reference.Properties().Count() != 1) throw new InvalidOperationException("Legacy plane reference must be a string or one reference object.");
+        if (reference["Frame"] is JObject frame) {
+            RequireOnly(frame, "Legacy Frame reference", "Plane");
+            return Required(frame, "Plane", "Legacy Frame reference") switch {
+                "CenterLR" => "Center (Left/Right)", "CenterFB" => "Center (Front/Back)", "Bottom" => "Reference Plane", var name => name
+            };
+        }
+        if (reference["Semantic"] is JObject semantic) {
+            RequireOnly(semantic, "Legacy Semantic reference", "Name");
+            return Required(semantic, "Name", "Legacy Semantic reference");
+        }
+        if (reference["Derived"] is JObject derived) {
+            RequireOnly(derived, "Legacy Derived reference", "Solid", "Face");
+            var solid = Required(derived, "Solid", "Legacy Derived reference");
+            var face = Required(derived, "Face", "Legacy Derived reference");
+            var key = face switch { "Left" or "Right" => $"{solid}.Length.{face}", "Back" or "Front" => $"{solid}.Width.{face}", "Top" => $"{solid}.Height.Top", _ => throw new InvalidOperationException($"Legacy derived face '{face}' requires native conversion.") };
+            return aliases.TryGetValue(key, out var result) ? result : throw new InvalidOperationException($"Legacy derived reference '{key}' has no converted solid.");
+        }
+        throw new InvalidOperationException($"Legacy plane reference field '{reference.Properties().Single().Name}' requires native conversion.");
+    }
+
+    private static Axis PlaneAxis(JObject planes, string name, JsonSerializer serializer) {
+        if (planes[name]?.ToObject<FamilyModelRefPlane>(serializer) is { } plane) return plane.Normal;
+        return AxisFor(name);
+    }
+
+    private static void ConvertLookupTables(JToken? token, JObject patch) {
+        if (token is null) return;
+        if (token is not JObject operation) throw new InvalidOperationException("SetLookupTables must be an object.");
+        RequireOnly(operation, "SetLookupTables", "Enabled", "ReplaceExisting", "Tables");
+        StrictBool(operation, "Enabled", "SetLookupTables");
+        StrictBool(operation, "ReplaceExisting", "SetLookupTables");
+        if (operation.Value<bool?>("Enabled") == false) return;
+        var tables = RequiredArray(operation, "Tables", "SetLookupTables");
+        EnsureObjects(tables, "SetLookupTables.Tables");
+        if (tables.Count == 0) return; // Frozen Grinder profile: validated active no-op.
+        if (operation.Value<bool?>("ReplaceExisting") == false) throw new InvalidOperationException("Populated SetLookupTables with ReplaceExisting=false has no native patch semantics.");
+        var native = patch["lookupTables"] as JObject ?? new JObject();
+        foreach (var table in tables.OfType<JObject>()) {
+            var definition = table.ToObject<LookupTableDefinition>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error }))
+                ?? throw new InvalidOperationException("SetLookupTables table could not be read.");
+            AddUnique(native, definition.Schema.Name, new JObject { ["csv"] = LookupTableCsvCodec.Encode(definition) });
+        }
+        patch["lookupTables"] = native;
+    }
 
     private static JObject RequiredObject(JObject value, string field, string path) =>
         value[field] is JObject result ? result : throw new InvalidOperationException($"{path} requires object {field}.");

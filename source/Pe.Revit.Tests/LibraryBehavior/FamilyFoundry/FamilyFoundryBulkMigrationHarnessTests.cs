@@ -137,7 +137,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
-    public void Public_converter_preserves_supported_real_param_driven_solids_and_refuses_the_rest() {
+    public void Public_converter_preserves_all_real_param_driven_solids() {
         var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
             .Where(p => p["settings"]!["ParamDrivenSolids"] is not null).ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
         var document = this.NewFamily("Param driven solids conversion proof");
@@ -167,15 +167,33 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics, Is.Empty, source);
             }
 
-            var refused = new Dictionary<string, string>(StringComparer.Ordinal) {
-                ["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"] = "Frame",
-                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json"] = "Connectors",
-                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json"] = "Connectors"
-            };
-            foreach (var (source, fields) in refused) {
-                var error = Assert.Throws<InvalidOperationException>(() => Convert(source));
-                Assert.That(error!.Message, Does.Contain(fields), source);
+            foreach (var (source, planeCount, formCount, connectorCount) in new[] {
+                         ("CmdFFManager/profiles/SavedEquip/Modine HHD Series.json", 15, 4, 3),
+                         ("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json", 17, 6, 5),
+                         ("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 11, 3, 2)
+                     }) {
+                var settings = profiles[source]["settings"]!;
+                var converted = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
+                    ["MakeRefPlaneAndDims"] = settings["MakeRefPlaneAndDims"]!.DeepClone(),
+                    ["ParamDrivenSolids"] = settings["ParamDrivenSolids"]!.DeepClone()
+                }, [], document.GetUnits()).Patch;
+                Assert.That(((JObject)converted.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount), source);
+                Assert.That(((JObject)converted.Patch["forms"]!).Count, Is.EqualTo(formCount), source);
+                Assert.That(((JObject)converted.Patch["connectors"]!).Count, Is.EqualTo(connectorCount), source);
+                var native = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch);
+                Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics.Any(d => d.Code == FamilyModelDiagnosticCodes.InvalidJson), Is.False, source);
             }
+            var power = (JObject)Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
+                ["ParamDrivenSolids"] = profiles["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"]["settings"]!["ParamDrivenSolids"]!.DeepClone()
+            }, [], document.GetUnits()).Patch.Patch["connectors"]!["Power"]!;
+            Assert.That((string)power["systemType"]!, Is.EqualTo("PowerBalanced"));
+            Assert.That((string)power["associate"]!["Voltage"]!, Is.EqualTo("param:PE_E___Voltage"));
+            Assert.That((string)power["associate"]!["Number of Poles"]!, Is.EqualTo("param:PE_E___NumberOfPoles"));
+            Assert.That(power["diameter"], Is.Null, "Electrical connector size belongs to its retained stub form.");
+
+            var grinderLookup = profiles["CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json"]["settings"]!["SetLookupTables"]!;
+            var lookup = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject { ["SetLookupTables"] = grinderLookup.DeepClone() }, [], document.GetUnits()).Patch;
+            Assert.That(lookup.Patch["lookupTables"], Is.Null, "The frozen active Tables:[] operation is a validated no-op.");
         } finally { document.Close(false); }
     }
 
