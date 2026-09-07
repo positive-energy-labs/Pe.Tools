@@ -547,3 +547,40 @@ Historical source does not establish filename normalization as preserved behavio
 No selector code or frozen profile changed because source cannot choose between family-name semantics and file-name semantics. The other ten absent-family selectors and `__CURRENT_FAMILY__` remain distinct applicability cases.
 
 Open product ruling: should all `IncludeNames` and `ExcludeNames` entries use Windows family-file semantics (remove a terminal `.rfa` and compare case-insensitively for equal, contains, and prefix), or should only exact `Equaling` entries accept `.rfa` and case differences while `Containing` and `StartingWith` retain case-sensitive `Family.Name` semantics?
+
+## Actual browser route readiness - 2026-09-07
+
+**BLOCKED before Family Foundry data loading.** Chrome opened the real Host pages at
+`http://127.0.0.1:52068/family` and `/families` against controlled session
+`ff-profile-proof-25`. The Instances page rendered the controlled session and its active
+`Old_Template-monthly45-disposable` project, but clicking either row could not create valid route
+state. Both Family Foundry routes consequently rendered `no document named - pick a document in
+chat, or open one from /instances`; neither profile list nor the `/families` project census mounted.
+
+The live identities agree before the route-state seam: `/host/status` reported connected Host PID
+92360, source root `Pe.Tools-family/source/pe-tools`, contract 37/20, and runtime
+`pe-host-ts/v25.7.0`. The SDK refresh receipt reported controlled Revit PID 89376, generation
+`20260907143006678`, build stamp `5a97a1ff24c0`, and the exact disposable project. `/instances`
+rendered the same PID, session, custody, year, active document title, and path. No lifecycle or
+document operation was invoked.
+
+The blocking seam is deterministic in current source. `instancesDocumentSchema` requires
+`selectedSession` and `staged.session` to match `session:<id>`
+(`packages/agent-contracts/src/instances.ts:3-12`). The live table instead persists
+`worldTrunk.option(world).id` directly for both fields (`apps/web/src/instances/cluster.tsx:181-186,
+219-228,501-503`). For this controlled world that value is `ff-profile-proof-25`, so the route store
+reports `selectedSession: Invalid input` or `staged.session: Invalid input`. Clearing the stale
+`session:takeoffs-25` state and selecting the current session again reproduces the same refusal;
+this is not stale-browser residue. The smallest repair is to make the Instances writer use the
+existing SDK selector grammar at this one boundary, then retain `worldTrunk`'s raw target id for
+Host targeting elsewhere.
+
+Browser screenshots were captured through CUA for `/instances`, `/families`, and `/family`. The
+CUA surface returned PNG bytes and displayed them in the run, but exposes no filesystem write in
+this session, so no local PNG is claimed. Browser logs contained only Vite connect/connected debug
+entries and no warning or error. Raw identity, state, route, and console observations are in
+`.artifacts/runs/browser-20260906-ff/actual-route-readiness-6620376/receipt.json`.
+
+Unproven because of this blocker: composed profile rendering, profile selection, loaded-family
+census inside `/families`, and every Plan/receipt/recapture path. No Apply was attempted. The
+pending name-filter product question above remains pending and no selector behavior changed.
