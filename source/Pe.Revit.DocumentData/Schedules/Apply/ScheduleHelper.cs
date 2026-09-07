@@ -241,6 +241,29 @@ public static class ScheduleHelper {
         return MapMatchingInstancesToFamilyIds(placements, matchingInstanceIds);
     }
 
+    /// <summary>Evaluates a schedule filter when every requested field is schedulable; false means at least one field is not.</summary>
+    public static bool TryGetFamilyIdsMatchingFiltersAnyType(
+        Document doc,
+        SharedScheduleProfile profile,
+        IReadOnlyList<TempPlacedSymbolRecord> placements,
+        out List<long> familyIds
+    ) {
+        familyIds = [];
+        var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
+        var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
+        if (profile.Filters.Any(filter => ScheduleFieldNameValueDomain.ResolveSchedulableField(
+                schedule.Definition, doc, Pe.Shared.RevitData.ParameterReference.FromName(filter.FieldName)) == null))
+            return false;
+
+        ApplyFilterFieldsAndFilters(schedule, profile);
+        if (schedule.Definition.GetFilterCount() != profile.Filters.Count)
+            throw new InvalidOperationException($"Schedule filter evaluation could not apply every filter for '{profile.Name}'.");
+        doc.Regenerate();
+        familyIds = MapMatchingInstancesToFamilyIds(placements,
+            CollectMatchingPlacedInstanceIds(doc, schedule.Id, placements));
+        return true;
+    }
+
     private static List<Family> GetMatchingFamiliesByFilter(
         Document doc,
         SharedScheduleProfile profile,
