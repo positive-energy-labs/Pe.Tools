@@ -10,9 +10,14 @@ namespace Pe.Revit.Parameters;
 ///     falling back to invariant-culture numbers, and reads round-trip invariantly.
 /// </summary>
 public static class ParameterStringIo {
-    /// <summary>Native unit syntax plus the portable length/angle literals, constrained by the target spec.</summary>
+    /// <summary>Native unit syntax plus constrained portable and known legacy explicit-unit literals.</summary>
     public static bool TryParseMeasuredValue(Units units, ForgeTypeId spec, string text, out double value) {
         if (UnitFormatUtils.TryParse(units, spec, text, out value)) return true;
+        if (spec == SpecTypeId.HvacTemperature && text.EndsWith(" F", StringComparison.Ordinal) &&
+            double.TryParse(text[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var fahrenheit)) {
+            value = UnitUtils.ConvertToInternalUnits(fahrenheit, UnitTypeId.Fahrenheit);
+            return true;
+        }
         if (!PortableScalar.TryParse(text, out var literal)) return false;
         if (spec == SpecTypeId.Length && literal.Kind == PortableScalarKind.Length) {
             value = literal.Feet;

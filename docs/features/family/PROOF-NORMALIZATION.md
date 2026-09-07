@@ -408,6 +408,14 @@ Compile-only proof: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c
 
 Proof commit `3dd92f9` shows the empty Text source `PE Tag` was excluded by `GetRankedCurrParams`, so normalization created `PE Asset Tag` but scheduled no native replacement or cleanup. `GetRankedCurrParams` now has an opt-in `includeEmpty` path, used only by `NormalizeParamSources` for explicit `wasNamed` intent. Its four fallback-mapping callers retain the populated-only default, so an arbitrary empty fallback source cannot win. Existing destination-first transfer, reference rewiring, source removal, and whole-family rollback paths are unchanged.
 
+## Modine explicit Fahrenheit literal - 2026-09-07
+
+The frozen Modine HHD profile assigns `PE_M_PerfHeat_FluidEWT` as `180 F`. The company definition declares `autodesk.spec.aec.hvac:temperature-2.0.0`. Revit 2025 API reference data declares `UnitTypeId.Fahrenheit` and the native `SymbolTypeId.DegreeF` symbol as `°F`; wave evidence shows that `UnitFormatUtils.TryParse` did not accept the profile's older space-plus-`F` spelling under the source document units.
+
+`ParameterStringIo.TryParseMeasuredValue` remains native-parser-first. Its only added fallback accepts an invariant number followed by the exact ` F` suffix when the destination spec is `SpecTypeId.HvacTemperature`, then calls `UnitUtils.ConvertToInternalUnits` with `UnitTypeId.Fahrenheit`. It does not read or change project unit settings. It does not alter valid native expressions, other specs, or unitless Number values. `FamilyProfileConverter` now uses this shared measured-value parser before emitting the existing explicit portable form.
+
+The real-profile acceptance checks both seams. The converted `HHD45` cell must contain an explicit unit and parse to the internal value of 180 Fahrenheit. After reconciliation, the native `PE_M_PerfHeat_FluidEWT` value must equal the same internal value. Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal` exited 0 with 130 warnings and 0 errors. No Revit lifecycle or runtime ran. P still must rerun the Modine profile case in a fresh or controlled session to prove Revit accepts the emitted portable literal and the reconciler converges.
+
 `One_call_renames_a_parameter_across_three_loaded_families` now reopens every loaded family and independently checks the native `FamilyManager.Parameters` collection for absence of the old source before its existing destination/value/formula/association checks. Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25 -v minimal` exited 0 with 36 warnings and 0 errors. Native rerun of both Text and Length cases remains proof-worker owned. No Revit/session/runtime command ran here.
 
 ## Wave10 company legacy display literals - 2026-09-07

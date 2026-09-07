@@ -639,7 +639,7 @@ public static class FamilyProfileConverter {
             return ParameterPortableFormat.ForSpec(spec)(legacyRaw);
         }
         if (spec == SpecTypeId.Number || spec == SpecTypeId.Int.Integer || !UnitUtils.IsMeasurableSpec(spec)) return value;
-        if (!UnitFormatUtils.TryParse(units, spec, value, out var raw)) throw new InvalidOperationException($"Legacy literal cannot resolve in source units: {name}={value}");
+        if (!ParameterStringIo.TryParseMeasuredValue(units, spec, value, out var raw)) throw new InvalidOperationException($"Legacy literal cannot resolve in source units: {name}={value}");
         return ParameterPortableFormat.ForSpec(spec)(raw);
     }
 

@@ -472,6 +472,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(url.Value<string>("sharedGuid"), Is.EqualTo(definition.DownloadOptions.GetGuid().ToString()));
                 Assert.That(url.Value<string>("value"), Does.StartWith("https://"));
             }
+            if (profilePath.EndsWith("/Modine HHD Series.json", StringComparison.Ordinal)) {
+                var literal = patch.Patch["types"]!["HHD45"]!["PE_M_PerfHeat_FluidEWT"]!.Value<string>()!;
+                Assert.That(literal, Does.Contain(" "), "Converted temperature must retain an explicit unit symbol.");
+                Assert.That(ParameterStringIo.TryParseMeasuredValue(document.GetUnits(), SpecTypeId.HvacTemperature, literal, out var parsed), Is.True);
+                Assert.That(parsed, Is.EqualTo(UnitUtils.ConvertToInternalUnits(180, UnitTypeId.Fahrenheit)).Within(1e-9));
+            }
             evidence["parameterPatch"] = patch.Patch.DeepClone();
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
@@ -597,6 +603,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.4, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
             "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json" => (Name: "PE_G___Weight", Type: "E130",
                 Spec: SpecTypeId.Number, Value: 98d),
+            "CmdFFManager/profiles/SavedEquip/Modine HHD Series.json" => (Name: "PE_M_PerfHeat_FluidEWT", Type: "HHD45",
+                Spec: SpecTypeId.HvacTemperature, Value: UnitUtils.ConvertToInternalUnits(180, UnitTypeId.Fahrenheit)),
             _ => default
         };
         if (expected.Name is null) return;
