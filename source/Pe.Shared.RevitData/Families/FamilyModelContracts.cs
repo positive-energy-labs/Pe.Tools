@@ -550,10 +550,10 @@ public sealed class FamilyModelArray {
 public enum ArrayAnchor { Second, Last }
 
 /// <summary>
-///     One `ConnectorElement`, addressed by its own stub's SKETCH PLANE <see cref="On" /> (any declared plane,
-///     tangent planes included: the Grinder Pump Basin discharge sits on a plane tangent to a cylinder) plus
-///     the two in-plane positioning planes <see cref="At" /> (four Zehnder duct connectors share one top
-///     plane and differ only in `at`). Critic F10/F11, both PROVEN on the corpus. The connector normal is
+///     One `ConnectorElement`, addressed by the plane its own FACE lies on, <see cref="On" /> (any declared
+///     plane, tangent planes included: the Grinder Pump Basin discharge sits on a plane tangent to a
+///     cylinder) plus the two in-plane positioning planes <see cref="At" /> (four Zehnder duct connectors
+///     share one top plane and differ only in `at`). Critic F10/F11, both PROVEN on the corpus. The connector normal is
 ///     the plane normal; there is no direction slot to get wrong. Identity and diff key: (domain, on, at).
 ///     Size slots are lengths; <see cref="Associate" /> maps connector parameter → `param:` host parameter
 ///     (gotcha 7 skip-list applies at lowering).
@@ -566,6 +566,17 @@ public sealed class FamilyModelConnector {
     [JsonProperty("systemType", Required = Required.Always)]
     public ConnectorSystemType SystemType { get; init; }
 
+    /// <summary>
+    ///     RULING (kaitpw, 2026-09-06): <see cref="On" /> is the plane the connector FACE lies on. It is not
+    ///     the plane the connector's stub starts from.
+    ///     `MakeConnectors` sketches the stub on <see cref="On" />, starts the stub one stub depth inward,
+    ///     and ends the stub on <see cref="On" />, so the terminal face of the stub is coplanar with the
+    ///     plane. Capture reads the connector face, finds the named plane the face lies on, and emits that
+    ///     plane here. Capture therefore reads back exactly the name the author wrote.
+    ///     A connector whose face lies on no named plane is `unmodeled` with reason
+    ///     <see cref="UnmodeledReason.ConnectorFaceNotOnPlane" />. The author declares the missing plane and
+    ///     the connector becomes addressable.
+    /// </summary>
     [JsonProperty("on", Required = Required.Always)]
     public string On { get; init; } = string.Empty;
 

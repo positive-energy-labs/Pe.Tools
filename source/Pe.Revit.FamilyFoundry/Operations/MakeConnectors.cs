@@ -7,9 +7,17 @@ using Pe.Shared.RevitData.Families;
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>
-///     One connector = a small stub extrusion sketched on `on`, positioned at the intersection of the two
-///     `at` planes, plus a `ConnectorElement` on the stub's terminal face, sized, configured, and associated.
-///     The stub is what makes the connector addressable by name on re-read: its sketch plane IS the `on` name.
+///     One connector is a small stub extrusion plus a `ConnectorElement` on the terminal face of the stub.
+///     RULING (kaitpw, 2026-09-06): the `on` name is the plane the connector FACE lies on. The `on` name is
+///     not the plane the stub starts from.
+///     This operation sketches the stub profile on `on`. This operation then starts the stub one stub depth
+///     inward and ends the stub on `on`, so the stub extrudes toward the family body. The terminal face of
+///     the stub is therefore coplanar with `on`.
+///     Capture reads the connector face, finds the named plane the face lies on, and emits that plane as
+///     `on`. Capture therefore reads back exactly the `on` name the author wrote.
+///     A stub that extruded away from `on` put the connector face one stub depth off the plane the author
+///     named, and capture read a different plane or read no plane at all.
+///     The two `at` planes cross the plane `on` at the connector origin.
 /// </summary>
 public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] connectors, FamilyModel model) : DocOperation<DefaultOperationSettings>(new DefaultOperationSettings()) {
     private const double StubSize = 1.0 / 12.0;
@@ -38,9 +46,13 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                 profile.Append(loop);
                 var stub = doc.Document.FamilyCreate.NewExtrusion(true, profile, sketchPlane, StubSize);
                 _ = stub.get_Parameter(BuiltInParameter.ELEMENT_IS_CUTTING)?.Set(0);
+                // Terminal face coplanar with `on`: start one depth inward, end on the plane. Start moves
+                // first because Revit refuses an end that is not above the current start.
+                _ = stub.get_Parameter(BuiltInParameter.EXTRUSION_START_PARAM)?.Set(-StubSize);
+                _ = stub.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM)?.Set(0.0);
                 doc.Document.Regenerate();
-                var face = MakeForms.FaceOn(doc, stub, Plane.CreateByNormalAndOrigin(normal, center + (normal * StubSize)))
-                           ?? throw new InvalidOperationException("Stub has no terminal face.");
+                var face = MakeForms.FaceOn(doc, stub, Plane.CreateByNormalAndOrigin(normal, center))
+                           ?? throw new InvalidOperationException("Stub has no terminal face on its `on` plane.");
 
                 var connector = spec.Domain switch {
                     ConnectorDomain.Duct => ConnectorElement.CreateDuctConnector(doc, Enum.Parse<DuctSystemType>(spec.SystemType.ToString()),
