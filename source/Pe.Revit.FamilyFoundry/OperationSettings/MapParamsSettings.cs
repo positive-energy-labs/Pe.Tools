@@ -19,7 +19,13 @@ public class MapParamsSettings : IOperationSettings {
 
     public IReadOnlyDictionary<string, MappingData> GetMappingsByNewName() => this.MappingData
         .GroupBy(mapping => mapping.NewName, StringComparer.Ordinal)
-        .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        .ToDictionary(group => group.Key, group => {
+            var first = group.First();
+            if (group.Any(m => m.OnlyAddIfSourceExists != first.OnlyAddIfSourceExists || m.MappingStrategy != first.MappingStrategy))
+                throw new InvalidOperationException($"Mapping target '{group.Key}' has conflicting conditional/coercion policies.");
+            return new MappingData { NewName = group.Key, CurrNames = group.SelectMany(m => m.CurrNames).Distinct(StringComparer.Ordinal).ToList(),
+                OnlyAddIfSourceExists = first.OnlyAddIfSourceExists, MappingStrategy = first.MappingStrategy };
+        }, StringComparer.Ordinal);
 
     public IEnumerable<(MappingData Mapping, LogEntry Log)> GetIncompleteMappings(OperationContext groupContext) {
         var mappingsByNewName = this.GetMappingsByNewName();

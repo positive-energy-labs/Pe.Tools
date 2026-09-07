@@ -14,7 +14,8 @@ internal static class CompanyNormalizationFixture {
         IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions) {
         var filter = profile["FilterApsParams"];
         var older = profile["SharedParameterSelection"];
-        var selected = definitions.Where(d => !d.IsArchived && Matches(d.Name!, filter?["IncludeNames"] ?? older?["Include"], true) &&
+        var include = filter?["IncludeNames"] ?? older?["Include"];
+        var selected = definitions.Where(d => (!d.IsArchived || (include?["Equaling"] ?? include?["Names"])?.Values<string>().Contains(d.Name) == true) && Matches(d.Name!, include, true) &&
             !Matches(d.Name!, filter?["ExcludeNames"] ?? older?["Exclude"], false)).Select(d => d.Name!).ToList();
         var mappings = profile["AddAndMapSharedParams"]?.ToObject<MapParamsSettings>() ??
             new MapParamsSettings { Enabled = profile["MappingData"] is not null, MappingData = profile["MappingData"]?.ToObject<List<MappingData>>() ?? [] };
@@ -29,11 +30,10 @@ internal static class CompanyNormalizationFixture {
         var specs = definitions.ToDictionary(d => d.Name!, d => d.DownloadOptions.GetSpecTypeId(), StringComparer.Ordinal);
         var locals = new JObject();
         if (profile["AddFamilyParams"] is JObject add && add.Value<bool?>("Enabled") != false) {
-            var labels = RevitLabelCatalog.GetLabelToSpecMap();
             foreach (var local in add["Parameters"] ?? new JArray()) {
                 var name = (string)local["Name"]!;
                 var label = (string?)local["DataType"] ?? "Text (Common)";
-                var spec = labels.TryGetValue(label, out var known) ? known : throw new InvalidOperationException($"Unknown legacy datatype {label}: {name}");
+                var spec = RevitLabelCatalog.ResolveSpec(label);
                 specs[name] = spec;
                 var dataType = Enum.GetValues(typeof(DataType)).Cast<DataType>().First(t => SetParamMetadata.Spec(t) == spec);
                 locals[name] = new JObject { ["dataType"] = dataType.ToString(), ["isInstance"] = local.Value<bool?>("IsInstance") ?? true,
@@ -52,6 +52,15 @@ internal static class CompanyNormalizationFixture {
         var patch = Convert(resolvedMappings.ToObject<MapParamsSettings>()!, selected,
             assignments, specs: specs, legacyUnits: document.GetUnits());
         var parameters = (JObject)patch.Patch["parameters"]!;
+        foreach (var name in selected) {
+            var definition = definitions.Single(d => d.Name == name);
+            parameters[name]!["sharedGuid"] = definition.DownloadOptions.GetGuid().ToString();
+            parameters[name]!["sharedSpecId"] = definition.DownloadOptions.GetSpecTypeId().TypeId;
+            parameters[name]!["sharedVisible"] = definition.DownloadOptions.Visible;
+            parameters[name]!["sharedUserModifiable"] = !definition.ReadOnly;
+            parameters[name]!["isInstance"] = definition.DownloadOptions.IsInstance;
+            parameters[name]!["propertiesGroup"] = definition.DownloadOptions.GetGroupTypeId().TypeId;
+        }
         foreach (var local in locals.Properties()) {
             if (parameters[local.Name] is JObject assigned) ((JObject)local.Value).Merge(assigned);
             parameters[local.Name] = local.Value;
@@ -74,9 +83,7 @@ internal static class CompanyNormalizationFixture {
         var selected = selectedSharedNames.ToHashSet(StringComparer.Ordinal);
         foreach (var name in selected) parameters[name] = new JObject { ["shared"] = true };
         if (mappings.Enabled) {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var mapping in mappings.MappingData.Where(m => selected.Contains(m.NewName))) {
-                if (!seen.Add(mapping.NewName)) throw new InvalidOperationException($"Duplicate mapping target: {mapping.NewName}");
+            foreach (var mapping in mappings.GetMappingsByNewName().Values.Where(m => selected.Contains(m.NewName))) {
                 if (mapping.OnlyAddIfSourceExists) throw new InvalidOperationException($"Conditional source-only rule needs per-family conversion: {mapping.NewName}");
                 var parameter = (JObject)parameters[mapping.NewName]!;
                 parameter["wasNamed"] = new JArray(mapping.CurrNames);

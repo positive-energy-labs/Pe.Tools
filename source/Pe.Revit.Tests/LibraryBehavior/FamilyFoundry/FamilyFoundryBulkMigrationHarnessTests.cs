@@ -712,8 +712,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 .WithPerFamilyCallback(_ => receipts.Add(operation.LastReceipt?.Converged ?? false))
                 .ProcessQueue(new OperationQueue().Add(operation).Add(failure));
             Assert.That(contexts.Count, Is.EqualTo(2));
-            Assert.That(failure.Triggered, Is.True, $"Loaded names: {string.Join(", ", familyNames)}; contexts: {string.Join(", ", contexts.Select(c => c.FamilyName))}");
             var (_, firstError) = contexts[0].OperationLogs;
+            Assert.That(failure.Triggered, Is.True, $"Earlier failure: {firstError}; loaded names: {string.Join(", ", familyNames)}; contexts: {string.Join(", ", contexts.Select(c => c.FamilyName))}");
             Assert.That(firstError?.Message, Does.Contain("injected failure"));
             Assert.That(receipts, Is.EqualTo(new[] { false, true }));
             for (var index = 0; index < familyNames.Length; index++) {
