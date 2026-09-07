@@ -1,5 +1,6 @@
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Events;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry;
@@ -594,28 +595,53 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(definitions, Has.Count.EqualTo(38));
             var operation = new ReconcileFamily(CompanyNormalizationFixture.Convert(mappings, names),
                 sharedSource: document => new FamilySharedParameterSource(document, definitions));
-            using var processor = new OperationProcessor(project);
-            var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
-            var (_, error) = contexts.Single().OperationLogs;
+            var failurePath = Path.Combine(output, "join-failures.json");
+            var failureEvidence = new JObject { ["status"] = "subscribed", ["failures"] = new JArray() };
+            WriteCheckpoint(failurePath, failureEvidence);
+            void CaptureFailures(object? _, FailuresProcessingEventArgs args) {
+                var accessor = args.GetFailuresAccessor();
+                if (accessor == null) return;
+                foreach (var failure in accessor.GetFailureMessages())
+                    ((JArray)failureEvidence["failures"]!).Add(new JObject {
+                        ["capturedAtUtc"] = DateTime.UtcNow.ToString("O"),
+                        ["document"] = accessor.GetDocument()?.Title,
+                        ["severity"] = failure.GetSeverity().ToString(),
+                        ["failureDefinitionId"] = failure.GetFailureDefinitionId().Guid.ToString(),
+                        ["description"] = failure.GetDescriptionText()
+                    });
+                failureEvidence["status"] = "observed";
+                WriteCheckpoint(failurePath, failureEvidence);
+            }
 
-            var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
-            var afterJoins = CaptureJoinGraph(project, loaded);
-            Assert.That(afterJoins, Is.EqualTo(beforeJoins), "Migration must preserve every authored join edge.");
-            if (error is null) {
-                Assert.That(operation.LastReceipt?.Converged, Is.True);
-                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
-                var exact = definitions.Count(definition => after.Parameters.Any(parameter =>
-                    parameter.Definition.Identity.Name == definition.Name &&
-                    parameter.Definition.Identity.SharedGuid == definition.DownloadOptions.GetGuid().ToString()));
-                Assert.That(exact, Is.EqualTo(definitions.Count));
-            } else {
-                var joinLossGuid = BuiltInFailures.JoinElementsFailures.CannotKeepJoined.Guid.ToString();
-                Assert.That(error.ToString(), Does.Contain(joinLossGuid), "Rollback must report the exact native join-loss failure GUID.");
-                Assert.That(loaded.Id, Is.EqualTo(originalId));
-                Assert.That(loaded.UniqueId, Is.EqualTo(originalUniqueId));
-                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
-                Assert.That(JToken.DeepEquals(JToken.FromObject(after.Parameters), JToken.FromObject(before.Parameters)), Is.True,
-                    "Rollback must preserve the complete parameter matrix.");
+            this._application.FailuresProcessing += CaptureFailures;
+            try {
+                using var processor = new OperationProcessor(project);
+                var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+
+                var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
+                var afterJoins = CaptureJoinGraph(project, loaded);
+                Assert.That(afterJoins, Is.EqualTo(beforeJoins), "Migration must preserve every authored join edge.");
+                if (error is null) {
+                    Assert.That(operation.LastReceipt?.Converged, Is.True);
+                    var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
+                    var exact = definitions.Count(definition => after.Parameters.Any(parameter =>
+                        parameter.Definition.Identity.Name == definition.Name &&
+                        parameter.Definition.Identity.SharedGuid == definition.DownloadOptions.GetGuid().ToString()));
+                    Assert.That(exact, Is.EqualTo(definitions.Count));
+                } else {
+                    var joinLossGuid = BuiltInFailures.JoinElementsFailures.CannotKeepJoined.Guid.ToString();
+                    Assert.That(error.ToString(), Does.Contain(joinLossGuid), "Rollback must report the exact native join-loss failure GUID.");
+                    Assert.That(loaded.Id, Is.EqualTo(originalId));
+                    Assert.That(loaded.UniqueId, Is.EqualTo(originalUniqueId));
+                    var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
+                    Assert.That(JToken.DeepEquals(JToken.FromObject(after.Parameters), JToken.FromObject(before.Parameters)), Is.True,
+                        "Rollback must preserve the complete parameter matrix.");
+                }
+            } finally {
+                this._application.FailuresProcessing -= CaptureFailures;
+                failureEvidence["status"] = "unsubscribed";
+                WriteCheckpoint(failurePath, failureEvidence);
             }
         } finally {
             project.Close(false);
