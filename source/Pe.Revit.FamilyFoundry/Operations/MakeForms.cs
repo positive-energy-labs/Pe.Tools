@@ -46,7 +46,7 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
                 var view = FamilyRefs.ViewFor(doc, null, normal);
                 foreach (var sketchCurve in extrusion.Sketch.GetAllElements().Select(id => doc.Document.GetElement(id)).OfType<ModelCurve>()) {
                     var hit = sketchCurves.FirstOrDefault(item => FamilyRefs.SameCurve(item.Curve, sketchCurve.GeometryCurve));
-                    if (hit.Spec is null) throw new InvalidOperationException("Revit sketch curve does not match its authored profile.");
+                    if (hit.Spec is null) throw new InvalidOperationException($"Revit sketch curve {FamilyRefs.DescribeCurve(sketchCurve.GeometryCurve)} does not match authored profiles: {string.Join("; ", sketchCurves.Select(item => FamilyRefs.DescribeCurve(item.Curve)))}.");
                     FamilyRefs.ConstrainSketchCurve(doc, view, sketchCurve, hit.Spec);
                 }
                 AlignCaps(doc, extrusion, normal, spec.Start ?? spec.SketchPlane!, spec.End, logs, slug);

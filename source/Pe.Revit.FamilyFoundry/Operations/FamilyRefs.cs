@@ -53,6 +53,12 @@ internal static class FamilyRefs {
         return (a0.IsAlmostEqualTo(b0, 1e-4) && a1.IsAlmostEqualTo(b1, 1e-4)) || (a0.IsAlmostEqualTo(b1, 1e-4) && a1.IsAlmostEqualTo(b0, 1e-4));
     }
 
+    internal static string DescribeCurve(Curve curve) => curve is Arc arc
+        ? $"Arc(bound={arc.IsBound}, circle={IsCircle(arc)}, center={arc.Center}, radius={arc.Radius:R}, normal={arc.Normal})"
+        : curve.IsBound
+            ? $"{curve.GetType().Name}({curve.GetEndPoint(0)} -> {curve.GetEndPoint(1)})"
+            : $"{curve.GetType().Name}(unbound)";
+
     public static ReferencePlane? FindPlane(Document doc, string name) =>
         new FilteredElementCollector(doc).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
             .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
@@ -156,6 +162,11 @@ internal static class FamilyRefs {
 
     public static void Align(Document doc, View view, Reference a, Reference b) {
         try { _ = doc.FamilyCreate.NewAlignment(view, a, b); }
-        catch { _ = doc.FamilyCreate.NewAlignment(view, b, a); }
+        catch (Exception first) {
+            try { _ = doc.FamilyCreate.NewAlignment(view, b, a); }
+            catch (Exception second) {
+                throw new AggregateException($"Alignment failed in view '{view.Name}' for {a.ElementId}/{a.ElementReferenceType} and {b.ElementId}/{b.ElementReferenceType}, in both argument orders.", first, second);
+            }
+        }
     }
 }
