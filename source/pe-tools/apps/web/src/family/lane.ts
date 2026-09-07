@@ -11,6 +11,7 @@ interface OpenFamilyDocument {
 interface FamilyLane {
   world: PageWorld;
   document: OpenFamilyDocument | null;
+  drawingModel: FamilyModel | null;
   parseError: string | null;
   seedKey: string;
   fixture: boolean;
@@ -24,6 +25,7 @@ export function familyLane(
   let projected: PageWorld | null = null;
   let model: FamilyModel | null = null;
   let parseError: string | null = null;
+  let capturedModel: FamilyModel | null = null;
   if (snapshot) {
     try {
       if (snapshot.composedContent == null)
@@ -45,6 +47,7 @@ export function familyLane(
   if (!snapshot && evidence && "modelJson" in evidence) {
     try {
       const captured = JSON.parse(evidence.modelJson) as FamilyModel;
+      capturedModel = captured;
       if (!captured?.family || typeof captured.family.name !== "string")
         throw new Error("The capture has no family header.");
       captured.types ??= {};
@@ -78,6 +81,7 @@ export function familyLane(
         });
   return {
     world,
+    drawingModel: model ?? capturedModel,
     document: model
       ? {
           model,

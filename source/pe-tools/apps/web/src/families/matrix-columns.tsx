@@ -144,7 +144,7 @@ export function useFamiliesColumns({
         cell: (row) => (
           <ReadCell
             value={row.familyName}
-            reason={`${row.familyName} — ${row.typeCount} type(s), element id ${row.familyId}. Click the row to open this one family in /family, in the bound session's family editor.`}
+            reason={`${row.familyName} — ${row.typeCount} type(s), element id ${row.familyId}. Click the row to open this one family in /family, using this route's source.`}
           />
         ),
       },

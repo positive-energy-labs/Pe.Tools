@@ -58,10 +58,17 @@ export function FamilyWorkspaceView() {
           }
           fact={
             <>
+              <FactChip title="Coverage is reported by native Revit capture; authored fixtures do not imply capture coverage.">
+                {evidence && "modelJson" in evidence
+                  ? `coverage ${Object.entries(evidence.coverage)
+                      .map(([key, value]) => `${key}: ${value}`)
+                      .join(" / ")} / ${evidence.unmodeledCount} unmodeled`
+                  : "coverage not captured / unmodeled not captured"}
+              </FactChip>
               {evidence && "modelJson" in evidence && (
                 <details>
                   <summary>native capture / {evidence.unmodeledCount} unmodeled</summary>
-                  <pre>
+                  <pre className="max-h-64 max-w-2xl overflow-auto">
                     {JSON.stringify(evidence.coverage, null, 2)}
                     {"\n"}
                     {evidence.modelJson}
@@ -71,10 +78,12 @@ export function FamilyWorkspaceView() {
               {snapshot && (
                 <details>
                   <summary>authored JSON</summary>
-                  <pre>{snapshot.rawContent}</pre>
+                  <pre className="max-h-64 max-w-2xl overflow-auto">{snapshot.rawContent}</pre>
                   <details>
                     <summary>expanded JSON</summary>
-                    <pre>{snapshot.composedContent}</pre>
+                    <pre className="max-h-64 max-w-2xl overflow-auto">
+                      {snapshot.composedContent}
+                    </pre>
                   </details>
                 </details>
               )}
@@ -123,13 +132,17 @@ export function FamilyWorkspaceView() {
                         {reconciliation.plan.entry.changes.length} changes ?{" "}
                         {reconciliation.plan.entry.refusals.length} refusals
                       </summary>
-                      <pre>{JSON.stringify(reconciliation.plan.entry, null, 2)}</pre>
+                      <pre className="max-h-64 max-w-2xl overflow-auto">
+                        {JSON.stringify(reconciliation.plan.entry, null, 2)}
+                      </pre>
                     </details>
                   )}
                   {reconciliation.apply && (
                     <details>
                       <summary>apply receipts</summary>
-                      <pre>{JSON.stringify(reconciliation.apply, null, 2)}</pre>
+                      <pre className="max-h-64 max-w-2xl overflow-auto">
+                        {JSON.stringify(reconciliation.apply, null, 2)}
+                      </pre>
                     </details>
                   )}
                 </>

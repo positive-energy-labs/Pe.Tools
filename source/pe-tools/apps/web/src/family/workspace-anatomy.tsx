@@ -44,7 +44,7 @@ export function FamilyWorkspaceAnatomy() {
         world={world}
         draft={draft}
         typeName={stageType}
-        model={lane.document?.model ?? null}
+        model={lane.drawingModel}
         focusedParts={focusedParts}
         focusedParams={focusedParams}
         onFocus={setFocus}

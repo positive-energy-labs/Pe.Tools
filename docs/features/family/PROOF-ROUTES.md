@@ -2,6 +2,44 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Native fixture browser slice - 2026-09-07
+
+**Partial proof, not route-plus-Revit acceptance.** The four native `/family` stories and native `/families` were rendered and interacted with in Chrome against this checkout's isolated no-Revit host. Screenshot capture is blocked: CUA `getScreenshot`, tab `screenshot`, and CDP `Page.captureScreenshot` timed out (5/10/30 seconds); no screenshot bytes were returned. DOM/interaction receipts are not screenshots or visual approval. A question about minimized/disconnected Chrome remains pending. No Revit operation or C# change occurred in this slice.
+
+### Source wiring and native readouts
+
+- `web/src/family/fixture.ts` directly imports the four unchanged `Pe.Revit.Tests/Fixtures/FamilyModel/{a-box,b-grd,c-bath-shower,d-bath-shower-refline}.family.json?raw` sources. The explicit route selectors are `box`, `grd`, `bath`, `refline`. No copied fixture payload or hidden fallback was added.
+- `family/family-model.ts::buildSheet` now reads native `forms`, datum/reference-plane seeds and connector `on`/`at` intersections. `project.ts` feeds native form dimensions to the existing editor and emits `/forms/...` changes. Existing legacy solids/frames, editor controls and evaluator remain. The shared length reader accepts signed portable lengths and native feet/inch display values. Native geometry tests use the unchanged source fixtures.
+- The existing SVG views render supported centered macro solids, reference-plane seeds and connectors; direction glyphs no longer claim an unauthored stub length. Native room-calculation points no longer receive the legacy guessed position. Arbitrary constrained placement, extrusion sketches, reference-line swing, nested bodies, arrays and Revit formula results are not solved in the browser. Declarations remain visible and raw JSON retains every field. The native pane explicitly names the Revit constraint/geometry boundary; parameter workflows remain available.
+- `family/anatomy.tsx` exposes native datums/refPlanes/refLines/dimensions/nested/arrays declarations. `workspace-view.tsx` shows capture coverage and unmodeled facts when present, or explicitly `coverage not captured / unmodeled not captured` for authored examples. Raw/expanded/capture JSON readouts are bounded and scrollable. Capture-only anatomy uses the native captured model while authored document identity stays null.
+- `families/fixture.ts` projects these same source models into four family/six type rows at `/families?source=fixture&fixture=native`. Native fixture rows start **unplanned**, with no fabricated backend hash or comparison result. Selected projection returns the exact source JSON; empty fixture coverage is labeled not captured. `matrix.tsx` navigates native fixture rows to their matching `/family` selector; real rows retain the existing editor-open/capture path. The original six-family fixture is preserved and linked separately.
+- Native shared-parameter field names relayed by normalize are `sharedGuid`, `fillBlanksFromSources`, and `mappingStrategy`. Raw authored JSON preserves them; this slice adds no guessed transport or normalization semantics. Dedicated typed authoring of those fields and host/schema verification await the coordinated normalization merge.
+
+### Browser receipts
+
+Server: Herdr session `ffroutes0906`, our terminal `w1:p2`, workdir `source/pe-tools`, `vp run dev:no-revit`; service identity `host-source-b3720e7771c8-no-revit`, PID 37656, `http://127.0.0.1:5180`. It advertises no Revit capability. Own Chrome tab 342187142. Evidence below lives in `.artifacts/runs/browser-20260906-ff/`.
+
+| Actual Chrome journey | Evidence and observation |
+|---|---|
+| Box | `box-before.ax.txt`, `box-body.ax.txt`, `box-edited.ax.txt`, `box-interaction.json`: body inspector; Wide Width 36in to 48in, Enter; front body SVG width/height ratio changed 1 to 4/3; unsaved edit visible. No file save. |
+| Grille | `grd-arrays.ax.txt`, `grd-drill.ax.txt`, `grd-final.ax.txt`: flange/exhaust present, arrays/vanes-back declaration opened, Slot type selected; formula cells remain derived/locked. |
+| Bath | `bath-interaction.ax.txt`: cold connector inspector and conn-z dimension opened; three connectors, six reference-plane and dimension declarations, three nested declarations. The 12.5in plane is an authored seed, not the solved half-inch labeled offset. |
+| Hinge | `refline-interaction.ax.txt`: two connectors, two reference-line declarations; opened conn swing (left) showing authored length/angle references. No invented nested hinge geometry. |
+| Native fleet | `fleet-native-projection.ax.txt`, `fleet-projection-source.json`: four families/six types; project selected Box; rendered pre text equals original source bytes, including numeric Voltage 480. Coverage says not captured. |
+| Fleet row navigation | `fleet-to-refline.ax.txt`, `fleet-navigation.json`: click PE Bath-Shower (hinge) row, URL becomes `/family?source=fixture&fixture=refline`, heading family. |
+| Preserved fleet | `fleet-original.ax.txt`, `fleet-original-projection.ax.txt`: existing six-family decision queue renders; selected projection remains functional. |
+
+`browser-errors.json` is empty. Network evidence is **not all green**: `browser-network.json` and `browser-network-summary.json` contain shell `/host/install` and `/host/update` 404 responses, plus eight canceled fetches. These do not establish host/provider-schema acceptance. Screenshot capture failures remain unresolved and no `.png` proof exists.
+
+### Validation and remaining proof
+
+- Deterministic focused route/model/store checks: **97 passed / 9 files**, exit 0 (`native-targeted-tests.txt`). Includes all four native geometry source cases, exact native `/forms` reverse path, direct fleet fixture source equality and existing editor/store coverage.
+- Wider family-prefix run: **127 passed, 2 failed / 14 files** (`native-family-tests.txt`). Both failures are unchanged `family-review/proto-editor/paint.test.tsx` render tests: `design token unavailable: line` from `lib/token.ts:9` via `StatePanel`. No prototype feature or test was removed. The restored original evaluator conformance tests pass in that wider run.
+- Static/type/format checks: **0 errors, 3 existing warnings / 42 files**, exit 0 (`native-geometry-check.txt`): parameterText no-base-to-string, store/workspace-core unbound-method warnings. One redirected attempt produced PowerShell NativeCommandError from benign warning stderr; the final run records the actual native exit.
+- Still owed: actual screenshots/visual inspection; host/schema verification with root's composition/scalar/normalization changes; C# keyed-include parity; shared-fragment per-field provenance/editing; current-family reviewed Apply plus native receipts/recapture; loaded-family navigation identity/scratch reuse; per-family rollback, batch continuation, no implicit save, and route-plus-Revit proof. Those runtime claims remain exclusively with the proof owner.
+
+The historical checkpoints below are superseded by the newer slice sections for changed seams; they remain the original census record.
+
 ## Project-row navigation and native readouts ? 2026-09-07
 
 - `web/src/families/matrix.tsx` passes the clicked row's family id to `store.actions.openFamily`. The existing `family.editor.open` operation remains the only editor-opening implementation; no new host operation was added. Its returned scratch `.rfa` path becomes the `/family` document scope, with the user's original session pin retained. A missing path refuses navigation. Fixture rows cannot open real Revit documents.

@@ -293,6 +293,13 @@ export function FamiliesReadoutBands() {
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
                 <span className="t-small t-upper">{entry.familyName ?? entry.familyId}</span>
+                <span className="t-small text-ink-2">
+                  {Object.keys(entry.coverage).length
+                    ? `coverage ${Object.entries(entry.coverage)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(" / ")} / ${entry.unmodeledCount} unmodeled`
+                    : "coverage not captured / unmodeled not captured"}
+                </span>
                 {entry.modelJson && (
                   <Verb
                     label="copy"

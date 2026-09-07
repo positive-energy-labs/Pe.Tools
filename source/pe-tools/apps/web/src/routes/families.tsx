@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamiliesStore, fixtureFamilyRows } from "#/families/fixture";
+import {
+  createFixtureFamiliesStore,
+  fixtureFamilyRows,
+  nativeFixtureRows,
+} from "#/families/fixture";
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
@@ -11,7 +15,8 @@ import type { Scope } from "#/state/route-store";
 
 export const familiesSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
+): { thread?: string; source?: "fixture"; fixture?: "native" } => ({
+  ...(search.fixture === "native" ? { fixture: "native" as const } : {}),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   source: search.source === "fixture" ? "fixture" : undefined,
@@ -23,11 +28,18 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  return <FamiliesRouteContent source={Route.useSearch().source} />;
+  return <FamiliesRouteContent {...Route.useSearch()} />;
 }
 
-export function FamiliesRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <FamiliesFixtureRoute />;
+export function FamiliesRouteContent({
+  source,
+  fixture,
+}: {
+  source?: "fixture";
+  fixture?: "native";
+}) {
+  if (source === "fixture")
+    return <FamiliesFixtureRoute key={fixture} native={fixture === "native"} />;
   return (
     <RouteScope>
       {(scope) => <FamiliesStoreOwner key={scope.scope.document} scope={scope} />}
@@ -35,9 +47,14 @@ export function FamiliesRouteContent({ source }: { source?: "fixture" }) {
   );
 }
 
-export function FamiliesFixtureRoute() {
-  const store = useRouteStore(() => createFixtureFamiliesStore(appAtomRegistry));
-  return <FamiliesWorkspace store={store} fixtureFamilies={fixtureFamilyRows} />;
+export function FamiliesFixtureRoute({ native = false }: { native?: boolean }) {
+  const store = useRouteStore(() => createFixtureFamiliesStore(appAtomRegistry, native));
+  return (
+    <FamiliesWorkspace
+      store={store}
+      fixtureFamilies={native ? nativeFixtureRows : fixtureFamilyRows}
+    />
+  );
 }
 
 function FamiliesStoreOwner({ scope }: { scope: Scope }) {

@@ -41,7 +41,10 @@ interface FrameSpec {
 
 export interface SolidSpec {
   kind: string;
-  frame: string;
+  frame?: string;
+  center?: string[];
+  bottom?: string;
+  void?: boolean;
   width?: string;
   depth?: string;
   height?: string;
@@ -55,8 +58,11 @@ interface StubSpec {
 
 export interface ConnectorSpec {
   domain: string;
-  frame: string;
-  shape: string;
+  frame?: string;
+  on?: string;
+  at?: string[];
+  associate?: Record<string, string>;
+  shape?: string;
   diameter?: string;
   width?: string;
   height?: string;
@@ -77,6 +83,7 @@ interface ArraySpec {
   member: string;
   axis: string;
   halfCount: string;
+  label?: string;
   limits?: { start: string; end: string };
 }
 
@@ -87,6 +94,19 @@ export interface FamilyModel {
   parameters?: Record<string, ParamSpec>;
   sharedParameters?: Record<string, ParamSpec>;
   types: Record<string, Record<string, string>>;
+  forms?: Record<string, SolidSpec>;
+  datums?: Record<string, { normal: string; isLevel?: boolean }>;
+  refPlanes?: Record<string, { normal: string; at: string }>;
+  refLines?: Record<string, unknown>;
+  dimensions?: Record<
+    string,
+    { between: string[]; label?: string; equality?: boolean; locked?: string }
+  >;
+  nested?: Record<
+    string,
+    { family: string; type?: string; host: string; associate?: Record<string, string> }
+  >;
+  coverage?: Record<string, string>;
   planes?: Record<string, PlaneSpec>;
   frames?: Record<string, FrameSpec>;
   solids?: Record<string, SolidSpec>;
@@ -115,12 +135,31 @@ export type Update = (fn: (model: FamilyModel) => FamilyModel) => void;
 /** A portable length literal (`24in`, `2 1/2in`, `3ft`, `600mm`) in inches, or null. */
 export function inches(text: string | undefined): number | null {
   if (!text) return null;
-  const m = /^\s*(?:(\d+(?:\.\d+)?)(?:\s+(\d+)\/(\d+))?|(\d+)\/(\d+))\s*(in|ft|mm)\s*$/.exec(text);
-  if (!m) return null;
-  let n = m[1] ? Number.parseFloat(m[1]) : 0;
-  if (m[2] && m[3]) n += Number(m[2]) / Number(m[3]);
-  if (m[4] && m[5]) n = Number(m[4]) / Number(m[5]);
-  return m[6] === "ft" ? n * 12 : m[6] === "mm" ? n / 25.4 : n;
+  const number = String.raw`(?:\d+(?:\.\d+)?(?:\s+\d+/\d+)?|\d+/\d+)`;
+  const value = (raw: string) =>
+    raw
+      .trim()
+      .split(/\s+/)
+      .reduce((sum, part) => {
+        const [n, d] = part.split("/").map(Number);
+        return sum + (d === undefined ? n : n / d);
+      }, 0);
+  const suffixed = new RegExp(`^\\s*([+-]?)(${number})\\s*(in|ft|mm|cm|m)\\s*$`).exec(text);
+  if (suffixed) {
+    const n = value(suffixed[2]) * (suffixed[1] === "-" ? -1 : 1);
+    return Number.isFinite(n)
+      ? n * { in: 1, ft: 12, mm: 1 / 25.4, cm: 1 / 2.54, m: 1000 / 25.4 }[suffixed[3]]!
+      : null;
+  }
+  // Same feet-inch display grammar as PortableScalar in FamilyModelContracts.cs.
+  const display = new RegExp(
+    `^\\s*([+-]?)\\s*(?:(${number})\\s*'\\s*-?\\s*)?(?:(${number})\\s*")?\\s*$`,
+  ).exec(text);
+  if (!display || (!display[2] && !display[3])) return null;
+  const n =
+    ((display[2] ? value(display[2]) * 12 : 0) + (display[3] ? value(display[3]) : 0)) *
+    (display[1] === "-" ? -1 : 1);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** `param:Body Width` → `Body Width`; anything else → null (it is a literal). */
@@ -276,18 +315,45 @@ function datumOutwardSign(reference: string): number {
 // family.Bottom. Face names and family-plane directions come from the conformance conventions,
 // which do NOT agree on the Y sign: a solid's Front face is +Y, a family plane's Out is −Y.
 function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
-  return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
-    slug,
-    kind: solid.kind,
-    isVoid: solid.kind.startsWith("Void"),
-    isCyl: solid.kind.endsWith("Cylinder"),
-    w: evalLen(model, typeName, solid.width ?? solid.diameter),
-    d: evalLen(model, typeName, solid.depth ?? solid.diameter),
-    h: evalLen(model, typeName, solid.height),
-  }));
+  const planes = model.forms ? planeGeos(model, typeName) : [];
+  return Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) => {
+    // ponytail: native macros draw only at a resolved stock origin; arbitrary constrained placement needs Revit.
+    const centered =
+      !model.forms ||
+      (solid.center?.length === 2 &&
+        ["x", "y"].every((axis) =>
+          solid.center!.some((name) =>
+            planes.some((p) => p.slug === name && p.axis === axis && p.offset === 0),
+          ),
+        ) &&
+        planes.some((p) => p.slug === solid.bottom && p.axis === "z" && p.offset === 0));
+    return {
+      slug,
+      kind: solid.kind,
+      isVoid: solid.void ?? solid.kind.startsWith("Void"),
+      isCyl: solid.kind.endsWith("Cylinder"),
+      w: centered ? evalLen(model, typeName, solid.width ?? solid.diameter) : null,
+      d: centered ? evalLen(model, typeName, solid.depth ?? solid.diameter) : null,
+      h: centered ? evalLen(model, typeName, solid.height) : null,
+    };
+  });
 }
 
 export function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
+  if (model.datums || model.refPlanes)
+    return Object.entries({ ...model.datums, ...model.refPlanes }).map(([slug, plane]) => {
+      const direction = /^(Plus|Minus)(X|Y|Z)$/.exec(plane.normal);
+      const text = "at" in plane ? plane.at : "0in";
+      const seed = inches(text);
+      return {
+        slug,
+        axis: direction ? (direction[2].toLowerCase() as Axis) : null,
+        offset: seed == null ? null : seed * (direction?.[1] === "Minus" ? -1 : 1),
+        param: null,
+        editable: false,
+        text: `${text} seed`,
+      };
+    });
   return Object.entries(model.planes ?? {}).map(([slug, plane]) => {
     const param = paramRef(plane.by);
     const spec = param ? paramSpec(model, param) : undefined;
@@ -333,23 +399,32 @@ function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): 
   });
 }
 
-function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
+function connGeos(
+  model: FamilyModel,
+  typeName: string,
+  frames: FrameGeo[],
+  planes: PlaneGeo[],
+  solids: SolidGeo[],
+): ConnGeo[] {
   return Object.entries(model.connectors ?? {})
-    .filter(([, connector]) => connector.frame)
+    .filter(([, connector]) => connector.frame || connector.on)
     .map(([slug, connector]) => {
+      const native = connector.on ? nativeConnectorFrame(model, connector, planes, solids) : null;
       const frame =
-        connector.frame === "frame:family"
+        native ??
+        (connector.frame === "frame:family"
           ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
-          : (frames.find((entry) => entry.slug === connector.frame.slice("frame:".length)) ?? {
+          : (frames.find((entry) => entry.slug === connector.frame?.slice("frame:".length)) ?? {
               pos: { x: null, y: null, z: null },
               normal: "+Z",
-            });
-      const round = connector.shape === "Round";
+            }));
+      const shape = connector.shape ?? (connector.diameter ? "Round" : "Unspecified");
+      const round = shape === "Round";
       const diameter = evalLen(model, typeName, connector.diameter);
       return {
         slug,
         domain: connector.domain,
-        shape: connector.shape,
+        shape,
         pos: frame.pos,
         normal: frame.normal,
         w: round ? diameter : evalLen(model, typeName, connector.width),
@@ -358,6 +433,41 @@ function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): Con
         stubDir: connector.stub?.direction,
       };
     });
+}
+
+/** Native `on` + `at` references are intersections, not legacy frames. Ref-plane coordinates are authored seeds. */
+function nativeConnectorFrame(
+  model: FamilyModel,
+  connector: ConnectorSpec,
+  planes: PlaneGeo[],
+  solids: SolidGeo[],
+): FrameGeo {
+  const pos: Vec3 = { x: null, y: null, z: null };
+  let normal = "";
+  for (const ref of [connector.on!, ...(connector.at ?? [])]) {
+    const plane = planes.find((p) => p.slug === ref);
+    let axis = plane?.axis;
+    let coordinate = plane?.offset;
+    let direction = (model.refPlanes?.[ref] ?? model.datums?.[ref])?.normal;
+    if (!plane) {
+      const dot = ref.lastIndexOf(".");
+      const solid = solids.find((g) => g.slug === ref.slice(0, dot));
+      const face = ref.slice(dot + 1);
+      if (solid) {
+        const faces: Record<string, [Axis, number | null, string]> = {
+          left: ["x", solid.w == null ? null : -solid.w / 2, "PlusX"],
+          right: ["x", solid.w == null ? null : solid.w / 2, "PlusX"],
+          front: ["y", solid.d == null ? null : -solid.d / 2, "PlusY"],
+          back: ["y", solid.d == null ? null : solid.d / 2, "PlusY"],
+          top: ["z", solid.h, "PlusZ"],
+        };
+        [axis, coordinate, direction] = faces[face] ?? [undefined, null, undefined];
+      }
+    }
+    if (axis) pos[axis] = coordinate ?? null;
+    if (ref === connector.on) normal = direction?.replace("Plus", "+").replace("Minus", "-") ?? "";
+  }
+  return { slug: connector.on!, pos, normal };
 }
 
 export interface Sheet {
@@ -374,16 +484,17 @@ export function buildSheet(model: FamilyModel, typeName: string): Sheet {
   const solids = solidGeos(model, typeName);
   const planes = planeGeos(model, typeName);
   const frames = frameGeos(model, solids, planes);
-  const conns = connGeos(model, typeName, frames);
+  const conns = connGeos(model, typeName, frames, planes, solids);
   const ghosts = Object.keys(model.types)
     .filter((name) => name !== typeName)
     .map((name) => ({ typeName: name, solids: solidGeos(model, name) }));
   // ponytail: fixed PE room-point convention — 12in, Unhosted → +Z, hosted → −Y (AddRoomDingler)
-  const rcp = model.roomCalculationPoint?.enabled
-    ? model.family.placement === "Unhosted"
-      ? { x: 0, y: 0, z: 12 }
-      : { x: 0, y: -12, z: 0 }
-    : null;
+  const rcp =
+    !model.parameters && model.roomCalculationPoint?.enabled
+      ? model.family.placement === "Unhosted"
+        ? { x: 0, y: 0, z: 12 }
+        : { x: 0, y: -12, z: 0 }
+      : null;
   return { solids, planes, frames, conns, ghosts, rcp };
 }
 
@@ -424,7 +535,7 @@ export function sheetBounds(sheet: Sheet): Record<Axis, [number, number]> {
 export function paramAssociations(model: FamilyModel, name: string): ParamAssociations {
   const reads = (...refs: (string | undefined)[]) => refs.some((ref) => paramRef(ref) === name);
   const dimensions: string[] = [];
-  for (const [slug, solid] of Object.entries(model.solids ?? {}))
+  for (const [slug, solid] of Object.entries(model.forms ?? model.solids ?? {}))
     if (reads(solid.width, solid.depth, solid.height, solid.diameter))
       dimensions.push(`solid ${slug}`);
   for (const [slug, plane] of Object.entries(model.planes ?? {}))
@@ -433,12 +544,17 @@ export function paramAssociations(model: FamilyModel, name: string): ParamAssoci
     if (reads(connector.diameter, connector.width, connector.height, connector.stub?.depth))
       dimensions.push(`connector ${slug}`);
   const arrays = Object.entries(model.arrays ?? {})
-    .filter(([, spec]) => reads(spec.halfCount))
+    .filter(([, spec]) => reads(spec.halfCount, spec.label))
     .map(([slug]) => `array ${slug}`);
   const nested = Object.entries(model.nestedFamilies ?? {}).flatMap(([slug, spec]) =>
     Object.entries(spec.parameterBindings ?? {})
       .filter(([, source]) => paramRef(source) === name || source === name)
       .map(([target]) => `${slug} · ${target}`),
   );
+  for (const [slug, dim] of Object.entries(model.dimensions ?? {}))
+    if (dim.label === name) dimensions.push(`dimension ${slug}`);
+  for (const [slug, spec] of Object.entries(model.nested ?? {}))
+    for (const [target, source] of Object.entries(spec.associate ?? {}))
+      if (reads(source)) nested.push(`${slug} / ${target}`);
   return { dimensions, arrays, nested };
 }

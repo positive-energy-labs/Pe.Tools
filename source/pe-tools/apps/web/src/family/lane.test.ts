@@ -3,6 +3,7 @@ import { expect, test } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import type { FamilySnapshot } from "#/family/host";
 import { familyLane } from "#/family/lane";
+import { buildSheet, inches, type FamilyModel } from "#/family/family-model";
 import { initialDraft } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 
@@ -106,4 +107,48 @@ test("native capture without an authored file renders a read-only family lane", 
   expect(lane.world.params[0]?.name).toBe("Width");
   expect(lane.parseError).toBeNull();
   expect(lane.seedKey).toContain("capture:");
+});
+
+test("native source geometry resolves macros and authored seeds without solving constraints", () => {
+  const source = (name: string): FamilyModel =>
+    JSON.parse(
+      readFileSync(
+        new URL(
+          `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.family.json`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+  const box = source("a-box");
+  expect(buildSheet(box, "Standard").solids[0]).toMatchObject({ slug: "body", w: 24, d: 8, h: 36 });
+  expect(buildSheet(box, "Standard").conns[0]?.pos).toEqual({ x: 0, y: 0, z: 36 });
+  expect(buildSheet(box, "Wide").solids[0]?.w).toBe(36);
+  const lane = familyLane(snapshot(JSON.stringify(box)), null);
+  const baseline = initialDraft(lane.world);
+  const edit = structuredClone(baseline);
+  edit.geom.body!.dims.width = "48in";
+  expect(draftToPatches(box, edit, baseline)).toEqual([
+    { path: ["fields", "/forms/body/width", "staged"], value: { value: "48in" } },
+  ]);
+  const grille = buildSheet(source("b-grd"), "24x12");
+  expect(grille.solids[0]).toMatchObject({ slug: "flange", w: 24, d: 12, h: 1 });
+  expect(grille.conns[0]).toMatchObject({ pos: { x: 0, y: 0, z: 1 }, w: 12, h: 8 });
+  const bath = buildSheet(source("c-bath-shower"), "Bathtub Floor Mounted");
+  expect(bath.solids).toEqual([]);
+  expect(bath.conns.map((c) => [c.slug, c.pos.x, c.pos.y, c.pos.z])).toEqual([
+    ["cold", -3, 0, 12.5],
+    ["hot", 3, 0, 12.5],
+    ["drain", -0, 24, 12.5],
+  ]);
+  expect(
+    buildSheet(source("d-bath-shower-refline"), "Bathtub Floor Mounted").conns.map((c) => c.pos),
+  ).toEqual([
+    { x: -3, y: 0, z: 0.5 },
+    { x: 3, y: 0, z: 0.5 },
+  ]);
+  expect(inches("-3in")).toBe(-3);
+  expect(inches("3ft")).toBe(36);
+  expect(inches("1/0in")).toBeNull();
+  expect(inches("not a length")).toBeNull();
 });

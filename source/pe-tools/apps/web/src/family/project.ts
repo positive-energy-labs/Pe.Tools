@@ -92,7 +92,10 @@ export function projectFamilyModel(
         ]),
       ),
       solids: Object.fromEntries(
-        Object.entries(model.solids ?? {}).map(([slug, solid]) => [slug, solidProse(solid)]),
+        Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) => [
+          slug,
+          solidProse(solid),
+        ]),
       ),
       connectors: Object.fromEntries(
         Object.entries(model.connectors ?? {}).map(([slug, connector]) => [
@@ -101,7 +104,7 @@ export function projectFamilyModel(
         ]),
       ),
       geometry: [
-        ...Object.entries(model.solids ?? {}).map(([slug, solid]) =>
+        ...Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) =>
           projectSolid(model, slug, solid, lengthType),
         ),
         ...Object.entries(model.connectors ?? {}).map(([slug, connector]) =>
@@ -182,7 +185,7 @@ function connectorProse(connector: ConnectorSpec): string {
 /** The frame a constituent sits on, as the two READ metadata rows the page shows: where its origin
  * is, and which way it faces. Both are computed from the sketch in Revit, so neither is editable
  * here — a text box would be claiming an edit nothing downstream would make. */
-function frameMeta(model: FamilyModel, frameRef: string): GeomMeta[] {
+function frameMeta(model: FamilyModel, frameRef: string | undefined): GeomMeta[] {
   if (!frameRef) return [];
   const slug = frameRef.startsWith("frame:") ? frameRef.slice("frame:".length) : frameRef;
   const frame = model.frames?.[slug];
@@ -240,7 +243,22 @@ function projectSolid(
     const raw = solid[property];
     if (raw != null) dims.push(dim(model, property, raw, lengthType));
   }
-  return { slug, kind: solid.kind, dims, meta: frameMeta(model, solid.frame) };
+  return {
+    slug,
+    kind: solid.kind,
+    dims,
+    meta: solid.center
+      ? [
+          {
+            key: "center",
+            label: "center / bottom",
+            control: "read",
+            value: [...solid.center, solid.bottom ?? ""].join(" / "),
+            note: "Native authored plane references.",
+          },
+        ]
+      : frameMeta(model, solid.frame),
+  };
 }
 
 function projectConnector(
@@ -290,14 +308,27 @@ function projectConnector(
     key: "shape",
     label: "shape",
     control: "read",
-    value: connector.shape,
+    value: connector.shape ?? (connector.diameter ? "Round" : "Unspecified"),
     note: "Round or Rectangular. Read-only: a round connector does not become rectangular because a word changed — its dims would have to change with it, which is a document edit, not a value.",
   });
   return {
     slug,
     kind: `${connector.domain}Connector`,
     dims,
-    meta: [...meta, ...frameMeta(model, connector.frame)],
+    meta: [
+      ...meta,
+      ...(connector.on
+        ? [
+            {
+              key: "on",
+              label: "on / at",
+              control: "read" as const,
+              value: [connector.on, ...(connector.at ?? [])].join(" / "),
+              note: "Native authored plane intersections; reference-plane positions are seeds until Revit solves constraints.",
+            },
+          ]
+        : frameMeta(model, connector.frame)),
+    ],
   };
 }
 
@@ -414,7 +445,7 @@ export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld)
   // projection stages — solids' four fields, connectors' three plus the nested stub. Metadata
   // lands only on its editable connector homes; `read` rows have no path and get none.
   for (const part of world.geom) {
-    const solid = next.solids?.[part.slug];
+    const solid = (next.forms ?? next.solids)?.[part.slug];
     const connector = next.connectors?.[part.slug];
     for (const dim of part.dims) {
       const binding = bindingOf(world, draft, part.slug, dim.property);
@@ -532,9 +563,9 @@ export function draftToPatches(
 /** Where a bindable dim lives in the document. A property the projection did not come from returns
  * null and stages nothing — silence beats inventing a path the schema does not have. */
 function dimSegments(model: FamilyModel, slug: string, property: string): string[] | null {
-  if (model.solids?.[slug])
+  if ((model.forms ?? model.solids)?.[slug])
     return ["width", "depth", "height", "diameter"].includes(property)
-      ? ["solids", slug, property]
+      ? [model.forms ? "forms" : "solids", slug, property]
       : null;
   if (model.connectors?.[slug]) {
     if (property === "stub.depth") return ["connectors", slug, "stub", "depth"];

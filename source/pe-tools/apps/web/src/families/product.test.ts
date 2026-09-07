@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { nativeFixtureFamilies } from "#/families/fixture";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { FAMILIES_PRODUCT, type FamiliesSlot } from "#/families/product";
@@ -30,5 +32,26 @@ describe("FAMILIES_PRODUCT", () => {
     expect(product.slots.profile).toMatchObject({ key: "profile", dir: "read", under: null });
     expect(product.stages.map((stage) => stage.key)).toEqual(["scope", "foundry"]);
     expect(product.stages[1]!.verbs[1]!.kind).toBe("commit");
+  });
+});
+
+it("native fleet rows and projected JSON retain all four direct authored sources", () => {
+  const names = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
+  expect(nativeFixtureFamilies).toHaveLength(4);
+  nativeFixtureFamilies.forEach(({ raw, model, row }, index) => {
+    expect(raw).toBe(
+      readFileSync(
+        new URL(
+          `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${names[index]}.family.json`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    expect(row.familyName).toBe(model.family.name);
+    expect(row.typeNames).toEqual(Object.keys(model.types));
+    expect(row.parameters.map((p) => p.definition.identity.name)).toEqual(
+      Object.keys(model.parameters!),
+    );
   });
 });
