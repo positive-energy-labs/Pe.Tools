@@ -1,5 +1,5 @@
 {
-  "family": { "name": "PE Bath-Shower", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBased" },
+  "family": { "name": "PE Bath-Shower", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBasedHosted" },
   "parameters": {
     "_conn angle":            { "dataType": "Angle",  "value": "90deg" },
     "_conn size":             { "dataType": "Length", "value": "3/4in", "isInstance": true },

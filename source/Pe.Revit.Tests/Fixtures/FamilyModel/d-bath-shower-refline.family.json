@@ -1,5 +1,5 @@
 {
-  "family": { "name": "PE Bath-Shower (hinge)", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBased" },
+  "family": { "name": "PE Bath-Shower (hinge)", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBasedHosted" },
   "parameters": {
     "_conn angle":            { "dataType": "Angle",  "value": "90deg", "isInstance": true },
     "_conn reach":            { "dataType": "Length", "value": "4in" },

@@ -20,7 +20,7 @@ public sealed class MakeDims((string Slug, FamilyModelDim Spec)[] dims, FamilyMo
             try {
                 var resolved = spec.Between.Select(n => Resolve(doc, n)).ToList();
                 var normal = resolved[0].Plane.Normal;
-                var view = FamilyRefs.ViewFor(doc, spec.View, normal);
+                var view = FamilyRefs.ViewFor(doc, spec.View, Math.Abs(normal.Z) > 0.95 ? XYZ.BasisX : XYZ.BasisZ);
                 var refs = new ReferenceArray();
                 foreach (var (r, _) in resolved) refs.Append(r);
                 var first = resolved[0].Plane.Origin;
