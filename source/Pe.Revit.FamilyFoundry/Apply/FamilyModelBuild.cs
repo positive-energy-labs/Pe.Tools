@@ -1,5 +1,7 @@
 using Autodesk.Revit.ApplicationServices;
+using Pe.Revit.Compat;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 
@@ -102,14 +104,24 @@ public static class FamilyModelBuild {
     /// <summary>The families a patch selects in a project: `{}` is every loaded, editable family.</summary>
     public static List<Family> FamiliesMatching(this Document project, PatchSelect select) {
         var names = select.Names is { Count: > 0 } n ? n.ToHashSet(StringComparer.Ordinal) : null;
-        var categories = select.Categories is { Count: > 0 } c ? c.Select(x => LenientEnumConverter<FamilyCategory>.Key(x.ToString())).ToHashSet(StringComparer.Ordinal) : null;
+        var categories = select.Categories is { Count: > 0 } c ? c.Select(FamilyTemplate.ResolveCategory).ToHashSet() : null;
+        static bool Matches(string name, IncludeFamilies? filters) => filters is null ||
+            filters.Equaling.Count + filters.Containing.Count + filters.StartingWith.Count == 0 ||
+            filters.Equaling.Contains(name, StringComparer.Ordinal) ||
+            filters.Containing.Any(value => name.Contains(value, StringComparison.Ordinal)) ||
+            filters.StartingWith.Any(value => name.StartsWith(value, StringComparison.Ordinal));
+        static bool Excluded(string name, ExcludeFamilies? filters) => filters is not null &&
+            (filters.Equaling.Contains(name, StringComparer.Ordinal) ||
+             filters.Containing.Any(value => name.Contains(value, StringComparison.Ordinal)) ||
+             filters.StartingWith.Any(value => name.StartsWith(value, StringComparison.Ordinal)));
         var placed = select.PlacedOnly == true
             ? new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>().Select(i => i.Symbol.Family.Id).ToHashSet()
             : null;
         return new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
             .Where(f => f.IsEditable && !f.IsInPlace)
             .Where(f => names is null || names.Contains(f.Name))
-            .Where(f => categories is null || (f.FamilyCategory is { } cat && categories.Contains(LenientEnumConverter<FamilyCategory>.Key(cat.Name))))
+            .Where(f => Matches(f.Name, select.IncludeNames) && !Excluded(f.Name, select.ExcludeNames))
+            .Where(f => categories is null || (f.FamilyCategory is { } cat && categories.Contains(cat.ToBuiltInCategory())))
             .Where(f => placed is null || placed.Contains(f.Id))
             .OrderBy(f => f.Name, StringComparer.Ordinal)
             .ToList();

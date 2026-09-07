@@ -1,5 +1,4 @@
 using Autodesk.Revit.ApplicationServices;
-using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
@@ -61,11 +60,31 @@ public static class FamilyTemplate {
             throw new InvalidOperationException($"Family header '{header.Name}' did not commit.");
     }
 
-    /// <summary>Token → BuiltInCategory by squashed English label (`GenericModels` == `Generic Models`).</summary>
-    public static BuiltInCategory ResolveCategory(FamilyCategory category) {
-        var key = LenientEnumConverter<FamilyCategory>.Key(category.ToString());
-        foreach (var pair in RevitLabelCatalog.GetLabelToBuiltInCategoryMap())
-            if (LenientEnumConverter<FamilyCategory>.Key(pair.Key) == key) return pair.Value;
-        throw new InvalidOperationException($"Revit family category '{category}' was not found.");
-    }
+    /// <summary>Portable token to stable native category identity; never depends on localized labels.</summary>
+    public static BuiltInCategory ResolveCategory(FamilyCategory category) => category switch {
+        FamilyCategory.GenericModels => BuiltInCategory.OST_GenericModel,
+        FamilyCategory.AirTerminals => BuiltInCategory.OST_DuctTerminal,
+        FamilyCategory.MechanicalEquipment => BuiltInCategory.OST_MechanicalEquipment,
+        FamilyCategory.ElectricalEquipment => BuiltInCategory.OST_ElectricalEquipment,
+        FamilyCategory.ElectricalFixtures => BuiltInCategory.OST_ElectricalFixtures,
+        FamilyCategory.LightingFixtures => BuiltInCategory.OST_LightingFixtures,
+        FamilyCategory.PlumbingFixtures => BuiltInCategory.OST_PlumbingFixtures,
+        FamilyCategory.PipeAccessories => BuiltInCategory.OST_PipeAccessory,
+        FamilyCategory.PipeFittings => BuiltInCategory.OST_PipeFitting,
+        FamilyCategory.DuctAccessories => BuiltInCategory.OST_DuctAccessory,
+        FamilyCategory.DuctFittings => BuiltInCategory.OST_DuctFitting,
+        FamilyCategory.Sprinklers => BuiltInCategory.OST_Sprinklers,
+        FamilyCategory.Furniture => BuiltInCategory.OST_Furniture,
+        FamilyCategory.Casework => BuiltInCategory.OST_Casework,
+        FamilyCategory.SpecialtyEquipment => BuiltInCategory.OST_SpecialityEquipment,
+        FamilyCategory.DataDevices => BuiltInCategory.OST_DataDevices,
+        FamilyCategory.FireAlarmDevices => BuiltInCategory.OST_FireAlarmDevices,
+        FamilyCategory.CommunicationDevices => BuiltInCategory.OST_CommunicationDevices,
+        FamilyCategory.SecurityDevices => BuiltInCategory.OST_SecurityDevices,
+        FamilyCategory.NurseCallDevices => BuiltInCategory.OST_NurseCallDevices,
+        FamilyCategory.TelephoneDevices => BuiltInCategory.OST_TelephoneDevices,
+        FamilyCategory.DetailItems => BuiltInCategory.OST_DetailComponents,
+        FamilyCategory.GenericAnnotations => BuiltInCategory.OST_GenericAnnotation,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, null)
+    };
 }

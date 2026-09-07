@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationGroups;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 
 namespace Pe.Shared.RevitData.Families;
@@ -140,6 +141,12 @@ public sealed class FamilyPatch {
 public sealed class PatchSelect {
     [JsonProperty("names", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? Names { get; init; }
+
+    [JsonProperty("includeNames", NullValueHandling = NullValueHandling.Ignore)]
+    public IncludeFamilies? IncludeNames { get; init; }
+
+    [JsonProperty("excludeNames", NullValueHandling = NullValueHandling.Ignore)]
+    public ExcludeFamilies? ExcludeNames { get; init; }
 
     [JsonProperty("categories", NullValueHandling = NullValueHandling.Ignore)]
     public List<FamilyCategory>? Categories { get; init; }

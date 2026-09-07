@@ -35,10 +35,6 @@ public static class FamilyProfileConverter {
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
         var executionOptions = ConvertExecutionOptions(composed["ExecutionOptions"]);
         var familyFilter = composed["FilterFamilies"];
-        foreach (var side in new[] { "IncludeNames", "ExcludeNames" })
-            if (familyFilter?[side] is JObject names && names.Properties().Any(p => p.Name != "Equaling" && p.Value.HasValues) ||
-                side == "ExcludeNames" && familyFilter?[side]?["Equaling"]?.HasValues == true)
-                throw new InvalidOperationException("Family name pattern/exclusion selection needs a native selector before export.");
         if (!string.IsNullOrEmpty((string?)familyFilter?["IncludeByCondition"]?["FieldName"]))
             throw new InvalidOperationException("Family field conditions need a native selector before export.");
         var older = composed["SharedParameterSelection"];
@@ -101,7 +97,8 @@ public static class FamilyProfileConverter {
         ConvertParamDrivenSolids(composed["ParamDrivenSolids"], exported.Patch);
         ConvertLookupTables(composed["SetLookupTables"], exported.Patch);
         return new FamilyProfileConversion(new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
-            Names = familyFilter?["IncludeNames"]?["Equaling"]?.ToObject<List<string>>(),
+            IncludeNames = familyFilter?["IncludeNames"]?.ToObject<IncludeFamilies>(),
+            ExcludeNames = familyFilter?["ExcludeNames"]?.ToObject<ExcludeFamilies>(),
             Categories = familyFilter?["IncludeCategoriesEqualing"]?.ToObject<List<FamilyCategory>>(JsonSerializer.Create(FamilyModelJson.Settings)),
             PlacedOnly = familyFilter?.Value<bool?>("IncludeUnusedFamilies") == false ? true : null
         } }, executionOptions);

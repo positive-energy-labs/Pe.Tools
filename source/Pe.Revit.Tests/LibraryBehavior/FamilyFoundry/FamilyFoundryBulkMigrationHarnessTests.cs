@@ -147,6 +147,43 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public static IEnumerable<string> CompanyProfiles() => JArray.Parse(File.ReadAllText(
         RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).Select(p => (string)p["source"]!);
 
+    [Test]
+    public void Public_converter_selects_name_patterns_exclusions_and_native_category_identity() {
+        var project = RevitFamilyFixtureHarness.CreateProjectDocument(this._application);
+        try {
+            foreach (var (name, category) in new[] {
+                         ("Exact Pump", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Prefix Fan Keep", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Prefix Fan Blocked", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Middle Coil Keep", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Middle Coil Remove", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Prefix Reject Start", BuiltInCategory.OST_MechanicalEquipment),
+                         ("Prefix Generic Keep", BuiltInCategory.OST_GenericModel)
+                     }) {
+                var familyDocument = this.NewFamily(name, category);
+                try { _ = familyDocument.LoadFamily(project, new DefaultFamilyLoadOptions()); }
+                finally { familyDocument.Close(false); }
+            }
+            var settings = JObject.Parse("""
+                {"FilterFamilies":{
+                  "IncludeUnusedFamilies":true,
+                  "IncludeCategoriesEqualing":["Mechanical Equipment"],
+                  "IncludeNames":{"Equaling":["Exact Pump"],"Containing":["Coil"],"StartingWith":["Prefix"]},
+                  "ExcludeNames":{"Equaling":["Prefix Fan Blocked"],"Containing":["Remove"],"StartingWith":["Prefix Reject"]},
+                  "IncludeByCondition":{}
+                }}
+                """);
+            var converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name), Is.EqualTo(new[] {
+                "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
+            }));
+
+            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject { ["FieldName"] = "Model", ["Value"] = "A" };
+            Assert.That(() => FamilyProfileConverter.Convert(settings, [], project.GetUnits()),
+                Throws.InvalidOperationException.With.Message.Contains("Family field conditions need a native selector"));
+        } finally { project.Close(false); }
+    }
+
     [TestCase("CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json", 4, 4)]
     [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 4, 4)]
     [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json", 7, 7)]
