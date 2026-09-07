@@ -118,6 +118,24 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public static IEnumerable<string> CompanyProfiles() => JArray.Parse(File.ReadAllText(
         RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).Select(p => (string)p["source"]!);
 
+    [TestCase("CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json", 4, 4)]
+    [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 4, 4)]
+    [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json", 7, 7)]
+    [TestCase("CmdFFManager/profiles/SavedEquip/Modine HHD Series.json", 7, 7)]
+    public void Public_converter_maps_corpus_reference_plane_intent(string profilePath, int planeCount, int dimensionCount) {
+        var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+            .Single(p => (string)p["source"]! == profilePath)["settings"]!;
+        var operation = new JObject { ["MakeRefPlaneAndDims"] = settings["MakeRefPlaneAndDims"]!.DeepClone() };
+        var document = this.NewFamily("Reference plane conversion proof");
+        try {
+            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(operation, [], document.GetUnits());
+            Assert.That(((JObject)patch.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount));
+            Assert.That(((JObject)patch.Patch["dimensions"]!).Count, Is.EqualTo(dimensionCount));
+            var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), patch.Patch);
+            Assert.That(FamilyModelJson.Parse(merged.ToString()).Diagnostics, Is.Empty);
+        } finally { document.Close(false); }
+    }
+
     [TestCaseSource(nameof(CompanyProfiles))]
     [Category("CompanyCorpus")]
     public void Each_company_profile_parameter_intent_uses_public_reconciler(string profilePath) {

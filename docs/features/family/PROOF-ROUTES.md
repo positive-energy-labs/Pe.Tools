@@ -1,5 +1,15 @@
 # Family routes proof checkpoint
 
+## Legacy reference-plane conversion slice - 2026-09-07
+
+`FamilyProfileConverter.Convert` now converts all four active `MakeRefPlaneAndDims` corpus profiles into native `refPlanes` and `dimensions`. Mirror specs emit two signed-axis seed planes, one labeled size dimension, and one equality dimension. Offset specs emit one signed-axis seed plane and one labeled dimension. The converter accepts only the corpus anchors, directions, strengths, and object/list shape. It still refuses unknown fields, unknown values, malformed entries, and active empty operations. It does not alter source profiles or introduce another geometry engine.
+
+The public converter test reads the frozen composed AprilAire800, Wine Guardian indoor/outdoor, and Modine HHD profiles. It asserts exact emitted plane/dimension counts and parses each patch after merging it with a captured native family model. The test is compiled but not executed because this slice forbids Revit runtime. Isolated `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug -p:Platform=x64` passes with0 errors and120 warnings. The first `--no-restore` attempt found no fresh-worktree assets and compiled nothing; the normal isolated build restored them and passed.
+
+`ExecutionOptions` transport remains open. `SingleTransaction` controls how `OperationQueue.ToNamedFuncs` groups inner edits, while `FamilyVisit.Run` and `FamilyVisit.InPlace` wrap the whole family in a `TransactionGroup`. Any transport must retain that outer rollback boundary. It must not reinterpret legacy `SingleTransaction:false` as permission to commit part of one family. The smallest follow-up is a converter result that carries the existing `ExecutionOptions` beside `FamilyPatch`, followed by the existing `OperationProcessor(document, options)` constructor. Electrical connector normalization remains untouched pending the update-all and host-search design.
+
+Proof stamp: `PROVEN[compile, Pe.Tools-ff-convert family/convert from 2025720, this slice, 2026-09-07]`. Native behavior remains `UNPROVEN` until the runtime owner executes the compiled public converter cases.
+
 ## Parameter-only readouts and Host restart - 2026-09-07
 
 Root integrated web slice70a4c4b as b56b452. R gracefully stopped only the owned root Host pane `ffroutes0906/w1:p4` with Ctrl+C and relaunched its existing `vp run attach` command. Old PID70908 exited; new PID84032 serves `http://127.0.0.1:52068`, service `host-source-2d50d9dbd1a8`, from `Pe.Tools-family/source/pe-tools/apps/host`. `/host/status` returned200; receipt is `.artifacts/runs/browser-20260906-ff/root-host-restart-status.json`. P received the identity. No Revit lifecycle or document mutation occurred. This reloads integrated Host command modules; it does not prove a new Revit payload.
