@@ -19,10 +19,10 @@
   "types": { "Bathtub Floor Mounted": {} },
   "datums": {
     "Ref. Level":          { "normal": "Z", "isLevel": true },
-    "Center (Left/Right)": { "normal": "X" },
-    "Center (Front/Back)": { "normal": "Y" }
+    "Center (Left/Right)": { "normal": "X" }
   },
   "refPlanes": {
+    "Center (Front/Back)": { "normal": "PlusY", "at": "0in" },
     "conn (left)":  { "normal": "PlusX",  "at": "-3in" },
     "conn (right)": { "normal": "PlusX",  "at": "3in" },
     "conn top":     { "normal": "PlusZ",  "at": "1' - 0 1/2\"" },
@@ -33,7 +33,7 @@
   "dimensions": {
     "conn-eq":   { "between": ["conn (left)", "Center (Left/Right)", "conn (right)"], "equality": true },
     "conn-x":    { "between": ["conn (left)", "conn (right)"], "label": "_conn x offset between" },
-    "conn-z":    { "between": ["Ref. Level", "conn top"], "label": "_conn z offset", "view": "Front" },
+    "conn-z":    { "between": ["Ref. Level", "conn top"], "label": "_conn z offset", "view": "Placement Side" },
     "drain-x":   { "between": ["arbitrary plane for positioning", "drain x"], "label": "_drain x offset" },
     "drain-fix": { "between": ["arbitrary plane for positioning", "Center (Left/Right)"], "locked": "3'" },
     "drain-y":   { "between": ["Center (Front/Back)", "drain y"], "label": "_drain y offset" }
