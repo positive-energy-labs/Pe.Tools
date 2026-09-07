@@ -4,7 +4,7 @@ import { address } from "@pe/agent-contracts";
 import type { FamilySnapshot } from "#/family/host";
 import { familyLane } from "#/family/lane";
 import { buildSheet, inches, type FamilyModel } from "#/family/family-model";
-import { initialDraft } from "#/family/model";
+import { initialDraft, rowAgreement } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 
 const snapshot = (rawContent: string, composedContent = rawContent): FamilySnapshot => ({
@@ -56,6 +56,16 @@ test("lane reads composition and uses fixtures only on explicit request", () => 
   );
   expect(lane.world.params[0]?.value).toBe("24");
   expect(lane.world.params[1]?.value).toBe("No");
+  expect(
+    rowAgreement(lane.world, initialDraft(lane.world), {
+      key: "Width",
+      name: "Width",
+      dataType: "Length",
+      kind: "profile",
+      group: "",
+      isInstance: false,
+    }),
+  ).toBe("unread");
   expect(familyLane(null, null).world.params).toEqual([]);
   expect(familyLane(snapshot("bad json"), null).world.params).toEqual([]);
   expect(familyLane(null, null, true).world.params.length).toBeGreaterThan(0);

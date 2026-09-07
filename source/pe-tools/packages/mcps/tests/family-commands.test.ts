@@ -19,7 +19,7 @@ const opened = {
   metadata: { documentId: { stableId: "C:\\Settings\\width.json" }, versionToken: { value: "v1" } },
 };
 
-test("native route plan/apply sends composed patch and reviewed included family hashes, preserving residue", async () => {
+test("native route consumes reviewed hashes and preserves replacement identity and residue", async () => {
   const doc = familiesRouteState.schema.parse({});
   const entry = {
     familyId: 1,
@@ -30,7 +30,7 @@ test("native route plan/apply sends composed patch and reviewed included family 
     refusals: [],
   };
   const receipt = {
-    familyId: 1,
+    familyId: 2,
     success: false,
     converged: false,
     residue: entry.changes,
@@ -69,6 +69,9 @@ test("native route plan/apply sends composed patch and reviewed included family 
     { patchJson: opened.composedContent, expectedPlanHashes: { "1": "hash-1" } },
   ]);
   expect(doc.apply?.receipts).toEqual([receipt]);
+  expect(doc.plan).toBeNull();
+  await expect(handlers.apply(input, ctx)).rejects.toThrow("Plan first");
+  expect(call).toHaveBeenCalledTimes(4);
   expect(doc.apply?.diagnostics[0]?.code).toBe("BatchIssue");
   expect(familiesRouteState.schema.parse(doc).apply?.receipts[0]?.residue).toEqual(entry.changes);
 });

@@ -114,6 +114,18 @@ export function createFamiliesStore(deps: {
         )
       : value;
   }).pipe(owned("view/plan"));
+  const applyRefusal = Atom.make((get) => {
+    const state = get(slice);
+    if (AsyncResult.isSuccess(state) && state.value.outcomeUnknown)
+      return "The previous Apply outcome is unknown. Recover it before applying again.";
+    const current = get(plan);
+    if (!current) return "plan first";
+    return current.entries.some(
+      (entry) => !get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
+    )
+      ? null
+      : "No included family has changes to apply.";
+  }).pipe(owned("view/apply-refusal"));
   const categorySource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),
   );
@@ -250,6 +262,8 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "apply",
         async () => {
+          const reason = registry.get(applyRefusal);
+          if (reason) refuse(reason);
           const current = registry.get(plan);
           if (!current) refuse("apply needs a plan");
           return expectRouteWrite(
@@ -315,6 +329,7 @@ export function createFamiliesStore(deps: {
       target,
       profilePath,
       plan,
+      applyRefusal,
       excludedIds,
       applyData,
       draft,

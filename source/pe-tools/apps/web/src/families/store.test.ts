@@ -36,6 +36,7 @@ const slice = (doc: FamiliesRouteDocument) => ({
   connected: null,
   error: null,
   peaActive: false,
+  outcomeUnknown: false,
 });
 const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
@@ -99,7 +100,7 @@ const make = (
       navigateTarget: async (target) => {
         testFixture.calls.push({ op: "navigate", input: target });
       },
-      slice: docSlice,
+      slice: Atom.make((get) => get(docSlice)),
       writer: testFixture.writer,
     }),
   };
@@ -107,6 +108,20 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("families route store", () => {
+  it("refuses external Apply for unknown outcomes and empty plans without crossing the host", async () => {
+    const { registry, docSlice, store, calls } = make();
+    await tick();
+    registry.set(docSlice, AsyncResult.success({ ...slice(document()), outcomeUnknown: true }));
+    expect(registry.get(store.atoms.applyRefusal)).toContain("outcome is unknown");
+    await expect(store.actions.applyFoundry()).rejects.toThrow("outcome is unknown");
+    const empty = document();
+    empty.plan!.entries = [{ ...fixtureFamilyPlanEntry, changes: [], runEffects: [] }];
+    registry.set(docSlice, AsyncResult.success(slice(empty)));
+    expect(registry.get(store.atoms.applyRefusal)).toContain("No included family");
+    await expect(store.actions.applyFoundry()).rejects.toThrow("No included family");
+    expect(calls).toEqual([]);
+  });
+
   it("refreshes family choices when categories change without waiting for cache expiry", async () => {
     const testFixture = fixture();
     const reads: string[][] = [];

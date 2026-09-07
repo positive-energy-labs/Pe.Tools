@@ -455,7 +455,7 @@ export function agreementOf(
 
 export function rowAgreement(world: PageWorld, draft: Draft, row: PRow): Agreement {
   const seen = new Set(world.typeNames.map((typeName) => agreementOf(world, draft, row, typeName)));
-  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "agree";
+  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "unread";
 }
 
 // ── the three readings of one cell ──────────────────────────────────────────────────────────────

@@ -81,6 +81,8 @@ export function createFamiliesCommandHandlers(
       });
 
       const latest = ctx.getDoc();
+      latest.plan = null;
+      latest.excludedIds = [];
       latest.apply = {
         diagnostics: result.diagnostics,
         appliedAt: new Date().toISOString(),

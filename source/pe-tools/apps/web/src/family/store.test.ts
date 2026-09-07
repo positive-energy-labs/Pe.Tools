@@ -123,7 +123,7 @@ const make = (
       navigateTarget: async (target) => {
         testFixture.calls.push({ op: "navigate", input: target });
       },
-      slices: { settings: settingsSlice, family: familySlice },
+      slices: { settings: Atom.make((get) => get(settingsSlice)), family: familySlice },
       writers: testFixture.writers,
     }),
   };
@@ -131,6 +131,16 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
+  it("reads a newly selected profile without waiting for snapshot cache expiry", async () => {
+    const { registry, settingsSlice, store } = make();
+    await tick();
+    const next = settings();
+    next.documentId = { ...next.documentId!, relativePath: "another.family.json" };
+    registry.set(settingsSlice, AsyncResult.success(slice(next)));
+    await tick();
+    expect(registry.get(store.atoms.snapshot)?.documentId.relativePath).toBe("another.family.json");
+  });
+
   it("projects matching host settings without a world binding", async () => {
     const { registry, store } = make();
     registry.get(store.atoms.snapshot);

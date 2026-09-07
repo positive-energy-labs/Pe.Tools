@@ -21,6 +21,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   const draft = useAtomValue(store.atoms.draft);
   const applied = useAtomValue(store.atoms.applied);
   const plan = useAtomValue(store.atoms.plan);
+  const applyRefusal = useAtomValue(store.atoms.applyRefusal);
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
   const fleet = useFleet({ enabled: !useFamiliesWorkspace().fixture });
@@ -53,7 +54,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
         : scopeDrifted
           ? "the draft changed — re-apply scope first"
           : null,
-    refuseApply: () => (plan ? null : "plan first"),
+    refuseApply: () => applyRefusal,
   });
   const state: BindingState<FamiliesSlot> = {
     bound: {
