@@ -29,6 +29,7 @@ test("native fleet keeps the replacement receipt and requires a fresh no-op plan
     changes: [{ section: "parameters", key: "Width", kind: "Modify" }],
     runEffects: [],
     refusals: [],
+    warnings: [{ code: "FamilyEditWarning", severity: "Warning", message: "observed" }],
   };
   const failedEntry = { ...entry, familyId: 3, familyName: "Other", planHash: "hash-3" };
   const receipt = {
@@ -113,6 +114,9 @@ test("native fleet keeps the replacement receipt and requires a fresh no-op plan
   expect(doc.plan?.entries).toEqual([
     expect.objectContaining({ familyId: 2, changes: [], runEffects: [] }),
   ]);
+  expect(familiesRouteState.schema.parse(doc).plan?.entries[0]?.warnings[0]?.code).toBe(
+    "FamilyEditWarning",
+  );
   await expect(handlers.apply({ expectedPlanHashes: {} }, ctx)).rejects.toThrow(
     "No included family has changes",
   );
@@ -179,6 +183,7 @@ test("current-family apply consumes its reviewed hash, preserves receipts and re
     modelJson: "{}",
     coverage: { parameters: "Read" },
     unmodeledCount: 0,
+    issues: [{ code: "FamilyEditWarning", severity: "Warning", message: "observed" }],
   };
   const model = { ...opened, composedContent: '{"parameters":{"Width":{"value":42}}}' };
   const applied = {
@@ -230,6 +235,9 @@ test("current-family apply consumes its reviewed hash, preserves receipts and re
   expect(doc.plan).toBeNull();
   expect(doc.apply).toEqual(applied);
   expect(doc.evidence).toMatchObject({ modelJson: "{}", origin: "capture" });
+  expect(familyRouteState.schema.parse(doc).evidence).toMatchObject({
+    issues: [{ code: "FamilyEditWarning" }],
+  });
   expect(familyRouteState.schema.parse(doc).apply).toEqual(applied);
   await expect(handlers.apply({ expectedPlanHash: "h7" }, ctx)).rejects.toThrow("Review a valid");
   expect(call).toHaveBeenCalledTimes(7);
