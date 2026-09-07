@@ -183,10 +183,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                   "IncludeCategoriesEqualing":["Mechanical Equipment"],
                   "IncludeNames":{"Equaling":["Exact Pump"],"Containing":["Coil"],"StartingWith":["Prefix"]},
                   "ExcludeNames":{"Equaling":["Prefix Fan Blocked"],"Containing":["Remove"],"StartingWith":["Prefix Reject"]},
-                  "IncludeByCondition":{}
+                  "IncludeByCondition":{"FieldName":"","FilterType":2,"Value":""}
                 }}
                 """);
             var converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name), Is.EqualTo(new[] {
+                "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
+            }));
+
+            settings["FilterFamilies"]!["IncludeByCondition"] = JValue.CreateNull();
+            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(converted.Patch.Select.IncludeByCondition, Is.Null);
             Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name), Is.EqualTo(new[] {
                 "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
             }));

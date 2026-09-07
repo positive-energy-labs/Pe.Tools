@@ -9,6 +9,20 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 [TestFixture]
 public sealed class FamilyReconcilerTests {
     [Test]
+    public void Patch_selector_accepts_absent_conditions_and_rejects_unknown_operators() {
+        Assert.That(FamilyPatch.Parse("""{"select":{"includeByCondition":null},"patch":{}}""").Select.IncludeByCondition, Is.Null);
+        var placeholder = FamilyPatch.Parse("""{"select":{"includeByCondition":{"FieldName":"","FilterType":2,"Value":""}},"patch":{}}""")
+            .Select.IncludeByCondition;
+        Assert.Multiple(() => {
+            Assert.That(placeholder, Is.Not.Null);
+            Assert.That(placeholder!.FieldName, Is.Empty);
+            Assert.That(placeholder.Value, Is.Empty);
+        });
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() =>
+            FamilyPatch.Parse("""{"select":{"includeByCondition":{"FieldName":"Keep","FilterType":999,"Value":"A"}},"patch":{}}"""));
+    }
+
+    [Test]
     public void Structured_run_policies_retain_native_clean_and_sort_settings() {
         var model = new FamilyModel { Family = new FamilyModelHeader { Name = "Policies", Category = FamilyCategory.GenericModels,
             Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased } };
