@@ -14,14 +14,14 @@ using System.IO;
 
 namespace Pe.App.Host;
 
-/// <summary>Bulk lane: plan, apply and capture over loaded families through the reconciler and a patch.</summary>
+/// <summary>Plan and apply a patch to the current family or loaded families; capture loaded families.</summary>
 internal static class FamilyFoundryBridgeOps {
-    [Op("familyfoundry.plan", Does = "Diff an inline family patch (`{ select, patch, run }`) against each loaded family it selects and return the plan per family with a deterministic hash.", Title = "Plan Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive)]
-    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+    [Op("familyfoundry.plan", Does = "Diff an inline family patch (`{ select, patch, run }`) against the current family document or each loaded family it selects and return the plan per family with a deterministic hash.", Title = "Plan Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive)]
+    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => PlanFamilies(request, document.Value), cancellationToken);
 
-    [Op("familyfoundry.apply", Does = "Reconcile explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family.", Title = "Apply Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "apply", "plan-hash", "receipt", "reconcile"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+    [Op("familyfoundry.apply", Does = "Reconcile the current family document or explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family.", Title = "Apply Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "apply", "plan-hash", "receipt", "reconcile"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => ApplyFamilies(request, document.Value), cancellationToken);
 
     [Op("familyfoundry.project", Does = "Open selected loaded families read-only and capture each as family.json with coverage.", Title = "Capture Loaded Families", Finds = ["family-foundry", "familyfoundry", "capture", "family-json", "project"], Cost = OpCost.Expensive)]
@@ -32,7 +32,9 @@ internal static class FamilyFoundryBridgeOps {
         var (patch, diagnostics) = ParsePatch(request.PatchJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
 
-        var families = request.FamilyId is { } id
+        var families = document.IsFamilyDocument
+            ? request.FamilyId is null || request.FamilyId == document.OwnerFamily.Id.Value() ? new List<Family> { document.OwnerFamily } : []
+            : request.FamilyId is { } id
             ? document.GetElement(id.ToElementId()) is Family f ? [f] : []
             : document.FamiliesMatching(patch.Select);
         if (families.Count == 0)
@@ -57,7 +59,10 @@ internal static class FamilyFoundryBridgeOps {
         var runOutput = StorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey).Output().TimestampedSubDir("host-apply");
         var receipts = new List<FamilyFoundryApplyReceipt>();
         foreach (var (familyId, expectedHash) in request.ExpectedPlanHashes) {
-            if (document.GetElement(familyId.ToElementId()) is not Family family) {
+            var family = document.IsFamilyDocument
+                ? document.OwnerFamily.Id.Value() == familyId ? document.OwnerFamily : null
+                : document.GetElement(familyId.ToElementId()) as Family;
+            if (family is null) {
                 receipts.Add(Failed(familyId, null, $"Element id {familyId} is not a loaded family."));
                 continue;
             }
@@ -102,6 +107,7 @@ internal static class FamilyFoundryBridgeOps {
 
     /// <summary>Read-only EditFamily (VERDICTS-R1 §7): reuse an already-open family document, else open and close without saving.</summary>
     private static T WithFamilyDocument<T>(Document project, Family family, Func<Document, T> read) {
+        if (project.IsFamilyDocument) return read(project);
         var open = project.Application.FindOpenFamilyDocument(family);
         var famDoc = open ?? project.EditFamily(family);
         try { return read(famDoc); }

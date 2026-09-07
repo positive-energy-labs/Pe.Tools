@@ -1,5 +1,11 @@
+import { createSettingsCommandHandlers } from "../src/pea/settings-commands.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { address, familiesRouteState, familyRouteState } from "@pe/agent-contracts";
+import {
+  address,
+  familiesRouteState,
+  familyRouteState,
+  settingsRouteState,
+} from "@pe/agent-contracts";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 import { createFamiliesCommandHandlers } from "../src/pea/families-commands.ts";
 import { createFamilyCommandHandlers } from "../src/pea/family-commands.ts";
@@ -107,4 +113,95 @@ test("native build stores convergence separately and invalid composition cannot 
   ]);
   await expect(handlers.build_evidence(input, ctx)).rejects.toThrow("invalid include");
   expect(call).toHaveBeenCalledTimes(3);
+});
+
+test("current-family apply consumes its reviewed hash, preserves receipts and recaptures native evidence", async () => {
+  const doc = familyRouteState.schema.parse({});
+  const entry = {
+    familyId: 7,
+    familyName: "Box",
+    planHash: "h7",
+    changes: [],
+    runEffects: [],
+    refusals: [],
+  };
+  const capture = {
+    reading: { at: scope.document, version: "v2", observedAt: "2026-09-07T00:00:00Z" },
+    familyName: "Box",
+    modelJson: "{}",
+    coverage: { parameters: "Read" },
+    unmodeledCount: 0,
+  };
+  const model = { ...opened, composedContent: '{"parameters":{"Width":{"value":42}}}' };
+  const applied = {
+    receipts: [{ familyId: 7, success: true, converged: true, residue: [], errors: [] }],
+    diagnostics: [],
+  };
+  const call = vi
+    .spyOn(HostRpcCaller.prototype, "call")
+    .mockResolvedValueOnce(capture as never)
+    .mockResolvedValueOnce(model as never)
+    .mockResolvedValueOnce({ families: [entry], diagnostics: [] } as never)
+    .mockResolvedValueOnce(capture as never)
+    .mockResolvedValueOnce(model as never)
+    .mockResolvedValueOnce(applied as never)
+    .mockResolvedValueOnce(capture as never);
+  const ctx = {
+    scope,
+    getDoc: () => doc,
+    setDoc: async (next: typeof doc) => {
+      Object.assign(doc, next);
+    },
+  };
+  const handlers = createFamilyCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
+  await handlers.plan(
+    { documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" } },
+    ctx,
+  );
+  await expect(handlers.apply({ expectedPlanHash: "stale" }, ctx)).rejects.toThrow(
+    "Review a valid",
+  );
+  expect(call).toHaveBeenCalledTimes(3);
+  await handlers.apply({ expectedPlanHash: "h7" }, ctx);
+  expect(call.mock.calls[5]).toEqual([
+    "familyfoundry.apply",
+    {
+      patchJson: JSON.stringify({ patch: JSON.parse(model.composedContent) }),
+      expectedPlanHashes: { 7: "h7" },
+    },
+  ]);
+  expect(doc.plan).toBeNull();
+  expect(doc.apply).toEqual(applied);
+  expect(doc.evidence).toMatchObject({ modelJson: "{}", origin: "capture" });
+  expect(familyRouteState.schema.parse(doc).apply).toEqual(applied);
+  await expect(handlers.apply({ expectedPlanHash: "h7" }, ctx)).rejects.toThrow("Review a valid");
+  expect(call).toHaveBeenCalledTimes(7);
+});
+
+test("expanded inherited edits cannot write local overrides or move staged edits to another file", async () => {
+  const documentId = { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" };
+  const doc = settingsRouteState.schema.parse({
+    documentId,
+    fields: { "/parameters/Width/value": { staged: { value: 12 } } },
+  });
+  const call = vi.spyOn(HostRpcCaller.prototype, "call").mockResolvedValue({
+    ...opened,
+    rawContent: '{"parameters":{"$include":"@local/_params/width"}}',
+    dependencies: [],
+  } as never);
+  const ctx = {
+    scope,
+    getDoc: () => doc,
+    setDoc: async (next: typeof doc) => {
+      Object.assign(doc, next);
+    },
+  };
+  const handlers = createSettingsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
+  await expect(handlers.save({}, ctx)).rejects.toThrow("shared fragment");
+  await expect(
+    handlers.open({ documentId: { ...documentId, relativePath: "_params/width" } }, ctx),
+  ).rejects.toThrow("current document's edits");
+  expect(call.mock.calls.every(([key]) => key === "settings.document.open")).toBe(true);
+  expect(doc.documentId).toEqual(documentId);
+  expect(doc.fields["/parameters/Width/value"].staged?.value).toBe(12);
 });

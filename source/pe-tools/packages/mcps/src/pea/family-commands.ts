@@ -19,6 +19,66 @@ export function createFamilyCommandHandlers(
   const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
+    plan: async (input, ctx) => {
+      const { documentId } = input as { documentId: SettingsDocumentId };
+      const rpc = caller(bridgeSelector(ctx.scope));
+      // The capture operation requires a family document; a project must use /families.
+      await rpc.call("revit.detail.family-model", {});
+      const opened = await rpc.call("settings.document.open", {
+        documentId,
+        includeComposedContent: true,
+      });
+      const patchJson = JSON.stringify({ patch: JSON.parse(executionContent(opened)) });
+      const planned = await rpc.call("familyfoundry.plan", { patchJson });
+      if (planned.diagnostics.length || planned.families.length !== 1)
+        throw new Error(
+          planned.diagnostics.map((d) => d.message).join("; ") ||
+            "Expected one current family plan.",
+        );
+      const document = ctx.getDoc();
+      document.plan = { documentId, patchJson, entry: planned.families[0] };
+      document.apply = null;
+      await ctx.setDoc(document);
+      return planned;
+    },
+    apply: async (input, ctx) => {
+      const { expectedPlanHash } = input as { expectedPlanHash: string };
+      const document = ctx.getDoc();
+      const plan = document.plan;
+      if (
+        !plan ||
+        !expectedPlanHash ||
+        plan.entry.planHash !== expectedPlanHash ||
+        plan.entry.refusals.length
+      )
+        throw new Error("Review a valid current-family plan before applying.");
+      const rpc = caller(bridgeSelector(ctx.scope));
+      await rpc.call("revit.detail.family-model", {});
+      const opened = await rpc.call("settings.document.open", {
+        documentId: plan.documentId,
+        includeComposedContent: true,
+      });
+      if (JSON.stringify({ patch: JSON.parse(executionContent(opened)) }) !== plan.patchJson)
+        throw new Error("The composed family JSON changed. Plan again before applying.");
+      // Consume the review before crossing the mutation boundary, including ambiguous failures.
+      document.plan = null;
+      await ctx.setDoc(document);
+      const applied = await rpc.call("familyfoundry.apply", {
+        patchJson: plan.patchJson,
+        expectedPlanHashes: { [plan.entry.familyId]: expectedPlanHash },
+      });
+      document.apply = applied;
+      await ctx.setDoc(document);
+      const captured = await rpc.call("revit.detail.family-model", {});
+      document.evidence = {
+        ...captured,
+        reading: readingSchema.parse(captured.reading),
+        origin: "capture",
+        rfaPath: null,
+      };
+      await ctx.setDoc(document);
+      return applied;
+    },
     parse_spec: async (input, ctx) => {
       const { url } = input as { url: string };
       const base = process.env.PE_WEB_URL ?? "http://localhost:3000";

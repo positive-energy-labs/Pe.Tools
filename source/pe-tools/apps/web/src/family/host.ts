@@ -54,6 +54,10 @@ export function createLiveFamilyHost(): FamilyHost {
         versionToken: raw.metadata.versionToken?.value ?? null,
         observedAt: new Date().toISOString(),
         rawContent: raw.rawContent,
+        dependencies: raw.dependencies.map((d) => ({
+          directivePath: d.directivePath,
+          documentId: { ...d.documentId },
+        })),
         composedContent: raw.composedContent ?? null,
         modifiedUtc: raw.metadata.modifiedUtc ?? null,
         validation: {

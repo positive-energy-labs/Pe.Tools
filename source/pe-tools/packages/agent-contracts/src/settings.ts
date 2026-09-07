@@ -83,6 +83,9 @@ export const settingsSnapshotSchema = z.object({
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
+  dependencies: z
+    .array(z.object({ directivePath: z.string(), documentId: settingsDocumentIdSchema }))
+    .optional(),
   modifiedUtc: z.string().nullish(),
   validation: settingsValidationSchema.nullish(),
 });

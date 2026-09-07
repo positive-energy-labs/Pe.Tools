@@ -3,7 +3,7 @@ import { z } from "zod";
 import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { readingSchema } from "./reading.ts";
 
-const diagnosticSchema = z.object({
+export const diagnosticSchema = z.object({
   code: z.string(),
   path: z.string(),
   message: z.string(),
@@ -15,7 +15,7 @@ const changeSchema = z.object({
   kind: z.string(),
   mappedFrom: z.string().nullish(),
 });
-const ffPlanEntrySchema = z.object({
+export const ffPlanEntrySchema = z.object({
   familyId: z.number(),
   familyName: z.string(),
   planHash: z.string(),
@@ -24,7 +24,7 @@ const ffPlanEntrySchema = z.object({
   refusals: z.array(diagnosticSchema),
 });
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
-const ffReceiptSchema = z.object({
+export const ffReceiptSchema = z.object({
   familyId: z.number(),
   familyName: z.string().nullish(),
   success: z.boolean(),

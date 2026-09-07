@@ -316,7 +316,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   const apply = (types: string[], only?: string) =>
     setDraft((previous) => {
       if (!lane.fixture) {
-        say("Apply is not connected to Revit yet. Captured values are unchanged.");
+        say(
+          "Use plan current family to review and apply the saved JSON. Save any draft edits first.",
+        );
         return previous;
       }
       const next = structuredClone(previous);
@@ -342,7 +344,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
 
   const applyAll = (types: string[]) => {
     if (!lane.fixture) {
-      say("Apply is not connected to Revit yet. Captured values are unchanged.");
+      say(
+        "Use plan current family to review and apply the saved JSON. Save any draft edits first.",
+      );
       return;
     }
     const count = driftCells.filter((cell) => types.includes(cell.typeName)).length;

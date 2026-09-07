@@ -114,11 +114,11 @@ export namespace FamilyEditorSnapshot {
   }
 }
 
-/** Reconcile explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family. */
+/** Reconcile the current family document or explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family. */
 export namespace FamilyfoundryApply {
   export namespace Req {
     /**
-     * Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift.
+     * Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.
      */
     export interface Request {
       patchJson: string;
@@ -167,11 +167,11 @@ export namespace FamilyfoundryApply {
   }
 }
 
-/** Diff an inline family patch (`{ select, patch, run }`) against each loaded family it selects and return the plan per family with a deterministic hash. */
+/** Diff an inline family patch (`{ select, patch, run }`) against the current family document or each loaded family it selects and return the plan per family with a deterministic hash. */
 export namespace FamilyfoundryPlan {
   export namespace Req {
     /**
-     * Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, or one explicit family.
+     * Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.
      */
     export interface Request {
       patchJson: string;

@@ -861,12 +861,52 @@ const expandIncludes: (
           return next;
         }
         if (!isRecord(candidate)) return candidate;
-        if ("$include" in candidate)
-          return yield* Effect.fail(
-            new Error(
-              "'$include' must be an array item. Use '$preset' to substitute a keyed object.",
-            ),
-          );
+        if ("$include" in candidate) {
+          if (Object.keys(candidate).some((key) => key !== "$include"))
+            return yield* Effect.fail(
+              new Error("Includes do not support inline overrides. Edit the shared fragment."),
+            );
+          const paths = Array.isArray(candidate.$include)
+            ? candidate.$include
+            : [candidate.$include];
+          const merged: Record<string, unknown> = {};
+          for (const includePath of paths) {
+            const directive = yield* Effect.try(() =>
+              resolveDirective(includePath, localRootDirectory, options.includeRoots ?? [], true),
+            );
+            const path = yield* resolveDirectiveFilePath(directive);
+            if (visited.has(path.toLowerCase()))
+              return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
+            visited.add(path.toLowerCase());
+            const fragment = yield* parseJsonValue(
+              yield* readFileString(path, "settings.document.compose"),
+            );
+            if (!isRecord(fragment))
+              return yield* Effect.fail(
+                new Error(`Keyed include '${path}' must contain a JSON object.`),
+              );
+            dependencies.push(
+              createDependency(
+                sourceDocumentId,
+                directive,
+                path,
+                SettingsDocumentDependencyKind.Include,
+              ),
+            );
+            const presets = yield* expandPresets(
+              fragment,
+              localRootDirectory,
+              options,
+              dependencies,
+              sourceDocumentId,
+            );
+            const expanded = yield* expand(presets, visited);
+            Object.assign(merged, expanded);
+            visited.delete(path.toLowerCase());
+          }
+          delete merged.$schema;
+          return merged;
+        }
         const next: Record<string, unknown> = {};
         for (const [key, child] of Object.entries(candidate))
           next[key] = yield* expand(child, visited);

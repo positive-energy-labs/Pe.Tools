@@ -65,6 +65,16 @@ export function createSettingsCommandHandlers(
       const { documentId } = input as { documentId: SettingsDocumentId };
       const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
+      const changed =
+        document.documentId == null ||
+        (["moduleKey", "rootKey", "relativePath"] as const).some(
+          (key) => document.documentId?.[key] !== documentId[key],
+        );
+      if (changed && Object.values(document.fields).some((field) => field.staged || field.proposal))
+        throw new Error(
+          "Save or resolve the current document's edits before opening another document.",
+        );
+      if (changed) document.fields = {};
       document.bindings.file = { id: snapshot.path, label: snapshot.path };
       document.documentId = documentId;
       await ctx.setDoc(document);
@@ -189,6 +199,10 @@ async function openSnapshot(
     versionToken: versionToken ?? null,
     observedAt: new Date().toISOString(),
     rawContent: raw.rawContent,
+    dependencies: raw.dependencies.map((d) => ({
+      directivePath: d.directivePath,
+      documentId: { ...d.documentId },
+    })),
     composedContent: raw.composedContent ?? null,
     modifiedUtc: raw.metadata.modifiedUtc ?? null,
     validation: toRouteValidation(raw.validation),
@@ -237,12 +251,20 @@ function applyFieldEdit(
   let cursor = root;
   for (let i = 0; i < segments.length - 1; i += 1) {
     const key = segments[i];
+    if ("$preset" in cursor || "$include" in cursor)
+      throw new Error(
+        "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
+      );
     const next = cursor[key];
     if (next == null || typeof next !== "object" || Array.isArray(next)) {
       cursor[key] = {};
     }
     cursor = cursor[key] as Record<string, unknown>;
   }
+  if (("$preset" in cursor || "$include" in cursor) && !segments.at(-1)?.startsWith("$"))
+    throw new Error(
+      "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
+    );
   const leaf = segments[segments.length - 1];
   if (edit.delete === true) delete cursor[leaf];
   else cursor[leaf] = edit.value;
@@ -262,6 +284,7 @@ function summarizeSnapshot(snapshot: SettingsSnapshot) {
     versionToken: snapshot.versionToken,
     isValid: snapshot.validation?.isValid ?? null,
     issueCount: snapshot.validation?.issues.length ?? 0,
+    dependencies: snapshot.dependencies,
   };
 }
 

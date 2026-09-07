@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { Verb } from "#/components/lang/verb";
 import { Workspace } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -24,6 +26,7 @@ export function FamilyWorkspaceView() {
     anatomyCollapsed,
     setAnatomyCollapsed,
   } = useFamilyWorkspace();
+  const reconciliation = useAtomValue(store.atoms.reconciliation);
   return (
     <Workspace
       className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
@@ -54,6 +57,62 @@ export function FamilyWorkspaceView() {
           }
           fact={
             <>
+              {(snapshot?.dependencies ?? []).map((dependency) => (
+                <a
+                  key={dependency.directivePath}
+                  href="/settings"
+                  title="Edit the shared source JSON. Changes affect every profile that includes it."
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void store.actions
+                      .openShared(dependency.documentId)
+                      .then(() => {
+                        const url = new URL(window.location.href);
+                        url.pathname = "/settings";
+                        url.searchParams.delete("fixture");
+                        url.searchParams.delete("family");
+                        window.location.assign(url.href);
+                      })
+                      .catch((error: unknown) =>
+                        store.actions.say(error instanceof Error ? error.message : String(error)),
+                      );
+                  }}
+                >
+                  edit shared {dependency.directivePath}
+                </a>
+              ))}
+              {!lane.fixture && (
+                <>
+                  <Verb
+                    tone="act"
+                    label="plan current family"
+                    reason="Plan the saved JSON against the current family document."
+                    onClick={() => void store.verbs.plan.run?.()}
+                  />
+                  <Verb
+                    tone="commit"
+                    label="apply reviewed plan"
+                    disabled={!reconciliation.plan || reconciliation.plan.entry.refusals.length > 0}
+                    reason="Review a valid plan first. Applies the saved JSON without saving the Revit document."
+                    onClick={() => void store.verbs.apply.run?.()}
+                  />
+                  {reconciliation.plan && (
+                    <details>
+                      <summary>
+                        {reconciliation.plan.entry.changes.length} changes ?{" "}
+                        {reconciliation.plan.entry.refusals.length} refusals
+                      </summary>
+                      <pre>{JSON.stringify(reconciliation.plan.entry, null, 2)}</pre>
+                    </details>
+                  )}
+                  {reconciliation.apply && (
+                    <details>
+                      <summary>apply receipts</summary>
+                      <pre>{JSON.stringify(reconciliation.apply, null, 2)}</pre>
+                    </details>
+                  )}
+                </>
+              )}
               {validation && (
                 <FactChip
                   tone={validation.isValid ? "done" : "caution"}

@@ -13,6 +13,7 @@
  * lifecycle already exists.
  */
 import { z } from "zod";
+import { diagnosticSchema, ffPlanEntrySchema, ffReceiptSchema } from "./families.ts";
 import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
@@ -90,6 +91,16 @@ const familyDocumentSchema = z.object({
   stage: z.enum(["author", "evidence"]).optional(),
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),
+  plan: z
+    .object({
+      documentId: settingsDocumentIdSchema,
+      patchJson: z.string(),
+      entry: ffPlanEntrySchema,
+    })
+    .nullish(),
+  apply: z
+    .object({ receipts: z.array(ffReceiptSchema), diagnostics: z.array(diagnosticSchema) })
+    .nullish(),
   build: z
     .object({
       reading: readingSchema,
@@ -112,6 +123,19 @@ export const familyRouteState = {
   // Pea never patches this slice directly — doc and evidence arrive via commands.
   agentWriteMask: [],
   commands: {
+    plan: {
+      description:
+        "Plan the saved composed family.json against the current family document. Review changes and refusals before applying. Omitted sections remain untouched.",
+      input: z.object({ documentId: settingsDocumentIdSchema }),
+      actor: "any",
+    },
+    apply: {
+      description:
+        "Apply the reviewed current-family plan without saving the Revit document. Refuses changed JSON or plan hashes; stores native receipts. Plan again for another apply.",
+      input: z.object({ expectedPlanHash: z.string() }),
+      actor: "human",
+      mutatesExternal: true,
+    },
     parse_spec: {
       description:
         "OCR a manufacturer spec sheet / submittal PDF (LlamaParse) by URL and attach its markdown blocks. Then read blocks and write proposals into route:settings fields, citing sources.",

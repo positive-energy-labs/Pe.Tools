@@ -2,6 +2,38 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Current-family Apply slice ? 2026-09-07
+
+This section supersedes the older checkpoint below where it names a seam now implemented. No Revit run or lifecycle action was performed.
+
+- `FamilyFoundryBridgeOps.Plan/Apply` now take `RevitDocument`. `PlanFamilies` selects `OwnerFamily` in a family document, accepts only its stable element id, and retains project selection otherwise. `WithFamilyDocument` reads the existing family document directly. Apply calls the existing `OperationProcessor`, whose `IsFamilyDocument` dispatch remains the only processing engine.
+- Apply compares a freshly computed plan before entering the processor (including its default-type setup). Current-family processing is enclosed in a transaction group: operation errors roll back the family, successful processing assimilates, and existing documents are not saved. This is compiled source behavior, not proven Revit atomicity. Loaded-family batch continuation remains the existing processor path and requires normalize integration.
+- `agent-contracts/src/family.ts` adds native plan and apply state, reusing the fleet plan/receipt schemas. Pea can plan the saved composed JSON; Apply is human-only at route state. Code/script/Pod operations remain unrestricted. `mcps/src/pea/family-commands.ts` gates current-family use with the existing family capture operation, wraps the saved composed model as `{patch: model}`, stores the backend plan, checks unchanged composed input, consumes the review before mutation, passes the exact OwnerFamily hash, stores all receipts/diagnostics, and recaptures native evidence. No optimistic live-cell mutation occurs.
+- `web/src/family/store.ts` and `workspace-view.tsx` expose plan current family, reviewable changes/refusals/hash, apply reviewed plan, and full receipts. Draft/staged edits must be saved first. Existing per-cell/per-type prototype Apply controls direct real users to this full saved-profile review; fixture simulation remains. Scoped cell/type patch application is still outstanding, explicitly not silently widened.
+- `host/src/settings.ts::expandIncludes` now accepts keyed object substitution with `{"$include":"@local/_fragments/parameters"}` or an ordered list `{"$include":["@local/_fragments/base","@global/_fragments/company"]}`. Each fragment must be an object. Keys merge shallowly in order: a later fragment replaces the entire conflicting keyed value. Existing array/Items splicing, preset-before-include order, whole-object presets, whitelists, cycles, and no-inline-override rules remain. No parallel resolver was added. C# composition/schema acceptance of this keyed syntax is **not** implemented by this TS slice and must be aligned before desktop/host end-to-end acceptance.
+- Raw JSON remains unchanged. Settings snapshots and Pea open summaries now retain dependency document ids. The expanded family view links to edit each shared source in the raw settings editor, retaining route scope. This is document-level provenance/navigation, not a per-field source map. Shared fragments are visible in the settings file picker. The shared field writer refuses edits beneath `$preset`/`$include`; opening another file refuses unresolved edits so they cannot migrate into a fragment. Per-field direct shared editing remains outstanding; no transparent local override is created.
+- Restored `source/Pe.Revit.Tests/Fixtures/Profiles/family-model-evaluator.conformance.json` byte-for-byte from `af52765^`, preserving the still-used evaluator feature and its original oracle.
+
+### Integration custody
+
+Read-only inspection of `Pe.Tools-ff-normalize` confirmed its four-line plan change: construct `FamilySharedParameterSource(famDoc)`, resolve `desired.Value` with `patch.Patch`, and pass `source.GetDefinition`, `patch.Patch`, and `source.ResolvedDefinitions` to `FamilyReconciler.Reconcile`. Those lines are outside this slice's dispatch edits and must remain when root combines changes.
+
+Root must also retain normalize's `new ReconcileFamily(patch, expectedPlanHash: expectedHash)` and its receipt handling after commit/load. This tree is still based on `d2e19ce`; its constructor lacks that argument, so this slice has a pre-processor plan check and retains the base's post-operation comparison. Do not replace normalize's constructor/receipt hunk with the older base hunk when resolving the combined bridge file. The new current-family transaction-group guard surrounds the existing processor call. No other worktree was merged or edited.
+
+### Validation
+
+| Lane | Result | Raw evidence |
+|---|---|---|
+| deterministic, web | 129 passed / 15 files, wider `src/family` plus fleet store and both routes; restored evaluator conformance passes | `apply-web-test.txt` |
+| deterministic, host | 20 passed; keyed later-wins, scalar values, raw preservation, invalid shape/overrides and existing cycle/whitelist behavior | `apply-composition-test.txt` |
+| deterministic, MCP commands | 6 passed / 2 files; native current-family apply hash/review consumption, receipt/recapture, inherited edit refusal | `apply-commands-test.txt` |
+| static/type | 0 errors, 2 pre-existing unbound-method warnings / 13 edited TS files | `apply-check.txt` |
+| compile/artifact | Uncached offline catalog/codegen succeeded, 67 operations; includes Pe.App compilation | `apply-codegen.txt` |
+
+Evidence is under `.artifacts/runs/browser-20260906-ff/`. Remaining proof: integrated C# composition/schema (including native scalar fixtures), current-family plan/apply/recapture through Host and browser, stale-hash refusal before any writes, full family rollback, batch continuation, post-commit/load convergence, no implicit document save, and source-file authoring navigation. Root's independent SDK diagnostic is not route proof.
+
+Project-to-family row navigation still drops the selected family and is the next separable route slice. Native geometry projections, coverage readouts, fleet authored patch fixture stories, and scoped cell/type Apply remain open as listed below. Full saved-profile current-family plan/apply now has a real transport path; runtime acceptance remains with the proof owner.
+
 ## Slice verdict
 
 PROVEN deterministic: native authored parameters and route-state payloads now pass through `/family` and `/families` without obsolete transport fields. Build, plan, and apply select validated composed JSON. The existing resolver remains the only composition engine. Complete closure is OPEN: native geometry, current-family apply, inherited authoring decisions, and runtime proof remain outstanding.

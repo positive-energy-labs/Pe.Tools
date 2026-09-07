@@ -67,7 +67,7 @@ export function createFamilyStore(deps: {
     settingsCommand(name: "open" | "save", input?: unknown): Promise<RouteStateWriteResult>;
     familyApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
     familyCommand(
-      name: "capture_evidence" | "build_evidence",
+      name: "capture_evidence" | "build_evidence" | "plan" | "apply",
       input?: unknown,
     ): Promise<RouteStateWriteResult>;
   };
@@ -154,6 +154,10 @@ export function createFamilyStore(deps: {
     if (!session) return null;
     return here(value, documentAddress(session)) as EvidenceSlice | null;
   }).pipe(owned("view/evidence"));
+  const reconciliation = Atom.make((get) => ({
+    plan: get(familyDoc)?.plan,
+    apply: get(familyDoc)?.apply,
+  })).pipe(owned("view/reconciliation"));
   const lane = Atom.make((get) =>
     familyLane(get(snapshot), get(evidence), deps.source === "fixture"),
   ).pipe(owned("view/lane"));
@@ -262,8 +266,10 @@ export function createFamilyStore(deps: {
         ? "arm build .rfa in the sheet pane first"
         : null;
   };
-  type CommandName = "open" | "save" | "capture" | "build";
+  type CommandName = "open" | "save" | "capture" | "build" | "plan" | "apply";
   const keys: Record<CommandName, readonly string[]> = {
+    plan: ["family"],
+    apply: ["family"],
     open: ["settings"],
     save: ["settings"],
     capture: ["family"],
@@ -271,6 +277,24 @@ export function createFamilyStore(deps: {
   };
   const writer = {
     async command(name: CommandName, input: unknown) {
+      if (name === "plan" || name === "apply") {
+        const current = registry.get(lane);
+        if (current.fixture || !current.document)
+          refuse("Open a saved family JSON and bind a family document first.");
+        if (registry.get(buildFacts).unsavedCount || registry.get(buildFacts).stagedCount)
+          refuse("Save authored edits before planning or applying.");
+        const result = expectRouteWrite(
+          await writers.familyCommand(
+            name,
+            name === "plan"
+              ? { documentId: { ...FAMILY_MODULE, relativePath: current.document!.relativePath } }
+              : { expectedPlanHash: registry.get(reconciliation).plan?.entry.planHash ?? "" },
+          ),
+        );
+        return name === "plan"
+          ? "Review the current-family plan before applying."
+          : JSON.stringify(result.result);
+      }
       if (name === "open") {
         expectRouteWrite(await writers.settingsCommand("open", input as Record<string, unknown>));
         return "opened";
@@ -323,6 +347,8 @@ export function createFamilyStore(deps: {
     refuse: name === "build" ? buildRefusal : () => null,
   });
   const verbs = {
+    plan: commandVerb("plan"),
+    apply: commandVerb("apply"),
     save: commandVerb("save"),
     capture: commandVerb("capture"),
     build: commandVerb("build"),
@@ -374,6 +400,18 @@ export function createFamilyStore(deps: {
         registry.set(core.receipt, { verb: "page", text, at: Date.now() }),
       );
     },
+    async openShared(
+      documentId: NonNullable<FamilySnapshot["dependencies"]>[number]["documentId"],
+    ) {
+      if (
+        registry.get(buildFacts).unsavedCount ||
+        Object.values(registry.get(fields)).some((field) => field.staged || field.proposal)
+      )
+        throw new Error(
+          "Save or resolve the current authored edits before opening a shared fragment.",
+        );
+      expectRouteWrite(await writers.settingsCommand("open", { documentId }));
+    },
     save: verbs.save.run!,
     open(relativePath: string) {
       return runVerb(
@@ -413,6 +451,7 @@ export function createFamilyStore(deps: {
   return {
     registry,
     atoms: {
+      reconciliation,
       target,
       profile,
       routeStage,
