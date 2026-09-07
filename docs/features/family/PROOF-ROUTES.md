@@ -2,6 +2,32 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Integrated dev session preparation and fragment UX census - 2026-09-07
+
+Integration root inspected read-only at `0bcab493f6a78ff5b2879ae137ff1b964e55afdb`. SDK beta.150 start-plan succeeded from that root:
+
+```powershell
+dotnet tool run pe-revit -- session start --project source/Pe.App/Pe.App.csproj --year 2025 --id ff-route-25 --snapshot --plan --json
+```
+
+`ff-route-25-start-plan.json` records state planned, checkout payload, root Pe.App/year2025, empty mutations/diagnostics, and SDK binary SHA256 `4D23791A6C273158A4E64D5361F79D2A04C575C25BA202D1381D54CF43563457`. No session was launched and no document opened. Snapshot was selected for an independent checkout build with no hot-reload emitter, as the current SDK guide documents (`sdk-session-guide.txt`). The sole proof owner launches after its current fresh tests. No pe.app-25 access.
+
+Payload compile is authorized but **held pending root's explicit build-lane release**, requested asynchronously. Root's terminal outputs use `.artifacts/build` and `.artifacts/obj/<project>/<configuration>`; no fixed-path interactive override will be used. Intended compile is root Pe.App Debug.R25 with DeployAddin/LaunchRevit false. That compile proves root source; the eventual session receipt must separately identify the snapshot payload actually loaded. Existing browser fixture host remains the routes checkout no-Revit process at 127.0.0.1:5180, Herdr ffroutes0906/w1:p2; it is not an integrated root or Revit host. Actual browser acceptance will use the proof owner's reported integrated host/web identity and exact family/project scopes, with native plan/receipt/recapture observations.
+
+Shared-fragment UX census (source findings, not completed behavior proof):
+
+| Seam | Current behavior | Gap against the user's ruling |
+|---|---|---|
+| Expanded family cell edit | workspace-core edits local Draft; project.draftToPatches addresses the profile's native field pointer | It does not resolve the field's source fragment before editing |
+| Save boundary | mcps/settings-commands.applyFieldEdit refuses traversal through `$preset`/`$include`; raw pointer remains intact | Refusal protects the file but does not implement origin editing |
+| Shared navigation | family/workspace-view lists snapshot dependencies; store.openShared opens the dependency document through route:settings, then navigates to /settings preserving scope | Document-level dependency list only; no field-level winning origin |
+| After an inherited draft edit | openShared refuses while authored/staged edits exist | User must resolve/discard the failed profile edit before source navigation; this is not transparent inherited editing |
+| Settings source UI | routes/settings renders schema fields or raw-field readout from snapshot.rawContent and stages native pointers | This is not a general text JSON editor; native fragment rendering/save still needs live-provider proof |
+| Fragment validation | host/settings.getSchemaJson chooses schemaJson only; semantic-validation resolves the root SettingsType and invokes its full validator | FragmentSchemaJson/relativePath are not selected for fragment context in the traced path. A parameter-map fragment can fail the full FamilyModel schema/validator; verify with integrated provider |
+| Deep conflict origin | Earlier Width.dataType plus later Width.value retains both after b69ca97 | One parameter can have multiple source files. Default shared editing needs provenance per field, not simply the last dependency file |
+
+No silent profile override or parallel composition engine was added. Required remaining closure is field provenance from the existing resolver, origin-directed edit/navigation, and fragment-aware schema/semantic validation. These findings supersede any earlier description implying that the existing source link alone completed inherited editing.
+
 ## Concrete route acceptance bundle and shared projection - 2026-09-07
 
 `acceptance/parameters.patch.json` is a native authored proof patch, scoped to **PE Box**: Width becomes `42in`, and a dedicated `FF_Route_Proof_Count` shared Number parameter becomes bare `7`. Its fixed GUID is a new proof identity, not a claimed company definition. The offline sharedSpecId/visibility/user-modifiable fields and migration options use the exact `406e7a8` contract. No C# source fixture or company setting is changed.
