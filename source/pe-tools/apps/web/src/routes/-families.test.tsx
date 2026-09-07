@@ -31,6 +31,21 @@ describe("families fixture route", () => {
       source: undefined,
       thread: undefined,
     });
+    expect(
+      familiesSearch({
+        source: "fixture",
+        fixture: "native",
+        thread: " review ",
+        doc: "C:\\Models\\A.rvt",
+        target: " ff-profile-proof-25 ",
+      }),
+    ).toEqual({
+      source: "fixture",
+      fixture: "native",
+      thread: "review",
+      doc: "C:\\Models\\A.rvt",
+      target: "ff-profile-proof-25",
+    });
 
     const registry = AtomRegistry.make();
     const fixtureStore = createFixtureFamiliesStore(registry);

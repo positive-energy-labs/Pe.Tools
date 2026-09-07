@@ -7,14 +7,20 @@ import { createFixtureFamilyStore, familyFixtures, type FamilyFixtureName } from
 import { createLiveFamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
-import { RouteScope } from "#/workbench/route-scope";
+import { RouteScope, routeScopeSearch } from "#/workbench/route-scope";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import type { Scope } from "#/state/route-store";
 
 export const familySearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture"; fixture?: FamilyFixtureName; capture?: boolean } => ({
+): ReturnType<typeof routeScopeSearch> & {
+  thread?: string;
+  source?: "fixture";
+  fixture?: FamilyFixtureName;
+  capture?: boolean;
+} => ({
+  ...routeScopeSearch(search),
   capture: search.capture === true || search.capture === "true" ? true : undefined,
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,

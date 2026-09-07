@@ -9,14 +9,19 @@ import {
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
-import { RouteScope } from "#/workbench/route-scope";
+import { RouteScope, routeScopeSearch } from "#/workbench/route-scope";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import type { Scope } from "#/state/route-store";
 
 export const familiesSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture"; fixture?: "native" } => ({
+): ReturnType<typeof routeScopeSearch> & {
+  thread?: string;
+  source?: "fixture";
+  fixture?: "native";
+} => ({
+  ...routeScopeSearch(search),
   ...(search.fixture === "native" ? { fixture: "native" as const } : {}),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
