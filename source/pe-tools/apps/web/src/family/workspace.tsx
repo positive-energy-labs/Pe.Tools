@@ -1,3 +1,5 @@
+import { scopeSession, sessionKey } from "#/host/target";
+import { scopePin } from "@pe/agent-contracts";
 /**
  * /family — THE surface for ONE family.
  *
@@ -138,10 +140,12 @@ import { useFamilyColumns } from "#/family/workspace-columns";
 function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string, source?: "fixture") {
   const core = useFamilyWorkspaceCore(store);
   const columnModel = useFamilyColumns(core);
-  const { profile, stage, target, busy } = core;
+  const { profile, stage, busy } = core;
 
   const picker = useAtomValue(store.atoms.picker);
   const fleet = useFleet({ enabled: source !== "fixture" });
+  const resolved = scopeSession(store.scope.scope, fleet.sessions);
+  const target = scopePin(store.scope.scope) ?? (resolved ? sessionKey(resolved) : null);
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
@@ -153,7 +157,7 @@ function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string, s
     ...store.verbs,
   });
   const bindingState: BindingState<FamilySlot> = {
-    bound: { world: target || null, profile: profile || null },
+    bound: { world: target, profile: profile || null },
     multi: {},
     stage,
   };

@@ -61,6 +61,7 @@ export function createFamilyStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamilyHost;
+  navigateTarget?: (target: string) => Promise<void>;
   slices?: FamilySlices;
   writers?: {
     settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
@@ -438,7 +439,10 @@ export function createFamilyStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          // ponytail: the world lives in the page Scope (`?target`); owed: family route navigation.
+          if (registry.get(buildFacts).unsavedCount || registry.get(buildFacts).stagedCount)
+            refuse("Save or resolve authored edits before changing the target.");
+          if (!deps.navigateTarget) refuse("Target navigation is unavailable on this surface.");
+          await deps.navigateTarget(nextTarget);
           return `bound ${nextTarget}`;
         },
         ["family", "profile"],
@@ -449,6 +453,7 @@ export function createFamilyStore(deps: {
     },
   };
   return {
+    scope: deps.scope,
     registry,
     atoms: {
       ready: familyDoc,

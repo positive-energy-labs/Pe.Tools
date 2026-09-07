@@ -38,6 +38,7 @@ export function createFamiliesStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamiliesHost;
+  navigateTarget?: (target: string) => Promise<void>;
   slice?: FamiliesSlice;
   writer?: {
     apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
@@ -158,9 +159,6 @@ export function createFamiliesStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  // ponytail: the world lives in the page Scope (`?target`); a bind here is a no-op until the
-  // route navigates. Owed: families route passes `?target` into `pageScope`.
-  const bindDocument = async (_nextTarget: string) => ({ ok: true });
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
     (nextFeed) => {
@@ -239,7 +237,6 @@ export function createFamiliesStore(deps: {
           const path = registry.get(profilePath);
           const scope = registry.get(applied);
           if (!path || !scope) refuse("plan needs a profile and applied scope");
-          await bindDocument(registry.get(target));
           return expectRouteWrite(await writer.command("plan", { profilePath: path, scope }));
         },
         ["families"],
@@ -251,7 +248,6 @@ export function createFamiliesStore(deps: {
         async () => {
           const current = registry.get(plan);
           if (!current) refuse("apply needs a plan");
-          await bindDocument(registry.get(target));
           return expectRouteWrite(
             await writer.command("apply", {
               expectedPlanHashes: Object.fromEntries(
@@ -272,8 +268,9 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          const result = await bindDocument(nextTarget);
-          return result;
+          if (!deps.navigateTarget) refuse("Target navigation is unavailable on this surface.");
+          await deps.navigateTarget(nextTarget);
+          return `bound ${nextTarget}`;
         },
         ["session", "category", "family", "profile"],
       );
@@ -308,6 +305,7 @@ export function createFamiliesStore(deps: {
   };
 
   return {
+    scope: deps.scope,
     registry,
     atoms: {
       target,

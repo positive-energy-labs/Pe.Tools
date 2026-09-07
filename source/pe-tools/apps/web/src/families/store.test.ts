@@ -96,6 +96,9 @@ const make = (
         },
       },
       host: testFixture.host,
+      navigateTarget: async (target) => {
+        testFixture.calls.push({ op: "navigate", input: target });
+      },
       slice: docSlice,
       writer: testFixture.writer,
     }),
@@ -190,9 +193,9 @@ describe("families route store", () => {
 
   it("binding another target is a navigation, never a document write", async () => {
     const { calls, registry, store } = make();
-    await store.actions.bind("session:new");
+    await store.actions.bind("new");
     expect(registry.get(store.atoms.failure)).toBeNull();
-    expect(calls.filter(({ op }) => op === "apply")).toEqual([]);
+    expect(calls).toEqual([{ op: "navigate", input: "new" }]);
   });
 
   it("reloads a persisted document binding before plan", async () => {

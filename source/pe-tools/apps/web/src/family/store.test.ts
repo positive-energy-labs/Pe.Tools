@@ -120,6 +120,9 @@ const make = (
         },
       },
       host: testFixture.host,
+      navigateTarget: async (target) => {
+        testFixture.calls.push({ op: "navigate", input: target });
+      },
       slices: { settings: settingsSlice, family: familySlice },
       writers: testFixture.writers,
     }),
@@ -162,9 +165,9 @@ describe("family route store", () => {
     expect(registry.get(store.atoms.lane).world.live?.worldLabel).toBe("C:\\Models\\Test.rfa");
 
     // Binding another target is a navigation of the page Scope, never a document write.
-    await store.actions.bind("session:new");
+    await store.actions.bind("new");
 
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([{ op: "navigate", input: "new" }]);
   });
 
   it("persists a picked profile before opening it", async () => {
@@ -303,4 +306,14 @@ describe("family route store", () => {
     await tick();
     expect(registry.get(store.feeds.profile).state).toBe("error");
   });
+});
+
+it("preserves unsaved authored edits when target navigation is requested", async () => {
+  const { registry, store, calls } = make();
+  registry.get(store.atoms.lane);
+  await tick();
+  store.actions.setDraft((d) => ({ ...d, authored: { ...d.authored, Width: "42in" } }));
+  await expect(store.actions.bind("new")).rejects.toThrow("Save or resolve authored edits");
+  expect(calls.filter((c) => c.op === "navigate")).toEqual([]);
+  expect(registry.get(store.atoms.draft).authored.Width).toBe("42in");
 });

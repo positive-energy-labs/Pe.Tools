@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { bridgeSelector, sdkSessionIdSchema } from "@pe/agent-contracts";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { createFixtureFamilyStore, familyFixtures, type FamilyFixtureName } from "#/family/fixture";
 import { createLiveFamilyHost } from "#/family/host";
@@ -47,7 +48,9 @@ export function FamilyRouteContent({
   if (source === "fixture") return <FamilyFixtureRoute key={fixture} fixture={fixture} />;
   return (
     <RouteScope>
-      {(scope) => <FamilyStoreOwner key={scope.scope.document} scope={scope} capture={capture} />}
+      {(scope) => (
+        <FamilyStoreOwner key={bridgeSelector(scope.scope)} scope={scope} capture={capture} />
+      )}
     </RouteScope>
   );
 }
@@ -58,11 +61,21 @@ function FamilyFixtureRoute({ fixture }: { fixture?: FamilyFixtureName }) {
 }
 
 function FamilyStoreOwner({ scope, capture }: { scope: Scope; capture?: boolean }) {
+  const navigate = useNavigate({ from: "/family" });
   const store = useRouteStore(() => {
     return createFamilyStore({
       registry: appAtomRegistry,
       scope,
       host: createLiveFamilyHost(),
+      navigateTarget: (target) =>
+        navigate({
+          to: "/family",
+          search: (previous) => ({
+            ...previous,
+            doc: scope.scope.document,
+            target: sdkSessionIdSchema.parse(target),
+          }),
+        }),
     });
   });
   const ready = useAtomValue(store.atoms.ready) != null;

@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { bridgeSelector, sdkSessionIdSchema } from "@pe/agent-contracts";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import {
   createFixtureFamiliesStore,
@@ -42,7 +43,7 @@ export function FamiliesRouteContent({
     return <FamiliesFixtureRoute key={fixture} native={fixture === "native"} />;
   return (
     <RouteScope>
-      {(scope) => <FamiliesStoreOwner key={scope.scope.document} scope={scope} />}
+      {(scope) => <FamiliesStoreOwner key={bridgeSelector(scope.scope)} scope={scope} />}
     </RouteScope>
   );
 }
@@ -58,11 +59,21 @@ export function FamiliesFixtureRoute({ native = false }: { native?: boolean }) {
 }
 
 function FamiliesStoreOwner({ scope }: { scope: Scope }) {
+  const navigate = useNavigate({ from: "/families" });
   const store = useRouteStore(() => {
     return createFamiliesStore({
       registry: appAtomRegistry,
       scope,
       host: createLiveFamiliesHost(),
+      navigateTarget: (target) =>
+        navigate({
+          to: "/families",
+          search: (previous) => ({
+            ...previous,
+            doc: scope.scope.document,
+            target: sdkSessionIdSchema.parse(target),
+          }),
+        }),
     });
   });
   return <FamiliesWorkspace store={store} />;
