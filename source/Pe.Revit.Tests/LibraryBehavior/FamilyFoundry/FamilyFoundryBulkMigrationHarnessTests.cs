@@ -535,6 +535,82 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test, Timeout(600000)]
+    public void Old_template_Mitsubishi_MSZ_GL_preserves_join_graph_or_rolls_back() {
+        const string familyName = "Mitsubishi_MSZ-GL";
+        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
+        var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_Mitsubishi_MSZ_GL_preserves_join_graph_or_rolls_back));
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(original, copy);
+        var project = this._application.OpenDocumentFile(copy);
+        try {
+            var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
+            var originalId = family.Id;
+            var originalUniqueId = family.UniqueId;
+            var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
+            var beforeJoins = CaptureJoinGraph(project, family);
+            Assert.That(beforeJoins, Has.Some.Contains("|Extrusion|"), "The real family must exercise joined extrusion geometry.");
+
+            var mappings = CompanyNormalizationFixture.MechanicalMappings();
+            var names = mappings.MappingData.Select(mapping => mapping.NewName).ToHashSet(StringComparer.Ordinal);
+            var definitions = CompanyCorpusDefinitions().Where(definition => names.Contains(definition.Name!)).ToList();
+            Assert.That(definitions, Has.Count.EqualTo(38));
+            var operation = new ReconcileFamily(CompanyNormalizationFixture.Convert(mappings, names),
+                sharedSource: document => new FamilySharedParameterSource(document, definitions));
+            using var processor = new OperationProcessor(project);
+            var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+
+            var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
+            var afterJoins = CaptureJoinGraph(project, loaded);
+            Assert.That(afterJoins, Is.EqualTo(beforeJoins), "Migration must preserve every authored join edge.");
+            if (error is null) {
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
+                var exact = definitions.Count(definition => after.Parameters.Any(parameter =>
+                    parameter.Definition.Identity.Name == definition.Name &&
+                    parameter.Definition.Identity.SharedGuid == definition.DownloadOptions.GetGuid().ToString()));
+                Assert.That(exact, Is.EqualTo(definitions.Count));
+            } else {
+                var joinLossGuid = BuiltInFailures.JoinElementsFailures.CannotKeepJoined.Guid.ToString();
+                Assert.That(error.ToString(), Does.Contain(joinLossGuid), "Rollback must report the exact native join-loss failure GUID.");
+                Assert.That(loaded.Id, Is.EqualTo(originalId));
+                Assert.That(loaded.UniqueId, Is.EqualTo(originalUniqueId));
+                var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
+                Assert.That(JToken.DeepEquals(JToken.FromObject(after.Parameters), JToken.FromObject(before.Parameters)), Is.True,
+                    "Rollback must preserve the complete parameter matrix.");
+            }
+        } finally {
+            project.Close(false);
+            Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash),
+                "Original template fixture was modified.");
+        }
+    }
+
+    private static IReadOnlyList<string> CaptureJoinGraph(Document project, Family family) {
+        var document = project.EditFamily(family);
+        try {
+            var elements = new FilteredElementCollector(document).WhereElementIsNotElementType().ToElements();
+            var byId = elements.ToDictionary(element => element.Id);
+            return elements.SelectMany(element => JoinGeometryUtils.GetJoinedElements(document, element)
+                    .Where(byId.ContainsKey)
+                    .Select(joinedId => (Left: element, Right: byId[joinedId])))
+                .Select(edge => DescribeJoinEdge(edge.Left, edge.Right))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(edge => edge, StringComparer.Ordinal)
+                .ToList();
+        } finally { document.Close(false); }
+    }
+
+    private static string DescribeJoinEdge(Element first, Element second) {
+        static string Describe(Element element) =>
+            $"{element.UniqueId}|{element.GetType().Name}|{element.Category?.Name ?? "<none>"}";
+        var left = Describe(first);
+        var right = Describe(second);
+        return string.CompareOrdinal(left, right) <= 0 ? $"{left}<->{right}" : $"{right}<->{left}";
+    }
+
+    [Test, Timeout(600000)]
     public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
         const string selectionVariable = "PE_FF_OLD_TEMPLATE_FAMILY_SELECTION";
         var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");

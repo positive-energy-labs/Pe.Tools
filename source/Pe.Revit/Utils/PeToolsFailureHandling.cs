@@ -43,6 +43,20 @@ public static class PeToolsFailureHandling {
         return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
     }
 
+    /// <summary>Reject the native join-loss warning without broadening warning policy or changing geometry.</summary>
+    public static FailureProcessingResult RejectJoinLoss(FailuresAccessor accessor,
+        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings = true) {
+        var reject = false;
+        foreach (var failure in accessor.GetFailureMessages()) {
+            var joinLoss = failure.GetFailureDefinitionId() == BuiltInFailures.JoinElementsFailures.CannotKeepJoined;
+            var isError = failure.GetSeverity() != FailureSeverity.Warning || joinLoss;
+            reject |= isError;
+            diagnostics.Add((isError, DescribeFailure(failure)));
+            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
+        }
+        return reject ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+    }
+
     public static FailureProcessingResult ResolveFailures(
         FailuresAccessor failuresAccessor,
         ICollection<(bool IsError, string Message)> diagnostics
