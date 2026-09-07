@@ -8,6 +8,7 @@ using Pe.Revit.Global.Services.Aps;
 using Pe.Shared.RevitData.Families;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Parameters;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
 
@@ -35,8 +36,17 @@ public static class FamilyProfileConverter {
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
         var executionOptions = ConvertExecutionOptions(composed["ExecutionOptions"]);
         var familyFilter = composed["FilterFamilies"];
-        if (!string.IsNullOrEmpty((string?)familyFilter?["IncludeByCondition"]?["FieldName"]))
-            throw new InvalidOperationException("Family field conditions need a native selector before export.");
+        ScheduleFilterSpec? includeByCondition = null;
+        if (familyFilter?["IncludeByCondition"] is JObject condition) {
+            RequireOnly(condition, "FilterFamilies.IncludeByCondition", "FieldName", "FilterType", "Value");
+            if (!string.IsNullOrWhiteSpace((string?)condition["FieldName"])) {
+                includeByCondition = condition.ToObject<ScheduleFilterSpec>()!;
+                if (!Enum.IsDefined(typeof(ScheduleAuthoredFilterType), includeByCondition.FilterType))
+                    throw new InvalidOperationException($"FilterFamilies.IncludeByCondition has unknown FilterType '{condition["FilterType"]}'.");
+            } else if (!string.IsNullOrWhiteSpace((string?)condition["Value"]))
+                throw new InvalidOperationException("FilterFamilies.IncludeByCondition requires FieldName when Value is set.");
+        } else if (familyFilter?["IncludeByCondition"] is not null)
+            throw new InvalidOperationException("FilterFamilies.IncludeByCondition must be an object.");
         var older = composed["SharedParameterSelection"];
         var filter = composed["FilterApsParams"];
         var include = filter?["IncludeNames"] ?? older?["Include"];
@@ -99,6 +109,7 @@ public static class FamilyProfileConverter {
         return new FamilyProfileConversion(new FamilyPatch { Patch = exported.Patch, Run = exported.Run, Select = new PatchSelect {
             IncludeNames = familyFilter?["IncludeNames"]?.ToObject<IncludeFamilies>(),
             ExcludeNames = familyFilter?["ExcludeNames"]?.ToObject<ExcludeFamilies>(),
+            IncludeByCondition = includeByCondition,
             Categories = familyFilter?["IncludeCategoriesEqualing"]?.ToObject<List<FamilyCategory>>(JsonSerializer.Create(FamilyModelJson.Settings)),
             PlacedOnly = familyFilter?.Value<bool?>("IncludeUnusedFamilies") == false ? true : null
         } }, executionOptions);

@@ -161,7 +161,19 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                          ("Prefix Generic Keep", BuiltInCategory.OST_GenericModel)
                      }) {
                 var familyDocument = this.NewFamily(name, category);
-                try { _ = familyDocument.LoadFamily(project, new DefaultFamilyLoadOptions()); }
+                try {
+                    if (name == "Prefix Fan Keep") {
+                        using var transaction = new Transaction(familyDocument, "Seed condition selector");
+                        transaction.Start();
+                        var keep = familyDocument.FamilyManager.get_Parameter("Keep");
+                        foreach (var type in familyDocument.FamilyManager.Types.Cast<FamilyType>()) {
+                            familyDocument.FamilyManager.CurrentType = type;
+                            familyDocument.FamilyManager.Set(keep, type.Name == "B" ? "selected" : "other");
+                        }
+                        Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                    }
+                    _ = familyDocument.LoadFamily(project, new DefaultFamilyLoadOptions());
+                }
                 finally { familyDocument.Close(false); }
             }
             var settings = JObject.Parse("""
@@ -178,9 +190,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
             }));
 
-            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject { ["FieldName"] = "Model", ["Value"] = "A" };
-            Assert.That(() => FamilyProfileConverter.Convert(settings, [], project.GetUnits()),
-                Throws.InvalidOperationException.With.Message.Contains("Family field conditions need a native selector"));
+            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject {
+                ["FieldName"] = "Keep", ["FilterType"] = "Equal", ["Value"] = "selected"
+            };
+            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
+                Is.EqualTo(new[] { "Prefix Fan Keep" }));
+
+            settings["FilterFamilies"]!["IncludeByCondition"]!["FieldName"] = "Missing condition field";
+            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
+            Assert.That(() => project.FamiliesMatching(converted.Patch.Select),
+                Throws.InvalidOperationException.With.Message.Contains("could not apply every filter"));
         } finally { project.Close(false); }
     }
 
