@@ -117,10 +117,14 @@ The SDK reminted `ff-profile-proof-25` as controlled snapshot generation **`2026
 
 Attempt 3 (`.artifacts/runs/monthly45-host-plan-3/`) proved the Newtonsoft compiler repair: conversion compiled and returned structured data. It then exposed the next boundary defect: the driver passed each full patch through `--request`, and 31 profiles exceeded Windows' argv limit. The terminal checkpoint contains all 45 rows: 31 command-line failures, 9 converter failures, 4 other operation errors, and 1 Plan response. No Apply ran.
 
-Commit **`5bc489d8c26d3b8f167db26c1ddad4764ef867f0`** adds the ledger-owed `pea host operations call --request-file` input and makes the driver pass its already-written request artifact. A small request-file call against the pinned session passed before retry. Attempt 4 (`.artifacts/runs/monthly45-host-plan-4/`) then completed all **45** profiles: **36** converted and returned Family Foundry Plan responses; **9** failed conversion. Every returned Plan selected zero families and reported `FamilyNotFound`, so this is complete profile/converter and Plan-envelope coverage, but it does not prove a family migration plan. The converter failures are:
+Commit **`5bc489d8c26d3b8f167db26c1ddad4764ef867f0`** added the ledger-owed `pea host operations call --request-file` input and made the driver pass its already-written request artifact. Attempt 4 (`.artifacts/runs/monthly45-host-plan-4/`) completed all **45** rows, but all 36 converted requests returned **`PatchJsonRequired`**, not `FamilyNotFound`. The request artifacts contained `patchJson`; the CLI subcommand did not enable kebab-case argument binding, so `--request-file` was ignored and Pea posted an undefined request. The earlier summary at commit `170cf1f` classified zero selected counts without reading the diagnostic code and was false.
 
-- 1 `FormatOptions cannot be modified for specTypeId` (`DBF-DEDPV`);
-- 1 unknown group `Other` (`Grinder Pump Basin`);
-- 7 empty parameter-group labels (Modine, three WaterFurnace profiles, two Wine Guardian profiles, and Zehnder).
+Commit **`9ba0234dbe5ffd6eae711cb1e940390a363d6018`** enables the shared Host operation command's kebab-case options and uses `--bridge-session-id` consistently. The minimal red loop in `.artifacts/runs/monthly45-request-file-shape-2/` changed from `PatchJsonRequired` to the deliberately expected `FamilyNotFound`, proving `patchJson` reached the native handler. Attempt 5 (`.artifacts/runs/monthly45-host-plan-5/`) then completed all **45** profiles against the same loaded `915790e` payload:
 
-No Apply ran. Post-pass `revit.context.summary` still reports the exact disposable project, `isModifiable: false`; the controlled session and its quarantine remain active for root review and an eventual selected Apply.
+- **9** failed conversion: one non-modifiable `FormatOptions`, one group `Other`, and seven empty groups.
+- **24** converted, reached the Host/native operation, and failed with the same empty parameter-group exception.
+- **12** returned structured Plans with `FamilyNotFound` and zero selected families.
+
+The read-only selector census in `.artifacts/runs/monthly45-selector-census/family-not-found-census.json` compares those 12 composed patches with all **560** loaded-family catalog rows. None of the 12 uses category, placement, condition, or exclusion filtering; each uses ordinal exact names only. `AprilAire E-Series` has a concrete selector defect: the two loaded names exist after removing the authored `.rfa` suffix, and one also differs by case. `Constrained Box` uses the family-document-only `__CURRENT_FAMILY__` sentinel against a project. The exact targets for the other ten profiles are absent from this template catalog, so the evidence does not support a matcher defect for them.
+
+No Apply ran. Post-pass context still reports the exact disposable project, `isModifiable: false`; the controlled session and quarantine remain active.
