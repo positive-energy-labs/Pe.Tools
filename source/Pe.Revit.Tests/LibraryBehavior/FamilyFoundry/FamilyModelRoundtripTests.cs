@@ -75,26 +75,26 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(captured.Coverage["details"], Is.EqualTo(CoverageState.Read));
             Assert.That(captured.Details, Has.Count.EqualTo(1));
             Assert.That(captured.Details.Values.Single().Visible, Is.EqualTo("param:Show"));
-            Assert.That(new FilteredElementCollector(reopened).OfClass(typeof(SymbolicCurve)).GetElementCount(), Is.EqualTo(circle ? 1 : 4));
+            Assert.That(new FilteredElementCollector(reopened).OfClass(typeof(CurveElement)).OfType<SymbolicCurve>().Count(), Is.EqualTo(circle ? 1 : 4));
             rebuilt = FamilyModelBuild.Build(this._ui.Application, captured).Document;
             if (circle) {
                 using var perturb = new Transaction(rebuilt, "Verify symbolic diameter driver");
                 perturb.Start();
                 rebuilt.FamilyManager.Set(rebuilt.FamilyManager.get_Parameter("Diameter"), 2d);
                 rebuilt.Regenerate();
-                var arc = (Arc)new FilteredElementCollector(rebuilt).OfClass(typeof(SymbolicCurve)).Cast<SymbolicCurve>().Single().GeometryCurve;
+                var arc = (Arc)new FilteredElementCollector(rebuilt).OfClass(typeof(CurveElement)).OfType<SymbolicCurve>().Single().GeometryCurve;
                 Assert.That(arc.Radius, Is.EqualTo(1d).Within(1e-9));
                 Assert.That(arc.Center.DistanceTo(XYZ.Zero), Is.LessThan(1e-9));
                 perturb.RollBack();
             } else {
-                var points = new FilteredElementCollector(rebuilt).OfClass(typeof(SymbolicCurve)).Cast<SymbolicCurve>()
+                var points = new FilteredElementCollector(rebuilt).OfClass(typeof(CurveElement)).OfType<SymbolicCurve>()
                     .SelectMany(curve => new[] { curve.GeometryCurve.GetEndPoint(0), curve.GeometryCurve.GetEndPoint(1) }).ToList();
                 Assert.That(points.All(point => Math.Abs(Math.Abs(point.X) - 1) < 1e-9 && Math.Abs(Math.Abs(point.Y) - 1) < 1e-9), Is.True);
             }
             var outline = authored.Details["Authored outline"];
             authored.Details["Authored outline"] = new FamilyModelDetail { View = outline.View, Curves = outline.Curves, Visible = "param:Hide" };
             Assert.That(FamilyModelBuild.Reconcile(rebuilt, authored)?.Converged, Is.True);
-            foreach (var curve in new FilteredElementCollector(rebuilt).OfClass(typeof(SymbolicCurve)).Cast<SymbolicCurve>()) {
+            foreach (var curve in new FilteredElementCollector(rebuilt).OfClass(typeof(CurveElement)).OfType<SymbolicCurve>()) {
                 var visibility = curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM);
                 Assert.That(rebuilt.FamilyManager.GetAssociatedFamilyParameter(visibility)?.Definition.Name, Is.EqualTo("Hide"));
                 Assert.That(visibility.AsInteger(), Is.Zero);

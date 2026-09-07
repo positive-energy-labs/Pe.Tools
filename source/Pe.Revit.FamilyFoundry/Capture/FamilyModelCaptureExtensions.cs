@@ -384,7 +384,7 @@ internal sealed class FamilyModelCapturer {
             };
             this._elements.Add(result[key], [instance.Id]);
         }
-        var pending = Collect<SymbolicCurve>().OrderBy(c => c.Id.Value()).ToList();
+        var pending = Collect<CurveElement>().OfType<SymbolicCurve>().OrderBy(c => c.Id.Value()).ToList();
         while (pending.Count > 0) {
             var first = pending[0];
             pending.RemoveAt(0);
