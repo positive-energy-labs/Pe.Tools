@@ -14,6 +14,8 @@ public sealed class MakeDims((string Slug, FamilyModelDim Spec)[] dims, FamilyMo
     public override string Description => $"Create {dims.Length} dimensions: {string.Join(", ", dims.Select(d => d.Slug))}";
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
+        // Newly created planes have no usable dimension references until geometry is regenerated.
+        doc.Document.Regenerate();
         var logs = new List<LogEntry>();
         var index = 0;
         foreach (var (slug, spec) in dims) {
