@@ -87,7 +87,7 @@ internal static class ScriptFileTemplates {
         - Each entrypoint source file must contain exactly one non-abstract `PeScriptContainer`; helper `src/**/*.cs` files compile alongside but are not runnable.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
         - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
-        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. Use `WriteTransaction` to keep changes.
+        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. Use `WriteTransaction` for one host-owned transaction, or `NoTransaction` when the script or called library must own transaction boundaries.
         - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. `ReadOnly` controls document transaction behavior only.
         - Long-running scripts should check `ct` (or call `ThrowIfCancelled()`) inside loops so cancellation and the execution timeout can interrupt them.
         - Use `Result(...)` once per run to return structured JSON to the caller; `WriteLine(...)` for short human-readable output; `Artifacts.WriteJson/WriteCsv/WriteText(...)` for durable files.
@@ -120,6 +120,7 @@ internal static class ScriptFileTemplates {
         - `ReadOnly` is the default permission mode: the script runs inside a rollback guard, so any document changes are discarded and reported as a warning.
         - Scripts are trusted in-process C# inside Revit; `ReadOnly` is a document rollback guarantee, not machine isolation.
         - `WriteTransaction` is explicit and host-owned: one transaction, committed on success, rolled back if the script throws.
+        - `NoTransaction` is explicit and unguarded: the script or called library owns any transaction boundaries and rollback behavior.
         - Executions have a cooperative timeout (default 600s) and can be cancelled with `scripting.cancel`; scripts that never check `ct` cannot be interrupted.
         - Keep terminal output small; use `Result(...)` for structured data and artifacts for broad rows, tables, or evidence.
         """;
@@ -163,7 +164,7 @@ internal static class ScriptFileTemplates {
         ## Notes
 
         - Inline snippets are traceable probes, not the primary durable authoring surface.
-        - `ReadOnly` (default) runs inside a rollback guard: document changes are discarded and reported as a warning; use `WriteTransaction` to keep changes.
+        - `ReadOnly` (default) runs inside a rollback guard: document changes are discarded and reported as a warning; use `WriteTransaction` for one host-owned transaction, or `NoTransaction` for script/library-owned transaction boundaries.
         - The generated project preserves supported user references across bootstrap regeneration.
         - Use host/agent tools outside the script to discover operation shapes; keep scripts focused on direct Revit API work.
         - This workspace runs inside Revit through the Pe.Tools bridge; runtime behavior depends on the loaded Revit-side assemblies.

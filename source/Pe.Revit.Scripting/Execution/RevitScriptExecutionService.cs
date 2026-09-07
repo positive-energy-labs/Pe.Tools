@@ -718,7 +718,7 @@ public sealed class RevitScriptExecutionService(
             return [
                 ScriptDiagnosticFactory.Error(
                     "permission",
-                    "WriteTransaction scripts require an active document."
+                    $"{plan.PermissionMode} scripts require an active document."
                 )
             ];
         }
@@ -727,7 +727,7 @@ public sealed class RevitScriptExecutionService(
             return [
                 ScriptDiagnosticFactory.Error(
                     "permission",
-                    "WriteTransaction scripts require a writable active document; the active document is read-only."
+                    $"{plan.PermissionMode} scripts require a writable active document; the active document is read-only."
                 )
             ];
         }
@@ -947,7 +947,7 @@ public sealed class RevitScriptExecutionService(
 
         // SaveAs and a few other Revit APIs require a quiescent document and reject any open
         // transaction. NoTransaction is explicit because it has neither rollback nor commit safety;
-        // script-owned Transaction objects remain policy-rejected in every mode.
+        // the script or called library owns any transaction boundaries it needs.
         container.Execute();
     }
 

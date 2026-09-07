@@ -17,6 +17,9 @@ public sealed class RevitTransactionPolicyRule : IScriptPolicyRule {
         ScriptSourceFile sourceFile,
         CompilationUnitSyntax root
     ) {
+        if (context.PermissionMode == ScriptPermissionMode.NoTransaction)
+            yield break;
+
         foreach (var creation in root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>()) {
             var typeName = GetSimpleName(creation.Type);
             if (!RejectedTransactionTypes.Contains(typeName))

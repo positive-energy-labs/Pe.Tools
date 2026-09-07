@@ -42,4 +42,4 @@ Owns durable host-facing contracts: operation definitions, request/response/prob
 - Keep `CallGuidance` to at most 2 bullets and request examples to at most 2 unless an explicit gateway exception is validated. If an operation needs more prose to be usable, fix the operation/request shape.
 - When project-standard parameter identity is uncertain, expose ranked parameter evidence with reasons; callers should pass observed `ParameterIdentity` values or `ParameterReference` objects into downstream detail or matrix requests.
 - Do not add new .NET host clients. New callers should use generated TypeScript RPC contracts or Revit bridge operations.
-- Scripting requests default to `ReadOnly`; `WriteTransaction` is explicit mutation intent. Policy/rule implementation stays in `Pe.Shared.Scripting` or Revit adapters.
+- Scripting requests default to `ReadOnly`; `WriteTransaction` requests one host-owned transaction, while `NoTransaction` explicitly leaves transaction ownership to the script or called library. Policy/rule implementation stays in `Pe.Shared.Scripting` or Revit adapters.
