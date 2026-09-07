@@ -59,6 +59,25 @@ public sealed class FamilyReconcilerTests {
             executionOptions: new ExecutionOptions { SingleTransaction = false }).PlanHash, Is.EqualTo(baseline));
     }
 
+    [Test]
+    public void Plan_hash_ignores_dictionary_order_and_detects_semantic_drift() {
+        var desiredAb = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "A": { "W": "2ft" }, "B": { "W": "2ft" } } }""");
+        var currentAb = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "A": { "W": "1ft" }, "B": { "W": "1ft" } } }""");
+        var desiredBa = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "B": { "W": "2ft" }, "A": { "W": "2ft" } } }""");
+        var currentBa = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "B": { "W": "1ft" }, "A": { "W": "1ft" } } }""");
+        var changedBa = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "B": { "W": "18in" }, "A": { "W": "1ft" } } }""");
+
+        var ab = FamilyReconciler.Reconcile(desiredAb, currentAb, UnitResolvers.Portable);
+        var ba = FamilyReconciler.Reconcile(desiredBa, currentBa, UnitResolvers.Portable);
+        var drifted = FamilyReconciler.Reconcile(desiredBa, changedBa, UnitResolvers.Portable);
+        Assert.Multiple(() => {
+            Assert.That(ab.Changes.Select(change => (change.Section, change.Key)),
+                Is.EquivalentTo(ba.Changes.Select(change => (change.Section, change.Key))));
+            Assert.That(ba.PlanHash, Is.EqualTo(ab.PlanHash));
+            Assert.That(drifted.PlanHash, Is.Not.EqualTo(ab.PlanHash));
+        });
+    }
+
     private static readonly string[] Fixtures = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
 
     [TestCase("association")]
