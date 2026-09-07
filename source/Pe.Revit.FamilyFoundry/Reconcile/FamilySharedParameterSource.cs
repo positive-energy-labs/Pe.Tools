@@ -36,7 +36,10 @@ public sealed class FamilySharedParameterSource(Document document,
             var target = (JObject)json["parameters"]![property.Name]!;
             if (target.Value<string>("propertiesGroup") is { } group)
                 target["propertiesGroup"] = SetParamMetadata.Group(group).TypeId;
-            if (parameter.Value<bool?>("shared") != true) continue;
+            if (parameter.Value<bool?>("shared") != true) {
+                target["isInstance"] ??= false;
+                continue;
+            }
             SharedDefinitionSpec definition;
             if (parameter.Value<string>("sharedSpecId") is { } specId) {
                 definition = new SharedDefinitionSpec(property.Name, new ForgeTypeId(specId),
@@ -60,6 +63,7 @@ public sealed class FamilySharedParameterSource(Document document,
             target["sharedSpecId"] = definition.DataType.TypeId;
             target["sharedVisible"] = definition.Visible;
             target["sharedUserModifiable"] = definition.UserModifiable;
+            target["isInstance"] ??= false;
             if (!string.IsNullOrEmpty(definition.Description)) target["tooltip"] = definition.Description;
         }
         return json.ToObject<FamilyModel>(JsonSerializer.Create(FamilyModelJson.Settings))!;

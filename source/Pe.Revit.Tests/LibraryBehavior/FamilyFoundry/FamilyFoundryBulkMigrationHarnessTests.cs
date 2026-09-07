@@ -42,6 +42,30 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    [Test]
+    public void Omitted_new_parameter_scope_resolves_to_native_type_default_and_reapplies_empty() {
+        var document = this.NewFamily("FF parameter scope defaults");
+        try {
+            var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Rotation":{"dataType":"Angle","value":"90deg"},"Note":{"dataType":"Text","value":"Rotation"}}}}""");
+            var desired = FamilyReconciler.Desired(document.CaptureFamilyModel(), patch).Value!;
+            using var source = new FamilySharedParameterSource(document, []);
+            var resolved = source.Resolve(desired, patch.Patch);
+            Assert.That(resolved.Parameters["Rotation"].IsInstance, Is.False);
+            Assert.That(resolved.Parameters["Note"].IsInstance, Is.False);
+            using var processor = new OperationProcessor(document);
+            for (var pass = 0; pass < 2; pass++) {
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, []));
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+                if (pass == 1) Assert.That(operation.LastPlan!.Changes, Is.Empty);
+            }
+            Assert.That(document.FamilyManager.FindParameter("Rotation").IsInstance, Is.False);
+            Assert.That(document.FamilyManager.FindParameter("Note").IsInstance, Is.False);
+        } finally { document.Close(false); }
+    }
+
     [TestCase("PE_P_LoadCalc_CWFU", false, false)]
     [TestCase("PE_P_LoadCalc_CWFU", false, true)]
     [TestCase("PE_P_LoadCalc_CWFU", true, false)]
