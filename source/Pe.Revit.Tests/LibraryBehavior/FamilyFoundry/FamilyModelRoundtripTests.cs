@@ -297,7 +297,8 @@ public sealed class FamilyModelRoundtripTests {
 
     [Test]
     public void Grd_arrays_own_independent_nested_seeds_under_count_and_spacing_perturbation() {
-        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json")));
+        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
+        var json = JObject.Parse(File.ReadAllText(fixturePath));
         var parameters = (JObject)json["parameters"]!;
         parameters["_back count"] = JObject.Parse("""{"dataType":"Integer","value":3}""");
         parameters["_front count"] = JObject.Parse("""{"dataType":"Integer","value":4}""");
@@ -315,7 +316,7 @@ public sealed class FamilyModelRoundtripTests {
 
         Document? document = null;
         try {
-            document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!).Document;
+            document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!, modelDirectory: Path.GetDirectoryName(fixturePath)).Document;
             var actual = new FilteredElementCollector(document).OfClass(typeof(LinearArray)).Cast<LinearArray>()
                 .ToDictionary(a => a.Label.Definition.Name, StringComparer.Ordinal);
             Assert.Multiple(() => {
