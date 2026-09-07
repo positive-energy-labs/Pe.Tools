@@ -108,22 +108,37 @@ public sealed class FamilyModelContractTests {
             var bytes = File.ReadAllBytes(Path.Combine(root, (string)file["path"]!));
             Assert.That(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), Is.EqualTo((string)file["sha256"]!), (string)file["path"]!);
         }
-        Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "Unresolved original presets remain explicit blockers.");
+        Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "The original census remains unchanged after reconstruction and resolver repairs.");
     }
 
     [Test]
-    public void Composed_company_corpus_covers_every_profile_except_pending_inline_preset_override() {
+    public void Composed_company_corpus_covers_every_original_profile() {
         var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
         var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "manifest.json")));
-        var expected = original["files"]!.Select(x => (string)x["path"]!).Where(p => p.Contains("/profiles/") && p != "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json");
+        var expected = original["files"]!.Select(x => (string)x["path"]!).Where(p => p.Contains("/profiles/"));
         var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
         Assert.That(composed.Select(x => (string)x["source"]!), Is.EquivalentTo(expected));
-        Assert.That(composed.Count, Is.EqualTo(44));
+        Assert.That(composed.Count, Is.EqualTo(45));
         Assert.That(composed.Descendants().OfType<JProperty>().Where(p => p.Name is "$include" or "$preset"), Is.Empty);
         foreach (var profile in composed) {
             var source = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", (string)profile["source"]!)));
             Assert.That(((JObject)profile["settings"]!).Properties().Select(p => p.Name), Is.EquivalentTo(source.Properties().Select(p => p.Name)), (string)profile["source"]!);
         }
+    }
+
+    [Test]
+    public void AprilAire_inline_fields_override_preset_and_preserve_other_fields() {
+        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
+        const string path = "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json";
+        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", path)))["FilterApsParams"]!;
+        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
+        var actual = composed.Single(p => (string)p["source"]! == path)["settings"]!["FilterApsParams"]!;
+        var preset = composed.Single(p => (string)p["source"]! == "CmdFFMigrator/profiles/MechEquip/DH.json")["settings"]!["FilterApsParams"]!;
+        Assert.Multiple(() => {
+            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["Equaling"], original["IncludeNames"]!["Equaling"]), Is.True);
+            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["StartingWith"], preset["IncludeNames"]!["StartingWith"]), Is.True);
+            Assert.That(JToken.DeepEquals(actual["ExcludeNames"], preset["ExcludeNames"]), Is.True);
+        });
     }
 
     [Test]
