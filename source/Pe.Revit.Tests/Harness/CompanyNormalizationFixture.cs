@@ -14,6 +14,19 @@ internal static class CompanyNormalizationFixture {
         IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions) =>
         Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(profile, definitions, document.GetUnits());
 
+    public static JObject ApplyNativeProfileOverride(string source, JObject settings) {
+        var path = RevitFamilyFixtureHarness.GetProfileFixturePath(Path.Combine("native-overrides", "grinder-pump-basin-sound-level.json"));
+        var profileOverride = JObject.Parse(File.ReadAllText(path));
+        if (source.Replace('\\', '/') != profileOverride.Value<string>("source")) return settings;
+        var copy = (JObject)settings.DeepClone();
+        var parameter = profileOverride.Value<string>("parameter")!;
+        var assignment = copy["SetKnownParams"]!["GlobalAssignments"]!.Single(item => item.Value<string>("Parameter") == parameter);
+        if (assignment.Value<string>("Value") != profileOverride.Value<string>("sourceValue"))
+            throw new InvalidOperationException($"The Grinder native override no longer matches its frozen source assignment: {parameter}.");
+        assignment["Value"] = profileOverride["value"]!.DeepClone();
+        return copy;
+    }
+
     public static FamilyPatch Convert(MapParamsSettings mappings, IEnumerable<string> selectedSharedNames,
         SetKnownParamsSettings? assignments = null, bool fillBlanksFromSources = false,
         IReadOnlyDictionary<string, ForgeTypeId>? specs = null, Units? legacyUnits = null) {

@@ -625,7 +625,8 @@ public static class FamilyProfileConverter {
         }
         if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
             if (legacy.Spec == SpecTypeId.Number)
-                return spec == SpecTypeId.Number ? NormalizeLegacyLiteral(name, value)
+                return spec == SpecTypeId.Number ? double.TryParse(value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out _) ? value : NormalizeLegacyLiteral(name, value)
                     : throw new InvalidOperationException($"Legacy Number literal '{name}' cannot target {spec.TypeId}.");
             var legacyUnits = new Units(UnitSystem.Imperial);
             legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));

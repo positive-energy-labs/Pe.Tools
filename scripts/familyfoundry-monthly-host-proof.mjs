@@ -181,8 +181,9 @@ function applyOne(profiles) {
 function convertProfiles() {
   const profilePath = join(repo, "source", "Pe.Revit.Tests", "Fixtures", "Profiles", "company-composed-20260906.json");
   const definitionsPath = join(repo, "source", "Pe.Revit.Tests", "Fixtures", "Profiles", "normalization-company-definitions.json");
+  const overridePath = join(repo, "source", "Pe.Revit.Tests", "Fixtures", "Profiles", "native-overrides", "grinder-pump-basin-sound-level.json");
   const scriptPath = join(output, "convert-company-profiles.cs");
-  writeFileSync(scriptPath, conversionScript(profilePath, definitionsPath));
+  writeFileSync(scriptPath, conversionScript(profilePath, definitionsPath, overridePath));
   const result = pea(["script", "execute", "--host", host, "--bridge-session-id", session, "--file", scriptPath, "--permission-mode", "ReadOnly", "--timeout-seconds", "600"], "conversion");
   const marker = "\ndata      ";
   const stdoutText = `\n${result.stdout}`;
@@ -216,9 +217,9 @@ function pea(commandArgs, label) {
   return result;
 }
 
-function conversionScript(profilePath, definitionsPath) {
+function conversionScript(profilePath, definitionsPath, overridePath) {
   const literal = (value) => `@"${resolve(value).replaceAll('"', '""')}"`;
-  return `using Newtonsoft.Json;\nusing Newtonsoft.Json.Linq;\nusing Pe.Revit.FamilyFoundry.Apply;\nusing Pe.Revit.Global.Services.Aps;\nusing Pe.Shared.RevitData.Families;\nusing System.Collections.Generic;\nusing System.IO;\nusing System.Linq;\nif (doc == null || doc.IsFamilyDocument) throw new System.InvalidOperationException("Activate the disposable Old Template project copy.");\nvar profiles = JArray.Parse(File.ReadAllText(${literal(profilePath)})).OfType<JObject>().ToList();\nvar definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(${literal(definitionsPath)}))!;\nvar rows = new JArray();\nforeach (var profile in profiles) {\n  ct.ThrowIfCancellationRequested();\n  var row = new JObject { ["source"] = (string)profile["source"]! }; rows.Add(row);\n  try { var converted = FamilyProfileConverter.Convert((JObject)profile["settings"]!, definitions, doc.GetUnits()); row["patchJson"] = JsonConvert.SerializeObject(converted.Patch); row["executionOptions"] = JObject.FromObject(converted.Options, JsonSerializer.Create(FamilyModelJson.Settings)); }\n  catch (System.Exception ex) { row["error"] = ex.ToString(); }\n}\nResult(new JObject { ["documentTitle"] = doc.Title, ["documentPath"] = doc.PathName, ["profiles"] = rows });\n`;
+  return `using Newtonsoft.Json;\nusing Newtonsoft.Json.Linq;\nusing Pe.Revit.FamilyFoundry.Apply;\nusing Pe.Revit.Global.Services.Aps;\nusing Pe.Shared.RevitData.Families;\nusing System.Collections.Generic;\nusing System.IO;\nusing System.Linq;\nif (doc == null || doc.IsFamilyDocument) throw new System.InvalidOperationException("Activate the disposable Old Template project copy.");\nvar profiles = JArray.Parse(File.ReadAllText(${literal(profilePath)})).OfType<JObject>().ToList();\nvar definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(${literal(definitionsPath)}))!;\nvar profileOverride = JObject.Parse(File.ReadAllText(${literal(overridePath)}));\nvar rows = new JArray();\nforeach (var profile in profiles) {\n  ct.ThrowIfCancellationRequested();\n  var source = (string)profile["source"]!; var settings = (JObject)profile["settings"]!.DeepClone();\n  if (source == (string)profileOverride["source"]!) { var parameter = (string)profileOverride["parameter"]!; var assignment = settings["SetKnownParams"]!["GlobalAssignments"]!.Single(item => (string)item["Parameter"]! == parameter); if ((string)assignment["Value"]! != (string)profileOverride["sourceValue"]!) throw new System.InvalidOperationException("The Grinder native override no longer matches its frozen source assignment."); assignment["Value"] = profileOverride["value"]!.DeepClone(); }\n  var row = new JObject { ["source"] = source }; rows.Add(row);\n  try { var converted = FamilyProfileConverter.Convert(settings, definitions, doc.GetUnits()); row["patchJson"] = JsonConvert.SerializeObject(converted.Patch); row["executionOptions"] = JObject.FromObject(converted.Options, JsonSerializer.Create(FamilyModelJson.Settings)); }\n  catch (System.Exception ex) { row["error"] = ex.ToString(); }\n}\nResult(new JObject { ["documentTitle"] = doc.Title, ["documentPath"] = doc.PathName, ["profiles"] = rows });\n`;
 }
 
 function parseArgs(values) {
