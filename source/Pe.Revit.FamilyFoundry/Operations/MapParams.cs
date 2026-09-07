@@ -87,7 +87,7 @@ public class MapParams(MapParamsSettings settings)
                             targetParameter: mapping.NewName,
                             mappingKey: mapping.NewName,
                             details: setValueDetails)
-                        .Defer(tgtParam != currParam
+                        .SuccessForType(tgtParam != currParam
                             ? $"Coerced {mappingDesc} using {mapping.MappingStrategy}"
                             : $"Set {mappingDesc}");
                     succeeded = true;

@@ -9,6 +9,7 @@ namespace Pe.Revit.FamilyFoundry;
 public class OperationContext {
     private readonly Dictionary<string, LogEntry> _entries = new();
     private readonly HashSet<string> _touchedThisOperation = [];
+    private readonly List<LogEntry> _snapshots = [];
     public IEnumerable<LogEntry> All => this._entries.Values;
 
     /// <summary>
@@ -46,10 +47,22 @@ public class OperationContext {
             })
             .ToList();
         this._touchedThisOperation.Clear();
+        this._snapshots.AddRange(snapshot);
         return snapshot;
     }
 
+    internal OperationLog Complete() {
+        foreach (var entry in this._entries.Values.Where(e => !e.IsComplete)) {
+            var attempts = this._snapshots.Where(s => ReferenceEquals(s.SnapshotOwner, entry)).ToList();
+            if (attempts.Any(s => s.Status is LogStatus.Success or LogStatus.Skipped) &&
+                !attempts.Any(s => s.Status == LogStatus.Error || s.Status == LogStatus.Pending && s.FamilyTypeName.Length > 0))
+                entry.Success("Group completed all attempted type writes.");
+        }
+        return new OperationLog("Group completion", this._entries.Values.Select(e => e.Clone()).ToList());
+    }
+
     public void Reset() {
+        this._snapshots.Clear();
         // Reset entries to Pending state rather than clearing them
         // This preserves the initialized keys while allowing reuse across families
         foreach (var key in this._entries.Keys.ToList())

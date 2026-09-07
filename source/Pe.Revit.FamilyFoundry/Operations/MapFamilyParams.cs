@@ -45,7 +45,7 @@ public sealed class MapFamilyParams(MapParamsSettings settings)
                         _ = doc.UnsetFormula(targetParameter);
 
                     _ = doc.SetValue(targetParameter, sourceParameter, mapping.MappingStrategy);
-                    _ = log.Defer(targetParameter != sourceParameter
+                    _ = log.SuccessForType(targetParameter != sourceParameter
                         ? $"Coerced {mappingDescription} using {mapping.MappingStrategy}"
                         : $"Set {mappingDescription}");
                     succeeded = true;

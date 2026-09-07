@@ -61,7 +61,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 isFallback = true;
             }
 
-            if (string.IsNullOrWhiteSpace(valueToSet)) {
+            if (valueToSet is null) {
                 _ = log
                     .WithParameterEvent(
                         ParameterEventOutcome.PerTypeValueSkipped,
@@ -70,7 +70,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         details: currentTypeName is null
                             ? null
                             : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
-                    .Defer("No per-type value for current family type");
+                    .SkipForType("No per-type value for current family type");
                 continue;
             }
 
@@ -83,7 +83,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         details: currentTypeName is null
                             ? null
                             : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
-                    .Skip("Already has value");
+                    .SkipForType("Already has value");
                 continue;
             }
 
@@ -100,7 +100,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                             ["IsFallback"] = isFallback.ToString(),
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
                         }))
-                    .Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
+                    .SuccessForType(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
             } catch (Exception ex) {
                 _ = log
                     .WithParameterEvent(
