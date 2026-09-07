@@ -8,15 +8,16 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
-Latest checkpoint: native wave9 at `46f22a5` ran 105 tests: 61 passed, 44 failed; company
-parameter cases 14/45 passed. Cleanup and native settings byte restoration passed. The
-electrical connector reference-plane probe succeeded, allowing removal of the support
-extrusion. Symbolic loop tests and raw Prism reapply are no longer in the failure set.
-Wave10 is assigned to retained proof context resumed as Sol medium, frozen at `4200a91`;
-R25.Tests compilation passed (0 errors, 119 warnings). It includes native connector hosts,
-driven-plane seed comparison, legacy conversion, conditional parameter rules and shared
-replacement lifetime repairs. Formula canonicalization remains a separate Sol-high task.
-The former Astra lines are retained idle, not discarded. Current source hold belongs to P.
+Latest checkpoint: fresh controlled wave10 at `4200a91` ran 108 tests: 68 passed,
+40 failed; company cases 10/45 passed. The strict converter now exposes unsupported
+active operations instead of omitting them. Owned Revit exited, zero quarantines remain,
+and native settings were restored byte-for-byte. Formula canonicalization and its rollback
+regression plus the wall-template census are integrated at `dc524dd`, not yet native proven.
+
+Current bounded dispatch: Sol high implements approved NoTransaction ownership and the
+script assembly-loading repair in `Pe.Tools-ff-details`; Sol medium censuses missing legacy
+conversion in the route tree; Sol medium diagnoses three remaining native geometry/rename
+failures in the proof tree. No native source hold is active. No new Revit run is queued.
 
 ## Completion contract
 
