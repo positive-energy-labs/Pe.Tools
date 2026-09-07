@@ -43,11 +43,54 @@ internal static class FamilyRefs {
 
     internal static bool IsCircle(Arc arc) => !arc.IsBound || Math.Abs(arc.Length - 2 * Math.PI * arc.Radius) < 1e-4;
 
+    internal static bool SameCircle(Arc a, Arc b) =>
+        a.Center.IsAlmostEqualTo(b.Center, 1e-4) && Math.Abs(a.Radius - b.Radius) < 1e-4 &&
+        Math.Abs(Math.Abs(a.Normal.DotProduct(b.Normal)) - 1) < 1e-4;
+
+    internal static bool IsCompleteCircle(IEnumerable<Arc> source) {
+        var arcs = source.ToList();
+        if (arcs.Count == 0 || arcs.Any(arc => !SameCircle(arcs[0], arc))) return false;
+        if (arcs.Count == 1) return IsCircle(arcs[0]);
+        if (arcs.Any(arc => !arc.IsBound)) return false;
+
+        var circle = arcs[0];
+        var normal = circle.Normal.Normalize();
+        var x = circle.XDirection.Normalize();
+        var y = normal.CrossProduct(x).Normalize();
+        var intervals = new List<(double Start, double End)>();
+        var total = 0d;
+        foreach (var arc in arcs) {
+            double Angle(XYZ point) {
+                var offset = (point - circle.Center).Normalize();
+                var angle = Math.Atan2(offset.DotProduct(y), offset.DotProduct(x));
+                return angle < 0 ? angle + 2 * Math.PI : angle;
+            }
+            static double Forward(double from, double to) => (to - from + 2 * Math.PI) % (2 * Math.PI);
+
+            var start = Angle(arc.GetEndPoint(0));
+            var end = Angle(arc.GetEndPoint(1));
+            var midpoint = Angle(arc.Evaluate(0.5, true));
+            var forward = Forward(start, end);
+            if (Forward(start, midpoint) > forward + 1e-9) (start, forward) = (end, 2 * Math.PI - forward);
+            total += forward;
+            intervals.Add((start, Math.Min(start + forward, 2 * Math.PI)));
+            if (start + forward > 2 * Math.PI) intervals.Add((0, start + forward - 2 * Math.PI));
+        }
+
+        var tolerance = 1e-4 / circle.Radius;
+        if (Math.Abs(total - 2 * Math.PI) > tolerance) return false;
+        var mergedEnd = 0d;
+        foreach (var interval in intervals.OrderBy(interval => interval.Start)) {
+            if (interval.Start > mergedEnd + tolerance) return false;
+            mergedEnd = Math.Max(mergedEnd, interval.End);
+        }
+        return mergedEnd >= 2 * Math.PI - tolerance;
+    }
+
     internal static bool SameCurve(Curve? a, Curve b) {
         if (a == null || a.GetType() != b.GetType()) return false;
         if (a is Arc arcA && b is Arc arcB && IsCircle(arcA) && IsCircle(arcB))
-            return arcA.Center.IsAlmostEqualTo(arcB.Center, 1e-4) && Math.Abs(arcA.Radius - arcB.Radius) < 1e-4 &&
-                Math.Abs(Math.Abs(arcA.Normal.DotProduct(arcB.Normal)) - 1) < 1e-4;
+            return SameCircle(arcA, arcB);
         if (!a.IsBound || !b.IsBound) return false;
         var (a0, a1, b0, b1) = (a.GetEndPoint(0), a.GetEndPoint(1), b.GetEndPoint(0), b.GetEndPoint(1));
         return (a0.IsAlmostEqualTo(b0, 1e-4) && a1.IsAlmostEqualTo(b1, 1e-4)) || (a0.IsAlmostEqualTo(b1, 1e-4) && a1.IsAlmostEqualTo(b0, 1e-4));

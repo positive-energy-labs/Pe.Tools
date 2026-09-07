@@ -44,11 +44,24 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
                 doc.Document.Regenerate();
 
                 var view = FamilyRefs.ViewFor(doc, null, normal);
-                foreach (var sketchCurve in extrusion.Sketch.GetAllElements().Select(id => doc.Document.GetElement(id)).OfType<ModelCurve>()) {
-                    var hit = sketchCurves.FirstOrDefault(item => FamilyRefs.SameCurve(item.Curve, sketchCurve.GeometryCurve));
-                    if (hit.Spec is null) throw new InvalidOperationException($"Revit sketch curve {FamilyRefs.DescribeCurve(sketchCurve.GeometryCurve)} does not match authored profiles: {string.Join("; ", sketchCurves.Select(item => FamilyRefs.DescribeCurve(item.Curve)))}.");
-                    FamilyRefs.ConstrainSketchCurve(doc, view, sketchCurve, hit.Spec);
+                var remaining = extrusion.Sketch.GetAllElements().Select(id => doc.Document.GetElement(id)).OfType<ModelCurve>().ToList();
+                foreach (var authored in sketchCurves) {
+                    if (authored.Curve is Arc intended && FamilyRefs.IsCircle(intended)) {
+                        var parts = remaining.Where(curve => curve.GeometryCurve is Arc arc && FamilyRefs.SameCircle(intended, arc)).ToList();
+                        if (!FamilyRefs.IsCompleteCircle(parts.Select(curve => (Arc)curve.GeometryCurve)))
+                            throw new InvalidOperationException($"Revit sketch arcs do not completely cover authored circle {FamilyRefs.DescribeCurve(intended)}.");
+                        FamilyRefs.ConstrainSketchCurve(doc, view, parts[0], authored.Spec);
+                        foreach (var part in parts) remaining.Remove(part);
+                        continue;
+                    }
+
+                    var match = remaining.FirstOrDefault(curve => FamilyRefs.SameCurve(authored.Curve, curve.GeometryCurve));
+                    if (match is null) throw new InvalidOperationException($"Authored sketch curve {FamilyRefs.DescribeCurve(authored.Curve)} has no native match.");
+                    FamilyRefs.ConstrainSketchCurve(doc, view, match, authored.Spec);
+                    remaining.Remove(match);
                 }
+                if (remaining.Count != 0)
+                    throw new InvalidOperationException($"Revit sketch has unmatched curves: {string.Join("; ", remaining.Select(curve => FamilyRefs.DescribeCurve(curve.GeometryCurve)))}.");
                 AlignCaps(doc, extrusion, normal, spec.Start ?? spec.SketchPlane!, spec.End, logs, slug);
                 if (spec.Subcategory is { } sub) {
                     var parent = doc.Document.OwnerFamily.FamilyCategory;
