@@ -737,3 +737,40 @@ No Open, Plan, Apply, lifecycle action, document activation, or native mutation 
 was not pointed at the project as a substitute for a family document. The remaining acceptance step
 is to integrate these web bytes, let P complete the controlled refresh, and observe the automatic
 catalog/profile repopulation without a manual reload.
+## Integrated catalog browser check - 2026-09-07
+
+The actual Host served `C:\Users\kaitp\source\repos\Pe.Tools-family` at integrated root
+`1811d2aa26574b0b6f19ca33fef3ae6a0a904398`, whose head is the catalog reconnect and warning patch.
+Host `http://127.0.0.1:52068` was connected to controlled `ff-profile-proof-25`, PID 79148, with the
+exact disposable `Old_Template-monthly45-disposable.rvt` project active. The browser used the real
+`/families?doc=...&target=ff-profile-proof-25` route; no fixture was loaded.
+
+The integrated route rendered all 64 native categories. Selecting Mechanical Equipment updated the
+scope binding to `1 of 64 category`. A read-only call using the exact route request and composite
+selector returned 81 Mechanical Equipment families, 282 types, zero issues, and no truncation.
+Despite that native result, the route family picker stayed disabled and the scope verb continued to
+report `needs family bound`. Changing the placement filter to `PlacedOnly` and back to `AllLoaded`
+also did not refresh it. Consequently the normal route could not apply the read-only scope or render
+the matrix. This is now the next route consumer blocker; it is downstream of catalog loading and is
+not a native empty-catalog result. The deterministic store test at integrated
+`families/store.test.ts:125-145` covers a direct `setDraft`, but the actual targeting picker path did
+not produce the same family-feed result. Browser console also reported that `FamiliesHead` updated
+`FamiliesWorkspace` while another component was rendering; the relationship to the missing feed is
+not yet proven.
+
+The actual Foundry profile picker opened successfully, but `settings.tree` for
+`FamilyFoundry/patches` contains exactly one entry:
+`ff-route-proof-ff-route-25-parameters.json`. No copied company profile is present in the route's
+authoritative profile root, so no substitute profile was selected. A company-profile binding and a
+real plan remain blocked until the copy exists in that root or the settled loader points at its
+existing authoritative location.
+
+No real plan is bound, so the integrated warning chip and advisory lines could not be observed
+without starting a plan. Their deterministic/type proof remains the evidence from the integrated
+patch. No already-required P refresh occurred during this bounded browser window, so automatic
+reconnect repopulation remains queued for the next P refresh rather than forcing an extra restart.
+
+No Open, Plan, Family Foundry Apply, lifecycle action, document activation, or model mutation was
+issued. The page remains scoped to the controlled project with Mechanical Equipment selected and
+`AllLoaded` restored. Raw request, native response, and browser receipt are under
+`.artifacts/runs/browser-20260906-ff/catalog-browser-1811d2a/`.
