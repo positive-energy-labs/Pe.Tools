@@ -280,7 +280,10 @@ public static class Solve {
             rooms.Add(new Room(i, d, reason, Loop(g), Math.Round(g.Area, 9),
                 label.X, label.Y, Math.Round(backed, 6), floor, ceiling, shared,
                 Enumerable.Range(0, ((Polygon)g).NumInteriorRings)
-                    .Select(h => Flat(((Polygon)g).GetInteriorRingN(h).Coordinates)).ToArray(), proposals[i]));
+                    .Select(h => ((Polygon)g).GetInteriorRingN(h))
+                    // Overlay can leave collinear triangles that Revit rejects as boundaries.
+                    .Where(h => Math.Round(Gf.CreatePolygon(h.Coordinates).Area, 9) > 0)
+                    .Select(h => Flat(h.Coordinates)).ToArray(), proposals[i]));
         }
 
         return rooms;

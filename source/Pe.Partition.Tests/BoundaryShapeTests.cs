@@ -91,6 +91,8 @@ public sealed class BoundaryShapeTests {
         // Geometry witness only. No captured hit is reassigned and no height is fabricated.
         // Dispositions from this run are deliberately neither asserted nor exported.
         var answer = Solve.Run(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
+        foreach (var hole in answer.Rooms.SelectMany(room => room.Holes ?? []))
+            Assert.That(Math.Round(Solve.GeometryOf([hole]).Area, 9), Is.GreaterThan(0), "numerical zero-area holes cannot be materialized in Revit");
         var after = answer.Rooms.Select(Polygon).ToArray();
         var before = Load<PartitionAnswer>(fixture, "answer").Rooms.Select(Polygon).ToArray();
         Assert.That(after.Length, Is.EqualTo(before.Length), "shaping must preserve the existing region set");
