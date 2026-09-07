@@ -16,6 +16,8 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
     public override string Description => $"Create {forms.Length} extrusions: {string.Join(", ", forms.Select(f => f.Slug))}";
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
+        // Dimension labels move the planes; settle them before reading profile coordinates.
+        doc.Document.Regenerate();
         var logs = new List<LogEntry>();
         foreach (var (slug, spec) in forms) {
             try {

@@ -117,7 +117,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, outcomes, plan.RunEffects, residue, current.Unmodeled,
             residue.Count == 0 && logs.All(l => l.PendingCount == 0));
         if (!this._candidateReceipt.Converged)
-            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries.");
+            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries: {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind})"))}.");
 
         return new OperationLog(this.Name, logs.SelectMany(l => l.Entries).ToList());
     }

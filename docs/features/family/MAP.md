@@ -18,71 +18,43 @@ Delete the map when the effort closes. No merge to main or live-product completi
 
 ## Current checkpoint and proof gates
 
-Integration `8008e19` includes composed desktop/host inputs, current-family apply and fleet navigation,
-native fixture readouts, per-family rollback/terminal receipts, offline shared definitions, explicit units,
-and one fallback type pass for all mapped parameters. Source integration is not product completion.
-Fresh controlled Revit 2025 wave 2 (`9941494`) passed 11/24; wave 3 (`1e24ef0`) passed 3/7.
-Wave 3 confirms named-plane reapply, rejected-template cleanup and assembly identity. The four
-geometry roundtrips remain red: dimension references, shared creation and portable angle parsing.
-Proof owns a bounded dimension diagnostic and lookup value loss; root owns geometry and parsing.
-Normalize owns destination-wins reference transfer, no-op planning, company conversion and corpus proof.
-Routes owns recursive field composition and the route-to-Revit journey. Four fixtures and fleet
-navigation were exercised in the browser; screenshot capture timed out and visual proof remains open.
-Root deterministic checks passed 129 web tests, 20 host tests and 6 command-chain tests before the
-latest readout/portable-definition integration. Combined validation is due after the current fixes.
-The SDK lease now enables only the required adapter, rejects overlapping leases under one mutex,
-and restores the exact acquired native settings. Wave 3 restored its original settings, left zero
-holds, and left the user's session unchanged. SDK changes remain isolated and unpublished.
+As of 2026-09-07 06:00 UTC, integration `324d797` plus root fixes is in `Pe.Tools-family`.
+Nothing is merged to main or published. No whole user story is closed yet.
 
-The paragraphs below retain the earlier measured experiment and initial ownership context;
-the current checkpoint above supersedes their source-only and runtime-pending status.
+| Owner | Current gate | Evidence / next action |
+|---|---|---|
+| Root | Portable geometry and all supported years | Revit 2023 FF compile now passes after removing newer framework API calls. Revit 2024/2026 compile and runtime remain owed. Four geometry fixtures are still red. |
+| Normalize / ffnorm0906 | Company migration and per-family rollback | Production Host composition resolves 43/45 frozen profiles. Reconstruct the missing Dehumidifier fragment, checking git history first (user authorized). Preserve inline preset overrides. Fix wave 5 native parameter failures, then run the old template corpus. |
+| Routes / ffroutes0906 | /family and /families on real Revit | Four fixtures and fleet navigation exercised in browser. Native plan/apply receipts through a dedicated controlled dev session remain owed. Pe.App build and shared-fragment editing are in progress. |
+| Proof / ffproof0906 | SDK custody, lookup values, nested dependencies | Sole Revit lifecycle owner. Wave 5 test run finished; SDK stop returned stopped. Lookup formula ordering and dependency loading fixes await the next READY integration. |
 
-Checkpoint: integration HEAD `f576a5a` contains the three capture rulings, restored native
-roundtrip/lookup acceptance, named-plane deletion repair, and the first normalization slice.
-Model contract checks passed 56/56 in the deterministic lane. The restored Revit tests compiled;
-their runtime assertions remain unproven. Commit `540154e` closes the desktop composed-input
-consumer and accepts native numeric/boolean scalar values in generated settings schemas.
+Fresh controlled Revit 2025 wave 5, frozen root `324d797`, returned **15 passed / 22 failed**
+across 37 selected tests. Shared causes: local-to-local ReplaceParameter misuse (8), geometry
+alignment (4), residue (3), shared creation (2), plus lookup evaluation, nested naming/loading,
+invalid rollback objects and fallback mapping. Failures remain acceptance failures.
+Raw evidence: `Pe.Tools-ff-proof/.artifacts/runs/fresh-20260906-ff/wave5`.
 
-P1 diagnosis is independently corroborated: native settings disabled ricaun and journals 3608/3610
-recorded the disabled test application. No pre-existing active quarantine appeared at 04:45:59 UTC.
-The proof owner's scoped SDK repair ran one fresh controlled diagnostic in PID 42800: 1/1 passed.
-Pe.Revit, FamilyFoundry and test assemblies loaded from the adapter test directory; Pe.App used the
-installed shell. The native settings and original fixture hashes were restored/unchanged afterward.
-The SDK repair and its cleanup behavior still require final review before adoption.
+Passed runtime checks include raw-value capture under rounded, symbol-suppressed display units,
+stale-plan rejection, and dependency refusal/cleanup. Earlier controlled measurements established
+that fresh reference planes need regeneration before dimension creation. Root now also settles
+labeled dimensions before reading extrusion profile coordinates; alignment acceptance is pending.
+Reconciliation errors now name the residual sections/keys rather than only reporting a count.
 
-P2/P3 now have fresh controlled Revit 2025 evidence in the proof tree, code `39cde8f`:
-three alternating repetitions on a 12-type Mitsubishi filter-box family from the old template,
-five target parameters, zero commit/reopen mismatches. Median mutation times: batched setters
-4867.6862 ms; source-parameter formulas 924.2989 ms; temporary selector 4133.6719 ms.
-Source parameters were already populated, so that timing applies to migration from existing data.
-Selector creation/population/cleanup are included. Existing formulas and associations survived;
-injected failure rolled back the selector and values. No selector optimization is adopted yet.
-New Number/Integer/Temperature parameters reported HasValue=true/raw zero; blank writes were
-rejected. The existing uniform helper falsely succeeded with a rounded 0 K literal; `39cde8f`
-repairs formatting and clear-error reporting. Broader units/cultures remain unproven.
+The SDK repair enables the required adapter without enabling unrelated add-ins, rejects overlapping
+leases, and restores the acquired native settings. A reused-parent-PID custody defect surfaced in
+wave 5 and is being repaired in `Pe.Revit.Sdk-ff-proof`; final runtime acceptance and adoption remain
+owed. User session `pe.app-25` PID 71484 is protected; no workflow may target it for this proof.
 
-R1/R2 first consumer slice `8c36c0d` is ready in the route tree: composed native payloads,
-native parameter projection, four direct fixture links, per-family hashes and receipts.
-Deterministic checks pass there; current-family Apply, browser and runtime proof remain open.
+Value strategy experiment (fresh controlled Revit 2025, proof `39cde8f`): 12-type Mitsubishi family,
+five parameter specs, three alternating repetitions, zero commit/reopen mismatches. Median mutation
+cost: batched setters 4867.7 ms; prepopulated-source formulas 924.3 ms; temporary selector 4133.7 ms.
+Selector setup and cleanup were included; source seeding was excluded. No selector optimization is
+adopted. New numeric parameters report raw zero; blank writes do not restore an unset state.
 
-Every agent is Astra medium. One writer per tree. Only proof owns Revit runtime runs this wave.
-Initial agent time box is 25 minutes; an intermediate report is due by 8 minutes.
-
-| ID | Owner / Herdr session | Worktree / branch | Claim and first gate | State |
-|---|---|---|---|---|
-| P1 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Diagnose zero-result fresh run; execute a real 2025 specimen | OPEN |
-| P2 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Compare temporary selector formulas, source formula baking, and one batched type pass; reopen and verify | OPEN |
-| P3 | proof / ffproof0906 | Pe.Tools-ff-proof / family/proof | Distinguish unset, explicit zero, numeric/temperature defaults, and clearing limits | OPEN |
-| N1 | normalize / ffnorm0906 | Pe.Tools-ff-normalize / family/normalize | Restore bulk migration acceptance; explicit values and destination priority; safe source cleanup | OPEN |
-| N2 | normalize / ffnorm0906 | Pe.Tools-ff-normalize / family/normalize | Family rollback, pre-mutation plan checks, post-commit/load receipts | OPEN |
-| R1 | routes / ffroutes0906 | Pe.Tools-ff-routes / family/routes | Reuse settings composition at execution boundaries; retain raw authoring and diagnostics | OPEN |
-| R2 | routes / ffroutes0906 | Pe.Tools-ff-routes / family/routes | Native model loading and truthful route state in /family and /families | OPEN |
-| G1 | root | Pe.Tools-family / family/rewrite | Reconcile capture rulings; restore roundtrip and lookup acceptance without hidden metadata | OPEN |
-
-Agent reports are `docs/features/family/PROOF-VALUES.md`, `PROOF-NORMALIZATION.md`, and
-`PROOF-ROUTES.md` in the named worktrees. Their claims require independent integration checks.
-Raw wave evidence is `.artifacts/runs/fresh-20260906-ff/`; route evidence uses its browser lane.
-The prior source census is `.artifacts/ff-census-0906/{core,routes,environment}-report.txt`.
+Root deterministic baseline: 135 web checks, 20 Host checks; routes has subsequent checks for
+shared fields/Pea scope. Combined validation is due after final integration. Agent reports live in
+PROOF-VALUES.md, PROOF-NORMALIZATION.md and PROOF-ROUTES.md; source and compile claims do not
+substitute for route or Revit proof.
 
 ## User stories and closure evidence
 
@@ -102,13 +74,13 @@ The prior source census is `.artifacts/ff-census-0906/{core,routes,environment}-
 
 These are assigned to the current owner or queued behind a named prerequisite; none is waived.
 
-- P1: SDK test discovery/load/adapter diagnosis; fix the owning layer, not another watchdog.
+- P1: finish SDK custody repair and acceptance, then adopt coherent SDK bytes through the normal consumer pin.
 - N1: shared-definition resolution, GUID/tooltip fidelity, ranked source mapping, ReplaceParameter,
   formula/type-cell/reference renames, coercion, association graph stability, safe source removal.
 - N1/P3: blank/default policy keyed by spec; fill-blank-from-source flag separate from explicit JSON values.
 - N2: unified per-family transaction boundary, result/error propagation, pre-apply hash, residue and load receipt.
 - R1: includes/presets at module/global scopes, native keyed-map composition, nested directives, sidecar paths;
-  desktop raw-file execution is root's follow-up after the shared composition contract is settled.
+  desktop composition is integrated; shared-fragment edit origin and native dependency composition remain owed.
 - R2: stale TS contracts, fixture fallbacks, local fake apply, old build evidence, profile picker,
   durable targeting/binding, scope head and Pea capability context; no second competing route-state owner.
 - G1: capture rulings (connector face plane, positional refLines, unsigned datums), native identity,
@@ -156,6 +128,6 @@ No permanent strategy flag or formula compiler is authorized merely by this expe
   unmigrated template. Both originals stay unchanged; proof opens disposable copies.
 - OneDrive Documents/Pe.Tools settings and workspaces are in scope; originals stay unchanged until
   converted replacements are checked against the company behavior. Cloud template is already migrated.
-- The four prior native fixture tests have no accepted fresh proof. Green build is not Revit evidence.
+- All four native fixture tests have fresh failures; no complete geometry roundtrip is accepted.
 - `family/rulings` 9d130a5, `family/pod` 80fa435, `family/critic-purge` 6c5fcae are sibling feeders
   from b578789, not a proven merge chain. Do not merge the critic's test deletions.
