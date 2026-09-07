@@ -1,4 +1,7 @@
 using Autodesk.Revit.ApplicationServices;
+using Autodesk.Revit.DB.Mechanical;
+using Newtonsoft.Json.Linq;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
 
@@ -77,6 +80,78 @@ public sealed class FamilyModelCaptureTests {
             Assert.That(model.Parameters["_drain angle"].Formula, Is.EqualTo("90°"));
             Assert.That(model.Parameters["PE_P_LoadCalc_DFU"].Shared, Is.True);
         });
+    }
+
+    [Test]
+    public void Native_connector_host_probe_compares_plane_with_coincident_nested_face() {
+        var model = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
+        model.Connectors.Clear();
+        var modelDirectory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json"));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_connector_host_probe_compares_plane_with_coincident_nested_face));
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._application, model, modelDirectory: modelDirectory).Document;
+            using var transaction = new Transaction(document, "Probe connector host identity");
+            transaction.Start();
+            var plane = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                .Single(referencePlane => referencePlane.Name == "flange.top");
+            var vane = new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .Where(instance => instance.Symbol.Family.Name == "vane")
+                .OrderBy(instance => ((LocationPoint)instance.Location).Point.GetLength()).First();
+            var options = new Options { ComputeReferences = true, DetailLevel = ViewDetailLevel.Fine };
+            var face = vane.get_Geometry(options).OfType<GeometryInstance>()
+                .SelectMany(instance => instance.GetSymbolGeometry().OfType<Solid>())
+                .SelectMany(solid => solid.Faces.OfType<PlanarFace>())
+                .Where(candidate => candidate.Reference is not null &&
+                    Math.Abs(Math.Abs(candidate.FaceNormal.DotProduct(plane.GetPlane().Normal)) - 1) < 1e-7)
+                .OrderBy(candidate => Math.Abs((candidate.Origin - plane.GetPlane().Origin).DotProduct(plane.GetPlane().Normal)))
+                .First();
+            Assert.That(Math.Abs((face.Origin - plane.GetPlane().Origin).DotProduct(plane.GetPlane().Normal)),
+                Is.LessThan(1e-7), "Control requires the nested face to be coincident with flange.top.");
+
+            var planeConnector = ConnectorElement.CreateDuctConnector(document, DuctSystemType.ExhaustAir,
+                ConnectorProfileType.Rectangular, plane.GetReference());
+            var faceConnector = ConnectorElement.CreateDuctConnector(document, DuctSystemType.SupplyAir,
+                ConnectorProfileType.Rectangular, face.Reference);
+            document.Regenerate();
+            ElementTransformUtils.MoveElement(document, planeConnector.Id, faceConnector.Origin - planeConnector.Origin);
+            document.Regenerate();
+            Assert.That(planeConnector.Origin.DistanceTo(faceConnector.Origin), Is.LessThan(1e-7));
+
+            static JObject DescribeParameter(Parameter parameter) {
+                var builtIn = (parameter.Definition as InternalDefinition)?.BuiltInParameter;
+                return new JObject {
+                    ["name"] = parameter.Definition.Name,
+                    ["builtIn"] = builtIn?.ToString(),
+                    ["storage"] = parameter.StorageType.ToString(),
+                    ["elementId"] = parameter.StorageType == StorageType.ElementId ? parameter.AsElementId().Value() : null,
+                    ["text"] = parameter.StorageType == StorageType.String ? parameter.AsString() : parameter.AsValueString()
+                };
+            }
+            static JArray Ids(IEnumerable<ElementId> ids) => new(ids.Select(id => id.Value()));
+            static JObject DescribeConnector(ConnectorElement connector) => new() {
+                ["id"] = connector.Id.Value(),
+                ["origin"] = connector.Origin.ToString(),
+                ["parameters"] = new JArray(connector.Parameters.Cast<Parameter>().Select(DescribeParameter)),
+                ["dependents"] = Ids(connector.GetDependentElements(null))
+            };
+            var evidence = new JObject {
+                ["plane"] = new JObject {
+                    ["id"] = plane.Id.Value(),
+                    ["referenceElementId"] = plane.GetReference().ElementId.Value(),
+                    ["dependents"] = Ids(plane.GetDependentElements(null))
+                },
+                ["nested"] = new JObject {
+                    ["id"] = vane.Id.Value(),
+                    ["faceReferenceElementId"] = face.Reference.ElementId.Value(),
+                    ["dependents"] = Ids(vane.GetDependentElements(null))
+                },
+                ["planeHosted"] = DescribeConnector(planeConnector),
+                ["nestedFaceHosted"] = DescribeConnector(faceConnector)
+            };
+            File.WriteAllText(Path.Combine(output, "connector-host-identity.json"), evidence.ToString());
+            transaction.RollBack();
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
 
     [Test]
