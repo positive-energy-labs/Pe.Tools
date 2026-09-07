@@ -646,6 +646,16 @@ The deleted matrix's 16th mapping deliberately sends Text to Number. `Public_rec
 
 Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal --no-restore` exited 0 with 25 warnings and 0 errors. No Revit/session/runtime command ran.
 
+## Nested named-reference positioning - 2026-09-07
+
+The c-bath failure was not view selection or hosting after the earlier work-plane placement repair. `PlaceNested` still created each puck at the host plane origin and immediately called `NewAlignment` against offset X/Y planes. Revit's R25 API contract states that `NewAlignment` only locks references that are already geometrically aligned and never moves them.
+
+Candidate implementation: `PlaceNested` measures each actual transformed named reference against its authored host plane with a temporary native linear dimension. The documented dimension midpoint supplies the signed normal offset; the operation deletes the measurement, moves the instance by that exact offset, regenerates, and only then creates the locked alignment. Child parameter associations now apply and regenerate before this measurement, so an associated angle/elevation cannot move a reference after it was locked; any association or alignment failure remains inside the existing whole-family transaction. This handles named references offset from the nested family's origin without center-name assumptions, opening the nested document during application, or persistent metadata. The `line:` placement branch is unchanged.
+
+The fresh `Bath_nested_instances_follow_authored_host_geometry` surface now requires all four c-bath native alignment identities after placement and exactly the six authored dimensions, so a temporary measurement cannot become residue; its existing points cover zero, positive, and negative host offsets and retain all d-bath endpoint/visibility assertions. `Nested_alignment_positions_a_named_child_reference_offset_from_its_origin` adds a +0.5-foot Strong Reference inside the loaded puck, authors a fourth placement against it, and requires the child origin to land at -0.5 feet plus the actual native lock. Exact `Debug.R25.Tests` compile passed with 25 existing warnings and 0 errors. No Revit/session/runtime command ran.
+
+This remains a candidate until P proves the native premise that R25 creates the pre-alignment dimension over a family-instance named reference and reports `Dimension.Origin` at the reference midpoint. Owed filters: `FullyQualifiedName~FamilyModelRoundtripTests.Bath_nested_instances_follow_authored_host_geometry` and `FullyQualifiedName~FamilyModelRoundtripTests.Nested_alignment_positions_a_named_child_reference_offset_from_its_origin`. A midpoint/value mismatch fails with both signed and native distances rather than guessing.
+
 ## Legacy family selector preservation - 2026-09-07
 
 At `b578789^`, `FilterFamiliesSettings.Filter` applied four ordered constraints: native `BuiltInCategory`, case-sensitive name inclusion/exclusion (`Equaling`, `Containing`, `StartingWith`), placed-instance presence, then an optional `ScheduleFilterSpec`. The current `PatchSelect` retained exact names, category tokens, and placed-only selection, while `FamilyProfileConverter` rejected every exclusion, substring/prefix include, and active condition.
