@@ -436,11 +436,29 @@ public static class FamilyReconciler {
             executionOptions.OptimizeTypeOperations,
             executionOptions.SuppressWarnings
         };
-        var json = JsonConvert.SerializeObject(
-            new { Changes = changes, Current = current, Run = run, Desired = desired, Authored = authored, SharedDefinitions = sharedDefinitions, ExecutionBehavior = executionBehavior }, FamilyModelJson.Settings);
+        var payload = new {
+            Changes = changes.OrderBy(change => change.Section, StringComparer.Ordinal)
+                .ThenBy(change => change.Key, StringComparer.Ordinal)
+                .ThenBy(change => change.Kind)
+                .ThenBy(change => change.MappedFrom, StringComparer.Ordinal),
+            Current = current,
+            Run = run,
+            Desired = desired,
+            Authored = authored,
+            SharedDefinitions = sharedDefinitions,
+            ExecutionBehavior = executionBehavior
+        };
+        var json = CanonicalHashToken(JToken.FromObject(payload, Serializer)).ToString(Formatting.None);
         using var sha = SHA256.Create();
         return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-", "")[..16];
     }
+
+    private static JToken CanonicalHashToken(JToken token) => token switch {
+        JObject value => new JObject(value.Properties().OrderBy(property => property.Name, StringComparer.Ordinal)
+            .Select(property => new JProperty(property.Name, CanonicalHashToken(property.Value)))),
+        JArray value => new JArray(value.Select(CanonicalHashToken)),
+        _ => token.DeepClone()
+    };
 
     // ── lowering: the ordering DAG (r2-reconcile §4) ──
 
