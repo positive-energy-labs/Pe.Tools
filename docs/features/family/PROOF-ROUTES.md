@@ -1,5 +1,33 @@
 # Family routes proof checkpoint
 
+## Instances selector repair - 2026-09-07
+
+The browser blocker was a representation mismatch at the Instances route-state boundary. Host
+targeting uses a raw target id such as `ff-profile-proof-25`; persisted Instances state requires
+the canonical `session:ff-profile-proof-25` selector. The UI previously wrote the raw id and tried
+to resolve stored canonical selectors as raw ids.
+
+`agent-contracts/instances.ts` now owns the schema plus its two exact conversions. The Instances
+table encodes only when writing `selectedSession` or `staged.session`, and decodes only when handing
+the value back to `worldTrunk`. MCP lifecycle consumers use the same decoder and start-result
+writers use the same encoder. The Host resolver and its raw target ids did not change; the route
+schema still refuses noncanonical state.
+
+Architectural tally: one two-function codec at the existing schema owner; two adapter consumers;
+zero new contracts, endpoints, state fields, compatibility paths, or native changes. Every writer
+of `selectedSession` and `staged.session` now uses the codec.
+
+Deterministic proof: the actual Instances route component clicks a controlled session and its
+already-open document and records canonical route patches, then remounts from a canonical stored
+selector and selects the raw Host world. `vp test src/routes/-instances.test.tsx` passed 8/8;
+`packages/runtime/tests/instances.test.ts` passed 1/1. Targeted `vp check` passed the three changed
+production files. The full web check remains blocked by the pre-existing formatting failure in
+`src/host/fleet.test.tsx`; the agent-contracts package check reaches the pre-existing generated
+settings type mismatch in `tests/settings-fields.test.ts:62`.
+
+No Host, browser state, Revit session, document, lifecycle command, or Apply changed in this slice.
+Actual browser repetition waits for root integration after the proof hold.
+
 ## Final legacy geometry adapter slice - 2026-09-07
 
 Modine HHD and both Wine Guardian profiles now use the same native rectangle, driven face-plane, circle-stub, and connector lowering as the authored profiles. Legacy strings, `Frame.Plane`, `Derived.{Solid,Face}`, `Semantic.Name`, and `Cabinet.Width/Length/Height` references resolve through one strict helper. Rectangle face aliases preserve the evaluated plane names. Connector depth produces the authored `Host.Depth.PlaneNameBase`; `${Name} Stub` preserves the generated solid name; round diameter stays parameter-driven. Duct and pipe configuration is copied, old `SupplyHydronic`/`ReturnHydronic` names map to the native `HydronicSupply`/`HydronicReturn` enum names, and absent pipe flow direction retains the retired evaluator default `Bidirectional`. Modine electrical `PowerBalanced` and both `Voltage` and `NumberOfPoles` associations are emitted as native `associate` entries. The retired round-connector evaluator used `Diameter.By` and did not materialize `Diameter.PlaneNameBase` or `Strength`; the adapter validates those authored fields and preserves that evaluated behavior rather than inventing diameter planes.

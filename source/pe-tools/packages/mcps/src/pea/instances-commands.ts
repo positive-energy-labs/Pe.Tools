@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { InstancesDocument, RouteStateCommandHandlers } from "@pe/agent-contracts";
+import {
+  sdkSessionSelectorOf,
+  sdkSessionTargetOf,
+  type InstancesDocument,
+  type RouteStateCommandHandlers,
+} from "@pe/agent-contracts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
 const relaySchema = z.looseObject({
@@ -73,7 +78,7 @@ export function createInstancesCommandHandlers(
         if (staged.kind === "open") {
           path = "/docs/open";
           body = {
-            id: staged.session.slice(8),
+            id: sdkSessionTargetOf(staged.session),
             path: staged.document,
             ...(staged.document.startsWith("cld:") ? { conflictPolicy: "keep" } : {}),
           };
@@ -92,7 +97,7 @@ export function createInstancesCommandHandlers(
         }
       } else {
         if (!doc.selectedSession) return refuse("Select a session first.");
-        const id = doc.selectedSession.slice(8);
+        const id = sdkSessionTargetOf(doc.selectedSession);
         path = action === "close" ? "/docs/close" : "/sessions";
         body =
           action === "close"
@@ -106,11 +111,13 @@ export function createInstancesCommandHandlers(
       ) {
         const session =
           staged?.kind === "start"
-            ? `session:${staged.name}`
+            ? sdkSessionSelectorOf(staged.name)
             : staged?.kind === "open"
               ? staged.session
               : doc.selectedSession;
-        const current = await request(`/docs/current?id=${encodeURIComponent(session!.slice(8))}`);
+        const current = await request(
+          `/docs/current?id=${encodeURIComponent(sdkSessionTargetOf(session!))}`,
+        );
         receipt.target = { session, document: current.result.activeDocument ?? null };
       }
       doc.outcome = { action, at: new Date().toISOString(), receipt: z.json().parse(receipt) };
@@ -122,7 +129,7 @@ export function createInstancesCommandHandlers(
       ) {
         doc.selectedSession =
           action === "start" && staged?.kind === "start"
-            ? `session:${staged.name}`
+            ? sdkSessionSelectorOf(staged.name)
             : doc.selectedSession;
         doc.staged = null;
       }
