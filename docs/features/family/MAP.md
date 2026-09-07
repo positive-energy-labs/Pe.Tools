@@ -20,8 +20,11 @@ Current integration adds explicit cap-alignment capture, one-use structural matc
 and native wall-template view vocabulary. These changes await the next compile/native gate.
 Current Sol work repairs slash-containing type cell identity and shared tooltip repeat,
 checks native array constraints and the circle test readback, and types clean/sort contracts.
-The old-template fixture is staged with verified original hash. Its 38-definition mechanical
-mapping gate remains unrun and is the next primary acceptance after parameter repairs.
+The old-template 38-definition mechanical gate ran at 0cf5097: 81 eligible, 22 completed,
+8 passed with all shared identities, 14 failed with identity and parameter matrix rollback,
+59 remaining. File replacement stopped checkpointing. Owned runtime exited and original
+fixture/settings hashes remained unchanged. P repairs checkpoint sharing; N repairs native
+builtin formula references and unmapped parameter specs exposed by this real corpus.
 No whole user story is closed. Route browser receipt proof and native scripting remain owed.
 
 Final simplification must retain features while reducing state, contracts and serialization.
