@@ -9,6 +9,7 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 [GROUNDING-REVIT.md](GROUNDING-REVIT.md).
 
 ## Decided
+- 2026-09-07, user ruling: Mitsubishi source Phase values migrate to `PE_E___Phase`, while connector Number of Poles associations route explicitly to `PE_E___NumberOfPoles`; numeric Phase must not drive the pole slot.
 - 2026-09-07, user ruling: only the native old-template Magna3 override treats the exact Text horsepower value `N/A` as a missing source; the frozen company standards and unrelated mappings keep strict coercion, and no default is synthesized when none is authored.
 - 2026-09-07: Explicit NoTransaction permits scripts or called libraries to own Revit transactions; ReadOnly remains the default. User approved this for multi-family creation and migration.
 

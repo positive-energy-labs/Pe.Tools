@@ -8,7 +8,7 @@ Budget posture revised by user: Sol medium/high for bounded work; Opus high when
 Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
 cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
 
-Latest valid native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
+Latest broad native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
 123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
 Wave12 reused stale Debug.R25.Tests binaries because root compiled Debug.R25 and passed
 --no-build. Wave12 does not prove its stated source. Wave11 remains valid for 5531460.
@@ -16,15 +16,18 @@ The corrected wave13 built the SDK-selected Debug.R25.Tests graph before executi
 Both owned processes exited and native settings were restored byte-for-byte.
 Protected sessions retained their exact start identities. No FF-owned session is active.
 
-Current integration adds explicit cap-alignment capture, one-use structural matching,
-and native wall-template view vocabulary. These changes await the next compile/native gate.
-Current Sol work repairs slash-containing type cell identity and shared tooltip repeat,
-checks native array constraints and the circle test readback, and types clean/sort contracts.
-The old-template 38-definition mechanical gate ran at 0cf5097: 81 eligible, 22 completed,
-8 passed with all shared identities, 14 failed with identity and parameter matrix rollback,
-59 remaining. File replacement stopped checkpointing. Owned runtime exited and original
-fixture/settings hashes remained unchanged. P repairs checkpoint sharing; N repairs native
-builtin formula references and unmapped parameter specs exposed by this real corpus.
+Integration includes cap-alignment capture, one-use structural matching, wall view vocabulary,
+typed type/parameter cell identity, tooltip repeat handling, independent array seeds, native
+formula ownership and scoped N/A handling. Exact Debug.R25.Tests compile passed at d460bf8.
+Wave15 measured 56/81 old-template mechanical families: 28 passed, 28 rolled back, then timeout.
+Wave16 at d460bf8 measured the remaining 25 plus four focused repeats: 11 passed, 18 rolled back.
+All 81 now have an attempted mapping result; this is not full monthly-profile acceptance.
+Wave16 native MSZ-GL proves the inherited formula-unit fix. Magna3 advances past N/A to a
+separate Phase source value `Single` conversion refusal. Connector pole associations targeting
+numeric Phase are diagnosed; user ruled explicit routing to PE_E___NumberOfPoles instead.
+Wave16 also exposed a join warning during MSZ-GL: parameter success does not prove untouched
+geometry. P owns the preservation investigation. Originals and protected sessions were preserved.
+The checkpoint sharing repair survived both subsequent runs. No source hold is active.
 No whole user story is closed. Route browser receipt proof and native scripting remain owed.
 
 Final simplification must retain features while reducing state, contracts and serialization.
@@ -50,7 +53,10 @@ Fleet mutation committed, but its response read an invalid pre-load Family objec
 and receipt fixes are integrated; a new browser proof is owed. The old route session is stopped.
 NoTransaction policy passes 3/3 deterministic; native script execution remains owed.
 All 45 company profiles compose. The 52 original fixture files retain their original bytes.
-The old-template 38-definition mapping gate has not run and is distinct from full profile migration.
+The old-template 38-definition mapping gate ran across all 81 mechanical families and remains
+distinct from full profile migration. Full-profile selector/plan acceptance is under review.
+Pea settings open/create/refresh now return authored and composed JSON (1ad0378); the settings
+command chain passes 5/5 deterministic tests. Actual Pea and route runtime proof remains owed.
 Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [routes](PROOF-ROUTES.md).
 
 ## User stories and remaining proof
