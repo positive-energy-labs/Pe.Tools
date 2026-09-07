@@ -1,3 +1,4 @@
+import { paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
@@ -17,6 +18,7 @@ import { PressContent } from "#/components/anatomy/press-content";
 export function FamilyWorkspaceDocPane() {
   const {
     world,
+    lane,
     draft,
     saved,
     docMode,
@@ -127,6 +129,7 @@ export function FamilyWorkspaceDocPane() {
 
   const paramInspector = (name: string): React.ReactNode => {
     const row = rows.find((entry) => entry.name === name && entry.kind === "profile");
+    const native = lane.drawingModel?.parameters ? paramSpec(lane.drawingModel, name) : null;
     const authored = draft.authored[name] ?? "";
     const drives = consumers.get(name) ?? [];
     const blocks = world.grounding[name] ?? [];
@@ -138,6 +141,13 @@ export function FamilyWorkspaceDocPane() {
           {row?.group ? ` · ${row.group}` : ""}
           {world.missingInRevit.has(name) && <span className="ml-1">⊘ not in Revit</span>}
         </p>
+
+        {native && (
+          <details className="mb-2 t-small">
+            <summary>Native parameter declaration</summary>
+            <pre className="max-h-48 overflow-auto">{JSON.stringify(native, null, 2)}</pre>
+          </details>
+        )}
 
         <div className="hairline-t mb-2 pt-1.5">
           <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
@@ -183,7 +193,7 @@ export function FamilyWorkspaceDocPane() {
           </p>
           {drives.length === 0 ? (
             <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
-              drives nothing — fine for schedule data, suspicious for a Length
+              no direct form or connector dimension binding; other native declarations may use it
             </EmptyState>
           ) : (
             drives.map((entry) => (

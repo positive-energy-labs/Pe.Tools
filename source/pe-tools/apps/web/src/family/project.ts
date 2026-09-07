@@ -126,7 +126,7 @@ export function projectFamilyModel(
 function projectParams(model: FamilyModel): ProtoParam[] {
   const project = ([name, spec]: [string, ParamSpec]): ProtoParam => ({
     name,
-    dataType: spec.dataType ?? "shared",
+    dataType: spec.dataType ?? spec.sharedSpecId ?? "shared",
     value: spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value),
     isInstance: spec.isInstance ?? false,
     group: spec.propertiesGroup ?? "other",

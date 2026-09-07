@@ -157,3 +157,33 @@ test("native source geometry resolves macros and authored seeds without solving 
   expect(inches("1/0in")).toBeNull();
   expect(inches("not a length")).toBeNull();
 });
+
+test("offline shared declarations survive native projection and unrelated value edits", () => {
+  const patch = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../../../../docs/features/family/acceptance/parameters.patch.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const raw = JSON.stringify({
+    family: { name: "PE Box" },
+    parameters: patch.patch.parameters,
+    types: { Standard: {} },
+  });
+  const lane = familyLane(snapshot(raw), null);
+  const shared = lane.world.params.find((p) => p.name === "FF_Route_Proof_Count")!;
+  expect(shared.dataType).toBe("autodesk.spec.aec:number-2.0.0");
+  expect(shared.value).toBe("7");
+  const baseline = initialDraft(lane.world);
+  const edit = structuredClone(baseline);
+  edit.authored.Width = "48in";
+  expect(draftToPatches(lane.document!.model, edit, baseline)).toEqual([
+    { path: ["fields", "/parameters/Width/value", "staged"], value: { value: "48in" } },
+  ]);
+  expect(lane.document!.model.parameters!.FF_Route_Proof_Count).toEqual(
+    patch.patch.parameters.FF_Route_Proof_Count,
+  );
+});

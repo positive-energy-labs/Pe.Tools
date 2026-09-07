@@ -16,10 +16,19 @@ interface ParamAssociations {
 // ── authored shape (v1, loosely typed for the projection) ───────────────────────────────────────
 
 export interface ParamSpec {
-  dataType: string;
+  dataType?: string;
+  shared?: boolean;
+  sharedGuid?: string;
+  sharedSpecId?: string;
+  sharedVisible?: boolean;
+  sharedUserModifiable?: boolean;
+  wasNamed?: string[];
+  fillBlanksFromSources?: boolean;
+  mappingStrategy?: string;
+  tooltip?: string;
   propertiesGroup?: string;
   resolvedValues?: Record<string, string>;
-  value?: string;
+  value?: string | number | boolean;
   formula?: string;
   /** Authored schema carries a nullable `isInstance`; absent means TYPE (Revit's default). */
   isInstance?: boolean;

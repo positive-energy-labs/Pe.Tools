@@ -1,0 +1,28 @@
+{
+  "select": {
+    "names": [
+      "PE Box"
+    ]
+  },
+  "patch": {
+    "parameters": {
+      "Width": {
+        "dataType": "Length",
+        "value": "42in"
+      },
+      "FF_Route_Proof_Count": {
+        "shared": true,
+        "sharedGuid": "f70f2c68-3d81-4dc3-a2d9-2da64e2a7158",
+        "sharedSpecId": "autodesk.spec.aec:number-2.0.0",
+        "sharedVisible": true,
+        "sharedUserModifiable": true,
+        "value": 7,
+        "wasNamed": [
+          "FF_Route_Proof_Old_Count"
+        ],
+        "fillBlanksFromSources": true,
+        "mappingStrategy": "CoerceByStorageType"
+      }
+    }
+  }
+}
