@@ -20,12 +20,10 @@ public static class FamilyDocumentNormalizeParameter {
         return replacement;
     }
 
-    /// <summary>Remove only an equivalent source, transferring every direct association and native formula reference first.</summary>
-    public static bool TryMergeEquivalentParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target) {
-        if (source.IsBuiltInParameter() || source.Id == target.Id || source.Definition.GetDataType() != target.Definition.GetDataType() ||
-            source.IsInstance != target.IsInstance || source.Formula != target.Formula) return false;
-        if (document.FamilyManager.Types.Cast<FamilyType>().Any(type =>
-                type.HasValue(source) != type.HasValue(target) || !Equals(document.GetValue(type, source), document.GetValue(type, target)))) return false;
+    /// <summary>Destination values win. Transfer all source references, then remove the source; any failure rolls back.</summary>
+    public static void TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target) {
+        if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
+        if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
         var fm = document.FamilyManager;
@@ -45,6 +43,5 @@ public static class FamilyDocumentNormalizeParameter {
         if (source.HasAnyAssociation(document)) throw new InvalidOperationException($"Source '{temporary}' still has dependencies.");
         fm.RemoveParameter(source);
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
-        return true;
     }
 }

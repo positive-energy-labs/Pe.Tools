@@ -5,7 +5,7 @@ using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
-/// <summary>Source migration precedes explicit authored writes. Untransferred sources remain in the family.</summary>
+/// <summary>Source migration precedes explicit authored writes. Destination state wins; source references transfer before removal.</summary>
 public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource)
     : DocOperation<DefaultOperationSettings>(new()) {
     public override string Description => "Normalize explicit parameter sources and shared identities";
@@ -81,8 +81,12 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var source = fm.FindParameter(sourceName);
                 var target = fm.FindParameter(targetName);
                 if (source is null || target is null || authoredNames.Contains(sourceName)) continue;
-                var removed = doc.TryMergeEquivalentParameter(source, target);
-                logs.Add(new LogEntry(sourceName).Skip(removed ? $"Transferred dependencies and removed equivalent source into '{targetName}'." : "Retained source: values, formula, scope or datatype are not equivalent."));
+                if (source.IsBuiltInParameter()) {
+                    logs.Add(new LogEntry(sourceName).Skip("Revit-owned built-in source is read-only to removal; destination state wins."));
+                    continue;
+                }
+                doc.TransferAndRemoveParameter(source, target);
+                logs.Add(new LogEntry(sourceName).Success($"Transferred references to '{targetName}' and removed source; destination values win."));
             }
         } finally { if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType; }
         return new OperationLog(this.Name, logs);

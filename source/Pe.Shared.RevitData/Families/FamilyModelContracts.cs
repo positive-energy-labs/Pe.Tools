@@ -244,7 +244,7 @@ public sealed class FamilyModelParameter {
 
     /// <summary>
     ///     Explicit source candidates, ranked by populated type count with authored-order ties. Existing
-    ///     destination wins. Safe native replacement preserves references; non-equivalent copied sources remain.
+    ///     destination wins. Transfer references before removing user-defined sources, even when source values differ.
     /// </summary>
     [JsonProperty("wasNamed", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? WasNamed { get; init; }

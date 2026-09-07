@@ -69,6 +69,50 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Conflicting_source_references_follow_existing_destination_before_source_removal(bool incompatible) {
+        var document = this.NewFamily("FF destination wins");
+        try {
+            using (var seed = new Transaction(document, "Seed conflicting destination and dependent formula")) {
+                seed.Start();
+                var manager = document.FamilyManager;
+                var target = manager.AddParameter("Winning Width", GroupTypeId.Geometry, incompatible ? SpecTypeId.String.Text : SpecTypeId.Length, false);
+                var dependent = manager.AddParameter("Dependent Width", GroupTypeId.Geometry, SpecTypeId.Length, false);
+                foreach (var type in manager.Types.Cast<FamilyType>()) {
+                    manager.CurrentType = type;
+                    if (incompatible) manager.Set(target, "destination"); else manager.Set(target, 9d);
+                }
+                manager.SetFormula(dependent, "Width * 2");
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var operation = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Winning Width":{"wasNamed":["Width"]}}}}"""));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            if (incompatible) {
+                Assert.That(error, Is.Not.Null, "A text destination cannot replace a length reference in multiplication.");
+                Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
+                AssertOriginalWidths(document);
+                Assert.That(document.FamilyManager.FindParameter("Dependent Width").Formula, Is.EqualTo("Width * 2"));
+                Assert.That(document.FamilyManager.Parameters.Cast<FamilyParameter>().Any(p => p.Definition.Name.StartsWith("FF_Transfer_")), Is.False);
+                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                    Assert.That(type.AsString(document.FamilyManager.FindParameter("Winning Width")), Is.EqualTo("destination"));
+                return;
+            }
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(document.FamilyManager.FindParameter("Width"), Is.Null);
+            var targetParameter = document.FamilyManager.FindParameter("Winning Width");
+            var dependentParameter = document.FamilyManager.FindParameter("Dependent Width");
+            Assert.That(dependentParameter.Formula, Does.Contain("Winning Width"));
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
+                Assert.That(type.AsDouble(targetParameter), Is.EqualTo(9d));
+                Assert.That(type.AsDouble(dependentParameter), Is.EqualTo(18d));
+            }
+        } finally { document.Close(false); }
+    }
+
     [Test]
     public void Multiple_targets_receive_a_shared_source_before_cleanup() {
         var document = this.NewFamily("FF batched fallback");
@@ -214,7 +258,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var targetParameter = document.FamilyManager.FindParameter("PE_G___Model");
             foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
                 Assert.That(type.AsString(targetParameter), Is.EqualTo(explicitValue ? "explicit" : type.Name == "A" ? "destination" : fill ? "dense-B" : ""));
-            Assert.That(document.FamilyManager.FindParameter("Model"), Is.Not.Null, "different source values must not be discarded");
+            Assert.That(document.FamilyManager.FindParameter("Model"), Is.Not.Null, "Revit owns the built-in source; it cannot be removed.");
+            Assert.That(document.FamilyManager.FindParameter("Mech Equip Model Number"), Is.Null, "Conflicting user-defined source is removed after transfer; destination wins.");
         } finally { document.Close(false); }
     }
 
