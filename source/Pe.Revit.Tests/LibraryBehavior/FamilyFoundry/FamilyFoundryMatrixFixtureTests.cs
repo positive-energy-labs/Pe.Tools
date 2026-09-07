@@ -91,7 +91,18 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             var loadedFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
                 this._dbApplication, projectDocument, outputDirectory);
             familyDocument = projectDocument.EditFamily(loadedFamily);
-            var before = FamilyModelJson.Serialize(familyDocument.CaptureFamilyModel());
+            Assert.That(familyDocument.FamilyManager.FindParameter(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber), Is.Null,
+                "The invalid mapping must exercise conversion into a missing destination.");
+            using (var seed = new Transaction(familyDocument, "Seed unparseable sixteenth source")) {
+                seed.Start();
+                var source = familyDocument.FamilyManager.FindParameter(FamilyFoundryMatrixFixtureBuilder.SourceText)!;
+                foreach (var type in familyDocument.FamilyManager.Types.Cast<FamilyType>()) {
+                    familyDocument.FamilyManager.CurrentType = type;
+                    familyDocument.FamilyManager.Set(source, "not-a-number");
+                }
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var before = familyDocument.CaptureFamilyModel();
             var referencesBefore = NativeReferenceGraph(familyDocument);
             var operation = new ReconcileFamily(SetValueMatrixPatch(includeInvalid: true));
             using var processor = new OperationProcessor(familyDocument);
@@ -100,7 +111,7 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             Assert.That(error?.ToString(), Does.Contain(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber)
                 .And.Contain("All sources failed"));
             Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
-            Assert.That(FamilyModelJson.Serialize(familyDocument.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(FamilyReconciler.Diff(before, familyDocument.CaptureFamilyModel(), UnitResolvers.Revit(familyDocument)), Is.Empty);
             Assert.That(NativeReferenceGraph(familyDocument), Is.EqualTo(referencesBefore));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -247,25 +258,25 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             [FamilyFoundryMatrixFixtureBuilder.SourceYesNo]);
         Map(FamilyFoundryMatrixFixtureBuilder.TargetNumber, SpecTypeId.Number, "Identity Data", false,
             [FamilyFoundryMatrixFixtureBuilder.SourceNumberText]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetLength, SpecTypeId.Length, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetLength, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceLengthText]);
         Map(FamilyFoundryMatrixFixtureBuilder.TargetVoltage, SpecTypeId.ElectricalPotential, "Electrical", false,
             [FamilyFoundryMatrixFixtureBuilder.SourceVoltageText], "CoerceElectrical");
         Map(FamilyFoundryMatrixFixtureBuilder.TargetCurrent, SpecTypeId.Current, "Electrical", false,
             [FamilyFoundryMatrixFixtureBuilder.SourceCurrentText], "CoerceElectrical");
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, SpecTypeId.Length, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceFormulaNested], clearFormula: true);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, SpecTypeId.Length, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceLengthText]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, SpecTypeId.Length, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceLinearDimension]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, SpecTypeId.Angle, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, SpecTypeId.Angle, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceAngularDimension]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, SpecTypeId.Length, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, SpecTypeId.Int.Integer, "Geometry", false,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, SpecTypeId.Int.Integer, GroupTypeId.Geometry.TypeId, false,
             [FamilyFoundryMatrixFixtureBuilder.SourceArrayCount]);
-        Map(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, "Geometry", true,
+        Map(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, true,
             [FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth]);
         if (includeInvalid)
             Map(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber, SpecTypeId.Number, "Identity Data", false,
@@ -282,7 +293,7 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             [FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText] = Shared(
                 FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeTextGuid, SpecTypeId.String.Text, "Text", false),
             [FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength] = Shared(
-                FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLengthGuid, SpecTypeId.Length, "Geometry", true),
+                FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLengthGuid, SpecTypeId.Length, GroupTypeId.Geometry.TypeId, true),
             [FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared] = Shared(
                 FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundSharedGuid, SpecTypeId.String.Text, "Electrical", true),
             [FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText] = Local("Text", "Identity Data", false,

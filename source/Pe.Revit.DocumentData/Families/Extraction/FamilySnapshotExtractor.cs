@@ -4,6 +4,7 @@ using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.DocumentData.Families.Extraction;
 
@@ -141,7 +142,8 @@ public static class FamilySnapshotExtractor {
                     ? null
                     : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId()),
                 (familyParameter.Definition as InternalDefinition)?.Visible,
-                familyParameter.UserModifiable
+                familyParameter.UserModifiable,
+                ReadDescription(famDoc.Document, familyParameter)
             ),
             familyParameter.IsShared ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
             LoadedFamilyParameterPresence.Family,
@@ -154,4 +156,14 @@ public static class FamilySnapshotExtractor {
 
     private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
         string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
+
+    private static string? ReadDescription(Document document, FamilyParameter parameter) {
+        if (Autodesk.Revit.DB.ParameterUtils.IsBuiltInParameter(parameter.Id)) return null;
+        var getSchema = typeof(Autodesk.Revit.DB.ParameterUtils).GetMethod(
+            "GetParameterSchema",
+            [typeof(ElementId), typeof(Document)]
+        ) ?? throw new MissingMethodException(typeof(Autodesk.Revit.DB.ParameterUtils).FullName, "GetParameterSchema");
+        var json = (string)getSchema.Invoke(null, [parameter.Id, document])!;
+        return JObject.Parse(json)["description"]?.Value<string>();
+    }
 }

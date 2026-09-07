@@ -47,6 +47,7 @@ public static class FamilyModelParameterProjection {
                 DataType = dataType,
                 PropertiesGroup = d.GroupTypeId,
                 IsInstance = d.IsInstance,
+                Tooltip = d.Description,
                 Formula = formula
             };
             if (formula != null) continue;

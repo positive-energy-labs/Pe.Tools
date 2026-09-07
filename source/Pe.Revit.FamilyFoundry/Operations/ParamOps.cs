@@ -72,8 +72,13 @@ public sealed class SetParamMetadata((string Name, FamilyModelParameter Spec)[] 
         return new OperationLog(this.Name, logs);
     }
 
-    public static ForgeTypeId Group(string label) =>
-        Pe.Revit.DocumentData.Parameters.RevitLabelCatalog.GetLabelToPropertyGroupMap().TryGetValue(label, out var forge) ? forge : new ForgeTypeId(label);
+    public static ForgeTypeId Group(string label) {
+        var labels = Pe.Revit.DocumentData.Parameters.RevitLabelCatalog.GetLabelToPropertyGroupMap();
+        if (labels.TryGetValue(label, out var forge)) return forge;
+        var requested = new ForgeTypeId(label);
+        if (Pe.Revit.DocumentData.Parameters.RevitLabelCatalog.GetPropertyGroupToLabelMap().ContainsKey(requested)) return requested;
+        throw new InvalidOperationException($"Unknown parameter group '{label}'. Use a native GroupTypeId TypeId or a Revit group label.");
+    }
 
     public static ForgeTypeId Spec(DataType dataType) => dataType switch {
         DataType.Length => SpecTypeId.Length, DataType.Area => SpecTypeId.Area, DataType.Volume => SpecTypeId.Volume, DataType.Angle => SpecTypeId.Angle,

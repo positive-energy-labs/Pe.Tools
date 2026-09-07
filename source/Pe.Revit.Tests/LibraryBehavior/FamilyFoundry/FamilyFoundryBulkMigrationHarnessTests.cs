@@ -1154,14 +1154,20 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 manager.SetFormula(target, "Amperage * 1.25");
                 Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
-            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var before = document.CaptureFamilyModel();
+            var valuesBefore = document.FamilyManager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsDouble(document.FamilyManager.FindParameter("Amperage")));
             var operation = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"PE_E___MCA":{"wasNamed":["Amperage"]}}}}"""));
             using var processor = new OperationProcessor(document);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
             var (_, error) = contexts.Single().OperationLogs;
             Assert.That(error?.ToString(), Does.Contain("PE_E___MCA").And.Contain("Amperage * 1.25")
                 .And.Contain("not an exact alias").And.Contain("Refusing to discard formula intent"));
-            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            var after = document.CaptureFamilyModel();
+            Assert.That(document.FamilyManager.FindParameter("PE_E___MCA")!.Formula, Is.EqualTo("Amperage * 1.25"));
+            Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsDouble(document.FamilyManager.FindParameter("Amperage"))), Is.EqualTo(valuesBefore));
+            Assert.That(FamilyReconciler.Diff(before, after, UnitResolvers.Revit(document)), Is.Empty);
         } finally { document.Close(false); }
     }
 
