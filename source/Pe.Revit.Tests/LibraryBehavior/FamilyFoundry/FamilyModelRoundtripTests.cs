@@ -1,5 +1,6 @@
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Shared.RevitData.Families;
 using Newtonsoft.Json.Linq;
 
@@ -281,6 +282,16 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(points.Any(point => Math.Abs(point.X + 0.25) < 1e-7), Is.True, "Cold puck must lie on conn (left).");
             Assert.That(points.Any(point => Math.Abs(point.X - 0.25) < 1e-7), Is.True, "Hot puck must lie on conn (right).");
             Assert.That(points.Any(point => Math.Abs(point.Y - 2.0) < 1e-7), Is.True, "Drain puck must lie on drain y.");
+            var capturedBath = bath.CaptureFamilyModel();
+            Assert.That(capturedBath.Nested.Values.Where(nested => nested.Family == "puck")
+                    .SelectMany(nested => nested.Align ?? []).Select(align => $"{align.Instance}->{align.To}"),
+                Is.EquivalentTo(new[] {
+                    "Center (Left/Right)->conn (left)",
+                    "Center (Left/Right)->conn (right)",
+                    "Center (Left/Right)->drain x",
+                    "Center (Front/Back)->drain y"
+                }), "Every positioned named reference must also receive its authored native lock.");
+            Assert.That(capturedBath.Dimensions, Has.Count.EqualTo(6), "Position measurements must not survive as family dimensions.");
 
             hinged = FamilyModelBuild.Build(this._ui.Application,
                 RevitFamilyFixtureHarness.LoadFamilyModelFixture("d-bath-shower-refline"), modelDirectory: directory).Document;
@@ -299,6 +310,55 @@ public sealed class FamilyModelRoundtripTests {
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(bath);
             RevitFamilyFixtureHarness.CloseDocument(hinged);
+        }
+    }
+
+    [Test]
+    public void Nested_alignment_positions_a_named_child_reference_offset_from_its_origin() {
+        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
+        var authored = RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower");
+        Document? bath = null;
+        Document? puck = null;
+        try {
+            bath = FamilyModelBuild.Build(this._ui.Application, authored, modelDirectory: directory).Document;
+            var puckFamily = new FilteredElementCollector(bath).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .First(instance => instance.Symbol.Family.Name == "puck").Symbol.Family;
+            puck = bath.EditFamily(puckFamily);
+            using (var offset = new Transaction(puck, "Add offset named-reference probe")) {
+                offset.Start();
+                var view = new FilteredElementCollector(puck).OfClass(typeof(View)).Cast<View>()
+                    .Where(candidate => !candidate.IsTemplate && candidate.ViewType is ViewType.Elevation or ViewType.Section)
+                    .OrderByDescending(candidate => Math.Abs(candidate.ViewDirection.DotProduct(XYZ.BasisX))).First();
+                var plane = puck.FamilyCreate.NewReferencePlane(
+                    new XYZ(0.5, -8, 0), new XYZ(0.5, 8, 0), XYZ.BasisZ, view);
+                plane.Name = "Offset Probe";
+                Assert.That(plane.get_Parameter(BuiltInParameter.ELEM_REFERENCE_NAME)?.Set(13), Is.True,
+                    "13 is Revit's native Strong Reference value, shared with MakeRefPlanes.");
+                Assert.That(offset.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            _ = puck.LoadFamily(bath, new DefaultFamilyLoadOptions());
+            RevitFamilyFixtureHarness.CloseDocument(puck);
+            puck = null;
+
+            var desiredJson = JObject.Parse(FamilyModelJson.Serialize(authored));
+            ((JObject)desiredJson["nested"]!)["offset-probe"] = JObject.Parse("""
+                { "family": "puck", "type": "default", "host": "Ref. Level",
+                  "align": [ { "instance": "Offset Probe", "to": "Center (Left/Right)" } ] }
+                """);
+            var desired = FamilyModelJson.Parse(desiredJson.ToString());
+            Assert.That(desired.Diagnostics, Is.Empty);
+            var receipt = FamilyModelBuild.Reconcile(bath, desired.Value!);
+            Assert.That(receipt?.Converged, Is.True);
+            var probe = new FilteredElementCollector(bath).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .Where(instance => instance.Symbol.Family.Name == "puck")
+                .Single(instance => Math.Abs(((LocationPoint)instance.Location).Point.X + 0.5) < 1e-7);
+            Assert.That(((LocationPoint)probe.Location).Point.X, Is.EqualTo(-0.5).Within(1e-7),
+                "The child origin must move opposite its +0.5ft named-reference offset.");
+            Assert.That(bath.CaptureFamilyModel().Nested.Values.SelectMany(nested => nested.Align ?? [])
+                .Any(align => align.Instance == "Offset Probe" && align.To == "Center (Left/Right)"), Is.True);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(puck);
+            RevitFamilyFixtureHarness.CloseDocument(bath);
         }
     }
 

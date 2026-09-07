@@ -48,15 +48,16 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
         }
         doc.Document.Regenerate();
 
+        foreach (var (target, source) in spec.Associate ?? []) {
+            var p = instance.LookupParameter(target) ?? throw new InvalidOperationException($"'{spec.Family}' has no parameter '{target}'.");
+            FamilyRefs.Associate(doc, p, source, logs, slug);
+        }
+        doc.Document.Regenerate();
         foreach (var align in spec.Align ?? []) {
             var (hostRef, hostPlane) = FamilyRefs.Resolve(doc, align.To);
             var nestedRef = instance.GetReferenceByName(align.Instance)
                             ?? throw new InvalidOperationException($"'{spec.Family}' exposes no '{align.Instance}' reference; set its Is Reference name.");
-            FamilyRefs.Align(doc, FamilyRefs.ViewForPlaneCreation(doc, hostPlane.Normal), hostRef, nestedRef);
-        }
-        foreach (var (target, source) in spec.Associate ?? []) {
-            var p = instance.LookupParameter(target) ?? throw new InvalidOperationException($"'{spec.Family}' has no parameter '{target}'.");
-            FamilyRefs.Associate(doc, p, source, logs, slug);
+            PositionAndAlign(doc, instance, hostRef, hostPlane, nestedRef);
         }
         if (spec.Visible is { } visible) {
             var parameter = instance.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM)
@@ -65,5 +66,29 @@ public sealed class PlaceNested((string Slug, FamilyModelNested Spec)[] nested, 
         }
         logs.Add(new LogEntry(slug).Success($"Placed {spec.Family}:{spec.Type} on {spec.Host}, {spec.Align?.Count ?? 0} alignments."));
         return instance;
+    }
+
+    private static void PositionAndAlign(FamilyDocument doc, FamilyInstance instance, Reference hostReference, Plane hostPlane, Reference instanceReference) {
+        var normal = hostPlane.Normal.Normalize();
+        var view = FamilyRefs.ViewForPlaneCreation(doc, normal);
+        var references = new ReferenceArray();
+        references.Append(hostReference);
+        references.Append(instanceReference);
+        var dimension = doc.Document.FamilyCreate.NewLinearDimension(
+            view,
+            Line.CreateBound(hostPlane.Origin - normal, hostPlane.Origin + normal),
+            references
+        );
+        doc.Document.Regenerate();
+        var distance = dimension.Value ?? throw new InvalidOperationException("Revit returned no distance between the nested and host references.");
+        var signedDistance = 2 * normal.DotProduct(dimension.Origin - hostPlane.Origin);
+        doc.Document.Delete(dimension.Id);
+        if (Math.Abs(Math.Abs(signedDistance) - distance) > 1e-7)
+            throw new InvalidOperationException($"Nested reference offset {signedDistance:R} disagrees with native dimension {distance:R}.");
+        if (distance > 1e-7) {
+            ElementTransformUtils.MoveElement(doc, instance.Id, -normal * signedDistance);
+            doc.Document.Regenerate();
+        }
+        FamilyRefs.Align(doc, view, hostReference, instanceReference);
     }
 }
