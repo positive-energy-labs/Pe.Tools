@@ -1168,6 +1168,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B")
                 .ToDictionary(type => type.Name, type => type.AsDouble(document.FamilyManager.FindParameter("Amperage"))), Is.EqualTo(valuesBefore));
             Assert.That(FamilyReconciler.Diff(before, after, UnitResolvers.Revit(document)), Is.Empty);
+            Assert.That(FamilyReconciler.Diff(after, before, UnitResolvers.Revit(document)), Is.Empty);
         } finally { document.Close(false); }
     }
 

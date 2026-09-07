@@ -111,7 +111,9 @@ public sealed class FamilyFoundryMatrixFixtureTests {
             Assert.That(error?.ToString(), Does.Contain(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber)
                 .And.Contain("All sources failed"));
             Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
-            Assert.That(FamilyReconciler.Diff(before, familyDocument.CaptureFamilyModel(), UnitResolvers.Revit(familyDocument)), Is.Empty);
+            var after = familyDocument.CaptureFamilyModel();
+            Assert.That(FamilyReconciler.Diff(before, after, UnitResolvers.Revit(familyDocument)), Is.Empty);
+            Assert.That(FamilyReconciler.Diff(after, before, UnitResolvers.Revit(familyDocument)), Is.Empty);
             Assert.That(NativeReferenceGraph(familyDocument), Is.EqualTo(referencesBefore));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
