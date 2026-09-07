@@ -65,6 +65,10 @@ function useFamiliesWorkspaceModel(
   const status = useHostStatusQuery({ ...scope, enabled: !fixture });
   const connected = fixture || (status.data?.bridgeIsConnected ?? false);
 
+  useEffect(() => {
+    if (connected && !fixture) store.actions.refreshReads();
+  }, [connected, fixture, store]);
+
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
   const draftFamilyNames = fixture

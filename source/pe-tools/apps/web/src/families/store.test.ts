@@ -144,6 +144,28 @@ describe("families route store", () => {
     ]);
   });
 
+  it("retries catalog and profile reads when the connected world returns", async () => {
+    const testFixture = fixture();
+    let categories = 0;
+    let profiles = 0;
+    testFixture.host.categories = async () => {
+      if (++categories === 1) throw new Error("disconnected");
+      return ["Mechanical Equipment"];
+    };
+    testFixture.host.profiles = async () => {
+      if (++profiles === 1) throw new Error("disconnected");
+      return ["company.json"];
+    };
+    const { registry, store } = make(testFixture);
+    await tick();
+    store.actions.refreshReads();
+    await tick();
+    await tick();
+
+    expect(registry.get(store.feeds.category).options?.[0]?.id).toBe("Mechanical Equipment");
+    expect(registry.get(store.feeds.profile).options?.[0]?.id).toBe("company.json");
+  });
+
   it("unbinds a persisted plan from another document", () => {
     const { registry, store } = make(fixture(), undefined, document("C:\\Models\\Other.rvt"));
 

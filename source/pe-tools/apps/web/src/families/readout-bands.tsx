@@ -3,7 +3,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Press } from "#/components/lang/press";
-import { diagnosticLine } from "#/host/familyfoundry";
+import { diagnosticLine, warningLine } from "#/host/familyfoundry";
 import { familyFlag, provenanceSummary } from "#/families/plan";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -31,6 +31,7 @@ export function FamiliesReadoutBands() {
     applyData,
     projection,
   } = useFamiliesWorkspace();
+  const warningCount = plan?.entries.reduce((sum, entry) => sum + entry.warnings.length, 0) ?? 0;
   return (
     <>
       {plan && (
@@ -52,7 +53,22 @@ export function FamiliesReadoutBands() {
                 {outsideProfile.length} unclaimed
               </FactChip>
             )}
+            {warningCount > 0 && (
+              <FactChip tone="caution" title="Capture warnings reported by the reviewed plan.">
+                {warningCount} warning{warningCount === 1 ? "" : "s"}
+              </FactChip>
+            )}
           </div>
+          {plan.entries.flatMap((entry) =>
+            entry.warnings.map((warning) => (
+              <OutcomeLine
+                key={`${entry.familyId}:${warning.code}:${warning.message}`}
+                kind="advisory"
+                label={`${entry.familyName} · ${warning.code}`}
+                says={warningLine(warning)}
+              />
+            )),
+          )}
           {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
               `--item-h`, tier type. This queue was the last table in the app drawn the old way —
               `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
