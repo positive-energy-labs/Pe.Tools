@@ -12,7 +12,11 @@ creation/topology/save/load is the next boundary to diagnose, not a guessed migr
 Owned PID102556 exited, quarantine is empty, native settings restored exactly, and protected
 71484/98976 start identities were preserved. The source hold is released. Evidence is
 Pe.Tools-ff-proof/.artifacts/runs/wave23/run.json, cleanup-verification.json, and retained
-matrix-value-stages.json. No TRX was found; exact selector failure detail remains owed.
+matrix-value-stages.json. No TRX was found; adapter.log contains the exact failures.
+The selector reaches the real condition but ScheduleHelper cannot add its local Keep field.
+N owns checking the schedule evaluator's parameter coverage without weakening the fixture.
+Pipe association prerequisite probes are integrated at 1303533; they isolate native flow
+configuration from unrelated bath geometry and leave the full bath acceptance intact.
 
 Wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed.
 Extraction parity, schema evidence, exact-alias refusal rollback, invalid-matrix rollback,
