@@ -33,17 +33,15 @@ function planEntry(familyId: number, familyName: string, ...targets: string[]): 
   return {
     familyId,
     familyName,
-    plan: {
-      parameters: [],
-      requiredApsParameterNames: [],
-      familyParameterNames: [],
-      loweredActions: targets.map((target) => ({
-        operation: "set",
-        target,
-        sources: [],
-        reason: "profile",
-      })),
-    },
+    planHash: `fixture-${familyId}`,
+    changes: targets.map((key) => ({
+      section: "parameters",
+      key,
+      kind: "Modify",
+      mappedFrom: null,
+    })),
+    runEffects: [],
+    refusals: [],
   };
 }
 
@@ -295,7 +293,6 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
           version: "fixture-v1",
           observedAt: "2026-08-30T00:00:00Z",
         },
-        planHash: "fixture-plan",
         entries: fixtureFamilyPlanEntries,
       },
       excludedIds: [104],
@@ -331,25 +328,52 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
     families: async () => fixtureFamiliesDraft.families,
     profiles: async () => ["desk.json"],
     project: async (_target, familyIds) => ({
-      projections: familyIds.map((familyId) => {
+      families: familyIds.map((familyId) => {
         const family = fixtureFamilyRows.find((candidate) => candidate.familyId === familyId);
         return family
           ? {
               familyId,
               familyName: family.familyName,
               success: true,
-              profileJson: JSON.stringify(
+              coverage: { parameters: "Read", types: "Read" },
+              unmodeledCount: 0,
+              modelJson: JSON.stringify(
                 {
-                  FilterFamilies: { IncludeNames: { Equaling: [family.familyName] } },
-                  FamilyParameters: family.parameters.map((parameter) => ({
-                    Name: parameter.definition.identity.name,
-                  })),
+                  family: {
+                    name: family.familyName,
+                    category: family.categoryName,
+                    template: "Generic Model",
+                    placement: "OneLevelBased",
+                  },
+                  parameters: Object.fromEntries(
+                    family.parameters.map((parameter) => [
+                      parameter.definition.identity.name,
+                      { dataType: "Text" },
+                    ]),
+                  ),
+                  types: Object.fromEntries(
+                    family.typeNames.map((name) => [
+                      name,
+                      Object.fromEntries(
+                        family.parameters.flatMap((parameter) => {
+                          const value = parameter.valuesPerType[name];
+                          return value == null ? [] : [[parameter.definition.identity.name, value]];
+                        }),
+                      ),
+                    ]),
+                  ),
                 },
                 null,
                 2,
               ),
             }
-          : { familyId, success: false, error: "fixture family not found" };
+          : {
+              familyId,
+              success: false,
+              coverage: {} as Record<string, string>,
+              unmodeledCount: 0,
+              error: "fixture family not found",
+            };
       }),
       diagnostics: [],
     }),

@@ -396,7 +396,7 @@ const composeForRead = Effect.fnUntraced(function* (
         suggestion: "Fix the directive path or allowed root configuration.",
       },
     ] satisfies SettingsValidationIssue[],
-    value: includeComposedContent ? cloneJson(value) : null,
+    value: null,
   };
 });
 
@@ -729,33 +729,43 @@ const expandPresets: (
     sourceDocumentId: SettingsDocumentId,
     visited: Set<string> = new Set(),
   ) {
-    if (Array.isArray(value))
-      return yield* Effect.all(
-        value.map((item) =>
-          expandPresets(item, localRootDirectory, options, dependencies, sourceDocumentId, visited),
-        ),
-      );
+    if (Array.isArray(value)) {
+      const next: unknown[] = [];
+      for (const item of value)
+        next.push(
+          yield* expandPresets(
+            item,
+            localRootDirectory,
+            options,
+            dependencies,
+            sourceDocumentId,
+            visited,
+          ),
+        );
+      return next;
+    }
     if (!isRecord(value)) return value;
     if ("$preset" in value) {
       const keys = Object.keys(value);
       if (keys.some((key) => key !== "$preset"))
-        throw new Error(
-          "Invalid '$preset' usage. Preset composition does not support inline overrides.",
+        return yield* Effect.fail(
+          new Error(
+            "Invalid '$preset' usage. Preset composition does not support inline overrides.",
+          ),
         );
-      const directive = resolveDirective(
-        value.$preset,
-        localRootDirectory,
-        options.presetRoots ?? [],
-        false,
+      const directive = yield* Effect.try(() =>
+        resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? [], false),
       );
       const path = yield* resolveDirectiveFilePath(directive);
       if (visited.has(path.toLowerCase()))
-        throw new Error(`Circular preset reference detected: ${path}`);
+        return yield* Effect.fail(new Error(`Circular preset reference detected: ${path}`));
       visited.add(path.toLowerCase());
       const content = yield* readFileString(path, "settings.document.compose");
       const parsed = yield* parseJsonValue(content);
       if (!isRecord(parsed))
-        throw new Error(`Preset '${basename(path)}' has invalid format. Expected a JSON object.`);
+        return yield* Effect.fail(
+          new Error(`Preset '${basename(path)}' has invalid format. Expected a JSON object.`),
+        );
       dependencies.push(
         createDependency(sourceDocumentId, directive, path, SettingsDocumentDependencyKind.Preset),
       );
@@ -808,16 +818,22 @@ const expandIncludes: (
           const next: unknown[] = [];
           for (const item of candidate) {
             if (isRecord(item) && "$include" in item) {
-              const directive = resolveDirective(
-                item.$include,
-                localRootDirectory,
-                options.includeRoots ?? [],
-                true,
+              const directive = yield* Effect.try(() =>
+                resolveDirective(
+                  item.$include,
+                  localRootDirectory,
+                  options.includeRoots ?? [],
+                  true,
+                ),
               );
               const path = yield* resolveDirectiveFilePath(directive);
               if (visited.has(path.toLowerCase()))
-                throw new Error(`Circular fragment include detected: ${path}`);
+                return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
               visited.add(path.toLowerCase());
+              if (Object.keys(item).some((key) => key !== "$include"))
+                return yield* Effect.fail(
+                  new Error("Invalid '$include' usage. Includes do not support inline overrides."),
+                );
               const fragment = yield* loadFragmentItems(path);
               dependencies.push(
                 createDependency(
@@ -827,7 +843,16 @@ const expandIncludes: (
                   SettingsDocumentDependencyKind.Include,
                 ),
               );
-              for (const fragmentItem of fragment) next.push(yield* expand(fragmentItem, visited));
+              for (const fragmentItem of fragment) {
+                const expanded = yield* expandPresets(
+                  fragmentItem,
+                  localRootDirectory,
+                  options,
+                  dependencies,
+                  sourceDocumentId,
+                );
+                next.push(yield* expand(expanded, visited));
+              }
               visited.delete(path.toLowerCase());
               continue;
             }
@@ -836,6 +861,12 @@ const expandIncludes: (
           return next;
         }
         if (!isRecord(candidate)) return candidate;
+        if ("$include" in candidate)
+          return yield* Effect.fail(
+            new Error(
+              "'$include' must be an array item. Use '$preset' to substitute a keyed object.",
+            ),
+          );
         const next: Record<string, unknown> = {};
         for (const [key, child] of Object.entries(candidate))
           next[key] = yield* expand(child, visited);

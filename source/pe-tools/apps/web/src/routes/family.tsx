@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamilyStore } from "#/family/fixture";
+import { createFixtureFamilyStore, familyFixtures, type FamilyFixtureName } from "#/family/fixture";
 import { createLiveFamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
@@ -11,10 +11,16 @@ import type { Scope } from "#/state/route-store";
 
 export const familySearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
+): { thread?: string; source?: "fixture"; fixture?: FamilyFixtureName } => ({
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   source: search.source === "fixture" ? "fixture" : undefined,
+  fixture:
+    search.source === "fixture" &&
+    typeof search.fixture === "string" &&
+    Object.hasOwn(familyFixtures, search.fixture)
+      ? (search.fixture as FamilyFixtureName)
+      : undefined,
 });
 
 export const Route = createFileRoute("/family")({
@@ -23,11 +29,17 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  return <FamilyRouteContent source={Route.useSearch().source} />;
+  return <FamilyRouteContent {...Route.useSearch()} />;
 }
 
-export function FamilyRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <FamilyFixtureRoute />;
+export function FamilyRouteContent({
+  source,
+  fixture,
+}: {
+  source?: "fixture";
+  fixture?: FamilyFixtureName;
+}) {
+  if (source === "fixture") return <FamilyFixtureRoute key={fixture} fixture={fixture} />;
   return (
     <RouteScope>
       {(scope) => <FamilyStoreOwner key={scope.scope.document} scope={scope} />}
@@ -35,8 +47,8 @@ export function FamilyRouteContent({ source }: { source?: "fixture" }) {
   );
 }
 
-function FamilyFixtureRoute() {
-  const store = useRouteStore(() => createFixtureFamilyStore(appAtomRegistry));
+function FamilyFixtureRoute({ fixture }: { fixture?: FamilyFixtureName }) {
+  const store = useRouteStore(() => createFixtureFamilyStore(appAtomRegistry, fixture));
   return <FamilyWorkspace store={store} source="fixture" />;
 }
 

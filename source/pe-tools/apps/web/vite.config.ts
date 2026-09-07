@@ -1,8 +1,9 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import type { Plugin } from "vite-plus";
-import { defineConfig, loadEnv } from "vite-plus";
+import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
@@ -54,25 +55,33 @@ const config = defineConfig(({ mode }) => {
     // dead silently (/call 404 → /settings targeting emptied). This version keeps isolation:
     // NO env var → no proxy, exactly the takeover-era behavior. Set PE_TOOLS_HOST_BASE_URL
     // to bind THIS lane's web to THIS lane's host explicitly (e.g. http://127.0.0.1:5180).
-    server: process.env.PE_TOOLS_HOST_BASE_URL
-      ? {
-          proxy: (() => {
-            const options = {
-              target: process.env.PE_TOOLS_HOST_BASE_URL,
-              changeOrigin: true,
-            } as const;
-            return {
-              "/call": options,
-              "/events": options,
-              "/ops": options,
-              "/schemas": options,
-              "/host": options,
-              "/sessions": options,
-              "/pe": options,
-            };
-          })(),
-        }
-      : undefined,
+    server: {
+      fs: {
+        allow: [
+          searchForWorkspaceRoot(import.meta.dirname),
+          fileURLToPath(new URL("../../../Pe.Revit.Tests/Fixtures/FamilyModel", import.meta.url)),
+        ],
+      },
+      ...(process.env.PE_TOOLS_HOST_BASE_URL
+        ? {
+            proxy: (() => {
+              const options = {
+                target: process.env.PE_TOOLS_HOST_BASE_URL,
+                changeOrigin: true,
+              } as const;
+              return {
+                "/call": options,
+                "/events": options,
+                "/ops": options,
+                "/schemas": options,
+                "/host": options,
+                "/sessions": options,
+                "/pe": options,
+              };
+            })(),
+          }
+        : {}),
+    },
     resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
     // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
     // multi-environment optimizer it can bind to a different React prebundle than react-dom's

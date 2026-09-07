@@ -26,7 +26,13 @@ import { settingsFieldPointer } from "@pe/agent-contracts";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
-import { paramRef, paramSpec } from "#/family/family-model";
+import {
+  paramRef,
+  paramSpec,
+  parameterSpecs,
+  parameterSection,
+  parameterText,
+} from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
 import { bindingOf, isFormula, type Draft, type PageWorld } from "#/family/model";
 import type {
@@ -77,7 +83,14 @@ export function projectFamilyModel(
       template: model.family.template,
       placement: model.family.placement,
       params,
-      types: model.types,
+      types: Object.fromEntries(
+        Object.entries(model.types ?? {}).map(([name, values]) => [
+          name,
+          Object.fromEntries(
+            Object.entries(values).map(([key, value]) => [key, parameterText(value)]),
+          ),
+        ]),
+      ),
       solids: Object.fromEntries(
         Object.entries(model.solids ?? {}).map(([slug, solid]) => [slug, solidProse(solid)]),
       ),
@@ -110,25 +123,19 @@ export function projectFamilyModel(
 function projectParams(model: FamilyModel): ProtoParam[] {
   const project = ([name, spec]: [string, ParamSpec]): ProtoParam => ({
     name,
-    dataType: spec.dataType,
-    value: spec.formula != null ? `= ${spec.formula}` : (spec.value ?? ""),
+    dataType: spec.dataType ?? "shared",
+    value: spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value),
     isInstance: spec.isInstance ?? false,
     group: spec.propertiesGroup ?? "other",
   });
-  return [
-    ...Object.entries(model.familyParameters).map(project),
-    ...Object.entries(model.sharedParameters ?? {}).map(project),
-  ];
+  return Object.entries(parameterSpecs(model)).map(project);
 }
 
 /** The spelling this document uses for a length. Read off its own parameters rather than assumed,
  * so a document written in another vocabulary still binds literals to matching candidates. */
 function lengthDataType(model: FamilyModel): string {
-  for (const spec of [
-    ...Object.values(model.familyParameters),
-    ...Object.values(model.sharedParameters ?? {}),
-  ])
-    if (spec.dataType.startsWith("Length")) return spec.dataType;
+  for (const spec of Object.values(parameterSpecs(model)))
+    if (spec.dataType?.startsWith("Length")) return spec.dataType;
   return FALLBACK_LENGTH_TYPE;
 }
 
@@ -176,6 +183,7 @@ function connectorProse(connector: ConnectorSpec): string {
  * is, and which way it faces. Both are computed from the sketch in Revit, so neither is editable
  * here — a text box would be claiming an edit nothing downstream would make. */
 function frameMeta(model: FamilyModel, frameRef: string): GeomMeta[] {
+  if (!frameRef) return [];
   const slug = frameRef.startsWith("frame:") ? frameRef.slice("frame:".length) : frameRef;
   const frame = model.frames?.[slug];
   const origin = frame
@@ -302,6 +310,26 @@ function projectEvidence(
 ): ProtoLive {
   const authored = new Set(params.map((param) => param.name));
   const values: Record<string, Record<string, ProtoLiveValue>> = {};
+  if ("modelJson" in evidence) {
+    const captured = JSON.parse(evidence.modelJson) as FamilyModel;
+    const reported = parameterSpecs(captured);
+    for (const [typeName, cells] of Object.entries(captured.types ?? {}))
+      for (const [name, value] of Object.entries(cells)) {
+        if (reported[name]?.formula != null || value == null) continue;
+        (values[name] ??= {})[typeName] = { value: parameterText(value) };
+      }
+    return {
+      familyName: evidence.familyName,
+      worldLabel: evidence.rfaPath ?? evidence.origin,
+      readAgo: timeAgo(evidence.reading.observedAt) || "just now",
+      values,
+      extraParams: Object.keys(reported).filter((name) => !authored.has(name)),
+      missingParams:
+        evidence.coverage.parameters === "Read"
+          ? [...authored].filter((name) => !(name in reported))
+          : [],
+    };
+  }
   for (const parameter of evidence.parameters) {
     const perType: Record<string, ProtoLiveValue> = {};
     for (const [typeName, resolved] of Object.entries(parameter.valuesPerType)) {
@@ -356,7 +384,7 @@ export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld)
   // Promoted literals are WHOLE new parameters — seeded first, so their authored value below
   // has a spec to land on and the drawing moves in the same beat as the promotion.
   for (const param of draft.newParams) {
-    next.familyParameters[param.name] = {
+    (next.parameters ?? next.familyParameters)[param.name] = {
       dataType: param.dataType,
       ...(param.group ? { propertiesGroup: param.group } : {}),
     };
@@ -364,9 +392,9 @@ export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld)
 
   // Family-level values: value XOR formula, applied only where the draft MOVED the cell.
   for (const [name, value] of Object.entries(draft.authored)) {
-    const spec = next.familyParameters[name] ?? next.sharedParameters?.[name];
+    const spec = paramSpec(next, name);
     if (!spec) continue;
-    const seeded = spec.formula != null ? `= ${spec.formula}` : (spec.value ?? "");
+    const seeded = spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value);
     if (value === seeded) continue;
     if (isFormula(value)) spec.formula = value.replace(/^\s*=\s*/, "");
     else {
@@ -446,7 +474,11 @@ export function draftToPatches(
     if (promoted.has(name) && !(name in savedDraft.authored)) {
       const seed = draft.newParams.find((param) => param.name === name);
       patches.push({
-        path: ["fields", settingsFieldPointer(["familyParameters", name]), "staged"],
+        path: [
+          "fields",
+          settingsFieldPointer([model.parameters ? "parameters" : "familyParameters", name]),
+          "staged",
+        ],
         value: {
           value: {
             dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
@@ -458,7 +490,7 @@ export function draftToPatches(
       continue;
     }
 
-    const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
+    const section = parameterSection(model, name);
     const spec = paramSpec(model, name);
     if (isFormula(value)) {
       patches.push(stage([section, name, "formula"], value.replace(/^\s*=\s*/, "")));

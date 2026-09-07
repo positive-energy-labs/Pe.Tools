@@ -79,6 +79,7 @@ const fixture = () => {
       versionToken: "v1",
       observedAt: "2026-08-25T00:00:00Z",
       rawContent: JSON.stringify(MODEL),
+      composedContent: JSON.stringify(MODEL),
       validation: { isValid: true, issues: [] },
     }),
   };

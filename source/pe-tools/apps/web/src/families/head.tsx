@@ -102,8 +102,8 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
       runner={runner}
       fact={
         plan ? (
-          <FactChip title="The plan hash that the apply command must return unchanged.">
-            plan hash · {plan.planHash.slice(0, 12)}
+          <FactChip title="Apply checks the reviewed hash for each included family.">
+            {plan.entries.length} family plans
           </FactChip>
         ) : undefined
       }

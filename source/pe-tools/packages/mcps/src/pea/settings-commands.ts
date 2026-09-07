@@ -14,6 +14,19 @@ import type {
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
+/** Execution uses the same validated composition as the settings reader; raw JSON stays authored. */
+export function executionContent(snapshot: SettingsDocumentSnapshot): string {
+  if (!snapshot.validation.isValid)
+    throw new Error(
+      snapshot.validation.issues.map((issue) => `${issue.path}: ${issue.message}`).join("\n"),
+    );
+  if (snapshot.composedContent == null)
+    throw new Error(
+      "No composed settings content was returned. Open with includeComposedContent=true.",
+    );
+  return snapshot.composedContent;
+}
+
 /** Build the settings command handlers, bound to a resolved host base URL. */
 export function createSettingsCommandHandlers(
   options: { hostBaseUrl?: string } = {},

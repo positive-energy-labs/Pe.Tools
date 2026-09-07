@@ -10,6 +10,7 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { executionContent } from "./settings-commands.ts";
 
 export function createFamilyCommandHandlers(
   options: { hostBaseUrl?: string } = {},
@@ -84,7 +85,7 @@ export function createFamilyCommandHandlers(
 
       const document = ctx.getDoc();
       document.evidence = {
-        ...raw.evidence,
+        ...raw,
         reading: readingSchema.parse(raw.reading),
         origin: "capture",
         familyName: raw.familyName,
@@ -94,8 +95,7 @@ export function createFamilyCommandHandlers(
 
       return {
         familyName: raw.familyName,
-        typeNames: raw.evidence.typeNames,
-        parameterCount: raw.evidence.parameters.length,
+        coverage: raw.coverage,
         unmodeledCount: raw.unmodeledCount,
         modelJson: raw.modelJson,
       };
@@ -113,7 +113,7 @@ export function createFamilyCommandHandlers(
       // Build the SAVED revision — read it through the same open path every consumer uses.
       const opened = await rpc.call("settings.document.open", {
         documentId,
-        includeComposedContent: false,
+        includeComposedContent: true,
       });
       const sourcePath = opened.metadata.documentId.stableId;
       if (!sourcePath)
@@ -130,31 +130,25 @@ export function createFamilyCommandHandlers(
 
       const built = await rpc
         .call("revit.apply.family-model", {
-          modelJson: opened.rawContent,
+          modelJson: executionContent(opened),
           outputPath: rfaPath,
           ...(modelDirectory ? { modelDirectory } : {}),
         })
         .catch((error: unknown) => {
           throw new Error(`revit.apply.family-model failed (${message(error)}).`);
         });
-      if (!built.evidence)
-        throw new Error("The build succeeded but returned no evidence projection.");
-
       const document = ctx.getDoc();
-      document.evidence = {
-        ...built.evidence,
+      document.build = {
+        ...built,
         reading: readingSchema.parse(built.reading),
-        origin: "build",
-        familyName: built.familyName ?? documentId.relativePath,
-        rfaPath: built.outputPath ?? rfaPath,
       };
       await ctx.setDoc(document);
 
       return {
         familyName: built.familyName,
         rfaPath: built.outputPath ?? rfaPath,
-        typeNames: built.evidence.typeNames,
-        parameterCount: built.evidence.parameters.length,
+        converged: built.converged,
+        residueCount: built.residueCount,
         documentVersionToken: opened.metadata?.versionToken?.value ?? null,
       };
     },

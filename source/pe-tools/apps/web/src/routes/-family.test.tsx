@@ -14,7 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("literal family fixture renders the canonical dense workspace without live Host calls", async () => {
+test("literal family fixture renders the canonical dense workspace without family RPCs", async () => {
   const fetchMock = vi.fn();
   const eventSource = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -40,7 +40,11 @@ test("literal family fixture renders the canonical dense workspace without live 
   expect(text).toContain("Compact");
   expect(text).toContain("Standard");
   expect(text).toContain("Tall");
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(
+    fetchMock.mock.calls.every(([url]) =>
+      ["/host/install", "/host/update", "http://localhost:3000/host/status"].includes(String(url)),
+    ),
+  ).toBe(true);
   expect(eventSource).not.toHaveBeenCalled();
 
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
@@ -51,7 +55,40 @@ test("literal family fixture renders the canonical dense workspace without live 
   await expect(store.actions.bind("session:test")).rejects.toThrow(
     "fixture family writes are disabled",
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(
+    fetchMock.mock.calls.every(([url]) =>
+      ["/host/install", "/host/update", "http://localhost:3000/host/status"].includes(String(url)),
+    ),
+  ).toBe(true);
   store.dispose();
   registry.dispose();
+});
+
+test("native fixture URLs render authored parameters through the route loader", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("EventSource", vi.fn());
+  for (const fixture of ["box", "grd", "bath", "refline"] as const) {
+    const mounted = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RegistryContext.Provider value={appAtomRegistry}>
+          <FamilyRouteContent source="fixture" fixture={fixture} />
+        </RegistryContext.Provider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(document.body.textContent).not.toContain("No family document"));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        fixture === "box" ? "Voltage" : fixture === "grd" ? "Duct Width" : "_conn",
+      ),
+    );
+    expect(document.body.textContent).not.toContain("FC42-cut-sheet.pdf");
+    expect(document.body.textContent).toContain("fixture");
+    mounted.unmount();
+  }
+  expect(
+    fetchMock.mock.calls.every(([url]) =>
+      ["/host/install", "/host/update", "http://localhost:3000/host/status"].includes(String(url)),
+    ),
+  ).toBe(true);
 });

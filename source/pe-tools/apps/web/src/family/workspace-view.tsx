@@ -40,7 +40,7 @@ export function FamilyWorkspaceView() {
                   <OutcomeLine
                     kind="error"
                     label="the open document will not parse"
-                    says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+                    says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}`}
                   />
                 ) : requestedFamily != null ? (
                   <OutcomeLine
@@ -74,7 +74,7 @@ export function FamilyWorkspaceView() {
               >
                 {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
               </FactChip>
-              {!lane.document && (
+              {lane.fixture && (
                 <FactChip
                   dashed
                   title="This page reads the checked-in family fixture. Bind a session and pick a profile to replace it with host state."

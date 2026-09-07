@@ -315,6 +315,10 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** apply — the profile wins. The one direction that MODIFIES the model, hence the commit tone. */
   const apply = (types: string[], only?: string) =>
     setDraft((previous) => {
+      if (!lane.fixture) {
+        say("Apply is not connected to Revit yet. Captured values are unchanged.");
+        return previous;
+      }
       const next = structuredClone(previous);
       for (const row of rows) {
         if (row.kind !== "profile") continue;
@@ -337,9 +341,13 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   };
 
   const applyAll = (types: string[]) => {
+    if (!lane.fixture) {
+      say("Apply is not connected to Revit yet. Captured values are unchanged.");
+      return;
+    }
     const count = driftCells.filter((cell) => types.includes(cell.typeName)).length;
     apply(types);
-    say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
+    say(`simulated ${count} value${count === 1 ? "" : "s"} in the fixture`);
   };
 
   const busy = useAtomValue(store.atoms.busy);

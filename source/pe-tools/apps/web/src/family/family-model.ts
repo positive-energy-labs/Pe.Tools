@@ -83,6 +83,8 @@ interface ArraySpec {
 export interface FamilyModel {
   family: { name: string; category: string; template: string; placement: string };
   familyParameters: Record<string, ParamSpec>;
+  /** Native name-keyed declarations, including shared:true. Legacy geometry editors remain separate. */
+  parameters?: Record<string, ParamSpec>;
   sharedParameters?: Record<string, ParamSpec>;
   types: Record<string, Record<string, string>>;
   planes?: Record<string, PlaneSpec>;
@@ -126,10 +128,24 @@ export const paramRef = (text: string | undefined) =>
   text?.startsWith("param:") ? text.slice("param:".length) : null;
 
 export function paramSpec(model: FamilyModel, name: string): ParamSpec | undefined {
-  return model.familyParameters[name] ?? model.sharedParameters?.[name];
+  return parameterSpecs(model)[name];
 }
 
+export const parameterSpecs = (model: FamilyModel): Record<string, ParamSpec> =>
+  model.parameters ?? { ...model.familyParameters, ...model.sharedParameters };
+
+export const parameterSection = (model: FamilyModel, name: string) =>
+  model.parameters
+    ? "parameters"
+    : model.familyParameters?.[name]
+      ? "familyParameters"
+      : "sharedParameters";
+
 export type ValueSource = "override" | "value" | "formula" | "missing";
+
+/** PortableValue's boolean literals use Revit's Yes/No spelling; raw JSON remains untouched. */
+export const parameterText = (value: unknown): string =>
+  typeof value === "boolean" ? (value ? "Yes" : "No") : String(value ?? "");
 
 /** THE value trichotomy: type override → formula (resolved) → family value → missing. */
 export function resolveParam(
@@ -138,12 +154,12 @@ export function resolveParam(
   name: string,
 ): { text: string; source: ValueSource } {
   const override = model.types[typeName]?.[name];
-  if (override != null) return { text: override, source: "override" };
+  if (override != null) return { text: parameterText(override), source: "override" };
   const spec = paramSpec(model, name);
   if (!spec) return { text: "—", source: "missing" };
   if (spec.formula != null)
     return { text: spec.resolvedValues?.[typeName] ?? `= ${spec.formula}`, source: "formula" };
-  return { text: spec.value ?? "—", source: "value" };
+  return { text: spec.value == null ? "—" : parameterText(spec.value), source: "value" };
 }
 
 /** The same reference as a NUMBER of inches — null when it does not resolve to a length. */
@@ -158,7 +174,7 @@ function evalLen(model: FamilyModel, typeName: string, raw: string | undefined):
 // ── immutable edits ─────────────────────────────────────────────────────────────────────────────
 
 export const setParamValue = (model: FamilyModel, name: string, value: string): FamilyModel => {
-  const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
+  const section = parameterSection(model, name);
   const specs = model[section] ?? {};
   const spec = specs[name];
   if (!spec || spec.formula != null) return model; // value XOR formula — formula params are locked
@@ -169,7 +185,7 @@ export const setParamValue = (model: FamilyModel, name: string, value: string): 
  * The value-XOR-formula law is the HOST's to enforce: staging a formula over a param that
  * still carries values is allowed here and surfaces as an advisory, never a block. */
 export const setParamFormula = (model: FamilyModel, name: string, formula: string): FamilyModel => {
-  const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
+  const section = parameterSection(model, name);
   const specs = model[section] ?? {};
   const spec = specs[name];
   if (!spec) return model;
@@ -318,28 +334,30 @@ function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): 
 }
 
 function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
-  return Object.entries(model.connectors ?? {}).map(([slug, connector]) => {
-    const frame =
-      connector.frame === "frame:family"
-        ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
-        : (frames.find((entry) => entry.slug === connector.frame.slice("frame:".length)) ?? {
-            pos: { x: null, y: null, z: null },
-            normal: "+Z",
-          });
-    const round = connector.shape === "Round";
-    const diameter = evalLen(model, typeName, connector.diameter);
-    return {
-      slug,
-      domain: connector.domain,
-      shape: connector.shape,
-      pos: frame.pos,
-      normal: frame.normal,
-      w: round ? diameter : evalLen(model, typeName, connector.width),
-      h: round ? diameter : evalLen(model, typeName, connector.height),
-      stub: evalLen(model, typeName, connector.stub?.depth),
-      stubDir: connector.stub?.direction,
-    };
-  });
+  return Object.entries(model.connectors ?? {})
+    .filter(([, connector]) => connector.frame)
+    .map(([slug, connector]) => {
+      const frame =
+        connector.frame === "frame:family"
+          ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
+          : (frames.find((entry) => entry.slug === connector.frame.slice("frame:".length)) ?? {
+              pos: { x: null, y: null, z: null },
+              normal: "+Z",
+            });
+      const round = connector.shape === "Round";
+      const diameter = evalLen(model, typeName, connector.diameter);
+      return {
+        slug,
+        domain: connector.domain,
+        shape: connector.shape,
+        pos: frame.pos,
+        normal: frame.normal,
+        w: round ? diameter : evalLen(model, typeName, connector.width),
+        h: round ? diameter : evalLen(model, typeName, connector.height),
+        stub: evalLen(model, typeName, connector.stub?.depth),
+        stubDir: connector.stub?.direction,
+      };
+    });
 }
 
 export interface Sheet {

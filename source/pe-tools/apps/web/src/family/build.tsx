@@ -187,6 +187,8 @@ interface BuildReceipt {
   rfaPath: string;
   documentVersionToken: string | null;
   parameterCount: number | null;
+  converged: boolean | null;
+  residueCount: number | null;
 }
 
 /**
@@ -204,6 +206,8 @@ export function readBuildReceipt(result: unknown): BuildReceipt | null {
     documentVersionToken:
       typeof record.documentVersionToken === "string" ? record.documentVersionToken : null,
     parameterCount: typeof record.parameterCount === "number" ? record.parameterCount : null,
+    converged: typeof record.converged === "boolean" ? record.converged : null,
+    residueCount: typeof record.residueCount === "number" ? record.residueCount : null,
   };
 }
 

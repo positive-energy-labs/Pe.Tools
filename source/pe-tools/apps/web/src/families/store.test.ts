@@ -22,7 +22,6 @@ const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument =>
       version: "v1",
       observedAt: "2026-08-25T00:00:00Z",
     },
-    planHash: "hash-1",
     entries: [fixtureFamilyPlanEntry],
   },
   excludedIds: [],
@@ -59,7 +58,7 @@ const fixture = () => {
     categories: async () => [],
     families: async () => [],
     profiles: async () => [],
-    project: async () => ({ projections: [], diagnostics: [] }),
+    project: async () => ({ families: [], diagnostics: [] }),
     openPath: async () => ({}),
   };
   const writer = {

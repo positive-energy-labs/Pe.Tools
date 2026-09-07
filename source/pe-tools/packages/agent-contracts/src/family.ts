@@ -53,7 +53,7 @@ const familyEvidenceDiagnosticSchema = z.object({
 });
 
 /** Revit evidence carries only the Reading for the document it describes. */
-export const familyEvidenceSchema = z.object({
+const fixtureEvidenceSchema = z.object({
   typeNames: z.array(z.string()),
   parameters: z.array(familyEvidenceParameterSchema),
   diagnostics: z.array(familyEvidenceDiagnosticSchema),
@@ -62,6 +62,18 @@ export const familyEvidenceSchema = z.object({
   familyName: z.string(),
   rfaPath: z.string().nullish(),
 });
+export const familyEvidenceSchema = z.union([
+  z.object({
+    reading: readingSchema,
+    familyName: z.string(),
+    modelJson: z.string(),
+    unmodeledCount: z.number(),
+    coverage: z.record(z.string(), z.string()),
+    origin: z.literal("capture"),
+    rfaPath: z.string().nullish(),
+  }),
+  fixtureEvidenceSchema,
+]);
 /* ── The document ──────────────────────────────────────────────────────────── */
 
 /** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
@@ -78,6 +90,16 @@ const familyDocumentSchema = z.object({
   stage: z.enum(["author", "evidence"]).optional(),
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),
+  build: z
+    .object({
+      reading: readingSchema,
+      familyName: z.string(),
+      outputPath: z.string(),
+      templatePath: z.string(),
+      converged: z.boolean(),
+      residueCount: z.number(),
+    })
+    .nullish(),
 });
 export type FamilyDocument = z.infer<typeof familyDocumentSchema>;
 
@@ -98,14 +120,14 @@ export const familyRouteState = {
     },
     capture_evidence: {
       description:
-        "Capture the family open in the bound Revit session (revit.detail.family-model): stores the resolved per-type evidence projection here and returns the authored modelJson so it can seed or update a settings document. Targets the bound session; pass target to override.",
+        "Capture the family open in the bound Revit session: stores native modelJson, coverage and unmodeledCount. Use route:settings to author JSON and proposals. Formula outputs are not captured values.",
       input: z.object({ target: z.string().optional() }),
       actor: "any",
       recoversExternal: true,
     },
     build_evidence: {
       description:
-        "Build the saved settings document into an .rfa (revit.apply.family-model) and store the evidence the build returned. Builds the SAVED revision — staged edits must be saved first. Targets the bound session; pass target to override.",
+        "Build the validated composed SAVED settings document into an .rfa and store its convergence/residue receipt. Save staged edits first. This does not capture parameter evidence or apply to an existing document.",
       input: z.object({
         documentId: settingsDocumentIdSchema,
         outputPath: z.string().optional().describe("Defaults to .artifacts/tmp/family/<path>.rfa"),

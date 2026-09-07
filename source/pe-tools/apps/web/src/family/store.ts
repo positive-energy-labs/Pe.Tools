@@ -57,6 +57,7 @@ type FamilySlices = {
 };
 
 export function createFamilyStore(deps: {
+  source?: "fixture";
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamilyHost;
@@ -153,9 +154,9 @@ export function createFamilyStore(deps: {
     if (!session) return null;
     return here(value, documentAddress(session)) as EvidenceSlice | null;
   }).pipe(owned("view/evidence"));
-  const lane = Atom.make((get) => familyLane(get(snapshot), get(evidence))).pipe(
-    owned("view/lane"),
-  );
+  const lane = Atom.make((get) =>
+    familyLane(get(snapshot), get(evidence), deps.source === "fixture"),
+  ).pipe(owned("view/lane"));
   const saved = Atom.make((get) => savedFrom(initialDraft(get(lane).world))).pipe(
     owned("view/saved"),
   );
@@ -286,6 +287,7 @@ export function createFamilyStore(deps: {
       if (name === "save") {
         const current = registry.get(lane);
         if (!current.document) {
+          if (!current.fixture) refuse("Open a family document before saving.");
           write("save", "page/draft", () =>
             registry.update(draft, (value) => ({ ...value, dirty: false })),
           );
@@ -313,7 +315,7 @@ export function createFamilyStore(deps: {
       const receipt = readBuildReceipt(result.result);
       if (receipt == null) return BUILD_OUTCOME_UNKNOWN;
       write("build", "page/armed", () => registry.set(armedBuild, null));
-      return `built ${receipt.rfaPath}`;
+      return `built ${receipt.rfaPath}${receipt.converged == null ? "" : receipt.converged ? " — converged" : ` — ${receipt.residueCount ?? "unknown"} changes remain`}`;
     },
   };
   const commandVerb = (name: CommandName, input: () => unknown = () => undefined) => ({
@@ -393,6 +395,8 @@ export function createFamilyStore(deps: {
     capture: verbs.capture.run!,
     build: verbs.build.run!,
     bind(nextTarget: string) {
+      if (deps.source === "fixture")
+        return Promise.reject(new Error("fixture family writes are disabled"));
       return runVerb(
         "bind",
         async () => {

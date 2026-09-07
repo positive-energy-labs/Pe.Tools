@@ -16,6 +16,7 @@ import type { FfProjectData } from "#/host/familyfoundry";
 import { bridgeSelector } from "@pe/agent-contracts";
 import { documentAddress, scopeSession } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
+import { familyFlag } from "#/families/plan";
 import {
   createRouteStoreCore,
   docAtom,
@@ -104,7 +105,12 @@ export function createFamiliesStore(deps: {
       ? scopeSession(deps.scope.scope, sessions.value.value)
       : null;
     if (!session) return null;
-    return here(value, documentAddress(session));
+    return value.reading
+      ? here(
+          value as typeof value & { reading: NonNullable<typeof value.reading> },
+          documentAddress(session),
+        )
+      : value;
   }).pipe(owned("view/plan"));
   const categorySource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),
@@ -246,7 +252,16 @@ export function createFamiliesStore(deps: {
           if (!current) refuse("apply needs a plan");
           await bindDocument(registry.get(target));
           return expectRouteWrite(
-            await writer.command("apply", { expectedPlanHash: current.planHash }),
+            await writer.command("apply", {
+              expectedPlanHashes: Object.fromEntries(
+                current.entries
+                  .filter(
+                    (entry) =>
+                      !registry.get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
+                  )
+                  .map((entry) => [String(entry.familyId), entry.planHash]),
+              ),
+            }),
           );
         },
         ["families", "matrix"],
@@ -268,7 +283,7 @@ export function createFamiliesStore(deps: {
         if (!ids.length) refuse("project needs picked families");
         const result = await deps.host.project(registry.get(target), ids);
         registry.set(projection, result);
-        return `projected ${result.projections.length} families`;
+        return `projected ${result.families.length} families`;
       });
     },
     openPath(path: string) {
