@@ -282,6 +282,14 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(points.Any(point => Math.Abs(point.X + 0.25) < 1e-7), Is.True, "Cold puck must lie on conn (left).");
             Assert.That(points.Any(point => Math.Abs(point.X - 0.25) < 1e-7), Is.True, "Hot puck must lie on conn (right).");
             Assert.That(points.Any(point => Math.Abs(point.Y - 2.0) < 1e-7), Is.True, "Drain puck must lie on drain y.");
+            var fixtureUnitSources = new FilteredElementCollector(bath).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
+                .Select(connector => connector.get_Parameter(BuiltInParameter.RBS_PIPE_FIXTURE_UNITS_PARAM))
+                .OfType<Parameter>()
+                .Select(parameter => bath.FamilyManager.GetAssociatedFamilyParameter(parameter)?.Definition.Name)
+                .Where(name => name is not null).ToList();
+            Assert.That(fixtureUnitSources, Is.EquivalentTo(new[] {
+                "PE_P_LoadCalc_CWFU", "PE_P_LoadCalc_HWFU", "PE_P_LoadCalc_DFU"
+            }), "Each pipe connector Fixture Units input must retain its authored shared-parameter association.");
             var capturedBath = bath.CaptureFamilyModel();
             Assert.That(capturedBath.Nested.Values.Where(nested => nested.Family == "puck")
                     .SelectMany(nested => nested.Align ?? []).Select(align => $"{align.Instance}->{align.To}"),
