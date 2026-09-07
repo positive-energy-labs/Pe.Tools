@@ -1,17 +1,22 @@
 # herdr.ps1 VERB SESSION [ARGS]
 # Verbs:
-#   up S CWD name:kind[:model][:effort] ... -> 0 ready; 1 runtime refusal; 2 usage
+#   up S CWD POSTURE name:kind[:model][:effort] ... -> 0 ready; 1 runtime refusal; 2 usage
+#   cast S CWD POSTURE spec PROMPT_FILE -> up, send, then agent/pane/tab/session identity
 #   send S AGENT PROMPT_FILE        -> 0 turn observed; 1 delivery failed; 2 usage; 3 busy/blocked
 #   status S [AGENT]                -> 0 JSON status; 1 unavailable; 2 usage
 #   wait S AGENT [TIMEOUT_MS]       -> 0 idle/done/blocked; 1 timeout; 2 missing/usage
 #   read S AGENT [LINES]            -> 0 text; 1 unavailable; 2 usage
 #   retire S AGENT                  -> 0 pane closed or absent; 1 failure; 2 usage; 3 working
 #   stop S                           -> 0 stopped+deleted or absent; 1 failure; 2 usage
+#   retire-worktree PATH             -> 0 unlinked/removed/pruned; 1 failure; 2 refusal
+#   sweep [DAYS]                     -> 0 stopped sessions deleted; 1 failure; 2 usage
+#   goal S GOAL_FILE                 -> 0 target; 1 gates/runtime; 2 usage; 3 dry
+# Goal uses the invocation CWD; WIDTH supplies its generated posture table.
 # Spec fields are positional; leave one empty to skip it (name:claude::high).
 # claude takes --model/--effort; codex takes -m/-c model_reasoning_effort.
 param(
   [Parameter(Mandatory = $true, Position = 0)][string]$Verb,
-  [Parameter(Mandatory = $true, Position = 1)][string]$Session,
+  [Parameter(Position = 1)][AllowEmptyString()][string]$Session,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 $ErrorActionPreference = 'Stop'
@@ -24,7 +29,8 @@ function Warn([string]$Message, [int]$Code = 1) {
 
 function HdJson {
   $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { $out = & $H --session $Session @Args 2>$null; $code = $LASTEXITCODE }
+  $selector = if ($Verb -eq 'sweep') { @() } else { @('--session', $Session) }
+  try { $out = & $H @selector @Args 2>$null; $code = $LASTEXITCODE }
   finally { $ErrorActionPreference = $eap }
   if ($code -ne 0) { return $null }
   try { return (($out -join "`n") | ConvertFrom-Json) }
@@ -33,7 +39,8 @@ function HdJson {
 
 function HdText {
   $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { $out = & $H --session $Session @Args 2>&1; $script:HdExit = $LASTEXITCODE }
+  $selector = if ($Verb -eq 'sweep') { @() } else { @('--session', $Session) }
+  try { $out = & $H @selector @Args 2>&1; $script:HdExit = $LASTEXITCODE }
   finally { $ErrorActionPreference = $eap }
   return (($out | ForEach-Object { $_.ToString() }) -join "`n")
 }
@@ -68,7 +75,7 @@ function Settle([string]$Name, [string]$ExpectedCwd, [string]$StartDetail) {
         return $info
       }
       if ($last -eq 'blocked') {
-        if ($info.launch_pending) { HdJson agent send-keys $Name enter | Out-Null }
+        if ($info.launch_pending -or $StartDetail -match '\bagent_not_ready\b') { HdJson agent send-keys $Name enter | Out-Null }
         else { Warn "$Name is blocked after startup; refusing to approve a non-startup dialog" 3 }
       }
     }
@@ -79,10 +86,21 @@ function Settle([string]$Name, [string]$ExpectedCwd, [string]$StartDetail) {
 }
 
 function Up {
-  if ($Rest.Count -lt 2) { Warn 'up wants CWD and one or more name:kind[:model][:effort] specs' 2 }
+  if ($Session -cnotmatch '^[a-z][a-z0-9_-]{0,31}$' -or $Session.EndsWith('-')) { Warn "invalid session name '$Session'" 2 }
+  if ($Rest.Count -lt 3) { Warn 'up wants CWD POSTURE and one or more name:kind[:model][:effort] specs' 2 }
   if (-not (Test-Path -LiteralPath $Rest[0] -PathType Container)) { Warn "cwd not found: $($Rest[0])" 2 }
   $cwd = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Rest[0]).Path).TrimEnd('\')
-  $specs = @($Rest[1..($Rest.Count - 1)])
+  $posture = $Rest[1]
+  if ([IO.Path]::GetExtension($posture) -notin @('.md', '.markdown') -or -not (Test-Path -LiteralPath $posture -PathType Leaf)) { Warn 'POSTURE must be an existing markdown file' 2 }
+  $rows = [IO.File]::ReadAllLines((Resolve-Path -LiteralPath $posture))
+  $table = $false
+  for ($i = 0; $i -lt $rows.Count - 1; $i++) {
+    $header = @($rows[$i].Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+    $separator = @($rows[$i + 1].Trim().Trim('|').Split('|'))
+    if ($header -ccontains 'Model' -and $separator.Count -eq $header.Count -and @($separator | Where-Object { $_ -notmatch '^\s*:?-{3,}:?\s*$' }).Count -eq 0) { $table = $true; break }
+  }
+  if (-not $table) { Warn 'POSTURE must contain a markdown table with a Model column' 2 }
+  $specs = @($Rest[2..($Rest.Count - 1)])
 
   if ($null -eq (HdJson workspace list)) {
     Start-Process -FilePath $H -ArgumentList @('--session', $Session, 'server') -WindowStyle Hidden
@@ -93,6 +111,10 @@ function Up {
     }
     if (-not $ready) { Warn "server for session $Session never came up" }
   }
+  $row = @((HdJson session list --json).sessions | Where-Object { $_.name -eq $Session })[0]
+  if (-not $row -or -not (Test-Path -LiteralPath $row.session_dir -PathType Container)) { Warn "session directory unavailable for $Session" }
+  $destination = Join-Path $row.session_dir 'posture.md'
+  if ([IO.Path]::GetFullPath((Resolve-Path -LiteralPath $posture).Path) -ne [IO.Path]::GetFullPath($destination)) { Copy-Item -LiteralPath $posture -Destination $destination -Force }
 
   $workspaces = @((HdJson workspace list).result.workspaces)
   $workspace = @($workspaces | Where-Object { $_.label -eq $Session })[0]
@@ -168,9 +190,14 @@ function Send {
   if ($info.agent_status -notin @('idle', 'done')) {
     Warn "refusing: $name is $($info.agent_status); wait for it to settle" 3
   }
-  $lines = [IO.File]::ReadAllLines((Resolve-Path -LiteralPath $file)) | Where-Object { $_.Trim() }
-  if (-not $lines) { Warn 'empty prompt file' 2 }
-  $prompt = (($lines -join "`n") -replace '"', '\"')
+  $prompt = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $file))
+  if ([string]::IsNullOrWhiteSpace($prompt)) { Warn 'empty prompt file' 2 }
+  # Windows PowerShell's native argv path strips quotes; keep quoted payloads in the file.
+  if ($prompt.Contains('"')) {
+    $prompt = "Read the prompt file at $((Resolve-Path -LiteralPath $file).Path) and follow its instructions."
+    "$name delivery: file path (quoted payload)"
+  }
+  else { "$name delivery: unchanged text" }
   $seq0 = [long]$info.state_change_seq
   foreach ($attempt in 1..2) {
     HdText agent prompt $name $prompt | Out-Null
@@ -214,7 +241,22 @@ function WaitAgent {
     }
     if ($settled) { "$name settled: $st"; return }
   }
+  HdText agent read $name --source visible --lines 40 --format text
   Warn "$name still $(Status $name) after ${timeout}ms"
+}
+
+function Cast {
+  if ($Rest.Count -ne 4) { Warn 'cast wants CWD POSTURE spec PROMPT_FILE' 2 }
+  $file = $Rest[3]
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Warn "prompt file not found: $file" 2 }
+  $name = ($Rest[2] -split ':')[0]
+  $Rest = @($Rest[0], $Rest[1], $Rest[2])
+  Up
+  $Rest = @($name, $file)
+  Send
+  $info = Agent $name
+  if (-not $info.name -or -not $info.pane_id -or -not $info.tab_id -or -not $info.agent_session.value) { Warn "agent get lacks identity for $name" }
+  [ordered]@{ name = $info.name; pane_id = $info.pane_id; tab_id = $info.tab_id; session_id = $info.agent_session.value } | ConvertTo-Json -Compress
 }
 
 function ShowStatus {
@@ -263,13 +305,146 @@ function StopSession {
   "$Session stopped and deleted"
 }
 
+function RetireWorktree {
+  if (-not $Session -or $Rest.Count) { Warn 'retire-worktree wants PATH' 2 }
+  $path = [IO.Path]::GetFullPath($Session).TrimEnd('\', '/')
+  $registered = @(git worktree list --porcelain | Where-Object { $_.StartsWith('worktree ') } | ForEach-Object { [IO.Path]::GetFullPath($_.Substring(9)).TrimEnd('\', '/') })
+  if ($LASTEXITCODE -ne 0) { Warn 'worktree list failed' }
+  if ($path -eq $registered[0] -or $path -notin $registered) { Warn "refusing main or unregistered worktree: $path" 2 }
+  $root = Get-Item -LiteralPath $path -Force
+  if ($root.Attributes -band [IO.FileAttributes]::ReparsePoint) { Warn 'worktree root is a reparse point' 2 }
+  $pending = [Collections.Generic.Stack[string]]::new()
+  $links = [Collections.Generic.List[IO.FileSystemInfo]]::new()
+  $pending.Push($path)
+  while ($pending.Count) {
+    foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
+      if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { $links.Add($item) }
+      elseif ($item.PSIsContainer) { $pending.Push($item.FullName) }
+    }
+  }
+  $directories = 0; $files = 0
+  foreach ($link in $links) {
+    if ($link.Attributes -band [IO.FileAttributes]::Directory) { [IO.Directory]::Delete($link.FullName); $directories++ }
+    else { [IO.File]::Delete($link.FullName); $files++ }
+  }
+  "$path : unlinked $($links.Count) reparse points ($directories directory, $files file)"
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { git -c core.longpaths=true worktree remove $path; $code = $LASTEXITCODE }
+  finally { $ErrorActionPreference = $eap }
+  if ($code -ne 0) { Warn "worktree remove failed after unlinking: $path" }
+  git worktree prune
+  if ($LASTEXITCODE -ne 0) { Warn 'worktree prune failed' }
+  'removed 1 worktree; prune completed'
+}
+
+function Sweep {
+  $days = 3
+  if ($Rest.Count -or ($Session -and (-not [int]::TryParse($Session, [ref]$days) -or $days -lt 0))) { Warn 'sweep wants nonnegative DAYS (default 3)' 2 }
+  $cutoff = [DateTime]::UtcNow.AddDays(-$days)
+  $sessions = HdJson session list --json
+  if (-not $sessions) { Warn 'session list unavailable' }
+  $deleted = 0
+  foreach ($row in $sessions.sessions) {
+    if ($row.default) { 'skipped default (Herdr does not support deleting it)'; continue }
+    if ($row.running -ne $false -or -not (Test-Path -LiteralPath $row.session_dir -PathType Container)) { continue }
+    if ((Get-Item -LiteralPath $row.session_dir -Force).LastWriteTimeUtc -ge $cutoff) { continue }
+    # Already stopped: delete refuses a concurrent restart; stop would kill that new server.
+    $out = HdText session delete $row.name --json
+    if ($script:HdExit -ne 0) { Warn "sweep delete failed for $($row.name): $out" }
+    "deleted $($row.name) ($($row.session_dir))"
+    $deleted++
+  }
+  "deleted $deleted stopped sessions older than $days days"
+}
+
+function GoalCommand([string]$Command) {
+  $body = "`$ErrorActionPreference = 'Stop'; & { $Command }; if (-not `$?) { exit 1 }; if (`$null -ne `$LASTEXITCODE) { exit `$LASTEXITCODE }"
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($body))
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1; $code = $LASTEXITCODE }
+  finally { $ErrorActionPreference = $eap }
+  return @{ code = $code; output = @($output | ForEach-Object { $_.ToString() }) }
+}
+
+function GoalNumber([string]$Text, [int]$Code = 2) {
+  $number = 0.0
+  if (-not [double]::TryParse($Text, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number) -or [double]::IsNaN($number) -or [double]::IsInfinity($number)) { Warn "expected one finite number, got: $Text" $Code }
+  return $number
+}
+
+function Goal {
+  if ($Session -cnotmatch '^[a-z][a-z0-9_-]{0,31}$' -or $Session.EndsWith('-')) { Warn "invalid session name '$Session'" 2 }
+  if ($Rest.Count -ne 1 -or [IO.Path]::GetExtension($Rest[0]) -notin @('.md', '.markdown') -or -not (Test-Path -LiteralPath $Rest[0] -PathType Leaf)) { Warn 'goal wants an existing markdown GOAL_FILE' 2 }
+  $text = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Rest[0]))
+  $sections = ([regex]'(?m)^## Brief[ \t]*\r?$').Split($text, 2)
+  if ($sections.Count -ne 2 -or [string]::IsNullOrWhiteSpace($sections[1])) { Warn 'GOAL_FILE needs ## Brief and its body' 2 }
+  $fields = @{}
+  foreach ($match in [regex]::Matches($sections[0], '(?m)^([A-Z_]+):[ \t]*([^\r\n]*)')) { $fields[$match.Groups[1].Value] = $match.Groups[2].Value.Trim() }
+  foreach ($key in @('MISSION', 'NUMBER', 'BASELINE', 'TARGET', 'GATES', 'WIDTH', 'DRY', 'WAVE_MS', 'CHECKPOINT')) {
+    if (-not $fields[$key]) { Warn "GOAL_FILE missing $key" 2 }
+  }
+  if ($fields.TARGET -cnotmatch '^(below|above)\s+(\S+)$') { Warn 'TARGET wants below N or above N' 2 }
+  $direction = $Matches[1]; $target = GoalNumber $Matches[2]
+  $previous = GoalNumber $fields.BASELINE; $best = $previous
+  if ($fields.WIDTH -cnotmatch '^([1-9][0-9]*):([a-z]+)(?::([^:]*))?(?::(low|medium|high|xhigh|max|ultra))?$') { Warn 'WIDTH wants count:kind[:model][:effort]' 2 }
+  $width = 0; $dryLimit = 0; $waveMs = 0
+  if (-not [int]::TryParse($Matches[1], [ref]$width)) { Warn 'WIDTH count is too large' 2 }
+  $workerSpec = $fields.WIDTH.Substring($fields.WIDTH.IndexOf(':') + 1)
+  if (-not [int]::TryParse($fields.DRY, [ref]$dryLimit) -or $dryLimit -lt 1 -or -not [int]::TryParse($fields.WAVE_MS, [ref]$waveMs) -or $waveMs -lt 1) { Warn 'DRY and WAVE_MS must be positive integers' 2 }
+  $cwd = (Get-Location).Path
+  $checkpoint = [IO.Path]::GetFullPath($fields.CHECKPOINT)
+  $directory = Split-Path -Parent $checkpoint
+  [IO.Directory]::CreateDirectory($directory) | Out-Null
+  $posture = "$checkpoint.posture.md"; $promptFile = "$checkpoint.brief.md"
+  $model = if ($Matches[3]) { $Matches[3] } else { 'CLI default' }
+  [IO.File]::WriteAllText($posture, "| Task | Model | Spec |`n|---|---|---|`n| $($fields.MISSION.Replace('|', '\|')) | $model | $workerSpec |`n")
+  $dry = 0; $wave = 0
+  while ($true) {
+    $wave++
+    $last = if (Test-Path -LiteralPath $checkpoint -PathType Leaf) { Get-Content -LiteralPath $checkpoint -Tail 1 } else { '' }
+    [IO.File]::WriteAllText($promptFile, $sections[1].Trim() + "`n`nLast checkpoint: $last`n")
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($waveMs)
+    foreach ($i in 1..$width) {
+      $output = & $PSCommandPath cast $Session $cwd $posture "w${i}:$workerSpec" $promptFile
+      if ($LASTEXITCODE -ne 0) { $output; Warn "wave $wave cast failed for w$i" 1 }
+    }
+    foreach ($i in 1..$width) {
+      $left = [int][Math]::Max(0, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+      $output = & $PSCommandPath wait $Session "w$i" $left
+      if ($LASTEXITCODE -ne 0) { $output; Warn "wave $wave wait failed for w$i" 1 }
+    }
+    $gates = GoalCommand $fields.GATES
+    $number = $null; $delta = $null
+    if ($gates.code -eq 0) {
+      $measurement = GoalCommand $fields.NUMBER
+      if ($measurement.code -ne 0) { Warn "NUMBER failed: $($measurement.output -join '`n')" 1 }
+      $number = GoalNumber ($measurement.output -join "`n") 1
+      $delta = $number - $previous
+    }
+    $record = [ordered]@{ wave = $wave; number = $number; gates = $gates.code; delta = $delta; when = [DateTime]::UtcNow.ToString('o') }
+    [IO.File]::AppendAllText($checkpoint, ($record | ConvertTo-Json -Compress) + "`n")
+    "wave=$wave number=$number gates=$($gates.code) delta=$delta"
+    if ($gates.code -ne 0) { Warn "GATES failed: $($gates.output -join '`n')" 1 }
+    if (($direction -eq 'below' -and $number -lt $target) -or ($direction -eq 'above' -and $number -gt $target)) { return }
+    if (($direction -eq 'below' -and $number -lt $best) -or ($direction -eq 'above' -and $number -gt $best)) { $best = $number; $dry = 0 }
+    else { $dry++ }
+    if ($dry -ge $dryLimit) { Warn "$dry consecutive waves without improvement" 3 }
+    $previous = $number
+  }
+}
+
 switch ($Verb.ToLowerInvariant()) {
   'up' { Up }
+  'cast' { Cast }
   'send' { Send }
   'wait' { WaitAgent }
   'status' { ShowStatus }
   'read' { ReadAgent }
   'retire' { RetireAgent }
   'stop' { StopSession }
+  'retire-worktree' { RetireWorktree }
+  'sweep' { Sweep }
+  'goal' { Goal }
   default { Warn "unknown verb '$Verb'" 2 }
 }
+exit 0

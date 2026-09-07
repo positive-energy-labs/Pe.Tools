@@ -88,7 +88,11 @@ dotnet tool run pe-revit -- <command> --json
 - Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable; do not retry the wrapper unchanged.
 
 ```powershell
-& .\.agents\skills\slot.execute\herdr.ps1 up <session> <cwd> <name>:<kind>[:<model>][:<effort>]
+& .\.agents\skills\slot.execute\herdr.ps1 up <session> <cwd> <posture.md> <name>:<kind>[:<model>][:<effort>]
+& .\.agents\skills\slot.execute\herdr.ps1 cast <session> <cwd> <posture.md> <spec> <prompt-file>
+& .\.agents\skills\slot.execute\herdr.ps1 goal <session> <goal.md>
+& .\.agents\skills\slot.execute\herdr.ps1 retire-worktree <path>
+& .\.agents\skills\slot.execute\herdr.ps1 sweep [<days>]
 & .\.agents\skills\slot.execute\herdr.ps1 status <session> [<agent>]
 & .\.agents\skills\slot.execute\herdr.ps1 send <session> <agent> <prompt-file>
 & .\.agents\skills\slot.execute\herdr.ps1 wait <session> <agent> [<timeout-ms>]
