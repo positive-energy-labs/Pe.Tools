@@ -23,10 +23,10 @@ All `OperationProcessor` project-family and family-document paths route through 
 
 ## Regression
 
-`Old_template_Mitsubishi_MSZ_GL_preserves_join_graph_or_rolls_back` uses a disposable copy of the real `Old_Template.rvt` and the real `Mitsubishi_MSZ-GL` family. It requires a non-vacuous joined edge involving an Extrusion, captures a canonical undirected graph keyed by element UniqueId/type/category, runs the same 38-definition company migration, and then requires:
+`Old_template_Mitsubishi_MSZ_GL_preserves_join_graph_or_rolls_back` uses a disposable copy of the real `Old_Template.rvt` and the real `Mitsubishi_MSZ-GL` family. It requires a non-vacuous joined edge involving an Extrusion, captures canonical native `GeomCombination.AllMembers` sets keyed by member UniqueId/type/category, runs the same 38-definition company migration, and then requires:
 
-- commit: converged receipt, 38/38 shared identities, and identical join graph; or
-- refusal: the exact `CannotKeepJoined` GUID, unchanged project family identity, unchanged parameter matrix, and identical join graph.
+- commit: converged receipt, 38/38 shared identities, and identical family combination membership; or
+- refusal: the exact `CannotKeepJoined` GUID, unchanged project family identity, unchanged parameter matrix, and identical family combination membership.
 
 The original fixture hash is checked after close. The test was compiled only; the proof owner must run it in fresh Revit. The underlying operation that causes Revit to lose the join remains untraced.
 
@@ -37,3 +37,8 @@ The original fixture hash is checked after close. The test was compiled only; th
 - Changed behavior: one exact warning ID now refuses and rolls back Family Foundry edit/load.
 - Preserved behavior: all unrelated warnings and all non-FamilyVisit failure-policy callers.
 - Native acceptance: pending; no runtime or session was started.
+
+## Wave 18 probe correction
+
+The first probe called `JoinGeometryUtils.GetJoinedElements`, which Revit correctly refused because it is project-document-only. Family joins/cuts are represented by `CombinableElement.Combinations` and each `GeomCombination.AllMembers` collection. The corrected probe deduplicates combinations by native element ID, requires at least two members, sorts each member set by stable UniqueId/type/category, and retains the non-vacuous Extrusion membership precondition. Runtime re-execution remains with the proof owner.
+- Follow-up compile: Debug.R25.Tests exit 0, 0 errors, 126 warnings.
