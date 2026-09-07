@@ -6,7 +6,7 @@ public static class FamilyDocumentLabelDimensions {
         var assignments = labels.ToList();
         if (assignments.Count == 0) return;
         var manager = document.FamilyManager;
-        var parameters = assignments.Select(a => a.Parameter).DistinctBy(p => p.Id).Where(p => p.Formula is null).ToList();
+        var parameters = assignments.Select(a => a.Parameter).GroupBy(p => p.Id).Select(group => group.First()).Where(p => p.Formula is null).ToList();
         var values = manager.Types.Cast<FamilyType>().Select(type => (Type: type,
             Cells: parameters.Select(parameter => (Parameter: parameter, Value: document.GetValue(type, parameter))).Where(c => c.Value is not null).ToList())).ToList();
         var original = manager.CurrentType;
