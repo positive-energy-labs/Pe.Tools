@@ -1,5 +1,17 @@
 # Family routes proof checkpoint
 
+## Actual current-family browser acceptance - 2026-09-07 06:38 UTC
+
+PROVEN[browser + session/dev, controlled ff-route-25, immutable ca353e9]: P confirmed active native `PE Box.rfa` after loading the original Width24in/Old_Count3 baseline into the separate project. R used root host `http://127.0.0.1:52068` and the exact backslash document address from `family-holder.json`. The unique model `ff-route-proof-ff-route-25-parameters` was created through the settings route command with create-only semantics and independently read back; existing company settings were not overwritten.
+
+Browser **plan current family** returned hash `5AFEE5B3F6483FC3`, four changes, zero refusals. Browser **apply reviewed plan** returned success=true, converged=true, empty residue/errors/diagnostics, and consumed the plan. The browser's expanded native capture and independent route-state read both show Standard Width `3.5000000000000004ft` (42in), shared `FF_Route_Proof_Count` = `7`, GUID `f70f2c68-3d81-4dc3-a2d9-2da64e2a7158`, and no old parameter. Coverage reports parameters/types Read, details NotRead, and one TemplateUnknown unmodeled fact. R did not save or reload the family into the project. P was notified that family acceptance completed and asked to activate the unchanged project for fleet acceptance.
+
+Evidence under `.artifacts/runs/browser-20260906-ff/`: `family-after-browser-plan.json`, `family-after-browser-apply.json`, `family-plan.ax`, `family-apply.ax`, `family-native-readback.ax`. Settings create/read receipts and exact requests are under `.artifacts/runs/ff-route-acceptance/ff-route-25-parameters/`. This proves browser interaction and native readback, not screenshots or a live Pea turn. PNG capture remains open.
+
+Observed route limits: three simultaneous live route tabs stalled hydration; closing the two duplicate proof tabs immediately released queued reads, consistent with the documented HTTP/1 SSE connection budget. The parameter-only profile omits types, so its table has zero type columns and misleadingly labels rows agree even before capture; the native disclosure still exposes actual Standard values. These UI seams remain to repair. Planned forward-slash paths also differ from the holder's exact Windows address; acceptance uses the returned canonical holder address.
+
+The older checkpoints below retain their historical timing; this section supersedes their pending-family statements. Fleet acceptance remains pending P's project-holder confirmation.
+
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
 ## Controlled session ready; awaiting document holders - 2026-09-07
