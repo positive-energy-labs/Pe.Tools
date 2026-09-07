@@ -277,16 +277,27 @@ const ProjectA_SCOPE = {
 };
 
 describe("takeoff route store", () => {
-  it("retains the producer's immutable review ID after partition", async () => {
+  it("prepares all materialization carriers before partition and retains its immutable review ID", async () => {
     const h = harness();
     const fixtureRegistry = AtomRegistry.make();
     registries.push(fixtureRegistry);
     const fixture = createFixtureTakeoffStore(fixtureRegistry, ProjectA_SCOPE);
     const original = fixtureRegistry.get(fixture.atoms.world).zones[0]!;
     const zone = { ...original, zone: { ...original.zone, elementId: 123 } };
+    let preparationCalls = 0;
     const host: TakeoffHost = {
       ...h.host,
+      async initializeCarrier(_session, stage) {
+        expect(stage).toBe("Materialization");
+        preparationCalls += 1;
+        return {
+          status: preparationCalls === 1 ? "needs-initialization" : "ready",
+          bound: "carrier",
+          remaining: preparationCalls === 1 ? ["last-carrier"] : [],
+        };
+      },
       async partition() {
+        expect(preparationCalls).toBe(2);
         return {
           review: {
             source: { runId: "immutable-captured-run", documentKey: "document", scopeKey: "scope" },

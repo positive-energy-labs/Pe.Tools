@@ -1161,6 +1161,10 @@ export function createTakeoffStore(deps: {
           const zoneRegion = zone.zone.elementId;
           if (zoneRegion === null) throw Error(`adopt ${zone.zone.key} first`);
           const session = await activeSession();
+          let preparation;
+          do {
+            preparation = await deps.host.initializeCarrier(session, "Materialization");
+          } while (preparation.remaining.length > 0);
           const result = await deps.host.partition(session, partitionInput(zone, zoneRegion));
           write("partition", "page/partition-review", () =>
             registry.set(reviewAtom, {
