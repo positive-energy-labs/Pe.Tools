@@ -11,7 +11,7 @@ namespace Pe.Shared.Tests;
 [TestFixture]
 public sealed class FamilyModelContractTests {
     private const string Head = """{"name":"x","category":"GenericModels","template":"Generic Model","placement":"OneLevelBased"}""";
-    private const string Datums = """{"Ref. Level":{"normal":"PlusZ","isLevel":true},"Center (Left/Right)":{"normal":"PlusX"},"Center (Front/Back)":{"normal":"PlusY"}}""";
+    private const string Datums = """{"Ref. Level":{"normal":"Z","isLevel":true},"Center (Left/Right)":{"normal":"X"},"Center (Front/Back)":{"normal":"Y"}}""";
     private const string Box = """{"kind":"Prism","center":["Center (Left/Right)","Center (Front/Back)"],"bottom":"Ref. Level","width":"6in","depth":"1in","height":"1in"}""";
 
     /// <summary>Wraps a `{...}` fragment of sections into a document with a header and the three stock datums.</summary>
@@ -62,6 +62,8 @@ public sealed class FamilyModelContractTests {
     [TestCase(28, """{"coverage":{"frames":"Read"}}""", "coverage-section-unknown")]
     // kaitpw rulings 2026-09-06: reference lines key positionally.
     [TestCase(101, """{"refLines":{"conn swing (left)":{"on":"Ref. Level","from":["Center (Left/Right)","Center (Front/Back)"],"length":"1in"}}}""", "refline-key-positional")]
+    [TestCase(102, """{"family":{"name":"x","category":"AirTerminals","template":"t","placement":"OneLevelBased"},"datums":{"Center (Front/Back)":{"normal":"MinusY"}}}""", "datum-normal-unsigned")]
+    [TestCase(103, """{"refPlanes":{"neck (Back)":{"normal":"Y","at":"2in"}}}""", "refplane-normal-signed")]
     public void Silent_error_is_caught(int probe, string body, string code) {
         var json = body.Contains("\"family\":{") ? body : Doc(body);
         var result = FamilyModelJson.Parse(json);

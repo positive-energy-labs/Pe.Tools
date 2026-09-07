@@ -18,6 +18,8 @@ public static class FamilyModelDiagnosticCodes {
     public const string UnknownParameter = "unknown-parameter";
     public const string FormulaTypeOverride = "formula-type-override";
     public const string SeedIsLiteral = "seed-is-literal";
+    public const string DatumNormalUnsigned = "datum-normal-unsigned";
+    public const string RefPlaneNormalSigned = "refplane-normal-signed";
     public const string UnknownReference = "unknown-reference";
     public const string InvalidReference = "invalid-reference";
     public const string RefLineKeyPositional = "refline-key-positional";
@@ -79,8 +81,18 @@ public static class FamilyModelValidator {
             if (p.Formula != null) d.Add(new(FamilyModelDiagnosticCodes.FormulaTypeOverride, path, "Formula-driven parameters take no per-type value."));
             if (p.DataType is { } dt) CheckValue(v, dt, path, d);
         }
-        foreach (var (name, rp) in m.RefPlanes)
+        // RULING (kaitpw, 2026-09-06): Revit's stored sign for a template plane varies, so a datum normal
+        // is unsigned; a refPlane seed runs along its normal, so a refPlane normal stays signed.
+        foreach (var (name, dm) in m.Datums)
+            if (dm.Normal.IsSigned())
+                d.Add(new(FamilyModelDiagnosticCodes.DatumNormalUnsigned, $"$.datums.{name}.normal",
+                    $"A datum normal is unsigned: Revit stores 'Center (Front/Back)' as MinusY in one template and PlusY in another, and a datum carries no seed for the sign to drive. Write {dm.Normal.Unsigned()}."));
+        foreach (var (name, rp) in m.RefPlanes) {
+            if (!rp.Normal.IsSigned())
+                d.Add(new(FamilyModelDiagnosticCodes.RefPlaneNormalSigned, $"$.refPlanes.{name}.normal",
+                    $"A refPlane normal is signed: the 'at' seed runs along it. Write Plus{rp.Normal} or Minus{rp.Normal}."));
             if (rp.At.IsParameter) d.Add(new(FamilyModelDiagnosticCodes.SeedIsLiteral, $"$.refPlanes.{name}.at", "The seed is a literal; a parameter drives a plane through a labeled dimension."));
+        }
         foreach (var (name, rl) in m.RefLines) {
             var path = $"$.refLines.{name}";
             // RULING (kaitpw, 2026-09-06): a reference line has no Revit name, so its key is positional.
@@ -253,7 +265,7 @@ public static class FamilyModelValidator {
     private static readonly Regex RefLineKey = new(@"^line-[1-9][0-9]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static bool Parallel(IReadOnlyDictionary<string, Axis> normals, string a, string b) =>
-        normals.TryGetValue(a, out var na) && normals.TryGetValue(b, out var nb) && (int)na / 2 == (int)nb / 2;
+        normals.TryGetValue(a, out var na) && normals.TryGetValue(b, out var nb) && na.Unsigned() == nb.Unsigned();
 
     private static bool DomainAllows(ConnectorDomain domain, ConnectorSystemType t) => domain switch {
         ConnectorDomain.Duct => t is ConnectorSystemType.SupplyAir or ConnectorSystemType.ReturnAir or ConnectorSystemType.ExhaustAir or ConnectorSystemType.OtherAir or ConnectorSystemType.Global or ConnectorSystemType.Fitting,

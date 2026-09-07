@@ -8,9 +8,9 @@
   },
   "types": { "Standard": {}, "Wide": { "Width": "36in" } },
   "datums": {
-    "Ref. Level":          { "normal": "PlusZ", "isLevel": true },
-    "Center (Left/Right)": { "normal": "PlusX" },
-    "Center (Front/Back)": { "normal": "PlusY" }
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" },
+    "Center (Front/Back)": { "normal": "Y" }
   },
   "forms": {
     "body": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",

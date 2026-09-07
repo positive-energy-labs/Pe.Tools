@@ -115,7 +115,7 @@ internal sealed class FamilyModelCapturer {
         var planes = new Dictionary<string, FamilyModelRefPlane>(StringComparer.Ordinal);
         foreach (var level in this._levels) {
             this._planeName[level.Id] = level.Name;
-            datums[level.Name] = new FamilyModelDatum { Normal = Axis.PlusZ, IsLevel = true };
+            datums[level.Name] = new FamilyModelDatum { Normal = Axis.Z, IsLevel = true };
         }
 
         var unnamed = 0;
@@ -135,7 +135,10 @@ internal sealed class FamilyModelCapturer {
             }
 
             if (definesOrigin) {
-                datums[name] = new FamilyModelDatum { Normal = axis.Value };
+                // RULING (kaitpw, 2026-09-06): a datum normal is unsigned. Revit's stored sign for a
+                // template plane varies ('Center (Front/Back)' reads MinusY here), and a datum carries no
+                // seed for the sign to drive, so the sign is folded away.
+                datums[name] = new FamilyModelDatum { Normal = axis.Value.Unsigned() };
                 continue;
             }
 

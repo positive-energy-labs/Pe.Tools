@@ -261,6 +261,18 @@ public enum DataType {
 /// </summary>
 [JsonObject(MemberSerialization.OptIn)]
 public sealed class FamilyModelDatum {
+    /// <summary>
+    ///     RULING (kaitpw, 2026-09-06): a datum normal is an UNSIGNED axis token, `X`, `Y`, or `Z`.
+    ///     Revit stores a signed normal for a template plane, and the stored sign varies. The
+    ///     `Center (Front/Back)` plane reads `MinusY` in both real families, and the fixtures declared it
+    ///     `PlusY`. Neither spelling is more true than the other.
+    ///     A datum carries no seed, so the sign of a datum normal drives nothing. The sign records which
+    ///     template built the family, and the diff then reports a difference that is not a change.
+    ///     Capture folds the stored sign away and emits the unsigned axis token. The author writes the same
+    ///     token. The validator refuses a signed token here, and names the unsigned token it wanted.
+    ///     A refPlane keeps a SIGNED normal, because the author's seed runs along it. See
+    ///     <see cref="FamilyModelRefPlane.Normal" />.
+    /// </summary>
     [JsonProperty("normal", Required = Required.Always)]
     public Axis Normal { get; init; }
 
@@ -277,6 +289,15 @@ public sealed class FamilyModelDatum {
 /// </summary>
 [JsonObject(MemberSerialization.OptIn)]
 public sealed class FamilyModelRefPlane {
+    /// <summary>
+    ///     RULING (kaitpw, 2026-09-06): a refPlane normal stays SIGNED, `PlusX` through `MinusZ`.
+    ///     The author owns a refPlane, and the author's <see cref="At" /> seed runs along this normal. A
+    ///     flipped normal therefore flips the seed, and puts the refPlane on the other side of the family
+    ///     origin. The sign here is authored truth, and capture emits the sign as read.
+    ///     The validator refuses an unsigned token in a refPlane normal, and names a signed token it
+    ///     wanted. A datum normal is unsigned, because a datum carries no seed. See
+    ///     <see cref="FamilyModelDatum.Normal" />.
+    /// </summary>
     [JsonProperty("normal", Required = Required.Always)]
     public Axis Normal { get; init; }
 
@@ -291,9 +312,21 @@ public sealed class FamilyModelRefPlane {
     public string? Subcategory { get; init; }
 }
 
-/// <summary>Family axis tokens: a plane's normal, an array direction.</summary>
+/// <summary>
+///     Family axis tokens. The SIGNED tokens address a refPlane normal and an array direction, where the
+///     sign is authored truth. The UNSIGNED tokens address a datum normal, where Revit's stored sign varies
+///     and drives nothing (kaitpw ruling 2026-09-06).
+/// </summary>
 [JsonConverter(typeof(StringEnumConverter))]
-public enum Axis { PlusX, MinusX, PlusY, MinusY, PlusZ, MinusZ }
+public enum Axis { PlusX, MinusX, PlusY, MinusY, PlusZ, MinusZ, X, Y, Z }
+
+/// <summary>Signed and unsigned <see cref="Axis" /> tokens, and the fold between them.</summary>
+public static class AxisTokens {
+    public static bool IsSigned(this Axis a) => a <= Axis.MinusZ;
+
+    /// <summary>The unsigned token on the same axis: `MinusY` and `PlusY` both fold to `Y`.</summary>
+    public static Axis Unsigned(this Axis a) => a.IsSigned() ? (Axis)(((int)a / 2) + (int)Axis.X) : a;
+}
 
 /// <summary>Mirrors the `ELEM_REFERENCE_NAME` value set by name.</summary>
 [JsonConverter(typeof(StringEnumConverter))]

@@ -10,9 +10,9 @@
   },
   "types": { "Bathtub Floor Mounted": {} },
   "datums": {
-    "Ref. Level":          { "normal": "PlusZ", "isLevel": true },
-    "Center (Left/Right)": { "normal": "PlusX" },
-    "Center (Front/Back)": { "normal": "PlusY" }
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" },
+    "Center (Front/Back)": { "normal": "Y" }
   },
   "refPlanes": {
     "conn (left)":  { "normal": "PlusX", "at": "-3in" },

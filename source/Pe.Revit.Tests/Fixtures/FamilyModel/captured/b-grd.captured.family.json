@@ -291,17 +291,17 @@
   },
   "datums": {
     "Ref. Level": {
-      "normal": "PlusZ",
+      "normal": "Z",
       "isLevel": true
     },
     "Center (Front/Back)": {
-      "normal": "MinusY"
+      "normal": "Y"
     },
     "Reference Plane": {
-      "normal": "PlusZ"
+      "normal": "Z"
     },
     "Center (Left/Right)": {
-      "normal": "PlusX"
+      "normal": "X"
     }
   },
   "refPlanes": {

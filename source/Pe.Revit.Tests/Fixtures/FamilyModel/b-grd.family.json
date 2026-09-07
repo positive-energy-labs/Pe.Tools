@@ -11,9 +11,9 @@
   },
   "types": { "24x12": {}, "Slot": { "_vane spacing": "0in" } },
   "datums": {
-    "Ref. Level":          { "normal": "PlusZ", "isLevel": true },
-    "Center (Left/Right)": { "normal": "PlusX" },
-    "Center (Front/Back)": { "normal": "PlusY" }
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" },
+    "Center (Front/Back)": { "normal": "Y" }
   },
   "forms": {
     "flange": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",
