@@ -16,6 +16,7 @@ export interface FamiliesHost {
   families(target: string, draft: FamiliesDraft): Promise<string[]>;
   profiles(): Promise<string[]>;
   project(target: string, familyIds: number[]): Promise<FfProjectData>;
+  openFamily(target: string, familyId: number): Promise<{ savedPath?: string | null }>;
   openPath(target: string, path: string): Promise<unknown>;
 }
 
@@ -73,6 +74,8 @@ export function createLiveFamiliesHost(): FamiliesHost {
     },
     project: (target, familyIds) =>
       callHostRpc("familyfoundry.project", { familyIds }, { bridgeSessionId: target || undefined }),
+    openFamily: (target, familyId) =>
+      callHostRpc("family.editor.open", { familyId }, { bridgeSessionId: target || undefined }),
     openPath: (target, path) =>
       callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
   };

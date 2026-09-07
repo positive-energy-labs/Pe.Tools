@@ -377,6 +377,9 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
       }),
       diagnostics: [],
     }),
+    openFamily: async () => {
+      throw new Error("Fixture families cannot open a Revit document.");
+    },
     openPath: async () => {
       throw new Error("fixture path opening is disabled");
     },

@@ -42,6 +42,19 @@ export function familyLane(
       parseError = error instanceof Error ? error.message : String(error);
     }
   }
+  if (!snapshot && evidence && "modelJson" in evidence) {
+    try {
+      const captured = JSON.parse(evidence.modelJson) as FamilyModel;
+      if (!captured?.family || typeof captured.family.name !== "string")
+        throw new Error("The capture has no family header.");
+      captured.types ??= {};
+      projected = buildPageWorld(
+        projectFamilyModel(captured, evidence, { path: "Captured family (not an authored file)" }),
+      );
+    } catch (error) {
+      parseError = error instanceof Error ? error.message : String(error);
+    }
+  }
   const versionToken = snapshot?.versionToken ?? null;
   const world = projected
     ? projected
@@ -78,6 +91,8 @@ export function familyLane(
       ? `${relativePath}@${versionToken ?? ""}`
       : fixture
         ? "fixture"
-        : `empty:${relativePath}`,
+        : evidence && "modelJson" in evidence
+          ? `capture:${evidence.reading.observedAt}`
+          : `empty:${relativePath}`,
   };
 }

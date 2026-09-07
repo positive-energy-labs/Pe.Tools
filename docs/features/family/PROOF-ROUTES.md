@@ -2,6 +2,16 @@
 
 2026-09-06. Owner checkout `C:/Users/kaitp/source/repos/Pe.Tools-ff-routes`, branch `family/routes`, base `d2e19ce15ec9092018f1c37cfc529c97e8349cd3`. Initial-wave report, updated after the intermediate checkpoint. No subagents, Revit lifecycle operations, company settings writes, or other-worktree merges. MAP and LEDGER are untouched.
 
+## Project-row navigation and native readouts ? 2026-09-07
+
+- `web/src/families/matrix.tsx` passes the clicked row's family id to `store.actions.openFamily`. The existing `family.editor.open` operation remains the only editor-opening implementation; no new host operation was added. Its returned scratch `.rfa` path becomes the `/family` document scope, with the user's original session pin retained. A missing path refuses navigation. Fixture rows cannot open real Revit documents.
+- `/family?doc=<returned Address>&target=<existing pin>&capture=true` waits for route hydration, then runs the existing native capture command. `family/lane.ts` can project native capture without an authored settings file, while keeping `lane.document` null so captured data is not a writable authored file or a fixture fallback.
+- The family header exposes native coverage/unmodeled count plus capture JSON, and raw/expanded authored JSON. All four authored native fixture stories remain available. The view catches command failures after the shared verb machinery records them.
+- PROVEN deterministic: 29 tests / 5 files passed (`navigation-test.txt`), including exact clicked id, returned document address and pin, capture-only projection, stores, and fixture routes. Static/type check: 0 errors, 2 existing unbound-method warnings / 11 files (`navigation-check.txt`). Runtime opening/activation/navigation/recapture is still UNPROVEN and belongs to the proof owner.
+- Existing backend limitation: `RevitDataRequestService.OpenFamilyEditorCore` uses a scratch filename based on family name and may reuse an already-open scratch document. Cross-project same-name family identity and scratch reuse must be covered by runtime proof or repaired by its owner. This slice does not claim a loaded-family project commit when applying inside that scratch family document. No Revit document was opened during this work.
+
+Commit `44e1d66` contains the preceding Apply/composition slice. The historical outstanding-navigation notes below are superseded by this section; geometry authoring, scoped cell/type apply, C# keyed composition parity, field-level provenance and fleet patch fixture stories remain outstanding.
+
 ## Current-family Apply slice ? 2026-09-07
 
 This section supersedes the older checkpoint below where it names a seam now implemented. No Revit run or lifecycle action was performed.

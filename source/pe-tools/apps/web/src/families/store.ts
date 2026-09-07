@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  address,
   familiesRouteState,
   here,
   type AppliedScope,
@@ -284,6 +285,18 @@ export function createFamiliesStore(deps: {
         const result = await deps.host.project(registry.get(target), ids);
         registry.set(projection, result);
         return `projected ${result.families.length} families`;
+      });
+    },
+    openFamily(familyId: number) {
+      return runVerb("open-family", async () => {
+        const opened = await deps.host.openFamily(registry.get(target), familyId);
+        if (!opened.savedPath)
+          refuse("The family editor returned no document path; navigation was not completed.");
+        return {
+          doc: address(opened.savedPath!),
+          target: deps.scope.scope.kind === "document" ? deps.scope.scope.pin : undefined,
+          capture: true as const,
+        };
       });
     },
     openPath(path: string) {

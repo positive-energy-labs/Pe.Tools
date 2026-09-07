@@ -6,6 +6,7 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 export function FamiliesMatrix() {
   const {
     store,
+    fixture,
     navigate,
     rows,
     columns,
@@ -87,10 +88,17 @@ export function FamiliesMatrix() {
             </EmptyState>
           )
         }
-        /* Fleet → one family. The URL is the whole handoff: /family opens the requested
-           family in the bound session's family editor and lands in its live lane. No
-           cross-route store, nothing to keep in sync. */
-        onRowClick={() => void navigate({ to: "/family", search: {} })}
+        /* The existing editor operation activates a scratch family copy; capture that returned document. */
+        onRowClick={
+          fixture
+            ? undefined
+            : (row) => {
+                void store.actions
+                  .openFamily(row.familyId)
+                  .then((search) => navigate({ to: "/family", search }))
+                  .catch(() => undefined);
+              }
+        }
       />
     </>
   );

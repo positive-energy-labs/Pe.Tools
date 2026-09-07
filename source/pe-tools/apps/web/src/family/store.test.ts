@@ -88,8 +88,10 @@ const fixture = () => {
     settingsCommand: (name: "open" | "save", input?: unknown) =>
       record(`settings.${name}`, input ?? {}),
     familyApply: (patches: RouteStatePatch[]) => record("family.apply", patches),
-    familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
-      record(`family.${name}`, input ?? {}),
+    familyCommand: (
+      name: "capture_evidence" | "build_evidence" | "plan" | "apply",
+      input?: unknown,
+    ) => record(`family.${name}`, input ?? {}),
   };
   return { host, writers, calls };
 };
@@ -213,7 +215,10 @@ describe("family route store", () => {
     const testFixture = fixture();
     const writers = {
       ...testFixture.writers,
-      familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
+      familyCommand: (
+        name: "capture_evidence" | "build_evidence" | "plan" | "apply",
+        input?: unknown,
+      ) =>
         name === "capture_evidence"
           ? new Promise<RouteStateWriteResult>((resolve) => {
               release = resolve;

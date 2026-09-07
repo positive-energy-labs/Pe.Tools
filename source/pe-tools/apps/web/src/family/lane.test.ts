@@ -84,3 +84,26 @@ test("native capture projects only read values and gates missing claims on cover
     familyLane(input, { ...evidence, coverage: { parameters: "Read" } }).world.live?.missingParams,
   ).toEqual(["Missing"]);
 });
+
+test("native capture without an authored file renders a read-only family lane", () => {
+  const modelJson =
+    '{"family":{"name":"Opened family","category":"GenericModels"},"parameters":{"Width":{"dataType":"Length","value":"24in"}},"types":{"Standard":{}}}';
+  const evidence = {
+    modelJson,
+    familyName: "Opened family",
+    coverage: { parameters: "Read" },
+    unmodeledCount: 0,
+    origin: "capture" as const,
+    reading: {
+      at: address("C:\\Models\\Opened.rfa"),
+      version: "v1",
+      observedAt: "2026-09-07T00:00:00Z",
+    },
+  };
+  const lane = familyLane(null, evidence);
+  expect(lane.fixture).toBe(false);
+  expect(lane.document).toBeNull();
+  expect(lane.world.params[0]?.name).toBe("Width");
+  expect(lane.parseError).toBeNull();
+  expect(lane.seedKey).toContain("capture:");
+});

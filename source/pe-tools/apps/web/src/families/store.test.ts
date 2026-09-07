@@ -59,6 +59,10 @@ const fixture = () => {
     families: async () => [],
     profiles: async () => [],
     project: async () => ({ families: [], diagnostics: [] }),
+    openFamily: async (target, familyId) => {
+      calls.push({ op: "openFamily", input: { target, familyId } });
+      return { savedPath: "C:\\Scratch\\Selected.rfa" };
+    },
     openPath: async () => ({}),
   };
   const writer = {
@@ -206,4 +210,18 @@ describe("families route store", () => {
       { op: "plan", input: expect.any(Object) },
     ]);
   });
+});
+
+it("family row opens its exact id and returns the new document scope with the user's pin", async () => {
+  const { store, calls } = make();
+  expect(await store.actions.openFamily(731)).toEqual({
+    doc: address("C:\\Scratch\\Selected.rfa"),
+    target: "test",
+    capture: true,
+  });
+  expect(calls.at(-1)).toEqual({
+    op: "openFamily",
+    input: { target: "pin:test|doc:" + address("C:\\Models\\Test.rvt"), familyId: 731 },
+  });
+  store.dispose();
 });

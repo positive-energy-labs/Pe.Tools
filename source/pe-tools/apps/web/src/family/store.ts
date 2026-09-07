@@ -451,6 +451,8 @@ export function createFamilyStore(deps: {
   return {
     registry,
     atoms: {
+      ready: familyDoc,
+      evidence,
       reconciliation,
       target,
       profile,

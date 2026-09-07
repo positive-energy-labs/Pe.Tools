@@ -27,6 +27,7 @@ export function FamilyWorkspaceView() {
     setAnatomyCollapsed,
   } = useFamilyWorkspace();
   const reconciliation = useAtomValue(store.atoms.reconciliation);
+  const evidence = useAtomValue(store.atoms.evidence);
   return (
     <Workspace
       className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
@@ -57,6 +58,26 @@ export function FamilyWorkspaceView() {
           }
           fact={
             <>
+              {evidence && "modelJson" in evidence && (
+                <details>
+                  <summary>native capture / {evidence.unmodeledCount} unmodeled</summary>
+                  <pre>
+                    {JSON.stringify(evidence.coverage, null, 2)}
+                    {"\n"}
+                    {evidence.modelJson}
+                  </pre>
+                </details>
+              )}
+              {snapshot && (
+                <details>
+                  <summary>authored JSON</summary>
+                  <pre>{snapshot.rawContent}</pre>
+                  <details>
+                    <summary>expanded JSON</summary>
+                    <pre>{snapshot.composedContent}</pre>
+                  </details>
+                </details>
+              )}
               {(snapshot?.dependencies ?? []).map((dependency) => (
                 <a
                   key={dependency.directivePath}
@@ -87,14 +108,14 @@ export function FamilyWorkspaceView() {
                     tone="act"
                     label="plan current family"
                     reason="Plan the saved JSON against the current family document."
-                    onClick={() => void store.verbs.plan.run?.()}
+                    onClick={() => void store.verbs.plan.run?.().catch(() => undefined)}
                   />
                   <Verb
                     tone="commit"
                     label="apply reviewed plan"
                     disabled={!reconciliation.plan || reconciliation.plan.entry.refusals.length > 0}
                     reason="Review a valid plan first. Applies the saved JSON without saving the Revit document."
-                    onClick={() => void store.verbs.apply.run?.()}
+                    onClick={() => void store.verbs.apply.run?.().catch(() => undefined)}
                   />
                   {reconciliation.plan && (
                     <details>
