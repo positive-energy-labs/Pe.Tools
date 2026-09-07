@@ -24,6 +24,13 @@ failures. No Apply ran. The snapshot quarantine remains leased until stop. Resta
 previous quarantine policy; isolated SDK candidate cf98d13 repairs hold precedence and passes
 focused deterministic vectors, but native restart acceptance remains owed.
 
+Request binding is repaired at9ba0234. Corrected monthly45-host-plan-5 completed45 profiles:
+24 native Plan exceptions for empty parameter group, eight conversion failures for empty/Other
+group, one conversion FormatOptions failure, and12 FamilyNotFound results. No Apply ran.
+N owns shared group identity and literal conversion; P is checking the12 selectors against
+loaded families, then proving NoTransaction script/library ownership on the current snapshot.
+The next required refresh can test isolated SDK f59ceb7 without changing installed SDK state.
+
 Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
 are correct after each seed and before topology, then Type A takes Type C values during
 topology construction. SaveAs/reopen/load do not introduce that first change. P is bracketing
