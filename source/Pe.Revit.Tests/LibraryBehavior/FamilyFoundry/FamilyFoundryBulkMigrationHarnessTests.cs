@@ -43,6 +43,25 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-aps-definitions.json")))!;
 
+    private static IReadOnlyList<ParametersApi.Parameters.ParametersResult> CompanyCorpusDefinitions() =>
+        JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+            RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
+
+    private static JObject GeometryInput(JObject settings, params string[] operations) {
+        var input = new JObject();
+        foreach (var name in new[] { "FilterApsParams", "AddAndMapSharedParams", "AddFamilyParams" }.Concat(operations))
+            if (settings[name] is { } value) input[name] = value.DeepClone();
+        return input;
+    }
+
+    private static JObject AddKnownTemplateContext(string profilePath, JObject native) {
+        if (!profilePath.EndsWith("Modine HHD Series.json", StringComparison.Ordinal)) return native;
+        var datums = (JObject)native["datums"]!;
+        datums["Left"] = new JObject { ["normal"] = "X" };
+        datums["Right"] = new JObject { ["normal"] = "X" };
+        return native;
+    }
+
     [Test]
     public void Native_formula_canonicalization_is_rollback_only_and_distinguishes_changed_literal() {
         const string raw = "if(PE_E___Voltage = 120, 1, 2)";
@@ -132,13 +151,14 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public void Public_converter_maps_corpus_reference_plane_intent(string profilePath, int planeCount, int dimensionCount) {
         var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
             .Single(p => (string)p["source"]! == profilePath)["settings"]!;
-        var operation = new JObject { ["MakeRefPlaneAndDims"] = settings["MakeRefPlaneAndDims"]!.DeepClone() };
         var document = this.NewFamily("Reference plane conversion proof");
         try {
-            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(operation, [], document.GetUnits()).Patch;
+            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
+                GeometryInput(settings, "MakeRefPlaneAndDims"), CompanyCorpusDefinitions(), document.GetUnits()).Patch;
             Assert.That(((JObject)patch.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount));
             Assert.That(((JObject)patch.Patch["dimensions"]!).Count, Is.EqualTo(dimensionCount));
-            var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), patch.Patch);
+            var merged = AddKnownTemplateContext(profilePath,
+                FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), patch.Patch));
             Assert.That(FamilyModelJson.Parse(merged.ToString()).Diagnostics, Is.Empty);
         } finally { document.Close(false); }
     }
@@ -149,8 +169,11 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             .Where(p => p["settings"]!["ParamDrivenSolids"] is not null).ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
         var document = this.NewFamily("Param driven solids conversion proof");
         try {
-            FamilyPatch Convert(string source) => Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
-                new JObject { ["ParamDrivenSolids"] = profiles[source]["settings"]!["ParamDrivenSolids"]!.DeepClone() }, [], document.GetUnits()).Patch;
+            FamilyPatch Convert(string source) {
+                var settings = (JObject)profiles[source]["settings"]!;
+                return Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
+                    GeometryInput(settings, "ParamDrivenSolids"), CompanyCorpusDefinitions(), document.GetUnits()).Patch;
+            }
 
             var box = Convert("CmdFFManager/profiles/SavedEquip/Constrained Box.json");
             Assert.That(((JObject)box.Patch["forms"]!).Properties().Single().Name, Is.EqualTo("Box"));
@@ -180,14 +203,14 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                          ("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 11, 3, 2)
                      }) {
                 var settings = profiles[source]["settings"]!;
-                var converted = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
-                    ["MakeRefPlaneAndDims"] = settings["MakeRefPlaneAndDims"]!.DeepClone(),
-                    ["ParamDrivenSolids"] = settings["ParamDrivenSolids"]!.DeepClone()
-                }, [], document.GetUnits()).Patch;
+                var converted = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
+                    GeometryInput((JObject)settings, "MakeRefPlaneAndDims", "ParamDrivenSolids"),
+                    CompanyCorpusDefinitions(), document.GetUnits()).Patch;
                 Assert.That(((JObject)converted.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount), source);
                 Assert.That(((JObject)converted.Patch["forms"]!).Count, Is.EqualTo(formCount), source);
                 Assert.That(((JObject)converted.Patch["connectors"]!).Count, Is.EqualTo(connectorCount), source);
-                var native = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch);
+                var native = AddKnownTemplateContext(source,
+                    FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch));
                 Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics.Any(d => d.Code == FamilyModelDiagnosticCodes.InvalidJson), Is.False, source);
             }
             var power = (JObject)Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
@@ -250,6 +273,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var conversion = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
             var patch = conversion.Patch;
             AssertConnectorRule((JObject)profile, patch);
+            if (profilePath.Contains("/WaterFurnace-", StringComparison.Ordinal)) {
+                Assert.That(patch.Patch["parameters"]!["Model"]!["isInstance"], Is.Null,
+                    "Omitted legacy scope must preserve the built-in parameter's current scope.");
+                Assert.That(patch.Patch["parameters"]!["Manufacturer"]!.Value<bool?>("isInstance"), Is.False,
+                    "Explicit legacy scope remains authoritative.");
+            }
             evidence["parameterPatch"] = patch.Patch.DeepClone();
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));

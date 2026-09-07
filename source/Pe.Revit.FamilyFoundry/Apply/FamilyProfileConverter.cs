@@ -54,9 +54,9 @@ public static class FamilyProfileConverter {
                 specs[name] = spec;
                 parameters[name] = new JObject {
                     ["dataType"] = Enum.GetValues(typeof(DataType)).Cast<DataType>().First(t => SetParamMetadata.Spec(t) == spec).ToString(),
-                    ["isInstance"] = local.Value<bool?>("IsInstance") ?? true,
                     ["propertiesGroup"] = SetParamMetadata.Group((string?)local["PropertiesGroup"] ?? "").TypeId
                 };
+                if (local["IsInstance"] is not null) parameters[name]!["isInstance"] = local["IsInstance"]!.DeepClone();
                 if (local["Tooltip"] is { Type: JTokenType.String } tooltip) parameters[name]!["tooltip"] = tooltip.DeepClone();
             }
         }
@@ -605,9 +605,10 @@ public static class FamilyProfileConverter {
             return value;
         }
         if (LegacyLiteralUnits.TryGetValue(name, out var legacy)) {
+            var normalized = NormalizeLegacyLiteral(name, value);
             var legacyUnits = new Units(UnitSystem.Imperial);
             legacyUnits.SetFormatOptions(legacy.Spec, new FormatOptions(legacy.Unit));
-            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, value, out var legacyRaw))
+            if (!UnitFormatUtils.TryParse(legacyUnits, legacy.Spec, normalized, out var legacyRaw))
                 throw new InvalidOperationException($"Legacy literal cannot resolve as {legacy.Spec.TypeId} in {legacy.Unit.TypeId}: {name}={value}");
             if (spec == SpecTypeId.Number)
                 return UnitUtils.ConvertFromInternalUnits(legacyRaw, legacy.Unit).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
@@ -641,6 +642,19 @@ public static class FamilyProfileConverter {
     private static void RejectUnknown(JObject value, string path, params string[] allowed) {
         var unknown = value.Properties().Select(property => property.Name).Except(allowed, StringComparer.Ordinal).ToList();
         if (unknown.Count > 0) throw new InvalidOperationException($"{path} has unknown field(s): {string.Join(", ", unknown)}.");
+    }
+
+    private static string NormalizeLegacyLiteral(string name, string value) {
+        var pattern = name switch {
+            "PE_G___Weight" => @"^(?<value>[0-9]+(?:\.[0-9]+)?) lbs$",
+            "PE_M_Fan_ExternalStaticPressure" => "^(?<value>[0-9]+(?:\\.[0-9]+)?)\\\"(?: w\\.g\\.)?$",
+            _ => throw new InvalidOperationException($"No legacy literal grammar is registered for '{name}'.")
+        };
+        var match = System.Text.RegularExpressions.Regex.Match(value, pattern,
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if (!match.Success)
+            throw new InvalidOperationException($"Legacy literal does not match the known alias grammar: {name}={value}");
+        return match.Groups["value"].Value;
     }
 
     public static FamilyPatch ExportSharedMappings(MapParamsSettings settings,
