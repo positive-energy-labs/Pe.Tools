@@ -23,11 +23,14 @@ R25.Tests compile passes, and ScriptPolicyAnalyzerTests pass 3/3 deterministic. 
 execution remains owed. `64c9239` fixes empty explicit rename sources; native proof is owed.
 `ae8021f` exposes curve and alignment diagnostics without masking either alignment attempt.
 
-The user-supplied `close-0907-review/SYNTHESIS.md` reviews takeoffs/Partition, not FF.
-Its transferable closure checks are actual-native versus reported results, mutation/replay
-guards, save/reopen persistence, and proof pinned to executed bytes. No takeoffs finding is
-adopted as an FF defect without tracing the FF path. Final simplification must redistill state,
-contracts, compilers and serialization while retaining all features and native acceptance.
+Final simplification must redistill state, contracts, compilers and serialization while
+retaining all features and native acceptance. The takeoffs review was sent here by mistake
+and is outside this effort, as corrected by the user.
+
+Latest integration `bf9f321` includes pressure/weight literal conversion, legacy plane/dimension
+conversion, and existing execution options beside the desired patch. R25.Tests compile passes
+(0 errors, 120 warnings); these changes still await native proof. The solids conversion and
+electrical normalization design are the current converter frontier.
 
 ## Completion contract
 
