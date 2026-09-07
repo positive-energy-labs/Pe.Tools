@@ -116,13 +116,15 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 FamilyFoundryMatrixFixtureBuilder.SourceText,
                 FamilyFoundryMatrixFixtureBuilder.SourceUnsetText,
                 FamilyFoundryMatrixFixtureBuilder.SourceInteger,
-                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension
+                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension,
+                FamilyFoundryMatrixFixtureBuilder.SourceArrayCount
             ]),
             ["hasValues"] = NativeMatrixHasValues(document, [
                 FamilyFoundryMatrixFixtureBuilder.SourceText,
                 FamilyFoundryMatrixFixtureBuilder.SourceUnsetText,
                 FamilyFoundryMatrixFixtureBuilder.SourceInteger,
-                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension
+                FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension,
+                FamilyFoundryMatrixFixtureBuilder.SourceArrayCount
             ])
         });
 
@@ -178,7 +180,19 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                     "The baseline control mutation must remain observable after save, reopen, load, and family edit.");
                 Assert.That(JToken.DeepEquals(afterLoad["hasValues"], afterArray["hasValues"]), Is.True);
             }
-            AssertArrayProbe(familyDocument);
+            var arrayEvidence = NativeArrayProbe(familyDocument);
+            File.WriteAllText(Path.Combine(outputDirectory,
+                $"matrix-array-census-{(selectFirstTypeForArrayCreate ? "first-type" : "baseline")}.json"),
+                arrayEvidence.ToString());
+            Assert.Multiple(() => {
+                Assert.That(arrayEvidence.Value<string>("label"),
+                    Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount));
+                Assert.That(arrayEvidence.Value<int>("numMembers"),
+                    Is.EqualTo(arrayEvidence["labelValuesByType"]![arrayEvidence.Value<string>("currentType")!]!.Value<int>()),
+                    "Installed API semantics require the array member count to be associated with its integer label value.");
+                Assert.That(arrayEvidence["originalMemberIds"]!.Concat(arrayEvidence["copiedMemberIds"]!)
+                    .Select(item => item.Value<bool>("exists")), Is.All.True);
+            });
         } finally {
             var evidencePath = Path.Combine(outputDirectory,
                 $"matrix-seed-boundaries-{(selectFirstTypeForArrayCreate ? "first-type" : "baseline")}.json");
@@ -618,25 +632,35 @@ public sealed class FamilyFoundryMatrixFixtureTests {
                 Assert.That(row.Value<int>(FamilyFoundryMatrixFixtureBuilder.SourceInteger), Is.EqualTo(index + 2));
                 Assert.That(row.Value<double>(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension),
                     Is.EqualTo(.5 + index).Within(1e-9));
+                Assert.That(row.Value<int>(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount), Is.EqualTo(index + 2));
                 Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceText), Is.True);
                 Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceInteger), Is.True);
                 Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceRadialDimension), Is.True);
+                Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount), Is.True);
                 Assert.That(hasValue.Value<bool>(FamilyFoundryMatrixFixtureBuilder.SourceUnsetText), Is.False);
                 Assert.That(row[FamilyFoundryMatrixFixtureBuilder.SourceUnsetText]!.Type, Is.EqualTo(JTokenType.Null));
             });
         }
     }
 
-    private static void AssertArrayProbe(Document document) {
+    private static JObject NativeArrayProbe(Document document) {
         var array = new FilteredElementCollector(document).OfClass(typeof(LinearArray)).Cast<LinearArray>().Single();
-        Assert.Multiple(() => {
-            Assert.That(array.NumMembers, Is.EqualTo(3));
-            Assert.That(array.Label?.Definition.Name, Is.EqualTo(FamilyFoundryMatrixFixtureBuilder.SourceArrayCount));
-            Assert.That(array.GetOriginalMemberIds(), Has.Count.EqualTo(1));
-            Assert.That(array.GetCopiedMemberIds(), Has.Count.EqualTo(1));
-            Assert.That(array.GetOriginalMemberIds().Select(document.GetElement), Is.All.Not.Null);
-            Assert.That(array.GetCopiedMemberIds().Select(document.GetElement), Is.All.Not.Null);
-        });
+        var manager = document.FamilyManager;
+        var label = array.Label ?? throw new InvalidOperationException("The persisted array has no label.");
+        JArray Members(IEnumerable<ElementId> ids) => new(ids.Select(id => new JObject {
+            ["id"] = id.Value(),
+            ["exists"] = document.GetElement(id) is not null,
+            ["kind"] = document.GetElement(id)?.GetType().Name
+        }));
+        return new JObject {
+            ["numMembers"] = array.NumMembers,
+            ["label"] = label.Definition.Name,
+            ["currentType"] = manager.CurrentType?.Name,
+            ["labelValuesByType"] = new JObject(manager.Types.Cast<FamilyType>().Select(type =>
+                new JProperty(type.Name, type.HasValue(label) ? type.AsInteger(label) : null))),
+            ["originalMemberIds"] = Members(array.GetOriginalMemberIds()),
+            ["copiedMemberIds"] = Members(array.GetCopiedMemberIds())
+        };
     }
 
     private static JObject ExpectedTargetMatrix() => ExpectedMatrix((index, row) => {
