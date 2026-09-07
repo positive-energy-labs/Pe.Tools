@@ -303,7 +303,9 @@ public enum RefStrength {
 }
 
 /// <summary>
-///     One reference line (`ModelCurve` with `IsReferenceLine`), keyed by its Name, drawn on work plane
+///     One reference line (`ModelCurve` with `IsReferenceLine`), keyed `line-&lt;n&gt;` in document order
+///     (RULING kaitpw 2026-09-06; Revit gives a reference line no user name, so the key is positional and
+///     the scheme is a placeholder — see `FamilyModelCapturer.RefLines`), drawn on work plane
 ///     <see cref="On" /> from the intersection of two crossing planes. With <see cref="Angle" /> it is the
 ///     rotation hinge: a labeled angular dimension from <see cref="AngleFrom" /> (`MakeRefLines`, live-proven).
 ///     A capture noun first: puck-style families roundtrip honestly. Its end work plane is addressable as

@@ -47,7 +47,7 @@ public sealed class FamilyModelContractTests {
     [TestCase(8, """{"parameters":{"W":{"dataType":"Length"}},"types":{"S":{"W":"12 furlongs"}}}""", "value-datatype-mismatch")]
     [TestCase(9, """{"dimensions":{"d":{"between":["ThisPlaneDoesNotExist","Center (Left/Right)"],"locked":"1in"}}}""", "unknown-reference")]
     [TestCase(10, """{"connectors":{"c":{"domain":"Duct","systemType":"SupplyAir","on":"AlsoFake","at":["Center (Left/Right)","Center (Front/Back)"]}}}""", "unknown-reference")]
-    [TestCase(11, """{"refLines":{"l":{"on":"Ref. Level","from":["Center (Left/Right)","Center (Left/Right)"],"length":"1in"}}}""", "refline-from-parallel")]
+    [TestCase(11, """{"refLines":{"line-1":{"on":"Ref. Level","from":["Center (Left/Right)","Center (Left/Right)"],"length":"1in"}}}""", "refline-from-parallel")]
     [TestCase(15, """{"parameters":{"n":{"dataType":"Integer","value":-7}},"nested":{"m":{"family":"f","type":"t","host":"Ref. Level"}},"arrays":{"a":{"member":"m","direction":"PlusY","label":"param:n","moveTo":"Last","spacingPlane":"Center (Front/Back)"}}}""", "array-count-below-two")]
     [TestCase(17, """{"connectors":{"c":{"domain":"Duct","systemType":"NotAnActualSystemType","on":"Ref. Level","at":["Center (Left/Right)","Center (Front/Back)"]}}}""", "invalid-json")]
     [TestCase(18, """{"connectors":{"c":{"domain":"Duct","systemType":"SupplyAir","on":"Ref. Level","at":["Center (Left/Right)","Center (Front/Back)"],"flowDirection":"Sideways"}}}""", "invalid-json")]
@@ -60,6 +60,8 @@ public sealed class FamilyModelContractTests {
     [TestCase(26, """{"parameters":{"S":{"shared":true,"dataType":"Length"}}}""", "shared-owns-datatype")]
     [TestCase(27, """{"parameters":{"W":{"value":"1in"}}}""", "required")]
     [TestCase(28, """{"coverage":{"frames":"Read"}}""", "coverage-section-unknown")]
+    // kaitpw rulings 2026-09-06: reference lines key positionally.
+    [TestCase(101, """{"refLines":{"conn swing (left)":{"on":"Ref. Level","from":["Center (Left/Right)","Center (Front/Back)"],"length":"1in"}}}""", "refline-key-positional")]
     public void Silent_error_is_caught(int probe, string body, string code) {
         var json = body.Contains("\"family\":{") ? body : Doc(body);
         var result = FamilyModelJson.Parse(json);

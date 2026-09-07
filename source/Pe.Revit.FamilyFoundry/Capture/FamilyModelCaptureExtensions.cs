@@ -150,13 +150,25 @@ internal sealed class FamilyModelCapturer {
         return (datums, planes);
     }
 
+    /// <summary>
+    ///     RULING (kaitpw, 2026-09-06): a reference line keys as `line-&lt;n&gt;` in document order.
+    ///     Revit gives a reference line no user name. `Element.Name` of a reference line is its line STYLE,
+    ///     for example `Reference Lines`. Every reference line in a family therefore reads the same name,
+    ///     and a name cannot be the key.
+    ///     Capture numbers the reference lines in the order the document returns them, and writes `line-1`,
+    ///     `line-2`, and so on. The author writes the same keys. Capture also records each reference line as
+    ///     `unmodeled` with reason `PlaneNotNamed`, because the key is a position and not a name.
+    ///     This naming scheme is a PLACEHOLDER. A positional key changes when the author adds a reference
+    ///     line before an existing one, and the diff then reports every later reference line as changed.
+    ///     Replace this scheme when Revit gives a reference line a stable user name, or when the reconciler
+    ///     keys a reference line on its own structure.
+    /// </summary>
     private Dictionary<string, FamilyModelRefLine> RefLines(ISet<string> known) {
         var result = new Dictionary<string, FamilyModelRefLine>(StringComparer.Ordinal);
         var n = 0;
         foreach (var line in this._refLines) {
             var name = $"line-{++n}";
             this._planeName[line.Id] = name;
-            // A reference line has no user name (Element.Name is its line style); the key is positional.
             this.Add(UnmodeledReason.PlaneNotNamed, $"$.refLines.{name}", ("element", "ModelCurve"), ("style", line.Name ?? ""));
             var on = line.SketchPlane?.Name ?? string.Empty;
             var from = this._alignments

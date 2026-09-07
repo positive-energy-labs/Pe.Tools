@@ -20,6 +20,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string SeedIsLiteral = "seed-is-literal";
     public const string UnknownReference = "unknown-reference";
     public const string InvalidReference = "invalid-reference";
+    public const string RefLineKeyPositional = "refline-key-positional";
     public const string RefLineFromTwoPlanes = "refline-from-two-planes";
     public const string RefLineFromParallel = "refline-from-parallel";
     public const string AngleNeedsAngleFrom = "angle-needs-angle-from";
@@ -82,6 +83,10 @@ public static class FamilyModelValidator {
             if (rp.At.IsParameter) d.Add(new(FamilyModelDiagnosticCodes.SeedIsLiteral, $"$.refPlanes.{name}.at", "The seed is a literal; a parameter drives a plane through a labeled dimension."));
         foreach (var (name, rl) in m.RefLines) {
             var path = $"$.refLines.{name}";
+            // RULING (kaitpw, 2026-09-06): a reference line has no Revit name, so its key is positional.
+            if (!RefLineKey.IsMatch(name))
+                d.Add(new(FamilyModelDiagnosticCodes.RefLineKeyPositional, path,
+                    $"'{name}' is not a positional reference line key. Revit gives a reference line no name, so capture keys reference lines line-1, line-2, … in document order. Write line-<n>."));
             Plane(rl.On, $"{path}.on", planes, d);
             if (rl.From.Count != 2) d.Add(new(FamilyModelDiagnosticCodes.RefLineFromTwoPlanes, $"{path}.from", "Exactly two plane names."));
             foreach (var (f, i) in rl.From.Select((f, i) => (f, i))) Plane(f, $"{path}.from[{i}]", planes, d);
@@ -244,6 +249,8 @@ public static class FamilyModelValidator {
     private static void Forbid(string path, List<FamilyModelDiagnostic> d, params (string Slot, bool Present)[] slots) {
         foreach (var (slot, present) in slots) if (present) d.Add(new(FamilyModelDiagnosticCodes.SlotNotLegalForKind, $"{path}.{slot}", $"{slot} is not a slot of this kind."));
     }
+
+    private static readonly Regex RefLineKey = new(@"^line-[1-9][0-9]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static bool Parallel(IReadOnlyDictionary<string, Axis> normals, string a, string b) =>
         normals.TryGetValue(a, out var na) && normals.TryGetValue(b, out var nb) && (int)na / 2 == (int)nb / 2;

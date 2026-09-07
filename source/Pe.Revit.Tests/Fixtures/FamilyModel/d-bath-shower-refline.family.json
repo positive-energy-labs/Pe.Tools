@@ -25,16 +25,16 @@
     "conn-z":  { "between": ["Ref. Level", "conn level"], "label": "_conn z offset", "view": "Front" }
   },
   "refLines": {
-    "conn swing (left)":  { "on": "conn level", "from": ["conn (left)",  "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" },
-    "conn swing (right)": { "on": "conn level", "from": ["conn (right)", "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" }
+    "line-1": { "on": "conn level", "from": ["conn (left)",  "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" },
+    "line-2": { "on": "conn level", "from": ["conn (right)", "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" }
   },
   "nested": {
     "conn-cold": {
-      "family": "stub", "type": "default", "host": "line:conn swing (left).end",
+      "family": "stub", "type": "default", "host": "line:line-1.end",
       "associate": { "_diameter": "param:_conn size" }
     },
     "conn-hot": {
-      "family": "stub", "type": "default", "host": "line:conn swing (right).end",
+      "family": "stub", "type": "default", "host": "line:line-2.end",
       "associate": { "_diameter": "param:_conn size" },
       "visible": "param:_hot conn visible"
     }
