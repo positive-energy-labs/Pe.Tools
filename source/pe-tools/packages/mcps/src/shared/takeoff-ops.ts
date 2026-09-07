@@ -179,6 +179,7 @@ function room(region: LiveRegion): WorldRoom {
     resolutions?: Resolution[];
     flags?: string[];
     r10?: WorldRoom["r10"];
+    partition?: { floorZ?: number | null; ceilingZ?: number | null };
   };
   const runId = value.RunId ?? value.runId;
   const sourceRoomId = value.SourceRoomId ?? value.sourceRoomId;
@@ -192,7 +193,10 @@ function room(region: LiveRegion): WorldRoom {
     name: sourceRoomId,
     type: (region.roomType || "hall") as WorldRoom["type"],
     sqft: Math.round(region.sqft),
-    ceilingFt: 0,
+    ceilingFt:
+      value.partition?.floorZ != null && value.partition.ceilingZ != null
+        ? value.partition.ceilingZ - value.partition.floorZ
+        : 0,
     label: centroid(region.outer),
     flags: [
       ...(value.flags ?? []).filter(

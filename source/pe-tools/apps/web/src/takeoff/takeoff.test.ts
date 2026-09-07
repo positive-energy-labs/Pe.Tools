@@ -228,7 +228,12 @@ describe("typed snapshot projection", () => {
           regionsByZone: {
             "zone-guid": [
               {
-                ...region(43, provenance(',"partition":{"holes":[[90,90,91,90,91,91]]}')),
+                ...region(
+                  43,
+                  provenance(
+                    ',"partition":{"floorZ":1413,"ceilingZ":1421,"holes":[[90,90,91,90,91,91]]}',
+                  ),
+                ),
                 roomType: "hall",
                 holes: [square(4.123456789012345, 4, 2)],
               },
@@ -263,6 +268,7 @@ describe("typed snapshot projection", () => {
       square(4.123456789012345, 4, 2),
     ]);
     expect(snapshot.world.zones[0]!.rooms[0]!.holes).toEqual([square(4.123456789012345, 4, 2)]);
+    expect(snapshot.world.zones[0]!.rooms[0]!.ceilingFt).toBe(8);
     expect(snapshot.world.zones[0]!.residues[0]!.holes).toEqual([square(2, 2, 1)]);
     const markup = renderToStaticMarkup(
       createElement(ZonePeek, {

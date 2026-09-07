@@ -212,7 +212,7 @@ export const partitionReviewSchema = z.object({
       id: z.string(),
       kind: z.enum(["room", "residue"]),
       disposition: z.enum(["accepted", "held", "void", "excluded"]).nullable(),
-      reason: z.string().nullable(),
+      reason: z.string().nullish().default(null),
       sqft: z.number().nullable(),
       label: pointSchema.nullable(),
       loops: z.array(z.array(pointSchema)),
