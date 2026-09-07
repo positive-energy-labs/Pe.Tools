@@ -40,7 +40,10 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                 if (spec.LossMethod is { } lm) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM))?.Set((int)(DuctLossMethodType)Enum.Parse(typeof(DuctLossMethodType), lm.ToString()));
                 if (spec.Angle is { Degrees: { } deg }) _ = connector.get_Parameter(BuiltInParameter.CONNECTOR_ANGLE)?.Set(deg * Math.PI / 180);
                 foreach (var (target, source) in spec.Associate ?? []) {
-                    var p = connector.LookupParameter(target) ?? throw new InvalidOperationException($"Connector has no parameter '{target}'.");
+                    var p = (spec.Domain == ConnectorDomain.Pipe && target == "Fixture Units"
+                        ? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FIXTURE_UNITS_PARAM)
+                        : connector.LookupParameter(target))
+                        ?? throw new InvalidOperationException($"Connector has no parameter '{target}'.");
                     FamilyRefs.Associate(doc, p, source, logs, slug);
                 }
                 logs.Add(new LogEntry(slug).Success($"{spec.Domain} {spec.SystemType} on {spec.On} at {spec.At[0]} × {spec.At[1]}."));
