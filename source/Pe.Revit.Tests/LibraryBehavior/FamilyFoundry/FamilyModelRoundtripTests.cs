@@ -333,7 +333,8 @@ public sealed class FamilyModelRoundtripTests {
         Document? document = null;
         try {
             var source = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json")));
-            source["connectors"] = new JObject();
+            foreach (var section in new[] { "connectors", "forms", "nested", "dimensions", "arrays" })
+                source[section] = new JObject();
             var parsed = FamilyModelJson.Parse(source.ToString(Newtonsoft.Json.Formatting.None));
             if (parsed.Value is null || parsed.Diagnostics.Count != 0)
                 throw new InvalidOperationException(string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}")));
