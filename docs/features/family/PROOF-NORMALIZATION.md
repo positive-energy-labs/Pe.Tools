@@ -570,3 +570,15 @@ Validation:
 - The broader `FamilyModelContractTests` class run was 78 passed, 1 failed at the pre-existing `c-bath-shower.family.json` `dimensions.conn-z.view = "Placement Side"` fixture/parser mismatch. This slice does not alter dimensions, views, or that fixture.
 
 Ranks 2-5 from the contract census remain deferred until native behavior stabilizes. No Revit or product runtime was started or mutated.
+
+## Independent native array seeds - 2026-09-07
+
+Wave 13 showed that the first GRD linear array consumes the sole placed `vane`, leaving the second array to find a member that is already owned by an array and therefore is not arrayable. Array-referenced `nested` entries now act as reusable placement specifications. `FamilyReconciler` determines that ownership from every desired array, omits those entries from the standalone `PlaceNested` operation, and `MakeArrays` calls the same extracted placement helper once per array before `LinearArray.Create`. Each seed therefore receives the authored host, named-reference alignments, and parameter associations independently; no element metadata, skip guard, family/type search, or parallel placement implementation was added.
+
+Dependency invalidation now seeds the cascade with changed or deleted nested entries as well as planes, lines, and datums. Changing the reusable vane's host, alignments, or associations marks every desired array referencing that key `Recreate`; the existing deletion phase removes the old arrays before `MakeArrays` places their new seeds. A deterministic `b-grd` regression mutates the vane host and association independently while leaving both array objects unchanged, then requires both arrays in the rebuild operation and forbids a stray `PlaceNested` operation.
+
+A highest-surface native test based on `b-grd.family.json` gives the back and front arrays distinct count parameters (3 and 4) and explicit pitches (3in and 5in). It asserts two distinct original seed ids, native member counts, independent Y spans, and retained `_vane length` / `_vane thickness` associations. The test compiled but was not executed because native runtime remains proof-owner controlled.
+
+Behavior boundary: a `nested` key referenced by any array no longer also creates a standalone instance. This matches the captured GRD contract, where array copies are not separate nested entries and the single `vane` key is shared by both arrays. The current model has no syntax requesting both a reusable array seed and an additional standalone placement from the same key; none of the authored fixtures express that intent.
+
+Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests -v minimal` passed with 124 warnings and 0 errors. Raw log: `.artifacts/runs/fresh-20260907-arrays/compile-debug-r25-tests.log`. No Revit/session/runtime command ran, and circle, wall, and cap sources were untouched.
