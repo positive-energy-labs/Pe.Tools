@@ -9,10 +9,12 @@ namespace Pe.Revit.Tests;
 public sealed class FamilyModelRoundtripTests {
     [Test]
     public void Reapply_moves_a_named_plane_in_the_same_family(UIApplication ui) {
-        var desired = FamilyModelJson.Parse("""
+        var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Plane reapply", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
-              "types": { "Standard": {} }, "refPlanes": { "Service clearance": { "normal": "+X", "at": "1ft" } } }
-            """).Value!;
+              "types": { "Standard": {} }, "refPlanes": { "Service clearance": { "normal": "PlusX", "at": "1ft" } } }
+            """);
+        Assert.That(parsed.Diagnostics, Is.Empty);
+        var desired = parsed.Value!;
         Document? document = null;
         try {
             var built = FamilyModelBuild.Build(ui.Application, desired);
