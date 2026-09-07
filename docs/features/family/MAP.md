@@ -25,6 +25,10 @@ shared capture failure boundary; no constraints were removed. Two timed-out elec
 have recovered terminal native results for14 and27 families. AprilAire800 has a reviewed clean
 plan for3813845; bounded Apply/capture/no-op reapply follows the current queue. Historical request
 and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
+Plan6 later exposed destructive native-copy warnings at journal3673 10:06:33: dimensions could
+not be copied and elements were deleted. That affected capture cannot certify safe Apply even
+if its current Plan returns no refusals. N must distinguish this from the known constraint warning
+at the shared EditFamily boundary; P preserves the exact affected-family evidence and never loads it back.
 
 NoTransaction script-owned rollback plus public FF Build passed in controlled915790e. Browser
 proved the shared Instances selector repair6eb667d. Explicit scope parser d7016d4 passes route
