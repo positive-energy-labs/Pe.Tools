@@ -28,7 +28,8 @@ internal static class Ingest {
     /// spike measured the managed skip at 2.2 s warm over 309 k elements, which the ingest can pay.</summary>
     public static bool Allowed(Element e) {
         var c = e.Category;
-        return c is not null && c.CategoryType == CategoryType.Model && !Denied.Contains(c.Id.Value());
+        return !e.ViewSpecific && e is not SpatialElement
+            && c is not null && c.CategoryType == CategoryType.Model && !Denied.Contains(c.Id.Value());
     }
 
     /// <summary>
@@ -79,7 +80,12 @@ internal static class Ingest {
             e.Category?.Name ?? "<none>",
             sawSolid ? PrimKind.Solid : PrimKind.Mesh,
             box,
-            count);
+            count,
+            HeightRole: e.Category?.ToBuiltInCategory() switch {
+                BuiltInCategory.OST_Floors => HeightRole.Floor | HeightRole.Overhead,
+                BuiltInCategory.OST_Ceilings or BuiltInCategory.OST_Roofs => HeightRole.Overhead,
+                _ => HeightRole.None
+            });
     }
 
     /// <summary>

@@ -180,7 +180,18 @@ public static class TakeoffAtlas
             residues.Select(r => new TakeoffDetectedResidue(
                 r.Id, r.Reason.ToString(), r.RawSqft,
                 [r.LabelX, r.LabelY], r.Polygon)).ToList(),
-            ReadLiveRegions(doc, view, request.ZoneGuid));
+            ReadLiveRegions(doc, view, request.ZoneGuid),
+            new TakeoffPartitionReview(
+                new TakeoffReviewSource(request.RunId, answer.Stamp.HostDocumentKey, request.ZoneGuid.ToString("D")),
+                new TakeoffReviewZone(request.ZoneGuid.ToString("D"), request.ZoneName,
+                    Boundaries((FilledRegion)doc.GetElement(request.ZoneRegion.ToElementId()))),
+                answer.Rooms.Select(r => new TakeoffReviewShape(
+                    $"R{r.Index + 1:D2}",
+                    r.Disposition is Pe.Revit.Partition.Disposition.Accepted or Pe.Revit.Partition.Disposition.Held ? "room" : "residue",
+                    r.Disposition.ToString().ToLowerInvariant(), r.Reason, r.AreaSqft,
+                    [r.LabelX, r.LabelY],
+                    new[] { r.Loop }.Concat(r.Holes ?? []).Select(loop => (IReadOnlyList<double[]>)Outer(loop)).ToList()))
+                    .ToList()));
     }
 
     private static List<double[]> Outer(double[] loop)

@@ -144,5 +144,5 @@ internal sealed class Partition {
 
     public Handle HandleFor(PrimRow row) => new(
         this.DocumentKey, row.ElementId, row.UniqueId, this.LinkInstanceId, row.Category, row.Kind,
-        row.Layer, row.Extrusion);
+        row.Layer, row.Extrusion, row.HeightRole);
 }

@@ -110,6 +110,7 @@ public static class Reasons {
     public const string Unbacked = "unbacked";
     public const string ZoneEdgeOnly = "zone-edge-only";
     public const string NoFloor = "no-floor";
+    public const string NoCeiling = "no-ceiling";
     public const string LowHeadroom = "low-headroom";
     public const string TooSmall = "too-small";
     public const string TooNarrow = "too-narrow";

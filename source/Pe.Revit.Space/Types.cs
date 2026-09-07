@@ -9,6 +9,12 @@ public enum PrimKind { Solid, Mesh, Curve2D }
 /// <summary>Which document a partition reads. One partition per source.</summary>
 public enum SourceKind { Host, RevitLink, IfcLink }
 
+/// <summary>Architectural height authority, independent of collision geometry. None means unclassified.</summary>
+[Flags]
+public enum HeightRole { None = 0, Floor = 1, Overhead = 2 }
+
+public enum ProbePurpose { Obstructions, RoomHeights }
+
 /// <summary>
 ///     One triangle in host internal feet. 40 bytes.
 ///     ponytail: float vertices, so a stored coordinate quantizes to about 1.5e-4 ft at 1300 ft from
@@ -49,7 +55,8 @@ public sealed record PrimRow(
     Aabb Box,
     int Triangles,
     string? Layer = null,
-    Extrusion? Extrusion = null
+    Extrusion? Extrusion = null,
+    HeightRole HeightRole = HeightRole.None
 );
 
 /// <summary>One row per partition. Carried inside every <see cref="Stamp" />.</summary>
@@ -101,7 +108,8 @@ public sealed record Handle(
     string Category,
     PrimKind Kind,
     string? Layer = null,
-    Extrusion? Extrusion = null
+    Extrusion? Extrusion = null,
+    HeightRole HeightRole = HeightRole.None
 );
 
 /// <summary>

@@ -270,7 +270,8 @@ public static class Solve {
             else if (i >= conflictStart) { d = Disposition.Held; reason = "native-overlap"; }
             else if (noEnclosure is not null && proposals[i] is null) { d = Disposition.Held; reason = noEnclosure; }
             else if (proposals[i] is null && (own.IsEmpty || own.Length <= SampleFt)) { d = Disposition.Held; reason = Reasons.ZoneEdgeOnly; }
-            else if (floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt) { d = Disposition.Void; reason = Reasons.NoFloor; }
+            else if (floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt) { d = Disposition.Held; reason = Reasons.NoFloor; }
+            else if (ceiling is null) { d = Disposition.Held; reason = Reasons.NoCeiling; }
             else if (ceiling is { } cz && cz - floor!.Value < knobs.MinHeadroomFt) { d = Disposition.Void; reason = Reasons.LowHeadroom; }
             else if (g.Area < knobs.MinRoomSqft) { d = Disposition.Held; reason = Reasons.TooSmall; }
             else if (g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty) { d = Disposition.Held; reason = Reasons.TooNarrow; }

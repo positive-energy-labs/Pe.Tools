@@ -30,7 +30,7 @@ public static class Verbs {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var input = Capture(document, request);
         ProbeAnswer Probe(double x, double y) {
-            var answer = SpaceVerbs.Probe(document, new XYZ(x, y, input.LevelZ + KneeLoFt), null);
+            var answer = SpaceVerbs.Probe(document, new XYZ(x, y, input.LevelZ + KneeLoFt), purpose: ProbePurpose.RoomHeights);
             RequireStamp(answer.Stamp, input.Knee.Stamp, document.GetDocumentKey(), "probe");
             return answer;
         }

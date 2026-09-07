@@ -5036,6 +5036,7 @@ export namespace TakeoffsPartition {
       rooms: TakeoffDetectedRoom[];
       residues: TakeoffDetectedResidue[];
       regions: TakeoffLiveRegion[];
+      review?: null | TakeoffPartitionReview;
     }
     export interface TakeoffPromotionFacts {
       accepted: number;
@@ -5066,6 +5067,30 @@ export namespace TakeoffsPartition {
       roomType: string;
       blob: string;
       outer: number[][];
+    }
+    export interface TakeoffPartitionReview {
+      source: TakeoffReviewSource;
+      zone: TakeoffReviewZone;
+      shapes: TakeoffReviewShape[];
+    }
+    export interface TakeoffReviewSource {
+      runId: string;
+      documentKey: string;
+      scopeKey: string;
+    }
+    export interface TakeoffReviewZone {
+      key: string;
+      name: string;
+      loops: number[][][];
+    }
+    export interface TakeoffReviewShape {
+      id: string;
+      kind: string;
+      disposition?: null | string;
+      reason?: null | string;
+      sqft?: null | number;
+      label?: number[] | null;
+      loops: number[][][];
     }
   }
 }

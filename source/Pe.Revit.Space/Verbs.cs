@@ -41,7 +41,8 @@ public sealed record ProbeAnswer(
     ProbeHit? Floor,
     ProbeHit? Ceiling,
     double MaxDistanceFt,
-    double Ms
+    double Ms,
+    ProbePurpose Purpose = ProbePurpose.Obstructions
 );
 
 public sealed record CensusBucket(
@@ -332,7 +333,8 @@ public static class Verbs {
         Document document,
         XYZ at,
         Filter? filter = null,
-        double maxDistanceFt = 200.0
+        double maxDistanceFt = 200.0,
+        ProbePurpose purpose = ProbePurpose.Obstructions
     ) {
         filter ??= Filter.Default;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -349,14 +351,19 @@ public static class Verbs {
             var prims = p.Prims;
             bool Wants(int pi) => filter.Wants(prims[pi]);
 
-            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Wants, out var dd, out var ti)
+            bool Floor(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
+                || (prims[pi].HeightRole & HeightRole.Floor) != 0);
+            bool Overhead(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
+                || (prims[pi].HeightRole & HeightRole.Overhead) != 0);
+
+            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Floor, out var dd, out var ti)
                 && (down is null || dd < down.DistanceFt)) {
                 var row = prims[p.Bvh.Triangle(ti).Prim];
                 down = new ProbeHit(p.HandleFor(row), Math.Round(dd, 6), Math.Round(at.Z - dd, 6));
                 _ = cats.Add(row.Category);
             }
 
-            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, 1), maxDistanceFt, Wants, out var du, out var ui)
+            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, 1), maxDistanceFt, Overhead, out var du, out var ui)
                 && (up is null || du < up.DistanceFt)) {
                 var row = prims[p.Bvh.Triangle(ui).Prim];
                 up = new ProbeHit(p.HandleFor(row), Math.Round(du, 6), Math.Round(at.Z + du, 6));
@@ -373,6 +380,6 @@ public static class Verbs {
             down,
             up,
             maxDistanceFt,
-            Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+            Math.Round(sw.Elapsed.TotalMilliseconds, 3), purpose);
     }
 }

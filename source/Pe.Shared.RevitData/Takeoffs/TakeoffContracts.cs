@@ -90,7 +90,18 @@ public sealed record TakeoffPartitionResult(
     IReadOnlyList<string> Failures,
     IReadOnlyList<TakeoffDetectedRoom> Rooms,
     IReadOnlyList<TakeoffDetectedResidue> Residues,
-    IReadOnlyList<TakeoffLiveRegion> Regions);
+    IReadOnlyList<TakeoffLiveRegion> Regions,
+    TakeoffPartitionReview? Review = null);
+
+public sealed record TakeoffPartitionReview(
+    TakeoffReviewSource Source,
+    TakeoffReviewZone Zone,
+    IReadOnlyList<TakeoffReviewShape> Shapes);
+public sealed record TakeoffReviewSource(string RunId, string DocumentKey, string ScopeKey);
+public sealed record TakeoffReviewZone(string Key, string Name, IReadOnlyList<IReadOnlyList<double[]>> Loops);
+public sealed record TakeoffReviewShape(
+    string Id, string Kind, string? Disposition, string? Reason, double? Sqft,
+    double[]? Label, IReadOnlyList<IReadOnlyList<double[]>> Loops);
 
 public sealed record TakeoffResolution(
     string Subject,
