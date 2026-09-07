@@ -1129,6 +1129,17 @@ public static class FamilyModelMacros {
 
     public static IReadOnlyList<FamilyModelDiagnostic> Expand(FamilyModel m) {
         var d = new List<FamilyModelDiagnostic>();
+        // Revit retains connected symbolic loops, not JSON grouping names.
+        foreach (var (name, detail) in m.Details.Where(p => p.Value.Family is null && p.Value.Curves is { Count: > 1 }).ToList()) {
+            var names = Enumerable.Range(1, detail.Curves!.Count).Select(i => $"{name}.loop-{i}").ToList();
+            if (names.Any(m.Details.ContainsKey)) {
+                d.Add(new(FamilyModelDiagnosticCodes.MacroNameCollision, $"$.details.{name}", "Generated loop name is already declared."));
+                continue;
+            }
+            m.Details.Remove(name);
+            for (var i = 0; i < names.Count; i++)
+                m.Details[names[i]] = new FamilyModelDetail { View = detail.View, Curves = [detail.Curves[i]], Visible = detail.Visible, Align = detail.Align };
+        }
         foreach (var (slug, f) in m.Forms.Where(f => f.Value.Kind != FormKind.Extrusion).ToList()) {
             var path = $"$.forms.{slug}";
             var prism = f.Kind == FormKind.Prism;

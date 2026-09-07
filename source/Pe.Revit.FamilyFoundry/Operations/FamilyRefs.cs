@@ -1,4 +1,5 @@
 using Pe.Shared.RevitData.Families;
+using Pe.Revit.Extensions.FamDocument;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -9,6 +10,48 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 /// </summary>
 internal static class FamilyRefs {
     private const double PlaneExtent = 8.0;
+
+    internal static IEnumerable<(Curve Curve, FamilyModelSketchCurve Spec)> SketchCurves(Document doc, Plane plane, FamilyModelLoop loop) {
+        var lines = loop.Curves.Where(c => c.Kind == CurveKind.Line).ToList();
+        for (var i = 0; i < lines.Count; i++) {
+            var on = Resolve(doc, lines[i].On!).Plane;
+            var start = Intersect(plane, Resolve(doc, lines[(i + lines.Count - 1) % lines.Count].On!).Plane, on);
+            var end = Intersect(plane, on, Resolve(doc, lines[(i + 1) % lines.Count].On!).Plane);
+            yield return (Line.CreateBound(start, end), lines[i]);
+        }
+        foreach (var circle in loop.Curves.Where(c => c.Kind == CurveKind.Circle)) {
+            var center = Intersect(plane, Resolve(doc, circle.Center![0]).Plane, Resolve(doc, circle.Center[1]).Plane);
+            var radius = Feet(doc, circle.Diameter!.Value) / 2;
+            var normal = plane.Normal.Normalize();
+            var x = (Math.Abs(normal.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ).CrossProduct(normal).Normalize();
+            yield return (Ellipse.CreateCurve(center, radius, radius, x, normal.CrossProduct(x), -Math.PI, Math.PI), circle);
+        }
+    }
+
+    internal static void ConstrainSketchCurve(FamilyDocument doc, View view, CurveElement curve, FamilyModelSketchCurve spec) {
+        if (spec.On is { } on) {
+            Align(doc, view, curve.GeometryCurve.Reference, Resolve(doc, on).Reference);
+            return;
+        }
+        var center = curve.CenterPointReference ?? throw new InvalidOperationException("Circle has no center reference.");
+        foreach (var plane in spec.Center!) Align(doc, view, Resolve(doc, plane).Reference, center);
+        if (curve.GeometryCurve is not Arc arc || arc.Reference is null) throw new InvalidOperationException("Circle has no arc reference.");
+        var dimension = doc.Document.FamilyCreate.NewDiameterDimension(view, arc.Reference, arc.Center + arc.XDirection * arc.Radius * 0.5);
+        if (spec.Diameter?.Parameter is { } label) doc.LabelDimensions([(dimension, Param(doc, label))]);
+        else dimension.IsLocked = true;
+    }
+
+    internal static bool IsCircle(Arc arc) => !arc.IsBound || Math.Abs(arc.Length - 2 * Math.PI * arc.Radius) < 1e-4;
+
+    internal static bool SameCurve(Curve? a, Curve b) {
+        if (a == null || a.GetType() != b.GetType()) return false;
+        if (a is Arc arcA && b is Arc arcB && IsCircle(arcA) && IsCircle(arcB))
+            return arcA.Center.IsAlmostEqualTo(arcB.Center, 1e-4) && Math.Abs(arcA.Radius - arcB.Radius) < 1e-4 &&
+                Math.Abs(Math.Abs(arcA.Normal.DotProduct(arcB.Normal)) - 1) < 1e-4;
+        if (!a.IsBound || !b.IsBound) return false;
+        var (a0, a1, b0, b1) = (a.GetEndPoint(0), a.GetEndPoint(1), b.GetEndPoint(0), b.GetEndPoint(1));
+        return (a0.IsAlmostEqualTo(b0, 1e-4) && a1.IsAlmostEqualTo(b1, 1e-4)) || (a0.IsAlmostEqualTo(b1, 1e-4) && a1.IsAlmostEqualTo(b0, 1e-4));
+    }
 
     public static ReferencePlane? FindPlane(Document doc, string name) =>
         new FilteredElementCollector(doc).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()

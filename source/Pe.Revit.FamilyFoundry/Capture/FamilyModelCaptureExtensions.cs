@@ -95,7 +95,7 @@ internal sealed class FamilyModelCapturer {
             this.Add(UnmodeledReason.ThirdPartyStorage, "$", ("dataStorageElements", Collect<DataStorage>().Count().ToString(CultureInfo.InvariantCulture)));
 
         var coverage = FamilyModel.SectionNames.ToDictionary(s => s, _ => CoverageState.Read, StringComparer.Ordinal);
-        coverage["details"] = CoverageState.NotRead;
+
 
         return new FamilyModel {
             Family = new FamilyModelHeader {
@@ -114,6 +114,7 @@ internal sealed class FamilyModelCapturer {
             Nested = nested,
             Arrays = arrays,
             Connectors = connectors,
+            Details = this.Details(),
             Settings = this.Settings(),
             LookupTables = this.LookupTables(snapshot),
             RoomCalculationPoint = this.RoomCalculationPoint(placement),
@@ -230,7 +231,7 @@ internal sealed class FamilyModelCapturer {
             var names = refs.Select(r => this.NameOf(r)).ToList();
             if (names.Any(x => x == null)) {
                 // A labeled radial/diameter dimension on a sketch curve belongs to its form (forms[].profile).
-                if (label != null && refs.All(r => this._d.GetElement(r.ElementId) is ModelCurve mc && !mc.IsReferenceLine)) continue;
+                if (label != null && refs.All(r => this._d.GetElement(r.ElementId) is CurveElement curve && curve is not ModelCurve { IsReferenceLine: true })) continue;
                 this.Add(UnmodeledReason.DimensionToFace, "$.dimensions",
                     ("label", label ?? ""), ("references", string.Join(" | ", refs.Select(r => this.Describe(r)))));
                 continue;
@@ -250,7 +251,7 @@ internal sealed class FamilyModelCapturer {
                 Label = label,
                 Equality = eq ? true : null,
                 Locked = label == null && !eq && locked ? PortableLength.FromFeet(Math.Round(dim.Value ?? 0, 9)) : null,
-                View = this.StockViewOf(dim, slug)
+                View = this.StockViewOf(dim.View, $"$.dimensions.{slug}.view")
             };
             this._elements.Add(result[slug], [dim.Id]);
         }
@@ -258,15 +259,14 @@ internal sealed class FamilyModelCapturer {
         return result;
     }
 
-    private StockView? StockViewOf(Dimension dim, string slug) {
-        var view = dim.View;
+    private StockView? StockViewOf(View? view, string path) {
         if (view == null) return null;
         var stock = view.Name switch {
             "Ref. Level" => (StockView?)StockView.RefLevel,
             "Front" => StockView.Front, "Back" => StockView.Back, "Left" => StockView.Left, "Right" => StockView.Right,
             _ => null
         };
-        if (stock == null) this.Add(UnmodeledReason.ViewNotStock, $"$.dimensions.{slug}.view", ("view", view.Name));
+        if (stock == null) this.Add(UnmodeledReason.ViewNotStock, path, ("view", view.Name));
         return stock;
     }
 
@@ -295,37 +295,15 @@ internal sealed class FamilyModelCapturer {
             foreach (CurveArray loop in ext.Sketch.Profile) {
                 var portable = new List<FamilyModelSketchCurve>();
                 foreach (Curve curve in loop) {
-                    var mc = curves.FirstOrDefault(c => SameCurve(c.GeometryCurve, curve));
-                    if (curve is Line && mc != null) {
-                        var on = this.LockPlane(mc.Id);
-                        if (on == null) {
-                            this.Add(UnmodeledReason.SketchLineUnlocked, "$.forms", ("name", ext.Name ?? ""),
-                                ("start", Fmt(curve.GetEndPoint(0))), ("end", Fmt(curve.GetEndPoint(1))));
-                            ok = false;
-                            break;
-                        }
-
-                        lockedTo.Add(on);
-                        portable.Add(new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on });
-                    } else if (curve is Arc arc && IsCircle(arc) && mc != null) {
-                        var center = this.CrossingPlanesThrough(arc.Center, arc.Normal);
-                        if (center == null) {
-                            this.Add(UnmodeledReason.SketchLineUnlocked, "$.forms", ("name", ext.Name ?? ""), ("circleCenter", Fmt(arc.Center)));
-                            ok = false;
-                            break;
-                        }
-
-                        var radial = this._dimensions.Where(x => x.References.Cast<Reference>().Any(r => r.ElementId == mc.Id)).Select(SafeLabel).FirstOrDefault(l => l != null);
-                        lockedTo.AddRange(center);
-                        portable.Add(new FamilyModelSketchCurve {
-                            Kind = CurveKind.Circle, Center = center,
-                            Diameter = radial != null ? PortableLength.Parse($"param:{radial}") : PortableLength.FromFeet(Math.Round(arc.Radius * 2, 9))
-                        });
-                    } else {
-                        this.Add(UnmodeledReason.CurveNotLineOrCircle, "$.forms", ("name", ext.Name ?? ""), ("curve", curve.GetType().Name));
+                    var mc = curves.FirstOrDefault(c => FamilyRefs.SameCurve(c.GeometryCurve, curve));
+                    var item = mc is null ? null : this.SketchCurve(mc, "$.forms");
+                    if (item is null) {
+                        if (mc is null) this.Add(UnmodeledReason.CurveNotLineOrCircle, "$.forms", ("reason", "No matching native sketch curve."));
                         ok = false;
                         break;
                     }
+                    if (item.On is { } on) lockedTo.Add(on); else lockedTo.AddRange(item.Center!);
+                    portable.Add(item);
                 }
 
                 if (!ok) break;
@@ -372,6 +350,92 @@ internal sealed class FamilyModelCapturer {
         return result;
     }
 
+    private FamilyModelSketchCurve? SketchCurve(CurveElement element, string path) {
+        if (element.GeometryCurve is Line && this.LockPlane(element.Id) is { } on)
+            return new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on };
+        if (element.GeometryCurve is Arc arc && FamilyRefs.IsCircle(arc) && this.CrossingPlanesThrough(arc.Center, arc.Normal) is { } center) {
+            var label = this._dimensions.Where(d => d.References.Cast<Reference>().Any(r => r.ElementId == element.Id))
+                .Select(SafeLabel).FirstOrDefault(name => name is not null);
+            return new FamilyModelSketchCurve {
+                Kind = CurveKind.Circle, Center = center,
+                Diameter = label is not null ? PortableLength.Parse($"param:{label}") : PortableLength.FromFeet(arc.Radius * 2)
+            };
+        }
+        this.Add(element.GeometryCurve is Line ? UnmodeledReason.SketchLineUnlocked : UnmodeledReason.CurveNotLineOrCircle,
+            path, ("element", element.Id.ToString()), ("curve", element.GeometryCurve.GetType().Name));
+        return null;
+    }
+
+    private Dictionary<string, FamilyModelDetail> Details() {
+        var result = new Dictionary<string, FamilyModelDetail>(StringComparer.Ordinal);
+        foreach (var instance in Collect<FamilyInstance>().Where(f => f.Symbol.Family.FamilyPlacementType == FamilyPlacementType.ViewBased)) {
+            var view = this.StockViewOf(this._d.GetElement(instance.OwnerViewId) as View, "$.details.view");
+            if (view is null) continue;
+            var align = this.InstanceAlignments(instance, "$.details.align");
+            if (align.Count == 0 && PointOf(instance) is { } location && !location.IsAlmostEqualTo(XYZ.Zero)) {
+                this.Add(UnmodeledReason.HingePlaneNotConstructible, "$.details", ("family", instance.Symbol.Family.Name), ("position", Fmt(location)));
+                continue;
+            }
+            var key = Unique(Slug(instance.Symbol.Family.Name), result.ContainsKey);
+            result[key] = new FamilyModelDetail {
+                View = view.Value, Family = instance.Symbol.Family.Name, Type = instance.Symbol.Name,
+                Align = align.Count == 0 ? null : align,
+                Visible = this.Assoc(instance.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))
+            };
+            this._elements.Add(result[key], [instance.Id]);
+        }
+        var pending = Collect<SymbolicCurve>().OrderBy(c => c.Id.Value()).ToList();
+        while (pending.Count > 0) {
+            var first = pending[0];
+            pending.RemoveAt(0);
+            var loop = new List<SymbolicCurve> { first };
+            if (first.GeometryCurve is Line firstLine) {
+                var start = firstLine.GetEndPoint(0);
+                var end = firstLine.GetEndPoint(1);
+                while (!end.IsAlmostEqualTo(start)) {
+                    var next = pending.Where(c => c.GeometryCurve is Line line &&
+                        (line.GetEndPoint(0).IsAlmostEqualTo(end) || line.GetEndPoint(1).IsAlmostEqualTo(end))).ToList();
+                    if (next.Count != 1) break;
+                    var curve = next[0];
+                    pending.Remove(curve);
+                    loop.Add(curve);
+                    end = curve.GeometryCurve.GetEndPoint(curve.GeometryCurve.GetEndPoint(0).IsAlmostEqualTo(end) ? 1 : 0);
+                }
+                if (!end.IsAlmostEqualTo(start)) {
+                    this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "Symbolic lines do not form an unambiguous closed loop."));
+                    continue;
+                }
+            }
+            var curves = loop.Select(curve => this.SketchCurve(curve, "$.details")).ToList();
+            if (curves.Any(curve => curve is null)) continue;
+            var visibility = loop.Select(curve => this.Assoc(curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))).Distinct().ToList();
+            if (visibility.Count != 1) {
+                this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "One connected loop has different curve visibility bindings."));
+                continue;
+            }
+            var view = this.StockViewOf(FamilyRefs.ViewFor(this._d, null, first.SketchPlane.GetPlane().Normal), "$.details.view");
+            if (view is null) continue;
+            var key = Unique("detail", result.ContainsKey);
+            result[key] = new FamilyModelDetail {
+                View = view.Value, Curves = [new FamilyModelLoop { Curves = curves.Select(c => c!).ToList() }], Visible = visibility[0]
+            };
+            this._elements.Add(result[key], loop.Select(curve => curve.Id).ToArray());
+        }
+        return result;
+    }
+
+    private List<FamilyModelAlign> InstanceAlignments(FamilyInstance instance, string path) {
+        var result = new List<FamilyModelAlign>();
+        foreach (var (_, references) in this._alignments.Where(a => a.Refs.Any(r => r.ElementId == instance.Id))) {
+            var to = references.Where(r => r.ElementId != instance.Id).Select(this.NameOf).FirstOrDefault(name => name is not null);
+            var mine = references.First(r => r.ElementId == instance.Id);
+            var name = this.NestedReferenceName(instance, mine);
+            if (to is null || name is null) this.Add(UnmodeledReason.DimensionToFace, path, ("reference", StableOf(mine)), ("to", to ?? ""));
+            else result.Add(new FamilyModelAlign { Instance = name, To = to });
+        }
+        return result;
+    }
+
     private string? LockPlane(ElementId curveId) =>
         this._alignments.Where(a => a.Refs.Any(r => r.ElementId == curveId))
             .SelectMany(a => a.Refs.Where(r => r.ElementId != curveId).Select(r => this.NameOf(r)))
@@ -404,7 +468,7 @@ internal sealed class FamilyModelCapturer {
     private Dictionary<string, FamilyModelNested> Nested(ISet<string> known) {
         var result = new Dictionary<string, FamilyModelNested>(StringComparer.Ordinal);
         var copies = Collect<LinearArray>().SelectMany(a => a.GetCopiedMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
-        foreach (var fi in Collect<FamilyInstance>().Where(f => f.Symbol?.Family != null && !copies.Contains(f.Id)).OrderBy(f => f.Id.Value())) {
+        foreach (var fi in Collect<FamilyInstance>().Where(f => f.Symbol?.Family != null && f.Symbol.Family.FamilyPlacementType is not (FamilyPlacementType.ViewBased or FamilyPlacementType.CurveBasedDetail) && !copies.Contains(f.Id)).OrderBy(f => f.Id.Value())) {
             var family = fi.Symbol.Family.Name;
             var slug = Unique(Slug(family), result.ContainsKey);
             var host = this.HostOf(fi);
@@ -414,18 +478,7 @@ internal sealed class FamilyModelCapturer {
                 continue;
             }
 
-            var align = new List<FamilyModelAlign>();
-            foreach (var (_, refs) in this._alignments.Where(a => a.Refs.Any(r => r.ElementId == fi.Id))) {
-                var to = refs.Where(r => r.ElementId != fi.Id).Select(r => this.NameOf(r)).FirstOrDefault(n => n != null);
-                var mine = refs.First(r => r.ElementId == fi.Id);
-                var instance = this.NestedReferenceName(fi, mine);
-                if (to == null || instance == null) {
-                    this.Add(UnmodeledReason.DimensionToFace, $"$.nested.{slug}.align", ("instanceReference", StableOf(mine)), ("to", to ?? ""));
-                    continue;
-                }
-
-                align.Add(new FamilyModelAlign { Instance = instance, To = to });
-            }
+            var align = this.InstanceAlignments(fi, $"$.nested.{slug}.align");
 
             var associate = new Dictionary<string, string>(StringComparer.Ordinal);
             string? visible = null;
@@ -774,6 +827,9 @@ internal sealed class FamilyModelCapturer {
         var generic = category is FamilyCategory.GenericModels or FamilyCategory.AirTerminals;
         var template = (placement, generic, category) switch {
             (FamilyModelPlacement.OneLevelBased, true, _) => "Generic Model",
+            (FamilyModelPlacement.OneLevelBased, _, FamilyCategory.ElectricalEquipment) => "Electrical Equipment",
+            (FamilyModelPlacement.ViewBased, _, FamilyCategory.DetailItems) => "Detail Item",
+            (FamilyModelPlacement.ViewBased, _, FamilyCategory.GenericAnnotations) => "Generic Annotation",
             (FamilyModelPlacement.WorkPlaneBased, true, _) => "Generic Model face based",
             (FamilyModelPlacement.OneLevelBasedHosted, _, FamilyCategory.PlumbingFixtures) => "Plumbing Fixture wall based",
             (FamilyModelPlacement.OneLevelBasedHosted, _, FamilyCategory.GenericModels) => "Generic Model wall based",
@@ -840,18 +896,6 @@ internal sealed class FamilyModelCapturer {
     }
 
     private static XYZ? PointOf(FamilyInstance fi) => (fi.Location as LocationPoint)?.Point;
-
-    private static bool IsCircle(Arc arc) => !arc.IsBound || Math.Abs(arc.Length - 2 * Math.PI * arc.Radius) < FaceTol;
-
-    private static bool SameCurve(Curve? a, Curve b) {
-        if (a == null || a.GetType() != b.GetType()) return false;
-        if (a is Arc arcA && b is Arc arcB && IsCircle(arcA) && IsCircle(arcB))
-            return arcA.Center.IsAlmostEqualTo(arcB.Center, FaceTol) && Math.Abs(arcA.Radius - arcB.Radius) < FaceTol &&
-                Math.Abs(Math.Abs(arcA.Normal.DotProduct(arcB.Normal)) - 1) < FaceTol;
-        if (!a.IsBound || !b.IsBound) return false;
-        var (a0, a1, b0, b1) = (a.GetEndPoint(0), a.GetEndPoint(1), b.GetEndPoint(0), b.GetEndPoint(1));
-        return (a0.IsAlmostEqualTo(b0, FaceTol) && a1.IsAlmostEqualTo(b1, FaceTol)) || (a0.IsAlmostEqualTo(b1, FaceTol) && a1.IsAlmostEqualTo(b0, FaceTol));
-    }
 
     private static string? SafeLabel(Dimension dim) => Try(() => dim.FamilyLabel)?.Definition.Name;
 

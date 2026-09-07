@@ -44,8 +44,8 @@ public static class FamilyModelBuild {
 
     // Fresh builds resolve portable sibling dependencies here, before any placement operations run.
     private static void LoadDependencies(Application application, Document target, FamilyModel model, ExecutionOptions? options, string? directory, List<string> ancestors) {
-        foreach (var group in model.Nested.Values.GroupBy(n => n.Family, StringComparer.Ordinal)) {
-            var name = group.Key;
+        foreach (var name in model.Nested.Values.Select(n => n.Family)
+                     .Concat(model.Details.Values.Select(d => d.Family).OfType<string>()).Distinct(StringComparer.Ordinal)) {
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
                 throw new InvalidOperationException($"Nested family '{name}' must be a portable sibling file name.");
             if (string.IsNullOrWhiteSpace(directory))
@@ -79,7 +79,8 @@ public static class FamilyModelBuild {
                         throw new InvalidOperationException($"Nested family '{name}' could not be named.");
                 }
                 var types = loaded.GetFamilySymbolIds().Select(id => target.GetElement(id).Name).ToHashSet(StringComparer.Ordinal);
-                foreach (var required in group.Select(n => n.Type).Distinct(StringComparer.Ordinal))
+                foreach (var required in model.Nested.Values.Where(n => n.Family == name).Select(n => n.Type)
+                             .Concat(model.Details.Values.Where(d => d.Family == name).Select(d => d.Type).OfType<string>()).Distinct(StringComparer.Ordinal))
                     if (!types.Contains(required))
                         throw new InvalidOperationException($"Nested family '{name}' has no type '{required}'. Available: {string.Join(", ", types)}");
             } finally {

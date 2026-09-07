@@ -88,10 +88,34 @@ public static class FamilyReconciler {
 
     /// <summary>Merge a patch fragment onto the captured current and parse it as the desired document.</summary>
     public static FamilyModelParseResult Desired(FamilyModel current, FamilyPatch patch) {
-        var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(current)), patch.Patch);
+        var captured = JObject.Parse(FamilyModelJson.Serialize(current));
+        var merged = FamilyPatch.Apply(captured, patch.Patch);
         merged.Remove("coverage");
         merged.Remove("unmodeled");
         var parsed = FamilyModelJson.Parse(merged.ToString());
+        if (parsed.Value is { } candidate) {
+            var observed = StructuralEntries(current).ToList();
+            var renamed = false;
+            foreach (var (section, key, spec) in StructuralEntries(candidate)) {
+                if (patch.Patch[section] is not JObject authored || authored[key] is not JObject || captured[section]?[key] is not null) continue;
+                var matches = observed.Where(entry => entry.Section == section && authored[entry.Key] is null &&
+                    StructuralIdentity(entry.Spec) == StructuralIdentity(spec)).ToList();
+                if (matches.Count != 1) continue;
+                var old = matches[0].Key;
+                ((JObject)captured[section]!)[key] = captured[section]![old]!.DeepClone();
+                ((JObject)captured[section]!).Remove(old);
+                if (section == "nested")
+                    foreach (var array in ((JObject?)captured["arrays"])?.Properties() ?? [])
+                        if ((string?)array.Value["member"] == old) array.Value["member"] = key;
+                renamed = true;
+            }
+            if (renamed) {
+                merged = FamilyPatch.Apply(captured, patch.Patch);
+                merged.Remove("coverage");
+                merged.Remove("unmodeled");
+                parsed = FamilyModelJson.Parse(merged.ToString());
+            }
+        }
         var existingDiagnostics = FamilyModelValidator.Validate(current);
         var authoredSections = patch.Patch.Properties().Where(p => p.Value is not JObject o || o.HasValues)
             .Select(p => "$." + p.Name).ToList();
@@ -146,9 +170,17 @@ public static class FamilyReconciler {
         FamilyModelNested x => $"{x.Family}|{x.Type}|{x.Host}",
         FamilyModelArray x => $"{x.Member}|{x.Direction}|{x.Label}",
         FamilyModelConnector x => ConnectorKey(x),
-        FamilyModelDetail x => $"{x.View}|{x.Family}|{x.Type}|{string.Join(",", (x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? []).OrderBy(p => p, StringComparer.Ordinal))}",
+        FamilyModelDetail x => $"{x.View}|{x.Family}|{x.Type}|{string.Join(",", (x.Curves?.SelectMany(l => l.Curves).Select(c => c.On ?? string.Join("+", (c.Center ?? []).OrderBy(p => p, StringComparer.Ordinal))) ?? []).OrderBy(p => p, StringComparer.Ordinal))}",
         _ => throw new ArgumentException($"No structural identity for {entry.GetType().Name}.", nameof(entry))
     };
+
+    private static IEnumerable<(string Section, string Key, object Spec)> StructuralEntries(FamilyModel model) =>
+        model.Dimensions.Select(p => ("dimensions", p.Key, (object)p.Value))
+            .Concat(model.Forms.Select(p => ("forms", p.Key, (object)p.Value)))
+            .Concat(model.Nested.Select(p => ("nested", p.Key, (object)p.Value)))
+            .Concat(model.Arrays.Select(p => ("arrays", p.Key, (object)p.Value)))
+            .Concat(model.Connectors.Select(p => ("connectors", p.Key, (object)p.Value)))
+            .Concat(model.Details.Select(p => ("details", p.Key, (object)p.Value)));
 
     // ── canonical form (F7): the uniform value becomes a cell in every type; parameters diff without it ──
 
@@ -231,7 +263,8 @@ public static class FamilyReconciler {
         var token = JObject.FromObject(value, Serializer);
         if (value is FamilyModelConnector && token["at"] is JArray at)
             token["at"] = new JArray(at.OrderBy(x => (string?)x, StringComparer.Ordinal));
-        if (value is FamilyModelForm && token["profile"] is JArray profile) {
+        var loopField = value is FamilyModelForm ? "profile" : "curves";
+        if (value is FamilyModelForm or FamilyModelDetail && token[loopField] is JArray profile) {
             foreach (var loop in profile.OfType<JObject>()) {
                 var curves = ((JArray)loop["curves"]!).ToList();
                 foreach (var curve in curves.OfType<JObject>())
@@ -243,7 +276,7 @@ public static class FamilyReconciler {
                         .SelectMany(order => Enumerable.Range(0, order.Count).Select(i => new JArray(order.Skip(i).Concat(order.Take(i)))))
                         .OrderBy(order => order.ToString(Formatting.None), StringComparer.Ordinal).First();
             }
-            token["profile"] = new JArray(profile.OrderBy(loop => loop.ToString(Formatting.None), StringComparer.Ordinal));
+            token[loopField] = new JArray(profile.OrderBy(loop => loop.ToString(Formatting.None), StringComparer.Ordinal));
         }
         return token;
     }

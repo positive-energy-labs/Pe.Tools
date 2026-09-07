@@ -27,17 +27,12 @@ public sealed class PlaceDetails((string Slug, FamilyModelDetail Spec)[] details
                 } else {
                     var viewPlane = Plane.CreateByNormalAndOrigin(view.ViewDirection, view.Origin);
                     var sketch = SketchPlane.Create(doc, viewPlane);
-                    foreach (var loop in spec.Curves ?? []) {
-                        var lines = loop.Curves.Where(c => c.Kind == CurveKind.Line).ToList();
-                        for (var i = 0; i < lines.Count; i++) {
-                            var previous = lines[(i - 1 + lines.Count) % lines.Count];
-                            var next = lines[(i + 1) % lines.Count];
-                            var p0 = FamilyRefs.Intersect(viewPlane, FamilyRefs.Resolve(doc, previous.On!).Plane, FamilyRefs.Resolve(doc, lines[i].On!).Plane);
-                            var p1 = FamilyRefs.Intersect(viewPlane, FamilyRefs.Resolve(doc, lines[i].On!).Plane, FamilyRefs.Resolve(doc, next.On!).Plane);
-                            var symbolic = doc.Document.FamilyCreate.NewSymbolicCurve(Line.CreateBound(p0, p1), sketch);
-                            FamilyRefs.Align(doc, view, symbolic.GeometryCurve.Reference, FamilyRefs.Resolve(doc, lines[i].On!).Reference);
+                    foreach (var loop in spec.Curves ?? [])
+                        foreach (var (curve, item) in FamilyRefs.SketchCurves(doc, viewPlane, loop)) {
+                            var symbolic = doc.Document.FamilyCreate.NewSymbolicCurve(curve, sketch);
+                            doc.Document.Regenerate();
+                            FamilyRefs.ConstrainSketchCurve(doc, view, symbolic, item);
                         }
-                    }
                 }
                 logs.Add(new LogEntry(slug).Success($"Detail in {spec.View}."));
             } catch (Exception ex) { logs.Add(new LogEntry(slug).Error(ex)); }
