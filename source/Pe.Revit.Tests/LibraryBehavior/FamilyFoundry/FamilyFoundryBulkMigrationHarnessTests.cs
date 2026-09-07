@@ -70,6 +70,36 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
+    public void Plumbing_shared_number_definitions_use_native_other_group() {
+        var document = this.NewFamily("FF plumbing shared definitions");
+        try {
+            var names = new[] { "PE_P_LoadCalc_CWFU", "PE_P_LoadCalc_DFU", "PE_P_LoadCalc_HWFU" };
+            var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+                RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name)).ToList();
+            Assert.That(definitions.Count, Is.EqualTo(3));
+            foreach (var definition in definitions) {
+                Assert.That(definition.DownloadOptions.GetGroupTypeId().TypeId, Is.Empty);
+                Assert.That(definition.DownloadOptions.GetSpecTypeId(), Is.EqualTo(SpecTypeId.Number));
+            }
+            var patch = CompanyNormalizationFixture.Convert(new(), names);
+            foreach (var name in names) patch.Patch["parameters"]![name]!["value"] = name.EndsWith("DFU") ? 2d : 7.5;
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            foreach (var definition in definitions) {
+                var parameter = document.FamilyManager.FindParameter(definition.Name!);
+                Assert.That(parameter.GUID, Is.EqualTo(definition.DownloadOptions.GetGuid()));
+                Assert.That(parameter.Definition.GetGroupTypeId().TypeId, Is.Empty);
+                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                    Assert.That(type.AsDouble(parameter), Is.EqualTo(definition.Name!.EndsWith("DFU") ? 2d : 7.5));
+            }
+        } finally { document.Close(false); }
+    }
+
+    [Test]
     public void Direct_public_plan_keeps_group_contexts_after_normalization() {
         var document = this.NewFamily("FF public plan");
         try {

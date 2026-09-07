@@ -46,7 +46,7 @@ public sealed class FamilySharedParameterSource(Document document,
                 definition = new SharedDefinitionSpec(property.Name, options.GetSpecTypeId(), Guid: options.GetGuid(),
                     Description: source.Description ?? "", Visible: options.Visible, UserModifiable: !source.ReadOnly);
                 target["isInstance"] ??= options.IsInstance;
-                target["propertiesGroup"] ??= options.GetGroupTypeId().TypeId;
+                if (options.GetGroupTypeId().TypeId is { Length: > 0 } groupId) target["propertiesGroup"] ??= groupId;
             }
             if (parameter.Value<Guid?>("sharedGuid") is { } requested && requested != definition.Guid)
                 throw new InvalidOperationException($"Shared parameter '{property.Name}' requested GUID {requested}, source defines {definition.Guid}.");
