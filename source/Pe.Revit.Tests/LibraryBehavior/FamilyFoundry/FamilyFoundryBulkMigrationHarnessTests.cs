@@ -69,6 +69,97 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void Company_numeric_literals_use_known_legacy_units_and_number_stays_unitless() {
+        var assignments = new Pe.Revit.FamilyFoundry.OperationSettings.SetKnownParamsSettings {
+            GlobalAssignments = [new() { Parameter = "Voltage", Kind = Pe.Revit.FamilyFoundry.OperationSettings.ParamAssignmentKind.Value, Value = "480" },
+                new() { Parameter = "Ratio", Kind = Pe.Revit.FamilyFoundry.OperationSettings.ParamAssignmentKind.Value, Value = "1.5" }]
+        };
+        var specs = new Dictionary<string, ForgeTypeId> { ["Voltage"] = SpecTypeId.ElectricalPotential, ["Ratio"] = SpecTypeId.Number };
+        Assert.Throws<InvalidOperationException>(() => CompanyNormalizationFixture.Convert(new(), [], assignments, specs: specs));
+        var units = new Units(UnitSystem.Metric);
+        units.SetFormatOptions(SpecTypeId.ElectricalPotential, new FormatOptions(UnitTypeId.Volts));
+        var patch = CompanyNormalizationFixture.Convert(new(), [], assignments, specs: specs, legacyUnits: units);
+        Assert.That(patch.Patch["parameters"]!["Voltage"]!["value"]!.ToString(), Does.Contain("V"));
+        Assert.That(patch.Patch["parameters"]!["Ratio"]!["value"]!.ToString(), Is.EqualTo("1.5"));
+    }
+
+    [Test]
+    public void Explicit_units_are_independent_of_display_units_and_implicit_literals_fail_before_writes() {
+        foreach (var displayUnit in new[] { UnitTypeId.Feet, UnitTypeId.Millimeters }) {
+            var document = this.NewFamily("FF explicit units");
+            try {
+                using (var seed = new Transaction(document, "Seed disposable display units")) {
+                    seed.Start();
+                    var units = document.GetUnits();
+                    units.SetFormatOptions(SpecTypeId.Length, new FormatOptions(displayUnit));
+                    document.SetUnits(units);
+                    Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                }
+                var invalid = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":3},"NeverAdded":{"dataType":"Number","value":2}}}}"""));
+                using (var processor = new OperationProcessor(document)) {
+                    var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(invalid));
+                    var (_, error) = contexts.Single().OperationLogs;
+                    Assert.That(error, Is.Not.Null);
+                    Assert.That(document.FamilyManager.FindParameter("NeverAdded"), Is.Null);
+                }
+                var valid = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3ft"},"Count":{"dataType":"Integer","value":2},"Ratio":{"dataType":"Number","value":1.5}}}}"""));
+                using (var processor = new OperationProcessor(document)) {
+                    var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(valid));
+                    var (_, error) = contexts.Single().OperationLogs;
+                    Assert.That(error, Is.Null, error?.Message);
+                    Assert.That(valid.LastReceipt?.Converged, Is.True);
+                }
+                var width = document.FamilyManager.FindParameter("Width");
+                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                    Assert.That(type.AsDouble(width), Is.EqualTo(3).Within(1e-9));
+                Assert.That(document.GetUnits().GetFormatOptions(SpecTypeId.Length).GetUnitTypeId(), Is.EqualTo(displayUnit));
+            } finally { document.Close(false); }
+        }
+    }
+
+    [Test]
+    public void Captured_shared_definitions_rebuild_offline_without_APS_cache() {
+        var original = this.NewFamily("FF offline source");
+        var target = this.NewFamily("FF offline rebuild");
+        try {
+            var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+                Path.Combine(AppContext.BaseDirectory, "Fixtures", "Profiles", "normalization-company-definitions.json")))!;
+            var mappingNames = CompanyNormalizationFixture.MechanicalMappings().MappingData.Select(m => m.NewName).ToHashSet();
+            definitions = definitions.Where(d => mappingNames.Contains(d.Name!)).ToList();
+            Assert.That(definitions.Count, Is.EqualTo(38), "Every target in the real mechanical mapping fragment has an exact frozen definition.");
+            var patch = CompanyNormalizationFixture.Convert(CompanyNormalizationFixture.MechanicalMappings(),
+                definitions.Select(d => d.Name!));
+            using (var processor = new OperationProcessor(original)) {
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+            }
+            var captured = original.CaptureFamilyModel();
+            var json = JObject.Parse(FamilyModelJson.Serialize(captured));
+            var offline = new FamilyPatch { Patch = new JObject { ["parameters"] = json["parameters"]!.DeepClone(), ["types"] = json["types"]!.DeepClone() } };
+            using (var processor = new OperationProcessor(target)) {
+                // Empty injected source deliberately makes every APS lookup fail.
+                var operation = new ReconcileFamily(offline, sharedSource: d => new FamilySharedParameterSource(d, []));
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                var (_, error) = contexts.Single().OperationLogs;
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+            }
+            var rebuilt = target.CaptureFamilyModel();
+            foreach (var definition in definitions) {
+                var before = captured.Parameters[definition.Name!];
+                var after = rebuilt.Parameters[definition.Name!];
+                Assert.That(after.SharedGuid, Is.EqualTo(before.SharedGuid));
+                Assert.That(after.SharedSpecId, Is.EqualTo(before.SharedSpecId));
+                Assert.That(after.SharedVisible, Is.EqualTo(before.SharedVisible));
+                Assert.That(after.SharedUserModifiable, Is.EqualTo(before.SharedUserModifiable));
+            }
+        } finally { original.Close(false); target.Close(false); }
+    }
+
     [TestCase(false, false)]
     [TestCase(true, false)]
     [TestCase(false, true)]

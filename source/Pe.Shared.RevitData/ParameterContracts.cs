@@ -41,7 +41,9 @@ public record ParameterDefinitionDescriptor(
     string? DataTypeId,
     string? DataTypeLabel,
     string? GroupTypeId,
-    string? GroupTypeLabel
+    string? GroupTypeLabel,
+    bool? Visible = null,
+    bool? UserModifiable = null
 );
 
 public record ParameterCatalogEntry(

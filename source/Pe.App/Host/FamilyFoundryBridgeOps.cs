@@ -47,6 +47,9 @@ internal static class FamilyFoundryBridgeOps {
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], desired.Diagnostics.Select(ToDiagnostic).ToList());
             using var source = new FamilySharedParameterSource(famDoc);
             var resolved = source.Resolve(desired.Value, patch.Patch);
+            var unitDiagnostics = FamilyModelUnitValidation.Validate(resolved, patch.Patch, source.GetDefinition);
+            if (unitDiagnostics.Count > 0)
+                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList());
             var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions);
             return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, plan.PlanHash, plan.Changes.Select(ToChange).ToList(), plan.RunEffects, plan.Refusals.Select(ToDiagnostic).ToList());
         })).ToList(), []);

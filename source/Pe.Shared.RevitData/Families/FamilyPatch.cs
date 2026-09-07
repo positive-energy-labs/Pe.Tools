@@ -47,7 +47,8 @@ public sealed class FamilyPatch {
         foreach (var parameter in (patch["parameters"] as JObject)?.Properties() ?? []) {
             var authored = parameter.Value as JObject;
             var merged = result["parameters"]?[parameter.Name] as JObject;
-            if (authored?.Value<bool?>("shared") == false) merged?.Remove("sharedGuid");
+            if (authored?.Value<bool?>("shared") == false)
+                foreach (var field in new[] { "sharedGuid", "sharedSpecId", "sharedVisible", "sharedUserModifiable" }) merged?.Remove(field);
             if (authored?.Value<bool?>("shared") == true) {
                 if (!authored.ContainsKey("dataType")) merged?.Remove("dataType");
                 if (!authored.ContainsKey("tooltip")) merged?.Remove("tooltip");

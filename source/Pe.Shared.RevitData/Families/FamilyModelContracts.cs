@@ -211,6 +211,16 @@ public sealed class FamilyModelParameter {
     [JsonProperty("sharedGuid", NullValueHandling = NullValueHandling.Ignore)]
     public Guid? SharedGuid { get; init; }
 
+    /// <summary>Exact native shared spec id. Together with sharedGuid this embeds an offline definition.</summary>
+    [JsonProperty("sharedSpecId", NullValueHandling = NullValueHandling.Ignore)]
+    public string? SharedSpecId { get; init; }
+
+    [JsonProperty("sharedVisible", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? SharedVisible { get; init; }
+
+    [JsonProperty("sharedUserModifiable", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? SharedUserModifiable { get; init; }
+
     [JsonProperty("dataType", NullValueHandling = NullValueHandling.Ignore)]
     public DataType? DataType { get; init; }
 

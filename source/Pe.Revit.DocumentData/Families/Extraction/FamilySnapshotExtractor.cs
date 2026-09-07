@@ -139,7 +139,9 @@ public static class FamilySnapshotExtractor {
                 groupType,
                 groupType == null
                     ? null
-                    : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId())
+                    : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId()),
+                (familyParameter.Definition as InternalDefinition)?.Visible,
+                familyParameter.UserModifiable
             ),
             familyParameter.IsShared ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
             LoadedFamilyParameterPresence.Family,

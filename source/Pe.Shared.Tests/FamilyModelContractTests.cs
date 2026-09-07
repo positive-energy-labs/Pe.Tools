@@ -61,6 +61,33 @@ public sealed class FamilyModelContractTests {
         Assert.That(local.Value!.Parameters["W"].SharedGuid, Is.Null);
     }
 
+    [TestCase("480", false)]
+    [TestCase("1e3", false)]
+    [TestCase("1/2", false)]
+    [TestCase("480 V", true)]
+    [TestCase("3ft", true)]
+    public void Authored_measurable_literals_require_units(string value, bool accepted) {
+        var patch = new JObject { ["parameters"] = new JObject {
+            ["Voltage"] = new JObject { ["value"] = value },
+            ["Number"] = new JObject { ["value"] = 3 },
+            ["Formula"] = new JObject { ["formula"] = "480" }
+        } };
+        Assert.That(FamilyValueUnits.Validate(patch, name => name != "Number").Count, Is.EqualTo(accepted ? 0 : 1));
+        Assert.That(FamilyValueUnits.Validate(new JObject(), _ => true), Is.Empty, "Captured unmentioned values are not authored literals.");
+    }
+
+    [Test]
+    public void Embedded_shared_definition_is_portable_without_service_name_resolution() {
+        var result = FamilyModelJson.Parse(Doc("""{"parameters":{"Offline":{"shared":true,"sharedGuid":"692091cc-1e3d-47e6-a7c5-9336c3149419","sharedSpecId":"autodesk.spec.aec:length-2.0.0","sharedVisible":false,"sharedUserModifiable":false,"tooltip":"Exact definition description"}},"types":{"A":{}}}"""));
+        Assert.That(result.Diagnostics, Is.Empty);
+        var serialized = FamilyModelJson.Serialize(result.Value!);
+        Assert.That(FamilyModelJson.Serialize(FamilyModelJson.Parse(serialized).Value!), Is.EqualTo(serialized));
+        var local = FamilyPatch.Apply(serialized, """{"parameters":{"Offline":{"shared":false,"dataType":"Length"}}}""");
+        Assert.That(local.Diagnostics, Is.Empty);
+        Assert.That(local.Value!.Parameters["Offline"].SharedSpecId, Is.Null);
+        Assert.That(local.Value.Parameters["Offline"].SharedVisible, Is.Null);
+    }
+
     [Test]
     public void Company_corpus_retains_original_bytes_and_all_saved_equipment() {
         var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles", "company-20260906"));

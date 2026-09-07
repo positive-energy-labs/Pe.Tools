@@ -70,7 +70,7 @@ public static class FamilyReconciler {
                 current.Parameters.Where(c => c.Key == p.Key || p.Value.WasNamed?.Contains(c.Key) == true).ToDictionary(c => c.Key, c => c.Value), p.Value))).ToList();
         }
         var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove only equivalent sources; explicit writes follow");
-        var definitionEffects = sharedDefinitions is null ? [] : new[] { "shared.definitions: " + JsonConvert.SerializeObject(sharedDefinitions) };
+        var definitionEffects = sharedDefinitions is null ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
         return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions));
     }
 
@@ -136,6 +136,7 @@ public static class FamilyReconciler {
         var parameters = m.Parameters.ToDictionary(p => p.Key, p => {
             var o = JObject.FromObject(p.Value, Serializer);
             o.Remove("value");
+            if (p.Value.Shared == true) o.Remove("tooltip");
             o.Remove("wasNamed");
             o.Remove("mappingStrategy");
             o.Remove("fillBlanksFromSources");

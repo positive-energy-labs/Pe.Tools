@@ -67,7 +67,8 @@ public static class FamilyModelValidator {
         foreach (var (name, p) in m.Parameters) {
             var path = $"$.parameters.{name}";
             if (p.Value != null && p.Formula != null) d.Add(new(FamilyModelDiagnosticCodes.ValueFormulaConflict, path, "value XOR formula."));
-            if (p.Shared == true && (p.DataType != null || p.Tooltip != null)) d.Add(new(FamilyModelDiagnosticCodes.SharedOwnsDataType, path, "A shared parameter takes its dataType and tooltip from its definition."));
+            if (p.Shared == true && (p.DataType != null || p.Tooltip != null && p.SharedSpecId is null)) d.Add(new(FamilyModelDiagnosticCodes.SharedOwnsDataType, path, "A shared parameter takes its dataType and tooltip from its definition."));
+            if (p.SharedSpecId is not null && (p.Shared != true || p.SharedGuid is null || string.IsNullOrWhiteSpace(p.SharedSpecId))) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedSpecId requires shared=true and sharedGuid."));
             if (p.SharedGuid is { } guid && (p.Shared != true || guid == Guid.Empty)) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedGuid requires shared=true and a nonempty GUID."));
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
             if (p.Value is { } v && p.DataType is { } dt) CheckValue(v, dt, $"{path}.value", d);
