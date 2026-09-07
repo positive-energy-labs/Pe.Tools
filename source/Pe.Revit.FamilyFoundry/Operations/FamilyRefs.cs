@@ -18,10 +18,13 @@ internal static class FamilyRefs {
         new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
             .FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.Ordinal));
 
-    public static ModelCurve? FindRefLine(Document doc, string name) =>
+    public static IEnumerable<ModelCurve> ReferenceLines(Document doc) =>
         new FilteredElementCollector(doc).OfClass(typeof(CurveElement)).Cast<CurveElement>()
-            .OfType<ModelCurve>()
-            .FirstOrDefault(c => c.IsReferenceLine && string.Equals(c.Name, name, StringComparison.Ordinal));
+            .OfType<ModelCurve>().Where(c => c.IsReferenceLine).OrderBy(c => c.Id.Value());
+
+    public static ModelCurve? FindRefLine(Document doc, string name) =>
+        name.StartsWith("line-", StringComparison.Ordinal) && int.TryParse(name[5..], out var index) && index > 0
+            ? ReferenceLines(doc).ElementAtOrDefault(index - 1) : null;
 
     /// <summary>Datum level or reference plane by name; throws when absent.</summary>
     public static (Reference Reference, Plane Plane) Resolve(Document doc, string name) {

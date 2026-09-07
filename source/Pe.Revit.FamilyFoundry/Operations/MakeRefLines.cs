@@ -12,7 +12,7 @@ public sealed class MakeRefLines((string Name, FamilyModelRefLine Spec)[] lines,
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
         var logs = new List<LogEntry>();
-        foreach (var (name, spec) in lines) {
+        foreach (var (name, spec) in lines.OrderBy(line => int.Parse(line.Name[5..]))) {
             try {
                 if (FamilyRefs.FindRefLine(doc, name) is not null) { logs.Add(new LogEntry(name).Skip("Already exists.")); continue; }
                 var (_, on) = FamilyRefs.Resolve(doc, spec.On);
@@ -27,9 +27,19 @@ public sealed class MakeRefLines((string Name, FamilyModelRefLine Spec)[] lines,
                 var sketch = FamilyRefs.SketchPlaneFor(doc, spec.On);
                 var curve = doc.Document.FamilyCreate.NewModelCurve(Line.CreateBound(start, start + (direction * length)), sketch);
                 curve.ChangeToReferenceLine();
-                curve.Name = name;
+                doc.Document.Regenerate();
+                var view = FamilyRefs.ViewFor(doc, null, on.Normal);
+                var startReference = curve.GeometryCurve.GetEndPointReference(0);
+                foreach (var from in spec.From)
+                    FamilyRefs.Align(doc, view, FamilyRefs.Resolve(doc, from).Reference, startReference);
+                if (spec.Length.Parameter is { } lengthLabel) {
+                    var endpoints = new ReferenceArray();
+                    endpoints.Append(startReference);
+                    endpoints.Append(curve.GeometryCurve.GetEndPointReference(1));
+                    var dimension = doc.Document.FamilyCreate.NewLinearDimension(view, (Line)curve.GeometryCurve, endpoints);
+                    dimension.FamilyLabel = FamilyRefs.Param(doc, lengthLabel);
+                }
                 if (spec.Angle is { Parameter: { } label } && spec.AngleFrom is { } fromName) {
-                    var view = FamilyRefs.ViewFor(doc, null, on.Normal);
                     var arc = Arc.Create(start, length * 0.5, 0, angle == 0 ? 0.1 : angle, along, on.Normal.CrossProduct(along));
                     var dim = doc.Document.FamilyCreate.NewAngularDimension(view, arc, FamilyRefs.Resolve(doc, fromName).Reference, curve.GeometryCurve.Reference);
                     dim.FamilyLabel = FamilyRefs.Param(doc, label);

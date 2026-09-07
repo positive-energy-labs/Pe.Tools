@@ -2,6 +2,7 @@ using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Pe.Revit.FamilyFoundry.LookupTables;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
@@ -47,8 +48,7 @@ internal sealed class FamilyModelCapturer {
         this._fm = d.FamilyManager;
         this._refPlanes = Collect<ReferencePlane>().OrderBy(p => p.Id.Value()).ToList();
         this._levels = Collect<Level>().OrderBy(l => l.Id.Value()).ToList();
-        this._refLines = new FilteredElementCollector(d).OfClass(typeof(CurveElement)).OfType<ModelCurve>()
-            .Where(c => c.IsReferenceLine).OrderBy(c => c.Id.Value()).ToList();
+        this._refLines = FamilyRefs.ReferenceLines(d).ToList();
         var dims = Collect<Dimension>().Where(x => x is not SpotDimension).OrderBy(x => x.Id.Value()).ToList();
         this._alignments = dims.Where(x => x.Category?.Id.Value() == (long)BuiltInCategory.OST_Constraints && x.Name == "Alignment")
             .Select(x => (x, x.References.Cast<Reference>().ToList())).ToList();
@@ -182,10 +182,13 @@ internal sealed class FamilyModelCapturer {
                 .Where(x => x.DimensionShape == DimensionShape.Angular && x.References.Cast<Reference>().Any(r => r.ElementId == line.Id))
                 .Select(x => (Label: SafeLabel(x), Other: x.References.Cast<Reference>().Where(r => r.ElementId != line.Id).Select(r => this.NameOf(r)).FirstOrDefault()))
                 .FirstOrDefault(x => x.Label != null && x.Other != null);
+            var lengthLabel = this._dimensions.Where(x => x.DimensionShape == DimensionShape.Linear &&
+                    x.References.Size == 2 && x.References.Cast<Reference>().All(r => r.ElementId == line.Id))
+                .Select(SafeLabel).FirstOrDefault(label => label is not null);
             result[name] = new FamilyModelRefLine {
                 On = on,
                 From = from,
-                Length = PortableLength.FromFeet(Math.Round(line.GeometryCurve.Length, 9)),
+                Length = lengthLabel is null ? PortableLength.FromFeet(line.GeometryCurve.Length) : PortableLength.Parse($"param:{lengthLabel}"),
                 AngleFrom = angular.Other,
                 Angle = angular.Label == null ? null : PortableAngle.Parse($"param:{angular.Label}")
             };
@@ -204,6 +207,8 @@ internal sealed class FamilyModelCapturer {
             if ((dim.Category?.Name ?? "").Contains("Automatic Sketch", StringComparison.Ordinal)) continue;
             var refs = dim.References.Cast<Reference>().ToList();
             var label = SafeLabel(dim);
+            if (refs.Any(r => this._refLines.Any(line => line.Id == r.ElementId)) &&
+                (dim.DimensionShape == DimensionShape.Angular || refs.Select(r => r.ElementId).Distinct().Count() == 1)) continue;
             var eq = dim.NumberOfSegments > 1 && dim.AreSegmentsEqual;
             var locked = dim.NumberOfSegments <= 1 && Try(() => dim.IsLocked);
             if (label == null && !eq && !locked) continue; // annotation only; not authored truth

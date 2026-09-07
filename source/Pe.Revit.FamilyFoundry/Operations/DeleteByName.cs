@@ -15,10 +15,11 @@ public sealed class DeleteByName(string section, object[] entries) : DocOperatio
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
         var logs = new List<LogEntry>();
-        foreach (var entry in entries) {
+        // Resolve before deleting: a positional line key changes when an earlier line disappears.
+        var targets = entries.Select(entry => (Entry: entry, Element: Find(doc, section, entry))).ToArray();
+        foreach (var (entry, element) in targets) {
             var key = Describe(entry);
             try {
-                var element = Find(doc, section, entry);
                 if (element is null) { logs.Add(new LogEntry(key).Skip("Not found in the document.")); continue; }
                 _ = doc.Document.Delete(element.Id);
                 logs.Add(new LogEntry(key).Success("Deleted."));
