@@ -71,6 +71,27 @@ public sealed class FamilyModelRoundtripTests {
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
 
+    [Test]
+    public void Native_electrical_connector_reference_plane_host_probe() {
+        Document? document = null;
+        var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_electrical_connector_reference_plane_host_probe));
+        try {
+            document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._ui.Application, BuiltInCategory.OST_ElectricalEquipment, "Connector plane probe");
+            using var transaction = new Transaction(document, "Probe native connector hosting");
+            transaction.Start();
+            var plane = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>().First();
+            try {
+                var connector = ConnectorElement.CreateElectricalConnector(document, Autodesk.Revit.DB.Electrical.ElectricalSystemType.PowerCircuit, plane.GetReference());
+                document.Regenerate();
+                Assert.That(connector.IsValidObject, Is.True);
+                File.WriteAllText(Path.Combine(directory, "connector-plane-host.json"), Newtonsoft.Json.JsonConvert.SerializeObject(new { accepted = true, plane = plane.Name, connector = connector.Id.Value() }));
+            } catch (Autodesk.Revit.Exceptions.ArgumentException exception) {
+                File.WriteAllText(Path.Combine(directory, "connector-plane-host.json"), Newtonsoft.Json.JsonConvert.SerializeObject(new { accepted = false, exception = exception.GetType().FullName, exception.Message }));
+            }
+            transaction.RollBack();
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void Symbolic_loop_roundtrip_preserves_geometry_and_reapplies_visibility_binding(bool circle) {
