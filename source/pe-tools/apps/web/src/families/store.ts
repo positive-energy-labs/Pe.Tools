@@ -136,15 +136,14 @@ export function createFamiliesStore(deps: {
       Atom.swr(categorySource, { staleTime: "5 minutes", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const familyCategories = Atom.map(draft, (value) => value.categories);
-  const familyPlacement = Atom.map(draft, (value) => value.placement);
-  const familySource = runtime.atom((get) => {
+  const familySource = runtime.atom(() => {
+    const draftScope = registry.get(draft);
     const next = {
-      categories: get(familyCategories),
-      placement: get(familyPlacement),
+      categories: draftScope.categories,
+      placement: draftScope.placement,
       families: [],
     };
-    const world = get(target);
+    const world = registry.get(target);
     return hostRead([world, ...next.categories, next.placement], () =>
       next.categories.length ? deps.host.families(world, next) : Promise.resolve([]),
     );
@@ -199,7 +198,17 @@ export function createFamiliesStore(deps: {
     refreshReads() {
       registry.set(invalidateReads, ["sessions", "category", "family", "profile"]);
     },
-    setDraft: (value: Setter<FamiliesDraft>) => set("set-draft", draft, value),
+    setDraft(value: Setter<FamiliesDraft>) {
+      const before = registry.get(draft);
+      set("set-draft", draft, value);
+      const after = registry.get(draft);
+      if (
+        before.placement !== after.placement ||
+        before.categories.length !== after.categories.length ||
+        before.categories.some((category, index) => category !== after.categories[index])
+      )
+        registry.set(invalidateReads, ["family"]);
+    },
     setPickedIds: (value: Setter<Set<number>>) => set("set-picked-ids", pickedIds, value),
     setProjection: (value: Setter<FfProjectData | null>) =>
       set("set-projection", projection, value),

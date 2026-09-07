@@ -142,6 +142,14 @@ describe("families route store", () => {
     expect(registry.get(store.feeds.family).options?.map((option) => option.id)).toEqual([
       "PE Box",
     ]);
+    store.actions.setDraft({
+      placement: "PlacedOnly",
+      categories: ["Mechanical Equipment"],
+      families: [],
+    });
+    await tick();
+    await tick();
+    expect(reads).toEqual([["Electrical Equipment"], ["Mechanical Equipment"]]);
   });
 
   it("retries catalog and profile reads when the connected world returns", async () => {

@@ -774,3 +774,42 @@ No Open, Plan, Family Foundry Apply, lifecycle action, document activation, or m
 issued. The page remains scoped to the controlled project with Mechanical Equipment selected and
 `AllLoaded` restored. Raw request, native response, and browser receipt are under
 `.artifacts/runs/browser-20260906-ff/catalog-browser-1811d2a/`.
+
+## Category-driven family feed and AprilAire proof profile - 2026-09-07
+
+The actual `/families` page disproved a native-catalog fault. During P's already-required session
+refresh, the integrated reconnect invalidation repopulated the mounted page with 81 of 81 Mechanical
+Equipment families. After a reload, however, changing either visible category picker while already
+connected updated the draft category but left the family picker disabled. The family source mixed
+route-owned atoms into an Effect runtime atom and relied on that cross-runtime dependency to push a
+new read. Direct store writes passed the deterministic test, but both real picker writers failed to
+refresh the mounted feed.
+
+The repair makes the existing `family` reactivity key the sole refresh trigger. The source snapshots
+the route draft when that key runs, and `setDraft` invalidates it once when categories or placement
+change. Selecting families alone does not issue another catalog request. The store regression changes
+category and placement twice and requires exactly one Host read for each scope, with no duplicate.
+It passed 13/13 tests. Targeted `vp check` passed both changed files with zero errors and the existing
+unbound injected-session-method warning; `git diff --check` passed. Browser acceptance against the
+integrated bytes remains the next step because the running Host serves the root tree, not this isolated
+worktree. The earlier React render-phase warning remains a separate observation; source inspection did
+not establish it as this feed failure's cause.
+
+The authorized company proof copy was created through `settings.document.validate`,
+`settings.document.save` with `createOnly:true`, and `settings.document.open` with composed content.
+Its authoritative address is `FamilyFoundry/patches/proof/company-aprilaire-800-native-proof.json`,
+stored at
+`C:\Users\kaitp\OneDrive\Documents\Pe.Tools\settings\FamilyFoundry\patches\proof\company-aprilaire-800-native-proof.json`.
+Only the decoded `patchJson` from P's successful AprilAire 800 plan request was saved; the request
+envelope and serialized execution options were not placed in the desired family model. Save validation
+was valid with zero issues, `writeApplied:true`, no conflict, and SHA-256
+`FEFBC51CE8EBBA15127747F9F32A348E45C6FF973E9577635B0FA4585DA26BAD`. Reopen returned valid composed
+content with zero dependencies, 14 parameters, six types, four reference planes, and four dimensions.
+The exact shared GUID/spec fields are present in the saved model. The route profile picker displayed
+and bound `proof/company-aprilaire-800-native-proof.json`; the original company corpus was not written.
+
+P subsequently proved AprilAire Apply, no-op, reapply, and final-empty behavior. The authoritative
+replacement family id is `6150263`; `3813845` is stale in the disposable project and must not be used
+for the next read-only route selection. This slice issued no Open, Plan, Apply, lifecycle action, or
+native mutation. Raw validate/save/open receipts are under
+`.artifacts/runs/browser-20260906-ff/aprilaire800-profile-copy/`.
