@@ -411,7 +411,7 @@ public sealed class FamilyModelDim {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum StockView { RefLevel, Front, Back, Left, Right }
+public enum StockView { RefLevel, Front, Back, Left, Right, PlacementSide, Backside }
 
 // ───────────────────────────── forms ─────────────────────────────
 

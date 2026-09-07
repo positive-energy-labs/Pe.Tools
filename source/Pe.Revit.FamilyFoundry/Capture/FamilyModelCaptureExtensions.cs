@@ -264,6 +264,7 @@ internal sealed class FamilyModelCapturer {
         var stock = view.Name switch {
             "Ref. Level" => (StockView?)StockView.RefLevel,
             "Front" => StockView.Front, "Back" => StockView.Back, "Left" => StockView.Left, "Right" => StockView.Right,
+            "Placement Side" => StockView.PlacementSide, "Backside" => StockView.Backside,
             _ => null
         };
         if (stock == null) this.Add(UnmodeledReason.ViewNotStock, path, ("view", view.Name));

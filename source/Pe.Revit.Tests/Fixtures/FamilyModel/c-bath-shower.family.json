@@ -33,7 +33,7 @@
   "dimensions": {
     "conn-eq":   { "between": ["conn (left)", "Center (Left/Right)", "conn (right)"], "equality": true },
     "conn-x":    { "between": ["conn (left)", "conn (right)"], "label": "_conn x offset between" },
-    "conn-z":    { "between": ["Ref. Level", "conn top"], "label": "_conn z offset", "view": "Placement Side" },
+    "conn-z":    { "between": ["Ref. Level", "conn top"], "label": "_conn z offset", "view": "PlacementSide" },
     "drain-x":   { "between": ["arbitrary plane for positioning", "drain x"], "label": "_drain x offset" },
     "drain-fix": { "between": ["arbitrary plane for positioning", "Center (Left/Right)"], "locked": "3'" },
     "drain-y":   { "between": ["Center (Front/Back)", "drain y"], "label": "_drain y offset" }

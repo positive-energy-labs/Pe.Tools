@@ -153,7 +153,7 @@ internal static class FamilyRefs {
     public static View ViewFor(Document doc, StockView? stock, XYZ? normal = null) {
         var views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).ToList();
         if (stock is { } s) {
-            var name = s switch { StockView.RefLevel => "Ref. Level", _ => s.ToString() };
+            var name = s switch { StockView.RefLevel => "Ref. Level", StockView.PlacementSide => "Placement Side", _ => s.ToString() };
             return views.FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.Ordinal))
                    ?? throw new InvalidOperationException($"Stock view '{name}' is not in this family.");
         }
