@@ -453,11 +453,24 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Each_company_profile_parameter_intent_uses_public_reconciler));
         var evidence = new JObject { ["profile"] = profilePath, ["composedSettings"] = profile["settings"]!.DeepClone() };
         try {
-            var conversion = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
+            var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(profilePath, (JObject)profile["settings"]!);
+            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, document, definitions);
             var patch = conversion.Patch;
             AssertConnectorRule((JObject)profile, patch);
             if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json")
                 Assert.That(patch.Patch["parameters"]!["PE_G___SoundLevel"]!.Value<string>("value"), Is.EqualTo("4"));
+            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json") {
+                var original = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath(
+                    Path.Combine("company-20260906", profilePath))));
+                var sourceValue = original["SetKnownParams"]!["GlobalAssignments"]!.Single(assignment =>
+                    (string)assignment["Parameter"]! == "PE_G___SoundLevel").Value<string>("Value");
+                Assert.Multiple(() => {
+                    Assert.That(sourceValue, Is.EqualTo("80 dBi alarm"), "The frozen company profile remains immutable.");
+                    Assert.That(settings["SetKnownParams"]!["GlobalAssignments"]!.Single(assignment =>
+                        (string)assignment["Parameter"]! == "PE_G___SoundLevel").Value<string>("Value"), Is.EqualTo("80"));
+                    Assert.That(patch.Patch["parameters"]!["PE_G___SoundLevel"]!.Value<string>("value"), Is.EqualTo("80"));
+                });
+            }
             if (profilePath.Contains("/WaterFurnace-", StringComparison.Ordinal)) {
                 Assert.That(patch.Patch["parameters"]!["Model"]!["isInstance"], Is.Null,
                     "Omitted legacy scope must preserve the built-in parameter's current scope.");
@@ -1041,7 +1054,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 var row = new JObject { ["source"] = source };
                 ((JArray)evidence["profiles"]!).Add(row);
                 try {
-                    var conversion = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert((JObject)profile["settings"]!, definitions, project.GetUnits());
+                    var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(source, (JObject)profile["settings"]!);
+                    var conversion = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(settings, definitions, project.GetUnits());
                     row["select"] = JObject.FromObject(conversion.Patch.Select, JsonSerializer.Create(FamilyModelJson.Settings));
                     row["patchSections"] = new JArray(((JObject)conversion.Patch.Patch).Properties().Select(p => p.Name));
                     row["hasRun"] = conversion.Patch.Run is not null;
