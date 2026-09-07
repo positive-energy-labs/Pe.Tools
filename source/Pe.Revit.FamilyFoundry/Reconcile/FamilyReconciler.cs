@@ -476,6 +476,10 @@ public static class FamilyReconciler {
         if (After<FamilyModelNested>("nested") is { Length: > 0 } nested) q.Add(new PlaceNested(nested, d));
         if (After<FamilyModelArray>("arrays") is { Length: > 0 } arrays) q.Add(new MakeArrays(arrays, d));
         if (After<FamilyModelConnector>("connectors") is { Length: > 0 } connectors) q.Add(new MakeConnectors(connectors, d));
+        if (run?.ElectricalConnectorParameters is { } electricalConnectorParameters) {
+            q.Add(new EnsureElectricalConnectorParameters(electricalConnectorParameters));
+            effects.Add($"run.electricalConnectorParameters: voltage={electricalConnectorParameters.Voltage}; numberOfPoles={electricalConnectorParameters.NumberOfPoles}; apparentPower={electricalConnectorParameters.ApparentPower}; minimumCircuitAmpacity={electricalConnectorParameters.MinimumCircuitAmpacity} (declaration only)");
+        }
         if (After<FamilyModelDetail>("details") is { Length: > 0 } details) q.Add(new PlaceDetails(details, d));
         // 18 visibility: the element and the Yes/No parameter both exist now
         var visible = After<FamilyModelForm>("forms").Where(f => f.Spec.Visible is not null).Select(f => (f.Slug, "forms", f.Spec.Visible!))

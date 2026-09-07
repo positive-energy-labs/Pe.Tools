@@ -1,4 +1,5 @@
 using Autodesk.Revit.ApplicationServices;
+using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry;
@@ -19,8 +20,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     [OneTimeSetUp]
     public void SetUp(UIApplication application) => this._application = application.Application;
 
-    private Document NewFamily(string name) {
-        var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_GenericModel, name);
+    private Document NewFamily(string name, BuiltInCategory category = BuiltInCategory.OST_GenericModel) {
+        var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, category, name);
         using var transaction = new Transaction(document, "Seed normalization case");
         transaction.Start();
         var fm = document.FamilyManager;
@@ -197,6 +198,36 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void Company_profiles_export_all_nineteen_connector_rules_and_omit_all_nine_disabled_rules() {
+        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+            .OfType<JObject>().Where(profile => profile["settings"]?["MakeElectricalConnector"] is JObject).ToList();
+        var enabled = profiles.Where(HasEnabledConnectorRule).ToList();
+        Assert.Multiple(() => {
+            Assert.That(enabled, Has.Count.EqualTo(19));
+            Assert.That(profiles.Except(enabled), Has.Count.EqualTo(9));
+        });
+        var definitions = CompanyDefinitions();
+        var document = this.NewFamily("Company connector conversion census");
+        try {
+            foreach (var profile in profiles)
+                AssertConnectorRule(profile, CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions).Patch);
+            var sample = (JObject)enabled[0]["settings"]!.DeepClone();
+            void Reject(JToken connector) {
+                var malformed = (JObject)sample.DeepClone();
+                malformed["MakeElectricalConnector"] = connector;
+                Assert.Throws<InvalidOperationException>(() => CompanyNormalizationFixture.ConvertProfileParameters(malformed, document, definitions));
+            }
+            Reject("not an object");
+            var unknownSetting = (JObject)sample["MakeElectricalConnector"]!.DeepClone();
+            unknownSetting["Unexpected"] = true;
+            Reject(unknownSetting);
+            var unknownSource = (JObject)sample["MakeElectricalConnector"]!.DeepClone();
+            unknownSource["SourceParameterNames"]!["Unexpected"] = "PE_E___MCA";
+            Reject(unknownSource);
+        } finally { document.Close(false); }
+    }
+
     [TestCaseSource(nameof(CompanyProfiles))]
     [Category("CompanyCorpus")]
     public void Each_company_profile_parameter_intent_uses_public_reconciler(string profilePath) {
@@ -204,12 +235,15 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             .Single(p => (string)p["source"]! == profilePath);
         var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
-        var document = this.NewFamily("Company profile parameter proof");
+        var connectorRule = HasEnabledConnectorRule((JObject)profile);
+        var document = this.NewFamily("Company profile parameter proof",
+            connectorRule ? BuiltInCategory.OST_MechanicalEquipment : BuiltInCategory.OST_GenericModel);
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Each_company_profile_parameter_intent_uses_public_reconciler));
         var evidence = new JObject { ["profile"] = profilePath, ["composedSettings"] = profile["settings"]!.DeepClone() };
         try {
             var conversion = CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions);
             var patch = conversion.Patch;
+            AssertConnectorRule((JObject)profile, patch);
             evidence["parameterPatch"] = patch.Patch.DeepClone();
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
@@ -231,11 +265,59 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Assert.That(actual!.GUID, Is.EqualTo(definitions.Single(d => d.Name == parameter.Name).DownloadOptions.GetGuid()));
             }
             AssertCompanyLiteral(profilePath, document);
+            if (connectorRule) {
+                var rule = patch.Run!.ElectricalConnectorParameters!;
+                Assert.That(document.FamilyManager.get_Parameter(rule.MinimumCircuitAmpacity), Is.Not.Null);
+                var connectors = new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
+                    .Where(connector => connector.Domain == Domain.DomainElectrical).ToList();
+                Assert.That(connectors, Is.Not.Empty);
+                foreach (var connector in connectors)
+                    foreach (var (target, source) in new Dictionary<BuiltInParameter, string> {
+                                 [BuiltInParameter.RBS_ELEC_VOLTAGE] = rule.Voltage,
+                                 [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = rule.NumberOfPoles,
+                                 [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = rule.ApparentPower })
+                        Assert.That(document.FamilyManager.GetAssociatedFamilyParameter(connector.get_Parameter(target))?.Definition.Name,
+                            Is.EqualTo(source), $"{profilePath}: {target}");
+                var connectorIds = connectors.Select(connector => connector.Id.Value()).ToList();
+                var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
+                var (repeatedLogs, repeatedError) = repeatedContexts.Single().OperationLogs;
+                Assert.That(repeatedError, Is.Null, repeatedError?.Message);
+                Assert.That(repeated.LastReceipt?.Converged, Is.True);
+                Assert.That(repeated.LastPlan!.Changes, Is.Empty);
+                Assert.That(repeatedLogs!.SelectMany(log => log.Entries)
+                    .Single(entry => entry.Name == "Electrical connectors").Status, Is.EqualTo(LogStatus.Skipped));
+                Assert.That(new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
+                    .Where(connector => connector.Domain == Domain.DomainElectrical).Select(connector => connector.Id.Value()), Is.EqualTo(connectorIds));
+            }
         } catch (Exception error) { evidence["failure"] = error.ToString(); throw; }
         finally {
             File.WriteAllText(Path.Combine(output, "company-profile-parameters.json"), evidence.ToString());
             document.Close(false);
         }
+    }
+
+    private static bool HasEnabledConnectorRule(JObject profile) =>
+        profile["settings"]?["MakeElectricalConnector"] is JObject settings && settings.Value<bool?>("Enabled") != false;
+
+    private static void AssertConnectorRule(JObject profile, FamilyPatch patch) {
+        var settings = profile["settings"]?["MakeElectricalConnector"] as JObject;
+        if (!HasEnabledConnectorRule(profile)) {
+            Assert.That(patch.Run?.ElectricalConnectorParameters, Is.Null, (string?)profile["source"]);
+            return;
+        }
+        var source = (JObject)settings!["SourceParameterNames"]!;
+        var rule = patch.Run?.ElectricalConnectorParameters;
+        Assert.That(rule, Is.Not.Null, (string?)profile["source"]);
+        Assert.Multiple(() => {
+            Assert.That(rule!.Voltage, Is.EqualTo((string)source["Voltage"]!));
+            Assert.That(rule.NumberOfPoles, Is.EqualTo((string)source["NumberOfPoles"]!));
+            Assert.That(rule.ApparentPower, Is.EqualTo((string)source["ApparentPower"]!));
+            Assert.That(rule.MinimumCircuitAmpacity, Is.EqualTo((string)source["MinimumCircuitAmpacity"]!));
+            foreach (var name in new[] { rule.Voltage, rule.NumberOfPoles, rule.ApparentPower, rule.MinimumCircuitAmpacity })
+                Assert.That(patch.Patch["parameters"]?[name] is not null || patch.Run?.ParametersIfSourceExists?.ContainsKey(name) == true,
+                    Is.True, $"{profile["source"]}: {name} must remain governed by exported parameter intent.");
+        });
     }
 
     private static void AssertCompanyLiteral(string profilePath, Document document) {

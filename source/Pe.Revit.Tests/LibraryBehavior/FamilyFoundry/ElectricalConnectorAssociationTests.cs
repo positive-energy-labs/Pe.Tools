@@ -1,6 +1,9 @@
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Revit.FamilyFoundry;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
 
@@ -78,6 +81,26 @@ public sealed class ElectricalConnectorAssociationTests {
         } finally { document.Close(false); }
     }
 
+    [Test]
+    public void Electrical_connector_run_rule_failure_rolls_the_whole_reconciliation_back() {
+        var document = this.NewFamily("Electrical connector run rollback");
+        try {
+            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var patch = new FamilyPatch { Patch = new Newtonsoft.Json.Linq.JObject(), Run = new PatchRun {
+                ElectricalConnectorParameters = new ElectricalConnectorParameterRule {
+                    Voltage = "Voltage", NumberOfPoles = "Number of Poles", ApparentPower = "Voltage", MinimumCircuitAmpacity = "MCA"
+                }
+            } };
+            var operation = new ReconcileFamily(patch);
+            using var processor = new OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Not.Null);
+            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(ElectricalConnectors(document), Is.Empty);
+        } finally { document.Close(false); }
+    }
+
     private static readonly IReadOnlyDictionary<BuiltInParameter, string> Mappings = new Dictionary<BuiltInParameter, string> {
         [BuiltInParameter.RBS_ELEC_VOLTAGE] = "Voltage",
         [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = "Number of Poles",
@@ -92,6 +115,7 @@ public sealed class ElectricalConnectorAssociationTests {
         manager.AddParameter("Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
         manager.AddParameter("Number of Poles", GroupTypeId.Electrical, SpecTypeId.Int.NumberOfPoles, false);
         manager.AddParameter("Apparent Power", GroupTypeId.Electrical, SpecTypeId.ApparentPower, false);
+        manager.AddParameter("MCA", GroupTypeId.Electrical, SpecTypeId.Current, false);
         Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
         return document;
     }

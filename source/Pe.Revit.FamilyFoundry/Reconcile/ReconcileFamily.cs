@@ -116,7 +116,8 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         doc.Document.Regenerate();
         desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document);
         var observed = this._capture(doc.Document);
-        var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document));
+        var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document))
+            .Where(change => this._patch?.Run?.ElectricalConnectorParameters is null || !RunOwnedConnectorResidue(change, desired!)).ToList();
         var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
@@ -126,6 +127,19 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries: {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
 
         return new OperationLog(this.Name, logs.SelectMany(l => l.Entries).ToList());
+    }
+
+    private static bool RunOwnedConnectorResidue(FamilyChange change, FamilyModel desired) {
+        if (change.Section != "connectors") return false;
+        if (change.Kind == ChangeKind.Delete && change.Before is FamilyModelConnector { Domain: ConnectorDomain.Electrical })
+            return desired.Connectors.Values.All(connector => connector.Domain != ConnectorDomain.Electrical);
+        if (change.Kind != ChangeKind.Recreate || change.Before is not FamilyModelConnector { Domain: ConnectorDomain.Electrical } before ||
+            change.After is not FamilyModelConnector { Domain: ConnectorDomain.Electrical } after) return false;
+        var beforeJson = Newtonsoft.Json.Linq.JObject.FromObject(before, Newtonsoft.Json.JsonSerializer.Create(FamilyModelJson.Settings));
+        var afterJson = Newtonsoft.Json.Linq.JObject.FromObject(after, Newtonsoft.Json.JsonSerializer.Create(FamilyModelJson.Settings));
+        beforeJson.Remove("associate");
+        afterJson.Remove("associate");
+        return Newtonsoft.Json.Linq.JToken.DeepEquals(beforeJson, afterJson);
     }
 
 }

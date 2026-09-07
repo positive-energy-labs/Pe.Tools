@@ -23,7 +23,7 @@ public static class FamilyProfileConverter {
     public static FamilyProfileConversion Convert(JObject composed, IEnumerable<ParametersApi.Parameters.ParametersResult> definitions, Units sourceUnits) {
         var supported = new HashSet<string>(StringComparer.Ordinal) { "$schema", "ExecutionOptions", "FilterFamilies", "FilterApsParams",
             "AddAndMapSharedParams", "AddFamilyParams", "SetKnownParams", "CleanFamilyDocument", "SortParams", "DeleteParams",
-            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims", "ParamDrivenSolids", "SetLookupTables" };
+            "SharedParameterSelection", "MappingData", "SharedParameters", "FamilyParameters", "PerTypeAssignmentsTable", "AddRoomDingler", "MakeRefPlaneAndDims", "ParamDrivenSolids", "SetLookupTables", "MakeElectricalConnector" };
         foreach (var field in composed.Properties().Where(p => !supported.Contains(p.Name)))
             if (field.Value is not JObject operation || operation.Value<bool?>("Enabled") != false)
                 throw new InvalidOperationException($"Profile operation '{field.Name}' requires native conversion; it cannot be omitted from an exported standard.");
@@ -43,7 +43,7 @@ public static class FamilyProfileConverter {
         var mappings = composed["AddAndMapSharedParams"]?.ToObject<MapParamsSettings>() ?? new MapParamsSettings {
             Enabled = composed["MappingData"] is not null, MappingData = composed["MappingData"]?.ToObject<List<MappingData>>() ?? [] };
         var exported = ExportSharedMappings(mappings, selected, clean: composed["CleanFamilyDocument"]?.ToObject<CleanFamilyDocumentSettings>(),
-            sort: composed["SortParams"]?.ToObject<SortParamsSettings>());
+            sort: composed["SortParams"]?.ToObject<SortParamsSettings>(), electricalConnectorParameters: ElectricalConnectorRule(composed["MakeElectricalConnector"]));
         var parameters = (JObject)exported.Patch["parameters"]!;
         var specs = selected.ToDictionary(d => d.Name!, d => d.DownloadOptions.GetSpecTypeId(), StringComparer.Ordinal);
         if (composed["AddFamilyParams"] is JObject add && add.Value<bool?>("Enabled") != false) {
@@ -618,9 +618,35 @@ public static class FamilyProfileConverter {
         return ParameterPortableFormat.ForSpec(spec)(raw);
     }
 
+    private static ElectricalConnectorParameterRule? ElectricalConnectorRule(JToken? operation) {
+        if (operation is null or { Type: JTokenType.Null }) return null;
+        if (operation is not JObject settings) throw new InvalidOperationException("MakeElectricalConnector must be an object.");
+        RejectUnknown(settings, "MakeElectricalConnector", "Enabled", "SourceParameterNames");
+        if (settings["SourceParameterNames"] is JObject declaredSources)
+            RejectUnknown(declaredSources, "MakeElectricalConnector.SourceParameterNames", "Voltage", "NumberOfPoles", "ApparentPower", "MinimumCircuitAmpacity");
+        else if (settings["SourceParameterNames"] is not null)
+            throw new InvalidOperationException("MakeElectricalConnector.SourceParameterNames must be an object.");
+        if (settings.Value<bool?>("Enabled") == false) return null;
+        if (settings["SourceParameterNames"] is not JObject sources)
+            throw new InvalidOperationException("MakeElectricalConnector requires SourceParameterNames.");
+        string Required(string field) => string.IsNullOrWhiteSpace((string?)sources[field])
+            ? throw new InvalidOperationException($"MakeElectricalConnector.SourceParameterNames.{field} is required.")
+            : (string)sources[field]!;
+        return new ElectricalConnectorParameterRule {
+            Voltage = Required("Voltage"), NumberOfPoles = Required("NumberOfPoles"), ApparentPower = Required("ApparentPower"),
+            MinimumCircuitAmpacity = Required("MinimumCircuitAmpacity")
+        };
+    }
+
+    private static void RejectUnknown(JObject value, string path, params string[] allowed) {
+        var unknown = value.Properties().Select(property => property.Name).Except(allowed, StringComparer.Ordinal).ToList();
+        if (unknown.Count > 0) throw new InvalidOperationException($"{path} has unknown field(s): {string.Join(", ", unknown)}.");
+    }
+
     public static FamilyPatch ExportSharedMappings(MapParamsSettings settings,
         IEnumerable<ParametersApi.Parameters.ParametersResult> selectedDefinitions, bool fillBlanksFromSources = false,
-        CleanFamilyDocumentSettings? clean = null, SortParamsSettings? sort = null) {
+        CleanFamilyDocumentSettings? clean = null, SortParamsSettings? sort = null,
+        ElectricalConnectorParameterRule? electricalConnectorParameters = null) {
         var definitions = selectedDefinitions.ToDictionary(d => d.Name!, StringComparer.Ordinal);
         var mappings = settings.Enabled ? settings.GetMappingsByNewName() : new Dictionary<string, MappingData>();
         var explicitParameters = new JObject();
@@ -645,8 +671,9 @@ public static class FamilyProfileConverter {
         }
         return new FamilyPatch {
             Patch = new JObject { ["parameters"] = explicitParameters },
-            Run = conditional.Count == 0 && clean is null && sort is null ? null : new PatchRun {
+            Run = conditional.Count == 0 && clean is null && sort is null && electricalConnectorParameters is null ? null : new PatchRun {
                 ParametersIfSourceExists = conditional.Count == 0 ? null : conditional,
+                ElectricalConnectorParameters = electricalConnectorParameters,
                 Clean = clean is null ? null : JObject.FromObject(clean), Sort = sort is null ? null : JObject.FromObject(sort)
             }
         };

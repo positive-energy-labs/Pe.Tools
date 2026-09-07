@@ -30,9 +30,25 @@ public sealed class FamilyReconcilerTests {
         "DeleteByName", "RenameParams", "DeleteParams", "CreateFamilyTypes", "AddParams", "SetParamMetadata", "ClearFormulas", "SetLookupTables",
         "SetParamValues", "SetParamValuesPerType", "SetBlankValues", "MakeRefPlanes", "MakeRefLines", "MakeDims",
         "SetParamValues", "SetParamValuesPerType",
-        "MakeForms", "PlaceNested", "MakeArrays", "MakeConnectors", "PlaceDetails", "SetVisibility", "SetFamilySettings", "AddRoomDingler",
+        "MakeForms", "PlaceNested", "MakeArrays", "MakeConnectors", "EnsureElectricalConnectorParameters", "PlaceDetails", "SetVisibility", "SetFamilySettings", "AddRoomDingler",
         "PurgeNestedFamilies", "PurgeReferencePlanes", "PurgeModelLines", "PurgeParams", "SortParams", "DeleteFamilyTypes"
     ];
+
+    [Test]
+    public void Electrical_connector_run_rule_is_hashed_lowered_and_reported_after_connector_creation() {
+        var desired = Load("a-box");
+        var current = new FamilyModel { Family = desired.Family, Datums = desired.Datums };
+        var run = new PatchRun { ElectricalConnectorParameters = new ElectricalConnectorParameterRule {
+            Voltage = "V", NumberOfPoles = "P", ApparentPower = "VA", MinimumCircuitAmpacity = "MCA"
+        } };
+        var plan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable, run);
+        var order = plan.OpOrder.ToList();
+        Assert.Multiple(() => {
+            Assert.That(order.IndexOf("EnsureElectricalConnectorParameters"), Is.GreaterThan(order.IndexOf("MakeConnectors")));
+            Assert.That(plan.RunEffects, Is.EqualTo(new[] { "run.electricalConnectorParameters: voltage=V; numberOfPoles=P; apparentPower=VA; minimumCircuitAmpacity=MCA (declaration only)" }));
+            Assert.That(plan.PlanHash, Is.Not.EqualTo(FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable).PlanHash));
+        });
+    }
 
     private static string FixturePath(string name) {
         var dir = Path.GetDirectoryName(typeof(FamilyReconcilerTests).Assembly.Location)!;

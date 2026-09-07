@@ -148,6 +148,9 @@ public sealed class PatchRun {
     [JsonProperty("parametersIfSourceExists", NullValueHandling = NullValueHandling.Ignore)]
     public Dictionary<string, FamilyModelParameter>? ParametersIfSourceExists { get; init; }
 
+    [JsonProperty("electricalConnectorParameters", NullValueHandling = NullValueHandling.Ignore)]
+    public ElectricalConnectorParameterRule? ElectricalConnectorParameters { get; init; }
+
     /// <summary>
     ///     Blank cells (per type: `HasValue(FamilyType, FamilyParameter)` false) of parameters whose
     ///     <see cref="DataType" /> is in <see cref="BlankRule.Specs" /> become <see cref="BlankRule.Value" />.
@@ -162,6 +165,22 @@ public sealed class PatchRun {
 
     [JsonProperty("sort", NullValueHandling = NullValueHandling.Ignore)]
     public JToken? Sort { get; init; }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class ElectricalConnectorParameterRule {
+    [JsonProperty("voltage", Required = Required.Always)]
+    public string Voltage { get; init; } = null!;
+
+    [JsonProperty("numberOfPoles", Required = Required.Always)]
+    public string NumberOfPoles { get; init; } = null!;
+
+    [JsonProperty("apparentPower", Required = Required.Always)]
+    public string ApparentPower { get; init; } = null!;
+
+    /// <summary>Retained family-parameter intent. No connector target is assumed until native capability is proven.</summary>
+    [JsonProperty("minimumCircuitAmpacity", Required = Required.Always)]
+    public string MinimumCircuitAmpacity { get; init; } = null!;
 }
 
 [JsonObject(MemberSerialization.OptIn)]
