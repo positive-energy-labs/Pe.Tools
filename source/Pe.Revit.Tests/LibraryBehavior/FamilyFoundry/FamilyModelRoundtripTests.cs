@@ -1,7 +1,10 @@
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Tests;
@@ -269,7 +272,7 @@ public sealed class FamilyModelRoundtripTests {
     public void Bath_nested_instances_follow_authored_host_geometry() {
         var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Bath_nested_instances_follow_authored_host_geometry));
-        WritePipeFixtureUnitsAssociationProbe(this._ui.Application, directory!, output);
+        WritePipeFixtureUnitsAssociationProbe(this._ui.Application, output);
         Document? bath = null;
         Document? hinged = null;
         try {
@@ -328,19 +331,43 @@ public sealed class FamilyModelRoundtripTests {
         }
     }
 
-    private static void WritePipeFixtureUnitsAssociationProbe(Application application, string modelDirectory, string output) {
+    private static void WritePipeFixtureUnitsAssociationProbe(Application application, string output) {
         var evidence = new JObject { ["revitVersion"] = application.VersionNumber, ["connectors"] = new JArray() };
         Document? document = null;
         try {
-            var source = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json")));
-            foreach (var section in new[] { "connectors", "forms", "nested", "dimensions", "arrays" })
-                source[section] = new JObject();
-            var parsed = FamilyModelJson.Parse(source.ToString(Newtonsoft.Json.Formatting.None));
-            if (parsed.Value is null || parsed.Diagnostics.Count != 0)
-                throw new InvalidOperationException(string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}")));
-            document = FamilyModelBuild.Build(application, parsed.Value, modelDirectory: modelDirectory).Document;
-            var host = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
-                .Single(plane => plane.Name == "conn top");
+            var template = FamilyTemplate.ResolveTemplatePath(application, "Plumbing Fixture wall based");
+            document = application.NewFamilyDocument(template)
+                       ?? throw new InvalidOperationException($"Revit did not create a family document from template '{template}'.");
+            ReferencePlane host;
+            using (var setup = new Transaction(document, "Prepare native pipe association probe")) {
+                setup.Start();
+                var names = new HashSet<string>(StringComparer.Ordinal) {
+                    "PE_P_LoadCalc_CWFU", "PE_P_LoadCalc_HWFU", "PE_P_LoadCalc_DFU"
+                };
+                var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+                    RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!
+                    .Where(definition => definition.Name is not null && names.Contains(definition.Name)).ToList();
+                if (definitions.Count != names.Count)
+                    throw new InvalidOperationException("Company definitions do not contain all three pipe Fixture Units parameters.");
+                foreach (var definition in definitions) {
+                    var options = definition.DownloadOptions;
+                    _ = RevitFamilyFixtureHarness.AddSharedFamilyParameter(document,
+                        new SharedDefinitionSpec(definition.Name!, options.GetSpecTypeId(), Guid: options.GetGuid(),
+                            Description: definition.Description ?? "", Visible: options.Visible, UserModifiable: !definition.ReadOnly),
+                        options.GetGroupTypeId(), options.IsInstance);
+                }
+
+                var normal = XYZ.BasisZ;
+                var direction = XYZ.BasisX.CrossProduct(normal).Normalize();
+                var cut = normal.CrossProduct(direction).Normalize();
+                var view = new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>()
+                    .Where(candidate => !candidate.IsTemplate && candidate.ViewType is ViewType.Elevation or ViewType.Section)
+                    .OrderByDescending(candidate => Math.Abs(candidate.ViewDirection.DotProduct(XYZ.BasisX))).First();
+                host = document.FamilyCreate.NewReferencePlane(
+                    XYZ.BasisZ + direction * 8, XYZ.BasisZ - direction * 8, cut, view);
+                host.Name = "conn top";
+                setup.Commit();
+            }
             var manager = document.FamilyManager;
             using var transaction = new Transaction(document, "Probe pipe Fixture Units association prerequisites");
             transaction.Start();
