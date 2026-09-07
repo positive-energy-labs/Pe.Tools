@@ -64,7 +64,7 @@ public static class Solve {
                 var wall = remainder.Difference(UnionOf(faces.Cast<Geometry>().ToList()));
                 generated = Reclaim(faces, wall, out excluded);
                 Merge(generated, backing, knobs);
-                generated = Rectify(generated, knobs.InkHalfWidthFt * 2.0);
+                generated = Rectify(generated, input);
             }
         }
         var shapes = new List<Geometry>();
@@ -287,19 +287,18 @@ public static class Solve {
     }
 
     /// <summary>
-    ///     Ruling (5): rectification is a solver stage after the gate. A coverage simplifier is used
-    ///     rather than a per-loop simplify, because simplifying loops independently tears the shared
-    ///     edges stage 5 just noded and the coverage check below would throw.
+    ///     Simplify the coverage, then fit supported local wall directions on shared chains.
+    ///     Both stages edit shared boundaries together; independent room-loop edits tear coverage.
     /// </summary>
-    private static List<Geometry> Rectify(List<Geometry> shapes, double tolerance) {
+    private static List<Geometry> Rectify(List<Geometry> shapes, PartitionInput input) {
         if (shapes.Count == 0) return shapes;
         var coverage = shapes.ToArray();
         if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(coverage))
             throw new PartitionException("cannot simplify unmatched shared boundaries");
-        var simplified = NetTopologySuite.Coverage.CoverageSimplifier.SimplifyInner(coverage, tolerance);
+        var simplified = NetTopologySuite.Coverage.CoverageSimplifier.SimplifyInner(coverage, input.Knobs.InkHalfWidthFt * 2.0);
         if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(simplified))
             throw new PartitionException("simplification broke shared boundaries");
-        return simplified.ToList();
+        return BoundaryShape.Regularize(simplified, input).ToList();
     }
 
     // ---------------------------------------------------------------- support and audits
