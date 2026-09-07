@@ -6,9 +6,8 @@ using Pe.Shared.RevitData;
 namespace Pe.Revit.Tests;
 
 /// <summary>
-///     Parity proof for the FamilyType.As* extraction path: values must match, cell for cell, what the
-///     old FamilyManager.CurrentType loop produced (both funnel through GetValueString, so divergence
-///     here means the FamilyType overload behaves differently from the CurrentType one).
+///     Parity proof for the FamilyType.As* extraction path: values must match, cell for cell, raw values from a FamilyManager.CurrentType loop. Doubles are now exact explicit-unit strings,
+///     so parity is numerical; strings, integers and references retain their existing representations.
 /// </summary>
 [TestFixture]
 public sealed class FamilySnapshotExtractorParityTests {
@@ -65,11 +64,15 @@ public sealed class FamilySnapshotExtractorParityTests {
             // GetValueString overload. Sandbox because CurrentType switching mutates the document.
             var famDoc = new FamilyDocument(familyDocument);
             var groundTruth = new Dictionary<string, string?>(StringComparer.Ordinal);
+            var rawDoubles = new Dictionary<string, double>(StringComparer.Ordinal);
             using (DocumentSandbox.BeginRollback(familyDocument, "Parity ground truth")) {
                 foreach (var familyType in fm.Types.Cast<FamilyType>()) {
                     fm.CurrentType = familyType;
-                    foreach (var parameter in fm.GetParameters())
-                        groundTruth[$"{parameter.Definition.Name}|{familyType.Name}"] = famDoc.GetValueString(parameter);
+                    foreach (var parameter in fm.GetParameters()) {
+                        var key = $"{parameter.Definition.Name}|{familyType.Name}";
+                        groundTruth[key] = famDoc.GetValueString(parameter);
+                        if (parameter.StorageType == StorageType.Double && familyType.HasValue(parameter)) rawDoubles[key] = familyType.AsDouble(parameter)!.Value;
+                    }
                 }
             }
 
@@ -84,7 +87,15 @@ public sealed class FamilySnapshotExtractorParityTests {
                 foreach (var (typeName, extractedValue) in parameterSnapshot.ValuesPerType) {
                     var key = $"{parameterSnapshot.Definition.Identity.Name}|{typeName}";
                     Assert.That(groundTruth.ContainsKey(key), Is.True, $"Ground truth missing cell '{key}'.");
-                    Assert.That(extractedValue, Is.EqualTo(groundTruth[key]), $"Cell '{key}' diverged.");
+                    if (rawDoubles.TryGetValue(key, out var raw)) {
+                        var spec = new ForgeTypeId(parameterSnapshot.Definition.DataTypeId);
+                        double parsed;
+                        if (Pe.Shared.RevitData.Families.PortableScalar.TryParse(extractedValue, out var scalar))
+                            parsed = scalar.Kind == Pe.Shared.RevitData.Families.PortableScalarKind.Length ? scalar.Feet : UnitUtils.ConvertToInternalUnits(scalar.Value, UnitTypeId.Degrees);
+                        else if (spec == SpecTypeId.Number) parsed = double.Parse(extractedValue!, System.Globalization.CultureInfo.InvariantCulture);
+                        else Assert.That(UnitFormatUtils.TryParse(familyDocument.GetUnits(), spec, extractedValue, out parsed), Is.True, key);
+                        Assert.That(parsed, Is.EqualTo(raw).Within(Math.Max(1, Math.Abs(raw)) * 1e-12), key);
+                    } else Assert.That(extractedValue, Is.EqualTo(groundTruth[key]), $"Cell '{key}' diverged.");
                     comparedCells++;
                 }
             }

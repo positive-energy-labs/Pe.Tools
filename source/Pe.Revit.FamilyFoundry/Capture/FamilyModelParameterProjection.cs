@@ -68,7 +68,7 @@ public static class FamilyModelParameterProjection {
         var t = text.Trim();
         if (t.EndsWith("°", StringComparison.Ordinal) &&
             double.TryParse(t[..^1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var degrees))
-            return degrees.ToString("0.####", CultureInfo.InvariantCulture) + "deg";
+            return degrees.ToString("R", CultureInfo.InvariantCulture) + "deg";
         return t;
     }
 

@@ -70,6 +70,55 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
+    public void Captured_raw_values_rebuild_despite_rounded_symbol_suppressed_display() {
+        var source = this.NewFamily("FF exact capture");
+        var target = this.NewFamily("FF exact rebuild");
+        var values = new[] {
+            (Name: "Width", Spec: SpecTypeId.Length, Unit: UnitTypeId.Millimeters, Raw: 1.23456789012345),
+            (Name: "Fine Angle", Spec: SpecTypeId.Angle, Unit: UnitTypeId.Degrees, Raw: 0.123456789012345),
+            (Name: "Fine Voltage", Spec: SpecTypeId.ElectricalPotential, Unit: UnitTypeId.Volts, Raw: UnitUtils.ConvertToInternalUnits(123.456789012345, UnitTypeId.Volts)),
+            (Name: "Fine Temperature", Spec: SpecTypeId.HvacTemperature, Unit: UnitTypeId.Celsius, Raw: UnitUtils.ConvertToInternalUnits(23.456789012345, UnitTypeId.Celsius)),
+            (Name: "Fine Number", Spec: SpecTypeId.Number, Unit: UnitTypeId.General, Raw: 1.23456789012345)
+        };
+        try {
+            using (var seed = new Transaction(source, "Seed disposable coarse display settings")) {
+                seed.Start();
+                var units = source.GetUnits();
+                foreach (var value in values) {
+                    var parameter = source.FamilyManager.FindParameter(value.Name) ?? source.FamilyManager.AddParameter(value.Name, GroupTypeId.Data, value.Spec, false);
+                    foreach (var type in source.FamilyManager.Types.Cast<FamilyType>()) { source.FamilyManager.CurrentType = type; source.FamilyManager.Set(parameter, value.Raw); }
+                    if (value.Spec == SpecTypeId.Number) continue;
+                    var format = new FormatOptions(value.Unit) { Accuracy = 1 };
+                    format.SetSymbolTypeId(new ForgeTypeId(""));
+                    units.SetFormatOptions(value.Spec, format);
+                }
+                source.SetUnits(units);
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var captured = source.CaptureFamilyModel();
+            var json = JObject.Parse(FamilyModelJson.Serialize(captured));
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = json["parameters"]!.DeepClone(), ["types"] = json["types"]!.DeepClone() } };
+            Assert.That(FamilyModelUnitValidation.Validate(captured, patch.Patch, _ => null), Is.Empty);
+            using var processor = new OperationProcessor(target);
+            var operation = new ReconcileFamily(patch);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            foreach (var value in values) {
+                var parameter = target.FamilyManager.FindParameter(value.Name);
+                foreach (var type in target.FamilyManager.Types.Cast<FamilyType>())
+                    Assert.That(type.AsDouble(parameter), Is.EqualTo(value.Raw).Within(Math.Max(1, Math.Abs(value.Raw)) * 1e-12), value.Name);
+                if (value.Spec != SpecTypeId.Number) {
+                    var format = source.GetUnits().GetFormatOptions(value.Spec);
+                    Assert.That(format.Accuracy, Is.EqualTo(1));
+                    Assert.That(format.GetSymbolTypeId().TypeId, Is.Empty);
+                }
+            }
+        } finally { source.Close(false); target.Close(false); }
+    }
+
+    [Test]
     public void Plumbing_shared_number_definitions_use_native_other_group() {
         var document = this.NewFamily("FF plumbing shared definitions");
         try {

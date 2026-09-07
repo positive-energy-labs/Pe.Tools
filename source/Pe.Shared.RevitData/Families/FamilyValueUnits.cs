@@ -12,7 +12,7 @@ public static class FamilyValueUnits {
             if (value is null || value.Type == JTokenType.Null || !isMeasurable(parameter)) return;
             var text = value.ToString();
             if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _) ||
-                !Regex.IsMatch(text, "[\\p{L}'\"\u00B0%]"))
+                !Regex.IsMatch(text, "[\\p{L}\\p{Sc}'\"\u00B0%]"))
                 diagnostics.Add(new("explicit-units-required", path, "Authored measurable values require explicit units; Number and Integer remain unitless. Formulas use Revit formula syntax."));
         }
         foreach (var parameter in (authored["parameters"] as JObject)?.Properties() ?? [])

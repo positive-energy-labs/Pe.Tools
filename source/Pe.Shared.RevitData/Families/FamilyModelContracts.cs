@@ -1016,7 +1016,7 @@ public sealed class DataTypeConverter : JsonConverter<DataType> {
 ///     Lengths resolve to <see cref="Feet" />; angles keep degrees in <see cref="Value" />.
 /// </summary>
 public readonly record struct PortableScalar(PortableScalarKind Kind, double Value, string Unit) {
-    private const string Number = @"(?:\d+(?:\.\d+)?(?:\s+\d+/\d+)?|\d+/\d+)";
+    private const string Number = @"(?:\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:\s+\d+/\d+)?|\d+/\d+)";
 
     private static readonly Regex Suffixed = new(
         $@"^\s*(?<number>[+-]?{Number})\s*(?<unit>mm|cm|in|ft|m|deg)\s*$",
@@ -1058,7 +1058,7 @@ public readonly record struct PortableScalar(PortableScalarKind Kind, double Val
         var parts = s.Split([' '], StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 2 && double.TryParse(parts[0], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var whole) && TryFraction(parts[1], out var f)) { value = sign * (whole + f); return true; }
         if (parts.Length == 1 && TryFraction(parts[0], out var only)) { value = sign * only; return true; }
-        if (parts.Length == 1 && double.TryParse(parts[0], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var n)) { value = sign * n; return true; }
+        if (parts.Length == 1 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var n)) { value = sign * n; return true; }
         value = 0; return false;
     }
 

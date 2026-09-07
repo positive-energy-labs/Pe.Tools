@@ -212,7 +212,7 @@ public static class FamilyModelValidator {
     private static void CheckValue(PortableValue v, DataType dt, string path, List<FamilyModelDiagnostic> d) {
         var ok = dt switch {
             DataType.Length or DataType.PipeSize or DataType.DuctSize => v.Kind == PortableValueKind.Length,
-            DataType.Angle or DataType.Slope => v.Kind == PortableValueKind.Angle,
+            DataType.Angle => v.Kind == PortableValueKind.Angle,
             DataType.Integer or DataType.NumberOfPoles => v.Kind == PortableValueKind.Integer,
             DataType.YesNo => v.Kind == PortableValueKind.YesNo,
             DataType.Number => v.Kind is PortableValueKind.Integer or PortableValueKind.Number,

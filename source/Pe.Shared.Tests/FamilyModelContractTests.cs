@@ -61,6 +61,13 @@ public sealed class FamilyModelContractTests {
         Assert.That(local.Value!.Parameters["W"].SharedGuid, Is.Null);
     }
 
+    [TestCase("1.23456789012345E-12ft", 1.23456789012345E-12)]
+    [TestCase("1.23456789012345E-12deg", 1.23456789012345E-12)]
+    public void Exact_capture_literals_preserve_scientific_notation(string text, double expected) {
+        Assert.That(PortableScalar.TryParse(text, out var value), Is.True);
+        Assert.That(value.Value, Is.EqualTo(expected));
+    }
+
     [TestCase("480", false)]
     [TestCase("1e3", false)]
     [TestCase("1/2", false)]

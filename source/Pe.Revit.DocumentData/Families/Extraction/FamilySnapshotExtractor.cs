@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.ProjDocument;
@@ -127,8 +128,10 @@ public static class FamilySnapshotExtractor {
         var formula = string.IsNullOrWhiteSpace(familyParameter.Formula) ? null : familyParameter.Formula;
 
         var valuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var format = familyParameter.StorageType == StorageType.Double ? ParameterPortableFormat.ForSpec(familyParameter.Definition.GetDataType()) : null;
         foreach (var type in types)
-            valuesPerType[type.Name] = famDoc.GetValueString(type, familyParameter);
+            valuesPerType[type.Name] = format is not null && type.HasValue(familyParameter)
+                ? format(type.AsDouble(familyParameter)!.Value) : famDoc.GetValueString(type, familyParameter);
 
         return new FamilyParameterSnapshot(
             new ParameterDefinitionDescriptor(
