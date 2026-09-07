@@ -7,6 +7,28 @@ namespace Pe.Revit.Tests;
 /// <summary>Native family.json acceptance through saved RFAs, with no authored state available to capture.</summary>
 [TestFixture]
 public sealed class FamilyModelRoundtripTests {
+    [Test]
+    public void Reapply_moves_a_named_plane_in_the_same_family(UIApplication ui) {
+        var desired = FamilyModelJson.Parse("""
+            { "family": { "name": "Plane reapply", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
+              "types": { "Standard": {} }, "refPlanes": { "Service clearance": { "normal": "+X", "at": "1ft" } } }
+            """).Value!;
+        Document? document = null;
+        try {
+            var built = FamilyModelBuild.Build(ui.Application, desired);
+            document = built.Document;
+            Assert.That(built.Receipt?.Converged, Is.True);
+            desired.RefPlanes["Service clearance"] = new FamilyModelRefPlane { Normal = Axis.PlusX, At = PortableLength.FromFeet(2) };
+            var receipt = FamilyModelBuild.Reconcile(document, desired);
+            Assert.That(receipt?.Converged, Is.True);
+            var plane = new FilteredElementCollector(document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                .Single(p => p.Name == "Service clearance");
+            Assert.That(plane.GetPlane().Origin.X, Is.EqualTo(2).Within(1e-7));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
     [TestCase("a-box")]
     [TestCase("b-grd")]
     [TestCase("c-bath-shower")]

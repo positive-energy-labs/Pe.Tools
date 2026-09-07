@@ -263,7 +263,8 @@ public static class FamilyReconciler {
 
         // 1 geometry deletes, dependents first (a labeled dim blocks DeleteParams: gotcha 21)
         foreach (var section in new[] { "details", "connectors", "arrays", "nested", "forms", "dimensions", "refLines", "refPlanes" })
-            if (Of(section, gone) is { Length: > 0 } dead) q.Add(new DeleteByName(section, dead.Select(x => x.Before!).ToArray()));
+            if (Of(section, gone) is { Length: > 0 } dead)
+                q.Add(new DeleteByName(section, dead.Select(x => section is "refPlanes" or "refLines" ? x.Key : x.Before!).ToArray()));
         // 2 renames before adds (gotcha 26), 3 param deletes, formula length descending
         if (Of("parameters", ChangeKind.Rename) is { Length: > 0 } renames)
             q.Add(new RenameParams(renames.Select(x => (x.MappedFrom!, x.Key)).ToArray()));
