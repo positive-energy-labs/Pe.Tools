@@ -13,6 +13,7 @@ const repo = resolve(args["repo-root"] ?? process.cwd());
 const output = resolve(required("artifact-dir"));
 const host = required("host");
 const session = required("bridge-session-id");
+const resolvedSession = session.startsWith("session:") ? session.slice("session:".length) : session;
 const documentPath = resolve(required("document-path"));
 const originalDocumentPath = resolve(required("original-document-path"));
 if (samePath(documentPath, originalDocumentPath)) throw new Error("The proof document must be a disposable copy, not the original.");
@@ -192,7 +193,7 @@ function hostCall(label, key, request) {
   const envelope = parsePeaJson(result.stdout, label);
   writeJson(join(output, "responses", `${label}.json`), envelope);
   if (!envelope.ok) throw new Error(`${key}: ${envelope.message ?? "Host operation failed"}`);
-  if (envelope.resolvedTarget?.session !== session)
+  if (envelope.resolvedTarget?.session !== resolvedSession)
     throw new Error(`${key}: target mismatch; requested '${session}', resolved '${envelope.resolvedTarget?.session ?? "none"}'.`);
   return envelope;
 }
