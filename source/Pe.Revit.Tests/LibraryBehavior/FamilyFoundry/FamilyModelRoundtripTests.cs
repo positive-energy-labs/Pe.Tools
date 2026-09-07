@@ -540,8 +540,15 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(after.Select(x => x.TypeName), Is.EqualTo(before.Select(x => x.TypeName)));
             for (var i = 0; i < before.Count; i++) AssertRuntimeSame(before[i].Result, after[i].Result);
 
-            if (fixture == "a-box")
+            if (fixture == "a-box") {
                 AssertMinimalBoxPreservation(artifact, before[0].Result, after[0].Result);
+                foreach (var typeName in new[] { "Standard", "Wide" }) {
+                    Assert.That(before.Single(state => state.TypeName == typeName).Result.ParameterValues["Lookup Result"],
+                        Is.EqualTo(6).Within(1e-9), $"authored {typeName}/Lookup Result");
+                    Assert.That(after.Single(state => state.TypeName == typeName).Result.ParameterValues["Lookup Result"],
+                        Is.EqualTo(6).Within(1e-9), $"rebuilt {typeName}/Lookup Result");
+                }
+            }
 
             var receipt = FamilyModelBuild.Reconcile(artifact.ReopenedB, artifact.Authored);
             Assert.That(receipt?.Converged, Is.True, "Reapplying the original specification must converge.");
