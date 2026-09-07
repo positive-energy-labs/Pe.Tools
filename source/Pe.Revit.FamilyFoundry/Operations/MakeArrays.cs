@@ -18,7 +18,7 @@ public sealed class MakeArrays((string Slug, FamilyModelArray Spec)[] arrays, Fa
         foreach (var (slug, spec) in arrays) {
             try {
                 var memberSpec = model.Nested.TryGetValue(spec.Member, out var m) ? m : throw new InvalidOperationException($"Array member '{spec.Member}' is not a nested entry.");
-                var member = PlaceNested.Find(doc, memberSpec) ?? throw new InvalidOperationException($"Nested '{spec.Member}' is not placed.");
+                var member = PlaceNested.Place(doc, $"{slug} seed", memberSpec, logs);
                 if (!LinearArray.IsElementArrayable(doc, member.Id)) throw new InvalidOperationException($"'{spec.Member}' is not arrayable.");
                 var label = FamilyRefs.Param(doc, spec.Label);
                 var formula = label.Formula;

@@ -28,6 +28,27 @@ public sealed class FamilyReconcilerTests {
 
     private static readonly string[] Fixtures = ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"];
 
+    [TestCase("association")]
+    [TestCase("host")]
+    public void Grd_nested_seed_changes_rebuild_both_unchanged_dependent_arrays(string change) {
+        var current = Load("b-grd");
+        var desired = FamilyModelJson.Parse(FamilyModelJson.Serialize(current)).Value!;
+        var vane = desired.Nested["vane"];
+        desired.Nested["vane"] = change == "host"
+            ? new FamilyModelNested { Family = vane.Family, Type = vane.Type, Host = "opening (Front)", Align = vane.Align, Associate = vane.Associate }
+            : new FamilyModelNested { Family = vane.Family, Type = vane.Type, Host = vane.Host, Align = vane.Align,
+                Associate = new Dictionary<string, string>(vane.Associate!) { ["_vane length"] = "param:Duct Width" } };
+
+        var plan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable);
+        Assert.Multiple(() => {
+            Assert.That(plan.Changes.Single(c => c.Section == "nested" && c.Key == "vane").Kind, Is.EqualTo(ChangeKind.Recreate));
+            Assert.That(plan.Changes.Where(c => c.Section == "arrays"), Has.Count.EqualTo(2));
+            Assert.That(plan.Changes.Where(c => c.Section == "arrays").Select(c => c.Kind), Is.All.EqualTo(ChangeKind.Recreate));
+            Assert.That(plan.Queue.Operations.OfType<PlaceNested>(), Is.Empty, "Array seeds remain owned by MakeArrays.");
+            Assert.That(plan.Queue.Operations.OfType<MakeArrays>().Single().Description, Does.Contain("vanes-back").And.Contain("vanes-front"));
+        });
+    }
+
     /// <summary>The DAG of r2-reconcile §4, as op type names; a plan's OpOrder must be a subsequence of this.</summary>
     private static readonly string[] Dag = [
         "DeleteByName", "RenameParams", "DeleteParams", "CreateFamilyTypes", "AddParams", "SetParamMetadata", "ClearFormulas", "SetLookupTables",

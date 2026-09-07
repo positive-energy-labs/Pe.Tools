@@ -1,6 +1,7 @@
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Tests;
 
@@ -292,6 +293,56 @@ public sealed class FamilyModelRoundtripTests {
         } finally {
             artifact.CloseDocuments();
         }
+    }
+
+    [Test]
+    public void Grd_arrays_own_independent_nested_seeds_under_count_and_spacing_perturbation() {
+        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json")));
+        var parameters = (JObject)json["parameters"]!;
+        parameters["_back count"] = JObject.Parse("""{"dataType":"Integer","value":3}""");
+        parameters["_front count"] = JObject.Parse("""{"dataType":"Integer","value":4}""");
+        var arrays = (JObject)json["arrays"]!;
+        arrays["vanes-back"]!["label"] = "param:_back count";
+        arrays["vanes-back"]!["moveTo"] = "Second";
+        arrays["vanes-back"]!["spacing"] = "3in";
+        ((JObject)arrays["vanes-back"]!).Remove("spacingPlane");
+        arrays["vanes-front"]!["label"] = "param:_front count";
+        arrays["vanes-front"]!["moveTo"] = "Second";
+        arrays["vanes-front"]!["spacing"] = "5in";
+        ((JObject)arrays["vanes-front"]!).Remove("spacingPlane");
+        var parsed = FamilyModelJson.Parse(json.ToString());
+        Assert.That(parsed.Diagnostics, Is.Empty);
+
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._ui.Application, parsed.Value!).Document;
+            var actual = new FilteredElementCollector(document).OfClass(typeof(LinearArray)).Cast<LinearArray>()
+                .ToDictionary(a => a.Label.Definition.Name, StringComparer.Ordinal);
+            Assert.Multiple(() => {
+                Assert.That(actual["_back count"].NumMembers, Is.EqualTo(3));
+                Assert.That(actual["_front count"].NumMembers, Is.EqualTo(4));
+                Assert.That(SpanY(document, actual["_back count"]), Is.EqualTo(0.5).Within(1e-7));
+                Assert.That(SpanY(document, actual["_front count"]), Is.EqualTo(1.25).Within(1e-7));
+            });
+            var originals = actual.Values.Select(a => a.GetOriginalMemberIds().Single()).ToArray();
+            Assert.That(originals.Distinct(), Has.Count.EqualTo(2), "Each array must own a separately placed seed.");
+            Assert.That(actual.Values.SelectMany(a => Instances(document, a))
+                .All(i => document.FamilyManager.GetAssociatedFamilyParameter(i.LookupParameter("_vane length")) is not null &&
+                          document.FamilyManager.GetAssociatedFamilyParameter(i.LookupParameter("_vane thickness")) is not null), Is.True,
+                "Seed placement associations must survive array creation.");
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+
+        static double SpanY(Document doc, LinearArray array) {
+            var ys = Instances(doc, array).Select(i => ((LocationPoint)i.Location).Point.Y).ToArray();
+            return ys.Max() - ys.Min();
+        }
+
+        static IEnumerable<FamilyInstance> Instances(Document doc, LinearArray array) =>
+            array.GetOriginalMemberIds().Concat(array.GetCopiedMemberIds()).SelectMany(id => doc.GetElement(id) switch {
+                Group group => group.GetMemberIds().Select(doc.GetElement).OfType<FamilyInstance>(),
+                FamilyInstance instance => [instance],
+                _ => []
+            });
     }
 
     private static void AssertNativeContent(Document document, FamilyModel desired) {

@@ -344,8 +344,8 @@ public static class FamilyReconciler {
     /// <summary>Verdict 4: a changed plane or line takes every desired entry that references it down with it.</summary>
     private static void Cascade(List<FamilyChange> changes, FamilyModel d) {
         var dying = changes
-            .Where(c => c.Section is "refPlanes" or "refLines" or "datums" && c.Kind is ChangeKind.Recreate or ChangeKind.Delete)
-            .Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
+            .Where(c => c.Kind is ChangeKind.Recreate or ChangeKind.Delete && c.Section is "refPlanes" or "refLines" or "datums" or "nested")
+            .Select(c => c.Section == "nested" ? "nested:" + c.Key : c.Key).ToHashSet(StringComparer.Ordinal);
         var recreated = changes.Where(c => c.Kind is ChangeKind.Recreate or ChangeKind.Add)
             .Select(c => $"{c.Section}:{c.Key}").ToHashSet(StringComparer.Ordinal);
 
@@ -479,8 +479,11 @@ public static class FamilyReconciler {
             }));
         // 13-17 forms, nested, arrays, connectors, details
         if (After<FamilyModelForm>("forms") is { Length: > 0 } forms) q.Add(new MakeForms(forms, d));
-        if (After<FamilyModelNested>("nested") is { Length: > 0 } nested) q.Add(new PlaceNested(nested, d));
-        if (After<FamilyModelArray>("arrays") is { Length: > 0 } arrays) q.Add(new MakeArrays(arrays, d));
+        var arrays = After<FamilyModelArray>("arrays");
+        var arrayMembers = d.Arrays.Values.Select(a => a.Member).ToHashSet(StringComparer.Ordinal);
+        var standaloneNested = After<FamilyModelNested>("nested").Where(n => !arrayMembers.Contains(n.Slug)).ToArray();
+        if (standaloneNested.Length > 0) q.Add(new PlaceNested(standaloneNested, d));
+        if (arrays.Length > 0) q.Add(new MakeArrays(arrays, d));
         if (After<FamilyModelConnector>("connectors") is { Length: > 0 } connectors) q.Add(new MakeConnectors(connectors, d));
         if (run?.ElectricalConnectorParameters is { } electricalConnectorParameters) {
             q.Add(new EnsureElectricalConnectorParameters(electricalConnectorParameters));
