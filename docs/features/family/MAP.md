@@ -1,186 +1,64 @@
 # Family Foundry completion map
 
-Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rewrite`.
-Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
-Nothing is merged to main or published. No whole user story is closed yet.
+Current effort: 2026-09-07. Integration: `Pe.Tools-family`, `family/rewrite`.
+Product rulings: [LEDGER.md](LEDGER.md). Nothing merged to main or published.
+No whole user story is closed. Historical attempts live in the proof reports and git.
 
-Wave25 at 3a64a1b ran five fresh controlled Revit 2025 checks: metadata and whole-family
-rollback passed; three diagnostic cases failed. LinearArray.Create is the exact first call
-that overwrites Type A with current Type C values. Native pipe Demand plus regeneration
-enables Fixture Units association for cold/hot/sanitary connectors. Local Keep values exist
-on symbols and native filters select correctly, but no schedulable field exposes them.
-PID88932 exited with exact settings restoration, empty quarantine, and protected identities
-preserved. Raw evidence: Pe.Tools-ff-proof/.artifacts/runs/wave25.
+## Current evidence
 
-Current native proof is controlled dev ff-profile-proof-25 on the disposable old template.
-Latest completed payload checkpoint is PID47944, generation20260907155847757, sourcee180b2f.
-AprilAire Apply and guarded reapply converged; both following Plans were empty. SDK candidate f59ceb7 retained quarantine
-across restart. Its saved original has identical85 add-in rows and disable flags to the prior
-baseline, but different JSON bytes; final stop/restoration remains owed. Protected sessions stay
-untouched. P owns all lifecycle. Plan6 is terminal; one real company profile now has full Host Apply/reapply proof.
+- Native controlled dev payload `e180b2f`: AprilAire 800 company profile passed Plan,
+  Apply, empty Plan, converged reapply, and final empty Plan. Replacement family6150263;
+  stable empty-plan hashE3E349A6E82E15B5. One profile, not the45-profile corpus.
+- Plan6:45 profiles attempted,43 converted,37 native Plans completed (19 selected zero),
+  six duplicate-name failures. Two transport timeouts recovered terminal results.
+  Grinder scoped80 correction70ddfaa and Modine Fahrenheit correction compile;
+  both require native conversion/apply. Original52 company files remain frozen.
+- Duplicate identity repairs468706e/b7799c9 are integrated. Latest lookup repair still
+  needs native Linear LED and lookup roundtrip checks without losing ambiguous-name data.
+- Actual `/families` browser selected Mechanical Equipment, AprilAire, and rendered
+  one family/six types with native values. Real catalog:560 families/1635 types/64 categories.
+  Saved native AprilAire profile copy is bound. Route Preview/Apply/repeat remain owed;
+  scope-band Dismiss behavior is under repair. Reconnect observation remains owed.
+- Explicit NoTransaction script-owned rollback and public FF Build passed in Revit.
+  Full Pea/Pod/bulk-script stories remain owed. Existing `/family` proof predates current
+  changes; repeat the full journey against current integrated bytes.
+- Shared dimension-label prevention passed the real AprilAire flow. Array creation has
+  a separate native per-type overwrite defect. Four combined geometry fixtures are not green.
+- Phase-to-poles routing, native metadata and whole-family rollback have focused passing
+  evidence. Full positive matrix, connector/room-point behavior and preservation remain owed.
+- FF compile portability was proven for2023-2026 at earlier commits; current full-app,
+  cross-year runtime and installed proof are not established.
 
-Request-file binding, empty/Other parameter groups, and unitless sone conversion are repaired.
-Plan6 completed all45 profiles:43 converted,2 literal conversion failures;37 native Plan operations
-completed (including19 zero-selected responses),6 failed on duplicate Default Elevation keys.
-The37 include two recovered transport timeouts. This is planning evidence, not migration success.
-Recursive EditFamily on nested
-Alternator exposed pre-existing geometry-constraint warnings and blocked capture. N owns the
-shared capture failure boundary; no constraints were removed. Two timed-out electrical requests
-have recovered terminal native results for14 and27 families. AprilAire800 has a reviewed clean
-plan for3813845; its fresh Apply refused hash drift12DF8B5967B8A884 to98AFB19C7704BE06.
-Hash repair962cfc2 passed the native guard on the second Apply. That run reached residue5:
-regeneration after dimension labels copied current-type values into another type. Whole-family
-rollback preserved the captured model. Native alphabetical-first-type control preserved all values,
-unset states, formulas, and original current type. Shared two-line fix e180b2f passed full Apply3;
-replacement family6150263 was followed through empty Plan, converged reapply, and final empty Plan
-with stable hashE3E349A6E82E15B5. Evidence: monthly45-host-apply-aprilaire800-3.
-Canonical identity fix468706e repairs the formula supplement; native Linear LED capture still
-finds another duplicate-name lookup. P owns its exact failing caller and feature-preserving repair. Historical request
-and converter failures remain in PROOF-MONTHLY-HOST.md, not evidence of missing families.
-Plan6 later exposed destructive native-copy warnings at journal3673 10:06:33: dimensions could
-not be copied and elements were deleted. That affected capture cannot certify safe Apply even
-if its current Plan returns no refusals. Shared capture guard c55cc19 distinguishes this from the
-known constraint warning; native proof is owed. Transport7501c47 preserves warnings/issues through
-route parsing. Affected family5982572 PE - Title Block remains excluded from Apply.
+## Immediate gates and ownership
 
-NoTransaction script-owned rollback plus public FF Build passed in controlled915790e. Browser
-proved the shared Instances selector repair6eb667d. Explicit scope parser d7016d4 passes route
-checks and actual scope binding is proven. Reconnect/warning UI1811d2a is integrated; real catalog
-returns560 families/1635 types/64 categories, with81 Mechanical Equipment families/282 types.
-Category selection still leaves the family feed disabled; R owns that path and a company profile
-copy in the authoritative route root. Full matrix/profile/Apply route proof remains owed. Modine Fahrenheit
-repair c63fa31 compiles, with native proof owed. Name matching and Grinder80dBi rulings are pending.
+- P (Sol medium, sole native lifecycle owner): c55 warning guard is FALSIFIED. EditFamily
+  failures can belong to its transient family document, not the source project. SDK9091b5c
+  and caller8c2f79a are isolated candidates, not integrated. Verify nested-document scope,
+  adopt coherent SDK packages, prove known constraint warning handling and refusal of
+  destructive copy warnings. Title Block5982572 remains excluded from Apply.
+- N (Sol high): existing SDK dev certificate passes the adapter's exact WinTrust check,
+  including zip roundtrip. Package newly versioned exact-target adapter without trust changes.
+  Native exact-process targeting is still unproven; attached tests remain suspended.
+- R (Sol medium): shared picker state repair and actual route Preview/Plan. Coordinate
+  native refresh with P. Grinder correction is integrated; native acceptance remains owed.
+- Focused parameter capture7cc0706 and connector881d393+a6ce060 are NOT integrated.
+  Full/focused parity, repeated EditFamily identity and dependency sensitivity gate adoption.
+  Fresh dispatch was refused by the existing R25 settings lease; coordinate controlled-session
+  checkpoint/stop through SDK, then run the gate. Do not repeat the lease-conflicting command.
+- Root: review integration, simplify final contracts, preserve every story below, and keep
+  compile/browser/native claims separate. Latest integrated checkpoint8e1c8e0 is ahead of
+  native payloade180b2f; source presence does not prove loaded behavior.
 
-Focused parameter capture candidate7cc0706 is NOT integrated. Native full/focused parity and
-repeated EditFamily identity stability gate integration; connector extension remains separate.
+## Custody checkpoint
 
-Demand support149a556/61d28ba, mixed local/shared/instance selectors87cee69, array prevention
-controls, and restored combined box acceptancee1587be remain native-proof obligations. The
-preservation census in PROOF-NORMALIZATION.md records full profile effects, positive matrix,
-GRD seed behavior, and operator evidence gaps; no feature is retired by a passing compile.
+P last verified controlled `ff-profile-proof-25`, PID47944, start2026-09-07T15:59:23.3391536Z,
+generation20260907155847757. It holds unsaved migrated disposable state and the R25 settings
+lease. Re-read identity before acting. SDK quarantine candidatef59ceb7 preserved its hold
+across restart; final stop/restoration is owed. Saved baseline has identical85 add-in disable
+rows but changed serialization bytes. Protected user sessions71484/98976 stay untouched.
 
-Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
-are correct after each seed and before topology, then Type A takes Type C values during
-topology construction. SaveAs/reopen/load do not introduce that first change. P is bracketing
-the individual native topology calls. The plumbing control failed on datum reconciliation
-before creating connectors; N is replacing its FF-built baseline with direct native setup.
-Owned PID40944 exited, settings restored exactly, quarantine is empty, and protected start
-identities are unchanged. Evidence: Pe.Tools-ff-proof/.artifacts/runs/wave24.
-
-Integrated fdb7948 carries execution options through Host and both route plans/applies.
-The shared contract lives in Pe.Shared.RevitData.Families; native FamilyVisitOptions remains
-separate. OptimizeTypeOperations and SuppressWarnings affect reconciler behavior and hashes.
-SingleTransaction remains meaningful for public multi-operation queues, not a single reconciler
-operation. EnableCollectors still controls optional caller pipelines; Host capture is mandatory.
-The monthly Host driver is integrated; actual 45-profile Host proof remains owed. Installed
-Host lacks FF operations, so this proof must use a current controlled dev snapshot and its Host.
-
-Wave23 at 81f486f ran six fresh controlled Revit 2025 checks: three passed, three failed.
-Production schema capture, all seven metadata cases, and connector-host capture after reopen
-passed. The selector, positive value matrix, and GRD pre-array checks failed. Native matrix
-stage evidence shows Type A already contains Type C values before normalization; fixture
-creation/topology/save/load is the next boundary to diagnose, not a guessed migrator repair.
-Owned PID102556 exited, quarantine is empty, native settings restored exactly, and protected
-71484/98976 start identities were preserved. The source hold is released. Evidence is
-Pe.Tools-ff-proof/.artifacts/runs/wave23/run.json, cleanup-verification.json, and retained
-matrix-value-stages.json. No TRX was found; adapter.log contains the exact failures.
-The selector reaches the real condition but ScheduleHelper applies fewer filters than requested.
-Its local Keep field may be unschedulable; N owns verifying parameter coverage without weakening
-the fixture.
-Pipe association prerequisite probes are integrated at 1303533; they isolate native flow
-configuration from unrelated bath geometry and leave the full bath acceptance intact.
-
-Wave22 at 866a7aa ran 11 checks, 5 passed and 6 failed.
-Extraction parity, schema evidence, exact-alias refusal rollback, invalid-matrix rollback,
-and connector-host identity probe passed. Raw internal parameter schemas contain descriptions
-under constants entries with id=description; N owns the production reader correction.
-Native host dependencies distinguish coincident plane/nested-face connectors. Integrated
-d2b40a2 reads native description constants and 129e1a5 replaces geometric host inference
-with native dependencies. Their production readback/reopen checks await wave23. Integrated
-fbd2aca records native matrix values before normalization, after normalization, and after
-value application; no production value fix is justified until the first bad stage is known.
-Matrix per-type values, GRD spacing before arrays, Fixture Units
-association, selector fixture instance filtering, and metadata readback remain red.
-PID 97760 exited, native settings restored exactly, and protected identities were preserved.
-Evidence: Pe.Tools-ff-proof/.artifacts/runs/wave22, including TRX and cleanup verification.
-
-Wave21 at 141877b ran eight independent native checks: 0 passed, 8 failed.
-Installed API metadata identifies GetParameterSchema as internal: the public reflection
-lookup cannot find it. Integrated 3294fbb retains parameter rows on optional tooltip errors
-and blocks reconciliation on incomplete required-field capture. Internal schema invocation
-was subsequently proven in wave22 and adopted at d2b40a2. Other-year runtime compatibility
-and integrated tooltip acceptance remain unproven.
-Selector fixture naming (0fdf8f7), pipe Fixture Units identity (dd67073), and explicit
-NotAReference capture (4f4ca9e) are repaired in source. Native acceptance remains owed.
-Exact integrated Debug.R25.Tests compilation at 4f4ca9e passed with 0 errors/129 warnings.
-The separate join diagnostic recorded no failures and did not establish a native warning ID.
-Both SDK-owned processes exited, settings were restored exactly, and protected sessions
-71484/98976 retained their identities. No source hold remains from these runs.
-
-Conditional selection is integrated at af051b7 using the existing native schedule evaluator,
-including null/omitted condition semantics. Native acceptance remains owed. SDK exact-target
-candidate c21da71 and adapter d838f46 use immutable local package 1.11.1-pe.target.2;
-safe preflight is proven, native multi-process targeting is not yet accepted. The rebuilt
-console is unsigned; adapter discovery requires Authenticode trust. P is checking existing
-configured signing support without altering trust or bypassing signature validation.
-
-Compile portability at e44aa8e: Pe.Revit.FamilyFoundry builds successfully for Debug.R23
-and Debug.R24 (net48, 161 warnings each) and Debug.R26 (net8.0-windows7.0, 74 warnings).
-MSBuild property reads independently confirm each RevitVersion and output configuration.
-Together with the Debug.R25.Tests build this covers compile compatibility for all declared
-2023-2026 years, not cross-year runtime or full Pe.App/route integration. Evidence is in
-Pe.Tools-ff-portability/.artifacts/runs/compile-20260907-portability/r23.log, r24.log, r26.log.
-
-Budget posture revised by user: Sol medium/high for bounded work; Opus high when useful;
-Astra low only occasionally for difficult decisions. Retain and resume primed sessions on
-cheaper models. No parallel Astra. Every dispatch has a deliverable and time box.
-
-Latest focused native checkpoint: wave19 at e44aa8e ran 21 cases: 10 passed and 11 failed.
-Explicit Phase-to-poles connector routing and exact destination alias materialization passed.
-Parameter metadata, matrix rollback evidence, bath placement/capture and GRD residue remained red.
-The parameter repair is integrated at 54cce83; exact Debug.R25.Tests compilation passed with
-0 errors and 129 warnings. Its schema-based tooltip capture and tightened rollback checks
-still require native proof. Native group ids replace invalid Geometry labels in the fixtures.
-
-Wave20 at 0247a29 reached the real MSZ-GL join-loss warning and stalled in its modal dialog
-until SDK timeout. No TRX or NUnit verdict was produced; connector-host and selector checks
-remain unproven. PID 77028 exited through SDK cleanup, settings restored byte-for-byte,
-and protected PIDs 71484/98976 retained their identities. The source hold is released.
-P owns the isolated handler diagnosis; N owns nested placement before alignment.
-
-Attached proof is suspended: the SDK previously dispatched to protected PID 71484 instead
-of selected PID 98840. Both tests failed during type loading before their mutation bodies.
-The exact PID/start adapter repair is isolated in Pe.Revit.Sdk-ff-targeted; old/stale adapter
-refusal and native targeting acceptance remain required before attached tests resume.
-Full monthly-profile planning remains 0/45 because the fresh installed Pe.App lacks the method.
-R prepared a public Host driver at 6e70c49 to remove that adapter dependency. It exposed
-13 profiles whose authored ExecutionOptions do not reach Host Apply. R owns tracing and
-closing that contract gap while preserving full-family rollback. No monthly Host run is claimed.
-
-Latest broad native checkpoint: fresh controlled Revit 2025 wave13 at `4a97297` ran
-123 tests: 84 passed and 39 failed. Runtime discovery included the new circle test.
-Wave12 reused stale Debug.R25.Tests binaries because root compiled Debug.R25 and passed
---no-build. Wave12 does not prove its stated source. Wave11 remains valid for 5531460.
-The corrected wave13 built the SDK-selected Debug.R25.Tests graph before execution.
-Both owned processes exited and native settings were restored byte-for-byte.
-Protected sessions retained their exact start identities. No FF-owned session is active.
-
-Integration includes cap-alignment capture, one-use structural matching, wall view vocabulary,
-typed type/parameter cell identity, tooltip repeat handling, independent array seeds, native
-formula ownership and scoped N/A handling. Exact Debug.R25.Tests compile passed at d460bf8.
-Wave15 measured 56/81 old-template mechanical families: 28 passed, 28 rolled back, then timeout.
-Wave16 at d460bf8 measured the remaining 25 plus four focused repeats: 11 passed, 18 rolled back.
-All 81 now have an attempted mapping result; this is not full monthly-profile acceptance.
-Wave16 native MSZ-GL proves the inherited formula-unit fix. Magna3 advances past N/A to a
-separate Phase source value `Single` conversion refusal. Connector pole associations targeting
-numeric Phase are diagnosed; user ruled explicit routing to PE_E___NumberOfPoles instead.
-Wave16 also exposed a join warning during MSZ-GL: parameter success does not prove untouched
-geometry. P owns the preservation investigation. Originals and protected sessions were preserved.
-The checkpoint sharing repair survived both subsequent runs. No source hold is active.
-No whole user story is closed. Route browser receipt proof and native scripting remain owed.
-
-Final simplification must retain features while reducing state, contracts and serialization.
-The takeoffs review was sent here by mistake and remains outside this effort.
+Reports: [monthly native](PROOF-MONTHLY-HOST.md), [values](PROOF-VALUES.md),
+[normalization](PROOF-NORMALIZATION.md), [routes](PROOF-ROUTES.md).
 
 ## Completion contract
 
@@ -194,19 +72,6 @@ The takeoffs review was sent here by mistake and remains outside this effort.
 - Destination wins: rewire source references and remove the source, or roll back the family.
 - Shared fragments merge by field, later values win; profile fields override their preset.
 - Measurable authored literals require units. Number/Integer stay unitless.
-
-## Route and corpus checkpoint
-
-Earlier `/family` browser Apply plus independent native readback passed on `ca353e9`.
-Fleet mutation committed, but its response read an invalid pre-load Family object. Reacquisition
-and receipt fixes are integrated; a new browser proof is owed. The old route session is stopped.
-NoTransaction policy passes 3/3 deterministic; native script execution remains owed.
-All 45 company profiles compose. The 52 original fixture files retain their original bytes.
-The old-template 38-definition mapping gate ran across all 81 mechanical families and remains
-distinct from full profile migration. Full-profile selector/plan acceptance is under review.
-Pea settings open/create/refresh now return authored and composed JSON (1ad0378); the settings
-command chain passes 5/5 deterministic tests. Actual Pea and route runtime proof remains owed.
-Reports: [values](PROOF-VALUES.md), [normalization](PROOF-NORMALIZATION.md), [routes](PROOF-ROUTES.md).
 
 ## User stories and remaining proof
 
