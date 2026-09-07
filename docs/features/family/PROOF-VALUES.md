@@ -2,6 +2,22 @@
 
 PROVEN in fresh controlled Revit 2025: the adapter runs, all three value strategies preserve the tested values through save/close/reopen, and the existing uniform helper's temperature precision defect is repaired. No selector optimization is adopted.
 
+## Wave23 focused fresh acceptance at `81f486f`
+
+Frozen root **`81f486fb502cf25f458aa967d5894738572ecdac`**, exact `Debug.R25.Tests` build **0 errors / 130 warnings**: **6 executed, 3 passed, 3 failed, 0 skipped**. The SDK plan selected fresh mode with official adapter 1.11.1 and CLI SHA256 **`2E75869B142B62D7D1CF8FCA5E0A7947A965321761CB50D0885E957B7CE5A8AD`**. Owned Revit PID **102556** started at **2026-09-07T13:18:47.3554690Z**. Adapter execution took **84.70 s** and total native execution took **1m54.78s**.
+
+Passed: the production schema capture reads both local and shared descriptions; all seven metadata cases apply and preserve values; and the connector host control survives save/close/reopen while distinguishing the coincident reference-plane and nested-face connectors by native dependency identity. This proves tooltip repair `d2b40a2` and host repair `129e1a5` on the focused native surface.
+
+| Failed case | First measured cause |
+|---|---|
+| Selector | The fixture-scoped instance assertion now passes. The actual `Keep == selected` condition reaches `ScheduleHelper.CreateMinimalFilterEvaluationSchedule`, which throws `Schedule filter evaluation could not apply every filter for 'Family Foundry condition'` at `ScheduleHelper.cs:303`; the final missing-field refusal is not reached. |
+| Positive matrix | `matrix-value-stages.json` contains all three stages. Corruption exists at `beforeNormalization`: Matrix Type A already carries Type C text/integer/formula values, while its radial dimension is `1.0` rather than authored `0.5`; normalization then faithfully copies those values. The migrator is not the first corrupting stage. The next proof boundary is fixture seed/topology/save/reopen. |
+| GRD pre-array | Reconciliation still reads `24x12/_vane spacing` as `0ft` after expecting `2in`; it also records four `SketchLineUnlocked` facts. |
+
+All four staged runtime assemblies match the frozen build byte-for-byte. `Pe.Revit.Tests.dll` is SHA256 **`58E3B0BDB1762F8B6C326FCD1E75F44599F9A30B98BD897F38E569DA6C7A3C14`**, MVID **`d53da472-5f70-40b5-bb1e-2b2f92428dd1`**. The adapter emitted no TRX path, so `adapter.log`, `journal.3667.txt`, and `run.json` are the raw result authorities; no rerun occurred. Evidence is under `.artifacts/runs/wave23/`, including the complete three-stage matrix JSON, schema JSON, connector identity JSON, and reopened RFA.
+
+Cleanup is complete: PID 102556 is gone, quarantines are empty, native settings restored byte-for-byte to SHA256 **`5549535F9DC399AC994EB941D2FB881D0DDFC282E2FEA835ECE4879679CC87C9`**, and protected PIDs 71484/98976 retain exact start identities. Root stayed clean at `81f486f`; the source hold was released before analysis. Background Host attach PowerShell PID **105596** remains live, parented by this Codex PID **51584**; the run did not touch it.
+
 ## Connector host identity repair at `866a7aa`
 
 Wave22's native control falsified geometric overlap as connector-host identity. At the same origin, reference plane **4023** owns dependent connector **4024**, while nested instance **4022** owns dependent connector **4025**. The raw artifact is `C:/Users/kaitp/AppData/Local/Temp/727cdfc6-235b-4225-ac05-5f5c511bc121/petrt/nativeconnec/0f53cc9a/connector-host-identity.json` and is retained under `.artifacts/runs/wave22/fixture-output/` in the proof tree.
