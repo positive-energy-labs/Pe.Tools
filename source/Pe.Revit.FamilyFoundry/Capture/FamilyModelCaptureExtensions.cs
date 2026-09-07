@@ -1,6 +1,5 @@
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
-using Autodesk.Revit.DB.ExtensibleStorage;
 using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
@@ -319,6 +318,18 @@ internal sealed class FamilyModelCapturer {
 
             if (!ok) continue;
 
+            var support = ext.Sketch.SketchPlane.GetPlane();
+            string? CapPlane(double offset) => this.NamedPlanesThrough(support.Origin + support.Normal * offset,
+                p => Math.Abs(Math.Abs(p.Normal.DotProduct(support.Normal)) - 1) < Tol).FirstOrDefault();
+            var start = CapPlane(ext.StartOffset);
+            var end = CapPlane(ext.EndOffset);
+            if (start is null || end is null) {
+                this.Add(UnmodeledReason.PlaneNotNamed, "$.forms", ("sketchPlane", sketchPlane),
+                    ("start", start ?? ext.StartOffset.ToString("R", CultureInfo.InvariantCulture)),
+                    ("end", end ?? ext.EndOffset.ToString("R", CultureInfo.InvariantCulture)));
+                continue;
+            }
+
             var slug = Unique(SlugFromPlanes(lockedTo) ?? (ext.IsSolid ? "extrusion" : "void"), result.ContainsKey);
             var identity = string.Join("|", lockedTo.OrderBy(x => x, StringComparer.Ordinal)) + "|" + sketchPlane;
             if (!planeSets.Add(identity)) this.Add(UnmodeledReason.IdentityNotUnique, $"$.forms.{slug}", ("identity", identity));
@@ -336,8 +347,8 @@ internal sealed class FamilyModelCapturer {
                 },
                 SketchPlane = sketchPlane,
                 Profile = loops,
-                Start = this.Length(ext.get_Parameter(BuiltInParameter.EXTRUSION_START_PARAM)),
-                End = this.Length(ext.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM))
+                Start = start,
+                End = end
             };
         }
 

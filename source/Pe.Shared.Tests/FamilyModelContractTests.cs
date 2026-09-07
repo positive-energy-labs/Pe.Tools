@@ -66,6 +66,8 @@ public sealed class FamilyModelContractTests {
     public void Exact_capture_literals_preserve_scientific_notation(string text, double expected) {
         Assert.That(PortableScalar.TryParse(text, out var value), Is.True);
         Assert.That(value.Value, Is.EqualTo(expected));
+        if (value.Kind == PortableScalarKind.Length)
+            Assert.That(PortableLength.Parse(PortableLength.FromFeet(expected).Text).Feet, Is.EqualTo(expected));
     }
 
     [TestCase("480", false)]

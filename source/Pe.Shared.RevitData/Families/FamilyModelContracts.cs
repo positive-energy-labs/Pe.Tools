@@ -864,7 +864,7 @@ public readonly record struct PortableLength(string? Parameter, double? Feet, st
             $"'{text}' is not a length. Legal: param:<Length parameter> or a literal such as 6in, 1/2in, 150mm, 1' - 6\".");
     }
 
-    public static PortableLength FromFeet(double feet) => new(null, feet, feet.ToString("0.####", CultureInfo.InvariantCulture) + "ft");
+    public static PortableLength FromFeet(double feet) => new(null, feet, feet.ToString("R", CultureInfo.InvariantCulture) + "ft");
 
     public override string ToString() => this.Text;
 }

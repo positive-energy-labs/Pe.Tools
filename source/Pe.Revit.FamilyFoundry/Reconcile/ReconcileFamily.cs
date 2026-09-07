@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
@@ -110,14 +111,15 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             OperationProcessor.ThrowOnErrors(logs);
         }
         doc.Document.Regenerate();
-        var residue = FamilyReconciler.Diff(desired!, this._capture(doc.Document), UnitResolvers.Revit(doc.Document));
+        var observed = this._capture(doc.Document);
+        var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document));
         var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
         this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, outcomes, plan.RunEffects, residue, current.Unmodeled,
             residue.Count == 0 && logs.All(l => l.PendingCount == 0));
         if (!this._candidateReceipt.Converged)
-            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries: {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind})"))}.");
+            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries: {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
 
         return new OperationLog(this.Name, logs.SelectMany(l => l.Entries).ToList());
     }

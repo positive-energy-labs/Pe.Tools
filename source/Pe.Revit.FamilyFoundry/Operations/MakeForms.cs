@@ -57,7 +57,9 @@ public sealed class MakeForms((string Slug, FamilyModelForm Spec)[] forms, Famil
 
                 var view = FamilyRefs.ViewFor(doc, null, normal);
                 foreach (var sketchCurve in extrusion.Sketch.GetAllElements().Select(id => doc.Document.GetElement(id)).OfType<ModelCurve>()) {
-                    var hit = locks.FirstOrDefault(l => l.Curve is Line a && sketchCurve.GeometryCurve is Line b && a.Origin.IsAlmostEqualTo(b.Origin) && a.Direction.IsAlmostEqualTo(b.Direction) || (sketchCurve.GeometryCurve is Line c && l.Curve is Line d && c.Origin.IsAlmostEqualTo(d.GetEndPoint(1))));
+                    var hit = locks.FirstOrDefault(l => l.Curve is Line a && sketchCurve.GeometryCurve is Line b &&
+                        (a.GetEndPoint(0).IsAlmostEqualTo(b.GetEndPoint(0)) && a.GetEndPoint(1).IsAlmostEqualTo(b.GetEndPoint(1)) ||
+                         a.GetEndPoint(0).IsAlmostEqualTo(b.GetEndPoint(1)) && a.GetEndPoint(1).IsAlmostEqualTo(b.GetEndPoint(0))));
                     if (hit.Plane is not null) FamilyRefs.Align(doc, view, sketchCurve.GeometryCurve.Reference, FamilyRefs.Resolve(doc, hit.Plane).Reference);
                     else if (sketchCurve.CenterPointReference is { } centerRef && spec.Profile.SelectMany(l => l.Curves).FirstOrDefault(c => c.Kind == CurveKind.Circle) is { } circle) {
                         FamilyRefs.Align(doc, view, FamilyRefs.Resolve(doc, circle.Center![0]).Reference, centerRef);
