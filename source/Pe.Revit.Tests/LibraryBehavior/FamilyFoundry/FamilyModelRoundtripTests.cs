@@ -49,6 +49,37 @@ public sealed class FamilyModelRoundtripTests {
     }
 
     [Test]
+    public void Reapply_deletes_only_the_named_small_form_on_a_shared_sketch_plane() {
+        var model = FamilyModelJson.Parse("""
+            { "family": { "name": "Exact form deletion", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
+              "types": { "Standard": {} },
+              "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
+              "forms": {
+                "tiny": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "1in", "depth": "1in", "height": "1in" },
+                "large": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "2ft", "depth": "2ft", "height": "2ft" }
+              } }
+            """).Value!;
+        Document? document = null;
+        try {
+            document = FamilyModelBuild.Build(this._ui.Application, model).Document;
+            var forms = new FilteredElementCollector(document).OfClass(typeof(Extrusion)).Cast<Extrusion>()
+                .OrderBy(form => (form.get_BoundingBox(null).Max - form.get_BoundingBox(null).Min).GetLength()).ToList();
+            Assert.That(forms, Has.Count.EqualTo(2));
+            var tiny = forms[0].Id;
+            var large = forms[1].Id;
+            var operation = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"forms":{"tiny":null}}}"""));
+            using var processor = new Pe.Revit.FamilyFoundry.OperationProcessor(document);
+            var (contexts, _) = processor.ProcessQueue(new Pe.Revit.FamilyFoundry.OperationQueue().Add(operation));
+            var (_, error) = contexts.Single().OperationLogs;
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(document.GetElement(tiny), Is.Null);
+            Assert.That(document.GetElement(large), Is.Not.Null, "The other form must retain its native identity.");
+            Assert.That(new FilteredElementCollector(document).OfClass(typeof(Extrusion)).GetElementCount(), Is.EqualTo(1));
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    [Test]
     public void Portable_values_preserve_units_and_literal_text_and_reapply_without_changes() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Portable angle", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },

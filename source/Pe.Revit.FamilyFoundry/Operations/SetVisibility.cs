@@ -24,11 +24,13 @@ public sealed class SetVisibility((string Slug, string Section, string Parameter
         var logs = new List<LogEntry>();
         foreach (var (slug, section, parameter) in bindings) {
             try {
-                var element = DeleteByName.Find(doc, section, section switch {
+                var elements = DeleteByName.FindElements(doc, section, section switch {
                     "forms" => model.Forms[slug], "nested" => model.Nested[slug], _ => model.Details[slug]
-                }) ?? throw new InvalidOperationException($"{section} '{slug}' was not found after creation.");
-                var visible = element.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM) ?? throw new InvalidOperationException("No IS_VISIBLE_PARAM.");
-                FamilyRefs.Associate(doc, visible, parameter, logs, slug);
+                });
+                foreach (var element in elements) {
+                    var visible = element.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM) ?? throw new InvalidOperationException("No IS_VISIBLE_PARAM.");
+                    FamilyRefs.Associate(doc, visible, parameter, logs, slug);
+                }
             } catch (Exception ex) { logs.Add(new LogEntry(slug).Error(ex)); }
         }
         return new OperationLog(this.Name, logs);

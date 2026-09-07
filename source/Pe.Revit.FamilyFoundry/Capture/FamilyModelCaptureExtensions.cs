@@ -3,6 +3,7 @@ using Autodesk.Revit.DB.Plumbing;
 using DataStorage = Autodesk.Revit.DB.ExtensibleStorage.DataStorage;
 using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
@@ -42,6 +43,19 @@ internal sealed class FamilyModelCapturer {
     private readonly Dictionary<ElementId, string> _nestedSlug = [];
     private readonly Dictionary<ElementId, string> _formSlug = [];
     private readonly Dictionary<ElementId, IReadOnlyList<string>> _nestedPlaneNames = [];
+    private readonly Dictionary<object, ElementId[]> _elements = [];
+    private FamilyModel? _model;
+
+    internal IReadOnlyList<Element> FindElements(object spec) {
+        this._model ??= this.Run();
+        var identity = FamilyReconciler.StructuralIdentity(spec);
+        var matches = this._elements.Where(entry => entry.Key.GetType() == spec.GetType() &&
+            FamilyReconciler.StructuralIdentity(entry.Key) == identity).ToList();
+        if (matches.Count != 1)
+            throw new InvalidOperationException($"Expected one native {spec.GetType().Name} for '{identity}', found {matches.Count}.");
+        return matches[0].Value.Select(id => this._d.GetElement(id) ??
+            throw new InvalidOperationException($"Captured element {id} no longer exists.")).ToList();
+    }
 
     public FamilyModelCapturer(Document d) {
         this._d = d;
@@ -238,6 +252,7 @@ internal sealed class FamilyModelCapturer {
                 Locked = label == null && !eq && locked ? PortableLength.FromFeet(Math.Round(dim.Value ?? 0, 9)) : null,
                 View = this.StockViewOf(dim, slug)
             };
+            this._elements.Add(result[slug], [dim.Id]);
         }
 
         return result;
@@ -351,6 +366,7 @@ internal sealed class FamilyModelCapturer {
                 Start = start,
                 End = end
             };
+            this._elements.Add(result[slug], [ext.Id]);
         }
 
         return result;
@@ -429,6 +445,7 @@ internal sealed class FamilyModelCapturer {
                 Associate = associate.Count == 0 ? null : associate,
                 Visible = visible
             };
+            this._elements.Add(result[slug], [fi.Id]);
         }
 
         return result;
@@ -543,6 +560,7 @@ internal sealed class FamilyModelCapturer {
                 SpacingPlane = spacingPlane,
                 Spacing = spacingPlane != null ? null : PortableLength.FromFeet(Math.Round(copies[^1].Delta.GetLength(), 9))
             };
+            this._elements.Add(result[slug], [array.Id]);
         }
 
         return result;
@@ -634,6 +652,7 @@ internal sealed class FamilyModelCapturer {
                 LossMethod = isDuct ? EnumOf<DuctLossMethodType, LossMethod>(loss) : isPipe ? EnumOf<PipeLossMethodType, LossMethod>(loss) : null,
                 Associate = associate.Count == 0 ? null : associate
             };
+            this._elements.Add(result[slug], [c.Id]);
         }
 
         return result;

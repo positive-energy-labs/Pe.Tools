@@ -119,13 +119,12 @@ public static class FamilyReconciler {
         Keyed(changes, "refPlanes", desired.RefPlanes, current.RefPlanes, units);
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
         Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units);
-        Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units, x => $"{x.Label}|{string.Join(",", x.Between)}");
-        Structural(changes, "forms", desired.Forms, current.Forms, units, x => $"{x.SketchPlane}|{string.Join(",", OnPlanes(x).OrderBy(p => p, StringComparer.Ordinal))}|{x.End}");
-        Structural(changes, "nested", desired.Nested, current.Nested, units, x => $"{x.Family}|{x.Type}|{x.Host}");
-        Structural(changes, "arrays", desired.Arrays, current.Arrays, units, x => $"{x.Member}|{x.Direction}|{x.Label}");
-        Structural(changes, "connectors", desired.Connectors, current.Connectors, units, ConnectorKey);
-        Structural(changes, "details", desired.Details, current.Details, units,
-            x => $"{x.View}|{x.Family}|{x.Type}|{string.Join(",", x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? [])}");
+        Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units);
+        Structural(changes, "forms", desired.Forms, current.Forms, units);
+        Structural(changes, "nested", desired.Nested, current.Nested, units);
+        Structural(changes, "arrays", desired.Arrays, current.Arrays, units);
+        Structural(changes, "connectors", desired.Connectors, current.Connectors, units);
+        Structural(changes, "details", desired.Details, current.Details, units);
         Singleton(changes, "settings", desired.Settings, current.Settings, units);
         if (desired.RoomCalculationPoint is { } roomPoint) {
             var actual = current.RoomCalculationPoint;
@@ -140,6 +139,16 @@ public static class FamilyReconciler {
 
     public static string ConnectorKey(FamilyModelConnector c) =>
         $"{c.Domain}|{c.On}|{string.Join(",", c.At.OrderBy(a => a, StringComparer.Ordinal))}";
+
+    internal static string StructuralIdentity(object entry) => entry switch {
+        FamilyModelDim x => $"{x.Label}|{string.Join(",", x.Between)}",
+        FamilyModelForm x => $"{x.SketchPlane}|{string.Join(",", OnPlanes(x).OrderBy(p => p, StringComparer.Ordinal))}|{x.Start ?? x.SketchPlane}|{x.End}",
+        FamilyModelNested x => $"{x.Family}|{x.Type}|{x.Host}",
+        FamilyModelArray x => $"{x.Member}|{x.Direction}|{x.Label}",
+        FamilyModelConnector x => ConnectorKey(x),
+        FamilyModelDetail x => $"{x.View}|{x.Family}|{x.Type}|{string.Join(",", (x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? []).OrderBy(p => p, StringComparer.Ordinal))}",
+        _ => throw new ArgumentException($"No structural identity for {entry.GetType().Name}.", nameof(entry))
+    };
 
     // ── canonical form (F7): the uniform value becomes a cell in every type; parameters diff without it ──
 
@@ -188,12 +197,12 @@ public static class FamilyReconciler {
     }
 
     private static void Structural<T>(List<FamilyChange> changes, string section, IReadOnlyDictionary<string, T> desired,
-        IReadOnlyDictionary<string, T> current, UnitResolver units, Func<T, string> identity) where T : class {
-        var byIdentity = current.GroupBy(p => identity(p.Value), StringComparer.Ordinal)
+        IReadOnlyDictionary<string, T> current, UnitResolver units) where T : class {
+        var byIdentity = current.GroupBy(p => StructuralIdentity(p.Value), StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var matched = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (slug, want) in desired) {
-            if (byIdentity.TryGetValue(identity(want), out var hit)) {
+            if (byIdentity.TryGetValue(StructuralIdentity(want), out var hit)) {
                 matched.Add(hit.Key);
                 if (!StructuralSame(want, hit.Value, units))
                     changes.Add(new FamilyChange(section, slug, ChangeKind.Recreate, null, hit.Value, want));
