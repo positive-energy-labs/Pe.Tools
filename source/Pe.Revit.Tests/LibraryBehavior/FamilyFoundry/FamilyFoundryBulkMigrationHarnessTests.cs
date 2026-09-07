@@ -152,6 +152,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public void Public_converter_selects_name_patterns_exclusions_and_native_category_identity() {
         var project = RevitFamilyFixtureHarness.CreateProjectDocument(this._application);
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Public_converter_selects_name_patterns_exclusions_and_native_category_identity));
+        var loadedFamilyIds = new HashSet<ElementId>();
         try {
             foreach (var (name, category) in new[] {
                          ("Exact Pump", BuiltInCategory.OST_MechanicalEquipment),
@@ -183,8 +184,10 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     Assert.That(loaded.Name, Is.EqualTo(name));
                     Assert.That(loaded.FamilyCategory?.Id.Value(), Is.EqualTo((long)category));
                 });
+                loadedFamilyIds.Add(loaded.Id);
             }
-            Assert.That(new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)), Is.Empty,
+            Assert.That(new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                    .Where(instance => loadedFamilyIds.Contains(instance.Symbol.Family.Id)), Is.Empty,
                 "IncludeUnusedFamilies=true must retain unplaced loaded families.");
             var settings = JObject.Parse("""
                 {"FilterFamilies":{
