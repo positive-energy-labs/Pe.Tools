@@ -279,10 +279,11 @@ public static class FamilyReconciler {
     private static void Structural<T>(List<FamilyChange> changes, string section, IReadOnlyDictionary<string, T> desired,
         IReadOnlyDictionary<string, T> current, UnitResolver units) where T : class {
         var byIdentity = current.GroupBy(p => StructuralIdentity(p.Value), StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            .ToDictionary(g => g.Key, g => new Queue<KeyValuePair<string, T>>(g), StringComparer.Ordinal);
         var matched = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (slug, want) in desired) {
-            if (byIdentity.TryGetValue(StructuralIdentity(want), out var hit)) {
+            if (byIdentity.TryGetValue(StructuralIdentity(want), out var hits) && hits.Count > 0) {
+                var hit = hits.Dequeue();
                 matched.Add(hit.Key);
                 if (!StructuralSame(want, hit.Value, units))
                     changes.Add(new FamilyChange(section, slug, ChangeKind.Recreate, null, hit.Value, want));

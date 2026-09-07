@@ -115,6 +115,17 @@ public sealed class FamilyReconcilerTests {
     }
 
     [Test]
+    public void Structural_identity_matches_each_current_element_at_most_once() {
+        var current = Load("a-box");
+        var desired = Parse(FamilyModelJson.Serialize(current));
+        desired.Forms["body-copy"] = desired.Forms["body"];
+
+        var change = FamilyReconciler.Diff(desired, current, UnitResolvers.Portable)
+            .Single(item => item.Section == "forms");
+        Assert.That((change.Key, change.Kind), Is.EqualTo(("body-copy", ChangeKind.Add)));
+    }
+
+    [Test]
     public void Feet_inches_and_inch_literals_are_the_same_length_through_the_unit_resolver() {
         var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "value": "12in" }, "N": { "dataType": "Number", "value": 480 } }, "types": { "A": {} } }""");
         var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "value": "1' - 0\"" }, "N": { "dataType": "Number", "value": "480.0" } }, "types": { "A": {} } }""");
