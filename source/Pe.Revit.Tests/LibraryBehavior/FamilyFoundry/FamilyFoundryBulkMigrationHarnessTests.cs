@@ -633,53 +633,70 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_plans_every_composed_company_profile_against_its_authored_selector));
         var checkpointPath = Path.Combine(output, "company-profile-plan-census.json");
-        var project = this._application.OpenDocumentFile(original);
-        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>().ToList();
-        var definitions = CompanyCorpusDefinitions();
-        var eligible = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
-            .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
-            .OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
-        var placed = new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
-            .GroupBy(instance => instance.Symbol.Family.Id).ToDictionary(group => group.Key, group => group.Count());
-        var evidence = new JObject { ["status"] = "running", ["eligible"] = new JArray(eligible.Select(f => new JObject {
-            ["familyId"] = f.Id.Value(), ["familyName"] = f.Name, ["category"] = f.FamilyCategory?.Name,
-            ["placedInstanceCount"] = placed.TryGetValue(f.Id, out var count) ? count : 0
-        })), ["profiles"] = new JArray() };
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(original, copy);
+        var evidence = new JObject { ["status"] = "starting", ["profiles"] = new JArray() };
         var failures = new List<string>();
+        var project = this._application.OpenDocumentFile(copy);
         try {
-            Assert.That(eligible, Has.Count.EqualTo(81), "The frozen Old Template census changed.");
+            var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>().ToList();
+            var definitions = CompanyCorpusDefinitions();
+            var eligible = project.FamiliesMatching(new PatchSelect());
+            var mechanical = eligible.Where(f => f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment).ToList();
+            var placed = new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
+                .GroupBy(instance => instance.Symbol.Family.Id).ToDictionary(group => group.Key, group => group.Count());
+            evidence["status"] = "running";
+            evidence["eligible"] = new JArray(eligible.Select(f => new JObject {
+                ["familyId"] = f.Id.Value(), ["familyName"] = f.Name, ["category"] = f.FamilyCategory?.Name,
+                ["placedInstanceCount"] = placed.TryGetValue(f.Id, out var count) ? count : 0
+            }));
+            evidence["mechanical81"] = new JArray(mechanical.Select(f => f.Name));
+            WriteCheckpoint(checkpointPath, evidence);
+            Assert.That(mechanical, Has.Count.EqualTo(81), "The frozen Old Template Mechanical Equipment census changed.");
             Assert.That(profiles, Has.Count.EqualTo(45), "The frozen composed company corpus changed.");
             foreach (var profile in profiles) {
                 var source = (string)profile["source"]!;
                 var row = new JObject { ["source"] = source };
+                ((JArray)evidence["profiles"]!).Add(row);
                 try {
                     var conversion = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert((JObject)profile["settings"]!, definitions, project.GetUnits());
                     row["select"] = JObject.FromObject(conversion.Patch.Select, JsonSerializer.Create(FamilyModelJson.Settings));
                     row["patchSections"] = new JArray(((JObject)conversion.Patch.Patch).Properties().Select(p => p.Name));
                     row["hasRun"] = conversion.Patch.Run is not null;
-                    var selected = project.FamiliesMatching(conversion.Patch.Select).Where(f => eligible.Any(e => e.Id == f.Id)).ToList();
+                    var selected = project.FamiliesMatching(conversion.Patch.Select);
                     row["selected"] = new JArray(selected.Select(f => f.Name));
                     var plans = new JArray();
-                    foreach (var family in selected) {
-                        var plan = FamilyFoundryBridgeOps.PlanFamilies(
-                            new FamilyFoundryPlanRequest(JsonConvert.SerializeObject(conversion.Patch), family.Id.Value()), project);
-                        plans.Add(JObject.FromObject(plan));
-                        if (plan.Diagnostics.Count > 0 || plan.Families.Any(f => f.Refusals.Count > 0))
-                            failures.Add($"{source} -> {family.Name}: native plan diagnostics");
-                    }
                     row["plans"] = plans;
+                    foreach (var family in selected) {
+                        var pair = new JObject { ["familyId"] = family.Id.Value(), ["familyName"] = family.Name };
+                        plans.Add(pair);
+                        try {
+                            var plan = FamilyFoundryBridgeOps.PlanFamilies(
+                                new FamilyFoundryPlanRequest(JsonConvert.SerializeObject(conversion.Patch), family.Id.Value()), project);
+                            pair["plan"] = JObject.FromObject(plan);
+                            if (plan.Diagnostics.Count > 0 || plan.Families.Any(f => f.Refusals.Count > 0))
+                                failures.Add($"{source} -> {family.Name}: native plan diagnostics");
+                        } catch (Exception exception) {
+                            pair["error"] = exception.ToString();
+                            failures.Add($"{source} -> {family.Name}: {exception.Message}");
+                        }
+                        WriteCheckpoint(checkpointPath, evidence);
+                    }
                 } catch (Exception exception) {
                     row["error"] = exception.ToString();
                     failures.Add($"{source}: {exception.Message}");
                 }
-                ((JArray)evidence["profiles"]!).Add(row);
                 WriteCheckpoint(checkpointPath, evidence);
             }
             evidence["status"] = failures.Count == 0 ? "passed" : "failed";
             evidence["failures"] = new JArray(failures);
             WriteCheckpoint(checkpointPath, evidence);
             Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
-        } finally { project.Close(false); }
+        } finally {
+            if (evidence.Value<string>("status") is "starting" or "running") evidence["status"] = "interrupted";
+            WriteCheckpoint(checkpointPath, evidence);
+            project.Close(false);
+        }
     }
 
     private static void WriteCheckpoint(string path, JObject evidence) {
