@@ -77,6 +77,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             (Name: "Width", Spec: SpecTypeId.Length, Unit: UnitTypeId.Millimeters, Raw: 1.23456789012345),
             (Name: "Fine Angle", Spec: SpecTypeId.Angle, Unit: UnitTypeId.Degrees, Raw: 0.123456789012345),
             (Name: "Fine Voltage", Spec: SpecTypeId.ElectricalPotential, Unit: UnitTypeId.Volts, Raw: UnitUtils.ConvertToInternalUnits(123.456789012345, UnitTypeId.Volts)),
+            (Name: "ResultVoltageLookupUnit", Spec: SpecTypeId.ElectricalPotential, Unit: UnitTypeId.Volts, Raw: 10.763910416709722),
+            (Name: "ResultAirFlowLookupUnit", Spec: SpecTypeId.AirFlow, Unit: UnitTypeId.CubicFeetPerMinute, Raw: 0.016666666666666666),
             (Name: "Fine Temperature", Spec: SpecTypeId.HvacTemperature, Unit: UnitTypeId.Celsius, Raw: UnitUtils.ConvertToInternalUnits(23.456789012345, UnitTypeId.Celsius)),
             (Name: "Fine Number", Spec: SpecTypeId.Number, Unit: UnitTypeId.General, Raw: 1.23456789012345)
         };
@@ -97,6 +99,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             var captured = source.CaptureFamilyModel();
             var json = JObject.Parse(FamilyModelJson.Serialize(captured));
+            foreach (var basis in values.Where(v => v.Name.EndsWith("LookupUnit", StringComparison.Ordinal)))
+                foreach (var type in (JObject)json["types"]!) {
+                    var text = type.Value![basis.Name]!.Value<string>();
+                    Assert.That(UnitFormatUtils.TryParse(target.GetUnits(), basis.Spec, text, out var raw), Is.True, $"{basis.Name}: {text}");
+                    Assert.That(raw, Is.EqualTo(basis.Raw).Within(1e-14), $"Captured unit basis {basis.Name}: {text}");
+                }
             var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = json["parameters"]!.DeepClone(), ["types"] = json["types"]!.DeepClone() } };
             Assert.That(FamilyModelUnitValidation.Validate(captured, patch.Patch, _ => null), Is.Empty);
             using var processor = new OperationProcessor(target);
