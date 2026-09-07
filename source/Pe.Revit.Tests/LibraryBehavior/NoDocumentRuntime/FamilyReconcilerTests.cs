@@ -40,6 +40,14 @@ public sealed class FamilyReconcilerTests {
 
     private const string Header = """ "family": { "name": "T", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" } """;
 
+    [Test]
+    public void Authored_group_label_and_captured_native_group_id_diff_empty() {
+        var label = LabelUtils.GetLabelForGroup(GroupTypeId.Geometry);
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "{{label}}" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "propertiesGroup": "{{GroupTypeId.Geometry.TypeId}}" } } }""");
+        Assert.That(FamilyReconciler.Diff(desired, current, UnitResolvers.Portable), Is.Empty);
+    }
+
     [TestCaseSource(nameof(Fixtures))]
     public void Same_document_diffs_empty(string fixture) {
         var model = Load(fixture);

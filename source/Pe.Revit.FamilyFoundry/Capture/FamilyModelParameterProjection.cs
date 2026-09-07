@@ -45,7 +45,7 @@ public static class FamilyModelParameterProjection {
                 SharedVisible = shared ? d.Visible : null,
                 SharedUserModifiable = shared ? d.UserModifiable : null,
                 DataType = dataType,
-                PropertiesGroup = shared ? d.GroupTypeId : string.IsNullOrWhiteSpace(d.GroupTypeLabel) ? null : d.GroupTypeLabel,
+                PropertiesGroup = d.GroupTypeId,
                 IsInstance = d.IsInstance,
                 Formula = formula
             };

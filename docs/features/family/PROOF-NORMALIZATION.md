@@ -231,3 +231,11 @@ Inspected proof commit `e5426ac` in full. Its extractor fix reads raw doubles an
 
 The final integration commit is a single-parent aggregate of this owner's portable capture, trimmed derived corpus and wave-4 acceptance changes against `09f6285`. It supersedes capture commits `26c2f00` and `6f3f08b` for cherry-pick purposes; do not also cherry-pick the extractor hunk from `e5426ac`. Owner branch history is preserved without reset/rebase/merge. Native fresh success remains proof-owned and pending.
 Consolidation validation: standard Debug.R25 test-package compile exited 0, 114 warnings, 0 errors (`compile-capture-consolidated.log`); preceding deterministic portable contract remains 66/66. No native runtime execution in this lane.
+
+## Language-neutral parameter groups
+
+`FamilyModelParameterProjection.Project` now emits `ParameterDefinitionDescriptor.GroupTypeId` for local and shared parameters alike. Localized GroupTypeLabel remains descriptive snapshot metadata and is not exported as authored identity. `FamilyReconciler.Canonical` uses existing `SetParamMetadata.Group` to compare old authored labels with captured native ids, avoiding false residue after successful metadata writes; empty Other remains omitted. Exact authored intent is still retained in the plan hash.
+
+Retargeted existing projection tests with a deliberately different display label and native id, covering local and shared rows. Added group-label/native-id diff equivalence acceptance. Isolated Debug.R25 test-package compile exited 0, 14 warnings, 0 errors (`compile-native-groups-final.log`); initial test initializer compile failure retained in `compile-native-groups.log`. These tests reside in the Revit-backed package and are compiled only here. This follow-up applies after consolidated capture `be29a96`; proof-owned formula and geometry edits remain untouched.
+
+Company continuation: original Dehumidifier preset is still absent by root's new OneDrive recheck; two profiles remain explicitly unresolved pending user ruling. Existing Host `settings.ts` is the include/preset composition owner, not the C# parameter converter. The remaining 43 profiles and full disposable Old_Template parameter-migration acceptance remain the next corpus work, with no synthetic replacement preset or new C# composition engine.

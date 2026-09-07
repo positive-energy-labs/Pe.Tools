@@ -15,7 +15,7 @@ public sealed class FamilySnapshotProjectionTests {
         new ParameterDefinitionDescriptor(
             new ParameterIdentity(sharedGuid != null ? $"shared-guid:{sharedGuid}" : $"name:{name}",
                 sharedGuid != null ? ParameterIdentityKind.SharedGuid : ParameterIdentityKind.NameFallback, name, null, sharedGuid, null),
-            isInstance, dataTypeId, null, null, "Dimensions"),
+            isInstance, dataTypeId, null, "autodesk.parameter.group:geometry-1.0.0", "Localized dimensions label"),
         sharedGuid != null ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
         LoadedFamilyParameterPresence.Family,
         "Double",
@@ -33,7 +33,7 @@ public sealed class FamilySnapshotProjectionTests {
             var p = result.Parameters["Width"];
             Assert.That(p.Shared, Is.Null);
             Assert.That(p.DataType, Is.EqualTo(DataType.Length));
-            Assert.That(p.PropertiesGroup, Is.EqualTo("Dimensions"));
+            Assert.That(p.PropertiesGroup, Is.EqualTo("autodesk.parameter.group:geometry-1.0.0"));
             Assert.That(p.IsInstance, Is.False);
             Assert.That(p.Value, Is.Null, "no hoisting at capture; the reconciler canonicalizes");
             Assert.That(result.Types["A"]["Width"].Kind, Is.EqualTo(PortableValueKind.Length));
@@ -52,6 +52,7 @@ public sealed class FamilySnapshotProjectionTests {
         Assert.Multiple(() => {
             Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].Shared, Is.True);
             Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].DataType, Is.Null);
+            Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].PropertiesGroup, Is.EqualTo("autodesk.parameter.group:geometry-1.0.0"));
             Assert.That(result.Types["A"]["PE_P_LoadCalc_DFU"].Kind, Is.EqualTo(PortableValueKind.Integer));
         });
     }
