@@ -2,6 +2,7 @@ import { Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
   address,
   familiesRouteState,
@@ -50,6 +51,7 @@ export function createFamiliesStore(deps: {
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   Reflect.set(runtime.layer, "keepAlive", false);
+  const invalidateReads = runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys));
 
   const slice = owned("slice/families", deps.slice ?? docAtom(familiesRouteState, deps.scope));
   const writer = deps.writer ?? docWriter(familiesRouteState, deps.scope, deps.registry, slice);
@@ -194,6 +196,9 @@ export function createFamiliesStore(deps: {
   );
 
   const actions = {
+    refreshReads() {
+      registry.set(invalidateReads, ["sessions", "category", "family", "profile"]);
+    },
     setDraft: (value: Setter<FamiliesDraft>) => set("set-draft", draft, value),
     setPickedIds: (value: Setter<Set<number>>) => set("set-picked-ids", pickedIds, value),
     setProjection: (value: Setter<FfProjectData | null>) =>

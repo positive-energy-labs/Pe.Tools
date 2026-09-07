@@ -693,3 +693,47 @@ The existing Host at `http://127.0.0.1:52068` answered HTTP 200 from PID 92360 a
 Warning visibility remains an acceptance gap. The current `/family` plan detail serializes the whole entry, so warnings would be visible only after expanding raw JSON; its summary counts changes and refusals but omits warnings (`family/workspace-view.tsx:140-148`). `/families` derives summaries and flags from changes, run effects, and refusals only (`families/plan.ts:3-19`), and its queue band renders action counts/provenance without warnings (`families/readout-bands.tsx:78-120`). A plan carrying capture warnings can therefore look clean in the primary summary. The running native payload identifies source `6620376d0057389f061537b081cced788e99be55`, while the integrated root has the newer capture-guard and warnings/issues transport. Missing new fields in this browser observation are a live-contract freshness mismatch until refresh; they are not evidence that explicit scope failed.
 
 No Open, Plan, Apply, lifecycle verb, document activation, or native request was issued. The selected session and disposable document URL state were preserved. Machine-readable observations are in `.artifacts/runs/browser-20260906-ff/actual-route-explicit-scope-4308985/receipt.json`. CUA displayed current screenshots for both routes, but its screenshot API returned image bytes without writing the requested filesystem path; no screenshot-file claim is made.
+
+## Families catalog reconnect and warning summaries - 2026-09-07
+
+The isolated route tree is based on `b5d3cbf3`, a descendant of the requested root `962cfc2`.
+The `/families` data path is already direct: the route parses `doc` and `target`,
+`createFamiliesStore` builds `pin:<session>|doc:<path>`, and `createLiveFamiliesHost` sends that
+selector to `revit.catalog.loaded-families`. Profiles come from the same store through
+`settings.tree` at `FamilyFoundry/patches`. There is no fixture fallback in this path.
+
+The empty catalog was a stale route-local read after the controlled session refresh. Host status
+uses TanStack query invalidation, while category, family, and profile feeds are Effect atoms owned by
+the `/families` store. A disconnect therefore left failed atom results cached after Host reconnected;
+only a full page reload retried them. The repair invalidates the four existing route-local read keys
+when Host status transitions to connected. The invalidation stays in the store's own Effect runtime,
+which is the runtime that owns those reads.
+
+Read-only calls against Host `http://127.0.0.1:52068`, controlled session
+`ff-profile-proof-25`, and the exact disposable `Old_Template-monthly45-disposable.rvt` returned
+560 loaded families, 1,635 types, 64 categories, zero issues, and no truncation. The exact
+`settings.tree` request for `FamilyFoundry/patches` returned HTTP 200. During P's refresh the same
+page visibly reported the disconnected session and settings-module discovery failure; after Host
+reported connected, a full reload rendered `FF-PROFILE-PROOF-25`, the exact composite selector, and
+an enabled category picker. This proves the real native catalog and current root bytes recover after
+a reload. The automatic reconnect repair remains deterministic-only until this commit is integrated
+into the Host source root and that refresh is repeated; the current Host serves
+`C:\Users\kaitp\source\repos\Pe.Tools-family\source\pe-tools`, not this worktree.
+
+Plan summaries now expose warnings without merging them into refusals. `/family` adds a separate
+warning count and advisory lines to its existing plan details. `/families` adds a warning chip and
+one advisory line per native issue before the existing decision queue. Both reuse `OutcomeLine`,
+`FactChip`, and the native issue fields already carried by the generated contract; refusals retain
+their existing flag and queue behavior.
+
+Deterministic validation passed the `/families` store suite, 13/13 tests, including a disconnect then
+reconnect regression for catalog and profile reads. Targeted web checking passed all six changed TS/
+TSX files with zero errors; the only diagnostic is the pre-existing unbound-method warning on the
+injected `sessions` callback. `git diff --check` passed. Raw request, response, Host identity, session
+identity, and browser observations are under
+`.artifacts/runs/browser-20260906-ff/catalog-binding-b5d3cbf/`.
+
+No Open, Plan, Apply, lifecycle action, document activation, or native mutation occurred. `/family`
+was not pointed at the project as a substitute for a family document. The remaining acceptance step
+is to integrate these web bytes, let P complete the controlled refresh, and observe the automatic
+catalog/profile repopulation without a manual reload.

@@ -11,3 +11,10 @@ export const FF_PROFILE_MODULE = {
 export function diagnosticLine(diagnostic: FamilyfoundryPlan.Res.FamilyFoundryDiagnostic): string {
   return `${diagnostic.code} · ${diagnostic.path} — ${diagnostic.message}`;
 }
+
+export function warningLine(warning: FamilyfoundryPlan.Res.RevitDataIssue): string {
+  const subject = [warning.familyName, warning.typeName, warning.parameterName]
+    .filter(Boolean)
+    .join(" / ");
+  return `${subject ? `${subject} — ` : ""}${warning.message}`;
+}

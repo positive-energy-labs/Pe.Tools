@@ -9,6 +9,7 @@ import { FamilyWorkspaceAnatomy } from "#/family/workspace-anatomy";
 import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";
 import { FamilyWorkspaceTable } from "#/family/workspace-table";
 import { useFamilyWorkspace } from "#/family/workspace-context";
+import { warningLine } from "#/host/familyfoundry";
 
 export function FamilyWorkspaceView() {
   const {
@@ -141,8 +142,17 @@ export function FamilyWorkspaceView() {
                     <details>
                       <summary>
                         {reconciliation.plan.entry.changes.length} changes ?{" "}
-                        {reconciliation.plan.entry.refusals.length} refusals
+                        {reconciliation.plan.entry.refusals.length} refusals ?{" "}
+                        {reconciliation.plan.entry.warnings.length} warnings
                       </summary>
+                      {reconciliation.plan.entry.warnings.map((warning) => (
+                        <OutcomeLine
+                          key={`${warning.code}:${warning.message}`}
+                          kind="advisory"
+                          label={warning.code}
+                          says={warningLine(warning)}
+                        />
+                      ))}
                       <pre className="max-h-64 max-w-2xl overflow-auto">
                         {JSON.stringify(reconciliation.plan.entry, null, 2)}
                       </pre>
