@@ -4,6 +4,22 @@ Current effort: 2026-09-07. Integration is `Pe.Tools-family`, branch `family/rew
 Product rulings live in [LEDGER.md](LEDGER.md). Sweep this map when the effort closes.
 Nothing is merged to main or published. No whole user story is closed yet.
 
+Wave24 at 2ce664d ran two fresh controlled Revit 2025 checks; both failed. Matrix values
+are correct after each seed and before topology, then Type A takes Type C values during
+topology construction. SaveAs/reopen/load do not introduce that first change. P is bracketing
+the individual native topology calls. The plumbing control failed on datum reconciliation
+before creating connectors; N is replacing its FF-built baseline with direct native setup.
+Owned PID40944 exited, settings restored exactly, quarantine is empty, and protected start
+identities are unchanged. Evidence: Pe.Tools-ff-proof/.artifacts/runs/wave24.
+
+Integrated fdb7948 carries execution options through Host and both route plans/applies.
+The shared contract lives in Pe.Shared.RevitData.Families; native FamilyVisitOptions remains
+separate. OptimizeTypeOperations and SuppressWarnings affect reconciler behavior and hashes.
+SingleTransaction remains meaningful for public multi-operation queues, not a single reconciler
+operation. EnableCollectors still controls optional caller pipelines; Host capture is mandatory.
+The monthly Host driver is integrated; actual 45-profile Host proof remains owed. Installed
+Host lacks FF operations, so this proof must use a current controlled dev snapshot and its Host.
+
 Wave23 at 81f486f ran six fresh controlled Revit 2025 checks: three passed, three failed.
 Production schema capture, all seven metadata cases, and connector-host capture after reopen
 passed. The selector, positive value matrix, and GRD pre-array checks failed. Native matrix
