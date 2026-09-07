@@ -155,12 +155,22 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var hpwh = Convert("CmdFFMigrator/profiles/PlumbEquip/HPWH.json");
             Assert.That(hpwh.Patch["forms"], Is.Null, "The frozen empty HPWH operation is a validated no-op.");
 
+            foreach (var (source, planeCount, formCount, connectorCount) in new[] {
+                         ("CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json", 6, 4, 1),
+                         ("CmdFFManager/profiles/SavedEquip/Zehnder ComfoAir 550 R Luxe ERV.json", 15, 5, 4)
+                     }) {
+                var converted = Convert(source);
+                Assert.That(((JObject)converted.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount), source);
+                Assert.That(((JObject)converted.Patch["forms"]!).Count, Is.EqualTo(formCount), source);
+                Assert.That(((JObject)converted.Patch["connectors"]!).Count, Is.EqualTo(connectorCount), source);
+                var native = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch);
+                Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics, Is.Empty, source);
+            }
+
             var refused = new Dictionary<string, string>(StringComparer.Ordinal) {
-                ["CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json"] = "Frame, Planes, Spans, Prisms",
                 ["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"] = "Frame",
                 ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json"] = "Connectors",
-                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json"] = "Connectors",
-                ["CmdFFManager/profiles/SavedEquip/Zehnder ComfoAir 550 R Luxe ERV.json"] = "Frame, Planes, Spans, Prisms"
+                ["CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json"] = "Connectors"
             };
             foreach (var (source, fields) in refused) {
                 var error = Assert.Throws<InvalidOperationException>(() => Convert(source));

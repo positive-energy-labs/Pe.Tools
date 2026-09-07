@@ -101,6 +101,10 @@ public static class FamilyProfileConverter {
         if (token is null) return;
         if (token is not JObject operation) throw new InvalidOperationException("ParamDrivenSolids must be an object.");
         if (!operation.HasValues) return; // Frozen HPWH deliberately authors the validated empty/no-op shape.
+        if (operation["Frame"] is not null || operation["Planes"] is not null || operation["Spans"] is not null || operation["Prisms"] is not null) {
+            ConvertAuthoredParamDrivenSolids(operation, patch);
+            return;
+        }
         RequireOnly(operation, "ParamDrivenSolids", "Enabled", "Rectangles", "Cylinders", "Connectors");
         if (operation["Enabled"] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException("ParamDrivenSolids.Enabled must be a boolean.");
         if (operation.Value<bool?>("Enabled") == false) return;
@@ -157,6 +161,100 @@ public static class FamilyProfileConverter {
         patch["forms"] = forms;
     }
 
+    private static void ConvertAuthoredParamDrivenSolids(JObject operation, JObject patch) {
+        RequireOnly(operation, "ParamDrivenSolids", "Frame", "Planes", "Spans", "Prisms", "Cylinders", "Connectors");
+        if (Required(operation, "Frame", "ParamDrivenSolids") != "NonHosted")
+            throw new InvalidOperationException("ParamDrivenSolids.Frame requires native conversion.");
+        var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
+        var planes = patch["refPlanes"] as JObject ?? new JObject();
+        var dimensions = patch["dimensions"] as JObject ?? new JObject();
+        var forms = patch["forms"] as JObject ?? new JObject();
+        var connectors = patch["connectors"] as JObject ?? new JObject();
+        var axes = new Dictionary<string, Axis>(StringComparer.Ordinal) {
+            ["Center (Left/Right)"] = Axis.PlusX, ["Left"] = Axis.PlusX, ["Right"] = Axis.PlusX,
+            ["Center (Front/Back)"] = Axis.PlusY, ["Back"] = Axis.PlusY, ["Front"] = Axis.PlusY,
+            ["Reference Plane"] = Axis.PlusZ, ["Top"] = Axis.PlusZ, ["Bottom"] = Axis.PlusZ
+        };
+        var dimIndex = 0;
+
+        if (operation["Planes"] is not JObject authoredPlanes) throw new InvalidOperationException("ParamDrivenSolids.Planes must be an object.");
+        foreach (var property in authoredPlanes.Properties()) {
+            if (property.Value is not JObject spec) throw new InvalidOperationException($"ParamDrivenSolids.Planes.{property.Name} must be an object.");
+            AddAuthoredOffset(property.Name, spec, planes, dimensions, axes, serializer, ref dimIndex);
+        }
+        foreach (var span in RequiredArray(operation, "Spans", "ParamDrivenSolids").OfType<JObject>())
+            AddAuthoredSpan(span, planes, dimensions, axes, serializer, ref dimIndex);
+        EnsureObjects(RequiredArray(operation, "Spans", "ParamDrivenSolids"), "ParamDrivenSolids.Spans");
+
+        var prisms = RequiredArray(operation, "Prisms", "ParamDrivenSolids");
+        EnsureObjects(prisms, "ParamDrivenSolids.Prisms");
+        foreach (var prism in prisms.OfType<JObject>()) {
+            RequireOnly(prism, "ParamDrivenSolids.Prism", "Name", "IsSolid", "On", "Width", "Length", "Height");
+            StrictBool(prism, "IsSolid", "ParamDrivenSolids.Prism");
+            var name = Required(prism, "Name", "ParamDrivenSolids.Prism");
+            var width = AddAuthoredSpan(RequiredObject(prism, "Width", "ParamDrivenSolids.Prism"), planes, dimensions, axes, serializer, ref dimIndex);
+            var length = AddAuthoredSpan(RequiredObject(prism, "Length", "ParamDrivenSolids.Prism"), planes, dimensions, axes, serializer, ref dimIndex);
+            var height = RequiredObject(prism, "Height", "ParamDrivenSolids.Prism");
+            var top = Required(height, "Name", "ParamDrivenSolids.Prism.Height");
+            AddAuthoredOffset(top, height, planes, dimensions, axes, serializer, ref dimIndex);
+            AddRectangleForm(forms, name, ResolvePlane(Required(prism, "On", "ParamDrivenSolids.Prism")), top, width, length,
+                prism.Value<bool?>("IsSolid") != false, serializer);
+        }
+
+        var cylinders = RequiredArray(operation, "Cylinders", "ParamDrivenSolids");
+        EnsureObjects(cylinders, "ParamDrivenSolids.Cylinders");
+        foreach (var cylinder in cylinders.OfType<JObject>()) {
+            RequireOnly(cylinder, "ParamDrivenSolids.Cylinder", "Name", "IsSolid", "On", "Center", "Diameter", "Height");
+            StrictBool(cylinder, "IsSolid", "ParamDrivenSolids.Cylinder");
+            var name = Required(cylinder, "Name", "ParamDrivenSolids.Cylinder");
+            var bottom = ResolvePlane(Required(cylinder, "On", "ParamDrivenSolids.Cylinder"));
+            var center = PlaneRefs(RequiredArray(cylinder, "Center", "ParamDrivenSolids.Cylinder"), "ParamDrivenSolids.Cylinder.Center");
+            var diameter = Driver(RequiredObject(cylinder, "Diameter", "ParamDrivenSolids.Cylinder"), "ParamDrivenSolids.Cylinder.Diameter");
+            var height = RequiredObject(cylinder, "Height", "ParamDrivenSolids.Cylinder");
+            RequireOnly(height, "ParamDrivenSolids.Cylinder.Height", "Name", "From", "By", "Dir");
+            var top = height.Value<string>("Name") ?? $"{name}.top";
+            var offset = (JObject)height.DeepClone();
+            offset["From"] ??= Required(cylinder, "On", "ParamDrivenSolids.Cylinder");
+            AddAuthoredOffset(top, offset, planes, dimensions, axes, serializer, ref dimIndex);
+            AddCircleForm(forms, name, bottom, top, center, diameter, cylinder.Value<bool?>("IsSolid") != false, serializer);
+        }
+
+        var authoredConnectors = RequiredArray(operation, "Connectors", "ParamDrivenSolids");
+        EnsureObjects(authoredConnectors, "ParamDrivenSolids.Connectors");
+        foreach (var connector in authoredConnectors.OfType<JObject>()) {
+            RequireOnly(connector, "ParamDrivenSolids.Connector", "Name", "Domain", "Face", "Depth", "IsSolid", "Round", "Config");
+            StrictBool(connector, "IsSolid", "ParamDrivenSolids.Connector");
+            var name = Required(connector, "Name", "ParamDrivenSolids.Connector");
+            var host = ResolvePlane(Required(connector, "Face", "ParamDrivenSolids.Connector"));
+            var face = $"{name} Face";
+            var depth = RequiredObject(connector, "Depth", "ParamDrivenSolids.Connector");
+            var faceSpec = (JObject)depth.DeepClone();
+            faceSpec["From"] = connector["Face"]!.DeepClone();
+            AddAuthoredOffset(face, faceSpec, planes, dimensions, axes, serializer, ref dimIndex);
+            var round = RequiredObject(connector, "Round", "ParamDrivenSolids.Connector");
+            RequireOnly(round, "ParamDrivenSolids.Connector.Round", "Center", "Diameter");
+            var center = PlaneRefs(RequiredArray(round, "Center", "ParamDrivenSolids.Connector.Round"), "ParamDrivenSolids.Connector.Round.Center");
+            var diameter = Driver(RequiredObject(round, "Diameter", "ParamDrivenSolids.Connector.Round"), "ParamDrivenSolids.Connector.Round.Diameter");
+            AddCircleForm(forms, $"{name} Stub", host, face, center, diameter, connector.Value<bool?>("IsSolid") != false, serializer);
+            var config = RequiredObject(connector, "Config", "ParamDrivenSolids.Connector");
+            RequireOnly(config, "ParamDrivenSolids.Connector.Config", "SystemType", "FlowConfiguration", "FlowDirection", "LossMethod");
+            var native = new JObject {
+                ["domain"] = Required(connector, "Domain", "ParamDrivenSolids.Connector"), ["systemType"] = Required(config, "SystemType", "ParamDrivenSolids.Connector.Config"),
+                ["on"] = face, ["at"] = new JArray(center), ["shape"] = "Round", ["diameter"] = diameter.Text
+            };
+            foreach (var field in new[] { "FlowConfiguration", "FlowDirection", "LossMethod" })
+                if (config[field] is { } value) {
+                    if (value.Type != JTokenType.String) throw new InvalidOperationException($"ParamDrivenSolids.Connector.Config.{field} must be a string.");
+                    native[char.ToLowerInvariant(field[0]) + field[1..]] = value.DeepClone();
+                }
+            AddUnique(connectors, name, native);
+        }
+        patch["refPlanes"] = planes;
+        patch["dimensions"] = dimensions;
+        patch["forms"] = forms;
+        patch["connectors"] = connectors;
+    }
+
     private static (string Base, string Anchor, string Parameter, RefStrength Strength) LegacyMirror(JObject value, string axis) {
         RequireOnly(value, $"ParamDrivenSolids.Rectangle.{axis}", "Mode", "Parameter", "CenterAnchor", "PlaneNameBase", "Strength");
         if (Required(value, "Mode", $"ParamDrivenSolids.Rectangle.{axis}") != "Mirror")
@@ -187,6 +285,81 @@ public static class FamilyProfileConverter {
         if (values.ContainsKey(name)) throw new InvalidOperationException($"ParamDrivenSolids generates duplicate native name '{name}'.");
         values[name] = value;
     }
+
+    private static void AddAuthoredOffset(string name, JObject spec, JObject planes, JObject dimensions,
+        IDictionary<string, Axis> axes, JsonSerializer serializer, ref int index) {
+        RequireOnly(spec, "ParamDrivenSolids offset", "Name", "From", "By", "Dir");
+        if (spec["Name"] is not null && Required(spec, "Name", "ParamDrivenSolids offset") != name)
+            throw new InvalidOperationException($"ParamDrivenSolids offset name '{name}' conflicts with '{spec["Name"]}'.");
+        var anchor = ResolvePlane(Required(spec, "From", "ParamDrivenSolids offset"));
+        var direction = Required(spec, "Dir", "ParamDrivenSolids offset");
+        if (direction is not "out" and not "in") throw new InvalidOperationException($"ParamDrivenSolids offset Dir '{direction}' is invalid.");
+        if (!axes.TryGetValue(anchor, out var axis)) throw new InvalidOperationException($"ParamDrivenSolids offset anchor '{anchor}' has no resolved native axis.");
+        AddPlane(planes, name, new FamilyModelRefPlane { Normal = axis, At = PortableLength.FromFeet(direction == "out" ? 1 : -1), IsReference = RefStrength.StrongReference }, serializer);
+        axes[name] = axis;
+        AddDrivenDimension(dimensions, $"authored-solid-{index++}", [anchor, name], Driver(spec, "ParamDrivenSolids offset"), serializer);
+    }
+
+    private static (string Negative, string Positive) AddAuthoredSpan(JObject spec, JObject planes, JObject dimensions,
+        IDictionary<string, Axis> axes, JsonSerializer serializer, ref int index) {
+        RequireOnly(spec, "ParamDrivenSolids span", "About", "By", "Negative", "Positive");
+        var about = ResolvePlane(Required(spec, "About", "ParamDrivenSolids span"));
+        if (!axes.TryGetValue(about, out var axis)) throw new InvalidOperationException($"ParamDrivenSolids span anchor '{about}' has no resolved native axis.");
+        var negative = Required(spec, "Negative", "ParamDrivenSolids span");
+        var positive = Required(spec, "Positive", "ParamDrivenSolids span");
+        AddPlane(planes, negative, new FamilyModelRefPlane { Normal = axis, At = PortableLength.FromFeet(-0.5), IsReference = RefStrength.StrongReference }, serializer);
+        AddPlane(planes, positive, new FamilyModelRefPlane { Normal = axis, At = PortableLength.FromFeet(0.5), IsReference = RefStrength.StrongReference }, serializer);
+        axes[negative] = axes[positive] = axis;
+        AddDrivenDimension(dimensions, $"authored-solid-{index++}", [negative, positive], Driver(spec, "ParamDrivenSolids span"), serializer);
+        AddUnique(dimensions, $"authored-solid-{index++}-eq", JObject.FromObject(new FamilyModelDim { Between = [negative, about, positive], Equality = true }, serializer));
+        return (negative, positive);
+    }
+
+    private static void AddDrivenDimension(JObject dimensions, string name, List<string> between, PortableLength driver, JsonSerializer serializer) =>
+        AddUnique(dimensions, name, JObject.FromObject(driver.IsParameter
+            ? new FamilyModelDim { Between = between, Label = driver.Parameter }
+            : new FamilyModelDim { Between = between, Locked = driver }, serializer));
+
+    private static void AddRectangleForm(JObject forms, string name, string bottom, string top,
+        (string Negative, string Positive) width, (string Negative, string Positive) length, bool solid, JsonSerializer serializer) =>
+        AddUnique(forms, name, JObject.FromObject(new FamilyModelForm {
+            Kind = FormKind.Extrusion, Void = !solid, SketchPlane = bottom, Start = bottom, End = top,
+            Profile = [new FamilyModelLoop { Curves = new[] { width.Negative, length.Positive, width.Positive, length.Negative }
+                .Select(p => new FamilyModelSketchCurve { Kind = CurveKind.Line, On = p }).ToList() }]
+        }, serializer));
+
+    private static void AddCircleForm(JObject forms, string name, string bottom, string top, List<string> center,
+        PortableLength diameter, bool solid, JsonSerializer serializer) =>
+        AddUnique(forms, name, JObject.FromObject(new FamilyModelForm {
+            Kind = FormKind.Extrusion, Void = !solid, SketchPlane = bottom, Start = bottom, End = top,
+            Profile = [new FamilyModelLoop { Curves = [new FamilyModelSketchCurve { Kind = CurveKind.Circle, Center = center, Diameter = diameter }] }]
+        }, serializer));
+
+    private static PortableLength Driver(JObject value, string path) {
+        try { return PortableLength.Parse(Required(value, "By", path)); }
+        catch (JsonSerializationException error) { throw new InvalidOperationException($"{path}.By is invalid: {error.Message}", error); }
+    }
+
+    private static JArray RequiredArray(JObject value, string field, string path) =>
+        value[field] is JArray result ? result : throw new InvalidOperationException($"{path}.{field} must be an array.");
+
+    private static void EnsureObjects(JArray values, string path) {
+        if (values.Any(value => value is not JObject)) throw new InvalidOperationException($"{path} entries must be objects.");
+    }
+
+    private static List<string> PlaneRefs(JArray values, string path) {
+        if (values.Count != 2 || values.Any(value => value.Type != JTokenType.String)) throw new InvalidOperationException($"{path} must contain two plane strings.");
+        return values.Values<string>().Select(ResolvePlane).ToList();
+    }
+
+    private static void StrictBool(JObject value, string field, string path) {
+        if (value[field] is { Type: not JTokenType.Boolean }) throw new InvalidOperationException($"{path}.{field} must be a boolean.");
+    }
+
+    private static string ResolvePlane(string value) => value switch {
+        "@CenterLR" => "Center (Left/Right)", "@CenterFB" => "Center (Front/Back)", "@Bottom" => "Reference Plane",
+        "@Left" => "Left", "@Right" => "Right", "@Top" => "Top", _ when value.StartsWith("plane:", StringComparison.Ordinal) => value[6..], _ => value
+    };
 
     private static ExecutionOptions ConvertExecutionOptions(JToken? token) {
         if (token is null) return new ExecutionOptions();
