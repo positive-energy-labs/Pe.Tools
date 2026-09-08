@@ -200,6 +200,13 @@ public sealed class PatchRun {
     /// </summary>
     [JsonProperty("failures", NullValueHandling = NullValueHandling.Ignore)]
     public Dictionary<string, FailureAction>? Failures { get; init; }
+
+    /// <summary>
+    ///     A Revit-owned built-in source (Model, Manufacturer, Type Comments) cannot be removed, so it reads its destination through a formula
+    ///     `= &lt;destination&gt;` instead (kaitpw 2026-09-08: essential, on by default). False leaves built-ins untouched.
+    /// </summary>
+    [JsonProperty("backlinkBuiltIns")]
+    public bool BacklinkBuiltIns { get; init; } = true;
 }
 
 /// <summary>What a family visit lets Revit do with one named failure.</summary>

@@ -7,7 +7,8 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>Source migration precedes explicit authored writes. Destination state wins; source references transfer before removal.</summary>
 public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollection<string> authoredNames, Func<string, ExternalDefinition?> sharedSource,
-    IReadOnlyCollection<string>? targets = null, ElectricalConnectorParameterRule? connectorRule = null, IReadOnlyList<BlankRule>? blanks = null)
+    IReadOnlyCollection<string>? targets = null, ElectricalConnectorParameterRule? connectorRule = null, IReadOnlyList<BlankRule>? blanks = null,
+    bool backlinkBuiltIns = true)
     : DocOperation<DefaultOperationSettings>(new()) {
     public override string Description => "Normalize explicit parameter sources and shared identities";
 
@@ -115,7 +116,14 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var target = fm.FindParameter(targetName);
                 if (source is null || target is null || authoredNames.Contains(sourceName)) continue;
                 if (source.IsBuiltInParameter()) {
-                    logs.Add(new LogEntry(sourceName).Skip("Revit-owned built-in source is read-only to removal; destination state wins."));
+                    // A built-in cannot be removed; it reads the destination through a formula so schedules keyed on it stay right (run.backlinkBuiltIns).
+                    if (!backlinkBuiltIns) { logs.Add(new LogEntry(sourceName).Skip("Revit-owned built-in source left as is; destination state wins.")); continue; }
+                    try {
+                        fm.SetFormula(source, targetName);
+                        logs.Add(new LogEntry(sourceName).Success($"Built-in reads '{targetName}' through a formula."));
+                    } catch (Autodesk.Revit.Exceptions.ApplicationException exception) {
+                        logs.Add(new LogEntry(sourceName).Skip($"Built-in could not take formula '{targetName}': {exception.Message}"));
+                    }
                     continue;
                 }
                 doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {

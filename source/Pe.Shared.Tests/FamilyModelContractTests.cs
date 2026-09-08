@@ -50,6 +50,8 @@ public sealed class FamilyModelContractTests {
             Assert.That(run.Failures!["constraintsNotSatisfied"], Is.EqualTo(FailureAction.Resolve));
             Assert.That(run.Failures["cantKeepJoined"], Is.EqualTo(FailureAction.Delete));
             Assert.That(FamilyPatch.Parse("""{"patch":{},"run":{"clean":true}}""").Run!.Failures, Is.Null);
+            Assert.That(FamilyPatch.Parse("""{"patch":{},"run":{"clean":true}}""").Run!.BacklinkBuiltIns, Is.True);
+            Assert.That(FamilyPatch.Parse("""{"patch":{},"run":{"backlinkBuiltIns":false}}""").Run!.BacklinkBuiltIns, Is.False);
         });
     }
 

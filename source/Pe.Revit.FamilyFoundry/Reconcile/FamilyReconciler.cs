@@ -131,7 +131,7 @@ public static class FamilyReconciler {
         var normalization = mappings.Count == 0 ? null : new NormalizeParamSources(desired, names,
             sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source.")),
             mappings.Select(p => p.Key).Concat(routeTargets).Distinct(StringComparer.Ordinal).ToList(),
-            run?.ElectricalConnectorParameters, run?.BlanksBecome);
+            run?.ElectricalConnectorParameters, run?.BlanksBecome, run?.BacklinkBuiltIns ?? true);
         var (queue, effects) = Lower(changes, desired, current, run, sharedSource, normalization);
         if (mappings.Count > 0) {
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
