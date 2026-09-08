@@ -15,6 +15,8 @@ using Pe.Revit.Parameters;
 using Pe.App.Host;
 using Pe.Shared.HostContracts.Operations;
 
+using Pe.Revit.Failures;
+
 namespace Pe.Revit.Tests;
 
 /// <summary>Normalization acceptance through the processor. Runtime owner runs these on disposable documents.</summary>
@@ -940,12 +942,16 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
                 RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name!)).ToList();
             Assert.That(definitions.Count, Is.EqualTo(39), "38 mapped mechanical definitions plus the routed PE_E___ApparentPower.");
-            FamilyPatch WithRule(FamilyPatch converted) => new() { Select = converted.Select, Patch = converted.Patch,
+            FamilyPatch WithRule(FamilyPatch converted, Dictionary<string, FailureAction>? failures = null) => new() { Select = converted.Select, Patch = converted.Patch,
                 Run = new PatchRun { ElectricalConnectorParameters = connectorRule, ParametersIfSourceExists = converted.Run?.ParametersIfSourceExists,
-                    Clean = converted.Run?.Clean, Sort = converted.Run?.Sort, BlanksBecome = converted.Run?.BlanksBecome } };
+                    Clean = converted.Run?.Clean, Sort = converted.Run?.Sort, BlanksBecome = converted.Run?.BlanksBecome, Failures = failures } };
             var patch = WithRule(CompanyNormalizationFixture.Convert(mappings, names));
             var scopedOverride = CompanyNormalizationFixture.OldTemplateHorsepowerOverride();
             var scopedPatch = WithRule(CompanyNormalizationFixture.Convert(scopedOverride.Mappings, names));
+            // 2026-09-08 ruling: PVFY's one-way angular rig (`z Duct Angle = z Type Flow * 180 deg`) posts "Constraints are not satisfied"
+            // whenever the type cursor moves; this family alone lets Revit unlock that constraint, and the receipt must say so.
+            const string pvfy = "Mitsubishi_PVFY-NAMU-E1";
+            var pvfyPatch = WithRule(CompanyNormalizationFixture.Convert(mappings, names), new() { ["constraintsNotSatisfied"] = FailureAction.Resolve });
             var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
                 .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
                 .Select(f => f.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
@@ -975,14 +981,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     ? before.Parameters.SingleOrDefault(parameter => parameter.Definition.Identity.Name == "PE_E___MCA")
                       ?? before.Parameters.Single(parameter => parameter.Definition.Identity.Name == "Minimum Circuit Ampacity")
                     : null;
-                var operation = new ReconcileFamily(scopedOverride.Families.Contains(familyName) ? scopedPatch : patch,
+                var operation = new ReconcileFamily(familyName == pvfy ? pvfyPatch : scopedOverride.Families.Contains(familyName) ? scopedPatch : patch,
                     sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
                 var (contexts, processorMs) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
                 var (operationLogs, error) = contexts.Single().OperationLogs;
                 var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().SingleOrDefault(f => f.Name == familyName);
                 var assertions = new JObject { ["loadedFamilyPresent"] = loaded is not null,
-                    ["committedConverged"] = error is null && operation.LastReceipt?.Converged == true };
+                    ["committedConverged"] = error is null && operation.LastReceipt?.Converged == true,
+                    ["runEffects"] = new JArray(operation.LastReceipt?.RunEffects ?? []) };
+                if (familyName == pvfy && operation.LastReceipt?.RunEffects.Any(e => e.Contains($"{FamilyFailurePolicy.ResolvedPrefix}constraintsNotSatisfied", StringComparison.Ordinal)) != true)
+                    familyFailures.Add("PVFY receipt does not record the resolved constraint as a RunEffect");
                 if (loaded is null) familyFailures.Add("loaded family disappeared");
                 else {
                     var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);

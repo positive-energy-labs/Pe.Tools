@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Events;
 using Pe.Revit.Tasks;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Failures;
 
@@ -61,17 +62,8 @@ public static class PeToolsFailureHandling {
 
     /// <summary>Reject the native join-loss warning without broadening warning policy or changing geometry.</summary>
     public static FailureProcessingResult RejectJoinLoss(FailuresAccessor accessor,
-        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings = true) {
-        var reject = false;
-        foreach (var failure in accessor.GetFailureMessages()) {
-            var joinLoss = failure.GetFailureDefinitionId() == BuiltInFailures.JoinElementsFailures.CannotKeepJoined;
-            var isError = failure.GetSeverity() != FailureSeverity.Warning || joinLoss;
-            reject |= isError;
-            diagnostics.Add((isError, DescribeFailure(failure)));
-            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
-        }
-        return reject ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
-    }
+        ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings = true) =>
+        FamilyFailurePolicy.Reject.Apply(accessor, diagnostics, suppressWarnings);
 
     public static FailureProcessingResult ResolveFailures(
         FailuresAccessor failuresAccessor,
@@ -98,7 +90,7 @@ public static class PeToolsFailureHandling {
             : FailureProcessingResult.Continue;
     }
 
-    private static string DescribeFailure(FailureMessageAccessor failureMessage) {
+    internal static string DescribeFailure(FailureMessageAccessor failureMessage) {
         var description = failureMessage.GetDescriptionText();
         var failureGuid = failureMessage.GetFailureDefinitionId().Guid;
         string elements;
@@ -114,7 +106,7 @@ public static class PeToolsFailureHandling {
             : $"{description} [{identity}]";
     }
 
-    private static bool TryResolveFailure(
+    internal static bool TryResolveFailure(
         FailuresAccessor failuresAccessor,
         FailureMessageAccessor failureMessage,
         out FailureResolutionType resolutionType
@@ -156,4 +148,81 @@ public static class PeToolsFailureHandling {
         failureMessage.HasResolutionOfType(resolutionType) &&
         failuresAccessor.IsFailureResolutionPermitted(failureMessage, resolutionType) &&
         !failuresAccessor.GetAttemptedResolutionTypes(failureMessage).Contains(resolutionType);
+}
+
+/// <summary>
+///     What a family visit lets Revit do with each named failure (patch <c>run.failures</c>, kaitpw 2026-09-08). Default: warnings
+///     are deleted and recorded, join loss and every error roll the edit back with Revit's text. A <see cref="FailureAction.Resolve"/>
+///     entry lets Revit take its first permitted non-modal resolution and records it as <c>Resolved &lt;name&gt; with &lt;type&gt;: ...</c>,
+///     which <c>ReconcileFamily</c> lifts onto the receipt as a RunEffect.
+/// </summary>
+public sealed class FamilyFailurePolicy {
+    public const string ResolvedPrefix = "Resolved ";
+
+    /// <summary>Patch-facing names for the Revit failure definitions FF has met. GUIDs are Revit's stable failure ids.</summary>
+    public static readonly IReadOnlyDictionary<string, Guid> KnownFailures = new Dictionary<string, Guid>(StringComparer.Ordinal) {
+        ["cantKeepJoined"] = BuiltInFailures.JoinElementsFailures.CannotKeepJoined.Guid,
+        // "Constraints are not satisfied" (Old_Template Mitsubishi_PVFY-NAMU-E1: a one-way angular rig, 2026-09-08)
+        ["constraintsNotSatisfied"] = new Guid("74441dd6-e6dd-41ea-a57c-04f4a4957f19"),
+        // "Constraints defined by highlighted Lines and Dimensions cannot be satisfied" (Old_Template Panasonic FV-0511VK2, flaky)
+        ["sketchConstraintsNotSatisfied"] = new Guid("3012554f-816b-4e6a-9b74-6b3914c87737")
+    };
+
+    public static readonly FamilyFailurePolicy Reject = new(null);
+
+    private readonly Dictionary<Guid, (string Name, FailureAction Action)> _actions = new();
+
+    public FamilyFailurePolicy(IReadOnlyDictionary<string, FailureAction>? actions) {
+        foreach (var (name, action) in actions ?? new Dictionary<string, FailureAction>()) {
+            if (!KnownFailures.TryGetValue(name, out var guid))
+                throw new ArgumentException($"run.failures names unknown failure '{name}'. Known: {string.Join(", ", KnownFailures.Keys)}.");
+            this._actions[guid] = (name, action);
+        }
+    }
+
+    public IReadOnlyDictionary<string, FailureAction> Actions => this._actions.Values.ToDictionary(a => a.Name, a => a.Action, StringComparer.Ordinal);
+
+    /// <summary>One policy for a queue of operations; the same failure named twice with different actions is a conflict.</summary>
+    public static FamilyFailurePolicy Merge(IEnumerable<FamilyFailurePolicy> policies) {
+        var merged = new Dictionary<string, FailureAction>(StringComparer.Ordinal);
+        foreach (var (name, action) in policies.SelectMany(p => p.Actions)) {
+            if (merged.TryGetValue(name, out var existing) && existing != action)
+                throw new InvalidOperationException($"run.failures conflict on '{name}': {existing} and {action}.");
+            merged[name] = action;
+        }
+        return merged.Count == 0 ? Reject : new FamilyFailurePolicy(merged);
+    }
+
+    public FailureProcessingResult Apply(FailuresAccessor accessor, ICollection<(bool IsError, string Message)> diagnostics, bool suppressWarnings = true) {
+        var reject = false;
+        var resolved = false;
+        foreach (var failure in accessor.GetFailureMessages()) {
+            var guid = failure.GetFailureDefinitionId().Guid;
+            var isWarning = failure.GetSeverity() == FailureSeverity.Warning;
+            var text = PeToolsFailureHandling.DescribeFailure(failure);
+            if (this._actions.TryGetValue(guid, out var named) && named.Action != FailureAction.Reject) {
+                if (named.Action == FailureAction.Resolve && PeToolsFailureHandling.TryResolveFailure(accessor, failure, out var type)) {
+                    resolved = true;
+                    diagnostics.Add((false, $"{ResolvedPrefix}{named.Name} with {type}: {text}"));
+                } else if (named.Action == FailureAction.Delete && isWarning) {
+                    accessor.DeleteWarning(failure);
+                    diagnostics.Add((false, $"Deleted {named.Name}: {text}"));
+                } else {
+                    reject = true;
+                    diagnostics.Add((true, named.Action == FailureAction.Delete
+                        ? $"{named.Name} is an error and cannot be deleted: {text}"
+                        : $"{named.Name} offers no permitted resolution: {text}"));
+                }
+                continue;
+            }
+            // Default: join loss counts as an error because resolving it changes geometry.
+            var isError = !isWarning || guid == KnownFailures["cantKeepJoined"];
+            reject |= isError;
+            diagnostics.Add((isError, text));
+            if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
+        }
+        return reject ? FailureProcessingResult.ProceedWithRollBack
+            : resolved ? FailureProcessingResult.ProceedWithCommit
+            : FailureProcessingResult.Continue;
+    }
 }

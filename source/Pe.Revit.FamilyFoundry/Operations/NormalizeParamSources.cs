@@ -91,12 +91,14 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 }
             }
             var pairs = cleanup.Distinct().ToList();
-            // One source can only surrender its labels, arrays and associations to one destination; the mapping must name the owner.
-            var contested = pairs.GroupBy(pair => pair.Source, StringComparer.Ordinal)
-                .Where(group => group.Select(pair => pair.Target).Distinct(StringComparer.Ordinal).Count() > 1).ToList();
-            if (contested.Count > 0)
-                throw new InvalidOperationException("A legacy source cannot be migrated to more than one destination: " + string.Join("; ",
-                    contested.Select(group => $"'{group.Key}' is claimed by {string.Join(", ", group.Select(pair => $"'{pair.Target}'").Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal))}")));
+            // One source surrenders its labels, arrays and associations to one destination only: the first in mapping order. Values already
+            // reached every destination above. The company mapping names one source for two destinations on purpose (run 15, 2026-09-08), so
+            // this is recorded, not refused.
+            foreach (var bySource in pairs.GroupBy(pair => pair.Source, StringComparer.Ordinal)) {
+                var targets = bySource.Select(pair => pair.Target).Distinct(StringComparer.Ordinal).ToList();
+                if (targets.Count > 1)
+                    logs.Add(new LogEntry(bySource.Key).Skip($"'{bySource.Key}' is named by {string.Join(", ", targets.Select(t => $"'{t}'"))}; its labels, arrays and associations go to '{targets[0]}' only."));
+            }
             foreach (var (sourceName, targetName) in pairs) {
                 var source = fm.FindParameter(sourceName);
                 var target = fm.FindParameter(targetName);

@@ -4,6 +4,8 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 
+using Pe.Revit.Failures;
+
 namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
@@ -114,7 +116,8 @@ public class OperationProcessor(
             Transaction = this._visitOpts.Transaction,
             Park = this._visitOpts.Park,
             SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings,
-            Load = saveOpts.LoadFamily
+            Load = saveOpts.LoadFamily,
+            Failures = FailurePolicyOf(queue)
         };
 
         foreach (var family in families) {
@@ -160,7 +163,7 @@ public class OperationProcessor(
                     logs.Add(new OperationLog("LoadFamily", [new LogEntry("post-verify").Error(result.Message ?? "unverified")]));
                 if (result.Verified) context.LoadedFamilyId = result.Loaded?.Id.Value();
                 context.OperationLogs = logs;
-                CompleteReconciliation(queue, !logs.Any(l => l.ErrorCount > 0));
+                CompleteReconciliation(queue, !logs.Any(l => l.ErrorCount > 0), result.Diagnostics);
             } catch (Exception ex) {
                 CompleteReconciliation(queue, false);
                 context.OperationLogs = new Exception($"Failed to process family {familyName}: {ex.ToStringDemystified()}");
@@ -203,7 +206,8 @@ public class OperationProcessor(
                         foreach (var (name, callback) in namedFamilyFuncs)
                             scope.Edit(name, d => { logs.AddRange(callback(d, pipeline.Context)); ThrowOnErrors(logs); });
                         pipeline.CollectPostSnapshot(collectorQueue);
-                    }, new FamilyVisitOptions { Transaction = this._visitOpts.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings });
+                    }, new FamilyVisitOptions { Transaction = this._visitOpts.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings,
+                        Failures = FailurePolicyOf(queue) });
                     if (!visitResult.Ran)
                         throw new InvalidOperationException($"{visitResult.Refusal}: {visitResult.Message}");
                     if (visitResult.Diagnostics.Count > 0)
@@ -216,7 +220,7 @@ public class OperationProcessor(
                 },
                 out var context);
         var (_, error) = context.OperationLogs;
-        CompleteReconciliation(queue, error is null && visitResult?.Verified == true && !visitResult.Diagnostics.Any(d => d.IsError));
+        CompleteReconciliation(queue, error is null && visitResult?.Verified == true && !visitResult.Diagnostics.Any(d => d.IsError), visitResult?.Diagnostics);
         // Note: No Close() call - we don't close the active family document
         this.WriteArtifacts(context);
         this._perFamilyCallback?.Invoke(context);
@@ -228,9 +232,13 @@ public class OperationProcessor(
         if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors.Select(e => $"{e.Name}: {e.Message}")));
     }
 
-    private static void CompleteReconciliation(OperationQueue queue, bool committed) {
-        foreach (var operation in queue.Operations.OfType<Reconcile.ReconcileFamily>()) operation.Complete(committed);
+    private static void CompleteReconciliation(OperationQueue queue, bool committed, IReadOnlyList<(string Edit, bool IsError, string Message)>? diagnostics = null) {
+        foreach (var operation in queue.Operations.OfType<Reconcile.ReconcileFamily>()) operation.Complete(committed, diagnostics);
     }
+
+    /// <summary>The queue's `run.failures`: one policy across every ReconcileFamily in it, conflicts refused.</summary>
+    private static FamilyFailurePolicy FailurePolicyOf(OperationQueue queue) =>
+        FamilyFailurePolicy.Merge(queue.Operations.OfType<Reconcile.ReconcileFamily>().Select(o => o.FailurePolicy));
 
 
     private static List<string> GetSavePaths(

@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
@@ -41,6 +41,16 @@ public sealed class FamilyModelContractTests {
         Assert.That((string?)patch.ResolveParameterRules(current)["parameters"]?["Target"]?["value"], Is.EqualTo("explicit"));
         patch.Patch["parameters"]!["Target"] = JValue.CreateNull();
         Assert.That(patch.ResolveParameterRules(current)["parameters"]!["Target"]!.Type, Is.EqualTo(JTokenType.Null));
+    }
+
+    [Test]
+    public void Run_failures_names_actions_and_omits_them_by_default() {
+        var run = FamilyPatch.Parse("""{"patch":{},"run":{"failures":{"constraintsNotSatisfied":"resolve","cantKeepJoined":"delete"}}}""").Run!;
+        Assert.Multiple(() => {
+            Assert.That(run.Failures!["constraintsNotSatisfied"], Is.EqualTo(FailureAction.Resolve));
+            Assert.That(run.Failures["cantKeepJoined"], Is.EqualTo(FailureAction.Delete));
+            Assert.That(FamilyPatch.Parse("""{"patch":{},"run":{"clean":true}}""").Run!.Failures, Is.Null);
+        });
     }
 
     [Test]

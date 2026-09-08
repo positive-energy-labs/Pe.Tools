@@ -1,8 +1,10 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
 using Pe.Revit.FamilyFoundry.Operations;
+
+using Pe.Revit.Failures;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
@@ -39,7 +41,11 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         this._expectedPlanHash = expectedPlanHash;
         this._sharedSource = sharedSource;
         this._executionOptions = executionOptions ?? new ExecutionOptions();
+        this.FailurePolicy = new FamilyFailurePolicy(patch.Run?.Failures);
     }
+
+    /// <summary>The patch's `run.failures`, applied by the visit that runs this operation; default rejects.</summary>
+    public FamilyFailurePolicy FailurePolicy { get; } = FamilyFailurePolicy.Reject;
 
     public override string Description => this._patch is null
         ? $"Reconcile the family to family.json '{this._desired!.Family.Name}'"
@@ -49,8 +55,12 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public FamilyPlan? LastPlan { get; private set; }
     public FamilyReceipt? LastReceipt { get; private set; }
 
-    internal void Complete(bool committed) {
+    internal void Complete(bool committed, IReadOnlyList<(string Edit, bool IsError, string Message)>? diagnostics = null) {
+        // Resolutions Revit took under run.failures are geometry the patch never named; they ride the receipt as RunEffects.
+        var resolutions = (diagnostics ?? []).Where(d => d.Message.StartsWith(FamilyFailurePolicy.ResolvedPrefix, StringComparison.Ordinal))
+            .Select(d => $"{d.Edit}: {d.Message}").ToList();
         this.LastReceipt = this._candidateReceipt is { } receipt ? receipt with {
+            RunEffects = resolutions.Count == 0 ? receipt.RunEffects : receipt.RunEffects.Concat(resolutions).ToList(),
             Converged = committed && receipt.Converged,
             Outcomes = committed ? receipt.Outcomes : receipt.Outcomes.Select(o => o with { Status = LogStatus.Error, Message = "Family processing did not commit successfully." }).ToList()
         } : null;
@@ -195,8 +205,10 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
                 created[0].Value.SystemType == ConnectorSystemType.PowerBalanced &&
                 intended.TryGetValue(ConnectorSystemType.PowerBalanced, out var adopted) && ExactAssociations(created[0].Value, adopted))
                 desired.Connectors.Add(created[0].Key, created[0].Value);
-            else
-                // A connector the capture cannot express would leave zero residue and a Converged receipt for a family that gained one.
+            else if (rule.CreateIfAbsent)
+                // A connector this run created that the capture cannot express would leave zero residue and a Converged receipt for a
+                // family that gained one. A pre-existing connector the capture cannot express stays an unmodeled fact (run 15, 2026-09-08:
+                // 30 Old_Template families carry one; refusing them was a regression).
                 throw new InvalidOperationException($"Electrical connector normalization left {native.Count} native power connector(s) the captured model does not express as one adoptable connector ({created.Count} captured). Refusing to report convergence; see the unmodeled facts.");
         }
     }

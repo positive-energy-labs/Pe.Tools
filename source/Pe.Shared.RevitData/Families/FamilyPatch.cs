@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.OperationSettings;
@@ -191,6 +192,25 @@ public sealed class PatchRun {
 
     [JsonProperty("sort", NullValueHandling = NullValueHandling.Ignore)]
     public SortParamsSettings? Sort { get; init; }
+
+    /// <summary>
+    ///     Named Revit failures and what FF lets Revit do with each (kaitpw 2026-09-08). Absent = <see cref="FailureAction.Reject"/>:
+    ///     the family rolls back. Names are the keys of <c>FamilyFailurePolicy.KnownFailures</c> (Pe.Revit); an unknown name fails
+    ///     the patch. Every resolution Revit takes lands on the receipt as a RunEffect with the element ids.
+    /// </summary>
+    [JsonProperty("failures", NullValueHandling = NullValueHandling.Ignore)]
+    public Dictionary<string, FailureAction>? Failures { get; init; }
+}
+
+/// <summary>What a family visit lets Revit do with one named failure.</summary>
+[JsonConverter(typeof(StringEnumConverter), true)]
+public enum FailureAction {
+    /// <summary>Roll the family back with the failure text (default).</summary>
+    Reject,
+    /// <summary>Let Revit take its first permitted non-modal resolution (unlock constraints, detach, fix, delete, skip). Geometry may change; the receipt says so.</summary>
+    Resolve,
+    /// <summary>Delete a warning and carry on. Errors cannot be deleted and reject.</summary>
+    Delete
 }
 
 [JsonObject(MemberSerialization.OptIn)]

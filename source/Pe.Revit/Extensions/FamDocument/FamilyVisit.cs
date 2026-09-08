@@ -40,6 +40,9 @@ public sealed class FamilyVisitOptions {
 
     /// <summary>Auto-resolve warnings on commit and record them as diagnostics instead of showing a dialog.</summary>
     public bool SuppressWarnings { get; init; }
+
+    /// <summary>Per-failure policy from the patch's `run.failures`; default rejects join loss and every error.</summary>
+    public FamilyFailurePolicy Failures { get; init; } = FamilyFailurePolicy.Reject;
 }
 
 /// <summary>The open family document plus the edit primitive that wraps each edit in the right transaction.</summary>
@@ -69,7 +72,7 @@ public sealed class FamilyVisitScope {
             // (journal 22:46:17 "ADialog::doModal", Mitsubishi_MSZ-GL, 2026-09-07). Warnings are always deleted here and
             // recorded; join loss and errors roll the edit back with their text.
             var posted = new List<(bool IsError, string Message)>();
-            var result = PeToolsFailureHandling.RejectJoinLoss(accessor, posted, suppressWarnings: true);
+            var result = this._options.Failures.Apply(accessor, posted, suppressWarnings: true);
             diagnostics.AddRange(posted.Where(d => d.IsError || !this._options.SuppressWarnings));
             args.SetProcessingResult(result);
         }
@@ -113,7 +116,7 @@ public sealed class FamilyVisitScope {
     private void Suppress(Transaction transaction, List<(bool IsError, string Message)> diagnostics) {
         var options = transaction.GetFailureHandlingOptions();
         _ = options.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
-            PeToolsFailureHandling.RejectJoinLoss(accessor, diagnostics, this._options.SuppressWarnings)));
+            this._options.Failures.Apply(accessor, diagnostics, this._options.SuppressWarnings)));
         _ = options.SetClearAfterRollback(true);
         _ = options.SetForcedModalHandling(true);
         transaction.SetFailureHandlingOptions(options);
@@ -168,7 +171,7 @@ public static class FamilyVisit {
             Family? loaded;
             try {
                 loaded = RevitFailureScope.Execute(project,
-                    accessor => PeToolsFailureHandling.RejectJoinLoss(accessor, loadDiagnostics, options.SuppressWarnings),
+                    accessor => options.Failures.Apply(accessor, loadDiagnostics, options.SuppressWarnings),
                     () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
             } finally {
                 scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
