@@ -34,7 +34,7 @@ Rung 4 is source-to-destination proof. The destination-wins ruling (existing `PE
 
 ## Resume point (2026-09-08, tree clean at `4bd5ed0`)
 
-Commits since `3d6ea55`: `99e16b0` rung 5 checkpoint, `297ac33` swarm round (21 fixes), `4bd5ed0` run.failures + run 15 regression scoping. Run 16 is the rung 5 stamp. Receipts against run 12: 80 comparable families, Outcomes and Residue byte-identical; PlanHash differs on exactly the 18 Mitsubishi families whose shared `Total Heating Capacity` now plans `PE_M___BoilerOutput` as an Add (wasNamed claimed once); Converged flipped false→true on PVFY and Panasonic. Swarm and fixer reports: `.artifacts/runs/famclose-20260907/swarm/`, `famfix/`, `depgraph-report.md`. Proxy swarm (session `famproxy`) in flight: `.artifacts/runs/famclose-20260907/proxy/`. Owed and unproven: LEDGER Owed, 2026-09-08 lines.
+Commits since `3d6ea55`: `99e16b0` rung 5 checkpoint, `297ac33` swarm round (21 fixes), `4bd5ed0` run.failures + run 15 regression scoping. Run 16 is the rung 5 stamp. Receipts against run 12: 80 comparable families, Outcomes and Residue byte-identical; PlanHash differs on exactly the 18 Mitsubishi families whose shared `Total Heating Capacity` now plans `PE_M___BoilerOutput` as an Add (wasNamed claimed once); Converged flipped false→true on PVFY and Panasonic. Swarm and fixer reports: `.artifacts/runs/famclose-20260907/swarm/`, `famfix/`, `depgraph-report.md`. Proxy swarm landed (three reports under `.artifacts/runs/famclose-20260907/proxy/`; ruling and leftovers in LEDGER 2026-09-08): wall time is geometry-driven, sketch-plane count is the proxy, project-side cannot see the tail. Owed and unproven: LEDGER Owed, 2026-09-08 lines.
 
 ## Merge gate (what closes the branch)
 
