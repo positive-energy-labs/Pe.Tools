@@ -13,4 +13,7 @@ public sealed class ExecutionOptions {
 
     /// <summary>Suppress non-fatal Revit warnings while retaining commit diagnostics.</summary>
     public bool SuppressWarnings { get; init; }
+
+    /// <summary>Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.</summary>
+    public bool CaptureDependencyGraph { get; init; }
 }

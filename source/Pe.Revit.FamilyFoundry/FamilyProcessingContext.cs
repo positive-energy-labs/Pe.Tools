@@ -117,6 +117,9 @@ public class FamilyProcessingContext {
     /// </summary>
     public Pe.Revit.Extensions.FamDocument.FamilyComplexity? Complexity { get; internal set; }
 
+    /// <summary>`ParameterDependencyGraph.ToText()` when <c>ExecutionOptions.CaptureDependencyGraph</c> is set; diagnostic only.</summary>
+    public string? DependencyGraph { get; internal set; }
+
 
     /// <summary>Finds a parameter snapshot in the pre-process snapshot by name.</summary>
     public ParameterSnapshot? FindParameterSnapshot(string paramName) {

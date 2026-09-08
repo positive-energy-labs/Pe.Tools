@@ -227,6 +227,17 @@ public sealed class FamilyWallTimeProxyProbe {
                         Measure(features, costs, "f_nestedFamilyElementCount", () =>
                             new FilteredElementCollector(document).OfClass(typeof(Family)).ToElementIds().Count);
 
+                        // The dependency-graph fingerprint and its own cost (r 0.01 as a cost proxy; kept for the record).
+                        Measure(features, costs, "f_graphSizes", () => {
+                            var graph = famDoc.DependencyGraph();
+                            features["f_graphParams"] = graph.Nodes.Count;
+                            features["f_graphParamParam"] = graph.ParamParamEdges;
+                            features["f_graphParamElement"] = graph.ParamElementEdges;
+                            features["f_graphFormulaDepth"] = graph.FormulaDepth;
+                            features["f_graphGeometrySinks"] = graph.GeometrySinks;
+                            return graph.Sizes;
+                        });
+
                         // Calibration only: not a runtime proxy, but the ground truth for "how big is this family".
                         var saveTimer = Stopwatch.StartNew();
                         savedPath = Path.Combine(saveDirectory, SanitizeFileName(familyName) + ".rfa");

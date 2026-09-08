@@ -1051,6 +1051,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     ["operations"] = new JArray((operationLogs ?? []).Select(log => new JObject { ["name"] = log.OperationName, ["msElapsed"] = log.MsElapsed })),
                     ["complexity"] = contexts.Single().Complexity is { } complexity ? new JObject { ["sketchPlanes"] = complexity.SketchPlanes,
                         ["elements"] = complexity.Elements, ["types"] = complexity.Types, ["predictedSeconds"] = complexity.PredictedSeconds } : null,
+                    ["dependencyGraph"] = contexts.Single().DependencyGraph,
                     ["assertions"] = assertions, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt),
                     ["error"] = error?.ToString(), ["failures"] = new JArray(familyFailures) });
                 evidence["remaining"] = new JArray(selected.Skip(((JArray)evidence["completed"]!).Count));
