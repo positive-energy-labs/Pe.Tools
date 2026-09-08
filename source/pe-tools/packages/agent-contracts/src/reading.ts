@@ -15,6 +15,10 @@ export type Address = z.infer<typeof addressSchema>;
 
 export const address = (value: string): Address => addressSchema.parse(value);
 
+/** GUID case and Windows path case/separators do not distinguish documents. */
+export const sameAddress = (a: Address, b: Address): boolean =>
+  a.replaceAll("/", "\\").toLowerCase() === b.replaceAll("/", "\\").toLowerCase();
+
 export const readingSchema = z.object({
   at: addressSchema,
   version: z.string().nullable(),
@@ -26,8 +30,8 @@ export type Reading = z.infer<typeof readingSchema>;
 export const here = <A extends { reading: Reading }>(
   value: A | null | undefined,
   at: Address | null,
-): A | null => (value && at && value.reading.at === at ? value : null);
+): A | null => (value && at && sameAddress(value.reading.at, at) ? value : null);
 
 /** Version drift is meaningful only between readings of the same document. */
 export const superseded = (older: Reading, newer: Reading): boolean =>
-  older.at === newer.at && older.version !== newer.version;
+  sameAddress(older.at, newer.at) && older.version !== newer.version;

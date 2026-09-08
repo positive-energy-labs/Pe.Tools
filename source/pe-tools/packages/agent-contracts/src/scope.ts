@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addressSchema, type Address } from "./reading.ts";
+import { addressSchema, sameAddress, type Address } from "./reading.ts";
 
 /**
  * Scope: what the user CHOSE for a chat thread. The host owns one Head per thread; the chat head
@@ -108,7 +108,7 @@ export function resolveScope(
       : { kind: "unchosen", sessions: fleet.map((s) => s.id) };
   }
   const { document, pin } = scope;
-  const holders = fleet.filter((s) => s.document === document);
+  const holders = fleet.filter((s) => s.document !== null && sameAddress(s.document, document));
   if (pin !== undefined && holders.some((h) => h.id === pin))
     return { kind: "resolved", via: "pin", session: pin, document };
   if (holders.length === 1)

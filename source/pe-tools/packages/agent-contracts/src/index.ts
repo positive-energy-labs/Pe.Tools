@@ -15,6 +15,7 @@ export * from "./schedule-grid.ts";
 export * from "./world.ts";
 export * from "./thread.ts";
 export * from "./scope.ts";
+export * from "./target.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
 export * from "./pods.ts";

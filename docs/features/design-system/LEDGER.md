@@ -14,6 +14,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-08: Build route targeting on `codex/route-primitive` from `8c7ddfc` while Takeoffs and Family finish their feature branches. Integrate their merged main once before consumer cutover. Main remains available for release preparation. The accepted model and operator decisions are in [ROUTE-PRIMITIVE.md](ROUTE-PRIMITIVE.md), sections 7–8.
+- 2026-09-08: The route foundation uses an exact call target and a session-keyed inventory. Address comparison belongs beside `Address` and treats GUID case and Windows path case/separators consistently. Purge review removed the unused read wrapper; use Effect's existing timeout and cancellation at the first real consumer. Contracts tests 28/28, existing web target/scope/store tests 15/15, contracts package checks pass. These are deterministic proofs, not a Takeoffs product fix.
+
 ### Where a rule lives
 
 - 2026-08-29 — Taste that code cannot hold lives in `lens.house`: figure, referents,
@@ -471,6 +474,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   ships (`h-*`, `face-*`, `z-*`) read as unregistered. A checker's loader is part of its claim.
 
 ## Owed
+
+- Route primitive integration: retain `C:\Users\kaitp\source\repos\Pe.Tools-route-primitive` on `codex/route-primitive`. Resume consumer changes after Takeoffs and Family are committed into main and their accepted heads are identifiable. Establish their baseline before replacing route state. Recover only this effort's spec from stash; never pop the release owner's stash. Cut over Takeoffs first, then Chat and Family, then remaining routes and authoring tools. Each cutover deletes its superseded implementation.
+- Route foundation proof: the exact resolver has permanent deterministic checks. An Effect cancellation/timeout probe passed and was retired to `.artifacts/handoffs/route-foundation/` after purge review because it had no product caller. Complete authoritative session/document inventory, document-lifetime handles and execution-time validation, Instances recovery and URL normalization, timeout/error rendering, durable operation receipts, per-call Pea targeting and owned-document cleanup. Browser and controlled Revit proof remain required. Eight existing design-guard failures reproduce with the new web files excluded; do not hide them by changing baselines.
 
 - `Picker` gained `derived` (a dashed underline: the bound value was reported by the world, not chosen; house law 8) for the chat to-line on 2026-09-06 without a swatch specimen; add one beside the popover specimens on `/design-system`.
 - 2026-09-01 pane/tutorial refinements (kaitpw at the merge verdict: "some refinements need to
