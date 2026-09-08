@@ -103,6 +103,7 @@ export const familiesRouteState = {
         target: z.string().optional(),
       }),
       actor: "any",
+      recoversExternal: true,
     },
     apply: {
       description: "HUMAN ONLY. Apply the plan minus exclusions; refuses on plan drift.",

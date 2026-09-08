@@ -1636,6 +1636,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var (_, error) = contexts.Single().OperationLogs;
             Assert.That(error, Is.Not.Null);
             Assert.That(operation.LastReceipt?.Converged ?? false, Is.False);
+            Assert.That(operation.LastReceipt?.Residue, Is.Empty, "Rollback must not replace measured post-apply residue with the requested plan.");
             AssertOriginalWidths(document);
         } finally { document.Close(false); }
     }
@@ -1652,6 +1653,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var (_, error) = contexts.Single().OperationLogs;
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(operation.LastReceipt?.Converged, Is.False);
+            Assert.That(operation.LastReceipt?.Residue, Is.Empty, "Staged edits have no measured residue, but the caller still owns commit.");
             transaction.RollBack();
             AssertOriginalWidths(document);
         } finally { document.Close(false); }

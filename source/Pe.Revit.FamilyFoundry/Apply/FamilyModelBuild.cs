@@ -18,10 +18,10 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 /// </summary>
 public static class FamilyModelBuild {
     /// <summary>Fresh document from the header's template; caller owns it. Nested dependencies resolve from modelDirectory: sibling .family.json before .rfa.</summary>
-    public static (Document Document, FamilyReceipt? Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options = null, string? modelDirectory = null) =>
+    public static (Document Document, FamilyReceipt Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options = null, string? modelDirectory = null) =>
         Build(application, model, options, modelDirectory, []);
 
-    private static (Document Document, FamilyReceipt? Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options, string? modelDirectory, List<string> ancestors) {
+    private static (Document Document, FamilyReceipt Receipt, string TemplatePath) Build(Application application, FamilyModel model, ExecutionOptions? options, string? modelDirectory, List<string> ancestors) {
         var name = model.Family.Name;
         if (ancestors.Contains(name, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Nested family dependency cycle: {string.Join(" -> ", ancestors.Append(name))}");
@@ -30,6 +30,8 @@ public static class FamilyModelBuild {
         try {
             LoadDependencies(application, document, model, options, modelDirectory, [.. ancestors, name]);
             var receipt = Reconcile(document, model, options);
+            if (receipt?.Converged != true)
+                throw new InvalidOperationException("Family build did not produce a committed, converged receipt.");
             return (document, receipt, templatePath);
         } catch {
             try { _ = document.Close(false); } catch { }
@@ -38,7 +40,7 @@ public static class FamilyModelBuild {
     }
 
     /// <summary>Build, save to `outputPath`, close. Returns the receipt (residue 0 is convergence).</summary>
-    public static (FamilyReceipt? Receipt, string TemplatePath, Pe.Shared.RevitData.Reading Reading) BuildAndSave(Application application, FamilyModel model, string outputPath, bool overwrite = false, string? modelDirectory = null) {
+    public static (FamilyReceipt Receipt, string TemplatePath, Pe.Shared.RevitData.Reading Reading) BuildAndSave(Application application, FamilyModel model, string outputPath, bool overwrite = false, string? modelDirectory = null) {
         var (document, receipt, templatePath) = Build(application, model, modelDirectory: modelDirectory);
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);

@@ -9,6 +9,10 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 [GROUNDING-REVIT.md](GROUNDING-REVIT.md).
 
 ## Decided
+- 2026-09-07, user inspected the saved Fantech PRE/POST family pair and said it looks correct; proceed next to bulk migration acceptance. This approves the inspected pair, not the full corpus.
+- 2026-09-07, supplied PE standards define estimated FLA as MCA / 1.25, explaining the authored apparent-power factor 0.8; preserve the formula during migration. Its general electrical applicability is not certified. Parameters Service definitions own exact datatype, identity, group and scope; naming prefixes do not determine datatype, and deliberate Number exceptions such as Weight remain.
+- 2026-09-07, user clarification: company PE_ migration primarily replaces Text or plain Number parameters with their intended BIM datatypes; unusual company formulas require clarification rather than inferred corrections.
+- 2026-09-07, user ruling: move regression coverage to complete product journeys as internal seams settle; retain focused native tests for unstable or counterintuitive Revit behavior, and remove lower-level duplication only when the higher surface carries its assertions.
 - 2026-09-07, user ruling: Grinder Pump Basin's exact SoundLevel literal `80 dBi alarm` maps to numeric `80` for that profile only; preserve frozen originals and strict coercion for unrelated profiles.
 - 2026-09-07, user ruling: Mitsubishi source Phase values migrate to `PE_E___Phase`, while connector Number of Poles associations route explicitly to `PE_E___NumberOfPoles`; numeric Phase must not drive the pole slot.
 - 2026-09-07, user ruling: only the native old-template Magna3 override treats the exact Text horsepower value `N/A` as a missing source; the frozen company standards and unrelated mappings keep strict coercion, and no default is synthesized when none is authored.
@@ -125,6 +129,12 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 - 2026-08-17 — (same fold) chasing visually tight whole-view exports: stock-template annotations make some whole-view exports visually loose, and that is a template fact, not a bug to grind on. The accepted GRD image plus structural assertions are the bar. Do not resume the capture experiment unless a separate `capture_view` requirement justifies it.
 
 ## Owed
+
+- 2026-09-07 — rung 5 (bulk native acceptance) has never run. `FamilyFoundryBulkMigrationHarnessTests.cs` `Old_template_all_editable_mechanical_families_migrate_company_mapping` presumes a pre-existing Fantech `PE_E___MCA` (~line 964) that the immutable fixture lacks; reconcile against the Fantech one-family proof (`.artifacts/runs/session-20260907-fantech-inspect/`) before running, keep every preservation assertion, batch through `PE_FF_OLD_TEMPLATE_FAMILY_SELECTION`.
+- 2026-09-07 — destination-wins (existing `PE_` destination with a differing source value: rewire references, remove source, else roll back the family) has only source-to-destination native evidence; needs one native carrier with a seeded conflicting destination.
+- 2026-09-07 — exclusive current-source attached-suite identity is UNPROVEN: every attached run loaded installed Pe.App 0.6.26 beside the test DLL; quarantining a source snapshot disables ricaun, so that shape is rejected. Needs a runner shape that excludes the installed add-in without quarantine.
+- 2026-09-07 — broad capture's related-document warning: SDK `9091b5c` + caller `8c2f79a` (branch `family/sdk-failure-scope-call`) stay unadopted; adopt as one package or exclude nested-warning families by name before rung 5.
+- 2026-09-07 — controlled session `ff-corpus-25` (PID 10548) exited after opening its disposable Old_Template copy with no SDK shutdown event and no Windows crash record; cause unknown. Next owned bulk session must capture the SDK log at exit before any retry.
 
 - 2026-09-06 — capture silently drops every non-array nested family (`FamilyModelCaptureExtensions.cs:104` returns early when no `LinearArray` exists); Bath-Shower captures with `nestedFamilies: {}` and no unmodeled entry. Dies with the native capture rewrite; until then it is a known lie.
 - 2026-09-06 — swept from the 2026-08-18 MAP (git history holds the long forms): Revit 2026 removed `OMNICLASS_CODE`, replacement is `ClassificationEntries` (year split stands); `settings.alwaysVertical` and `partType` have no portable default (asymmetry stands, survey unrun); `settings.partType` unproven live (needs an MEP-category fixture).

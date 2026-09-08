@@ -9,6 +9,7 @@ import {
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 import { createFamiliesCommandHandlers } from "../src/pea/families-commands.ts";
 import { createFamilyCommandHandlers } from "../src/pea/family-commands.ts";
+import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 
 afterEach(() => vi.restoreAllMocks());
 const scope = { kind: "document" as const, document: address("C:\\Models\\Test.rvt") };
@@ -124,47 +125,125 @@ test("native fleet keeps the replacement receipt and requires a fresh no-op plan
   expect(familiesRouteState.schema.parse(doc).apply).toBeNull();
 });
 
-test("native build stores convergence separately and invalid composition cannot reach Revit", async () => {
-  const doc = familyRouteState.schema.parse({});
-  const built = {
-    reading: { at: scope.document, version: "v1", observedAt: "2026-09-06T00:00:00Z" },
+test("fleet runtime blocks an unknown Apply until a successful native replan", async () => {
+  let saved: unknown;
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec: familiesRouteState, handlers: createFamiliesCommandHandlers() }],
+    store: {
+      getState: async () => structuredClone(saved),
+      setState: async ({ value }) => {
+        saved = structuredClone(value);
+      },
+    },
+  });
+  const read = () => workspace.read({ scope }, "families");
+  const command = async (name: string, input: unknown) =>
+    workspace.command(
+      { scope },
+      "families",
+      "human",
+      name,
+      input,
+      (await read())!.revision,
+      crypto.randomUUID(),
+    );
+  const entry = {
+    familyId: 1,
     familyName: "Box",
-    outputPath: "C:\\Out\\Box.rfa",
-    templatePath: "template.rft",
-    converged: true,
-    residueCount: 0,
+    planHash: "h1",
+    changes: [{ section: "parameters", key: "Width", kind: "Modify" }],
+    runEffects: [],
+    refusals: [],
+    warnings: [],
   };
   const call = vi
     .spyOn(HostRpcCaller.prototype, "call")
     .mockResolvedValueOnce(opened as never)
-    .mockResolvedValueOnce(built as never)
-    .mockResolvedValueOnce({
-      ...opened,
-      composedContent: null,
-      validation: { isValid: false, issues: [{ path: "$", message: "invalid include" }] },
-    } as never);
-  const ctx = {
-    scope,
-    getDoc: () => doc,
-    setDoc: async (next: typeof doc) => {
-      Object.assign(doc, next);
+    .mockResolvedValueOnce({ families: [entry], diagnostics: [] } as never)
+    .mockResolvedValueOnce(opened as never)
+    .mockRejectedValueOnce(new Error("response lost"));
+  const planInput = {
+    profilePath: "width",
+    scope: {
+      categoryNames: [],
+      familyNames: ["Box"],
+      placementScope: "AllLoaded",
     },
   };
-  const handlers = createFamilyCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
-  const input = {
-    documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" },
-    outputPath: built.outputPath,
-  };
-  await handlers.build_evidence(input, ctx);
-  expect(doc.build).toEqual(built);
-  expect(doc.evidence).toBeUndefined();
-  expect(call.mock.calls[1]).toEqual([
-    "revit.apply.family-model",
-    { modelJson: opened.composedContent, outputPath: built.outputPath },
-  ]);
-  await expect(handlers.build_evidence(input, ctx)).rejects.toThrow("invalid include");
-  expect(call).toHaveBeenCalledTimes(3);
+  const applyInput = { expectedPlanHashes: { "1": "h1" } };
+  expect(await command("plan", planInput)).toMatchObject({ ok: true });
+  expect(await command("apply", applyInput)).toMatchObject({ ok: false, error: "response lost" });
+  expect(await read()).toMatchObject({ status: "outcomeUnknown" });
+  expect(await command("apply", applyInput)).toMatchObject({ ok: false, kind: "refused" });
+  expect(call).toHaveBeenCalledTimes(4);
+  call.mockRejectedValueOnce(new Error("read failed"));
+  expect(await command("plan", planInput)).toMatchObject({ ok: false });
+  expect(await read()).toMatchObject({ status: "outcomeUnknown" });
+  call
+    .mockResolvedValueOnce(opened as never)
+    .mockResolvedValueOnce({ families: [{ ...entry, planHash: "h2" }], diagnostics: [] } as never);
+  expect(await command("plan", planInput)).toMatchObject({ ok: true });
+  expect(await read()).toMatchObject({
+    status: "ready",
+    doc: { plan: { entries: [{ planHash: "h2" }] } },
+  });
+  call
+    .mockResolvedValueOnce(opened as never)
+    .mockResolvedValueOnce({ receipts: [], diagnostics: [] } as never);
+  expect(await command("apply", { expectedPlanHashes: { "1": "h2" } })).toMatchObject({ ok: true });
+  expect(await read()).toMatchObject({ status: "ready", doc: { plan: null } });
+  expect(call).toHaveBeenCalledTimes(9);
 });
+
+test.each([undefined, "C:\\Sidecars"])(
+  "native build resolves sidecars (%s), stores convergence and refuses invalid composition",
+  async (modelDirectory) => {
+    const doc = familyRouteState.schema.parse({});
+    const built = {
+      reading: { at: scope.document, version: "v1", observedAt: "2026-09-06T00:00:00Z" },
+      familyName: "Box",
+      outputPath: "C:\\Out\\Box.rfa",
+      templatePath: "template.rft",
+      converged: true,
+      residueCount: 0,
+    };
+    const call = vi
+      .spyOn(HostRpcCaller.prototype, "call")
+      .mockResolvedValueOnce(opened as never)
+      .mockResolvedValueOnce(built as never)
+      .mockResolvedValueOnce({
+        ...opened,
+        composedContent: null,
+        validation: { isValid: false, issues: [{ path: "$", message: "invalid include" }] },
+      } as never);
+    const ctx = {
+      scope,
+      getDoc: () => doc,
+      setDoc: async (next: typeof doc) => {
+        Object.assign(doc, next);
+      },
+    };
+    const handlers = createFamilyCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" });
+    const input = {
+      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" },
+      outputPath: built.outputPath,
+      modelDirectory,
+    };
+    await handlers.build_evidence(input, ctx);
+    expect(doc.build).toEqual(built);
+    expect(doc.evidence).toBeUndefined();
+    expect(call.mock.calls[1]).toEqual([
+      "revit.apply.family-model",
+      {
+        modelJson: opened.composedContent,
+        outputPath: built.outputPath,
+        modelDirectory: modelDirectory ?? "C:\\Settings",
+      },
+    ]);
+    await expect(handlers.build_evidence(input, ctx)).rejects.toThrow("invalid include");
+    expect(call).toHaveBeenCalledTimes(3);
+  },
+);
 
 test("current-family apply consumes its reviewed hash, preserves receipts and recaptures native evidence", async () => {
   const doc = familyRouteState.schema.parse({});

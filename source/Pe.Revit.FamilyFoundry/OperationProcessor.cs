@@ -220,23 +220,31 @@ public class OperationProcessor(
             this._exOpts.SingleTransaction);
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
 
+        FamilyVisitResult? visitResult = null;
         _ = this.OpenDoc
             .GetFamilyDocument()
             .StartPipeline(pipeline =>
                 {
                     pipeline.CollectPreSnapshot(collectorQueue);
                     var logs = new List<OperationLog>();
-                    _ = FamilyVisit.InPlace(pipeline.FamDoc, scope => {
+                    visitResult = FamilyVisit.InPlace(pipeline.FamDoc, scope => {
                         foreach (var (name, callback) in namedFamilyFuncs)
                             scope.Edit(name, d => { logs.AddRange(callback(d, pipeline.Context)); ThrowOnErrors(logs); });
                         pipeline.CollectPostSnapshot(collectorQueue);
                     }, new FamilyVisitOptions { Transaction = this._visitOpts.Transaction, SuppressWarnings = this._exOpts.SuppressWarnings || this._visitOpts.SuppressWarnings });
+                    if (!visitResult.Ran)
+                        throw new InvalidOperationException($"{visitResult.Refusal}: {visitResult.Message}");
+                    if (visitResult.Diagnostics.Count > 0)
+                        logs.Add(new OperationLog("Commit", visitResult.Diagnostics
+                            .Select((d, i) => d.IsError ? new LogEntry($"{d.Edit} {i + 1}").Error(d.Message) : new LogEntry($"{d.Edit} {i + 1}").Skip(d.Message)).ToList()));
+                    if (!visitResult.Verified)
+                        logs.Add(new OperationLog("Commit", [new LogEntry("verification").Skip(visitResult.Message ?? "Commit is unverified.")]));
                     pipeline.Context.OperationLogs = logs;
                     pipeline.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
                 },
                 out var context);
         var (_, error) = context.OperationLogs;
-        CompleteReconciliation(queue, error is null && !this.OpenDoc.IsModifiable);
+        CompleteReconciliation(queue, error is null && visitResult?.Verified == true && !visitResult.Diagnostics.Any(d => d.IsError));
         // Note: No Close() call - we don't close the active family document
         this.WriteArtifacts(context);
         this._perFamilyCallback?.Invoke(context);

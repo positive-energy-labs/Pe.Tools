@@ -448,7 +448,10 @@ public static class FamilyReconciler {
             SharedDefinitions = sharedDefinitions,
             ExecutionBehavior = executionBehavior
         };
-        var json = CanonicalHashToken(JToken.FromObject(payload, Serializer)).ToString(Formatting.None);
+        var token = JToken.FromObject(payload, Serializer);
+        // Unmodeled diagnostics contain transient EditFamily reference GUIDs; reasons and paths remain guarded.
+        foreach (var facts in token.SelectTokens("$.*.unmodeled[*].facts").ToList()) facts.Parent!.Remove();
+        var json = CanonicalHashToken(token).ToString(Formatting.None);
         using var sha = SHA256.Create();
         return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-", "")[..16];
     }

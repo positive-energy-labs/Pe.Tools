@@ -105,10 +105,7 @@ internal sealed class FamilyModelCapturer {
         if (Collect<DataStorage>().Any())
             this.Add(UnmodeledReason.ThirdPartyStorage, "$", ("dataStorageElements", Collect<DataStorage>().Count().ToString(CultureInfo.InvariantCulture)));
 
-        var coverage = FamilyModel.SectionNames.ToDictionary(s => s, _ => CoverageState.Read, StringComparer.Ordinal);
-
-
-        return new FamilyModel {
+        var model = new FamilyModel {
             Family = new FamilyModelHeader {
                 Name = string.IsNullOrWhiteSpace(this._d.OwnerFamily.Name) ? Path.GetFileNameWithoutExtension(this._d.Title) : this._d.OwnerFamily.Name,
                 Category = category,
@@ -129,10 +126,14 @@ internal sealed class FamilyModelCapturer {
             Settings = this.Settings(),
             LookupTables = this.LookupTables(snapshot),
             RoomCalculationPoint = this.RoomCalculationPoint(placement),
-            Coverage = coverage,
             Unmodeled = this._un,
             CaptureIssues = this._issues
         };
+        var incomplete = this._un.Select(fact => fact.Path.Split('.').ElementAtOrDefault(1))
+            .OfType<string>().ToHashSet(StringComparer.Ordinal);
+        foreach (var section in FamilyModel.SectionNames)
+            model.Coverage[section] = incomplete.Contains(section) ? CoverageState.Partial : CoverageState.Read;
+        return model;
     }
 
     // ───────────────────────────── datums, refPlanes, refLines ─────────────────────────────

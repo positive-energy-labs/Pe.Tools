@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import {
   readingSchema,
@@ -200,7 +200,7 @@ export function createFamilyCommandHandlers(
         .call("revit.apply.family-model", {
           modelJson: executionContent(opened),
           outputPath: rfaPath,
-          ...(modelDirectory ? { modelDirectory } : {}),
+          modelDirectory: modelDirectory ?? dirname(sourcePath),
         })
         .catch((error: unknown) => {
           throw new Error(`revit.apply.family-model failed (${message(error)}).`);

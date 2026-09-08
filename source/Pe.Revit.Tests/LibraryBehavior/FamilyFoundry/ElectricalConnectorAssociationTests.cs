@@ -81,20 +81,36 @@ public sealed class ElectricalConnectorAssociationTests {
         } finally { document.Close(false); }
     }
 
-    [Test]
-    public void Electrical_connector_run_rule_failure_rolls_the_whole_reconciliation_back() {
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Electrical_connector_run_rule_converges_or_rolls_the_whole_reconciliation_back(bool incompatible) {
         var document = this.NewFamily("Electrical connector run rollback");
         try {
             var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
             var patch = new FamilyPatch { Patch = new Newtonsoft.Json.Linq.JObject(), Run = new PatchRun {
                 ElectricalConnectorParameters = new ElectricalConnectorParameterRule {
-                    Voltage = "Voltage", NumberOfPoles = "Number of Poles", ApparentPower = "Voltage", MinimumCircuitAmpacity = "MCA"
+                    Voltage = "Voltage", NumberOfPoles = "Number of Poles", ApparentPower = incompatible ? "Voltage" : "Apparent Power", MinimumCircuitAmpacity = "MCA"
                 }
             } };
             var operation = new ReconcileFamily(patch);
             using var processor = new OperationProcessor(document);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
             var (_, error) = contexts.Single().OperationLogs;
+            if (!incompatible) {
+                Assert.That(error, Is.Null, error?.Message);
+                Assert.That(operation.LastReceipt?.Converged, Is.True);
+                Assert.That(operation.LastReceipt?.Residue, Is.Empty);
+                Assert.That(ElectricalConnectors(document), Has.Count.EqualTo(1));
+                AssertAssociations(document, ElectricalConnectors(document));
+                var repeated = new ReconcileFamily(patch);
+                var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
+                var (_, repeatedError) = repeatedContexts.Single().OperationLogs;
+                Assert.That(repeatedError, Is.Null, repeatedError?.Message);
+                Assert.That(repeated.LastReceipt?.Converged, Is.True);
+                Assert.That(repeated.LastPlan?.Changes, Is.Empty);
+                Assert.That(ElectricalConnectors(document), Has.Count.EqualTo(1));
+                return;
+            }
             Assert.That(error, Is.Not.Null);
             Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
             Assert.That(ElectricalConnectors(document), Is.Empty);

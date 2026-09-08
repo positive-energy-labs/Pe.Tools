@@ -165,6 +165,21 @@ public sealed class FamilyProjectIdentityTests {
             var parameter = JObject.Parse(capture.ModelJson!)["parameters"]!["Default Elevation"];
             Assert.That(parameter, Is.Not.Null, "The authored String parameter must not be dropped with the same-named built-in length parameter.");
             Assert.That(parameter!.Value<string>("dataType"), Is.EqualTo("Text"));
+            Assert.That(capture.Coverage["lookupTables"], Is.EqualTo("Partial"));
+            Assert.That(capture.Coverage["parameters"], Is.EqualTo("Read"));
+            var patch = """{"patch":{"parameters":{"FF Coverage Probe":{"dataType":"Number","value":7}}}}""";
+            var plan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            Assert.That(plan.Refusals, Is.Empty);
+            Assert.That(plan.Changes.Single(change => change.Key == "FF Coverage Probe").Kind, Is.EqualTo("Add"));
+            var tablePatch = """{"patch":{"lookupTables":{"Coverage Probe":{"csv":",Key##number##general,Value##number##general\nrow,1,2\n"}}}}""";
+            var tablePlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(tablePatch, family.Id.Value()), project).Families.Single();
+            Assert.That(tablePlan.Changes.Single(change => change.Key == "Coverage Probe").Kind, Is.EqualTo("Unverifiable"));
+            var repeat = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            Assert.That(repeat.PlanHash, Is.EqualTo(plan.PlanHash), "Transient EditFamily reference GUIDs must not change the reviewed intent.");
+            var applied = FamilyFoundryBridgeOps.ApplyFamilies(new FamilyFoundryApplyRequest(patch, new Dictionary<long, string> { [family.Id.Value()] = plan.PlanHash }), project).Receipts.Single();
+            Assert.That(applied.Success && applied.Converged, Is.True, applied.Error);
+            var final = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, applied.FamilyId), project).Families.Single();
+            Assert.That(final.Changes, Is.Empty);
         } finally { project.Close(false); }
     }
 }
