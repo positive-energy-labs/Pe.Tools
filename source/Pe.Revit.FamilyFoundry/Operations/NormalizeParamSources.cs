@@ -29,7 +29,10 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var existed = existing is not null;
                 var nativeReplacement = false;
                 var candidates = ranking.GetRankedCurrParams(spec.WasNamed ?? [], fm, context, includeEmpty: true)
-                    .Where(p => p.Definition.Name != name).Select(p => p.Definition.Name).ToList();
+                    .Where(p => p.Definition.Name != name)
+                    // A family-type selector that happens to share a legacy name (Old_Template VMB 'Voltage') carries no value to move.
+                    .Where(p => p.StorageType != StorageType.ElementId)
+                    .Select(p => p.Definition.Name).ToList();
                 var needsShared = spec.Shared == true && (existing is null || !existing.IsShared || existing.GUID != spec.SharedGuid || spec.SharedSpecId is { } specId && existing.Definition.GetDataType() != new ForgeTypeId(specId) || spec.SharedVisible is { } visible && (existing.Definition as InternalDefinition)?.Visible != visible || spec.SharedUserModifiable is { } modifiable && existing.UserModifiable != modifiable);
                 var definition = needsShared ? sharedSource(name) ?? throw new InvalidOperationException($"No shared definition for '{name}'.") : null;
                 var dataType = definition?.GetDataType() ?? (spec.DataType is { } data ? SetParamMetadata.Spec(data) : existing?.Definition.GetDataType());
@@ -38,8 +41,15 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var first = candidates.Select(fm.FindParameter).FirstOrDefault(p => p is not null);
                 if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !sharedCandidates.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
                     strategy is "Strict" or "CoerceByStorageType") {
-                    existing = doc.ReplaceDefinition(first, name, definition, propertiesGroup, spec.IsInstance ?? false);
-                    nativeReplacement = true;
+                    try {
+                        existing = doc.ReplaceDefinition(first, name, definition, propertiesGroup, spec.IsInstance ?? false);
+                        nativeReplacement = true;
+                    } catch (InvalidOperationException exception) {
+                        // Revit refuses some in-place replacements (observed on Old_Template dimension and capacity parameters).
+                        // The sub-transaction rolled back; fall through to create-then-transfer, which moves values, formulas and associations.
+                        logs.Add(new LogEntry(name).Skip($"Native replacement of '{first.Definition.Name}' refused; transferring instead. {exception.Message}"));
+                        existing = AddParams.Create(doc, name, spec, sharedSource);
+                    }
                 } else if (existing is null) {
                     existing = AddParams.Create(doc, name, spec, sharedSource);
                 } else if (needsShared) {

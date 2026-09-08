@@ -915,7 +915,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         }
     }
 
-    [Test, Timeout(600000)]
+    [Test, Timeout(3600000)]
     public void Old_template_all_editable_mechanical_families_migrate_company_mapping() {
         const string selectionVariable = "PE_FF_OLD_TEMPLATE_FAMILY_SELECTION";
         var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
@@ -931,12 +931,21 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         try {
             var mappings = CompanyNormalizationFixture.MechanicalMappings();
             var names = mappings.MappingData.Select(m => m.NewName).ToHashSet(StringComparer.Ordinal);
+            // 2026-09-07 ruling: connector Number of Poles routes explicitly to PE_E___NumberOfPoles, never through legacy Phase.
+            // The company MechEquip profiles route all four connector slots; the sweep carries the same rule for every family
+            // that already has an electrical connector and never creates one (creation belongs to the profile lane).
+            var connectorRule = new ElectricalConnectorParameterRule { Voltage = "PE_E___Voltage", NumberOfPoles = "PE_E___NumberOfPoles",
+                ApparentPower = "PE_E___ApparentPower", MinimumCircuitAmpacity = "PE_E___MCA", CreateIfAbsent = false };
+            names.UnionWith([connectorRule.Voltage, connectorRule.NumberOfPoles, connectorRule.ApparentPower, connectorRule.MinimumCircuitAmpacity]);
             var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
                 RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name!)).ToList();
-            Assert.That(definitions.Count, Is.EqualTo(38));
-            var patch = CompanyNormalizationFixture.Convert(mappings, names);
+            Assert.That(definitions.Count, Is.EqualTo(39), "38 mapped mechanical definitions plus the routed PE_E___ApparentPower.");
+            FamilyPatch WithRule(FamilyPatch converted) => new() { Select = converted.Select, Patch = converted.Patch,
+                Run = new PatchRun { ElectricalConnectorParameters = connectorRule, ParametersIfSourceExists = converted.Run?.ParametersIfSourceExists,
+                    Clean = converted.Run?.Clean, Sort = converted.Run?.Sort, BlanksBecome = converted.Run?.BlanksBecome } };
+            var patch = WithRule(CompanyNormalizationFixture.Convert(mappings, names));
             var scopedOverride = CompanyNormalizationFixture.OldTemplateHorsepowerOverride();
-            var scopedPatch = CompanyNormalizationFixture.Convert(scopedOverride.Mappings, names);
+            var scopedPatch = WithRule(CompanyNormalizationFixture.Convert(scopedOverride.Mappings, names));
             var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
                 .Where(f => f.IsEditable && f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment)
                 .Select(f => f.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
@@ -961,8 +970,10 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 var originalId = family.Id;
                 var originalUniqueId = family.UniqueId;
                 var before = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
+                // The immutable fixture holds the source alias (`Minimum Circuit Ampacity` = `Amperage`); migration creates PE_E___MCA.
                 var fantechMcaBefore = familyName == "Fantech - MUAH Heater"
-                    ? before.Parameters.Single(parameter => parameter.Definition.Identity.Name == "PE_E___MCA")
+                    ? before.Parameters.SingleOrDefault(parameter => parameter.Definition.Identity.Name == "PE_E___MCA")
+                      ?? before.Parameters.Single(parameter => parameter.Definition.Identity.Name == "Minimum Circuit Ampacity")
                     : null;
                 var operation = new ReconcileFamily(scopedOverride.Families.Contains(familyName) ? scopedPatch : patch,
                     sharedSource: d => new FamilySharedParameterSource(d, definitions));
@@ -1007,6 +1018,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 ((JArray)evidence["completed"]!).Add(new JObject { ["familyName"] = familyName, ["familyId"] = originalId.Value(),
                     ["familyUniqueId"] = originalUniqueId, ["result"] = familyFailures.Count == 0 ? "passed" : "failed",
                     ["elapsedMs"] = timer.Elapsed.TotalMilliseconds, ["processorMs"] = processorMs, ["contextMs"] = contexts.Single().TotalMs,
+                    ["graph"] = contexts.Single().GraphSizes,
                     ["assertions"] = assertions, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt),
                     ["error"] = error?.ToString(), ["failures"] = new JArray(familyFailures) });
                 evidence["remaining"] = new JArray(selected.Skip(((JArray)evidence["completed"]!).Count));

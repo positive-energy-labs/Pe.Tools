@@ -11,6 +11,8 @@ public static class FamilyDocumentNormalizeParameter {
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
         var fm = document.FamilyManager;
+        var sourceName = source.Definition.Name;
+        try {
         if (shared is not null && source.Definition.GetDataType() != shared.GetDataType())
             throw new InvalidOperationException($"Cannot natively replace '{source.Definition.Name}' with a different data type.");
         var replacement = source;
@@ -27,6 +29,9 @@ public static class FamilyDocumentNormalizeParameter {
         }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException($"Replacement of '{name}' did not commit.");
         return replacement;
+        } catch (Autodesk.Revit.Exceptions.InvalidOperationException exception) {
+            throw new InvalidOperationException($"Replacing '{sourceName}' with '{name}' (shared: {shared?.Name ?? "no"}, instance: {instance}) failed natively: {exception.Message}", exception);
+        }
     }
 
     /// <summary>Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.</summary>
@@ -86,6 +91,8 @@ public static class FamilyDocumentNormalizeParameter {
                 }
             }
             foreach (var dependent in dependents.Where(dependent => dependent.Id != target.Id)) {
+                // A dependent found through a label or association carries no formula; only formula text is rewritten here.
+                if (string.IsNullOrEmpty(dependent.Formula)) continue;
                 var formula = dependent.Formula.Replace(temporary, target.Definition.Name);
                 try { fm.SetFormula(dependent, formula); }
                 catch (Exception exception) {

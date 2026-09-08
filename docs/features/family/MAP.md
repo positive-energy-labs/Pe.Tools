@@ -26,11 +26,15 @@ Diff against main (main has not touched this area since base `bb4b7f1`): library
 | 2 | one family, browser: AprilAire Plan → Apply → converged → repeat 0 | browser + session dev, ff-close-25 | `.artifacts/runs/session-20260907-aprilaire/` |
 | 3 | one family, public script: Linear LED capture, stable plan hash, apply, empty replan | Host script | `.artifacts/runs/fresh-20260907-ff-close/` |
 | 4 | one family, native migration: Fantech 38/38 shared identities, 80 → 0 changes, zero residue; user inspected PRE/POST and approved | Host script, NoTransaction | `.artifacts/runs/session-20260907-fantech-inspect/` (execution e4442d9f) |
-| 5 | bulk: every editable mechanical family in Old_Template under all applicable profiles | native harness | **never run** |
+| 5 | bulk: all 81 editable mechanical families in Old_Template under the company mechanical mapping plus the connector rule | fresh `pe-revit test`, `Old_template_all_editable_mechanical_families_migrate_company_mapping` | 2026-09-08: run 12 one session 78/80 (Magna3 excluded; PVFY and Panasonic FV-0511VK2 roll back on `Constraints are not satisfied`, Panasonic flaky: passed run 4). Run 14 Magna3 alone passes with the pole-word ruling. So 79/81 green, 2 owed to the depgraph line (`.artifacts/runs/famclose-20260907/depgraph-report.md`). Evidence: `rung5-run12-checkpoint.json`, `rung5-run14-checkpoint.json` |
 | 6 | receipt commitment tracks the real `FamilyVisit` result; Build refuses an unconverged family | Host script | `receipt-readback.cs` in run 3; dirty tree, uncommitted |
 | 7 | exclusive current-source attached suite (no installed Pe.App beside it) | pe-revit test | **UNPROVEN**: every attached run so far loaded installed Pe.App 0.6.26 too |
 
 Rung 4 is source-to-destination proof. The destination-wins ruling (existing `PE_` destination with a differing source value) has no native carrier yet.
+
+## Resume point (2026-09-08 00:30, uncommitted)
+
+Fourteen source files (plus `CoerceByStorageType` pole words) are dirty on top of `3d6ea55` and compile: key-level verifiability, connector rule on the sweep with `createIfAbsent`, power-only connectors, phase-1 slot on unbalanced connectors, replacement fallback, null-formula guard, family-type sources excluded, electrical coercion of numeric sources, label fallback, failure-event resolution in `FamilyVisit` (the modal-dialog hang), commit errors carrying Revit text, NUnit timeout 60. Herd `famclose` cast 2026-09-08 00:20: depgraph (writes source), perf, bugs-reconcile, bugs-ops, cruft (read-only); reports under `.artifacts/runs/famclose-20260907/swarm/`. Swarm reports landed 2026-09-08; dispatched to session `famfix` in worktree `Pe.Tools-family-fix` (branch `family/rewrite-fix`, seed `2cff8dd` = this dirty tree without the depgraph trace): fix-ops, fix-reconcile, fix-cruft, posture and reports under its `.artifacts/runs/famfix-20260908/`. Owed from the swarm, not dispatched: perf 1 and 2 (four captures and the double reconcile), perf 8 (per-attempt SubTransaction), cruft 2-4 (second capture pipeline fold), bugs-reconcile 8. Next: merge `family/rewrite-fix` onto the line after depgraph lands, rerun the 80, compare receipts to run 12, commit as the rung 5 checkpoint.
 
 ## Merge gate (what closes the branch)
 

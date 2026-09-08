@@ -27,8 +27,12 @@ public class CoerceElectrical : ICoercionStrategy {
             var t when t?.TypeId.Contains(".electrical:") == true => this.ExtractDouble(
                 context.SourceValueString ?? context.SourceValue?.ToString() ?? string.Empty,
                 context.TargetParam),
+            // Any other numeric storage (Old_Template VMB carries Voltage under a non-electrical spec) is taken at face value.
+            _ when context.SourceValue is double raw => raw,
+            _ when context.SourceValue is int rawInt => rawInt,
+            // ToLabel throws on ids without a label; report the raw id instead.
             _ => throw new ArgumentException(
-                $"Unsupported source type {context.SourceDataType?.ToLabel() ?? "null"} for electrical coercion")
+                $"Unsupported source type {context.SourceDataType?.TypeId ?? "null"} for electrical coercion")
         };
 
         var convertedVal = UnitUtils.ConvertToInternalUnits(currVal, context.TargetUnitType);

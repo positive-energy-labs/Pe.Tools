@@ -151,13 +151,14 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = rule.ApparentPower
         };
         var native = new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
-            .Where(connector => connector.Domain == Domain.DomainElectrical).ToList();
+            .Where(connector => connector.IsPowerConnector()).ToList();
+        if (native.Count == 0 && !rule.CreateIfAbsent) return; // associate-only rule on a family without an electrical connector
         if (native.Count == 0) throw new InvalidOperationException("Electrical connector normalization left no electrical connector.");
         var intended = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var connector in native)
             foreach (var (targetId, sourceName) in mappings) {
                 var source = document.FamilyManager.get_Parameter(sourceName);
-                var target = connector.get_Parameter(targetId);
+                var target = connector.AssociableSlot(targetId);
                 if (source is null || target is null || document.FamilyManager.GetAssociatedFamilyParameter(target)?.Id != source.Id)
                     throw new InvalidOperationException($"Electrical connector {connector.Id.Value()} did not retain '{targetId}' association to '{sourceName}'.");
                 intended[target.Definition.Name] = $"param:{sourceName}";

@@ -64,12 +64,14 @@ public sealed class FamilyVisitScope {
         void OnFailures(object? _, FailuresProcessingEventArgs args) {
             var accessor = args.GetFailuresAccessor();
             if (accessor?.GetDocument()?.Equals(doc) != true) return;
-            foreach (var failure in accessor.GetFailureMessages()) {
-                var severity = failure.GetSeverity();
-                if (this._options.SuppressWarnings && severity == FailureSeverity.Warning) continue;
-                var text = failure.GetDescriptionText();
-                diagnostics.Add((severity != FailureSeverity.Warning, string.IsNullOrWhiteSpace(text) ? failure.GetFailureDefinitionId().Guid.ToString() : text));
-            }
+            // Failures posted mid-transaction (explicit Regenerate, join recomputation) reach this event before the
+            // transaction preprocessor. Left unresolved they open Revit's modal error dialog and hang a headless session
+            // (journal 22:46:17 "ADialog::doModal", Mitsubishi_MSZ-GL, 2026-09-07). Warnings are always deleted here and
+            // recorded; join loss and errors roll the edit back with their text.
+            var posted = new List<(bool IsError, string Message)>();
+            var result = PeToolsFailureHandling.RejectJoinLoss(accessor, posted, suppressWarnings: true);
+            diagnostics.AddRange(posted.Where(d => d.IsError || !this._options.SuppressWarnings));
+            args.SetProcessingResult(result);
         }
 
         doc.Application.FailuresProcessing += OnFailures;
@@ -78,19 +80,19 @@ public sealed class FamilyVisitScope {
                 using var transaction = new SubTransaction(doc);
                 _ = transaction.Start();
                 edit(this.Document);
-                RequireCommitted(transaction.Commit(), name);
+                RequireCommitted(transaction.Commit(), name, diagnostics);
             } else if (this._options.Transaction == FamilyVisitTransaction.Sandbox) {
                 using var sandbox = DocumentSandbox.BeginCommit(doc, name);
                 Suppress(sandbox.Transaction, diagnostics);
                 edit(this.Document);
                 sandbox.Complete();
-                RequireCommitted(sandbox.Transaction.GetStatus(), name);
+                RequireCommitted(sandbox.Transaction.GetStatus(), name, diagnostics);
             } else {
                 using var transaction = new Transaction(doc, name);
                 _ = transaction.Start();
                 Suppress(transaction, diagnostics);
                 edit(this.Document);
-                RequireCommitted(transaction.Commit(), name);
+                RequireCommitted(transaction.Commit(), name, diagnostics);
             }
         } finally {
             doc.Application.FailuresProcessing -= OnFailures;
@@ -100,9 +102,12 @@ public sealed class FamilyVisitScope {
             throw new InvalidOperationException($"'{name}' reported commit errors: {string.Join("; ", diagnostics.Where(d => d.IsError).Select(d => d.Message))}");
     }
 
-    internal static void RequireCommitted(TransactionStatus status, string name) {
-        if (status != TransactionStatus.Committed)
-            throw new InvalidOperationException($"'{name}' did not commit: {status}.");
+    internal static void RequireCommitted(TransactionStatus status, string name, List<(bool IsError, string Message)>? diagnostics = null) {
+        if (status == TransactionStatus.Committed) return;
+        var posted = diagnostics?.Where(d => d.IsError).Select(d => d.Message).Distinct().ToList() ?? [];
+        throw new InvalidOperationException(posted.Count == 0
+            ? $"'{name}' did not commit: {status}."
+            : $"'{name}' did not commit: {status}. Revit posted: {string.Join("; ", posted)}.");
     }
 
     private void Suppress(Transaction transaction, List<(bool IsError, string Message)> diagnostics) {

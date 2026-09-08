@@ -389,13 +389,20 @@ public static class FamilyReconciler {
         Mark("details", d.Details, x => (x.Align?.Select(a => a.To) ?? []).Concat(x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? []));
     }
 
-    /// <summary>F6/F9: a change in a section capture did not fully read is Unverifiable by construction.</summary>
+    /// <summary>F6/F9: a change in a section capture did not read is Unverifiable by construction; in a Partial
+    /// section only the keys an unmodeled fact names are Unverifiable (2026-09-06 ruling: key-level, never section-level).</summary>
     private static List<FamilyChange> Verifiability(List<FamilyChange> changes, FamilyModel current) {
         if (current.Coverage.Count == 0) return changes; // authored current: fully stated
+        var unmodeled = current.Unmodeled.Select(fact => fact.Path).ToList();
         return changes.Select(c => {
             var section = c.Section == "types.cell" ? "types" : c.Section;
             var state = current.Coverage.TryGetValue(section, out var s) ? s : CoverageState.NotRead;
-            return state == CoverageState.Read ? c : c with { Kind = ChangeKind.Unverifiable };
+            if (state == CoverageState.Read) return c;
+            if (state == CoverageState.NotRead) return c with { Kind = ChangeKind.Unverifiable };
+            var whole = $"$.{section}";
+            var key = $"$.{section}.{c.Key}";
+            var named = unmodeled.Any(path => path == whole || path == key || path.StartsWith(key + ".", StringComparison.Ordinal));
+            return named ? c with { Kind = ChangeKind.Unverifiable } : c;
         }).ToList();
     }
 

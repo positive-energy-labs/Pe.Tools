@@ -207,6 +207,10 @@ public sealed class ElectricalConnectorParameterRule {
     /// <summary>Retained family-parameter intent. No connector target is assumed until native capability is proven.</summary>
     [JsonProperty("minimumCircuitAmpacity", Required = Required.Always)]
     public string MinimumCircuitAmpacity { get; init; } = null!;
+
+    /// <summary>Create one power-balanced connector on a native host when the family has none. False associates existing connectors only.</summary>
+    [JsonProperty("createIfAbsent")]
+    public bool CreateIfAbsent { get; init; } = true;
 }
 
 [JsonObject(MemberSerialization.OptIn)]
