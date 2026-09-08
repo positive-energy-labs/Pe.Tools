@@ -41,20 +41,16 @@ export class HostLifecycle extends Context.Service<
 >()("pe/HostLifecycle") {}
 
 /**
- * The host version reported in the service file: the install receipt's release version in the
+ * The host version reported in the service file: the install pointer's canonical version in the
  * installed lane, "dev" otherwise — mirroring what `/host/install` surfaces.
  */
 export function resolveHostVersion(): string {
   if (hostOwnership.lane === "installed") {
     try {
-      const receipt = JSON.parse(
-        readFileSync(join(productRoot(), "install.receipt.json"), "utf8"),
-      ) as { releaseVersion?: unknown };
-      if (typeof receipt.releaseVersion === "string" && receipt.releaseVersion) {
-        return receipt.releaseVersion;
-      }
+      const version = readFileSync(join(productRoot(), "current.txt"), "utf8").trim();
+      if (version) return version;
     } catch {
-      /* no receipt (or unreadable) -> fall through to the dev sentinel */
+      /* no pointer (or unreadable) -> fall through to the dev sentinel */
     }
   }
   return "dev";
