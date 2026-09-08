@@ -37,6 +37,9 @@ public readonly struct FamilyDocument {
 
     // Forward common Document methods
     public void SaveAs(string filePath, SaveAsOptions options) => this.Document.SaveAs(filePath, options);
+
+    /// <summary>Sketch planes, elements and types: the cheap predictor of how long a Family Foundry pass takes here. Diagnostic only.</summary>
+    public FamilyComplexity Complexity() => FamilyComplexity.Measure(this);
     public bool Close(bool save) => this.Document.Close(save);
     /// <remarks>TRAP: Document.LoadFamily into a family document SILENTLY RETURNS FALSE when no transaction is open on the target famdoc; no throw, no warning. Live-proven 3/3; this produced a false-pass that survived two proofs.</remarks>
     public Family LoadFamily(Document doc, IFamilyLoadOptions options) => this.Document.LoadFamily(doc, options);

@@ -115,6 +115,13 @@ public class FamilyProcessingContext {
     public string? GraphSizes { get; internal set; }
 
 
+    /// <summary>
+    ///     Sketch planes, elements, types and the seconds they predict (proxy swarm 2026-09-08). Read once before the operations run;
+    ///     emitted on the checkpoint row and the family report, never consulted by processing.
+    /// </summary>
+    public Pe.Revit.Extensions.FamDocument.FamilyComplexity? Complexity { get; internal set; }
+
+
     /// <summary>Finds a parameter snapshot in the pre-process snapshot by name.</summary>
     public ParameterSnapshot? FindParameterSnapshot(string paramName) {
         var parameters = this.PreProcessSnapshot?.Parameters?.Data;

@@ -139,7 +139,7 @@ public class OperationProcessor(
                         famDocCollector!(pre, famDoc);
                         context.PreProcessSnapshot = pre;
                     }
-                    context.GraphSizes = ParameterDependencyGraph.Capture(famDoc).Sizes;
+                    context.Complexity = famDoc.Complexity();
                     AppendProcessorTrace(outputFolderPath, familyName, "operations-start");
                     var opSw = Stopwatch.StartNew();
                     foreach (var (name, callback) in edits)

@@ -993,7 +993,26 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 if (familyName == pvfy && operation.LastReceipt?.RunEffects.Any(e => e.Contains($"{FamilyFailurePolicy.ResolvedPrefix}constraintsNotSatisfied", StringComparison.Ordinal)) != true)
                     familyFailures.Add("PVFY receipt does not record the resolved constraint as a RunEffect");
                 if (loaded is null) familyFailures.Add("loaded family disappeared");
-                else {
+                else if (error is null && Environment.GetEnvironmentVariable("PE_FF_OLD_TEMPLATE_SAVE_DIR") is { Length: > 0 } saveDir) {
+                    // Review export only: the migrated family as an .rfa beside the checkpoint. The project itself is never saved.
+                    // Re-opening a family Revit resolved under run.failures can post the same error again (PVFY, run 17); the
+                    // failure scope records it on the row instead of a modal dialog, and the export is skipped.
+                    var exportDiagnostics = new List<(bool IsError, string Message)>();
+                    try {
+                        Pe.Revit.Tasks.RevitFailureScope.Execute(project, accessor => FamilyFailurePolicy.Reject.Apply(accessor, exportDiagnostics), () => {
+                            var export = new FamilyDocument(project.EditFamily(loaded));
+                            try {
+                                var fileName = string.Concat(familyName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".rfa";
+                                export.SaveAs(Path.Combine(saveDir, fileName), new SaveAsOptions { OverwriteExistingFile = true, Compact = true });
+                            } finally { _ = export.Close(false); }
+                            return true;
+                        });
+                    } catch (Exception exportFailure) {
+                        exportDiagnostics.Add((true, exportFailure.Message));
+                    }
+                    assertions["reviewExport"] = exportDiagnostics.Count == 0 ? "saved" : string.Join("; ", exportDiagnostics.Select(d => d.Message));
+                }
+                if (loaded is not null) {
                     var after = Pe.Revit.DocumentData.Families.Extraction.FamilySnapshotExtractor.ExtractFromProjectFamily(project, loaded);
                     if (error is not null || operation.LastReceipt?.Converged != true) {
                         familyFailures.Add(error?.Message ?? "No committed converged receipt");
@@ -1030,7 +1049,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     // OperationsMs is the reconcile body alone; elapsedMs - operationsMs is EditFamily + LoadFamily + close.
                     ["operationsMs"] = contexts.Single().OperationsMs,
                     ["operations"] = new JArray((operationLogs ?? []).Select(log => new JObject { ["name"] = log.OperationName, ["msElapsed"] = log.MsElapsed })),
-                    ["graph"] = contexts.Single().GraphSizes,
+                    ["complexity"] = contexts.Single().Complexity is { } complexity ? new JObject { ["sketchPlanes"] = complexity.SketchPlanes,
+                        ["elements"] = complexity.Elements, ["types"] = complexity.Types, ["predictedSeconds"] = complexity.PredictedSeconds } : null,
                     ["assertions"] = assertions, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt),
                     ["error"] = error?.ToString(), ["failures"] = new JArray(familyFailures) });
                 evidence["remaining"] = new JArray(selected.Skip(((JArray)evidence["completed"]!).Count));
