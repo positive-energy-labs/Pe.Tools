@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -131,7 +131,7 @@ public static class FamilyReconciler {
         var normalization = mappings.Count == 0 ? null : new NormalizeParamSources(desired, names,
             sharedSource ?? (_ => throw new InvalidOperationException("No shared definition source.")),
             mappings.Select(p => p.Key).Concat(routeTargets).Distinct(StringComparer.Ordinal).ToList(),
-            run?.ElectricalConnectorParameters);
+            run?.ElectricalConnectorParameters, run?.BlanksBecome);
         var (queue, effects) = Lower(changes, desired, current, run, sharedSource, normalization);
         if (mappings.Count > 0) {
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
@@ -531,13 +531,9 @@ public static class FamilyReconciler {
         // 7 lookup tables (size_lookup formulas name the table)
         if (Of("lookupTables", ChangeKind.Add, ChangeKind.Update) is { Length: > 0 } tables)
             q.Add(SetLookupTables.FromCsv(tables.Select(x => (x.Key, ((FamilyModelLookupTable)x.After!).Csv))));
-        // 8 values (per-type cells), then run.blanksBecome
+        // 8 values (per-type cells)
         var cells = Of("types.cell", ChangeKind.Update);
         if (cells.Length > 0) q.Add(new SetKnownParams(Values(cells)));
-        if (run?.BlanksBecome is { Count: > 0 } rules) {
-            q.Add(new SetBlankValues(rules));
-            effects.Add($"run.blanksBecome: {rules.Count} rules");
-        }
         // 9-11 planes, lines, dims
         if (After<FamilyModelRefPlane>("refPlanes") is { Length: > 0 } planes) q.Add(new MakeRefPlanes(planes));
         if (After<FamilyModelRefLine>("refLines") is { Length: > 0 } lines) q.Add(new MakeRefLines(lines, d));
@@ -576,6 +572,11 @@ public static class FamilyReconciler {
         if (run?.Clean is { Enabled: true } clean) {
             q.Add(new CleanFamilyDocument(clean, d.Parameters.Keys));
             effects.Add("run.clean");
+        }
+        // run.blanksBecome after clean: purge-empty must still see the blanks it deletes, and the sentinel must never be purged.
+        if (run?.BlanksBecome is { Count: > 0 } rules) {
+            q.Add(new SetBlankValues(rules));
+            effects.Add($"run.blanksBecome: {rules.Count} rules");
         }
         if (run?.Sort is { Enabled: true } sort) {
             q.Add(new SortParams(sort));

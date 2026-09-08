@@ -1140,6 +1140,130 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         }
     }
 
+    /// <summary>
+    ///     Rung 5b (kaitpw 2026-09-08): the converted company profiles themselves, applied natively. Formulas, connector creation, tag values,
+    ///     clean, sort and the -1 sentinel, then an empty second plan. Three profiles are the agreed guarantee; HP is cut to two families.
+    /// </summary>
+    [Test, Timeout(3600000)]
+    public void Old_template_applies_composed_company_profiles_natively() {
+        var profileFamilies = new Dictionary<string, string[]?>(StringComparer.Ordinal) {
+            ["CmdFFMigrator/profiles/MechEquip/SH.json"] = null,
+            // FV-0511VK2 rolls back on "Constraints are not satisfied" once run.clean purges its planes (LEDGER 2026-09-08); named out until diagnosed.
+            ["CmdFFMigrator/profiles/MechEquip/Fan.json"] = ["Tamarack Technologies Dragon Garage Fan", "Thunderbird Dryer Vent", "Panasonic - WhisperGreen Select - FV-0511VKSL2 - Exhaust Fan Light",
+                "Panasonic - WhisperLine - Remote Mount In-Line Fan - Exhaust Fan", "Panasonic - WhisperValue DC - FV-0510VS1 - Exhaust Fan",
+                "Panasonic - WhisperRecessed LED Designer Fan - FV-08VRE2 - Exhaust Fan Light", "Fantech - prioAir 6 EC Inline Fan", "Fantech - prioAir 10 EC Inline Fan BETA"],
+            // PVFY is out until the unbalanced two-pole connector has a ruling (LEDGER 2026-09-08).
+            ["CmdFFMigrator/profiles/MechEquip/HP.json"] = ["Mitsubishi_PKA-HA", "Mitsubishi_SLZ-KA"]
+        };
+        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
+        var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_applies_composed_company_profiles_natively));
+        var checkpointPath = Path.Combine(output, "company-profile-apply.json");
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(original, copy);
+        var project = this._application.OpenDocumentFile(copy);
+        var evidence = new JObject { ["status"] = "running", ["families"] = new JArray() };
+        var failures = new List<string>();
+        var saveDir = Environment.GetEnvironmentVariable("PE_FF_OLD_TEMPLATE_SAVE_DIR") is { Length: > 0 } root ? Directory.CreateDirectory(Path.Combine(root, "profiles")).FullName : null;
+        try {
+            var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>()
+                .ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
+            var definitions = CompanyCorpusDefinitions();
+            foreach (var (source, only) in profileFamilies) {
+                var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(source, (JObject)profiles[source]["settings"]!);
+                var patch = FamilyProfileConverter.Convert(settings, definitions, project.GetUnits()).Patch;
+                var authored = ((JObject)patch.Patch["parameters"]!).Properties().Where(p => p.Value is JObject).ToList();
+                var formulas = authored.Where(p => p.Value["formula"]?.Type == JTokenType.String).ToDictionary(p => p.Name, p => (string)p.Value["formula"]!, StringComparer.Ordinal);
+                var values = authored.Where(p => p.Value["value"]?.Type == JTokenType.String).ToDictionary(p => p.Name, p => (string)p.Value["value"]!, StringComparer.Ordinal);
+                var rule = patch.Run?.ElectricalConnectorParameters;
+                var sentinelSpecs = (patch.Run?.BlanksBecome ?? []).SelectMany(r => r.Specs).Select(SetParamMetadata.Spec).ToList();
+                foreach (var family in project.FamiliesMatching(patch.Select).Where(f => only is null || only.Contains(f.Name)).OrderBy(f => f.Name, StringComparer.Ordinal).ToList()) {
+                    var familyName = family.Name;
+                    var row = new JObject { ["profile"] = source, ["familyName"] = familyName };
+                    ((JArray)evidence["families"]!).Add(row);
+                    var familyFailures = new List<string>();
+                    try {
+                        var familyPatch = familyName == "Mitsubishi_PVFY-NAMU-E1" ? WithFailures(patch, new() { ["constraintsNotSatisfied"] = FailureAction.Resolve }) : patch;
+                        var operation = new ReconcileFamily(familyPatch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                        using var processor = new OperationProcessor(project);
+                        var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
+                        var (_, error) = contexts.Single().OperationLogs;
+                        row["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt);
+                        row["complexity"] = contexts.Single().Complexity?.ToString();
+                        if (error is not null || operation.LastReceipt?.Converged != true) { familyFailures.Add(error?.Message ?? "no converged receipt"); continue; }
+                        var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
+                        var inspect = new List<(bool IsError, string Message)>();
+                        Pe.Revit.Tasks.RevitFailureScope.Execute(project, accessor => FamilyFailurePolicy.Reject.Apply(accessor, inspect), () => {
+                            var document = new FamilyDocument(project.EditFamily(loaded));
+                            try {
+                                var fm = document.FamilyManager;
+                                var types = fm.Types.Cast<FamilyType>().ToList();
+                                if (rule is not null) {
+                                    var power = new FilteredElementCollector(document.Document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>().Where(c => c.IsPowerConnector()).ToList();
+                                    row["powerConnectors"] = power.Count;
+                                    if (power.Count == 0) familyFailures.Add("no power connector after the profile's connector rule");
+                                    foreach (var connector in power)
+                                        foreach (var (slot, name) in new[] { (BuiltInParameter.RBS_ELEC_VOLTAGE, rule.Voltage), (BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES, rule.NumberOfPoles), (BuiltInParameter.RBS_ELEC_APPARENT_LOAD, rule.ApparentPower) })
+                                            if (fm.GetAssociatedFamilyParameter(connector.AssociableSlot(slot))?.Definition.Name != name)
+                                                familyFailures.Add($"connector {connector.Id.Value()} slot {slot} is not associated to {name}");
+                                }
+                                foreach (var (name, formula) in formulas) {
+                                    var actual = fm.get_Parameter(name)?.Formula;
+                                    row[$"formula:{name}"] = actual;
+                                    if (string.IsNullOrEmpty(actual)) familyFailures.Add($"{name} has no formula; the profile authored '{formula}'");
+                                }
+                                foreach (var (name, value) in values) {
+                                    var parameter = fm.get_Parameter(name);
+                                    var actual = parameter is null ? null : types.Select(t => t.AsString(parameter) ?? t.AsValueString(parameter)).FirstOrDefault();
+                                    row[$"value:{name}"] = actual;
+                                    if (actual != value) familyFailures.Add($"{name} reads '{actual}'; the profile authored '{value}'");
+                                }
+                                var numeric = fm.GetParameters().Where(p => string.IsNullOrEmpty(p.Formula) && !p.IsReadOnly && sentinelSpecs.Contains(p.Definition.GetDataType())).ToList();
+                                var blank = numeric.SelectMany(p => types.Where(t => !document.HasValue(t, p)).Select(t => $"{p.Definition.Name}@{t.Name}")).ToList();
+                                row["blankNumericCells"] = new JArray(blank);
+                                row["numericValues"] = new JObject(numeric.Select(p => new JProperty(p.Definition.Name, types.Select(t => t.AsValueString(p)).FirstOrDefault())));
+                                if (blank.Count > 0) familyFailures.Add($"{blank.Count} numeric cells still blank after run.blanksBecome: {string.Join(", ", blank.Take(5))}");
+                                if (saveDir is { Length: > 0 })
+                                    document.SaveAs(Path.Combine(saveDir, string.Concat(familyName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".rfa"),
+                                        new SaveAsOptions { OverwriteExistingFile = true, Compact = true });
+                            } finally { _ = document.Close(false); }
+                            return true;
+                        });
+                        familyFailures.AddRange(inspect.Where(d => d.IsError).Select(d => $"inspect: {d.Message}"));
+                        // Second plan through the library, not Pe.App.Host: an installed Pe.App beside the test DLL wins the type load (rung 7).
+                        var dry = new ReconcileFamily(familyPatch, dryRun: true, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                        using (var replanner = new OperationProcessor(project))
+                            _ = replanner.SelectFamilies(() => [loaded]).ProcessQueue(new OperationQueue().Add(dry), loadAndSaveOptions: new LoadAndSaveOptions { LoadFamily = false });
+                        var replan = dry.LastPlan;
+                        row["replanChanges"] = new JArray((replan?.Changes ?? []).Select(c => new JObject { ["change"] = $"{c.Section}:{c.Key} {c.Kind}",
+                            ["before"] = c.Before is null ? null : JToken.FromObject(c.Before), ["after"] = c.After is null ? null : JToken.FromObject(c.After) }));
+                        if (replan is null) familyFailures.Add("second plan was not produced");
+                        else if (replan.Changes.Count > 0 || replan.Refusals.Count > 0) familyFailures.Add($"second plan is not empty: {replan.Changes.Count} changes, {replan.Refusals.Count} refusals");
+                    } catch (Exception exception) {
+                        familyFailures.Add(exception.Message);
+                        row["error"] = exception.ToString();
+                    } finally {
+                        row["result"] = familyFailures.Count == 0 ? "passed" : "failed";
+                        row["failures"] = new JArray(familyFailures);
+                        failures.AddRange(familyFailures.Select(f => $"{familyName}: {f}"));
+                        WriteCheckpoint(checkpointPath, evidence);
+                    }
+                }
+            }
+            evidence["status"] = failures.Count == 0 ? "passed" : "completedWithFailures";
+            WriteCheckpoint(checkpointPath, evidence);
+            Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
+        } finally {
+            WriteCheckpoint(checkpointPath, evidence);
+            project.Close(false);
+            Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash), "Original template fixture was modified.");
+        }
+    }
+
+    private static FamilyPatch WithFailures(FamilyPatch patch, Dictionary<string, FailureAction> failures) => new() { Select = patch.Select, Patch = patch.Patch,
+        Run = new PatchRun { ParametersIfSourceExists = patch.Run?.ParametersIfSourceExists, ElectricalConnectorParameters = patch.Run?.ElectricalConnectorParameters,
+            BlanksBecome = patch.Run?.BlanksBecome, Clean = patch.Run?.Clean, Sort = patch.Run?.Sort, Failures = failures } };
+
     private static void WriteCheckpoint(string path, JObject evidence) {
         var pending = path + ".pending";
         File.WriteAllText(pending, evidence.ToString());

@@ -82,6 +82,11 @@ public static class FamilyDocumentNormalizeParameter {
             }
             document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
             foreach (var array in arrays) array.Label = target;
+            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Revit refuses a spec mismatch; the per-type values already written then stand.
+            if (!targetIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
+                try { fm.SetFormula(target, source.Formula); }
+                catch (Autodesk.Revit.Exceptions.ApplicationException) { /* ponytail: values stand; a Skip log needs a return channel this method lacks */ }
+            }
             if (targetIsExactAlias) {
                 fm.SetFormula(target, null!);
                 foreach (var (type, value) in targetValues.Where(item => item.Value is not null)) {

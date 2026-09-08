@@ -107,12 +107,8 @@ public class FamilyProcessingContext {
     /// <summary>Optional tag for storing additional context data (e.g., VariantSpec).</summary>
     public object? Tag { get; internal set; }
 
-    /// <summary>
-    ///     <see cref="ParameterDependencyGraph.Sizes" /> read once before the operations run: how wired the family is
-    ///     (parameters, formula edges, element edges, formula depth, geometry sinks). The honest proxy for how long a
-    ///     family takes and how much a mutation can disturb.
-    /// </summary>
-    public string? GraphSizes { get; internal set; }
+    /// <summary>Parameters this run created from scratch; a numeric 0 on one of them is Revit's blank (`run.blanksBecome`).</summary>
+    public HashSet<string> CreatedParameters { get; } = new(StringComparer.Ordinal);
 
 
     /// <summary>

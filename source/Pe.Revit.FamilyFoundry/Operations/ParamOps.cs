@@ -1,4 +1,4 @@
-﻿using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Shared.RevitData.Families;
@@ -36,6 +36,7 @@ public sealed class AddParams((string Name, FamilyModelParameter Spec)[] paramet
             try {
                 if (doc.FamilyManager.FindParameter(name) is not null) { logs.Add(new LogEntry(name).Skip("Already exists.")); continue; }
                 _ = Create(doc, name, spec, sharedSource);
+                _ = ctx.CreatedParameters.Add(name);
                 logs.Add(new LogEntry(name).Success(spec.Shared == true ? "Added shared parameter." : $"Added {spec.DataType} parameter."));
             } catch (Exception ex) { logs.Add(new LogEntry(name).Error(ex)); }
         }
@@ -145,19 +146,30 @@ public sealed class SetBlankValues(IReadOnlyList<BlankRule> rules) : TypeOperati
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext g) {
         var logs = new List<LogEntry>();
-        var fm = doc.FamilyManager;
-        var type = fm.CurrentType;
-        foreach (var p in fm.GetParameters()) {
-            if (!string.IsNullOrWhiteSpace(p.Formula) || p.IsReadOnly) continue;
-            var spec = p.Definition.GetDataType();
-            var rule = rules.FirstOrDefault(r => r.Specs.Any(s => SetParamMetadata.Spec(s) == spec));
-            if (rule is null || doc.HasValue(type, p)) continue;
+        var type = doc.FamilyManager.CurrentType;
+        foreach (var p in doc.FamilyManager.GetParameters()) {
             try {
-                _ = doc.SetValue(p, rule.Value.Text, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
-                logs.Add(new LogEntry(p.Definition.Name).Success($"Blank → {rule.Value.Text}"));
+                if (Fill(doc, type, p, rules, ctx.CreatedParameters.Contains(p.Definition.Name)) is { } written)
+                    logs.Add(new LogEntry(p.Definition.Name).Success($"Blank → {written}"));
             } catch (Exception ex) { logs.Add(new LogEntry(p.Definition.Name).Error(ex)); }
         }
         return new OperationLog(this.Name, logs);
+    }
+
+    /// <summary>
+    ///     Writes the rule value into a blank cell and returns it, else null. Revit has no blank for numbers: a parameter this run created
+    ///     reads 0 until something writes it, so for created parameters 0 is the blank (kaitpw 2026-09-08). `type` must be the current type.
+    /// </summary>
+    public static string? Fill(FamilyDocument doc, FamilyType type, FamilyParameter p, IReadOnlyList<BlankRule> rules, bool created) {
+        if (!string.IsNullOrWhiteSpace(p.Formula) || p.IsReadOnly) return null;
+        var spec = p.Definition.GetDataType();
+        var rule = rules.FirstOrDefault(r => r.Specs.Any(s => SetParamMetadata.Spec(s) == spec));
+        if (rule is null) return null;
+        var createdZero = created && p.StorageType switch {
+            StorageType.Double => type.AsDouble(p) is null or 0, StorageType.Integer => type.AsInteger(p) is null or 0, _ => false };
+        if (doc.HasValue(type, p) && !createdZero) return null;
+        _ = doc.SetValue(p, rule.Value.Text, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
+        return rule.Value.Text;
     }
 }
 

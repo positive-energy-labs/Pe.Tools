@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.OperationGroups;
@@ -716,14 +716,34 @@ public static class FamilyProfileConverter {
                 conditional[name] = parameter.ToObject<FamilyModelParameter>(JsonSerializer.Create(FamilyModelJson.Settings))!;
             else explicitParameters[name] = parameter;
         }
+        var blanks = Blanks(definitions.Values);
         return new FamilyPatch {
             Patch = new JObject { ["parameters"] = explicitParameters },
-            Run = conditional.Count == 0 && clean is null && sort is null && electricalConnectorParameters is null ? null : new PatchRun {
+            Run = conditional.Count == 0 && clean is null && sort is null && electricalConnectorParameters is null && blanks is null ? null : new PatchRun {
                 ParametersIfSourceExists = conditional.Count == 0 ? null : conditional,
                 ElectricalConnectorParameters = electricalConnectorParameters,
+                BlanksBecome = blanks,
                 Clean = clean, Sort = sort
             }
         };
+    }
+
+    /// <summary>
+    ///     kaitpw 2026-09-08: a created numeric parameter with nothing to say reads -1, never a silent 0. Explicit units make the sentinel the
+    ///     same internal value whatever either document displays; Text and Yes/No stay blank. Specs outside the portable vocabulary
+    ///     (hvac loads, hvac power, frequency) carry no sentinel until the vocabulary names them.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<DataType, string> Sentinels = new Dictionary<DataType, string> {
+        [DataType.Number] = "-1", [DataType.Integer] = "-1", [DataType.ElectricalPotential] = "-1 V", [DataType.Current] = "-1 A",
+        [DataType.ApparentPower] = "-1 VA", [DataType.Wattage] = "-1 W", [DataType.AirFlow] = "-1 CFM", [DataType.Pressure] = "-1 in-wg",
+        [DataType.Temperature] = "-1 \u00B0F"
+    };
+
+    private static List<BlankRule>? Blanks(IEnumerable<ParametersApi.Parameters.ParametersResult> definitions) {
+        var specs = definitions.Select(d => d.DownloadOptions.GetSpecTypeId().TypeId).ToHashSet(StringComparer.Ordinal);
+        var rules = Sentinels.Where(s => specs.Contains(SetParamMetadata.Spec(s.Key).TypeId))
+            .Select(s => new BlankRule { Specs = [s.Key], Value = PortableValue.Parse(s.Value) }).ToList();
+        return rules.Count == 0 ? null : rules;
     }
 }
 

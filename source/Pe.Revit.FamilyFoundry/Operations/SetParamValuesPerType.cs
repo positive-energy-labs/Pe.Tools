@@ -27,7 +27,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
         }
 
         var fm = famDoc.FamilyManager;
-        var currentTypeName = fm.CurrentType?.Name;
+        var currentTypeName = fm.CurrentType?.Name?.Trim();
         var perTypeAssignmentsByParameter = this.Settings.GetPerTypeAssignmentsByParameter();
         var globalAssignmentsByParameter = this.Settings.GetGlobalAssignmentsByParameter();
 

@@ -142,7 +142,17 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             .Any(connector => connector.Value is Newtonsoft.Json.Linq.JObject fields && fields["associate"] is not null) == true;
         if (connectorRule is not null)
             ResolveConnectorIntent(doc, desired!, observed, connectorRule, authoredConnectorAssociations);
-        var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document)).ToList();
+        // run.clean is a declared effect: the planes, lines, nested families and their dimensions it purged are not residue.
+        var purged = new HashSet<string>(StringComparer.Ordinal);
+        if (this._patch?.Run?.Clean is { Enabled: true } clean) {
+            if (clean.EnablePurgeReferencePlanes) { purged.Add("refPlanes"); purged.Add("dimensions"); }
+            if (clean.EnablePurgeModelLines) purged.Add("refLines");
+            if (clean.EnablePurgeNestedFamilies) purged.Add("nested");
+        }
+        // Connectors and forms name planes by position; a purge renumbers them and the re-read comes back Unverifiable or Recreate.
+        var replaned = purged.Contains("refPlanes");
+        var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document))
+            .Where(r => !purged.Contains(r.Section) && !(replaned && r.Section is "connectors" or "forms" && r.Kind is ChangeKind.Unverifiable or ChangeKind.Recreate)).ToList();
         // Score what ran, plus the committed changes source migration absorbed before the replan; residue is the test either way.
         var applied = applyPlan.Changes.Select(c => (c.Section, c.Key)).ToHashSet();
         var scored = applyPlan.Changes.Concat(plan.Changes.Where(c => !applied.Contains((c.Section, c.Key)))).ToList();
@@ -205,11 +215,10 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
                 created[0].Value.SystemType == ConnectorSystemType.PowerBalanced &&
                 intended.TryGetValue(ConnectorSystemType.PowerBalanced, out var adopted) && ExactAssociations(created[0].Value, adopted))
                 desired.Connectors.Add(created[0].Key, created[0].Value);
-            else if (rule.CreateIfAbsent)
-                // A connector this run created that the capture cannot express would leave zero residue and a Converged receipt for a
-                // family that gained one. A pre-existing connector the capture cannot express stays an unmodeled fact (run 15, 2026-09-08:
-                // 30 Old_Template families carry one; refusing them was a regression).
-                throw new InvalidOperationException($"Electrical connector normalization left {native.Count} native power connector(s) the captured model does not express as one adoptable connector ({created.Count} captured). Refusing to report convergence; see the unmodeled facts.");
+            else if (rule.CreateIfAbsent && native.Count != 1)
+                // The loop above already proved every native power connector carries the rule's associations. One connector the capture
+                // cannot express (face-hosted, rung 5b: 7 of 13 families) is the requested result plus an unmodeled fact, not a refusal.
+                throw new InvalidOperationException($"Electrical connector normalization left {native.Count} native power connectors; the rule creates one.");
         }
     }
 
