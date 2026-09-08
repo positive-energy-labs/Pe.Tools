@@ -61,7 +61,7 @@ public sealed class DeleteParams(DeleteParamsSettings settings) : DocOperation<D
 
             var blockers = stableParameters
                 .Where(candidate => candidate.Id != paramToDelete.Id && !candidate.IsBuiltInParameter())
-                .Where(candidate => paramToDelete.IsReferencedIn(candidate.Formula) && candidate.HasDirectAssociation(doc))
+                .Where(candidate => paramToDelete.IsReferencedIn(candidate.Formula, stableParameters.Select(p => p.Definition.Name)) && candidate.HasDirectAssociation(doc))
                 .Select(candidate => candidate.Definition.Name)
                 .ToList();
             if (paramToDelete.HasDirectAssociation(doc)) blockers.Insert(0, targetName);

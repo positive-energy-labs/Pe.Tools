@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
@@ -64,6 +64,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
         this.Reset();
+        var formulaCache = new Dictionary<(string Parameter, string Formula), string>();
         var current = this._capture(doc.Document);
         var authoredPatch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
         var patch = new FamilyPatch { Select = authoredPatch.Select, Run = authoredPatch.Run, Patch = authoredPatch.ResolveParameterRules(current) };
@@ -74,7 +75,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return new OperationLog(this.Name, parsed.Diagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
             desired = source.Resolve(parsed.Value, patch.Patch);
-            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document);
+            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document, formulaCache);
         }
 
         foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
@@ -114,7 +115,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             if (afterMigration.Value is null || afterMigration.Diagnostics.Count > 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, afterMigration.Diagnostics.Select(d => d.Message)));
             desired = source.Resolve(afterMigration.Value, patch.Patch);
-            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document);
+            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document, formulaCache);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
         }
         if (applyPlan.Refusals.Count > 0 || applyPlan.Changes.Any(c => c.Kind == ChangeKind.Unverifiable))
@@ -124,7 +125,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             OperationProcessor.ThrowOnErrors(logs);
         }
         doc.Document.Regenerate();
-        desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document);
+        desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document, formulaCache);
         var observed = this._capture(doc.Document);
         var connectorRule = this._patch?.Run?.ElectricalConnectorParameters;
         var authoredConnectorAssociations = (this._patch?.Patch["connectors"] as Newtonsoft.Json.Linq.JObject)?.Properties()
@@ -132,13 +133,16 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         if (connectorRule is not null)
             ResolveConnectorIntent(doc, desired!, observed, connectorRule, authoredConnectorAssociations);
         var residue = FamilyReconciler.Diff(desired!, observed, UnitResolvers.Revit(doc.Document)).ToList();
-        var outcomes = plan.Changes.Select(c => new ChangeOutcome(c,
+        // Score what ran, plus the committed changes source migration absorbed before the replan; residue is the test either way.
+        var applied = applyPlan.Changes.Select(c => (c.Section, c.Key)).ToHashSet();
+        var scored = applyPlan.Changes.Concat(plan.Changes.Where(c => !applied.Contains((c.Section, c.Key)))).ToList();
+        var outcomes = scored.Select(c => new ChangeOutcome(c,
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
-        this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, outcomes, plan.RunEffects, residue, observed.Unmodeled,
+        this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, applyPlan.PlanHash, outcomes, plan.RunEffects, residue, observed.Unmodeled,
             residue.Count == 0 && logs.All(l => l.PendingCount == 0));
         if (!this._candidateReceipt.Converged)
-            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries: {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
+            throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries ({string.Join(", ", logs.SelectMany(l => l.Entries).Where(e => e.HasPendingWork).Select(e => e.Name))}): {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
 
         return new OperationLog(this.Name, logs.SelectMany(l => l.Entries).ToList());
     }
@@ -154,31 +158,47 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             .Where(connector => connector.IsPowerConnector()).ToList();
         if (native.Count == 0 && !rule.CreateIfAbsent) return; // associate-only rule on a family without an electrical connector
         if (native.Count == 0) throw new InvalidOperationException("Electrical connector normalization left no electrical connector.");
-        var intended = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var connector in native)
+        // The associable slots differ by classification (an unbalanced connector drives phase 1), so intent is per system type, never merged.
+        var intended = new Dictionary<ConnectorSystemType, Dictionary<string, string>>();
+        foreach (var connector in native) {
+            var system = connector.SystemClassification == MEPSystemClassification.PowerUnBalanced
+                ? ConnectorSystemType.PowerUnBalanced : ConnectorSystemType.PowerBalanced;
+            var slots = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var (targetId, sourceName) in mappings) {
                 var source = document.FamilyManager.get_Parameter(sourceName);
                 var target = connector.AssociableSlot(targetId);
                 if (source is null || target is null || document.FamilyManager.GetAssociatedFamilyParameter(target)?.Id != source.Id)
                     throw new InvalidOperationException($"Electrical connector {connector.Id.Value()} did not retain '{targetId}' association to '{sourceName}'.");
-                intended[target.Definition.Name] = $"param:{sourceName}";
+                slots[target.Definition.Name] = $"param:{sourceName}";
             }
+            intended[system] = slots;
+        }
         // Authored associations still have to survive the ordinary diff, including conflicts with the run rule.
         if (authoredConnectorAssociations) return;
-        var expected = desired.Connectors.Where(item => item.Value.Domain == ConnectorDomain.Electrical).ToList();
+        // Only power connectors can carry these associations; Data, Controls and the rest are electrical but never associated here.
+        var expected = desired.Connectors.Where(item => item.Value.Domain == ConnectorDomain.Electrical &&
+            item.Value.SystemType is ConnectorSystemType.PowerBalanced or ConnectorSystemType.PowerUnBalanced).ToList();
         foreach (var (key, connector) in expected) {
+            if (!intended.TryGetValue(connector.SystemType, out var slots)) continue; // no native connector of this classification to copy intent from
             var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
             var json = Newtonsoft.Json.Linq.JObject.FromObject(connector, serializer);
             var associations = json["associate"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
-            foreach (var (target, source) in intended) associations[target] = source;
+            foreach (var (target, source) in slots) associations[target] = source;
             json["associate"] = associations;
             desired.Connectors[key] = json.ToObject<FamilyModelConnector>(serializer)!;
         }
         // Native host selection is part of create-if-absent; no other observed geometry becomes expected state.
-        var created = captured.Connectors.Where(item => item.Value.Domain == ConnectorDomain.Electrical).ToList();
-        if (expected.Count == 0 && native.Count == 1 && created.Count == 1 &&
-            created[0].Value.SystemType == ConnectorSystemType.PowerBalanced && ExactAssociations(created[0].Value, intended))
-            desired.Connectors.Add(created[0].Key, created[0].Value);
+        var created = captured.Connectors.Where(item => item.Value.Domain == ConnectorDomain.Electrical &&
+            item.Value.SystemType is ConnectorSystemType.PowerBalanced or ConnectorSystemType.PowerUnBalanced).ToList();
+        if (expected.Count == 0) {
+            if (native.Count == 1 && created.Count == 1 &&
+                created[0].Value.SystemType == ConnectorSystemType.PowerBalanced &&
+                intended.TryGetValue(ConnectorSystemType.PowerBalanced, out var adopted) && ExactAssociations(created[0].Value, adopted))
+                desired.Connectors.Add(created[0].Key, created[0].Value);
+            else
+                // A connector the capture cannot express would leave zero residue and a Converged receipt for a family that gained one.
+                throw new InvalidOperationException($"Electrical connector normalization left {native.Count} native power connector(s) the captured model does not express as one adoptable connector ({created.Count} captured). Refusing to report convergence; see the unmodeled facts.");
+        }
     }
 
     private static bool ExactAssociations(FamilyModelConnector connector, IReadOnlyDictionary<string, string> intended) =>

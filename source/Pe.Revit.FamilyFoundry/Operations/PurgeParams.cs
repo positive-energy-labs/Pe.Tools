@@ -27,7 +27,8 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
 
         // For non-formula parameters, check actual values
         var values = snapshot.ValuesPerType.Values.ToList();
-        if (values.Count == 0) return true;
+        // Absence of evidence is not emptiness: a capture gap must never authorize a delete.
+        if (values.Count == 0) return false;
 
         return values.All(this.IsValueEmpty);
     }
@@ -97,7 +98,10 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
         foreach (var param in parameters) {
             var parameterName = param.Definition.Name;
 
-            // If empty AND DirectDelete is enabled, delete immediately (bypass association checks)
+            // A parameter that labels a dimension or array, or drives a connector, is load-bearing whatever its value.
+            if (param.HasDirectAssociation(doc)) continue;
+
+            // If empty AND DirectDelete is enabled, delete immediately (its own dependents are not consulted)
             if (this.Settings.DirectDeleteEmptyParameters
                 && this.IsParameterEmpty(param, processingContext)) {
                 var log = new LogEntry(parameterName);
@@ -126,7 +130,6 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
 
             // For non-empty parameters, do the normal association checks
             if (param.GetDependents(allParams).Any(p => p.HasDirectAssociation(doc))) continue;
-            if (param.HasDirectAssociation(doc)) continue;
 
             var normalLog = new LogEntry(parameterName);
             try {

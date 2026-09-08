@@ -17,7 +17,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.Integer, StorageType.String) => true,
             (StorageType.Integer, StorageType.Double) => true,
             (StorageType.Double, StorageType.String) => true,
-            (StorageType.Double, StorageType.Integer) => true,
+            (StorageType.Double, StorageType.Integer) => context.SourceValue is double,
             (StorageType.String, StorageType.Integer) => CanParseStringToInteger(context),
             (StorageType.String, StorageType.Double) => CanParseStringToDouble(context),
             _ => false
@@ -42,9 +42,11 @@ public class CoerceByStorageType : ICoercionStrategy {
             // Try to use the SourceValueString if it is available, otherwise fall back to ToString()
             (StorageType.Double, StorageType.String) => context.SourceValueString ?? sourceValueText,
 
-            // Set to integer by extracting integer from the doubleParam's "value string"
+            // Round the numeric value; the display string is formatted ("1' - 6\"", "$1,200") and scraping it loses or throws.
+            // ponytail: rounds the internal-unit double, so a measurable source lands in feet; add a unit convert if an
+            // integer destination ever needs display units.
             (StorageType.Double, StorageType.Integer) =>
-                Regexes.ExtractInteger(context.SourceValueString ?? string.Empty),
+                (int)Math.Round(context.SourceValue as double? ?? 0, MidpointRounding.AwayFromZero),
 
             // Set to integer by extracting integer from the stringParam's value
             (StorageType.String, StorageType.Integer) =>

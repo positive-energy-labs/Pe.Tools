@@ -1,4 +1,4 @@
-using Pe.Revit.Extensions.FamDocument;
+﻿using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Shared.RevitData.Families;
@@ -63,8 +63,11 @@ public sealed class SetParamMetadata((string Name, FamilyModelParameter Spec)[] 
                 var p = fm.FindParameter(name) ?? throw new InvalidOperationException($"'{name}' is not in this family.");
                 var notes = new List<string>();
                 if (spec.IsInstance is { } inst && p.IsInstance != inst) { if (inst) fm.MakeInstance(p); else fm.MakeType(p); notes.Add(inst ? "instance" : "type"); }
-                if (spec.PropertiesGroup is { } pg && p.Definition is InternalDefinition def && def.GetGroupTypeId() != Group(pg)) { def.SetGroupTypeId(Group(pg)); notes.Add($"group {pg}"); }
-                if (spec.Tooltip is { } tip && !p.IsShared) { fm.SetDescription(p, tip); notes.Add("tooltip"); }
+                // `null = delete` reaches here as a null field; the empty group and the empty description ARE the deleted forms.
+                var group = spec.PropertiesGroup ?? string.Empty;
+                if (p.Definition is InternalDefinition def && def.GetGroupTypeId() != Group(group)) { def.SetGroupTypeId(Group(group)); notes.Add($"group {(group.Length == 0 ? "Other" : group)}"); }
+                // ponytail: a tooltip has no readback, so an unreadable native tooltip is indistinguishable from a deleted one and is cleared here.
+                if (!p.IsShared) { fm.SetDescription(p, spec.Tooltip ?? string.Empty); if (spec.Tooltip is not null) notes.Add("tooltip"); }
                 if (spec.DataType is { } dt && !p.IsShared && p.Definition.GetDataType() != Spec(dt)) throw new InvalidOperationException($"'{name}' is {p.Definition.GetDataType().TypeId}, desired {dt}; a data type cannot change in place.");
                 logs.Add(notes.Count == 0 ? new LogEntry(name).Skip("Unchanged.") : new LogEntry(name).Success(string.Join(", ", notes)));
             } catch (Exception ex) { logs.Add(new LogEntry(name).Error(ex)); }

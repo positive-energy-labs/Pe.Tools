@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
@@ -387,6 +387,16 @@ public sealed class FamilyModelContractTests {
     public void Formula_names_strip_string_literals_and_built_ins() {
         var names = FamilyModelValidator.FormulaNames("if(_vane spacing = 0mm, 0, roundup((Open Width / 2) / _vane spacing)) + size_lookup(\"tbl\", \"2024-01-01\", 1)").ToList();
         Assert.That(names, Is.EqualTo(new[] { "_vane spacing", "Open Width", "_vane spacing" }));
+    }
+
+    [Test]
+    public void Connector_rule_creates_only_when_the_patch_asks_for_it() {
+        var silent = FamilyPatch.Parse("""{"patch":{},"run":{"electricalConnectorParameters":{"voltage":"V","numberOfPoles":"P","apparentPower":"A","minimumCircuitAmpacity":"M"}}}""");
+        var explicitly = FamilyPatch.Parse("""{"patch":{},"run":{"electricalConnectorParameters":{"voltage":"V","numberOfPoles":"P","apparentPower":"A","minimumCircuitAmpacity":"M","createIfAbsent":true}}}""");
+        Assert.Multiple(() => {
+            Assert.That(silent.Run!.ElectricalConnectorParameters!.CreateIfAbsent, Is.False);
+            Assert.That(explicitly.Run!.ElectricalConnectorParameters!.CreateIfAbsent, Is.True);
+        });
     }
 
     [Test]

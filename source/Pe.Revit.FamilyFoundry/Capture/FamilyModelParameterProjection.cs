@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData.Families;
+﻿using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
@@ -53,7 +53,12 @@ public static class FamilyModelParameterProjection {
             if (formula != null) continue;
 
             foreach (var (typeName, cells) in types) {
-                if (!row.ValuesPerType.TryGetValue(typeName, out var text) || text == null) continue;
+                if (!row.ValuesPerType.TryGetValue(typeName, out var text)) {
+                    // The snapshot produced no cell for this type: unread, not blank. A null text IS a read blank.
+                    unmodeled.Add(Fact(UnmodeledReason.ParameterValueUnreadable, $"$.types.{typeName}.{name}"));
+                    continue;
+                }
+                if (text == null) continue;
                 cells[name] = PortableValue.Parse(Canonical(text));
             }
         }

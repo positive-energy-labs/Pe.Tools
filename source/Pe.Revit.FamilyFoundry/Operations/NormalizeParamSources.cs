@@ -90,7 +90,14 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     if (failure is not null) throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}'.", failure);
                 }
             }
-            foreach (var (sourceName, targetName) in cleanup.Distinct()) {
+            var pairs = cleanup.Distinct().ToList();
+            // One source can only surrender its labels, arrays and associations to one destination; the mapping must name the owner.
+            var contested = pairs.GroupBy(pair => pair.Source, StringComparer.Ordinal)
+                .Where(group => group.Select(pair => pair.Target).Distinct(StringComparer.Ordinal).Count() > 1).ToList();
+            if (contested.Count > 0)
+                throw new InvalidOperationException("A legacy source cannot be migrated to more than one destination: " + string.Join("; ",
+                    contested.Select(group => $"'{group.Key}' is claimed by {string.Join(", ", group.Select(pair => $"'{pair.Target}'").Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal))}")));
+            foreach (var (sourceName, targetName) in pairs) {
                 var source = fm.FindParameter(sourceName);
                 var target = fm.FindParameter(targetName);
                 if (source is null || target is null || authoredNames.Contains(sourceName)) continue;
@@ -103,9 +110,14 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
                     [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
                 });
-                doc.Document.Regenerate();
+                // TransferAndRemoveParameter commits its own sub-transaction, and Revit regenerates on commit;
+                // one explicit regeneration after the loop replaces one per removed source.
                 fm = doc.FamilyManager;
                 logs.Add(new LogEntry(sourceName).Success($"Transferred references to '{targetName}' and removed source; destination values win."));
+            }
+            if (pairs.Count > 0) {
+                doc.Document.Regenerate();
+                fm = doc.FamilyManager;
             }
         } finally { if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType; }
         return new OperationLog(this.Name, logs);

@@ -2,93 +2,78 @@
 
 ## Scope
 
-Owns Family Foundry authored settings, operation queues, runtime operations, compile/apply helpers, snapshots,
-projections, and Family Foundry-specific schema definitions.
+Owns the Revit-side family reconciler: capture a live family document as a `FamilyModel`, diff it against a
+desired model, lower the differences to an `OperationQueue`, apply that queue inside one `FamilyVisit`, and write
+a `FamilyReceipt`. The portable contracts themselves (`FamilyModel`, `FamilyPatch`) live in
+`source/Pe.Shared.RevitData/Families/`, which holds no Revit assembly reference.
 
 ## Purpose
 
-`Pe.Revit.FamilyFoundry` is the domain package for authored family-processing workflows. It should keep authored
-contracts, planning/compile steps, runtime operations, and diagnostics explicit and testable, while hiding low-level
-Revit mutation details behind predictable operations and helpers.
+One capability, one path. `ReconcileFamily` is the only `DocOperation` a caller needs: build from template, bulk
+patch and normalize are that operation with three inputs. Everything under `Operations/` is the execution layer the
+reconciler lowers to; scripts and Pods may call those verbs directly, but they are not a second front door.
 
 ## Critical Entry Points
 
-- `OperationProcessor.cs` — high-level queue execution across family/project documents.
-- `FamilyProcessingContext.cs` — per-family processing state, logs, and snapshot helpers.
-- `ProcessingResultBuilder.cs` — canonical FF run/family artifact model and output writing.
-- `OperationQueue.cs` and `BaseOperation.cs` — authored execution plan and operation model.
-- `OperationGroups/` and `Operations/` — reusable runtime mutation building blocks.
-- `SchemaDefinitions/FamilyFoundrySchemaDefinitions.cs` — Family Foundry schema/provider wiring.
-- `Capture/` and `Snapshots/` — snapshot capture entrypoints, collectors, portable structure, and apply/proof-oriented
-  diagnostics.
-- `Profiles/` — FF-owned authored profile contracts, manifests, and snapshot-to-profile projection seams.
-- `Resolution/AuthoredParamDrivenSolidsCompiler.cs` — authored param-driven solids compile path.
-- `Apply/DocumentFamilyProfileApplyExtensions.cs` and `Apply/FamilyProfileApplicator.cs` — document-owned apply verbs
-  plus the shared runtime apply path.
-- `OperationSettings/` — authored settings contracts used by profiles.
+- `Reconcile/ReconcileFamily.cs` — the one `DocOperation`. Capture current, resolve the patch to a desired
+  `FamilyModel`, `Reconcile` to a `FamilyPlan`, run the lowered queue, capture again, diff for residue, publish
+  `LastPlan` / `LastReceipt`. Non-empty residue throws; the caller's transaction rolls the family back whole.
+- `Reconcile/FamilyReconciler.cs` — pure, no `Document`. `Desired` merges a patch onto the capture; `Diff` is the
+  one comparison (identity rules are on its doc-comment); `Reconcile` wraps `Diff` plus `Lower` and hashes the plan.
+- `Capture/FamilyModelCaptureExtensions.cs` — `Document.CaptureFamilyModel()`, the capture both sides of a diff use.
+- `Pe.Revit/Extensions/FamDocument/FamilyVisit.cs` — EditFamily, transaction discipline, LoadFamily, post-verify.
+  It is a `Pe.Revit` seam with no FF dependency, so Pods call it directly.
+- `OperationProcessor.cs`, `OperationQueue.cs`, `BaseOperation.cs` — queue execution across family and project
+  documents, and the operation model the reconciler lowers into.
+- `Operations/`, `OperationGroups/` — the ops library: the verbs `FamilyReconciler.Lower` emits and scripts reuse.
+- `Apply/FamilyModelBuild.cs` — build a new family document from a template plus a `FamilyModel`.
+- `Apply/FamilyProfileConverter.cs` — one-shot converter for the 45 frozen company profiles. Scaffolding with an
+  expiry date; it retires with them.
+- `ProcessingResultBuilder.cs` — the run and per-family artifact writer (`run-summary.json`, `family-report.json`,
+  `plan.json`, `receipt.json`).
+- `FamilyModelSettingsRegistration.cs`, `SchemaDefinitions/FamilyFoundrySchemaDefinitions.cs` — the `FamilyFoundry`
+  settings module (`models`, `patches` roots), its validators, and the value domains its schema exposes.
 
 ## Validation
 
-- Prefer proving FF behavior with focused Revit-backed tests or snapshot/artifact comparison, not by inspection alone.
-- When a fix changes runtime member shape, assume a Revit restart is required for trustworthy validation.
-- For schema/autocomplete changes, verify both generated schema metadata and the runtime path that ultimately consumes
-  the field.
-- For FF runtime debugging, start with `run-summary.json`, then `family-report.json`, then `snapshot-diff.json` and
-  `logs-detailed.json`.
-- Treat `snapshot-diff.json` and projected snapshot-profile artifacts as primary verification surfaces; use raw snapshot
-  files only after narrowing scope.
+- `pe-revit test` is the ONLY Revit surface. Everything under `Pe.Revit.Tests` boots Revit, including the pure
+  reconciler tests; never run `dotnet test` against it. `Pe.Shared.Tests` covers the portable contracts with no Revit.
+- Compile is a proof of shape, not of behavior. Say which lane carried a claim: source compile, deterministic test,
+  attached `pe-revit test`, or a named live session.
+- The `FamilyReceipt` is the convergence evidence. `Residue.Count == 0` is the definition of converged; `Outcomes`
+  says what each planned change did, `Unmodeled` says what capture could not express, and `PlanHash` says the plan
+  did not drift between plan and apply. Compare receipts before and after a change.
+- `snapshot-diff.json` is NOT proof. Its `Post` side is populated only by a collector lane that every product caller
+  passes null, so it reads as structurally half-null. Deleting it is owed work.
+- Debugging ladder: `run-summary.json` → `family-report.json` → `receipt.json` and `plan.json` → `logs-detailed.json`.
+- A change in a section capture did not fully read is `Unverifiable` by construction; check `Coverage` before
+  believing a clean diff.
 
 ## Shared Language
 
-| Term                    | Meaning                                                                          | Prefer / Avoid                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **operation**           | One runtime mutation/action unit in the FF queue                                 | Avoid calling whole workflows one operation when the queue/group distinction matters |
-| **queue**               | Ordered set of operations/groups passed to `OperationProcessor`                  | Avoid using it as a synonym for a single command                                     |
-| **param-driven solids** | The canonical authored/serialized semantic solids shape                          | Avoid referring to old low-level extrusion authoring as an equal peer model          |
-| **artifact manifest**   | The per-family output map carried on `FamilyProcessingContext.Artifacts`         | Prefer this over ad hoc “output files” wording when discussing FF transparency       |
-| **family report**       | The per-family top-level proof packet entrypoint written as `family-report.json` | Open this before drilling into raw logs or snapshot payloads                         |
-| **profile**             | The top-level authored settings document — `FFManagerProfile`, `FFMigratorProfile` | Avoid using it for a captured snapshot or a compiled plan                            |
-| **capture**             | Family-side state extraction; one public entrypoint pair, `Document.CaptureFamilySnapshot()` / `FamilyDocument.CaptureFamilySnapshot()` in `Capture/FamilySnapshotCaptureExtensions.cs` | Avoid "collect" when you mean the whole capture entrypoint                             |
-| **snapshot**            | Captured family state — `FamilySnapshot`, `ParameterSnapshot`, `RefPlaneSnapshot`, `ParamDrivenSolidsSnapshot` | Avoid "section"; these are snapshot fragments, not sections                            |
-| **collect**             | A live query/capture substep — `IFamilySnapshotCollector`, `IProjectSnapshotCollector`, `SnapshotCapturePipeline`, `ParameterSnapshotCollector`, `LookupTableSnapshotCollector`, `ReferencePlaneSnapshotCollector`, `ParamDrivenSolidsSnapshotCollector` | `SnapshotCollector` is the preferred noun; collector mechanics live under `Capture/`, snapshot models under `Snapshots/` |
-| **projection**          | Deriving an authored target shape from captured state — `FamilySnapshotProfileProjector`, `FamilyParamProfileAdapter.ProjectSnapshotsToProfile(...)` | Avoid calling a projection a capture                                                  |
-| **apply**               | Running authored settings through FF mutation pipelines, via the document-owned `ApplyFamilyProfile(...)` / `ApplyFamilyMigrationProfile(...)` extensions | Avoid describing an individual operation (`SetKnownParams`, `SetLookupTables`, `MakeParamDrivenPlanesAndDims`, `MakeConstrainedExtrusions`, `MakeParamDrivenConnectors`) as an apply |
-| **create**              | Not a stable caller-facing FF seam — it exists only inside helpers such as `CreateProjectedFamilyDocument(...)`, `ConstrainedExtrusionFactory.CreateRectangle/CreateCircle(...)`, `RefPlaneDimCreator.Create...(...)` | Do not present it as a public FF verb peer to `apply`                                 |
-| **spec**                | Overloaded on purpose: authored reusable parts (`AuthoredPlaneSpec`, `AuthoredSpanSpec`, `AuthoredPrismSpec`, `AuthoredConnectorSpec`), captured/legacy shapes (`MirrorConstraintSnapshot`, `OffsetConstraintSnapshot`, `ConstrainedRectangleExtrusionSnapshot`, `ConstrainedCircleExtrusionSnapshot`), and resolved execution shapes (`SymmetricPlanePairSpec`, `OffsetPlaneConstraintSpec`) | Say which of the three you mean; never let one stand for all                           |
-| **authored → resolved** | The real transition `AuthoredParamDrivenSolidsSettings` makes when its compiler emits `ParamDrivenPlanesAndDimsPlan` / `ParamDrivenExtrusionsPlan` | Describe it as authored-to-resolved-execution, not as two peer settings shapes         |
+| Term | Meaning | Prefer / Avoid |
+| --- | --- | --- |
+| **model** | `FamilyModel`, the ONE portable profile (family.json). Capture emits it and an author writes it | Avoid "snapshot" and "profile" for it; both name retired shapes |
+| **patch** | `FamilyPatch`, the `{ select, patch, run }` fragment. Omit = unchanged, null = delete, `{}` = ensure | Avoid calling a patch a partial model; the merge onto the capture is what makes it one |
+| **reconcile** | `FamilyReconciler.Reconcile`: `Diff` desired against current, then `Lower` to an `OperationQueue` | Avoid "apply"; apply is running the lowered queue, not deciding what to run |
+| **plan** | `FamilyPlan`: changes, queue, refusals, run effects, `PlanHash` | Non-empty `Refusals` means an EMPTY queue; a refused plan is not a partial plan |
+| **receipt** | `FamilyReceipt` for one family, published on `ReconcileFamily.LastReceipt` | The proof packet. Prefer it over logs whenever both could carry the claim |
+| **residue** | `Diff(desired, capture-after-apply)`. Empty residue is convergence | Avoid "remaining changes"; residue is measured after the fact, never predicted |
+| **unmodeled** | `FamilyModelUnmodeledFact`, the ledger of what is INEXPRESSIBLE, with a closed reason enum | Honesty over completeness. The compiler refuses to apply unmodeled facts; never persist state to hide one |
+| **coverage** | `CoverageState` per section: whether capture READ it at all | A different fact from unmodeled. Absent after capture means `NotRead`, not "empty" |
+| **operation** | One runtime mutation unit under `Operations/`; a group is an ordered set of them | Avoid calling a whole workflow one operation when the queue distinction matters |
+| **visit** | One `FamilyVisit`: EditFamily → edits → LoadFamily → verify, as one transaction group | Avoid describing the inner queue as transactional; it opens no transaction of its own |
 
 ## Living Memory
 
-- Use the FF debugging ladder before changing code:
-  1. semantic/compiler validation
-  2. authored profile/layout issue
-  3. operation-time API/logic issue
-  4. transaction-commit warning or failure-processing issue
-  5. snapshot / reverse-inference / diagnostics issue
-- Prefer adding targeted logs, snapshots, or proof artifacts over speculative fixes.
-- Keep operations linear and debuggable. If nesting or orchestration gets hard to inspect, extract helpers or move logic
-  up a level.
-- Preserve the distinction between authored contracts, captured snapshots, derived projections, and compiled/runtime
-  execution plans.
-- Preserve the distinction between run-level artifacts, family-level artifacts, and snapshot-phase artifacts; output
-  shape drift across commands is an FF architecture bug.
-- Manager and Migrator should share the same artifact contract even when their authored profiles and queues differ.
-- New FF features should define their proof surface as part of implementation:
-  - which snapshot files should show the change
-  - whether `snapshot-diff.json` should surface it
-  - whether projected profile artifacts should reflect it
-  - whether a compiled plan artifact is needed
-- Favor specs as the reusable building blocks that authored profiles and captured snapshots compose, rather than
-  duplicating similar shapes under `State`/`Model` names.
-- Schedule/filter/provider wiring belongs in schema definitions unless there is a stronger shared-runtime reason to
-  place it elsewhere.
-- When validating geometry, connectors, or param associations, assert across multiple types/states so broken
-  associations do not hide behind a single happy-path family type.
-- Do not treat logs as the only audit surface when a stronger structural artifact exists.
-- Explicitly state the assumed family orientation before authoring connector faces when docs are ambiguous.
-- Distinguish air-path faces from service-connection faces and verify both against submittal/CAD views.
-- For refrigeration equipment:
-  - liquid line typically leaves the condenser and enters the evaporator
-  - suction line typically leaves the evaporator and enters the condenser
-  - condensate leaves the indoor unit only
-- Prefer tests and docs that encode these patterns before adding stronger abstractions.
+- Keep the reconciler pure. `FamilyReconciler` takes no `Document`; anything needing Revit belongs in
+  `ReconcileFamily`, an operation, or a `UnitResolver`.
+- Each family rolls back whole on failure. Partial completion is a property of the batch, never of one family.
+- Existing company destinations win source selection. Rewire source references to the destination, then remove
+  the source; a failed transfer rolls the family back.
+- Portability permits referenced files and sidecars and forbids ExtensibleStorage or roundtrip metadata. Nothing may
+  be persisted to make capture or a test succeed.
+- Treat Revit metadata and positional correspondence as untrusted until behavior proves them. Assert across several
+  family types so a broken association cannot hide behind one happy path.
+- Product rulings live in `docs/features/family/LEDGER.md`; live-proven Revit behavior in that dir's
+  `GROUNDING-REVIT.md`. Neither belongs here.

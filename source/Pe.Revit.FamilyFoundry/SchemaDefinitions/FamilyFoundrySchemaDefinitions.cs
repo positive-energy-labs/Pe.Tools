@@ -21,25 +21,16 @@ internal sealed class PatchSelectSchemaDefinition : SettingsSchemaDefinition<Pat
 }
 
 public static class FamilyFoundrySchemaDefinitionBootstrapper {
-    private static readonly object SyncRoot = new();
-    private static bool _registered;
-
+    // ponytail: [ModuleInitializer] is the only entry and the runtime already serialises it, so no lock.
     [ModuleInitializer]
-    internal static void RegisterOnModuleLoad() => TryRegister();
-
-    public static void EnsureRegistered() {
-        if (_registered) return;
-        lock (SyncRoot) {
-            if (_registered) return;
-            SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelHeaderSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelParameterSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new PatchSelectSchemaDefinition());
-            _registered = true;
-        }
+    internal static void RegisterOnModuleLoad() {
+        try { Register(); } catch (Exception ex) when (IsMissingRevitAssembly(ex)) { }
     }
 
-    private static void TryRegister() {
-        try { EnsureRegistered(); } catch (Exception ex) when (IsMissingRevitAssembly(ex)) { }
+    private static void Register() {
+        SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelHeaderSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelParameterSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new PatchSelectSchemaDefinition());
     }
 
     private static bool IsMissingRevitAssembly(Exception ex) =>

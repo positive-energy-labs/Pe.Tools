@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -35,7 +35,10 @@ public sealed record ChangeOutcome(FamilyChange Change, LogStatus Status, string
 /// <summary>Residue is Diff(desired, capture-after-apply). Residue.Count == 0 is the definition of converged.</summary>
 public sealed record FamilyReceipt(
     string Family,
+    /// <summary>The hash the caller pinned when the plan was issued.</summary>
     string PlanHash,
+    /// <summary>The hash of the plan that actually ran; differs from <see cref="PlanHash"/> when source migration forced a replan.</summary>
+    string AppliedPlanHash,
     IReadOnlyList<ChangeOutcome> Outcomes,
     IReadOnlyList<string> RunEffects,
     IReadOnlyList<FamilyChange> Residue,
@@ -56,13 +59,25 @@ public static class FamilyReconciler {
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(FamilyModelJson.Settings);
 
     /// <summary>Ask Revit to canonicalize formulas without retaining any document mutation. Missing add-then-formula references remain authored until apply.</summary>
-    public static FamilyModel ResolveNativeFormulas(FamilyModel desired, Document document) {
+    public static FamilyModel ResolveNativeFormulas(FamilyModel desired, Document document,
+        IDictionary<(string Parameter, string Formula), string>? cache = null) {
         var fm = document.FamilyManager;
         var pending = desired.Parameters.Where(p => p.Value.Formula is not null)
             .Select(p => (p.Key, p.Value, Target: fm.FindParameter(p.Key)))
             .Where(p => p.Target is not null && p.Target.Formula != p.Value.Formula).ToList();
         if (pending.Count == 0) return desired;
         var json = JObject.Parse(FamilyModelJson.Serialize(desired));
+        // One Execute asks three times; canonicalizing (parameter, formula) costs a regenerate each, and the answer does not move.
+        var reused = false;
+        if (cache is not null) {
+            foreach (var (name, parameter, _) in pending.ToList())
+                if (cache.TryGetValue((name, parameter.Formula!), out var canonical)) {
+                    json["parameters"]![name]!["formula"] = canonical;
+                    pending.RemoveAll(p => p.Key == name);
+                    reused = true;
+                }
+            if (pending.Count == 0) return reused ? FamilyModelJson.Parse(json.ToString()).Value! : desired;
+        }
         Transaction? transaction = null;
         SubTransaction? subTransaction = null;
         var started = false;
@@ -74,8 +89,10 @@ public static class FamilyReconciler {
                 if (FamilyModelValidator.FormulaNames(parameter.Formula!).Any(reference => fm.FindParameter(reference) is null)) continue;
                 fm.SetFormula(target!, parameter.Formula);
                 document.Regenerate();
-                json["parameters"]![name]!["formula"] = target!.Formula
+                var canonical = target!.Formula
                     ?? throw new InvalidOperationException($"Revit did not retain formula for '{name}'.");
+                json["parameters"]![name]!["formula"] = canonical;
+                if (cache is not null) cache[(name, parameter.Formula!)] = canonical;
             }
         } finally {
             if (started) {
@@ -95,6 +112,11 @@ public static class FamilyReconciler {
         var refusals = desired.Unmodeled
             .Select(f => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, f.Path, "A desired document may not carry unmodeled facts."))
             .ToList();
+        // A uniform value is canonicalized into one cell per type; with no types it would silently write nothing.
+        if (desired.Types.Count == 0)
+            refusals.AddRange(desired.Parameters.Where(p => p.Value.Value is not null).Select(p =>
+                new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.ValueWithoutTypes, $"$.parameters.{p.Key}.value",
+                    $"'{p.Key}' carries a value but the family has no types to write it into.")));
         if (desired.RoomCalculationPoint is { Enabled: true, Offset.Parameter: not null })
             refusals.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.UnmodeledState, "$.roomCalculationPoint.offset",
                 "Room calculation point offset requires an explicit length; parameter binding is not supported."));
@@ -127,7 +149,9 @@ public static class FamilyReconciler {
             (have.Shared != true || desired.SharedGuid != have.SharedGuid || desired.SharedSpecId != have.SharedSpecId ||
              desired.SharedVisible != have.SharedVisible || desired.SharedUserModifiable != have.SharedUserModifiable)) return true;
         if (sources.Any(source => source != name && !authoredNames.Contains(source) && current.Parameters.ContainsKey(source))) return true;
-        return desired.FillBlanksFromSources == true && sources.Count > 0 && have.Formula is null && current.Types.Values.Any(row =>
+        // A blank a source could have filled is only pending while that source is still there; otherwise the clause never reaches a fixed point.
+        return desired.FillBlanksFromSources == true && sources.Any(source => source != name && current.Parameters.ContainsKey(source)) &&
+               have.Formula is null && current.Types.Values.Any(row =>
             !row.TryGetValue(name, out var value) || string.IsNullOrWhiteSpace(value.Text));
     }
 
@@ -284,7 +308,8 @@ public static class FamilyReconciler {
                     changes.Add(new FamilyChange(section, key, IsGeometry(section) ? ChangeKind.Recreate : ChangeKind.Update, null, have, want));
                 continue;
             }
-            var source = wasNamed?.Invoke(key)?.FirstOrDefault(current.ContainsKey);
+            // One source can only be renamed once; a second target naming it has to add its own.
+            var source = wasNamed?.Invoke(key)?.FirstOrDefault(candidate => current.ContainsKey(candidate) && !renamedAway.Contains(candidate));
             if (source is null) changes.Add(new FamilyChange(section, key, ChangeKind.Add, null, null, want));
             else {
                 renamedAway.Add(source);
@@ -400,7 +425,8 @@ public static class FamilyReconciler {
             if (state == CoverageState.Read) return c;
             if (state == CoverageState.NotRead) return c with { Kind = ChangeKind.Unverifiable };
             var whole = $"$.{section}";
-            var key = $"$.{section}.{c.Key}";
+            // A cell's key is "<Type>/<Parameter>"; its path is the dotted one capture emits.
+            var key = c.Cell is { } cell ? $"$.types.{cell.Type}.{cell.Parameter}" : $"$.{section}.{c.Key}";
             var named = unmodeled.Any(path => path == whole || path == key || path.StartsWith(key + ".", StringComparison.Ordinal));
             return named ? c with { Kind = ChangeKind.Unverifiable } : c;
         }).ToList();

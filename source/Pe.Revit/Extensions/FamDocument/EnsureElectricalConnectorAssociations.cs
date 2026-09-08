@@ -52,22 +52,40 @@ public static class FamilyDocumentElectricalConnectorAssociations {
             changed.Add(connector.Id);
         }
 
+        // AssociableSlot reads the connector's live pole count, so every other association (poles above all) must be
+        // in place and regenerated before the Apparent Load slot is chosen; otherwise the stale stamp picks the slot.
+        var loadSources = sources.Where(entry => entry.Target == BuiltInParameter.RBS_ELEC_APPARENT_LOAD).ToList();
         foreach (var connector in connectors)
-            foreach (var (targetId, source) in sources) {
-                var target = connector.AssociableSlot(targetId);
-                if (target.Definition.GetDataType() != source.Definition.GetDataType())
-                    throw new InvalidOperationException($"Connector parameter '{target.Definition.Name}' is incompatible with family parameter '{source.Definition.Name}'.");
-                var existing = manager.GetAssociatedFamilyParameter(target);
-                if (existing?.Id == source.Id) continue;
-                // An associated parameter reports itself as not associable; release the legacy association before asking.
-                if (existing is not null) manager.AssociateElementParameterToFamilyParameter(target, null);
-                if (!manager.CanElementParameterBeAssociated(target))
-                    throw new InvalidOperationException($"Connector parameter '{target.Definition.Name}' cannot be associated on connector {connector.Id.Value()} (read-only: {target.IsReadOnly}; was: {existing?.Definition.Name ?? "unassociated"}; " +
-                        string.Join(", ", connector.Parameters.Cast<Parameter>().OrderBy(p => p.Definition.Name).Select(p => $"{p.Definition.Name}={p.AsValueString() ?? p.AsString()}")) + ").");
-                manager.AssociateElementParameterToFamilyParameter(target, source);
-                changed.Add(connector.Id);
-            }
+            foreach (var entry in sources.Except(loadSources))
+                Associate(connector, entry.Target, entry.Source);
+        if (loadSources.Count > 0) {
+            document.Document.Regenerate();
+            foreach (var connector in connectors)
+                foreach (var entry in loadSources)
+                    Associate(connector, entry.Target, entry.Source);
+        }
+
         return changed.OrderBy(id => id.Value()).ToList();
+
+        void Associate(ConnectorElement connector, BuiltInParameter targetId, FamilyParameter source) {
+            var target = connector.AssociableSlot(targetId);
+            if (target.Definition.GetDataType() != source.Definition.GetDataType())
+                throw new InvalidOperationException($"Connector parameter '{target.Definition.Name}' is incompatible with family parameter '{source.Definition.Name}'.");
+            var existing = manager.GetAssociatedFamilyParameter(target);
+            if (existing?.Id == source.Id) return;
+            // Releasing the legacy association is destructive, so it only survives once the new association succeeds.
+            using var transaction = new SubTransaction(document.Document);
+            transaction.Start();
+            // An associated parameter reports itself as not associable; release the legacy association before asking.
+            if (existing is not null) manager.AssociateElementParameterToFamilyParameter(target, null);
+            if (!manager.CanElementParameterBeAssociated(target))
+                throw new InvalidOperationException($"Connector parameter '{target.Definition.Name}' cannot be associated on connector {connector.Id.Value()} (read-only: {target.IsReadOnly}; was: {existing?.Definition.Name ?? "unassociated"}; " +
+                    string.Join(", ", connector.Parameters.Cast<Parameter>().OrderBy(p => p.Definition.Name).Select(p => $"{p.Definition.Name}={p.AsValueString() ?? p.AsString()}")) + ").");
+            manager.AssociateElementParameterToFamilyParameter(target, source);
+            if (transaction.Commit() != TransactionStatus.Committed)
+                throw new InvalidOperationException($"Association of connector parameter '{target.Definition.Name}' did not commit.");
+            changed.Add(connector.Id);
+        }
     }
 
     private static ConnectorElement Create(FamilyDocument document) {

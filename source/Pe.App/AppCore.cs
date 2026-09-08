@@ -78,8 +78,8 @@ public sealed class AppCore : IPePayload {
             registry => {
                 registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
                 registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
-                registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
-                registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
+                registry.RegisterModules(FamilyModelSettingsRegistration.StructuralModules);
+                registry.RegisterRootBindings(FamilyModelSettingsRegistration.RootBindings);
             },
             reason => this._bridgeConnectionSupervisor?.RequestReconnect(reason)
         );

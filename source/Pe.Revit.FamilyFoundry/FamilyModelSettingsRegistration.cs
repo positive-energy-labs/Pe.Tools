@@ -11,7 +11,10 @@ using System.Reflection;
 
 namespace Pe.Revit.FamilyFoundry;
 
+/// <summary>One module: `FamilyFoundry`, roots `models` (family.json) and `patches` (patch.json).</summary>
 public static class FamilyModelSettingsRegistration {
+    static FamilyModelSettingsRegistration() => RegisterValidator();
+
     public const string ModuleKey = "FamilyFoundry";
     public const string RootKey = "models";
     public const string PatchRootKey = "patches";
@@ -35,7 +38,7 @@ public static class FamilyModelSettingsRegistration {
     public static IReadOnlyList<ISettingsRootBinding> RootBindings { get; } = [Root, PatchRoot];
 
     /// <summary>Registers the strict validator and tells the schema generator that the slot-grammar structs are strings.</summary>
-    public static void RegisterValidator() {
+    private static void RegisterValidator() {
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyModel>(Validate);
         SettingsDocumentValidatorRegistry.Shared.Register<FamilyPatch>(ValidatePatch);
         foreach (var slot in new[] { typeof(PortableLength), typeof(PortableAngle) })

@@ -89,35 +89,6 @@ public class OperationProcessor(
         return (contexts, totalSw.Elapsed.TotalMilliseconds);
     }
 
-    public (List<FamilyProcessingContext> contexts, double totalMs) ProcessQueueDangerously(
-        OperationQueue queue,
-        SnapshotCapturePipeline? collectorQueue,
-        string? outputFolderPath = null,
-        LoadAndSaveOptions? loadAndSaveOptions = null
-    ) {
-        var totalSw = Stopwatch.StartNew();
-
-        // Disable collectors if requested in execution options
-        if (!this._exOpts.EnableCollectors) collectorQueue = null;
-
-        var contexts = this.OpenDoc.IsFamilyDocument
-            ? this.ProcessFamilyDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath)
-            : this.ProcessNormalDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath);
-
-        var errors = contexts
-            .Where(ctx => {
-                var (_, err) = ctx.OperationLogs;
-                return err != null;
-            }).Select(ctx => {
-                var (_, err) = ctx.OperationLogs;
-                return err;
-            }).ToList();
-        if (errors.First() != null) throw errors.First() ?? new Exception("Unknown error occured");
-
-        totalSw.Stop();
-        return (contexts, totalSw.Elapsed.TotalMilliseconds);
-    }
-
     /// <summary>
     ///     Project path: one <see cref="FamilyVisit" /> per selected family. The visit owns EditFamily, the
     ///     transaction discipline, LoadFamily and the post-verify; the

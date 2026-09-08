@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
@@ -845,6 +845,7 @@ public enum UnmodeledReason {
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     FormulaNameNotDeclared,
     ParameterMetadataUnreadable,
+    ParameterValueUnreadable,        // a type row the capture produced no cell for; the value lane cannot claim to have read it
     LookupTableUnreadable,
     PartTypeNotPortable,
     RoomPointNotOnAxis,

@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Reconcile;
+﻿using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.SettingsRuntime.Json;
@@ -359,6 +359,52 @@ public sealed class FamilyReconcilerTests {
             Assert.That(keyed, Does.ContainKey("roomCalculationPoint:roomCalculationPoint").WithValue(ChangeKind.Update));
             Assert.That(plan.RunEffects, Is.EqualTo(new[] { "run.blanksBecome: 1 rules", "run.sort" }));
             Assert.That(plan.OpOrder, Is.EqualTo(new[] { "DeleteByName", "DeleteParams", "AddParams", "SetParamMetadata", "SetParamValues", "SetParamValuesPerType", "SetBlankValues", "AddRoomDingler", "SortParams" }));
+        });
+    }
+
+    [Test]
+    public void Two_targets_naming_one_source_rename_once_and_add_once() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "PE_E___Voltage": { "dataType": "ElectricalPotential", "wasNamed": ["Voltage"] }, "PE_E___Volts": { "dataType": "ElectricalPotential", "wasNamed": ["Voltage"] } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "Voltage": { "dataType": "ElectricalPotential" } } }""");
+        var kinds = FamilyReconciler.Diff(desired, current, UnitResolvers.Portable)
+            .Where(c => c.Section == "parameters").ToDictionary(c => c.Key, c => c.Kind);
+        Assert.Multiple(() => {
+            Assert.That(kinds.Values.Count(k => k == ChangeKind.Rename), Is.EqualTo(1));
+            Assert.That(kinds.Values.Count(k => k == ChangeKind.Add), Is.EqualTo(1));
+            Assert.That(kinds, Does.Not.ContainKey("Voltage"), "the claimed source is renamed away, not deleted");
+        });
+    }
+
+    [Test]
+    public void A_value_on_a_family_with_no_types_is_refused_rather_than_dropped() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "value": "2ft" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } } }""");
+        var plan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable);
+        Assert.That(plan.Refusals.Select(r => r.Code), Is.EqualTo(new[] { FamilyModelDiagnosticCodes.ValueWithoutTypes }));
+    }
+
+    [Test]
+    public void An_unread_cell_makes_that_cell_unverifiable_and_leaves_its_neighbours_alone() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "A": { "W": "2ft" }, "B": { "W": "3ft" } } }""");
+        var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length" } }, "types": { "A": {}, "B": {} }, "coverage": { "parameters": "Read", "types": "Partial" }, "unmodeled": [ { "reason": "ParameterValueUnreadable", "path": "$.types.A.W" } ] }""");
+        var kinds = FamilyReconciler.Diff(desired, current, UnitResolvers.Portable)
+            .Where(c => c.Section == "types.cell").ToDictionary(c => c.Key, c => c.Kind);
+        Assert.Multiple(() => {
+            Assert.That(kinds, Does.ContainKey("A/W").WithValue(ChangeKind.Unverifiable));
+            Assert.That(kinds, Does.ContainKey("B/W").WithValue(ChangeKind.Update));
+        });
+    }
+
+    [Test]
+    public void Fill_blanks_stops_asking_once_no_source_survives() {
+        var desired = Parse($$"""{ {{Header}}, "parameters": { "PE_M___Airflow": { "dataType": "AirFlow", "wasNamed": ["CFM"], "fillBlanksFromSources": true } }, "types": { "A": { "PE_M___Airflow": "100 CFM" }, "B": {} } }""");
+        var authored = Newtonsoft.Json.Linq.JObject.Parse("""{"parameters":{"PE_M___Airflow":{}}}""");
+        var before = Parse($$"""{ {{Header}}, "parameters": { "PE_M___Airflow": { "dataType": "AirFlow" }, "CFM": { "dataType": "AirFlow" } }, "types": { "A": { "PE_M___Airflow": "100 CFM" }, "B": {} } }""");
+        var after = Parse($$"""{ {{Header}}, "parameters": { "PE_M___Airflow": { "dataType": "AirFlow" } }, "types": { "A": { "PE_M___Airflow": "100 CFM" }, "B": {} } }""");
+        FamilyPlan Plan(FamilyModel current) => FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable, null, _ => null, authored);
+        Assert.Multiple(() => {
+            Assert.That(Plan(before).Changes.Any(c => c.Section == "parameters.sources"), Is.True, "the source is still there to fill from");
+            Assert.That(Plan(after).Changes.Any(c => c.Section == "parameters.sources"), Is.False, "type B stays blank forever; asking again never converges");
         });
     }
 

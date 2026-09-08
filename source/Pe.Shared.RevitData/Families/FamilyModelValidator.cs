@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace Pe.Shared.RevitData.Families;
 
@@ -12,6 +12,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string InvalidJson = "invalid-json";
     public const string Required = "required";
     public const string ValueFormulaConflict = "value-formula-conflict";
+    public const string ValueWithoutTypes = "value-without-types";
     public const string SharedOwnsDataType = "shared-owns-datatype";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";

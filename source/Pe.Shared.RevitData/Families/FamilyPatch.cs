@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.OperationSettings;
@@ -208,9 +208,10 @@ public sealed class ElectricalConnectorParameterRule {
     [JsonProperty("minimumCircuitAmpacity", Required = Required.Always)]
     public string MinimumCircuitAmpacity { get; init; } = null!;
 
-    /// <summary>Create one power-balanced connector on a native host when the family has none. False associates existing connectors only.</summary>
+    /// <summary>Create one power-balanced connector on a native host when the family has none. Default false: creating a
+    /// connector on a host nobody chose is a mutation a patch has to ask for. True associates or creates.</summary>
     [JsonProperty("createIfAbsent")]
-    public bool CreateIfAbsent { get; init; } = true;
+    public bool CreateIfAbsent { get; init; }
 }
 
 [JsonObject(MemberSerialization.OptIn)]

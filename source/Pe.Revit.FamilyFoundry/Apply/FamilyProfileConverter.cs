@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.OperationGroups;
@@ -660,7 +660,9 @@ public static class FamilyProfileConverter {
             : (string)sources[field]!;
         return new ElectricalConnectorParameterRule {
             Voltage = Required("Voltage"), NumberOfPoles = Required("NumberOfPoles"), ApparentPower = Required("ApparentPower"),
-            MinimumCircuitAmpacity = Required("MinimumCircuitAmpacity")
+            MinimumCircuitAmpacity = Required("MinimumCircuitAmpacity"),
+            // The legacy MakeElectricalConnector operation creates; the DTO default does not, so say it.
+            CreateIfAbsent = true
         };
     }
 

@@ -979,7 +979,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     sharedSource: d => new FamilySharedParameterSource(d, definitions));
                 using var processor = new OperationProcessor(project);
                 var (contexts, processorMs) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
-                var (_, error) = contexts.Single().OperationLogs;
+                var (operationLogs, error) = contexts.Single().OperationLogs;
                 var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().SingleOrDefault(f => f.Name == familyName);
                 var assertions = new JObject { ["loadedFamilyPresent"] = loaded is not null,
                     ["committedConverged"] = error is null && operation.LastReceipt?.Converged == true };
@@ -1017,7 +1017,10 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 failures.AddRange(familyFailures.Select(failure => $"{familyName}: {failure}"));
                 ((JArray)evidence["completed"]!).Add(new JObject { ["familyName"] = familyName, ["familyId"] = originalId.Value(),
                     ["familyUniqueId"] = originalUniqueId, ["result"] = familyFailures.Count == 0 ? "passed" : "failed",
-                    ["elapsedMs"] = timer.Elapsed.TotalMilliseconds, ["processorMs"] = processorMs, ["contextMs"] = contexts.Single().TotalMs,
+                    ["elapsedMs"] = timer.Elapsed.TotalMilliseconds, ["processorMs"] = processorMs,
+                    // OperationsMs is the reconcile body alone; elapsedMs - operationsMs is EditFamily + LoadFamily + close.
+                    ["operationsMs"] = contexts.Single().OperationsMs,
+                    ["operations"] = new JArray((operationLogs ?? []).Select(log => new JObject { ["name"] = log.OperationName, ["msElapsed"] = log.MsElapsed })),
                     ["graph"] = contexts.Single().GraphSizes,
                     ["assertions"] = assertions, ["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt),
                     ["error"] = error?.ToString(), ["failures"] = new JArray(familyFailures) });

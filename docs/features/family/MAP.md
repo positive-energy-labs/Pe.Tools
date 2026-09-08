@@ -8,9 +8,9 @@ One portable text profile, one reconciler, three doors.
 
 | Piece | Where | Role |
 |---|---|---|
-| `FamilyModel` (family.json) | `Pe.Revit.FamilyFoundry/Model` | the ONE portable profile; patch semantics (omit = unchanged, null = delete, `{}` = ensure) |
-| Patch file `{ select, patch, run }` | `Pe.Revit.FamilyFoundry/Patch` | bulk lane input; 45 frozen company profiles convert to it |
-| `ReconcileFamily` | `Pe.Revit.FamilyFoundry/Reconcile` | one `DocOperation`: capture current, pure `Diff`, compile to `OperationQueue`, apply inside `FamilyVisit`, receipt with residue |
+| `FamilyModel` (family.json) | `Pe.Shared.RevitData/Families/FamilyModelContracts.cs` | the ONE portable profile; patch semantics (omit = unchanged, null = delete, `{}` = ensure) |
+| Patch file `{ select, patch, run }` | `Pe.Shared.RevitData/Families/FamilyPatch.cs` | bulk lane input; 45 frozen company profiles convert to it |
+| `ReconcileFamily` | `Pe.Revit.FamilyFoundry/Reconcile/ReconcileFamily.cs` | one `DocOperation`: capture current, pure `Diff`, compile to `OperationQueue`, apply inside `FamilyVisit`, receipt with residue |
 | Ops library | `Pe.Revit.FamilyFoundry/Operations`, `OperationProcessor` | script-usable execution layer; the only pre-rewrite survivor |
 | Door 1 `/family` | `apps/web/src/family` | one-family authored + live lanes on `family/store.ts` |
 | Door 2 `/families` | `apps/web/src/families` | fleet plan → apply → receipt chain in `familiesRouteState` |
