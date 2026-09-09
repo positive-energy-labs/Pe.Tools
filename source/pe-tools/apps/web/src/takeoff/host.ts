@@ -21,7 +21,9 @@ function buildRhvacInsert(
   number: number,
   systemNumber: number,
 ): RhvacInsertRoomData {
-  const height = room.ceilingFt || 8;
+  if (!Number.isFinite(room.ceilingFt) || room.ceilingFt <= 0)
+    throw Error(`room '${room.name}' has invalid ceiling height ${room.ceilingFt}`);
+  const height = room.ceilingFt;
   const outer = room.outer ?? [];
   const walls = outer.map(([x1, y1], index) => {
     const [x2, y2] = outer[(index + 1) % outer.length]!;

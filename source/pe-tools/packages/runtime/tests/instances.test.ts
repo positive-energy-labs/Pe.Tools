@@ -56,7 +56,12 @@ test("Instances isolates workspaces, denies agent lifecycle controls and replays
     }
     expect(fetch).not.toHaveBeenCalled();
     const first = await workspace.command(a, "instances", "agent", "open", {}, 1, "open-once");
-    expect(first.ok).toBe(true);
+    expect(first).toMatchObject({
+      ok: true,
+      result: {
+        target: { session: "exact", document: "C:\\Models\\A.rvt" },
+      },
+    });
     expect(await workspace.command(a, "instances", "agent", "open", {}, 1, "open-once")).toEqual(
       first,
     );

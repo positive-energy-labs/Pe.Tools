@@ -1,3 +1,4 @@
+import { decisionRefusal } from "#/takeoff/room-actions";
 import { Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -263,7 +264,7 @@ const partitionInput = (zone: WorldZone, zoneRegion: number): PartitionArgs => (
   view: zone.zone.lane.view,
   zoneName: zone.name,
   zoneGuid: zone.zone.guid,
-  runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
+  runId: `run-${crypto.randomUUID()}`,
 });
 
 export function atlasRoomState(room: WorldRoom, open: number): AtlasRoomState {
@@ -425,7 +426,7 @@ export function createTakeoffStore(deps: {
     sorts: [],
     query: "",
   }).pipe(owned("page/atlas-table"));
-  const reviewAtom = Atom.make<{
+  const freshReviewAtom = Atom.make<{
     zone: string;
     data: PartitionReviewData | null;
     flags: string[];
@@ -728,6 +729,16 @@ export function createTakeoffStore(deps: {
       })),
     };
   }).pipe(owned("world"));
+  const reviewAtom = Atom.make((get) => {
+    const fresh = get(freshReviewAtom);
+    const zoneKey = get(zoneKeyAtom);
+    if (!zoneKey) return fresh ? { ...fresh, source: "fresh solver" as const } : null;
+    if (fresh?.zone === zoneKey) return { ...fresh, source: "fresh solver" as const };
+    const zone = get(worldAtom).zones.find((item) => item.zone.guid === zoneKey);
+    return zone?.savedReview
+      ? { zone: zoneKey, data: zone.savedReview, flags: [], source: "saved native" as const }
+      : null;
+  }).pipe(owned("page/selected-partition-review"));
   const roomsByIdAtom = Atom.make(
     (get) =>
       new Map(
@@ -742,7 +753,7 @@ export function createTakeoffStore(deps: {
       const zoneKey = get(zoneKeyAtom);
       return (
         zoneKey !== null &&
-        get(worldAtom).zones.some((zone) => zone.zone.key === zoneKey && zone.zone.guid === id)
+        get(worldAtom).zones.some((zone) => zone.zone.guid === zoneKey && zone.zone.guid === id)
       );
     }).pipe(Atom.autoDispose),
   );
@@ -751,7 +762,7 @@ export function createTakeoffStore(deps: {
     const stageFilter = get(stageFilterAtom);
     const decisions = get(decisionsAtom);
     const world = get(worldAtom);
-    const selected = zoneKey ? world.zones.find((zone) => zone.zone.key === zoneKey) : undefined;
+    const selected = zoneKey ? world.zones.find((zone) => zone.zone.guid === zoneKey) : undefined;
     const zones = selected
       ? [selected]
       : world.zones.filter((zone) => stageFilter === null || zone.stage === stageFilter);
@@ -797,7 +808,13 @@ export function createTakeoffStore(deps: {
     );
     const blockedZones = inScope.filter(
       (zone) =>
+        zone.driftSqft === null ||
         zone.driftSqft > 0 ||
+        zone.rooms.some(
+          (room) =>
+            !deps.host.fixture &&
+            (room.analysis?.state !== "current" || room.analysis.hold !== null),
+        ) ||
         zone.rooms.some((room) => room.flags.length > 0) ||
         zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
     );
@@ -1114,17 +1131,20 @@ export function createTakeoffStore(deps: {
       ).catch(() => undefined);
     },
     decideRoom(room: WorldRoom, flag: string, verdict: "accept" | "dismiss") {
-      write("decision", `entity/${room.guid}/decided`, () =>
-        registry.update(decisionsAtom, (decisions) => ({
-          ...decisions,
-          [`${room.guid}::${flag}`]: verdict,
-        })),
-      );
-      if (deps.host.fixture) return;
+      if (deps.host.fixture) {
+        write("decision", `entity/${room.guid}/decided`, () =>
+          registry.update(decisionsAtom, (decisions) => ({
+            ...decisions,
+            [`${room.guid}::${flag}`]: verdict,
+          })),
+        );
+        return;
+      }
       void runVerb(
         "decision",
         async () => {
-          if (room.elementId === null) throw Error(`room ${room.name} has no Room Region home`);
+          const refusal = decisionRefusal(room, flag);
+          if (refusal) throw Error(refusal);
           const session = await activeSession();
           const next: Resolution = {
             subject: room.provenance.sourceRoomId,
@@ -1135,7 +1155,7 @@ export function createTakeoffStore(deps: {
           };
           await deps.host.writeDecisions(
             session,
-            room.elementId,
+            room.elementId!,
             upsertResolution(room.decisions, next),
           );
         },
@@ -1143,10 +1163,10 @@ export function createTakeoffStore(deps: {
       ).catch(() => undefined);
     },
     flagReview(key: string) {
-      const review = registry.get(reviewAtom);
+      const review = registry.get(freshReviewAtom);
       if (!review) return;
       write("flag-review", "page/partition-review", () =>
-        registry.set(reviewAtom, {
+        registry.set(freshReviewAtom, {
           ...review,
           flags: review.flags.includes(key)
             ? review.flags.filter((flag) => flag !== key)
@@ -1167,8 +1187,8 @@ export function createTakeoffStore(deps: {
           } while (preparation.remaining.length > 0);
           const result = await deps.host.partition(session, partitionInput(zone, zoneRegion));
           write("partition", "page/partition-review", () =>
-            registry.set(reviewAtom, {
-              zone: zone.zone.key,
+            registry.set(freshReviewAtom, {
+              zone: zone.zone.guid,
               data: result.review ?? null,
               flags: [],
             }),
@@ -1179,6 +1199,7 @@ export function createTakeoffStore(deps: {
       );
     },
     refresh() {
+      registry.set(freshReviewAtom, null);
       return runVerb("refresh", async () => "refreshing", ["snapshot", "takeoff-views"]);
     },
     launchRhvac() {

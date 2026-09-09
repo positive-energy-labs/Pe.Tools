@@ -192,6 +192,113 @@ describe("decision queue", () => {
 });
 
 describe("typed snapshot projection", () => {
+  it("keeps edited geometry visible while invalidating old measurements and decisions across mixed runs", () => {
+    const native: LiveRegion & { roomType: string } = {
+      ...region(
+        43,
+        provenance(
+          ',"flags":["check"],"resolutions":[{"subject":"R01","flag":"check","verb":"accept","at":"then","runId":"old"}]',
+        ),
+      ),
+      roomType: "hall",
+      analysis: {
+        state: "stale",
+        runId: "old",
+        floorZ: null,
+        ceilingZ: null,
+        hold: "geometry-changed",
+      },
+    };
+    const input = {
+      reading: {
+        at: "11111111-1111-1111-1111-111111111111",
+        version: "v",
+        observedAt: "2026-09-08T00:00:00Z",
+      },
+      snapshot: {
+        status: {
+          systems: [],
+          carriers: { stage: "Adoption" as const, status: "ready", missingCarrierGuids: [] },
+        },
+        zoneFrs: [
+          {
+            ...region(42, '{"view":"Plan","name":"Renamed zone"}'),
+            guid: "zone",
+            typeName: "Zone",
+            view: "Renamed plan",
+            color: "1,2,3",
+            loops: [square(0, 0, 30)],
+          },
+        ],
+        regionsByZone: {
+          zone: [
+            native,
+            { ...native, guid: "other-guid", blob: provenance().replace('"r"', '"other-run"') },
+          ],
+        },
+      },
+    };
+    const project = () =>
+      projectTakeoffSnapshot(input, "Document", [{ name: "Renamed plan", level: "Main" }]).world
+        .zones[0]!;
+    const stale = project();
+    expect(stale.zone.guid).toBe("zone");
+    expect(stale.zone.lane.view).toBe("Renamed plan");
+    expect(stale.rooms[0]).toMatchObject({
+      ceilingFt: 0,
+      decisions: [],
+      flags: ["geometry-changed", "check"],
+    });
+    expect(stale.savedReview!.shapes.map((shape) => shape.id)).toEqual([native.guid, "other-guid"]);
+    expect(stale.savedReview!.shapes[0]!.loops[0]).toEqual(native.outer);
+    expect(stale.savedReview!.shapes[0]!.disposition).toBeNull();
+    expect(stale.savedReview!.shapes[0]!.reason).toContain("measurements stale");
+    expect(stale.driftSqft).toBeNull();
+    expect(stale.savedReview!.source.runId).toBeNull();
+    expect(stale.savedReview!.shapes[1]!.original?.runId).toBe("other-run");
+    input.snapshot.regionsByZone.zone[0] = {
+      ...native,
+      analysis: { state: "current", runId: "new", floorZ: 0, ceilingZ: 9, hold: null },
+    };
+    expect(project().rooms[0]).toMatchObject({ ceilingFt: 9, decisions: [], flags: ["check"] });
+  });
+
+  it("rejects native review provenance with neither supported field spelling", () => {
+    expect(() =>
+      projectTakeoffSnapshot(
+        {
+          reading: {
+            at: "document",
+            version: "version",
+            observedAt: "2026-08-25T12:00:00.000Z",
+          },
+          snapshot: {
+            status: {
+              systems: [],
+              carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
+            },
+            zoneFrs: [
+              {
+                ...region(42, '{"view":"Plan","name":"Zone"}'),
+                typeName: "Zone",
+                view: "Plan",
+                color: "1,2,3",
+                loops: [square(0, 0, 10)],
+              },
+            ],
+            regionsByZone: {
+              "3a9956bd-d135-4290-b184-3cbe93d4d1ea": [
+                { ...region(43, "{}"), role: "held-residue" as const, roomType: "" },
+              ],
+            },
+          },
+        },
+        "Document",
+        [{ name: "Plan", level: "Level 1" }],
+      ),
+    ).toThrow("Native takeoff review provenance is missing runId or sourceRoomId");
+  });
+
   it("passes through source identity and derives the world from the typed response", () => {
     const snapshot = projectTakeoffSnapshot(
       {
@@ -272,7 +379,8 @@ describe("typed snapshot projection", () => {
       square(4.123456789012345, 4, 2),
     ]);
     expect(snapshot.world.zones[0]!.rooms[0]!.holes).toEqual([square(4.123456789012345, 4, 2)]);
-    expect(snapshot.world.zones[0]!.rooms[0]!.ceilingFt).toBe(8);
+    expect(snapshot.world.zones[0]!.rooms[0]!.ceilingFt).toBe(0);
+    expect(snapshot.world.zones[0]!.rooms[0]!.flags).toContain("remeasure-required");
     expect(snapshot.world.zones[0]!.residues[0]!.holes).toEqual([square(2, 2, 1)]);
     const markup = renderToStaticMarkup(
       createElement(ZonePeek, {

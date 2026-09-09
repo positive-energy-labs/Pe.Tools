@@ -359,7 +359,9 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       <PartitionReview
         key={review.data?.source.runId ?? review.zone}
         review={review}
-        onFlag={(key) => store.actions.flagReview(key)}
+        onFlag={
+          review.source === "fresh solver" ? (key) => store.actions.flagReview(key) : undefined
+        }
       />
     ) : null;
   if (live && !session)

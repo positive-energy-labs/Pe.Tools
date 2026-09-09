@@ -1,4 +1,9 @@
-import { instancesRouteState, type InstancesDocument } from "@pe/agent-contracts";
+import {
+  instancesRouteState,
+  scopeSchema,
+  type InstancesDocument,
+  type Scope,
+} from "@pe/agent-contracts";
 import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
 import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -49,6 +54,13 @@ type DocFact = {
 type Staged =
   | { readonly kind: "open"; readonly doc: DocFact; readonly world: WorldFacts }
   | { readonly kind: "start"; readonly doc?: DocFact; readonly year: string };
+
+type DocumentScope = Extract<Scope, { kind: "document" }>;
+
+const documentScope = (session: unknown, document: unknown): DocumentScope | null => {
+  const parsed = scopeSchema.safeParse({ kind: "document", document, pin: session });
+  return parsed.success && parsed.data.kind === "document" && parsed.data.pin ? parsed.data : null;
+};
 
 /** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
 export const sessionIdOf = (name: string) =>
@@ -107,6 +119,7 @@ type ClusterProps = {
   setTarget: (target: string) => void;
   source?: "fixture";
   onEvent?: (event: ClusterEvent) => void;
+  onDocument?: (scope: DocumentScope) => void;
 };
 
 export function InstancesCluster(props: ClusterProps) {
@@ -143,6 +156,7 @@ function InstancesClusterView({
   setTarget,
   source,
   onEvent,
+  onDocument,
   route,
 }: {
   route?: RouteStateHandle<InstancesDocument>;
@@ -152,6 +166,8 @@ function InstancesClusterView({
   source?: "fixture";
   /** Settled lifecycle receipts, for a host page's ledger. */
   onEvent?: (event: ClusterEvent) => void;
+  /** Hands the selected document and its exact session pin to an embedding route. */
+  onDocument?: (scope: DocumentScope) => void;
 }) {
   const queryClient = useQueryClient();
   const { worlds, isLoading } = fleet;
@@ -274,6 +290,10 @@ function InstancesClusterView({
       pickedWorld ? document.openIn.includes(pickedWorld.id) || document.year === pickedYear : true,
     )
     .filter((document) => (yearPick ? document.year === yearPick : true));
+  const stagedScope =
+    staged?.kind === "open" && staged.doc.openIn.includes(staged.world.id)
+      ? documentScope(worldTrunk.option(staged.world).id, staged.world.session?.activeDocumentId)
+      : null;
 
   const settle = (kind: OutcomeKind, text: string, says?: string) => {
     setOutcome({ kind, text, says });
@@ -293,12 +313,15 @@ function InstancesClusterView({
       const receipt = result.result as {
         diagnostics?: { detail?: string; code?: string }[];
         result?: { state?: string };
+        target?: { session?: unknown; document?: unknown };
       };
       settle(
         receipt.diagnostics?.length ? "advisory" : "receipt",
         `${command} · ${receipt.result?.state ?? "answered"}`,
         receipt.diagnostics?.map((d) => d.detail ?? d.code).join(" · "),
       );
+      const scope = documentScope(receipt.target?.session, receipt.target?.document);
+      if ((command === "open" || command === "start") && scope) onDocument?.(scope);
     }
     finish();
   };
@@ -561,11 +584,21 @@ function InstancesClusterView({
             {staged.kind === "open" ? (
               <VerbButton
                 tone="commit"
-                label="open"
-                reason={openRefusal ?? "open the staged document in its session"}
-                disabled={busy !== null || openRefusal !== null || route?.outcomeUnknown === true}
+                label={stagedScope && onDocument ? "use" : "open"}
+                reason={
+                  stagedScope && onDocument
+                    ? "use the staged document in this route"
+                    : (openRefusal ?? "open the staged document in its session")
+                }
+                disabled={
+                  busy !== null ||
+                  (!stagedScope && openRefusal !== null) ||
+                  route?.outcomeUnknown === true
+                }
                 busy={busy === "open"}
-                onClick={() => void runCommand("open")}
+                onClick={() =>
+                  stagedScope && onDocument ? onDocument(stagedScope) : void runCommand("open")
+                }
               />
             ) : (
               <VerbButton

@@ -190,3 +190,35 @@ public sealed record Searched(
     int Examined,
     int Skipped
 );
+
+/// <summary>One original CAD curve in host internal feet, before ribbon extrusion.</summary>
+public sealed record OriginalCurve(
+    Handle Handle,
+    IReadOnlyList<int> TraversalPath,
+    string Layer,
+    string Kind,
+    IReadOnlyList<double[]> Points,
+    OriginalArc? Arc = null
+);
+
+/// <summary>Native arc pose required to reconstruct the captured curve.</summary>
+public sealed record OriginalArc(
+    double[] Center,
+    double Radius,
+    bool IsBound,
+    double[]? Start,
+    double[]? End,
+    double[] BasisX,
+    double[] BasisY,
+    double[] Normal,
+    double? StartParameter,
+    double? EndParameter
+);
+
+/// <summary>A geometry-read failure. Path is the ordinal path reached before the failure.</summary>
+public sealed record CurveCaptureFailure(
+    IReadOnlyList<int> TraversalPath,
+    string Stage,
+    string Detail,
+    Handle? Handle = null
+);

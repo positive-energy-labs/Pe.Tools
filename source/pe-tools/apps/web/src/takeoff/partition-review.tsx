@@ -3,13 +3,17 @@ import type { PartitionReviewData } from "@pe/agent-contracts";
 import { ReviewShapes, ReviewList, partitionReviewShapes } from "#/runs/review";
 import { zoneViewport } from "#/runs/world";
 
-/** The route owns the result and flags. No saved-run lookup or live-room reconstruction. */
 export function PartitionReview({
   review,
   onFlag,
 }: {
-  review: { zone: string; data: PartitionReviewData | null; flags: string[] };
-  onFlag: (key: string) => void;
+  review: {
+    zone: string;
+    data: PartitionReviewData | null;
+    flags: string[];
+    source: "fresh solver" | "saved native";
+  };
+  onFlag?: (key: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const data = review.data;
@@ -39,12 +43,19 @@ export function PartitionReview({
   return (
     <div className="p-2 overflow-auto">
       <div>
-        Partition review / {data.zone.name} / {data.source.runId}
+        Partition review / {review.source} / {data.zone.name} /{" "}
+        {data.source.runId ?? "mixed original runs"}
       </div>
       <div>
         {data.source.documentKey} / {data.source.scopeKey}
       </div>
-      <div>No plan evidence attached. Geometry is the partition result.</div>
+      <div>
+        Edit boundaries in Revit, then refresh. Geometry is{" "}
+        {review.source === "saved native"
+          ? "read from Revit; original solver verdicts are historical"
+          : "a temporary solver comparison; refresh or reload discards it"}
+        .
+      </div>
       <div className="flex flex-wrap gap-2">
         <svg
           width={vp.widthPx}
@@ -55,7 +66,7 @@ export function PartitionReview({
           <ReviewShapes
             shapes={shapes}
             zone={data.zone.key}
-            runId={data.source.runId}
+            runId={data.source.runId ?? data.source.scopeKey}
             vp={vp}
             selected={selected}
             flags={review.flags}
@@ -71,7 +82,7 @@ export function PartitionReview({
         />
       </div>
       <a
-        download={`${data.source.runId}-review.json`}
+        download={`${data.source.runId ?? data.source.scopeKey}-review.json`}
         href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...data, flags: review.flags }, null, 2))}`}
       >
         export review JSON

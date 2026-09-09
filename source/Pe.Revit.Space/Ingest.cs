@@ -185,21 +185,15 @@ internal static class Ingest {
     ) {
         if (ii.ViewSpecific) return 0;
 
-        GeometryElement? ge;
-        try {
-            ge = ii.get_Geometry(Opts);
-        } catch {
-            return 0;
-        }
-
-        if (ge is null) return 0;
-
         // Collected in the owning document's frame: GetInstanceGeometry already applies the import's
         // own transform, and the link transform is applied once on emit. Multiplying here is the
         // double-transform bug probe 1 hit.
-        var byLayer = new Dictionary<string, List<IList<XYZ>>>(StringComparer.OrdinalIgnoreCase);
+        var captured = new List<CapturedCurve>();
+        var failures = new List<CurveCaptureFailure>();
         var doc = ii.Document;
-        Curves(doc, ge, byLayer, 0);
+        ReadCurves(ii, captured, failures);
+        var byLayer = captured.GroupBy(c => c.Layer, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.Points).ToList(), StringComparer.OrdinalIgnoreCase);
         if (byLayer.Count == 0) return 0;
 
         var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
@@ -288,55 +282,102 @@ internal static class Ingest {
     ///     ponytail: a closed polyline is taken exactly as Revit hands it over. No closing edge is
     ///     synthesised, so a shape Revit does not close stays open and its ribbon has a seam.
     /// </summary>
-    private static void Curves(
+    internal sealed record CapturedCurve(
+        IReadOnlyList<int> Path,
+        string Layer,
+        string Kind,
+        Curve? Native,
+        IList<XYZ> Points
+    );
+
+    internal static void ReadCurves(
+        ImportInstance import,
+        List<CapturedCurve> curves,
+        List<CurveCaptureFailure> failures
+    ) {
+        GeometryElement? geometry;
+        try {
+            geometry = import.get_Geometry(Opts);
+        } catch (Exception ex) {
+            failures.Add(new CurveCaptureFailure([], "traversal", ex.Message));
+            return;
+        }
+        if (geometry is null) {
+            failures.Add(new CurveCaptureFailure([], "traversal", "import geometry was null"));
+            return;
+        }
+        Curves(import.Document, geometry, curves, failures, [], 0);
+    }
+
+    internal static void Curves(
         Document doc,
         GeometryElement ge,
-        Dictionary<string, List<IList<XYZ>>> byLayer,
+        List<CapturedCurve> curves,
+        List<CurveCaptureFailure> failures,
+        IReadOnlyList<int> path,
         int depth
     ) {
-        if (depth > 4) return;
+        if (depth > 4) {
+            failures.Add(new CurveCaptureFailure(path, "traversal", "maximum geometry depth exceeded"));
+            return;
+        }
+        var ordinal = 0;
         foreach (var go in ge) {
+            var here = path.Append(ordinal++).ToArray();
             switch (go) {
                 case GeometryInstance gi: {
                     GeometryElement? inner;
                     try {
                         inner = gi.GetInstanceGeometry();
-                    } catch {
+                    } catch (Exception ex) {
+                        failures.Add(new CurveCaptureFailure(here, "traversal", ex.Message));
                         continue;
                     }
 
-                    if (inner is not null) Curves(doc, inner, byLayer, depth + 1);
+                    if (inner is null) failures.Add(new CurveCaptureFailure(here, "traversal", "instance geometry was null"));
+                    else Curves(doc, inner, curves, failures, here, depth + 1);
                     break;
                 }
                 case Curve c: {
                     IList<XYZ> pts;
                     try {
                         pts = c.Tessellate();
-                    } catch {
+                    } catch (Exception ex) {
+                        failures.Add(new CurveCaptureFailure(here, "tessellation", ex.Message));
                         continue;
                     }
 
-                    Add(Layer(doc, go), pts);
+                    Add(go, c.GetType().Name, c, pts, here);
                     break;
                 }
                 case PolyLine pl:
-                    Add(Layer(doc, go), pl.GetCoordinates());
+                    try {
+                        Add(go, nameof(PolyLine), null, pl.GetCoordinates(), here);
+                    } catch (Exception ex) {
+                        failures.Add(new CurveCaptureFailure(here, "tessellation", ex.Message));
+                    }
                     break;
             }
         }
 
-        void Add(string layer, IList<XYZ> pts) {
-            if (pts.Count < 2) return;
-            if (!byLayer.TryGetValue(layer, out var list)) byLayer[layer] = list = [];
-            list.Add(pts);
+        void Add(GeometryObject go, string kind, Curve? native, IList<XYZ> pts, IReadOnlyList<int> at) {
+            if (pts.Count < 2) {
+                failures.Add(new CurveCaptureFailure(at, "tessellation", "fewer than two points"));
+                return;
+            }
+            var layer = Layer(doc, go, out var layerFailure);
+            if (layerFailure is not null) failures.Add(new CurveCaptureFailure(at, "layer", layerFailure));
+            curves.Add(new CapturedCurve(at, layer, kind, native, pts));
         }
     }
 
-    private static string Layer(Document doc, GeometryObject go) {
+    private static string Layer(Document doc, GeometryObject go, out string? failure) {
         try {
-            return (doc.GetElement(go.GraphicsStyleId) as GraphicsStyle)?.GraphicsStyleCategory?.Name
-                ?? "<none>";
-        } catch {
+            var layer = (doc.GetElement(go.GraphicsStyleId) as GraphicsStyle)?.GraphicsStyleCategory?.Name;
+            failure = layer is null ? $"graphics style {go.GraphicsStyleId} resolved no layer" : null;
+            return layer ?? "<none>";
+        } catch (Exception ex) {
+            failure = ex.Message;
             return "<none>";
         }
     }

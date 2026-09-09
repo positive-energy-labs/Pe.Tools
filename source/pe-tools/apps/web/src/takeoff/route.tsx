@@ -128,7 +128,18 @@ function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
         no document bound — pick a session and stage a document below
       </p>
       <div className="mx-auto mt-5 max-w-6xl">
-        <InstancesCluster fleet={fleet} target={target} setTarget={setTarget} />
+        <InstancesCluster
+          fleet={fleet}
+          target={target}
+          setTarget={setTarget}
+          onDocument={(scope) => {
+            const url = new URL(href, "http://takeoffs.local");
+            url.searchParams.set("doc", scope.document);
+            if (scope.pin) url.searchParams.set("target", scope.pin);
+            else url.searchParams.delete("target");
+            void router.navigate({ href: url.pathname + url.search, replace: true });
+          }}
+        />
       </div>
     </main>
   );

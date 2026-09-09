@@ -42,6 +42,9 @@ public sealed record SharedEdge(int Other, double LengthFt, double Support);
 /// <summary>Architectural Room boundaries in host feet. All flat XY loops use even-odd semantics.</summary>
 public sealed record RoomProposal(string SourceKey, string Name, string Number, double[][] Loops);
 
+/// <summary>Original CAD evidence for the two solver slabs. Null means not captured, never empty-complete.</summary>
+public sealed record OriginalCurveEvidence(OriginalCurvesAnswer Knee, OriginalCurvesAnswer Header);
+
 /// <summary>
 ///     Captured inputs to the one solver. ZoneLoops retains every boundary in host feet with
 ///     even-odd semantics. Resolved contains knee solids, knee ribbons, header solids, header ribbons.
@@ -55,7 +58,8 @@ public sealed record PartitionInput(
     IReadOnlyList<Resolved> Resolved,
     string EnclosureSource,
     IReadOnlyList<RoomProposal> Proposals,
-    string? NoEnclosureDetail
+    string? NoEnclosureDetail,
+    OriginalCurveEvidence? OriginalCurves = null
 );
 
 /// <summary>One face of the partition. Loop is a closed CCW ring x0,y0,x1,y1,... in host feet.</summary>

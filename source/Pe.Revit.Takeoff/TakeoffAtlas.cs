@@ -35,6 +35,7 @@ public static class TakeoffAtlas
     {
         var zones = ZoneRegions(doc);
         var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.OrdinalIgnoreCase);
+        var geometryKeys = new Dictionary<Guid, string>();
 
         foreach (var fr in new FilteredElementCollector(doc)
                      .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
@@ -48,7 +49,10 @@ public static class TakeoffAtlas
             string key = provenance.ZoneGuid.ToString("D");
             if (!grouped.TryGetValue(key, out var regions))
                 grouped[key] = regions = [];
-            regions.Add(ToLiveRegion(doc, fr, role, guid.Value, blob));
+            if (!geometryKeys.TryGetValue(provenance.ZoneGuid, out var geometryKey))
+                geometryKeys[provenance.ZoneGuid] = geometryKey = RegionMeasurements.ScopeKey(
+                    doc, (View)doc.GetElement(fr.OwnerViewId), provenance.ZoneGuid);
+            regions.Add(ToLiveRegion(doc, fr, role, guid.Value, blob, geometryKey));
         }
 
         var registry = TakeoffCarriers.ReadRegistry(doc);
@@ -114,6 +118,11 @@ public static class TakeoffAtlas
     // rebind-by-geometry rule in ZoneMaterializer is untouched.
     public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) {
         TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
+        var zone = doc.GetElement(request.ZoneRegion.ToElementId()) as FilledRegion
+            ?? throw new InvalidOperationException("Partition requires a native Zoning Region");
+        if (TakeoffCarriers.ReadIdentity(zone) != (TakeoffCarriers.RoleZoningRegion, request.ZoneGuid)
+            || zone.OwnerViewId != FindView(doc, request.View).Id)
+            throw new InvalidOperationException("Partition target does not match the adopted zone identity and view");
         Pe.Revit.Space.SpaceWorld.Prepare(doc);
         return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(
             doc, new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion)));
@@ -163,6 +172,7 @@ public static class TakeoffAtlas
         var materialized = ZoneMaterializer.Materialize(
             doc, view, elevation, request.ZoneGuid, request.RunId, rooms, residues, log);
         doc.Regenerate();
+        RegionMeasurements.Measure(doc, view, request.ZoneGuid, request.RunId);
 
         var acc = answer.Accounting;
         return new TakeoffPartitionResult(
@@ -218,7 +228,18 @@ public static class TakeoffAtlas
     }
 
     public static TakeoffWriteResult WriteDecisions(Document doc, TakeoffDecisionsRequest request) =>
-        MutateProvenance(doc, request.ElementId, p => p with { Resolutions = request.Resolutions });
+        MutateProvenance(doc, request.ElementId, p => {
+            var fr = (FilledRegion)doc.GetElement(request.ElementId.ToElementId());
+            var view = (View)doc.GetElement(fr.OwnerViewId);
+            var key = RegionMeasurements.ScopeKey(doc, view, p.ZoneGuid) + RegionMeasurements.GeometryKey(
+                view.GenLevel.ProjectElevation, [Boundaries(fr)]);
+            var analysis = RegionMeasurements.Read(p, key);
+            if (analysis.State != "current" || request.Resolutions.Any(r => r.RunId != analysis.RunId
+                || r.Subject != p.SourceRoomId || r.Flag == analysis.Hold))
+                throw new InvalidOperationException("Review decisions require the current native measurement; remeasure this zone");
+            return p with { Resolutions = p.Resolutions.Where(r => r.RunId != analysis.RunId)
+                .Concat(request.Resolutions).ToList() };
+        });
 
     public static IReadOnlyList<TakeoffWriteResult> LinkRhvacBatch(
         Document doc,
@@ -293,19 +314,22 @@ public static class TakeoffAtlas
     }
 
     private static TakeoffLiveRegion ToLiveRegion(
-        Document doc, FilledRegion fr, string role, Guid guid, string blob)
+        Document doc, FilledRegion fr, string role, Guid guid, string blob, string geometryKey)
     {
         var loops = Boundaries(fr);
         var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).FirstOrDefault()
                     ?? throw new InvalidOperationException($"FilledRegion {fr.Id} has no boundary");
         return new TakeoffLiveRegion(fr.Id.Value(), role, guid, Area(fr, loops),
             role == TakeoffCarriers.RoleRoomRegion ? TakeoffCarriers.ReadRoomType(fr) : "", blob, outer,
-            loops.Where(loop => !ReferenceEquals(loop, outer)).ToList());
+            loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
+            RegionMeasurements.Read(RegionProvenance.FromJson(blob), geometryKey + RegionMeasurements.GeometryKey(
+                ((View)doc.GetElement(fr.OwnerViewId)).GenLevel.ProjectElevation, [loops])));
     }
 
     private static List<TakeoffLiveRegion> ReadLiveRegions(Document doc, ViewPlan view, Guid zoneGuid)
     {
         var result = new List<TakeoffLiveRegion>();
+        var geometryKey = RegionMeasurements.ScopeKey(doc, view, zoneGuid);
         foreach (var fr in new FilteredElementCollector(doc, view.Id)
                      .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
         {
@@ -315,7 +339,7 @@ public static class TakeoffAtlas
             string blob = TakeoffCarriers.ReadProvenance(fr)
                           ?? throw new InvalidOperationException($"{role} {fr.Id} has no provenance blob");
             if (RegionProvenance.FromJson(blob).ZoneGuid != zoneGuid) continue;
-            result.Add(ToLiveRegion(doc, fr, role, guid.Value, blob));
+            result.Add(ToLiveRegion(doc, fr, role, guid.Value, blob, geometryKey));
         }
         return result;
     }

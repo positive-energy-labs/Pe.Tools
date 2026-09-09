@@ -86,11 +86,16 @@ public static class Verbs {
         RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
         var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
             header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
+        var originalKnee = SpaceVerbs.OriginalCurves(document, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
+        var originalHeader = SpaceVerbs.OriginalCurves(document, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
+        RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
+        RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
         var proposals = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
         var detail = knee.Merged.Pieces == 0 && header.Merged.Pieces == 0
             ? HoldWithCensus(document, clip, source, knee.Solids.Stamp) : null;
         RequireCurrent(document, knee.Solids.Stamp);
-        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals, detail);
+        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals, detail,
+            new OriginalCurveEvidence(originalKnee, originalHeader));
     }
 
     // ---------------------------------------------------------------- stage 1

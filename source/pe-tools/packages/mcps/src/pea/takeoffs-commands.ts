@@ -63,7 +63,7 @@ export function createTakeoffsCommandHandlers(
           view: zone.zone.lane.view,
           zoneName: zone.name,
           zoneGuid: zone.zone.guid,
-          runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
+          runId: `run-${crypto.randomUUID()}`,
         });
       }
       const snapshot = await readSnapshot(caller);

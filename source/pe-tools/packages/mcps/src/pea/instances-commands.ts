@@ -1,12 +1,22 @@
 import { z } from "zod";
-import type { InstancesDocument, RouteStateCommandHandlers } from "@pe/agent-contracts";
+import {
+  addressSchema,
+  type InstancesDocument,
+  type RouteStateCommandHandlers,
+} from "@pe/agent-contracts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
 const relaySchema = z.looseObject({
   result: z.looseObject({
     state: z.string().optional(),
     revitYears: z.array(z.string()).optional(),
-    activeDocument: z.json().optional(),
+    activeDocument: z
+      .looseObject({
+        modelGuid: z.string().nullable().optional(),
+        path: z.string().nullable().optional(),
+      })
+      .nullable()
+      .optional(),
   }),
   diagnostics: z
     .array(z.object({ detail: z.string().nullable().optional(), code: z.string().optional() }))
@@ -111,7 +121,14 @@ export function createInstancesCommandHandlers(
               ? staged.session
               : doc.selectedSession;
         const current = await request(`/docs/current?id=${encodeURIComponent(session!.slice(8))}`);
-        receipt.target = { session, document: current.result.activeDocument ?? null };
+        const active = current.result.activeDocument;
+        const document = addressSchema.safeParse(active?.modelGuid ?? active?.path).data ?? null;
+        receipt.target = { session: session!.slice(8), document };
+        if (!document)
+          receipt.diagnostics.push({
+            code: "document.target-unavailable",
+            detail: "The session answered without an active document Address.",
+          });
       }
       doc.outcome = { action, at: new Date().toISOString(), receipt: z.json().parse(receipt) };
       // A returned SDK failure remains visible and does not discard the staged request.

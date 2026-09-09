@@ -1,7 +1,12 @@
-import { readingSchema, takeoffCarrierPreflightSchema } from "@pe/agent-contracts";
+import {
+  readingSchema,
+  takeoffCarrierPreflightSchema,
+  takeoffRegionAnalysisSchema,
+} from "@pe/agent-contracts";
 import type {
   LiveRegion,
   Resolution,
+  PartitionReviewData,
   TakeoffSnapshot,
   ViewFacts,
   World,
@@ -47,6 +52,7 @@ export function projectTakeoffSnapshot(
       key,
       regions.map((region) => ({
         ...region,
+        analysis: region.analysis ? takeoffRegionAnalysisSchema.parse(region.analysis) : null,
         outer: points(region.outer),
         holes: region.holes.map(points),
       })),
@@ -76,14 +82,19 @@ export function projectTakeoffSnapshot(
     const rooms = materialized.filter((item) => item.role !== "held-residue").map(room);
     const residues = materialized
       .filter((item) => item.role === "held-residue")
-      .map((item) => ({
-        id: item.guid,
-        reason: "held",
-        rawSqft: item.sqft,
-        label: centroid(item.outer),
-        outer: item.outer,
-        holes: item.holes,
-      }));
+      .map((item) => {
+        const value = JSON.parse(item.blob) as {
+          partition?: { disposition?: number | string };
+        };
+        return {
+          id: item.guid,
+          reason: disposition(value.partition?.disposition) === "void" ? "void" : "held",
+          rawSqft: item.sqft,
+          label: centroid(item.outer),
+          outer: item.outer,
+          holes: item.holes,
+        };
+      });
     const tags = meta.systemTag ? [meta.systemTag] : [];
     const stage =
       materialized.length === 0
@@ -102,18 +113,7 @@ export function projectTakeoffSnapshot(
         lane,
         color: region.color,
         loops: region.loops,
-        declaredSqft: region.loops.reduce(
-          (sum, loop) =>
-            sum +
-            Math.abs(
-              loop.reduce((area, point, index) => {
-                const next = loop[(index + 1) % loop.length]!;
-                return area + point[0] * next[1] - next[0] * point[1];
-              }, 0),
-            ) /
-              2,
-          0,
-        ),
+        declaredSqft: region.sqft,
         bounds: bounds(region.loops),
       },
       stage,
@@ -123,7 +123,14 @@ export function projectTakeoffSnapshot(
       residues,
       heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
       runs: [],
-      driftSqft: 0,
+      driftSqft: null, // Coverage drift has not been measured by this projection.
+      savedReview: savedReview(
+        response.reading.at,
+        region.guid ?? "",
+        name,
+        region.loops,
+        materialized,
+      ),
     };
   });
   return {
@@ -147,6 +154,72 @@ export function projectTakeoffSnapshot(
     },
   };
 }
+
+const DISPOSITIONS = ["accepted", "held", "void", "excluded"] as const;
+
+function savedReview(
+  documentKey: string,
+  scopeKey: string,
+  name: string,
+  zoneLoops: [number, number][][],
+  regions: LiveRegion[],
+): PartitionReviewData | null {
+  if (regions.length === 0) return null;
+  const values = regions.map((region) => ({
+    region,
+    value: JSON.parse(region.blob) as {
+      RunId?: string;
+      runId?: string;
+      SourceRoomId?: string;
+      sourceRoomId?: string;
+      partition?: { disposition?: number | string; reason?: string | null };
+    },
+  }));
+  if (
+    values.some(
+      ({ value }) => !(value.RunId ?? value.runId) || !(value.SourceRoomId ?? value.sourceRoomId),
+    )
+  )
+    throw Error("Native takeoff review provenance is missing runId or sourceRoomId");
+  const runIds = [...new Set(values.map(({ value }) => (value.RunId ?? value.runId)!))];
+
+  return {
+    source: {
+      runId: runIds.length === 1 ? runIds[0]! : null,
+      documentKey,
+      scopeKey,
+    },
+    zone: { key: scopeKey, name, loops: zoneLoops },
+    shapes: values.map(({ region, value }) => ({
+      original: {
+        runId: (value.RunId ?? value.runId)!,
+        sourceRoomId: (value.SourceRoomId ?? value.sourceRoomId)!,
+        disposition: disposition(value.partition?.disposition),
+        reason: value.partition?.reason ?? null,
+      },
+      id: region.guid,
+      kind: region.role === "held-residue" ? ("residue" as const) : ("room" as const),
+      disposition: null,
+      reason: [
+        `measurements ${region.analysis?.state ?? "unmeasured"}`,
+        region.analysis?.hold,
+        `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.RunId ?? value.runId}/${value.SourceRoomId ?? value.sourceRoomId})`,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      sqft: region.sqft,
+      label: centroid(region.outer),
+      loops: [region.outer, ...region.holes],
+    })),
+  };
+}
+
+const disposition = (
+  value: number | string | undefined,
+): PartitionReviewData["shapes"][number]["disposition"] =>
+  typeof value === "number"
+    ? (DISPOSITIONS[value] ?? null)
+    : (DISPOSITIONS.find((item) => item === value?.toLowerCase()) ?? null);
 
 const points = (values: number[][]): [number, number][] =>
   values.map(([x, y]) => {
@@ -186,26 +259,37 @@ function room(region: LiveRegion): WorldRoom {
   const sourceSqft = value.SourceSqft ?? value.sourceSqft;
   if (!runId || !sourceRoomId || typeof sourceSqft !== "number")
     throw Error("Room Region provenance is missing runId, sourceRoomId, or sourceSqft");
-  const decisions = value.resolutions ?? [];
+  const analysis = region.analysis;
+  const current = analysis?.state === "current";
+  const decisions = (value.resolutions ?? []).filter(
+    (decision) => current && decision.runId === analysis.runId,
+  );
+  const measurementFlags = !current
+    ? [analysis?.state === "stale" ? "geometry-changed" : "remeasure-required"]
+    : analysis.hold
+      ? [analysis.hold]
+      : [];
   return {
+    analysis,
     guid: region.guid,
     elementId: region.elementId,
     name: sourceRoomId,
     type: (region.roomType || "hall") as WorldRoom["type"],
     sqft: Math.round(region.sqft),
     ceilingFt:
-      value.partition?.floorZ != null && value.partition.ceilingZ != null
-        ? value.partition.ceilingZ - value.partition.floorZ
+      current && analysis.floorZ != null && analysis.ceilingZ != null
+        ? analysis.ceilingZ - analysis.floorZ
         : 0,
     label: centroid(region.outer),
     flags: [
+      ...measurementFlags,
       ...(value.flags ?? []).filter(
         (flag) => !decisions.some((item) => item.subject === sourceRoomId && item.flag === flag),
       ),
       ...(value.r10 ? ["r10-not-open"] : []),
     ],
     decisions,
-    provenance: { runId, sourceRoomId, sourceSqft },
+    provenance: { runId: analysis?.runId ?? runId, sourceRoomId, sourceSqft },
     r10: value.r10 ?? null,
     data: null,
     outer: region.outer,

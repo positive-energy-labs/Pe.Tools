@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using NetTopologySuite.Geometries;
 using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
@@ -67,6 +68,37 @@ public sealed class Main09Tests {
         }
 
         TestContext.Out.WriteLine($"SliceJson round trip: {knee.Elements.Count:N0} rows, {doubles:N0} doubles, bit-exact");
+    }
+
+    [Test]
+    public void Projected_triangle_keeps_its_dimension_under_translation() {
+        var clip = typeof(Pe.Revit.Space.Verbs).GetMethod("ClipToSlab",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var piece = typeof(Solve).GetMethod("Piece",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        foreach (var offset in new[] { 0f, 1024f }) {
+            double[]? Clip(Tri triangle) => (double[]?)clip.Invoke(null, [triangle, 2.0, 8.0]);
+            Geometry? Piece(double[] xy) => (Geometry?)piece.Invoke(null, [xy]);
+            var line = Clip(new Tri {
+                A = new(offset, offset, 0), B = new(offset + 10, offset + 5, 0),
+                C = new(offset + 4, offset + 2, 10)
+            });
+            var area = Clip(new Tri {
+                A = new(offset, offset, 2), B = new(offset + 10, offset, 4),
+                C = new(offset, offset + 10, 8)
+            });
+            var point = Clip(new Tri {
+                A = new(offset, offset, 0), B = new(offset, offset, 5), C = new(offset, offset, 10)
+            });
+
+            Assert.Multiple(() => {
+                Assert.That(line, Is.Not.Null, $"line projection was dropped at offset {offset}");
+                Assert.That(Piece(line!) is LineString, Is.True, $"line projection became area at offset {offset}");
+                Assert.That(Piece(line!)!.Buffer(0.125).Area, Is.GreaterThan(0));
+                Assert.That(Piece(area!)!.Area, Is.EqualTo(50).Within(1e-6), $"area projection changed at offset {offset}");
+                Assert.That(point, Is.Null, $"point projection survived at offset {offset}");
+            });
+        }
     }
 
     [Test]

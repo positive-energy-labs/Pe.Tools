@@ -103,19 +103,14 @@ public static class Solve {
         return UnionOf(parts);
     }
 
-    /// <summary>A slice piece is a flat x,y ring of 3 to 5 points. Degenerate rings are dropped.</summary>
+    /// <summary>A slice piece is a convex x,y projection. Point projections are dropped.</summary>
     private static Geometry? Piece(double[] xy) {
         var n = xy.Length / 2;
-        if (n < 3) return null;
-        var cs = new Coordinate[n + 1];
+        if (n < 2) return null;
+        var cs = new Coordinate[n];
         for (var i = 0; i < n; i++) cs[i] = new Coordinate(xy[i * 2], xy[(i * 2) + 1]);
-        cs[n] = cs[0].Copy();
-        try {
-            var p = Gf.CreatePolygon(Gf.CreateLinearRing(cs));
-            return p.IsValid ? p : p.Buffer(0);
-        } catch (ArgumentException) {
-            return null;
-        }
+        var hull = Gf.CreateMultiPointFromCoords(cs).ConvexHull();
+        return hull is NetTopologySuite.Geometries.Point ? null : hull;
     }
 
     /// <summary>Morphological closing. FOOTGUN: 0.75 ft on 0.125 ft ink seals at most a 0.83 ft gap,

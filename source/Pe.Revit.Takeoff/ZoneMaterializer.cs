@@ -16,6 +16,7 @@ public sealed record RegionProvenance(
 {
     // The solver's original answer, not a designer acceptance or current edited boundary.
     public Pe.Revit.Partition.Room? Partition { get; init; }
+    public RegionMeasurement? Measurement { get; init; }
 
     [JsonProperty("resolutions")]
     public List<TakeoffResolution> Resolutions { get; init; } = [];

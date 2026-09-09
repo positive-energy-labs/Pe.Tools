@@ -5068,6 +5068,17 @@ export namespace TakeoffsPartition {
       blob: string;
       outer: number[][];
       holes: number[][][];
+      analysis?: null | TakeoffRegionAnalysis;
+    }
+    /**
+     * Freshness against native region and zone geometry, not a claim about all model evidence.
+     */
+    export interface TakeoffRegionAnalysis {
+      state: string;
+      runId?: null | string;
+      floorZ?: null | number;
+      ceilingZ?: null | number;
+      hold?: null | string;
     }
     export interface TakeoffPartitionReview {
       source: TakeoffReviewSource;
@@ -5198,6 +5209,17 @@ export namespace TakeoffsSnapshot {
       blob: string;
       outer: number[][];
       holes: number[][][];
+      analysis?: null | TakeoffRegionAnalysis;
+    }
+    /**
+     * Freshness against native region and zone geometry, not a claim about all model evidence.
+     */
+    export interface TakeoffRegionAnalysis {
+      state: string;
+      runId?: null | string;
+      floorZ?: null | number;
+      ceilingZ?: null | number;
+      hold?: null | string;
     }
   }
 }

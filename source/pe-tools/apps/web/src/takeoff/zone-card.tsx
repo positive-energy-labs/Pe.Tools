@@ -120,7 +120,11 @@ export function ZoneCard({
               <VerbGroup title="zone verbs" radius="document · model">
                 <Verb
                   tone="commit"
-                  label="partition zone"
+                  label={
+                    zone.rooms.length + zone.residues.length > 0
+                      ? "remeasure / compare"
+                      : "partition zone"
+                  }
                   disabled={busy !== null || zone.zone.elementId === null}
                   reason={
                     zone.zone.elementId === null
@@ -128,7 +132,7 @@ export function ZoneCard({
                       : hostReason(
                           live,
                           busy,
-                          "Replays the capture masked to this zone and materializes Room Regions in the model (a rerun never overwrites)",
+                          "First run creates native regions. Reruns measure current native regions and show a temporary solver comparison; geometry and roles are preserved.",
                           "fixture · nothing to partition",
                         )
                   }

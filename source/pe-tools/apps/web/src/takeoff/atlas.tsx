@@ -93,7 +93,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     [world, stageFilter],
   );
 
-  const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
+  const selected = zoneKey ? (world.zones.find((z) => z.zone.guid === zoneKey) ?? null) : null;
   const setTableState = useCallback(
     (state: MasterTableState) => store.actions.setTableState(state),
     [store],
@@ -184,7 +184,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   ];
 
   const selectZone = (z: WorldZone | null) => {
-    setZoneKey(z ? z.zone.key : null);
+    setZoneKey(z ? z.zone.guid : null);
     setCursor(null);
     if (z) setLevel(z.zone.lane.label);
   };
@@ -209,7 +209,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
 
   const proposedUrl =
     `/takeoffs?level=${level}` +
-    (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
+    (selected ? `&zone=${encodeURIComponent(selected.zone.guid)}` : "") +
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
 
   return {

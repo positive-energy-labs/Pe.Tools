@@ -36,7 +36,11 @@ public sealed record TakeoffLiveRegion(
     string RoomType,
     string Blob,
     List<double[]> Outer,
-    List<List<double[]>> Holes);
+    List<List<double[]>> Holes,
+    TakeoffRegionAnalysis? Analysis = null);
+/// <summary>Freshness against native region and zone geometry, not a claim about all model evidence.</summary>
+public sealed record TakeoffRegionAnalysis(
+    string State, string? RunId, double? FloorZ, double? CeilingZ, string? Hold);
 public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,
