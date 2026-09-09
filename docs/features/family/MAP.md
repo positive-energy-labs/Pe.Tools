@@ -42,7 +42,7 @@ Line: `family/rewrite`. Rung 5 identity migration 81/81 (run 20) and rung 5b sta
 1. Dirty tree proven deterministic-green and committed as one checkpoint (w1 report in `.artifacts/runs/famclose-20260907/`).
 2. Rung 5 on a disposable Old_Template copy in a session this effort owns. Coverage units are distinct: 45 profiles, 81 editable mechanical families, 38 shared definitions. Known seam: the harness at `FamilyFoundryBulkMigrationHarnessTests.cs` ~964 presumes a pre-existing Fantech `PE_E___MCA` the immutable fixture lacks; reconcile against rung 4, do not delete preservation assertions.
 3. Rung 7 or an explicit waiver line in the ledger.
-4. Broad capture's related-document warning (SDK `9091b5c` + caller `8c2f79a`) adopted as one coherent package or excluded by name.
+4. Pin the line to SDK `0.1.0-beta.152` (proven a strict superset of `ff.1`, see LEDGER 2026-09-08): `global.json`, `.config/dotnet-tools.json`, and the eleven packages in `eng/sdk-feed` move together; then adopt or exclude caller `8c2f79a` for the `RevitFailureScope` predicate overload 152 ships.
 5. Ledger rebuilt to current truth; this MAP deleted; the branch sweep below executed.
 
 Geometry roundtrip, room points, lookup-table deletion, Pea authoring, supported-year and installed journeys stay in scope but are not merge gates (2026-09-06: bulk parameter migration is the primary gate).
