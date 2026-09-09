@@ -838,9 +838,16 @@ session shutdown returning to Instances with the document retained and dead targ
 The original project-a cloud launch itself was not repeated; a controlled local project exercised
 the dispatch and recovery chain. `rp-cutover` is stopped.
 
-Next: integrate the final accepted Takeoffs and Family heads, preserving their feature behavior,
-then cut over Chat/Pea and Family. Family's finished engine revision is the remaining external
-input; unrelated stashes are not a prerequisite. The phase/cell composition, shared semantic
+Family code at `f3b39f7` is now integrated in `7e850d9` on SDK beta.152. Its two dirty design
+documents remain in the owner's worktree and are not implemented engine contracts. Merge
+resolution retained Family's SDK selector helpers and Takeoffs' Address-shaped handoff receipt.
+The old palette benchmark constructor was updated; the stubbed Family command test now uses
+an explicit test host URL. PROVEN, compile: isolated Debug.R26 Pe.App build, zero errors;
+PROVEN, deterministic: 147 Family/route web checks, 33 host checks and 12 MCP checks pass.
+This merge adds no new browser or native Family behavior proof.
+
+Next: cut over Chat/Pea and Family; no feature-code input is now blocking that work. Reconcile
+the final owner merges before merging this branch into main. The phase/cell composition, shared semantic
 action manifest, file/saved modes, independent pane views, durable unknown-operation recovery,
 and owned temporary-document release remain unfinished. Do not label this Takeoffs checkpoint
 as completion of the route primitive.
