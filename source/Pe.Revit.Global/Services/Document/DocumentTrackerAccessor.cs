@@ -12,6 +12,14 @@ public static class DocumentTrackerAccessor {
 }
 
 public static class DocumentTrackerExtensions {
+    private sealed class OpenIdentity {
+        public string Value { get; } = Guid.NewGuid().ToString("N");
+    }
+
+    /// <summary>Stable across wrapper access and SaveAs, replaced after close/reopen.</summary>
+    public static string OpenId(this TrackedDocument document) =>
+        document.State(_ => new OpenIdentity()).Value;
+
     /// <summary>
     ///     Finds the tracked document for a live wrapper. Wrapper identity, not reference
     ///     equality — safe with a Document obtained from any event or request.

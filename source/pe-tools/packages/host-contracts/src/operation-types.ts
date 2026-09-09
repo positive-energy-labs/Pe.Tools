@@ -1,4 +1,5 @@
 import {
+  bridgeDocumentSnapshotSchema,
   hostModuleDescriptorSchema,
   hostRuntimeAssemblyDataSchema,
   type HostOperationDefinition,
@@ -387,6 +388,7 @@ export const bridgeSessionsListSchema = Schema.Struct({
       custody: Schema.optional(Schema.NullOr(Schema.String)),
       lane: Schema.optional(Schema.NullOr(Schema.String)),
       openDocumentCount: Schema.Number,
+      openDocuments: Schema.NullOr(Schema.Array(bridgeDocumentSnapshotSchema)),
       processId: Schema.optional(Schema.NullOr(Schema.Number)),
       processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
       revitVersion: Schema.optional(Schema.NullOr(Schema.String)),

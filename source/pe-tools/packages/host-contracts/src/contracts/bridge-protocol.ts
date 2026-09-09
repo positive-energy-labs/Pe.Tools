@@ -6,7 +6,7 @@ import type { SessionObservation } from "../vendor/generated/pe-revit-contract.t
 import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 37 as const;
-export const BRIDGE_CONTRACT_VERSION = 20 as const;
+export const BRIDGE_CONTRACT_VERSION = 21 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 // Caller attribution (queue-provenance §1): `<lane>:<name>[#<id>]`, e.g. `web:/schedule-grid`,
@@ -75,6 +75,14 @@ export const bridgeRegistrationAckSchema = Schema.Struct({
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
+export const bridgeDocumentSnapshotSchema = Schema.Struct({
+  openId: Schema.String,
+  title: Schema.String,
+  address: nullableString,
+  isFamilyDocument: Schema.Boolean,
+  isActive: Schema.Boolean,
+});
+
 export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentCloudModelGuid: nullableString,
   activeDocumentCloudModelUrn: nullableString,
@@ -88,7 +96,7 @@ export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentTitle: nullableString,
   availableModules: Schema.Array(hostModuleDescriptorSchema),
   hasActiveDocument: Schema.Boolean,
-  openDocumentCount: Schema.Number,
+  openDocuments: Schema.Array(bridgeDocumentSnapshotSchema),
   revitVersion: Schema.String,
   runtimeAssemblies: Schema.Array(hostRuntimeAssemblyDataSchema),
   runtimeFramework: Schema.String,

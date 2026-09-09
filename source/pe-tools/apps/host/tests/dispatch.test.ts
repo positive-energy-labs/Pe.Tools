@@ -15,6 +15,7 @@ import {
   getBridgeRegistrationRejection,
   reserveBridgePending,
   type RevitBridge,
+  type BridgeSessionView,
 } from "../src/bridge.ts";
 import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
 import {
@@ -465,47 +466,71 @@ test("bridge pending mailbox ignores mismatched response ids", async () => {
 });
 
 test("bridge session summary maps Revit state snapshot fields", async () => {
-  const summary = await Effect.runPromise(
-    getBridgeSessionSummary({
-      connected: true,
-      processId: 123,
-      sessionId: "bridge-a",
-      state: {
-        activeDocumentCloudModelGuid: "model-guid",
-        activeDocumentCloudModelUrn: "model-urn",
-        activeDocumentCloudProjectGuid: "project-guid",
-        activeDocumentIsFamilyDocument: true,
-        activeDocumentIsModelInCloud: true,
-        activeDocumentIsWorkshared: true,
-        activeDocumentKey: "doc-key",
-        activeDocumentObservedAtUnixMs: 42,
-        activeDocumentPath: "C:/model.rvt",
-        activeDocumentTitle: "Model",
-        availableModules: [
-          {
-            activeDocumentKind: "Any",
-            defaultRootKey: "default",
-            moduleKey: "module-a",
-            scope: "Session",
-          },
-        ],
-        hasActiveDocument: true,
-        openDocumentCount: 2,
-        revitVersion: "2026",
-        runtimeAssemblies: [
-          {
-            informationalVersion: "1.2.3",
-            location: "C:/Pe.dll",
-            moduleVersionId: "mvid",
-            name: "Pe.Test",
-            version: "1.2.3.0",
-          },
-        ],
-        runtimeFramework: ".NET 8",
-        sharedParametersFilename: "C:/shared.txt",
-      },
-    }),
-  );
+  const bridge = {
+    connected: true,
+    processId: 123,
+    sessionId: "bridge-a",
+    state: {
+      activeDocumentCloudModelGuid: "model-guid",
+      activeDocumentCloudModelUrn: "model-urn",
+      activeDocumentCloudProjectGuid: "project-guid",
+      activeDocumentIsFamilyDocument: true,
+      activeDocumentIsModelInCloud: true,
+      activeDocumentIsWorkshared: true,
+      activeDocumentKey: "doc-key",
+      activeDocumentObservedAtUnixMs: 42,
+      activeDocumentPath: "C:/model.rvt",
+      activeDocumentTitle: "Model",
+      availableModules: [
+        {
+          activeDocumentKind: "Any",
+          defaultRootKey: "default",
+          moduleKey: "module-a",
+          scope: "Session",
+        },
+      ],
+      hasActiveDocument: true,
+      openDocuments: [
+        {
+          openId: "project",
+          title: "Model",
+          address: "C:/model.rvt",
+          isFamilyDocument: false,
+          isActive: true,
+        },
+        {
+          openId: "family",
+          title: "Unsaved family",
+          address: null,
+          isFamilyDocument: true,
+          isActive: false,
+        },
+        {
+          openId: "cloud",
+          title: "Cloud",
+          address: "f2933e8d-9e16-4bf4-b9ca-484f461e4563",
+          isFamilyDocument: false,
+          isActive: false,
+        },
+      ],
+      revitVersion: "2026",
+      runtimeAssemblies: [
+        {
+          informationalVersion: "1.2.3",
+          location: "C:/Pe.dll",
+          moduleVersionId: "mvid",
+          name: "Pe.Test",
+          version: "1.2.3.0",
+        },
+      ],
+      runtimeFramework: ".NET 8",
+      sharedParametersFilename: "C:/shared.txt",
+    },
+  } satisfies BridgeSessionView;
+  const summary = await Effect.runPromise(getBridgeSessionSummary(bridge));
+  const inventory = await Effect.runPromise(listBridgeSessions(Effect.succeed([bridge])));
+  expect(inventory.sessions[0]?.openDocuments).toEqual(bridge.state.openDocuments);
+  expect(inventory.sessions[0]?.openDocumentCount).toBe(3);
 
   expect(summary.activeDocument?.key).toBe("doc-key");
   expect(summary.availableModules).toHaveLength(1);
@@ -557,7 +582,7 @@ test("bridge registration rejects mismatched contract versions", () => {
       activeDocumentTitle: null,
       availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",
@@ -585,7 +610,7 @@ test("bridge registration accepts current contract version without session id", 
       activeDocumentTitle: null,
       availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",

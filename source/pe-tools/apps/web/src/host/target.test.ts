@@ -15,6 +15,7 @@ it("projects process-start identity from the bridge sessions transport", () => {
         lane: "dev",
         custody: "observed",
         openDocumentCount: 0,
+        openDocuments: [],
       },
     ])[0],
   ).toMatchObject({ processId: 4128, processStartUtcUnixMs: 1_752_000_000_000 });

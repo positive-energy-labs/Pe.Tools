@@ -15,7 +15,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
     private readonly IDocumentTracker _documents;
     private readonly Func<BridgeStateSnapshot> _snapshot;
-    private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
+    private readonly Func<DocumentInvalidationEvent, BridgeStateSnapshot, Task> _publishAsync;
     private readonly object _sync = new();
     private bool _disposed;
     private bool _isInitialized;
@@ -25,7 +25,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     public BridgeDocumentNotifier(
         IDocumentTracker documents,
         Func<BridgeStateSnapshot> snapshot,
-        Func<DocumentInvalidationEvent, Task> publishAsync
+        Func<DocumentInvalidationEvent, BridgeStateSnapshot, Task> publishAsync
     ) {
         this._documents = documents;
         this._snapshot = snapshot;
@@ -66,19 +66,19 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     }
 
     public Task PublishInitialStateAsync() =>
-        this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Changed));
+        this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
     private void OnOpened(TrackedDocument tracked) {
         if (this._isReplaying)
             return;
-        _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Opened));
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Opened);
     }
 
     private void OnClosed(DocumentKey key) =>
-        _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Closed));
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Closed);
 
     private void OnActiveChanged(TrackedDocument? active) =>
-        _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Changed));
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
     private void OnChanged(TrackedDocument tracked, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {
         lock (this._sync) {
@@ -89,12 +89,12 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             this._lastDocumentChangedNotificationUtc = utcNow;
         }
 
-        _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Changed));
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
     }
 
-    private DocumentInvalidationEvent BuildCurrentPayload(DocumentInvalidationReason reason) {
+    private Task PublishCurrentAsync(DocumentInvalidationReason reason) {
         var snapshot = this._snapshot();
-        return new DocumentInvalidationEvent(
+        var payload = new DocumentInvalidationEvent(
             reason,
             snapshot.ActiveDocumentTitle,
             snapshot.ActiveDocumentKey,
@@ -106,15 +106,16 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             snapshot.ActiveDocumentCloudModelGuid,
             snapshot.ActiveDocumentCloudModelUrn,
             snapshot.HasActiveDocument,
-            snapshot.OpenDocumentCount,
+            snapshot.OpenDocuments.Count,
             snapshot.ActiveDocumentObservedAtUnixMs,
             RevitVersion: snapshot.RevitVersion
         );
+        return this.PublishAsync(payload, snapshot);
     }
 
-    private async Task PublishAsync(DocumentInvalidationEvent payload) {
+    private async Task PublishAsync(DocumentInvalidationEvent payload, BridgeStateSnapshot snapshot) {
         try {
-            await this._publishAsync(payload);
+            await this._publishAsync(payload, snapshot);
         } catch (Exception ex) {
             Log.Warning(ex, "Host bridge failed to publish document invalidation event.");
         }

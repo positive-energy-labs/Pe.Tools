@@ -14,6 +14,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-08: Begin integration before Family's engine review finishes. Takeoffs input is private snapshot `9f4d03a` from `d9fb18b` plus its 40 completed dirty/untracked feature files; its branch, index and files are untouched. Exclude the stray `0` file. Reconcile this snapshot against the later official merge. User interjections steer ongoing work unless they explicitly stop or replace it.
+- 2026-09-08: Bridge v21 publishes tracked open documents, including inactive/cloud/unsaved documents. Open IDs use the SDK tracker's per-document state bag. One fresh controlled R2026 test proves wrapper lookup, SaveAs continuity, and close/reopen invalidation. Capture document state on the event thread and publish it before invalidation to prevent consumers refetching the old inventory. Host deterministic tests pass 19/19 and wire tests 13/13. Operation dispatch remains active-document-only until its execution guard is replaced.
+
 - 2026-09-08: Build route targeting on `codex/route-primitive` from `8c7ddfc` while Takeoffs and Family finish their feature branches. Integrate their merged main once before consumer cutover. Main remains available for release preparation. The accepted model and operator decisions are in [ROUTE-PRIMITIVE.md](ROUTE-PRIMITIVE.md), sections 7–8.
 - 2026-09-08: The route foundation uses an exact call target and a session-keyed inventory. Address comparison belongs beside `Address` and treats GUID case and Windows path case/separators consistently. Purge review removed the unused read wrapper; use Effect's existing timeout and cancellation at the first real consumer. Contracts tests 28/28, existing web target/scope/store tests 15/15, contracts package checks pass. These are deterministic proofs, not a Takeoffs product fix.
 
