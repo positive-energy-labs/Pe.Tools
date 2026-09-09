@@ -52,10 +52,16 @@ export function useHostOp<K extends OpKey>(
   ...args: OpCallArgs<K, HostQueryOptions & HostOpQueryTuning>
 ) {
   const [request, options] = args;
-  const { enabled, bridgeSessionId, ...tuning } = options ?? {};
-  const scope = bridgeSessionId ? { bridgeSessionId } : undefined;
+  const { enabled, bridgeSessionId, openDocumentId, ...tuning } = options ?? {};
+  const scope = { bridgeSessionId, openDocumentId };
   return useQuery({
-    queryKey: [...HOST_QUERY_KEY, bridgeSessionId ?? "", key, stableKey(request)],
+    queryKey: [
+      ...HOST_QUERY_KEY,
+      bridgeSessionId ?? "",
+      key,
+      stableKey(request),
+      ...(openDocumentId ? [openDocumentId] : []),
+    ],
     // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open;
     // the public signatures on this hook and callHostRpc enforce it at call sites.
     queryFn: () => callHostRpc(key, ...([request, scope] as OpCallArgs<K, HostSessionScope>)),
@@ -72,8 +78,18 @@ export function useHostStatusQuery(options?: HostQueryOptions) {
 }
 
 export function useBridgeSessionsListQuery(options?: { enabled?: boolean }) {
-  return useHostOp("bridge.sessions.list", undefined, { ...options, staleTime: 5_000 });
+  return useQuery({ ...bridgeSessionsQuery, ...options });
 }
+
+export const bridgeSessionsQuery = {
+  queryKey: [...HOST_QUERY_KEY, "", "bridge.sessions.list", ""],
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    callHostRpc("bridge.sessions.list", undefined, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+    }),
+  staleTime: 5_000,
+  refetchOnWindowFocus: false,
+};
 
 export function useLoadedFamiliesMatrixQuery(
   request: LoadedFamiliesMatrixRequest | undefined,

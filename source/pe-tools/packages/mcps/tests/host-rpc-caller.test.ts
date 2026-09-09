@@ -1,6 +1,9 @@
 import { expect, test } from "vite-plus/test";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 import { ScriptingTools } from "../src/shared/scripting.ts";
 
@@ -58,12 +61,16 @@ test("script execution forwards its selector in one direct /call without lifecyc
     const client = new HostRpcCaller({
       hostBaseUrl: "http://127.0.0.1:5180",
       bridgeSessionId: "session:source-e2e",
+      openDocumentId: "project-open-1",
     });
     await new ScriptingTools(client, { workspaceKey: "acceptance" }).execute({
       scriptContent: 'WriteLine("ok");',
     });
 
     expect(calls).toHaveLength(1);
+    expect(new Headers(calls[0].init?.headers).get(HOST_RPC_DOCUMENT_HEADER)).toBe(
+      "project-open-1",
+    );
     expect(new URL(calls[0].url).pathname).toBe("/call");
     expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
       "session:source-e2e",

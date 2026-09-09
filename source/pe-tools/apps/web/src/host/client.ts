@@ -1,5 +1,6 @@
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
   HostCallError,
   type HostSessionScope,
@@ -9,6 +10,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 
 const HOST_CALL_URL = "/call";
+type HostCallOptions = HostSessionScope & { signal?: AbortSignal };
 
 /**
  * The typed client: POST { key, request } as JSON, keys constrained to the
@@ -17,7 +19,7 @@ const HOST_CALL_URL = "/call";
  */
 export function callHostRpc<K extends OpKey>(
   key: K,
-  ...args: OpCallArgs<K, HostSessionScope>
+  ...args: OpCallArgs<K, HostCallOptions>
 ): Promise<OpResponseOf<K>> {
   const [request, options] = args;
   return postCall(key, request, options) as Promise<OpResponseOf<K>>;
@@ -31,7 +33,7 @@ export function callHostRpc<K extends OpKey>(
 export function callHostDynamic(
   key: string,
   request?: unknown,
-  options?: HostSessionScope,
+  options?: HostCallOptions,
 ): Promise<unknown> {
   return postCall(key, request, options);
 }
@@ -39,10 +41,11 @@ export function callHostDynamic(
 async function postCall(
   key: string,
   request: unknown,
-  options?: HostSessionScope,
+  options?: HostCallOptions,
 ): Promise<unknown> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (options?.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
+  if (options?.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
   headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
@@ -50,6 +53,7 @@ async function postCall(
     method: "POST",
     headers,
     body: JSON.stringify({ key, request }),
+    signal: options?.signal,
   });
   if (!response.ok) {
     const problem = (await response.json().catch(() => undefined)) as

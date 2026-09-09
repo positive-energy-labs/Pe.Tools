@@ -27,6 +27,7 @@ import {
 } from "./rhvac-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
@@ -58,6 +59,7 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
     const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
     if (CALL_FORWARD_BASE) {
       const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
+      const documentHeader = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim();
       const forwarded = yield* Effect.tryPromise({
         try: async () => {
           const response = await fetch(`${CALL_FORWARD_BASE}/call`, {
@@ -65,11 +67,21 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
             headers: {
               "content-type": "application/json",
               ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
+              ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
               [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
             },
             body: JSON.stringify(body),
           });
-          return { status: response.status, json: (await response.json()) as unknown };
+          return {
+            status: response.status,
+            json: (await response.json()) as unknown,
+            headers: Object.fromEntries(
+              [RESOLVED_SESSION_HEADER, RESOLVED_DOCUMENT_HEADER].flatMap((key) => {
+                const value = response.headers.get(key);
+                return value ? [[key, value]] : [];
+              }),
+            ),
+          };
         },
         catch: (cause) =>
           new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
@@ -85,7 +97,10 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
           );
         }
       }
-      return Response.jsonUnsafe(forwarded.json ?? null, { status: forwarded.status });
+      return Response.jsonUnsafe(forwarded.json ?? null, {
+        status: forwarded.status,
+        headers: forwarded.headers,
+      });
     }
     if (!isRecord(body) || typeof body.key !== "string")
       return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
@@ -97,6 +112,7 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
     const key = body.key;
     const request = "request" in body ? body.request : undefined;
     const bridgeSessionId = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
+    const openDocumentId = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim() || undefined;
 
     const bridge = yield* RevitBridge;
     // Endpoint-level backstop for the data-loss path: an untargeted Revit op with several sessions
@@ -108,14 +124,23 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
     }
     op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
     const result = isTsOnlyOperationKey(key)
-      ? yield* dispatchTsOnlyOperation(key, request, bridgeSessionId, bridge)
-      : yield* bridge.invoke(key, request ?? {}, bridgeSessionId);
+      ? {
+          value: yield* dispatchTsOnlyOperation(
+            key,
+            request,
+            bridgeSessionId,
+            bridge,
+            openDocumentId,
+          ),
+          target: null,
+        }
+      : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
     captureHostOp(op, { ok: true });
     // Every /call response names the target it actually ran against, so a tool card can show
     // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
     // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
-    const headers = op.tsOnly ? {} : resolvedTargetHeaders(yield* bridge.snapshot(bridgeSessionId));
-    return Response.jsonUnsafe(result ?? null, { headers });
+    const headers = result.target ? resolvedTargetHeaders(result.target) : {};
+    return Response.jsonUnsafe(result.value ?? null, { headers });
   }).pipe(
     Effect.catch((error) => {
       if (op) captureHostOp(op, { ok: false, problem: toProblem(error) });
@@ -154,12 +179,16 @@ function captureHostOp(
 export const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
 export const RESOLVED_DOCUMENT_HEADER = "x-pe-resolved-document";
 
-function resolvedTargetHeaders(view: BridgeSessionView): Record<string, string> {
+function resolvedTargetHeaders({
+  session,
+  document,
+}: {
+  session: string;
+  document: string | null;
+}): Record<string, string> {
   const headers: Record<string, string> = {};
-  const session = view.sdkSessionId ?? view.sessionId;
-  const document = view.state?.activeDocumentCloudModelGuid ?? view.state?.activeDocumentPath;
-  if (view.connected && session) headers[RESOLVED_SESSION_HEADER] = session;
-  if (view.connected && document) headers[RESOLVED_DOCUMENT_HEADER] = encodeURIComponent(document);
+  headers[RESOLVED_SESSION_HEADER] = session;
+  if (document) headers[RESOLVED_DOCUMENT_HEADER] = encodeURIComponent(document);
   return headers;
 }
 
@@ -196,6 +225,7 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   bridgeSessionId: string | undefined,
   bridge: RevitBridge["Service"],
+  openDocumentId?: string,
 ) {
   switch (key) {
     case "host.status":
@@ -227,20 +257,26 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* getSettingsWorkspaces({
         bridge: bridgeView,
         invokeBridge: (operationKey, payload) =>
-          bridge.invoke(operationKey, payload, bridgeSessionId),
+          bridge
+            .invoke(operationKey, payload, bridgeSessionId, openDocumentId)
+            .pipe(Effect.map((result) => result.value)),
       });
     }
     case "settings.tree":
       return yield* discoverSettingsTree(yield* decodeRequest(key, request), {
         bridgeSessionId,
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge.invoke(operationKey, payload, scopedBridgeSessionId),
+          bridge
+            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
+            .pipe(Effect.map((result) => result.value)),
       });
     case "settings.document.open":
       return yield* openSettingsDocument(yield* decodeRequest(key, request), {
         bridgeSessionId,
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge.invoke(operationKey, payload, scopedBridgeSessionId),
+          bridge
+            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
+            .pipe(Effect.map((result) => result.value)),
       });
     case "settings.document.open-with-module": {
       const decoded = yield* decodeRequest(key, request);
@@ -252,13 +288,17 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* validateSettingsDocument(yield* decodeRequest(key, request), {
         bridgeSessionId,
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge.invoke(operationKey, payload, scopedBridgeSessionId),
+          bridge
+            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
+            .pipe(Effect.map((result) => result.value)),
       });
     case "settings.document.save":
       return yield* saveSettingsDocument(yield* decodeRequest(key, request), {
         bridgeSessionId,
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge.invoke(operationKey, payload, scopedBridgeSessionId),
+          bridge
+            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
+            .pipe(Effect.map((result) => result.value)),
       });
     case "rhvac.open":
       return yield* rhvacOpen(yield* decodeRequest(key, request));

@@ -249,7 +249,7 @@ internal sealed class BridgeAgent : IDisposable {
                 var run = await this._revitTaskQueue.RunForResult(
                     context => op.ExecuteAsync(
                         request.PayloadJson,
-                        ResolveDocument(op, context.Cancellation),
+                        ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
                         context.Cancellation),
                     new RevitRunOptions { Label = op.Key },
                     cancellationToken
@@ -302,7 +302,8 @@ internal sealed class BridgeAgent : IDisposable {
                         serializationMs,
                         requestBytes,
                         responseBytes
-                    )
+                    ),
+                    op.Definition.Needs == OpNeeds.Nothing ? null : request.OpenDocumentId
                 )
             );
 
@@ -441,12 +442,14 @@ internal sealed class BridgeAgent : IDisposable {
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
     };
 
-    private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
+    private static object? ResolveDocument(Op op, string? openDocumentId, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         if (op.Definition.Needs == OpNeeds.Nothing)
             return null;
 
-        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        var tracked = openDocumentId == null ? null : DocumentTrackerAccessor.Current?.FindOpenId(openDocumentId);
+        var document = tracked?.Resolve()
+            ?? throw BridgeOperationExceptions.Conflict("The selected document is no longer open. Select a document and retry.");
         OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
         return op.Definition.Needs switch {
             OpNeeds.Document => new RevitDocument(document!),

@@ -221,6 +221,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     live,
     busy,
     geoReady,
+    geometry: snapshot,
     actions,
     stageFilter,
     zoneKey,

@@ -108,7 +108,11 @@ const createStore = (
     // The harness session holds this document: the store resolves its Scope against the fleet
     // (ADR 0010), so a page scoped elsewhere reads no session at all.
     scope: deps.scope ?? {
-      scope: { kind: "document" as const, document: address("C:\\Models\\Harness.rvt") },
+      scope: {
+        kind: "document" as const,
+        document: address("C:\\Models\\Harness.rvt"),
+        pin: "dev-26",
+      },
     },
     slice,
     writer,
@@ -167,6 +171,15 @@ function harness() {
           activeDocumentTitle: documentTitle,
           activeDocumentId: documentId,
           openDocumentCount: 1,
+          openDocuments: [
+            {
+              openId: "harness-open",
+              title: documentTitle,
+              address: documentId,
+              isFamilyDocument: false,
+              isActive: true,
+            },
+          ],
         },
       ];
     },
@@ -663,61 +676,16 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("reconciles the URL world once after the destination document owns the store", async () => {
+  it("keeps the requested session in the page instead of writing it into shared work", async () => {
     const h = harness();
-    h.setDocumentTitle("Other.rvt");
     const patches: RouteStatePatch[][] = [];
-    const store = createStore(
-      {
-        host: h.host,
-        sessions: h.sessions,
-        scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
-        target: "dev-26",
-      },
-      (next) => patches.push(next),
+    const store = createStore({ host: h.host, sessions: h.sessions, target: "dev-26" }, (next) =>
+      patches.push(next),
     );
-
-    await store.actions.reconcileWorld();
-
-    const worldPatches = () =>
-      patches.flat().filter((patch) => patch.path[0] === "bindings" && patch.path[1] === "world");
-    expect(worldPatches()).toEqual([
-      {
-        path: ["bindings", "world"],
-        value: {
-          id: "dev-26",
-          label: "dev-26",
-        },
-      },
-    ]);
+    await store.actions.settle(store.atoms.snapshot);
     expect(
-      AsyncResult.getOrThrow(store.atoms.registry.get(store.slices.takeoffs)).doc?.bindings.world,
-    ).toEqual({
-      id: "dev-26",
-      label: "dev-26",
-    });
-
-    const matchedPatches: RouteStatePatch[][] = [];
-    const reconciled = AsyncResult.getOrThrow(store.atoms.registry.get(store.slices.takeoffs));
-    const matchedStore = createStore(
-      {
-        host: h.host,
-        sessions: h.sessions,
-        scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Other.rvt") } },
-        target: "dev-26",
-        slice: Atom.make(AsyncResult.success(reconciled)),
-      },
-      (next) => matchedPatches.push(next),
-    );
-
-    await matchedStore.actions.reconcileWorld();
-
-    expect(
-      matchedPatches
-        .flat()
-        .filter((patch) => patch.path[0] === "bindings" && patch.path[1] === "world"),
+      patches.flat().filter((patch) => patch.path[0] === "bindings" && patch.path[1] === "world"),
     ).toEqual([]);
-    matchedStore.dispose();
     store.dispose();
   });
 

@@ -1,5 +1,4 @@
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { Cause } from "effect";
 import type {
   DocCloseState,
   DocCurrentResult,
@@ -367,34 +366,20 @@ export const documentTrunk = {
     lane: Lane = "live",
     open: readonly Option[] = [],
   ): Feed {
-    if (AsyncResult.isFailure(active))
-      return {
-        options: null,
-        state: "error",
-        lane,
-        stale: false,
-        note: String(Cause.squash(active.cause)),
-      };
-    return feed(
+    const reading = feed(
       active,
-      (current) => {
-        const options: Option[] = current ? [{ id: current.documentId, label: current.title }] : [];
-        const seen = new Set(options.map((option) => option.id));
-        for (const option of open) {
-          if (!seen.has(option.id)) options.push(option);
-          seen.add(option.id);
-        }
-        if (recents && AsyncResult.isSuccess(recents))
-          for (const item of recents.value.value) {
-            const id = item.modelGuid ?? item.path;
-            if (seen.has(id)) continue;
-            options.push({ id, label: item.title, sub: item.isCloud ? "cloud" : item.path });
-            seen.add(id);
-          }
-        return options;
-      },
+      (current) => (current ? [{ id: current.documentId, label: current.title }] : []),
       lane,
     );
+    const options = new Map((reading.options ?? []).map((option) => [option.id, option]));
+    for (const option of open) options.set(option.id, option);
+    if (recents && AsyncResult.isSuccess(recents))
+      for (const item of recents.value.value) {
+        const id = item.modelGuid ?? item.path;
+        if (!options.has(id))
+          options.set(id, { id, label: item.title, sub: item.isCloud ? "cloud" : item.path });
+      }
+    return options.size ? { ...reading, options: [...options.values()], state: "ready" } : reading;
   },
   async pick(
     session: SessionFacts,

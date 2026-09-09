@@ -21,6 +21,30 @@ import {
 } from "./route-store";
 
 describe("route store kit", () => {
+  it("bounds a stalled read and aborts its late publication", async () => {
+    let signal: AbortSignal | undefined;
+    let release!: () => void;
+    let published = false;
+    const read = Effect.runPromise(
+      hostRead(
+        ["geometry"],
+        async (abort) => {
+          signal = abort;
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          abort.throwIfAborted();
+          published = true;
+        },
+        10,
+      ),
+    );
+    await expect(read).rejects.toThrow("Read timed out");
+    expect(signal?.aborted).toBe(true);
+    release();
+    await Promise.resolve();
+    expect(published).toBe(false);
+  });
   it("projects every feed state and keeps lane, stale, and seam honest", async () => {
     const read = await Effect.runPromise(hostRead(["doc"], async () => ["a"]));
     const seam = { needs: "a document" };

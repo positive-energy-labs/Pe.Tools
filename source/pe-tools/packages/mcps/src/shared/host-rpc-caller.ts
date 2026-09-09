@@ -10,6 +10,7 @@ import {
 } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HostCallError,
   type OpKey,
   type OpRequestOf,
@@ -250,6 +251,7 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
+      if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
       const response = await fetch(`${base}/call`, {
         method: "POST",
         headers,

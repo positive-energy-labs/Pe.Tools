@@ -1,29 +1,26 @@
 import { PartitionReview } from "#/takeoff/partition-review";
 import { token } from "#/lib/token";
-import { Workspace } from "#/components/anatomy";
 import { useMemo, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
 import { VerbLane } from "#/components/lang/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { fuseFleet, useFleet } from "#/host/fleet";
-import { scopeSession } from "#/host/target";
+import { documentSession, scopeSession } from "#/host/target";
 import { Atlas } from "#/takeoff/atlas";
 import { DEFAULT_ARTIFACT_DIR } from "#/takeoff/model";
 import { TAKEOFF_SLOTS, type TakeoffSlot, type TakeoffStore } from "#/takeoff/store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
-import { documentTrunk, openLocalDocuments, worldTrunk } from "#/targeting/world";
+import { documentTrunk, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { DIRS_KEY, PANES, readDirs, takeoffsWorkingCopyPath } from "#/takeoff/route";
 import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
 import { addressSchema } from "@pe/agent-contracts";
-import { useHostOp } from "#/host/queries";
 
 export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
@@ -54,13 +51,15 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   };
   const targetingFleet = live ? fleet : fixtureFleet;
   const sessions = targetingFleet.sessions;
-  const session = scopeSession(store.scope.scope, sessions);
-  const documentSession = useHostOp("revit.context.document-session", undefined, {
-    bridgeSessionId: session?.sessionId,
-    enabled: live && session !== null,
-  });
-  const openDocuments = documentSession.data ? openLocalDocuments(documentSession.data) : [];
-  const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
+  const session = (live ? documentSession : scopeSession)(store.scope.scope, sessions);
+  const openDocuments = (session?.openDocuments ?? []).map((document) => ({
+    id: document.address ?? `open:${document.openId}`,
+    label: document.title,
+    sub: document.address ?? "unsaved — save before binding Takeoffs",
+  }));
+  const scope: HostSessionScope | null = session
+    ? { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId }
+    : null;
   const activeDocument =
     AsyncResult.isSuccess(activeDocumentResult) && activeDocumentResult.value.bound
       ? activeDocumentResult.value.value
@@ -119,11 +118,11 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   );
   const moveToDocument = (documentId: string) => {
     const at = addressSchema.safeParse(documentId);
-    if (at.success)
-      void navigate({
-        search: (previous) => ({ ...previous, doc: at.data }),
-        replace: true,
-      });
+    if (!at.success) throw Error("Save this document before binding Takeoffs.");
+    void navigate({
+      search: (previous) => ({ ...previous, doc: at.data }),
+      replace: true,
+    });
   };
   const switchDocument = async (documentId: string) => {
     if (openDocuments.some((document) => document.id === documentId)) {
@@ -364,33 +363,5 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         }
       />
     ) : null;
-  if (live && !session)
-    return (
-      <Workspace
-        headRail={headRail}
-        readoutBand={readoutBand}
-        table={
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <EmptyState
-              story="scope"
-              exit={
-                sessions.length === 0
-                  ? "start Revit with the Pe add-in loaded and a world appears in the sentence — or take the fixture lane"
-                  : "no session holds this document — pick a world in the sentence above"
-              }
-            >
-              no world bound — the sentence's first slot is the live connected-host catalog
-            </EmptyState>
-            <Verb
-              label="open the project-a fixture instead"
-              onClick={() =>
-                void navigate({ search: (previous) => ({ ...previous, source: "fixture" }) })
-              }
-              reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
-            />
-          </div>
-        }
-      />
-    );
   return <Atlas store={store} headRail={headRail} readoutBand={readoutBand} />;
 }

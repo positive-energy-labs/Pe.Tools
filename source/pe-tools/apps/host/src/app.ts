@@ -77,8 +77,8 @@ const opsCatalogRoute = (spa: SpaFallback) =>
       const result = yield* Effect.result(bridge.invoke("host.ops.catalog", {}, readSessionId));
       const bridgeOps =
         result._tag === "Success" &&
-        Array.isArray((result.success as { operations?: unknown }).operations)
-          ? (result.success as { operations: unknown[] }).operations
+        Array.isArray((result.success.value as { operations?: unknown }).operations)
+          ? (result.success.value as { operations: unknown[] }).operations
           : [];
       const body: {
         operations: unknown[];
@@ -117,7 +117,7 @@ const settingsSchemaRoute = HttpRouter.add(
         { error: String(result.failure.message ?? result.failure) },
         { status: 503 },
       );
-    const schemaJson = (result.success as { schemaJson?: string } | null)?.schemaJson;
+    const schemaJson = (result.success.value as { schemaJson?: string } | null)?.schemaJson;
     if (!schemaJson)
       return Response.jsonUnsafe(
         { error: `No schema for ${moduleKey}/${rootKey}` },

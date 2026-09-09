@@ -58,7 +58,10 @@ test("dispatch threads bridgeSessionId through local snapshots and bridge invoke
   const bridge = {
     invoke: (key: string, _payload: unknown, bridgeSessionId?: string) => {
       seen.push(`invoke:${key}:${bridgeSessionId ?? ""}`);
-      return Effect.succeed({ schemaJson: "{}" });
+      return Effect.succeed({
+        value: { schemaJson: "{}" },
+        target: { session: "bridge-b", document: null },
+      });
     },
     snapshot: (bridgeSessionId?: string) => {
       seen.push(`snapshot:${bridgeSessionId ?? ""}`);

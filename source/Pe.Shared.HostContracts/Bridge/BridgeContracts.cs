@@ -6,7 +6,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    public const int ContractVersion = 21;
+    public const int ContractVersion = 22;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -81,7 +81,8 @@ public sealed record BridgeStateSync(
 public sealed record BridgeRequest(
     string RequestId,
     string OperationKey,
-    string PayloadJson
+    string PayloadJson,
+    string? OpenDocumentId = null
 );
 
 public sealed record BridgeResponse(
@@ -91,7 +92,8 @@ public sealed record BridgeResponse(
     string? ErrorMessage,
     int? StatusCode,
     List<ValidationIssue>? Issues,
-    PerformanceMetrics Metrics
+    PerformanceMetrics Metrics,
+    string? OpenDocumentId = null
 );
 
 public sealed record BridgeEvent(

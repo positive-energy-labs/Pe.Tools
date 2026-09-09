@@ -16,14 +16,17 @@ public class OpenDocumentIdentityTests {
         try {
             var tracked = tracker.Open.Single(item => item.Matches(document));
             var id = tracked.OpenId();
+            Assert.That(tracker.FindOpenId(id), Is.SameAs(tracked));
             Assert.That(tracker.Find(document)!.OpenId(), Is.EqualTo(id));
             document.SaveAs(path);
             Assert.That(tracker.Find(document)!.OpenId(), Is.EqualTo(id));
             document.Close(false);
             document = null;
             Assert.That(() => tracked.OpenId(), Throws.TypeOf<ObjectDisposedException>());
+            Assert.That(tracker.FindOpenId(id), Is.Null);
             document = uiapp.Application.OpenDocumentFile(path);
             Assert.That(tracker.Find(document)!.OpenId(), Is.Not.EqualTo(id));
+            Assert.That(tracker.FindOpenId(id), Is.Null);
         } finally {
             document?.Close(false);
             if (File.Exists(path)) File.Delete(path);

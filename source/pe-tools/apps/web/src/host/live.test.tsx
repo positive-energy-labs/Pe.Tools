@@ -16,6 +16,10 @@ import { RootComponent } from "#/routes/__root";
 import { usePeInfo } from "./info";
 import { useHostLiveInvalidation } from "./live";
 
+vi.mock("#/instances/cluster", () => ({
+  InstancesCluster: () => <p>instances picker</p>,
+}));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -135,7 +139,7 @@ test("opens host events only after PeInfo confirms Revit", async () => {
   expect(sources[0]?.close).toHaveBeenCalledOnce();
 });
 
-test("live Takeoffs does not open Revit wires before literal capability true", async () => {
+test("live Takeoffs without a document opens Instances instead of its workspace", async () => {
   const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
     Response.json({
       controllerId: "pea",
@@ -153,21 +157,22 @@ test("live Takeoffs does not open Revit wires before literal capability true", a
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("EventSource", eventSource);
 
+  const root = createRootRoute({ component: () => <LiveTakeoffsRoute /> });
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
   render(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(LiveTakeoffsRoute),
-    ),
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
   );
 
-  await waitFor(() => expect(document.body.textContent).toContain("Revit unavailable"));
-  expect(fetchMock).toHaveBeenCalledOnce();
-  const requestedUrls = fetchMock.mock.calls.map(([url]) =>
-    typeof url === "string" ? url : url instanceof URL ? url.href : url.url,
-  );
-  expect(requestedUrls[0]).toContain("/host/status");
-  expect(requestedUrls.some((url) => new URL(url).pathname === "/sessions")).toBe(false);
+  expect(await screen.findByText("instances picker")).toBeTruthy();
+  expect(document.body.textContent).toContain("Pick a session and document");
+  expect(document.body.textContent).not.toContain("loading room geometry");
   expect(eventSource).not.toHaveBeenCalled();
 });
 

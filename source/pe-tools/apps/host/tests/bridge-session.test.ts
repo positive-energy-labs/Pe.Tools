@@ -1,6 +1,6 @@
+import { computeBridgeSessionId } from "@pe/host-contracts/contracts";
 import { expect, test } from "vite-plus/test";
 import {
-  computeBridgeSessionId,
   inferCustody,
   normalizeSessionLane,
   resolveSessionTarget,
@@ -39,20 +39,20 @@ const controlled = candidate({
   sdkSessionId: "scratch-a",
 });
 
-test("session id is a stable hash of pid + processStartUtc", () => {
-  const first = computeBridgeSessionId({
+test("session id is a stable hash of pid + processStartUtc", async () => {
+  const first = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
-  const again = computeBridgeSessionId({
+  const again = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
-  const otherStart = computeBridgeSessionId({
+  const otherStart = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_001,
   });
-  const otherPid = computeBridgeSessionId({
+  const otherPid = await computeBridgeSessionId({
     processId: 4243,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
@@ -63,10 +63,10 @@ test("session id is a stable hash of pid + processStartUtc", () => {
   expect(otherPid).not.toBe(first);
 });
 
-test("session id is absent without process identity (uuid fallback stays)", () => {
-  expect(computeBridgeSessionId({ processId: 4242 })).toBeNull();
-  expect(computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: null })).toBeNull();
-  expect(computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: 0 })).toBeNull();
+test("session id is absent without process identity (uuid fallback stays)", async () => {
+  expect(await computeBridgeSessionId({ processId: 4242 })).toBeNull();
+  expect(await computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: null })).toBeNull();
+  expect(await computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: 0 })).toBeNull();
 });
 
 test("lane is the SDK union or nothing; a retired value is refused, not carried", () => {

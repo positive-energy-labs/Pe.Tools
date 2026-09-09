@@ -199,11 +199,22 @@ export interface TimedRead<A> {
   readonly bound: boolean;
 }
 
-export const hostRead = <A>(basis: readonly string[], read: () => Promise<A>) =>
+export const hostRead = <A>(
+  basis: readonly string[],
+  read: (signal: AbortSignal) => Promise<A>,
+  timeoutMs = 30_000,
+) =>
   Effect.tryPromise({
     try: read,
     catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
-  }).pipe(Effect.map((value): TimedRead<A> => ({ value, at: Date.now(), basis, bound: true })));
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: timeoutMs,
+      orElse: () =>
+        Effect.fail(Error(`Read timed out after ${timeoutMs / 1000}s: ${basis.join(", ")}`)),
+    }),
+    Effect.map((value): TimedRead<A> => ({ value, at: Date.now(), basis, bound: true })),
+  );
 
 export const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A> => ({
   value,
@@ -340,21 +351,24 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
     Stream.callback<WireMessage, Error>((queue) =>
       Effect.acquireRelease(
         Effect.tryPromise({
-          try: async () => {
-            const hydrated = await fetch(routeUrl(spec.route, "read", scope));
+          try: async (signal) => {
+            const hydrated = await fetch(routeUrl(spec.route, "read", scope), {
+              signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+            });
             if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
             const payload = (await hydrated.json()) as {
               doc?: unknown;
               revision?: unknown;
               outcomeUnknown?: unknown;
             };
-            if ("doc" in payload && Number.isInteger(payload.revision))
-              Queue.offerUnsafe(queue, {
-                kind: "doc",
-                doc: payload.doc ?? null,
-                revision: payload.revision as number,
-                outcomeUnknown: Boolean(payload.outcomeUnknown),
-              });
+            if (!("doc" in payload) || !Number.isInteger(payload.revision))
+              throw Error("route workspace response has no document or revision");
+            Queue.offerUnsafe(queue, {
+              kind: "doc",
+              doc: payload.doc ?? null,
+              revision: payload.revision as number,
+              outcomeUnknown: Boolean(payload.outcomeUnknown),
+            });
             // ONE long-lived connection per route document: its events stream. Turn activity
             // comes from the thread stream the workbench already owns (see useRouteState); a
             // second controller subscription here once pushed a chat page past the browser's

@@ -1,14 +1,14 @@
 import { address } from "@pe/agent-contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { EmptyState } from "#/components/lang/empty";
 import { appAtomRegistry } from "#/state/registry";
 import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
 import { createFixtureTakeoffStore } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { pageScope } from "#/state/route-store";
-import { usePeInfo } from "#/host/info";
+import { routeTarget } from "#/host/route-target";
 import { useRouteScope } from "#/workbench/route-scope";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 import { useFleet } from "#/host/fleet";
@@ -55,49 +55,40 @@ export function TakeoffsRoute({ source, target = "" }: { source: TakeoffSource; 
 export function LiveTakeoffsRoute({ target = "" }: { target?: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  return mounted ? <MountedLiveTakeoffsRoute target={target} /> : null;
-}
-
-function MountedLiveTakeoffsRoute({ target }: { target: string }) {
-  const info = usePeInfo();
-  // The capability gate stays OUTSIDE the Scope read: no router wire opens before Revit is real.
-  if (info.data?.capabilities.revit !== true) return <TakeoffsCapabilityState info={info} />;
-  return <ScopedLiveTakeoffsRoute target={target} />;
+  return mounted ? <ScopedLiveTakeoffsRoute target={target} /> : null;
 }
 
 function ScopedLiveTakeoffsRoute({ target }: { target: string }) {
   const scope = useRouteScope();
-  if (!scope) return <TakeoffsClusterFallback target={target} />;
+  const fleet = useFleet({ all: true });
+  const resolved = routeTarget(scope?.scope, fleet);
+  const router = useRouter();
+  const href = useLocation({ select: (location) => location.href });
+  const canonicalTarget =
+    resolved.kind === "gone" ? "" : resolved.kind === "ready" ? resolved.session.sessionId : target;
+  useEffect(() => {
+    if (canonicalTarget === target) return;
+    const url = new URL(href, "http://takeoffs.local");
+    if (canonicalTarget) url.searchParams.set("target", canonicalTarget);
+    else url.searchParams.delete("target");
+    void router.navigate({ href: url.pathname + url.search, replace: true });
+  }, [canonicalTarget, target, href, router]);
+  if (!scope || resolved.kind !== "ready")
+    return (
+      <TakeoffsClusterFallback
+        target={canonicalTarget}
+        fleet={fleet}
+        requestedDocument={scope?.scope.document}
+        reason={resolved.kind === "ready" ? "Pick a document." : resolved.reason}
+      />
+    );
   return (
     <TakeoffsStoreOwner
-      key={liveTakeoffsStoreKey(target, scope.scope.document)}
+      key={liveTakeoffsStoreKey(canonicalTarget, scope.scope.document)}
       source="live"
       documentAddress={scope.scope.document}
-      target={target}
+      target={canonicalTarget}
     />
-  );
-}
-
-function TakeoffsCapabilityState({ info }: { info?: ReturnType<typeof usePeInfo> }) {
-  return (
-    <div className="flex h-screen items-center justify-center">
-      <EmptyState
-        story="scope"
-        exit={
-          info?.error
-            ? "restore the host connection, or take the fixture lane with ?source=fixture"
-            : info?.data
-              ? "start Revit with the Pe add-in loaded, or take the fixture lane with ?source=fixture"
-              : "checking host capabilities"
-        }
-      >
-        {info?.error
-          ? "host capabilities unavailable"
-          : info?.data
-            ? "Revit unavailable"
-            : "checking host capabilities"}
-      </EmptyState>
-    </div>
   );
 }
 
@@ -111,8 +102,17 @@ export const liveTakeoffsStoreKey = (sessionId: string, documentAddress: string)
  * cloud model; explicit safe-copy/--detach verbs are owed in the takeoffs ledger). Once a
  * document is named, `RouteScope` binds it and the takeoff store owns working-copy concerns.
  */
-function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
-  const fleet = useFleet({ all: true });
+function TakeoffsClusterFallback({
+  target,
+  fleet,
+  requestedDocument,
+  reason,
+}: {
+  target: string;
+  fleet: ReturnType<typeof useFleet>;
+  requestedDocument?: string;
+  reason: string;
+}) {
   const router = useRouter();
   const href = useLocation({ select: (location) => location.href });
   const setTarget = (next: string) => {
@@ -124,12 +124,12 @@ function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
   return (
     <main className="min-h-screen px-6 py-4">
       <RouteHead name="Takeoffs" />
-      <p className="t-small face-mono mt-1 text-ink-2">
-        no document bound — pick a session and stage a document below
-      </p>
+      <p className="t-small face-mono mt-1 text-ink-2">{reason}</p>
+      {requestedDocument && <p className="face-mono mt-1">Recover document: {requestedDocument}</p>}
       <div className="mx-auto mt-5 max-w-6xl">
         <InstancesCluster
           fleet={fleet}
+          requestedDocument={requestedDocument}
           target={target}
           setTarget={setTarget}
           onDocument={(scope) => {
@@ -154,13 +154,14 @@ export function TakeoffsStoreOwner({
   documentAddress: import("@pe/agent-contracts").Address;
   target?: string;
 }) {
+  const queryClient = useQueryClient();
   const store = useRouteStore(() => {
     const created =
       source === "fixture"
         ? createFixtureTakeoffStore(appAtomRegistry, pageScope(documentAddress, target))
         : createTakeoffStore({
             host: createLiveTakeoffHost(),
-            sessions: createHostSessionSource(),
+            sessions: createHostSessionSource(queryClient),
             source,
             registry: appAtomRegistry,
             scope: pageScope(documentAddress, target),
@@ -169,8 +170,5 @@ export function TakeoffsStoreOwner({
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
   });
-  useEffect(() => {
-    if (source === "live") void store.actions.reconcileWorld();
-  }, [source, store]);
   return <TakeoffsPage store={store} />;
 }

@@ -1,13 +1,15 @@
-import { partitionReviewSchema } from "@pe/agent-contracts";
+import { partitionReviewSchema, takeoffRegionAnalysisSchema } from "@pe/agent-contracts";
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
+import type { QueryClient } from "@tanstack/react-query";
+import { bridgeSessionsQuery } from "#/host/queries";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
   takeoffProjectIndexRequest,
 } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
-import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
+import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { WorldRoom, WorldZone } from "#/takeoff/world";
 
 const WALL_ASSEMBLY =
@@ -130,24 +132,18 @@ async function syncRhvacRooms(
   };
 }
 
-export const createHostSessionSource = (): SessionSource => ({
+export const createHostSessionSource = (client: QueryClient): SessionSource => ({
   async list() {
-    const response = await callHostRpc("bridge.sessions.list", undefined);
-    const yearBySession = new Map(
-      response.sessions.map((session) => [session.sessionId, session.revitVersion ?? undefined]),
-    );
-    return fromBridgeSessions(response.sessions).map((session) => ({
-      ...session,
-      year: yearBySession.get(session.sessionId),
-    }));
+    const response = await client.ensureQueryData(bridgeSessionsQuery);
+    return fromBridgeSessions(response.sessions);
   },
   async activeDocument(session) {
-    const response = await callHostRpc("revit.context.document-session", undefined, {
-      bridgeSessionId: session.sessionId,
-    });
-    const document = response.activeDocument;
-    if (!document) throw new Error(`session ${session.sessionId} has no active document`);
-    const documentId = document.cloudModelGuid ?? document.path;
+    const document = session.openDocuments?.find(
+      (document) => document.openId === session.openDocumentId,
+    );
+    if (!document)
+      throw new Error(`session ${session.sessionId} no longer holds the selected document`);
+    const documentId = document.address;
     if (!documentId)
       throw new Error(
         `session ${session.sessionId} active document has no cloud model GUID or absolute path`,
@@ -155,31 +151,25 @@ export const createHostSessionSource = (): SessionSource => ({
     return { session, documentId, title: document.title };
   },
   subscribe(listener) {
-    const source = new EventSource("/events");
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as {
-          readonly sessionId?: string;
-          readonly kind?: "connected" | "disconnected" | "state-sync" | "event";
-        };
-        if (!event.sessionId) return;
-        const kind: SessionEvent["kind"] =
-          event.kind === "connected" || event.kind === "disconnected"
-            ? "sessionsChanged"
-            : "docChanged";
-        listener({ kind, sessionId: event.sessionId });
-      } catch {
-        // The next well-formed host event remains usable; malformed SSE cannot name a safe key.
-      }
-    };
-    return () => source.close();
+    return client.getQueryCache().subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        event.action.type === "success" &&
+        event.query.queryKey[2] === "bridge.sessions.list"
+      )
+        listener({ kind: "sessionsChanged", sessionId: "" });
+    });
   },
 });
 
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
-  async readSnapshot(session, document, views, write) {
-    const scope = { bridgeSessionId: session.sessionId };
+  async readSnapshot(session, document, views, write, signal) {
+    const scope = {
+      bridgeSessionId: session.sessionId,
+      openDocumentId: session.openDocumentId,
+      signal,
+    };
     const response = await callHostRpc("takeoffs.snapshot", undefined, scope);
     const snapshot = projectTakeoffSnapshot(response, document.title, views);
     await write(snapshot);
@@ -191,6 +181,7 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
       takeoffProjectIndexRequest,
       {
         bridgeSessionId: session.sessionId,
+        openDocumentId: session.openDocumentId,
       },
     );
     return projectTakeoffViews(projectIndex);
@@ -204,7 +195,7 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     const response = await callHostRpc(
       "takeoffs.candidates",
       { view },
-      { bridgeSessionId: session.sessionId },
+      { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId },
     );
     return response.regions.map((region) => ({
       ...region,
@@ -217,18 +208,23 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     const adopted = await callHostRpc(
       "takeoffs.adopt",
       { view: input.view, items: [...input.items] },
-      { bridgeSessionId: session.sessionId },
+      { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId },
     );
     return { text: `adopted ${adopted.adopted.length} zoning regions` };
   },
   initializeCarrier: (session, stage) =>
-    callHostRpc("takeoffs.initialize-carrier", { stage }, { bridgeSessionId: session.sessionId }),
+    callHostRpc(
+      "takeoffs.initialize-carrier",
+      { stage },
+      { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId },
+    ),
   async partition(session, input) {
     const response = await callHostRpc(
       "takeoffs.partition",
       { ...input },
       {
         bridgeSessionId: session.sessionId,
+        openDocumentId: session.openDocumentId,
       },
     );
     return {
@@ -249,6 +245,10 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
       })),
       regions: response.regions.map((region) => ({
         ...region,
+        analysis:
+          region.analysis == null
+            ? region.analysis
+            : takeoffRegionAnalysisSchema.parse(region.analysis),
         outer: toPoints(region.outer),
         holes: region.holes.map(toPoints),
       })),
@@ -258,7 +258,7 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     const result = await callHostRpc(
       "takeoffs.decisions",
       { elementId, resolutions: [...resolutions] },
-      { bridgeSessionId: session.sessionId },
+      { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId },
     );
     return { blob: result.blob };
   },
@@ -266,14 +266,16 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     await callHostRpc(
       "takeoffs.room-type",
       { elementId, roomType },
-      { bridgeSessionId: session.sessionId },
+      { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId },
     );
   },
   async launchRhvac(session, path) {
     await callHostRpc(
       "rhvac.launch",
       { path },
-      session ? { bridgeSessionId: session.sessionId } : undefined,
+      session
+        ? { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId }
+        : undefined,
     );
   },
   syncRhvac: (session, path, inserts) => syncRhvacRooms(session.sessionId, path, inserts),

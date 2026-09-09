@@ -4,6 +4,8 @@ import { AtlasNavigation } from "#/takeoff/atlas-navigation";
 import { AtlasTable } from "#/takeoff/atlas-table";
 import { AtlasVisual } from "#/takeoff/atlas-visual";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { Cause } from "effect";
 
 const PLAN_MIN_PX = 140;
 const PLAN_MAX_PX = 720;
@@ -11,18 +13,30 @@ const PLAN_DEFAULT_PX = 320;
 const PLAN_CHROME_PX = 34;
 
 export function AtlasWorkspace() {
-  const { geoReady, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
+  const { geometry, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
       className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t"
       headRail={headRail}
       readoutBand={
         readoutBand ??
-        (!geoReady ? (
+        (AsyncResult.isFailure(geometry) ? (
+          <OutcomeLine
+            kind="error"
+            label="room geometry unavailable"
+            says={String(Cause.squash(geometry.cause))}
+          />
+        ) : AsyncResult.isInitial(geometry) || geometry.waiting ? (
           <OutcomeLine
             kind="busy"
             label="loading room geometry"
             says="rooms draw as position dots until their boundaries land"
+          />
+        ) : !geometry.value.bound ? (
+          <OutcomeLine
+            kind="advisory"
+            label="no room geometry bound"
+            says="select a document and refresh its geometry"
           />
         ) : null)
       }

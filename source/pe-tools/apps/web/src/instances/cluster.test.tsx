@@ -18,7 +18,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-test("hands an explicitly staged open document to an embedding route without reopening it", () => {
+test("hands an explicitly staged inactive document to an embedding route without reopening it", () => {
   const activeDocumentId = "C:\\Models\\projectA.rvt";
   const session: SessionFacts = {
     sessionId: "bridge-pe.app-25",
@@ -27,9 +27,25 @@ test("hands an explicitly staged open document to an embedding route without reo
     year: "2025",
     lane: "dev",
     custody: "controlled",
-    activeDocumentId,
-    activeDocumentTitle: "projectA.rvt",
-    openDocumentCount: 1,
+    activeDocumentId: "C:\\Models\\Other.rvt",
+    activeDocumentTitle: "Other.rvt",
+    openDocumentCount: 2,
+    openDocuments: [
+      {
+        openId: "project-a-open",
+        address: activeDocumentId,
+        title: "projectA.rvt",
+        isActive: false,
+        isFamilyDocument: false,
+      },
+      {
+        openId: "other-open",
+        address: "C:\\Models\\Other.rvt",
+        title: "Other.rvt",
+        isActive: true,
+        isFamilyDocument: false,
+      },
+    ],
   };
   const fleet: InstancesFleet = {
     sessions: [session],
@@ -55,7 +71,7 @@ test("hands an explicitly staged open document to an embedding route without reo
   };
   const onDocument = vi.fn();
 
-  render(
+  const mounted = render(
     <QueryClientProvider client={new QueryClient()}>
       <InstancesCluster
         fleet={fleet}
@@ -75,4 +91,20 @@ test("hands an explicitly staged open document to an embedding route without reo
     document: activeDocumentId,
     pin: "pe.app-25",
   });
+
+  mounted.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <InstancesCluster
+        fleet={{ ...fleet, worlds: [], sessions: [] }}
+        target=""
+        setTarget={() => {}}
+        source="fixture"
+        requestedDocument="C:\\Models\\Unlisted.rvt"
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /recover Unlisted.rvt/i }));
+  expect(
+    screen.getByText("Pick a session or Revit year before opening this document."),
+  ).toBeTruthy();
 });

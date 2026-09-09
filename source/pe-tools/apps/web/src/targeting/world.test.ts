@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { unbound } from "#/state/route-store";
 import type {
   Envelope,
   RecentDocument,
@@ -29,10 +31,13 @@ const recent = (modelGuid: string, path: string): RecentDocument => ({
   region: "US",
   title: "Equal title.rvt",
   year: 2026,
+  savedYear: null,
+  savedYearFailure: null,
 });
 
 const observation = (id: string, pid: number): SessionObservation => ({
   case: "controlled-active",
+  kind: "installed",
   bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
   detail: "ready",
   id,
@@ -92,6 +97,18 @@ const worldFeed = (worlds: readonly WorldFacts[]) =>
   });
 
 describe("targeting world", () => {
+  it("keeps the open document catalog available when the active read is unbound or failed", () => {
+    const open = [{ id: "C:\\Models\\Open.rvt", label: "Open" }];
+    for (const active of [
+      AsyncResult.success(unbound(null, [])),
+      AsyncResult.fail(Error("active unavailable")),
+    ]) {
+      expect(documentTrunk.feed(active, undefined, "live", open)).toMatchObject({
+        state: "ready",
+        options: open,
+      });
+    }
+  });
   it("names fused worlds by SDK session id or pid and discloses custody", () => {
     const controlled = session();
     const observed = session({

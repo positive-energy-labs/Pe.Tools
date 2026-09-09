@@ -1,5 +1,5 @@
 import { decisionRefusal } from "#/takeoff/room-actions";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -19,7 +19,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { scopeSession, type SessionFacts } from "#/host/target";
+import { scopeSession, documentSession, type SessionFacts } from "#/host/target";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
@@ -118,6 +118,7 @@ export interface TakeoffHost {
     document: ActiveDocument,
     views: readonly ViewFacts[],
     write: (snapshot: TakeoffSnapshot) => Promise<unknown>,
+    signal?: AbortSignal,
   ): Promise<TakeoffSnapshot>;
   readViews(session: SessionFacts): Promise<ViewFacts[]>;
   listRhvac(dir: string): Promise<RhvacFile[]>;
@@ -471,7 +472,10 @@ export function createTakeoffStore(deps: {
       const target = get(targetAtom);
       return Effect.gen(function* () {
         const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
-        const session = scopeSession(deps.scope.scope, read.value);
+        const session = (deps.host.fixture ? scopeSession : documentSession)(
+          deps.scope.scope,
+          read.value,
+        );
         if (!session) return unbound<ActiveDocument | null>(null, [target]);
         return yield* hostRead([session.sessionId], () => deps.sessions.activeDocument(session));
       });
@@ -485,7 +489,10 @@ export function createTakeoffStore(deps: {
       Effect.gen(function* () {
         const target = get(targetAtom);
         const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
-        const session = scopeSession(deps.scope.scope, read.value);
+        const session = (deps.host.fixture ? scopeSession : documentSession)(
+          deps.scope.scope,
+          read.value,
+        );
         if (!session || deps.host.fixture) return unbound<readonly RecentDocument[]>([], [target]);
         return yield* hostRead([session.sessionId, session.year ?? "all"], () =>
           documentTrunk.recents(session.year),
@@ -521,16 +528,23 @@ export function createTakeoffStore(deps: {
         if (!document.value) return unbound<TakeoffSnapshot | null>(null, document.basis);
         const views = yield* get.result(viewFactsResult, { suspendOnWaiting: true });
         if (!views.bound) return unbound<TakeoffSnapshot | null>(null, views.basis);
-        return yield* hostRead([document.value.session.sessionId, document.value.documentId], () =>
-          deps.host.readSnapshot(
-            document.value!.session,
-            document.value!,
-            views.value,
-            async (snapshot) => {
-              const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
-              expectRouteWrite(result);
-            },
-          ),
+        return yield* hostRead(
+          [document.value.session.sessionId, document.value.documentId],
+          (signal) =>
+            deps.host.readSnapshot(
+              document.value!.session,
+              document.value!,
+              views.value,
+              async (snapshot) => {
+                signal.throwIfAborted();
+                const result = await takeoffsWriter.apply([
+                  { path: ["snapshot"], value: snapshot },
+                ]);
+                expectRouteWrite(result);
+              },
+              signal,
+            ),
+          120_000,
         );
       }),
     )
@@ -543,6 +557,8 @@ export function createTakeoffStore(deps: {
   const snapshotResult = Atom.make((get) => {
     const slice = get(takeoffsSlice);
     const producer = get(snapshotProducerResult);
+    if (AsyncResult.isFailure(slice))
+      return AsyncResult.fail(Error(String(Cause.squash(slice.cause))));
     if (AsyncResult.isFailure(producer)) return producer;
     if (AsyncResult.isSuccess(slice)) {
       if (!slice.value.hydrated) return AsyncResult.initial();
@@ -917,11 +933,6 @@ export function createTakeoffStore(deps: {
       write("host-event", "invalidate/sessions", () => registry.set(invalidateAtom, ["sessions"]));
       return;
     }
-    const document = registry.get(activeDocumentResult);
-    const current = AsyncResult.isSuccess(document)
-      ? document.value.value?.session.sessionId
-      : null;
-    if (current !== event.sessionId) return;
     write("host-event", "invalidate/sessions,active-document", () =>
       registry.set(invalidateAtom, ["sessions", "active-document"]),
     );
@@ -971,29 +982,6 @@ export function createTakeoffStore(deps: {
         if (patch.stage) patches.push({ path: ["stage"], value: patch.stage });
         if (patches.length) void takeoffsWriter.apply(patches);
       }
-    },
-    async reconcileWorld() {
-      const target = deps.target?.trim();
-      if (!target) return;
-      const document = await settle(activeDocumentResult);
-      if (document.value?.documentId !== deps.scope.scope.document) return;
-      // Once: the page pin or the document's own world binding already says this target.
-      if (
-        worldSelector(deps.scope.scope) === target ||
-        registry.get(bindingsAtom).world?.id === target
-      )
-        return;
-      expectRouteWrite(
-        await takeoffsWriter.apply([
-          {
-            path: ["bindings", "world"],
-            value: {
-              id: target,
-              label: target,
-            },
-          },
-        ]),
-      );
     },
     settle,
     invalidate: (keys: readonly string[]) =>

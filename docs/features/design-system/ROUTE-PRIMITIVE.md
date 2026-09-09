@@ -774,15 +774,14 @@ the difference before an inspector claims complete attribution.
 - A thrown family query still releases an owned read-only document; a borrowed document remains open.
 - A lost mutation/release acknowledgement becomes unknown and is recoverable by its original identity.
 
-These are proposed acceptance criteria. No product code, Revit lifecycle operation, or new bridge
-contract was implemented this round.
+These are acceptance criteria for the full cutover. Section 9 records the implemented subset.
 
 Sketch check: extracted both TypeScript blocks into
 `.artifacts/tmp/route-primitive-r4-contracts.ts`; the checkout's TypeScript compiler passed with
 `--strict --noEmit`. Four `@ts-expect-error` checks also passed: host calls reject Revit targets,
 session calls require a destination, borrowed documents have no release token, and a host target
 has no Revit document reference. Inherited and explicit document calls both typecheck. This proves
-only those structural properties; none of the execution/cleanup trials above has run.
+only those structural properties; execution evidence is recorded below.
 
 ## 9. Implementation checkpoint, 2026-09-08
 
@@ -791,23 +790,57 @@ The spec was recovered from `b362fc4^3` without popping the release owner's stas
 
 `agent-contracts/src/target.ts` implements exact call resolution with a frozen default or
 explicit override. Session identities are record keys. Named requests retain their address for
-recovery. Open requests require an exact document-lifetime reference. These contracts are not
-yet connected to the host, routes, or Pea. `needs` must come from trusted capability metadata.
+recovery. Open requests require an exact document-lifetime reference. Takeoffs now consumes
+the resolver; Pea admission is still owed. `needs` must come from trusted capability metadata.
 Inventory absence is authoritative only after a complete registry read; a bridge outage must
-not be converted into an empty inventory by its future producer.
+not be converted into an empty inventory.
 
 The purge critic found address-spelling mismatches and duplicate session rows. Shared address
 comparison and session-keyed inventory resolve those findings. The unused read wrapper was
-deleted. Its Effect timeout/cancellation probe remains scratch evidence; consumer tests must
-prove visible failure and stale-response rejection during Takeoffs cutover.
+deleted. Permanent consumer tests now cover read timeout and stale-response rejection.
 
-PROVEN, deterministic: 28 contracts tests, 15 existing web targeting/scope/store tests, and
-contracts package checks pass. Eight repository guard failures reproduce without the proposed
-web files. No browser or Revit proof was performed in this phase.
+The initial foundation passed 28 contracts tests and 15 web checks. Eight repository guard
+failures reproduced without the proposed web files. Subsequent execution proof follows.
 
-Resume after both feature results are committed into main, including any currently dirty or
-stashed changes intended for those merges. Record the merged main commit and both accepted
-feature heads, integrate main here once, and establish their baseline before replacing state.
-Unstashing unrelated work is not a prerequisite. Cut over Takeoffs first and prove the original
-launch, picker, geometry failure, and lost-session recovery stories before moving to Chat and
-Family. Their temporary-document lifecycle and separate revision owners remain required.
+### Takeoffs execution cutover
+
+Main `fe7c2b4` and private Takeoffs input `9f4d03a2ab80674add4e785f119b184a9ce3e119`
+are integrated at `04a0b1b3e4b6be2892d81614220ff6a0d94983d7`. The input preserves the
+completed but uncommitted Takeoffs tree without changing its index, files, or HEAD. Its final
+accepted merge must still be reconciled; this private snapshot is not the feature owner's merge.
+
+Live Takeoffs now admits only an exact session/document pair. Bridge inventory contains every
+open document, including inactive documents, with SDK-tracked open-lifetime identities. The
+host captures a target before queueing; protocol 22 validates that lifetime on the Revit thread.
+Active-view operations refuse a different active document. Responses attribute only an accepted
+document binding. HostRpcCaller forwards explicit document identity, but Pea's turn admission
+and public per-call override are not yet cut over.
+
+The shared fleet query owns inventory. Takeoffs' private EventSource and document-context read
+are removed. Session selection no longer writes into shared authored Takeoffs work. Instances
+hands off the document clicked, including an inactive one. Confirmed session closure removes
+only the target URL parameter; outages preserve it. A shared process-identity hash joins a
+disconnected SDK census row without depending on unrelated Revit processes.
+
+World reads have cancellation and deadlines (30 seconds normally, 120 for Takeoffs geometry).
+Geometry renders failure as failure; it no longer maps every non-success state to a spinner.
+
+PROVEN, deterministic: 43 focused web tests, 8 routing/live tests, 32 host tests, and 5 MCP
+caller tests pass. The catalog regression test passes independently. Full repository guard and
+typecheck baselines remain red; targeted checks do not certify the whole repository.
+PROVEN, fresh controlled R2026: OpenDocumentIdentityTests passes with SDK beta.152.
+PROVEN, session controlled dev: `rp-cutover`, payload `478af59f3568`, read the inactive project
+while the family was active; UI context refused it with 409. Session-only reads carried no
+document attribution. Closing/reopening the same project changed its open identity and both
+old-handle calls returned 409. This proves explicit dispatch, not a complete Pea turn.
+PROVEN, browser: open document choices, successful geometry, visible geometry failure, and
+session shutdown returning to Instances with the document retained and dead target removed.
+The original project-a cloud launch itself was not repeated; a controlled local project exercised
+the dispatch and recovery chain. `rp-cutover` is stopped.
+
+Next: integrate the final accepted Takeoffs and Family heads, preserving their feature behavior,
+then cut over Chat/Pea and Family. Family's finished engine revision is the remaining external
+input; unrelated stashes are not a prerequisite. The phase/cell composition, shared semantic
+action manifest, file/saved modes, independent pane views, durable unknown-operation recovery,
+and owned temporary-document release remain unfinished. Do not label this Takeoffs checkpoint
+as completion of the route primitive.

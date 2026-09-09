@@ -71,11 +71,13 @@ export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 // lives below the generated-contract boundary (host-typegen must not import its own output).
 export {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
 } from "./contracts/bridge-protocol.js";
 
 export const hostSessionScopeSchema = Schema.Struct({
   bridgeSessionId: Schema.optional(Schema.String),
+  openDocumentId: Schema.optional(Schema.String),
 });
 
 export type HostSessionScope = Schema.Schema.Type<typeof hostSessionScopeSchema>;

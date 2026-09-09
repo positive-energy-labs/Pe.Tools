@@ -2,9 +2,10 @@ import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { capture } from "@pe/runtime";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   BRIDGE_CONTRACT_VERSION,
+  computeBridgeSessionId,
   bridgeFrameSchema,
   type BridgeFrame,
   type BridgeRegistrationRequest,
@@ -98,22 +99,6 @@ export function getBridgeRegistrationRejection(registration: BridgeRegistrationR
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
     ? null
     : `Unsupported bridge contract version '${registration.contractVersion}'. Expected '${BRIDGE_CONTRACT_VERSION}'.`;
-}
-
-/**
- * The universal session id: hash(pid + processStartUtc), for every lane, no exceptions.
- * The broker (this host) assigns it and returns it in the registration ack. Returns null when
- * the client did not report process identity — the caller keeps the bridge-${uuid} fallback
- * (deleting that fallback is later hardening).
- */
-export function computeBridgeSessionId(registration: {
-  readonly processId: number;
-  readonly processStartUtcUnixMs?: number | null;
-}): string | null {
-  const startUtc = registration.processStartUtcUnixMs;
-  if (typeof startUtc !== "number" || !Number.isFinite(startUtc) || startUtc <= 0) return null;
-  const digest = createHash("sha256").update(`${registration.processId}:${startUtc}`).digest("hex");
-  return `session-${digest.slice(0, 16)}`;
 }
 
 /** Accepts only Host/UI lanes; lane-less sessions remain targetable by process identity. */
@@ -327,7 +312,11 @@ export class RevitBridge extends Context.Service<
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
-    ) => Effect.Effect<unknown, BridgeError | NoRevitSession>;
+      openDocumentId?: string,
+    ) => Effect.Effect<
+      { value: unknown; target: { session: string; document: string | null } },
+      BridgeError | NoRevitSession
+    >;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;
     readonly list: Effect.Effect<readonly BridgeSessionView[]>;
     readonly handleConnection: (
@@ -508,8 +497,10 @@ export const RevitBridgeLive = Layer.effect(
             yield* Deferred.succeed(initialGate, void 0);
             // Broker-assigned identity: hash(pid + processStartUtc) when the client reported
             // process identity; bridge-${uuid} fallback otherwise (deleting it is later hardening).
+            const registration = frame.registration;
             const sessionId =
-              computeBridgeSessionId(frame.registration) ?? `bridge-${randomUUID()}`;
+              (yield* Effect.promise(() => computeBridgeSessionId(registration))) ??
+              `bridge-${randomUUID()}`;
             const registeredSession = {
               send,
               pending: yield* Ref.make<BridgePendingRequest | null>(null),
@@ -616,6 +607,7 @@ export const RevitBridgeLive = Layer.effect(
       session: Session,
       operationKey: string,
       payload: unknown,
+      openDocumentId: string | undefined,
     ) {
       const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
       const requestId = randomUUID();
@@ -628,6 +620,7 @@ export const RevitBridgeLive = Layer.effect(
             requestId,
             operationKey,
             payloadJson,
+            openDocumentId,
           },
         });
         const res = yield* Deferred.await(reply);
@@ -635,7 +628,10 @@ export const RevitBridgeLive = Layer.effect(
           return yield* Effect.fail(
             new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500),
           );
-        return yield* decodePayloadJson(res.payloadJson);
+        return {
+          value: yield* decodePayloadJson(res.payloadJson),
+          openDocumentId: res.openDocumentId,
+        };
       }).pipe(
         Effect.ensuring(
           Ref.update(session.pending, (pending) => (pending?.reply === reply ? null : pending)),
@@ -647,6 +643,7 @@ export const RevitBridgeLive = Layer.effect(
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
+      openDocumentId?: string,
     ) {
       // Every bridge invoke reaches into exactly one Revit process, so ambiguity hard-fails here
       // (no warning-only release). Read-only aggregation across sessions goes through `list`.
@@ -659,6 +656,10 @@ export const RevitBridgeLive = Layer.effect(
       // on a live Revit (2026-09-06) while `list` showed the session, because of this copy.
       const session = (yield* Ref.get(sessions)).get(resolution.session.sessionId);
       if (!session) return yield* Effect.fail(new NoRevitSession());
+
+      const state = yield* Ref.get(session.state);
+      const selectedDocument =
+        openDocumentId ?? state.openDocuments.find((document) => document.isActive)?.openId;
 
       const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
       if (depth > MAX_QUEUED_OPS) {
@@ -699,11 +700,19 @@ export const RevitBridgeLive = Layer.effect(
         // The session may have died — or been taken over by a reconnect — while we queued.
         const live = (yield* Ref.get(sessions)).get(session.sessionId);
         if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        const result = yield* invokeSession(session, operationKey, payload);
+        const result = yield* invokeSession(session, operationKey, payload, selectedDocument);
         yield* Effect.logInfo(
           `Revit queue completed op=${operationKey} session=${session.sessionId} duration_ms=${Date.now() - startedAt}`,
         );
-        return result;
+        return {
+          value: result.value,
+          target: {
+            session: session.sdkSessionId ?? session.sessionId,
+            document:
+              state.openDocuments.find((document) => document.openId === result.openDocumentId)
+                ?.address ?? null,
+          },
+        };
       }).pipe(
         Effect.ensuring(
           Effect.andThen(

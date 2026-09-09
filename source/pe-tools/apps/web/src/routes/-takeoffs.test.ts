@@ -61,7 +61,7 @@ describe("takeoffs document scope", () => {
     const feed = documentTrunk.feed(active, AsyncResult.initial(), "live", open);
 
     expect(feed.options).toEqual([
-      { id: "C:\\Models\\Active.rvt", label: "Active.rvt" },
+      { id: "C:\\Models\\Active.rvt", label: "Active.rvt", active: true },
       { id: "C:\\Models\\Other.rvt", label: "Other.rvt", active: false },
     ]);
   });

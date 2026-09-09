@@ -91,25 +91,25 @@ function mergeDocFacts(
           openIn: [],
         });
     }
-  for (const world of liveWorlds) {
-    const title = world.session?.activeDocumentTitle;
-    if (!title) continue;
-    const path = world.session?.activeDocumentId ?? title;
-    const existing = [...byId.values()].find(
-      (candidate) => candidate.path === path || candidate.id === path,
-    );
-    if (existing) byId.set(existing.id, { ...existing, openIn: [...existing.openIn, world.id] });
-    else
-      byId.set(path, {
-        id: path,
-        title,
-        path,
-        selector: path,
-        year: world.row?.year != null ? String(world.row.year).slice(-2) : null,
-        cloud: false,
-        openIn: [world.id],
-      });
-  }
+  for (const world of liveWorlds)
+    for (const document of world.session?.openDocuments ?? []) {
+      const { title, address: path } = document;
+      if (!path) continue;
+      const existing = [...byId.values()].find(
+        (candidate) => candidate.path === path || candidate.id === path,
+      );
+      if (existing) byId.set(existing.id, { ...existing, openIn: [...existing.openIn, world.id] });
+      else
+        byId.set(path, {
+          id: path,
+          title,
+          path,
+          selector: path,
+          year: world.row?.year != null ? String(world.row.year).slice(-2) : null,
+          cloud: false,
+          openIn: [world.id],
+        });
+    }
   return [...byId.values()];
 }
 
@@ -120,6 +120,7 @@ type ClusterProps = {
   source?: "fixture";
   onEvent?: (event: ClusterEvent) => void;
   onDocument?: (scope: DocumentScope) => void;
+  requestedDocument?: string;
 };
 
 export function InstancesCluster(props: ClusterProps) {
@@ -157,6 +158,7 @@ function InstancesClusterView({
   source,
   onEvent,
   onDocument,
+  requestedDocument,
   route,
 }: {
   route?: RouteStateHandle<InstancesDocument>;
@@ -168,6 +170,7 @@ function InstancesClusterView({
   onEvent?: (event: ClusterEvent) => void;
   /** Hands the selected document and its exact session pin to an embedding route. */
   onDocument?: (scope: DocumentScope) => void;
+  requestedDocument?: string;
 }) {
   const queryClient = useQueryClient();
   const { worlds, isLoading } = fleet;
@@ -187,6 +190,19 @@ function InstancesClusterView({
     })) ?? [];
   const recentsLoading = route?.busy === "refresh";
   const documents = useMemo(() => mergeDocFacts(buckets, liveWorlds), [buckets, liveWorlds]);
+  const recovery: DocFact | undefined =
+    documents.find((document) => document.id === requestedDocument) ??
+    (requestedDocument && /[\\/]/.test(requestedDocument)
+      ? {
+          id: requestedDocument,
+          title: requestedDocument.split(/[\\/]/).at(-1)!,
+          path: requestedDocument,
+          selector: requestedDocument,
+          year: null,
+          cloud: false,
+          openIn: [],
+        }
+      : undefined);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
   const [localStaged, setLocalStaged] = useState<Staged | null>(null);
@@ -292,7 +308,7 @@ function InstancesClusterView({
     .filter((document) => (yearPick ? document.year === yearPick : true));
   const stagedScope =
     staged?.kind === "open" && staged.doc.openIn.includes(staged.world.id)
-      ? documentScope(worldTrunk.option(staged.world).id, staged.world.session?.activeDocumentId)
+      ? documentScope(worldTrunk.option(staged.world).id, staged.doc.id)
       : null;
 
   const settle = (kind: OutcomeKind, text: string, says?: string) => {
@@ -352,10 +368,18 @@ function InstancesClusterView({
         String(world.row.year).slice(-2) === document.year,
     );
     const live = showing ?? readyOfYear;
+    const year = document.year ?? yearPick;
+    if (!live && !year) {
+      setOutcome({
+        kind: "error",
+        text: "Pick a session or Revit year before opening this document.",
+      });
+      return;
+    }
     setStaged(
       live
         ? { kind: "open", doc: document, world: live }
-        : { kind: "start", doc: document, year: document.year ?? "25" },
+        : { kind: "start", doc: document, year: year! },
     );
   };
 
@@ -496,6 +520,7 @@ function InstancesClusterView({
           onClick={() => void route.command("refresh")}
         />
       ) : null}
+      {recovery && <Press onClick={() => stageDoc(recovery)}>recover {recovery.title}</Press>}
       <div className="flex items-center gap-2">
         <span className="t-small face-mono text-ink-2">year</span>
         {years.map((candidate) => (

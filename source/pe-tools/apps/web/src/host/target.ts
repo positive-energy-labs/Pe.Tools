@@ -7,6 +7,7 @@ import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types"
 import {
   addressSchema,
   resolveScope,
+  resolveCallTarget,
   type Address,
   type FleetSession,
   type Scope,
@@ -35,6 +36,9 @@ export interface SessionFacts {
   activeDocumentId?: string;
   activeDocumentTitle?: string;
   openDocumentCount: number;
+  openDocuments?: BridgeSessionListEntry["openDocuments"];
+  /** Set only on a document-bound view of this session, never on the fleet row. */
+  openDocumentId?: string;
   /** activeDocumentObservedAtUnixMs from the bridge snapshot — an observation time, not computed staleness. */
   observedAtUnixMs?: number;
 }
@@ -66,6 +70,7 @@ export function fromBridgeSessions(entries: readonly BridgeSessionListEntry[]): 
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
       openDocumentCount: e.openDocumentCount,
+      openDocuments: e.openDocuments,
     }));
 }
 
@@ -89,5 +94,38 @@ export function scopeSession(scope: Scope, sessions: readonly SessionFacts[]): S
   const resolution = resolveScope(scope, fleetOf(sessions));
   return resolution.kind === "resolved"
     ? (sessions.find((session) => sessionKey(session) === resolution.session) ?? null)
+    : null;
+}
+
+/** Exact document selection for migrated consumers. A selected session never falls back. */
+export function documentSession(
+  scope: Scope,
+  sessions: readonly SessionFacts[],
+): SessionFacts | null {
+  if (scope.kind !== "document" || !scope.pin) return null;
+  const candidates = sessions.filter(
+    (session) => session.sessionId === scope.pin || sessionKey(session) === scope.pin,
+  );
+  const session = candidates.length === 1 ? candidates[0] : undefined;
+  if (!session?.openDocuments) return null;
+  const result = resolveCallTarget(
+    { needs: "document" },
+    { kind: "named", session: session.sessionId, address: scope.document },
+    {
+      kind: "ready",
+      sessions: {
+        [session.sessionId]: {
+          kind: "ready",
+          values: session.openDocuments.map((document) => ({
+            openId: document.openId,
+            address: addressSchema.safeParse(document.address).data ?? null,
+            kind: document.isFamilyDocument ? "family" : "project",
+          })),
+        },
+      },
+    },
+  );
+  return result.kind === "resolved" && result.target.kind === "document"
+    ? { ...session, openDocumentId: result.target.ref.openId }
     : null;
 }

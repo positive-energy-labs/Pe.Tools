@@ -20,6 +20,9 @@ public static class DocumentTrackerExtensions {
     public static string OpenId(this TrackedDocument document) =>
         document.State(_ => new OpenIdentity()).Value;
 
+    public static TrackedDocument? FindOpenId(this IDocumentTracker tracker, string openId) =>
+        tracker.Open.SingleOrDefault(document => document.OpenId() == openId);
+
     /// <summary>
     ///     Finds the tracked document for a live wrapper. Wrapper identity, not reference
     ///     equality — safe with a Document obtained from any event or request.

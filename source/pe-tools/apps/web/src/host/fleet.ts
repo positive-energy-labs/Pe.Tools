@@ -1,5 +1,6 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
 import { useQuery } from "@tanstack/react-query";
+import { computeBridgeSessionId } from "@pe/host-contracts/contracts";
 import type {
   BridgeObservation,
   ControlledActiveBridgeObservation,
@@ -22,6 +23,7 @@ type WorldPhase = FleetPhase | "failed";
 export interface WorldFacts {
   /** The pe-revit session id when the SDK knows this world, else the bridge session id. */
   id: string;
+  brokerSessionId?: string | null;
   custody: Custody;
   phase: WorldPhase;
   detail: string;
@@ -99,7 +101,7 @@ function projectObservation(row: SessionObservation): ObservationView {
 
 /** Joins only one exact process incarnation; the SDK census owns every world's classification. */
 export function fuseFleet(
-  rows: readonly SessionObservation[],
+  rows: readonly (SessionObservation & { brokerSessionId?: string | null })[],
   sessions: readonly SessionFacts[],
 ): WorldFacts[] {
   const claimedSessionIds = new Set<string>();
@@ -119,6 +121,7 @@ export function fuseFleet(
       phase,
       detail,
       id: observed ? String(row.process.pid) : row.id,
+      brokerSessionId: row.brokerSessionId,
       custody: observed ? "observed" : "controlled",
       lane: observed ? (session?.lane ?? undefined) : RECEIPT_LANE[row.receipt.payload],
       pid: process?.pid,
@@ -152,8 +155,10 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.status", all ? "all" : ""],
     enabled,
-    queryFn: async (): Promise<SessionListResult> => {
-      const response = await fetch(all ? "/sessions?all=true" : "/sessions");
+    queryFn: async ({ signal }) => {
+      const response = await fetch(all ? "/sessions?all=true" : "/sessions", {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+      });
       if (!response.ok) throw new Error(`session list ${response.status}`);
       const body = (await response.json()) as Envelope<SessionListResult>;
       const result = body.result;
@@ -163,7 +168,23 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
         throw new Error("session list envelope carried no result.unreadableReceipts[]");
       if (!Array.isArray(result.processReadErrors))
         throw new Error("session list envelope carried no result.processReadErrors[]");
-      return result;
+      return {
+        ...result,
+        sessions: await Promise.all(
+          result.sessions.map(async (row) => {
+            const process = projectObservation(row)[2];
+            return {
+              ...row,
+              brokerSessionId: process
+                ? await computeBridgeSessionId({
+                    processId: process.pid,
+                    processStartUtcUnixMs: Date.parse(process.processStartUtc),
+                  })
+                : null,
+            };
+          }),
+        ),
+      };
     },
     refetchInterval: 5_000,
     refetchOnWindowFocus: false,
