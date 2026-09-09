@@ -16,7 +16,8 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 public static class FamilyProfileConverter {
     private static readonly IReadOnlyDictionary<string, string> LegacyParameterNames =
         new Dictionary<string, string>(StringComparer.Ordinal) {
-            ["PE_G___Url"] = "PE_G___URL"
+            ["PE_G___Url"] = "PE_G___URL",
+            ["PE_G___Horsepower"] = "PE_G_Perf_Horsepower"
         };
 
     private static readonly IReadOnlyDictionary<string, (ForgeTypeId Spec, ForgeTypeId Unit)> LegacyLiteralUnits =
@@ -50,7 +51,7 @@ public static class FamilyProfileConverter {
         var older = composed["SharedParameterSelection"];
         var filter = composed["FilterApsParams"];
         var include = filter?["IncludeNames"] ?? older?["Include"];
-        var selected = definitions.Where(d => (!d.IsArchived || (include?["Equaling"] ?? include?["Names"])?.Values<string>().Contains(d.Name) == true) && Matches(d.Name!, include, true) &&
+        var selected = definitions.Where(d => !d.IsArchived && Matches(d.Name!, include, true) &&
             !Matches(d.Name!, filter?["ExcludeNames"] ?? older?["Exclude"], false)).ToList();
         var mappings = composed["AddAndMapSharedParams"]?.ToObject<MapParamsSettings>() ?? new MapParamsSettings {
             Enabled = composed["MappingData"] is not null, MappingData = composed["MappingData"]?.ToObject<List<MappingData>>() ?? [] };
@@ -712,6 +713,9 @@ public static class FamilyProfileConverter {
                 if (mapping.SourceValuesTreatedAsMissing.Count > 0)
                     parameter["sourceValuesTreatedAsMissing"] = new JArray(mapping.SourceValuesTreatedAsMissing);
             }
+            var retiredNames = LegacyParameterNames.Where(p => p.Value == name).Select(p => p.Key).ToList();
+            if (retiredNames.Count > 0)
+                parameter["wasNamed"] = new JArray((mapping?.CurrNames ?? []).Concat(retiredNames).Distinct(StringComparer.Ordinal));
             if (mapping?.OnlyAddIfSourceExists == true)
                 conditional[name] = parameter.ToObject<FamilyModelParameter>(JsonSerializer.Create(FamilyModelJson.Settings))!;
             else explicitParameters[name] = parameter;

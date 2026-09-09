@@ -1,99 +1,78 @@
-# Family Foundry completion map
+# Family Foundry investigation
 
-Rewritten 2026-09-07 (the 2026-09-07 morning form is in git). Integration line: `Pe.Tools-family`, branch `family/rewrite`, base `68ce9db` plus 16 dirty files (Codex's last uncommitted round: receipt commitment, coverage marking, connector intent, sidecar default). Nothing merged to main or published. Product rulings: [LEDGER.md](LEDGER.md).
+2026-09-08. Source baseline `57b72b6`, branch `family/rewrite`, base `bb4b7f1`. Six independent workers: Astra medium (shape), Opus low (engine and retained-session mining), Sol low (tests, contracts, definitions). Root checked findings and ran proof. Old feature reports were not used as specifications.
 
-## The shape (what exists on the line)
+## Verdict
 
-One portable text profile, one reconciler, three doors.
+Keep the new engine. It consolidates real consumers and improves native parameter transfer. Do not restore the old Desired compiler. Do not merge on a claim of complete preservation or portability yet: the current model omits mandatory BIM state, and some loss can disappear into a new baseline.
 
-| Piece | Where | Role |
-|---|---|---|
-| `FamilyModel` (family.json) | `Pe.Shared.RevitData/Families/FamilyModelContracts.cs` | the ONE portable profile; patch semantics (omit = unchanged, null = delete, `{}` = ensure) |
-| Patch file `{ select, patch, run }` | `Pe.Shared.RevitData/Families/FamilyPatch.cs` | bulk lane input; 45 frozen company profiles convert to it |
-| `ReconcileFamily` | `Pe.Revit.FamilyFoundry/Reconcile/ReconcileFamily.cs` | one `DocOperation`: capture current, pure `Diff`, compile to `OperationQueue`, apply inside `FamilyVisit`, receipt with residue |
-| Ops library | `Pe.Revit.FamilyFoundry/Operations`, `OperationProcessor` | script-usable execution layer; the only pre-rewrite survivor |
-| Door 1 `/family` | `apps/web/src/family` | one-family authored + live lanes on `family/store.ts` |
-| Door 2 `/families` | `apps/web/src/families` | fleet plan → apply → receipt chain in `familiesRouteState` |
-| Door 3 scripts / Pods / Pea | `packages/mcps/src/pea/family-commands.ts`, `FamilyModelBridgeOps.cs` | public Build/Plan/Apply primitives; `NoTransaction` lets the script own the transaction |
+The minimal target is captured BIM state, an explicit standard or patch, and one native reconciler. Geometry construction can extend that core. This is a proposed direction, not a completed architecture change.
 
-Diff against main (main has not touched this area since base `bb4b7f1`): library 113 files −9,279 net; tests 108 files +11,494; web/TS 57 files +2,328.
+## Historical comparison
 
-## Proof ladder (highest surface that has carried the claim)
+The old snapshot is `d06e67e`, parent of the actual `CmdFFDesiredMigrator` addition `92c6239` on June 1. The mature desired snapshot is `bb4b7f1`; the new snapshot is `57b72b6`. Entries below describe inspected source capability, not historical runtime certification.
 
-| Rung | Claim | Lane | Evidence |
+| Operator need | Old Manager / Migrator | Desired era | New worktree |
 |---|---|---|---|
-| 1 | all 45 profiles convert; Grinder, Modine, Magna3 rulings honored | deterministic | converter tests on the line |
-| 2 | one family, browser: AprilAire Plan → Apply → converged → repeat 0 | browser + session dev, ff-close-25 | `.artifacts/runs/session-20260907-aprilaire/` |
-| 3 | one family, public script: Linear LED capture, stable plan hash, apply, empty replan | Host script | `.artifacts/runs/fresh-20260907-ff-close/` |
-| 4 | one family, native migration: Fantech 38/38 shared identities, 80 → 0 changes, zero residue; user inspected PRE/POST and approved | Host script, NoTransaction | `.artifacts/runs/session-20260907-fantech-inspect/` (execution e4442d9f) |
-| 5 | bulk: all 81 editable mechanical families in Old_Template under the company mechanical mapping plus the connector rule | fresh `pe-revit test`, `Old_template_all_editable_mechanical_families_migrate_company_mapping` | **PROVEN (identity migration)** 2026-09-08: run 16 on `4bd5ed0` and run 20 on the rung 5b engine with the built-in backlink, 81/81 both (run 19, 80/81, the FV-0511VK2 flake); receipts identical except PlanHash, which now covers `run.backlinkBuiltIns` under the mapping-only patch (no standards formulas, connector creation, tag values, clean or sort), 39 shared identities each, fixture SHA unchanged, 22 min. PVFY migrates under `run.failures: {constraintsNotSatisfied: resolve}` and its receipt carries the resolution as a RunEffect; Magna3 under the number-word ruling. Evidence `.artifacts/runs/famclose-20260907/rung5-run16-checkpoint.json`; run 12 (78/80) and run 15 (30/81, two swarm fixes falsified) beside it |
-| 5b | the real composed company profiles applied natively: both electrical formulas, connector created and associated to the four PE_ slots, TagInstance value, clean, sort, -1 sentinel on created numeric parameters, empty second plan; built-ins Model, Manufacturer, Description, Type Comments read their PE_ destination through `= <destination>` | fresh `pe-revit test`, `Old_template_applies_composed_company_profiles_natively` | **PROVEN** 2026-09-08: runs 8 and 9 (with the built-in backlink), 12/12 families across SH (2), Fan (8, FV-0511VK2 named out), HP (PKA-HA, SLZ-KA). Evidence `.artifacts/runs/famclose-20260907/rung5b-run8-checkpoint.json`; exports under `review/profiles/`. 17 MechEquip profiles unproven in apply; PVFY awaits the unbalanced-connector ruling |
-| 6 | receipt commitment tracks the real `FamilyVisit` result; Build refuses an unconverged family | Host script | `receipt-readback.cs` in run 3; dirty tree, uncommitted |
-| 7 | exclusive current-source attached suite (no installed Pe.App beside it) | pe-revit test | **UNPROVEN**: every attached run so far loaded installed Pe.App 0.6.26 too |
+| Bulk project standard | Selectors and add/map/delete/purge queue | Declarative declarations compiled into old operations; three command paths | Per-family capture, plan, hash check, apply and receipt; common visit |
+| Per-type values | Native replacement or copy/coercion | Same underlying mapping | Ranked sources, destination precedence, fill blanks and explicit assignments |
+| Formulas and bindings | Mapping explicitly unsets formulas; fallback mainly copies values | Declarative input does not repair the old primitive | Transfers dimensions, arrays, associations and dependent formulas; source-formula failure can still be swallowed |
+| Remove nonstandard parameters | Explicit delete and unused/empty purge | Similar purge | Explicit tombstones; overlay omission is retention, so no closed standard |
+| Room calculation | Absent from inspected old queues | Ordinary Manager/Migrator expose it; Desired lowerer omits it | Shared patch path for build and migration; capture/apply axis mismatch |
+| Electrical normalization | Migrator creates an electrical connector | Ordinary and Desired lowerers disagree about legacy creation | Shared power-connector association rule; no explicit main-connector selection |
+| Portable shared definitions | Service dependent | Captured model lacks embedded GUID/spec | Embedded GUID/spec and attributes support offline reconstruction |
+| Hosting and orientation | Native substrate retained during edits | Restricted template/geometry projection | Placement exists; connector pose, arbitrary room coordinates and host fidelity remain incomplete |
+| Geometry | Constrained planes/extrusions/connectors | Separate model lowering/composition layers | One element-oriented model with optional construction macros; arbitrary geometry remains unmodeled |
+| Repeatability | Processing timestamp changes each run | Timestamp remains | Timestamp removed; diff/residue machinery exists, but run effects and omitted facts need separate checks |
 
-Rung 4 is source-to-destination proof. The destination-wins ruling (existing `PE_` destination with a differing source value) has no native carrier yet.
+Historical anchors: `FFMigratorQueueBuilder`, `MapReplaceParams`, `MapParams`, `DesiredParameterCompiler`, `DesiredMigrationPlanLowerer` in the snapshots above. Current anchors: `NormalizeParamSources`, `NormalizeParameter`, `FamilyReconciler`, `FamilySharedParameterSource`, `FamilyModelBuild`.
 
-## Resume point (2026-09-08 evening, tree clean after this commit)
+The bounded C# count for FamilyFoundry, shared family contracts and FF ribbon commands fell from 23,111 desired-era lines to 11,569. This is not whole-feature net deletion: native helpers, host, web and tests are outside that count.
 
-Line: `family/rewrite`. Rung 5 identity migration 81/81 (run 20) and rung 5b standards on three profiles 12/12 (run 9) on one engine. Owed rulings: PVFY unbalanced two-pole connector; storage-module shape before the converter cutover. Owed proof: 17 MechEquip profiles in apply; FV-0511VK2 flake (fails under any plane purge); rung 7 exclusive attached suite; roundtrip (geometry, room point, lookup tables); perf 1/2/8 and the capture-pipeline fold. Evidence root `.artifacts/runs/famclose-20260907/` (rung5-run*, rung5b-run*, swarm/, famfix/, proxy/, archaeology/, review/profiles/*.rfa).
+## Merge concerns
 
-## Merge gate (what closes the branch)
+| Finding | Evidence and consequence | Smallest honest next step |
+|---|---|---|
+| Formula loss can become the baseline | `FamilyDocumentNormalizeParameter.TransferAndRemoveParameter` catches native formula assignment failure, then removes the source. `ReconcileFamily` recaptures after normalization. Source-proven path; native refusal case still owed. | Preserve the expression or refuse the family. Exercise a spec-incompatible source formula and assert rollback, not only current values. |
+| A deleted type cell can disappear from planning | Merge removes a null cell; `FamilyReconciler.Diff` enumerates desired cells, so a removed cell produces no value change. Source-proven; native clear policy is unresolved. | Define clear versus inherit versus preserve; reject unsupported clearing before mutation. |
+| Standard closure is absent | Full models become overlays. Cleanup protects all desired parameter names, including inherited nonstandard names. | Separate overlay semantics from a complete allowed set; resolve required drivers before deleting the complement. |
+| Connector pose is under-specified | Capture accepts either coplanar normal sign and does not read back complete rectangular orientation; identity is domain/plane/intersections. | Capture and compare signed pose and host facts; retain native bindings without requiring arbitrary visual geometry. |
+| Room capture/apply disagree | `AddRoomDingler` uses negative Y for work-plane and wall-hosted families; capture uses negative Y only for wall-hosted families. Offset alone cannot represent arbitrary/from-to points. | One placement rule, plus an explicit unsupported-state outcome until the model carries full required positions. |
+| Save and load are different commit domains | `FamilyVisit` saves before project load verification. A later rollback cannot undo an overwritten file. | Model file outcome separately; prove source-file custody and load refusal. Merely moving Save after Assimilate is not atomic. |
+| Contract validation permits invalid authored state | A deterministic probe against the built shared assembly accepts invalid slope strings, contradictory connector dimensions/domains and incomplete shared identity. `ValidatePatch` only parses shape before live merging. | Validate at the shared authored-input seam. Avoid blanket restrictions on native states, such as rejecting every empty type name. |
 
-1. Dirty tree proven deterministic-green and committed as one checkpoint (w1 report in `.artifacts/runs/famclose-20260907/`).
-2. Rung 5 on a disposable Old_Template copy in a session this effort owns. Coverage units are distinct: 45 profiles, 81 editable mechanical families, 38 shared definitions. Known seam: the harness at `FamilyFoundryBulkMigrationHarnessTests.cs` ~964 presumes a pre-existing Fantech `PE_E___MCA` the immutable fixture lacks; reconcile against rung 4, do not delete preservation assertions.
-3. Rung 7 or an explicit waiver line in the ledger.
-4. Pin the line to SDK `0.1.0-beta.152` (proven a strict superset of `ff.1`, see LEDGER 2026-09-08): `global.json`, `.config/dotnet-tools.json`, and the eleven packages in `eng/sdk-feed` move together; then adopt or exclude caller `8c2f79a` for the `RevitFailureScope` predicate overload 152 ships.
-5. Ledger rebuilt to current truth; this MAP deleted; the branch sweep below executed.
+These are not seven demonstrated native failures. The table explicitly distinguishes source paths, deterministic acceptance and missing native proof. The fresh baseline did demonstrate a fixture failure before migration: creating its array while Type C was current changed Type A seed values. The builder already has a first-type path; that path is now the default, and the diagnostic corruption case remains explicit.
 
-Geometry roundtrip, room points, lookup-table deletion, Pea authoring, supported-year and installed journeys stay in scope but are not merge gates (2026-09-06: bulk parameter migration is the primary gate).
+## Test and fixture shape
 
-## Branch and worktree disposition (census 2026-09-07)
+Two public scenarios should carry the product, with narrow native-trap tests retained where they explain Revit:
 
-70 `family/*` branches sat beside the line. `git cherry family/rewrite <b>`:
+1. **Bulk standard:** several types; source/destination collision; shared identity replacement; source and dependent formulas; dimension/array/connector bindings; blanks; room/electrical normalization; nonstandard drivers; one deliberately refused family. Assert independent expected native values/bindings, rollback, saved/reloaded project behavior and no-op reapply.
+2. **Portable family:** capture, reconstruct in another document/year, save, reopen and apply again. Assert per-type values/formulas, signed connector pose, room positions, hosting/orientation and coverage. Optional geometry refusal must not conceal missing BIM state.
 
-- 45 branches: every commit patch-equivalent in `family/rewrite`. Worktrees retired 2026-09-07 (`retire-list.txt`, `retire.log` in the run dir); branches deleted at the sweep.
-- 25 branches carry commits the line does not hold verbatim. Census (`w2-report.md`, literal-line match of added source against the line): 20 are re-expressed on the line (A), `family/proof` is 38 doc commits plus two test files, `family/critic-purge` is contradicted by the 2026-09-06 ops-library ruling (re-open with the user, never by merge). Pull before the sweep, one commit each:
-  - `family/electrical-connector-plan-capture`: `Capture/FamilyPlanCapture.cs`, focused pre-apply capture and refusal of approximate connector plan identities.
-  - `family/sdk-failure-scope-call` `8c2f79a`: `ProcessFamily.cs` EditFamily failure predicate (pairs with SDK `9091b5c`, gate 4).
-  - `family/proof`: `Diagnostics/DimensionCreationDiagnosticsTests.cs`, and the missing rows of `ValueWriteExperimentTests.cs`.
-- Deterministic state of the dirty tree (w1, 2026-09-08T00:54Z): C# compiles 0 errors; `Pe.Shared.Tests` 172/172; web family routes 161/161; `vp check` typecheck fails with 28 errors in untouched `family-review/proto-editor/*` and `instances/*` (pre-existing on `68ce9db`); one mcps test needs a running dev host. Every `Pe.Revit.Tests` filter boots Revit, so converter and `Diff` tests are attached-lane only.
-- `family/scope-dismiss` (merged) has two dirty `families/store` files; inspect, then retire.
+The current 81-family sweep checks shared identities and convergence across the corpus, plus specific Fantech MCA values. It does not independently assert every mapped value/formula on every family. Its elapsed time also includes review export and readback; use `processorMs` and `operationsMs` when distinguishing execution from that extra work.
 
-## Runtime custody
+Use the real company profiles and Old_Template corpus as acceptance inputs. Do not delete complex tests just because their fixture is expensive. Replace duplicate fixture/converter scaffolding only after the common scenario preserves its behavioral assertions. A fixture that compares only its own capture output can validate a shared omission twice.
 
-No SDK sessions exist as of 2026-09-07 evening (`pe-revit session list`: none). Every PID and port in earlier forms of this map is dead. Rules that survive: re-read SDK identity before runtime work; own the session you mutate; `pe-revit test` is the only Revit test surface; never quarantine a source snapshot (it disables ricaun); public scripts go through `vp exec jiti apps/pea/src/main.ts script execute --host dev --bridge-session-id session:<owned-id> --permission-mode NoTransaction`; check operation status, not CLI exit 0.
+Company definitions originally contained 145 entries: 144 exact active cache identities and archived `PE_G___Horsepower`. The other 10 duplicate names in the cache each pair an active and archived row; selecting the last row by name produced false mismatches and was rejected. Archive status lives in `Metadata`, not a serialized top-level boolean.
 
-## Completion contract
+The change removes the archived fixture entry, selects only active converter definitions and routes the retired horsepower name to `PE_G_Perf_Horsepower`. A public native test covers both type values and repeat convergence. Both bulk harnesses now checkpoint definition identity, cache/fixture hashes and differences before migration. A cache observation is not proof of a live service refresh.
 
-- Explicit JSON specifications are manifested; unmentioned content stays untouched.
-- Each family completes or rolls back; successful batch siblings persist.
-- Destination wins: rewire source references and remove the source, or roll back the family.
-- No ExtensibleStorage or persistent roundtrip metadata. Apply never saves existing documents.
-- `/family`, `/families`, Pea route state and public script/Pod primitives must agree.
-- Green by deleting coverage is rejected; restore deleted intent at the highest surface.
-- Measurable authored literals require units. Number/Integer stay unitless.
+## Retained-session extraction
 
-## User stories and remaining proof
+The September 1-8 frozen extraction examined 1,626 candidate turns. After excluding relays, injected instructions, agent dispatches and unrelated turns, 72 retained FF author-turn excerpts were reviewed; twelve claims were checked again in their original session stores. Three long excerpts have unreviewed tails, including part of the PE standard document. Family-worktree records were delegated rather than independent user authorship. Raw-record locators are in the disposable mining evidence.
 
-| Story | Remaining highest-surface evidence |
-|---|---|
-| Author one portable family | native JSON + sidecars create on every supported year; no machine paths |
-| Bulk normalize a model | rung 5 |
-| Audit/manage a project's families | `/families` live snapshot, selection, plan, apply, drift, failure, repeat, receipts (two bridge ops still dashed) |
-| Ask Pea to author a family | Pea changes real route state through capability/scope/target contracts |
-| Normalize third-party electrical content | destination precedence natively; association transfer (dirty tree carries the connector-intent rewrite) |
-| Use FF from scripts/Pods | one pod renames a parameter across three families through `FamilyVisit`, live |
-| Reapply a changed specification | extras preserved, connector added, explicit values changed, next run 0 |
-| Trust partial batch progress | failed family unchanged, sibling persisted, actionable receipt, in one bulk run |
-| Roundtrip supported content | capture/rebuild/reopen plus geometry perturbation; symbolic loops compile, not native-proven |
+Stable intent: preserve formulas; explicit formula unset retains type values; whole-family rollback with per-family batch outcomes; real company standards on the unmigrated template; Fantech before/after inspection; dependency planning is intentional. The present request supersedes old absolute metadata wording with a narrow exception, while keeping the ES ban. Historical reports of broken connectors/formulas are leads, not current runtime verdicts.
 
-## Value strategy evidence
+## Proof frontier
 
-Fresh controlled Revit 2025, proof `39cde8f`: 12-type Mitsubishi family, five specs, three repetitions, zero mismatches. Median mutation: batched setters 4867.7 ms, prepopulated-source formulas 924.3 ms, temporary selector 4133.7 ms. No selector optimization adopted. New numeric values are raw zero; blank writes do not restore unset.
+- Clean `57b72b6`: deterministic Family selection passed 88/88 through `pe-revit test`.
+- Clean `57b72b6`: fresh controlled Revit 2025 public matrix failed at seed validation, before migration.
+- Current focused edits: compile passed; two public tests passed in fresh controlled Revit 2025: active horsepower replacement/reapply and the full value/reference matrix. The separately named array diagnostic did not match the filter; the public matrix exercises the corrected default.
+- Fresh controlled Revit 2025: the full mechanical sweep passed 81/81 families; composed profiles passed 12/12 family applications and empty second plans. SDK verdict: two tests passed, zero failed/skipped, exit 0; elapsed 48m25s including boot/build/inspection/export. The mechanical preflight matched 39 active definitions; composed preflight matched all 144 fixture definitions, with zero differences.
+- The user chose the existing cache as authority; a live service refresh is not independently proven. Both checkpoints record its exact hash and identity fields. Review output contains 49 sweep RFAs and 12 profile RFAs; the first 32 sweep exports failed before the output directory was created, independently of their passing migrations.
+- Documentation guard passed 6/6. The `beta.151.ff.1` CLI predates PID-pinned attached tests; its attached attempt was cancelled without native proof. The released `beta.152` CLI correctly refused the snapshot without a loaded test server. Successful native verdicts above came from fresh tests.
 
-## Protected state
+The committed-branch merge preview against `main` (`fe7c2b4`) reports conflicts in `global.json`, `.config/dotnet-tools.json` and `ProfileListItem.cs`; it excludes this investigation's uncommitted edits. No merge has been performed.
 
-- `Old_Template.rvt` SHA256 `8107AD50ADBD7BB9866287F0C8DB9168FD88ABE3132206356B717E24F2EE46B1`; proof opens disposable copies only.
-- Downloads `MEP_Architect_Project Name_R25_Copy_2025.07.11.rte` is the user's likely old clone; unchanged.
-- OneDrive Documents/Pe.Tools settings and workspaces are migration inputs; the cloud template is already migrated.
-- SDK pin on this line is `ff.1`; canonical main is beta.151 with different companions. Adopt as a package, never by swapping global.json alone.
+Disposable run: `.artifacts/runs/ff-purify-20260908/`. It contains source/historical citations in `shape-report.md`, revised `engine-report.md`, `tests-report.md`, `contracts-report.md`, `definitions-report.md`, `mine-report.md`, native/compile receipts and the deterministic contract probe. The feature verdict and open work live in [LEDGER.md](LEDGER.md); this map is swept when the merge frontier closes.

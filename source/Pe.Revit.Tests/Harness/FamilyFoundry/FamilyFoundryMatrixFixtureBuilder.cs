@@ -75,7 +75,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         Document projectDocument,
         string outputDirectory,
         Action<string, Document>? observe = null,
-        bool selectFirstTypeForArrayCreate = false
+        bool selectFirstTypeForArrayCreate = true
     ) {
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,

@@ -71,8 +71,8 @@ reconciler lowers to; scripts and Pods may call those verbs directly, but they a
 - Each family rolls back whole on failure. Partial completion is a property of the batch, never of one family.
 - Existing company destinations win source selection. Rewire source references to the destination, then remove
   the source; a failed transfer rolls the family back.
-- Portability permits referenced files and sidecars and forbids ExtensibleStorage or roundtrip metadata. Nothing may
-  be persisted to make capture or a test succeed.
+- Portability permits referenced files and sidecars. ExtensibleStorage is banned; any other roundtrip metadata
+  needs a concrete large benefit from a small datum. Never persist data merely to make a test succeed.
 - Treat Revit metadata and positional correspondence as untrusted until behavior proves them. Assert across several
   family types so a broken association cannot hide behind one happy path.
 - Product rulings live in `docs/features/family/LEDGER.md`; live-proven Revit behavior in that dir's

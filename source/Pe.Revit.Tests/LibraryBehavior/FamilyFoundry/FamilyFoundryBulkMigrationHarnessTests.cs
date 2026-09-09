@@ -54,6 +54,74 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
 
+    private static void VerifyCompanyDefinitions(IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions,
+        JObject evidence, string checkpointPath) {
+        var cache = Pe.Shared.StorageRuntime.StorageClient.Default.Global().State()
+            .Json<ParametersApi.Parameters>("parameters-service-cache");
+        var cachePath = ((Pe.Shared.StorageRuntime.Json.JsonReader<ParametersApi.Parameters>)cache).FilePath;
+        var cached = JsonConvert.DeserializeObject<ParametersApi.Parameters>(File.ReadAllText(cachePath))!.Results!;
+        var active = cached.Where(d => !d.IsArchived).ToList();
+        static JObject Identity(ParametersApi.Parameters.ParametersResult d) => JObject.FromObject(new {
+            d.Name, Guid = d.DownloadOptions.GetGuid(), Spec = d.DownloadOptions.GetSpecTypeId().TypeId,
+            d.DownloadOptions.IsInstance, Group = d.DownloadOptions.GetGroupTypeId().TypeId,
+            Description = d.Description ?? "", d.DownloadOptions.Visible, d.ReadOnly
+        });
+        var differences = new JArray();
+        foreach (var definition in definitions) {
+            var matches = active.Where(d => d.Name == definition.Name).ToList();
+            if (definition.IsArchived || matches.Count != 1 || !JToken.DeepEquals(Identity(definition), Identity(matches[0])))
+                differences.Add(new JObject {
+                    ["fixture"] = Identity(definition), ["fixtureArchived"] = definition.IsArchived,
+                    ["activeCacheMatches"] = new JArray(matches.Select(Identity))
+                });
+        }
+        static string Hash(string path) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+        evidence["definitions"] = new JObject {
+            ["source"] = cachePath, ["sourceSha256"] = Hash(cachePath),
+            ["sourceLastWriteUtc"] = File.GetLastWriteTimeUtc(cachePath).ToString("O"),
+            ["fixtureSha256"] = Hash(RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")),
+            ["activeCount"] = active.Count, ["archivedCount"] = cached.Count - active.Count,
+            ["used"] = new JArray(definitions.Select(Identity)), ["differences"] = differences,
+            ["status"] = differences.Count == 0 ? "matchedCachedDefinitions" : "definitionMismatch"
+        };
+        if (differences.Count > 0) evidence["status"] = "definitionMismatch";
+        WriteCheckpoint(checkpointPath, evidence);
+        Assert.That(differences, Is.Empty, "Company fixture definitions must match one active Parameters Service cache definition per name.");
+    }
+
+    [Test]
+    public void Company_standard_replaces_archived_horsepower_with_active_definition_and_preserves_type_values() {
+        const string retired = "PE_G___Horsepower", active = "PE_G_Perf_Horsepower";
+        var document = this.NewFamily("Company horsepower migration");
+        try {
+            using (var transaction = new Transaction(document, "Seed retired horsepower")) {
+                transaction.Start();
+                var parameter = document.FamilyManager.AddParameter(retired, GroupTypeId.Data, SpecTypeId.Number, false);
+                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
+                    document.FamilyManager.CurrentType = type;
+                    document.FamilyManager.Set(parameter, type.Name == "A" ? 1.5 : 3.0);
+                }
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var definitions = CompanyCorpusDefinitions();
+            var settings = JObject.Parse("""{"FilterApsParams":{"IncludeNames":{"Equaling":["PE_G___Horsepower"]}}}""");
+            var patch = FamilyProfileConverter.Convert(settings, definitions, document.GetUnits()).Patch;
+            using var processor = new OperationProcessor(document);
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            _ = processor.ProcessQueue(new OperationQueue().Add(operation));
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            Assert.That(document.FamilyManager.get_Parameter(retired), Is.Null);
+            var target = document.FamilyManager.get_Parameter(active);
+            Assert.That(target.GUID, Is.EqualTo(definitions.Single(d => d.Name == active).DownloadOptions.GetGuid()));
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
+                Assert.That(type.AsDouble(target), Is.EqualTo(type.Name == "A" ? 1.5 : 3.0));
+            var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            _ = processor.ProcessQueue(new OperationQueue().Add(repeated));
+            Assert.That(repeated.LastReceipt?.Converged, Is.True);
+            Assert.That(repeated.LastPlan!.Changes, Is.Empty);
+        } finally { document.Close(false); }
+    }
+
     private static JObject GeometryInput(JObject settings, params string[] operations) {
         var input = new JObject();
         foreach (var name in new[] { "FilterApsParams", "AddAndMapSharedParams", "AddFamilyParams" }.Concat(operations))
@@ -939,9 +1007,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var connectorRule = new ElectricalConnectorParameterRule { Voltage = "PE_E___Voltage", NumberOfPoles = "PE_E___NumberOfPoles",
                 ApparentPower = "PE_E___ApparentPower", MinimumCircuitAmpacity = "PE_E___MCA", CreateIfAbsent = false };
             names.UnionWith([connectorRule.Voltage, connectorRule.NumberOfPoles, connectorRule.ApparentPower, connectorRule.MinimumCircuitAmpacity]);
-            var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
-                RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => names.Contains(d.Name!)).ToList();
+            var definitions = CompanyCorpusDefinitions().Where(d => names.Contains(d.Name!)).ToList();
             Assert.That(definitions.Count, Is.EqualTo(39), "38 mapped mechanical definitions plus the routed PE_E___ApparentPower.");
+            VerifyCompanyDefinitions(definitions, evidence, checkpointPath);
             FamilyPatch WithRule(FamilyPatch converted, Dictionary<string, FailureAction>? failures = null) => new() { Select = converted.Select, Patch = converted.Patch,
                 Run = new PatchRun { ElectricalConnectorParameters = connectorRule, ParametersIfSourceExists = converted.Run?.ParametersIfSourceExists,
                     Clean = converted.Run?.Clean, Sort = converted.Run?.Sort, BlanksBecome = converted.Run?.BlanksBecome, Failures = failures } };
@@ -1170,6 +1238,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>()
                 .ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
             var definitions = CompanyCorpusDefinitions();
+            VerifyCompanyDefinitions(definitions, evidence, checkpointPath);
             foreach (var (source, only) in profileFamilies) {
                 var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(source, (JObject)profiles[source]["settings"]!);
                 var patch = FamilyProfileConverter.Convert(settings, definitions, project.GetUnits()).Patch;

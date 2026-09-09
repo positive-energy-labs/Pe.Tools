@@ -3296,32 +3296,5 @@
         }
       }
     ]
-  },
-  {
-    "Id": "parameters.6cd2c1f1f48d41f4aa5f4b51e535595f:aff27f9deca34828be8267ad76efab2c-1.0.0",
-    "Name": "PE_G___Horsepower",
-    "SpecId": "autodesk.spec.aec:number-2.0.0",
-    "ReadOnly": false,
-    "Metadata": [
-      {
-        "Id": "isHidden",
-        "Value": false
-      },
-      {
-        "Id": "isArchived",
-        "Value": true
-      },
-      {
-        "Id": "instanceTypeAssociation",
-        "Value": "TYPE"
-      },
-      {
-        "Id": "group",
-        "Value": {
-          "bindingId": "ABYV-32458-BXMZ-08934",
-          "id": "autodesk.parameter:group-1.0.0"
-        }
-      }
-    ]
   }
 ]
