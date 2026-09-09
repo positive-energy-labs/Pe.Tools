@@ -1,128 +1,63 @@
 using Newtonsoft.Json;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Shared.Tests;
 
 [TestFixture]
 public sealed class FamilyFoundryHostContractTests {
     [Test]
-    public void Plan_contract_round_trips_inline_profile_filter_provenance_and_diagnostics() {
-        var request = JsonConvert.DeserializeObject<FamilyFoundryPlanRequest>(
-            """{ "profileJson": "{\"FamilyParameters\":[]}", "familyId": 42 }""");
+    public void Plan_contract_round_trips_changes_run_effects_and_refusals() {
         var data = new FamilyFoundryPlanData(
-            new Reading("C:\\model.rvt", "v1", "2026-08-26T00:00:00.0000000Z"),
-            "abc",
-            [new FamilyFoundryFamilyPlanData(42, "AHU", CreatePlan("Width"))],
-            [new FamilyFoundryDiagnostic("NamedDiagnostic", "$.profileJson.old", "stale field")]);
-        var roundTripped = RoundTrip(data);
+            [new FamilyFoundryFamilyPlanData(12, "PE Box", "ABCDEF0123456789",
+                [new FamilyFoundryChangeData("parameters", "PE_M_Equip_Tag", "Rename", "Tag")],
+                ["run.sort"],
+                [],
+                [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")])],
+            [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", "Element id 9 is not a loaded family.")]);
 
+        var back = JsonConvert.DeserializeObject<FamilyFoundryPlanData>(JsonConvert.SerializeObject(data))!;
         Assert.Multiple(() => {
-            Assert.That(request!.ProfileJson, Does.Contain("FamilyParameters"));
-            Assert.That(request.FamilyId, Is.EqualTo(42));
-            Assert.That(roundTripped.PlanHash, Is.EqualTo("abc"));
-            Assert.That(roundTripped.Families.Single().Plan.Parameters.Single().Provenance.DataType,
-                Is.EqualTo("Authored"));
-            Assert.That(roundTripped.Diagnostics.Single().Code, Is.EqualTo("NamedDiagnostic"));
+            Assert.That(back.Families[0].Changes[0].MappedFrom, Is.EqualTo("Tag"));
+            Assert.That(back.Families[0].RunEffects, Is.EqualTo(new[] { "run.sort" }));
+            Assert.That(back.Families[0].Warnings[0].Code, Is.EqualTo("FamilyEditWarning"));
+            Assert.That(back.Diagnostics[0].Code, Is.EqualTo("FamilyNotFound"));
         });
     }
 
     [Test]
-    public void Apply_contract_round_trips_drift_gate_and_per_family_receipts() {
-        var request = RoundTrip(new FamilyFoundryApplyRequest("{}", [7, 9], "expected"));
-        var data = RoundTrip(new FamilyFoundryApplyData(
-            "actual",
-            false,
-            [new FamilyFoundryApplyReceipt(
-                7,
-                "Pump",
-                true,
-                null,
-                ["Add Params", "Set Values"],
-                3,
-                new FamilyFoundryParameterDiffSummary(1, 0, 2),
-                "C:\\artifacts\\Pump")],
-            []));
+    public void Apply_contract_round_trips_receipts_with_residue() {
+        var data = new FamilyFoundryApplyData(
+            [new FamilyFoundryApplyReceipt(12, "PE Box", true, false, null, "ABCDEF0123456789",
+                [new FamilyFoundryChangeData("types.cell", "Wide/Width", "Update", null)], [], "out/PE Box")],
+            []);
 
+        var back = JsonConvert.DeserializeObject<FamilyFoundryApplyData>(JsonConvert.SerializeObject(data))!;
         Assert.Multiple(() => {
-            Assert.That(request.FamilyIds, Is.EqualTo(new long[] { 7, 9 }));
-            Assert.That(request.ExpectedPlanHash, Is.EqualTo("expected"));
-            Assert.That(data.Refused, Is.False);
-            Assert.That(data.Receipts.Single().ParametersChanged, Is.EqualTo(3));
-            Assert.That(data.Receipts.Single().DiffSummary.Modified, Is.EqualTo(2));
-            Assert.That(data.Receipts.Single().ArtifactDirectoryPath, Is.EqualTo("C:\\artifacts\\Pump"));
+            Assert.That(back.Receipts[0].Converged, Is.False);
+            Assert.That(back.Receipts[0].Residue[0].Key, Is.EqualTo("Wide/Width"));
         });
     }
 
     [Test]
-    public void Project_contract_round_trips_dense_inline_profile_documents() {
-        var request = RoundTrip(new FamilyFoundryProjectRequest([5]));
-        var data = RoundTrip(new FamilyFoundryProjectData(
-            [new FamilyFoundryProfileProjectionData(5, "VAV", true, "{\"FamilyParameters\":[]}", null)],
-            []));
+    public void Project_contract_round_trips_model_json_and_coverage() {
+        var data = new FamilyFoundryProjectData(
+            [new FamilyFoundryFamilyModelData(12, "PE Box", true, "{}", new Dictionary<string, string> { ["parameters"] = "Read" }, 0,
+                [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")], null)],
+            []);
 
-        Assert.Multiple(() => {
-            Assert.That(request.FamilyIds.Single(), Is.EqualTo(5));
-            Assert.That(data.Projections.Single().Success, Is.True);
-            Assert.That(data.Projections.Single().ProfileJson, Does.Contain("FamilyParameters"));
-        });
+        var back = JsonConvert.DeserializeObject<FamilyFoundryProjectData>(JsonConvert.SerializeObject(data))!;
+        Assert.That(back.Families[0].Coverage["parameters"], Is.EqualTo("Read"));
+        Assert.That(back.Families[0].Issues[0].Severity, Is.EqualTo(Pe.Shared.RevitData.RevitDataIssueSeverity.Warning));
     }
 
     [Test]
-    public void Plan_hash_is_deterministic_and_changes_with_a_field() {
-        var first = CreatePlan("Width", reverseValues: false);
-        var sameProfileDifferent_dictionary_order = CreatePlan("Width", reverseValues: true);
-        var changedField = CreatePlan("Depth", reverseValues: false);
+    public void Capture_issues_are_not_authored_family_state() {
+        var model = new FamilyModel {
+            CaptureIssues = [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning,
+                "transient element 6150368")]
+        };
 
-        var firstHash = FamilyFoundryPlanHasher.Compute(first);
-        Assert.Multiple(() => {
-            Assert.That(FamilyFoundryPlanHasher.Compute(first), Is.EqualTo(firstHash));
-            Assert.That(FamilyFoundryPlanHasher.Compute(sameProfileDifferent_dictionary_order), Is.EqualTo(firstHash));
-            Assert.That(FamilyFoundryPlanHasher.Compute(changedField), Is.Not.EqualTo(firstHash));
-            Assert.That(firstHash, Does.Match("^[0-9a-f]{64}$"));
-        });
+        Assert.That(FamilyModelJson.Serialize(model), Does.Not.Contain("FamilyEditWarning").And.Not.Contain("6150368"));
     }
-
-    private static FamilyFoundryReconciliationPlanData CreatePlan(string parameterName, bool reverseValues = false) {
-        var values = new Dictionary<string, string?>();
-        if (reverseValues) {
-            values["Type B"] = "2'";
-            values["Type A"] = "1'";
-        } else {
-            values["Type A"] = "1'";
-            values["Type B"] = "2'";
-        }
-
-        return new FamilyFoundryReconciliationPlanData(
-            [new FamilyFoundryResolvedParameterData(
-                new FamilyFoundryResolvedParameterDefinitionData(
-                    new ParameterIdentity(
-                        $"name:{parameterName.ToLowerInvariant()}",
-                        ParameterIdentityKind.NameFallback,
-                        parameterName,
-                        null,
-                        null,
-                        null),
-                    parameterName,
-                    "autodesk.spec.aec:length-2.0.0",
-                    "autodesk.parameter.group:dimensions-1.0.0",
-                    false,
-                    null),
-                false,
-                new FamilyFoundryAssignmentData("Value", "1'"),
-                values,
-                null,
-                new FamilyFoundryParameterProvenanceData(
-                    "SnapshotOrFixture",
-                    "Authored",
-                    "FamilyFoundryDefault",
-                    "Authored",
-                    "Unresolved"))],
-            [],
-            [parameterName],
-            [new FamilyFoundryLoweredActionData("AddFamilyParameter", parameterName, [], "declared")]);
-    }
-
-    private static T RoundTrip<T>(T value) =>
-        JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value))!;
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { familyRouteState, familiesRouteState, settingsRouteState } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
@@ -231,6 +233,129 @@ test("the doors ride the host under the turn's Scope and name the revision and r
       result: string;
     };
     expect(skill.result).toContain("name: build-pod");
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("Pea doors author native JSON and plan both family routes under the turn scope", async () => {
+  const patch = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../../../docs/features/family/acceptance/parameters.patch.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  const writes: Array<{ url: URL; body: Record<string, unknown> }> = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (typeof init?.body === "string") {
+      writes.push({ url, body: JSON.parse(init.body) });
+      return Response.json({ ok: true, revision: 13 });
+    }
+    return Response.json({ revision: 12, doc: {} });
+  });
+  try {
+    for (const route of ["family", "families"] as const) {
+      const document = `C:\\Models\\FFRouteProof.${route === "family" ? "rfa" : "rvt"}`;
+      const scoped = (input: unknown) =>
+        peDo.execute!(
+          input as never,
+          {
+            agent: { toolCallId: `ff-${route}` },
+            requestContext: {
+              [turnContextKey]: { ...turn, scope: { kind: "document", document, pin: "ff-proof" } },
+            },
+          } as never,
+        );
+      const documentId = {
+        moduleKey: "FamilyFoundry",
+        rootKey: route === "family" ? "models" : "patches",
+        relativePath: "ff-route-proof",
+      };
+      const rawContent = JSON.stringify(
+        route === "family"
+          ? {
+              family: {
+                name: "PE Box",
+                category: "ElectricalEquipment",
+                template: "Electrical Equipment",
+                placement: "OneLevelBased",
+              },
+              parameters: patch.patch.parameters,
+              types: { Standard: {} },
+            }
+          : patch,
+      );
+      const create = settingsRouteState.commands.create.input.parse({ documentId, rawContent });
+      expect(
+        await scoped({ key: "route:settings.create", input: create, timeoutSeconds: 30 }),
+      ).toMatchObject({ ok: true });
+      expect(writes.at(-1)?.body).toMatchObject({
+        command: "create",
+        input: create,
+        expectedRevision: 12,
+      });
+      expect(writes.at(-1)?.url.searchParams.get("doc")).toBe(document);
+      expect(writes.at(-1)?.url.searchParams.get("pin")).toBe("ff-proof");
+      const plan =
+        route === "family"
+          ? familyRouteState.commands.plan.input.parse({ documentId })
+          : familiesRouteState.commands.plan.input.parse({
+              profilePath: documentId.relativePath,
+              scope: {
+                categoryNames: ["ElectricalEquipment"],
+                familyNames: ["PE Box"],
+                placementScope: "AllLoaded",
+              },
+            });
+      expect(
+        await scoped({ key: `route:${route}.plan`, input: plan, timeoutSeconds: 30 }),
+      ).toMatchObject({ ok: true });
+      expect(writes.at(-1)?.url.pathname).toBe(`/pe/agent/route-state/${route}/command`);
+      expect(writes.at(-1)?.body).toMatchObject({
+        command: "plan",
+        input: plan,
+        expectedRevision: 12,
+      });
+      const proposal =
+        route === "family"
+          ? {
+              key: "route:settings.propose",
+              patches: [
+                {
+                  path: ["fields", "/parameters/FF_Route_Proof_Count", "proposal"],
+                  value: { value: patch.patch.parameters.FF_Route_Proof_Count, by: "pea" },
+                },
+              ],
+            }
+          : {
+              key: "route:families.propose",
+              patches: [{ path: ["profilePath"], value: documentId.relativePath }],
+            };
+      expect(
+        await scoped({
+          key: proposal.key,
+          input: { patches: proposal.patches },
+          expectedRevision: 12,
+          timeoutSeconds: 30,
+        }),
+      ).toMatchObject({ ok: true });
+      expect(writes.at(-1)?.url.pathname).toBe(
+        `/pe/agent/route-state/${route === "family" ? "settings" : "families"}/apply`,
+      );
+      expect(writes.at(-1)?.body).toEqual({ patches: proposal.patches, expectedRevision: 12 });
+      const before = writes.length;
+      expect(
+        await scoped({ key: `route:${route}.apply`, input: {}, timeoutSeconds: 30 }),
+      ).toMatchObject({ isError: true });
+      expect(writes).toHaveLength(before);
+    }
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();

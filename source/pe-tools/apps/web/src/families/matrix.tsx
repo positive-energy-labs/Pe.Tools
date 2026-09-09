@@ -1,3 +1,4 @@
+import { nativeFixtureFamilies } from "#/families/fixture";
 import { EmptyState } from "#/components/lang/empty";
 import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -6,6 +7,7 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 export function FamiliesMatrix() {
   const {
     store,
+    fixture,
     navigate,
     rows,
     columns,
@@ -22,6 +24,13 @@ export function FamiliesMatrix() {
   } = useFamiliesWorkspace();
   return (
     <>
+      {fixture && (
+        <p className="px-4 py-1 t-small">
+          Fixture source (no Revit capture).{" "}
+          <a href="/families?source=fixture&fixture=native">native authored examples</a> /{" "}
+          <a href="/families?source=fixture">original review fixture</a>
+        </p>
+      )}
       <MasterTable
         rows={rows}
         columns={columns}
@@ -87,10 +96,27 @@ export function FamiliesMatrix() {
             </EmptyState>
           )
         }
-        /* Fleet → one family. The URL is the whole handoff: /family opens the requested
-           family in the bound session's family editor and lands in its live lane. No
-           cross-route store, nothing to keep in sync. */
-        onRowClick={() => void navigate({ to: "/family", search: {} })}
+        /* The existing editor operation activates a scratch family copy; capture that returned document. */
+        onRowClick={(row) => {
+          if (fixture) {
+            const native = nativeFixtureFamilies.find(
+              (entry) => entry.row.familyId === row.familyId,
+            );
+            if (native)
+              void navigate({
+                to: "/family",
+                search: {
+                  source: "fixture",
+                  fixture: native.key as "box" | "grd" | "bath" | "refline",
+                },
+              });
+            return;
+          }
+          void store.actions
+            .openFamily(row.familyId)
+            .then((search) => navigate({ to: "/family", search }))
+            .catch(() => undefined);
+        }}
       />
     </>
   );

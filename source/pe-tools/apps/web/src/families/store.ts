@@ -2,7 +2,9 @@ import { Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
+  address,
   familiesRouteState,
   here,
   type AppliedScope,
@@ -16,6 +18,7 @@ import type { FfProjectData } from "#/host/familyfoundry";
 import { bridgeSelector } from "@pe/agent-contracts";
 import { documentAddress, scopeSession } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
+import { familyFlag } from "#/families/plan";
 import {
   createRouteStoreCore,
   docAtom,
@@ -36,6 +39,7 @@ export function createFamiliesStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamiliesHost;
+  navigateTarget?: (target: string) => Promise<void>;
   slice?: FamiliesSlice;
   writer?: {
     apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
@@ -47,6 +51,7 @@ export function createFamiliesStore(deps: {
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   Reflect.set(runtime.layer, "keepAlive", false);
+  const invalidateReads = runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys));
 
   const slice = owned("slice/families", deps.slice ?? docAtom(familiesRouteState, deps.scope));
   const writer = deps.writer ?? docWriter(familiesRouteState, deps.scope, deps.registry, slice);
@@ -104,8 +109,25 @@ export function createFamiliesStore(deps: {
       ? scopeSession(deps.scope.scope, sessions.value.value)
       : null;
     if (!session) return null;
-    return here(value, documentAddress(session));
+    return value.reading
+      ? here(
+          value as typeof value & { reading: NonNullable<typeof value.reading> },
+          documentAddress(session),
+        )
+      : value;
   }).pipe(owned("view/plan"));
+  const applyRefusal = Atom.make((get) => {
+    const state = get(slice);
+    if (AsyncResult.isSuccess(state) && state.value.outcomeUnknown)
+      return "The previous Apply outcome is unknown. Recover it before applying again.";
+    const current = get(plan);
+    if (!current) return "plan first";
+    return current.entries.some(
+      (entry) => !get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
+    )
+      ? null
+      : "No included family has changes to apply.";
+  }).pipe(owned("view/apply-refusal"));
   const categorySource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),
   );
@@ -114,17 +136,20 @@ export function createFamiliesStore(deps: {
       Atom.swr(categorySource, { staleTime: "5 minutes", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const familySource = runtime.atom((get) => {
-    const next = get(draft);
-    const world = get(target);
+  const familySource = runtime.atom(() => {
+    const draftScope = registry.get(draft);
+    const next = {
+      categories: draftScope.categories,
+      placement: draftScope.placement,
+      families: [],
+    };
+    const world = registry.get(target);
     return hostRead([world, ...next.categories, next.placement], () =>
       next.categories.length ? deps.host.families(world, next) : Promise.resolve([]),
     );
   });
   const familyResult = runtimeFactory
-    .withReactivity(["family"])(
-      Atom.swr(familySource, { staleTime: "5 minutes", revalidateOnMount: false }),
-    )
+    .withReactivity(["family"])(familySource)
     .pipe(Atom.autoDispose);
   const profileSource = runtime.atom(() =>
     hostRead(["family-foundry"], () => deps.host.profiles()),
@@ -151,9 +176,6 @@ export function createFamiliesStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  // ponytail: the world lives in the page Scope (`?target`); a bind here is a no-op until the
-  // route navigates. Owed: families route passes `?target` into `pageScope`.
-  const bindDocument = async (_nextTarget: string) => ({ ok: true });
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
     (nextFeed) => {
@@ -173,7 +195,20 @@ export function createFamiliesStore(deps: {
   );
 
   const actions = {
-    setDraft: (value: Setter<FamiliesDraft>) => set("set-draft", draft, value),
+    refreshReads() {
+      registry.set(invalidateReads, ["sessions", "category", "family", "profile"]);
+    },
+    setDraft(value: Setter<FamiliesDraft>) {
+      const before = registry.get(draft);
+      set("set-draft", draft, value);
+      const after = registry.get(draft);
+      if (
+        before.placement !== after.placement ||
+        before.categories.length !== after.categories.length ||
+        before.categories.some((category, index) => category !== after.categories[index])
+      )
+        registry.set(invalidateReads, ["family"]);
+    },
     setPickedIds: (value: Setter<Set<number>>) => set("set-picked-ids", pickedIds, value),
     setProjection: (value: Setter<FfProjectData | null>) =>
       set("set-projection", projection, value),
@@ -232,7 +267,6 @@ export function createFamiliesStore(deps: {
           const path = registry.get(profilePath);
           const scope = registry.get(applied);
           if (!path || !scope) refuse("plan needs a profile and applied scope");
-          await bindDocument(registry.get(target));
           return expectRouteWrite(await writer.command("plan", { profilePath: path, scope }));
         },
         ["families"],
@@ -242,11 +276,21 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "apply",
         async () => {
+          const reason = registry.get(applyRefusal);
+          if (reason) refuse(reason);
           const current = registry.get(plan);
           if (!current) refuse("apply needs a plan");
-          await bindDocument(registry.get(target));
           return expectRouteWrite(
-            await writer.command("apply", { expectedPlanHash: current.planHash }),
+            await writer.command("apply", {
+              expectedPlanHashes: Object.fromEntries(
+                current.entries
+                  .filter(
+                    (entry) =>
+                      !registry.get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
+                  )
+                  .map((entry) => [String(entry.familyId), entry.planHash]),
+              ),
+            }),
           );
         },
         ["families", "matrix"],
@@ -256,8 +300,9 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          const result = await bindDocument(nextTarget);
-          return result;
+          if (!deps.navigateTarget) refuse("Target navigation is unavailable on this surface.");
+          await deps.navigateTarget(nextTarget);
+          return `bound ${nextTarget}`;
         },
         ["session", "category", "family", "profile"],
       );
@@ -268,7 +313,19 @@ export function createFamiliesStore(deps: {
         if (!ids.length) refuse("project needs picked families");
         const result = await deps.host.project(registry.get(target), ids);
         registry.set(projection, result);
-        return `projected ${result.projections.length} families`;
+        return `projected ${result.families.length} families`;
+      });
+    },
+    openFamily(familyId: number) {
+      return runVerb("open-family", async () => {
+        const opened = await deps.host.openFamily(registry.get(target), familyId);
+        if (!opened.savedPath)
+          refuse("The family editor returned no document path; navigation was not completed.");
+        return {
+          doc: address(opened.savedPath!),
+          target: deps.scope.scope.kind === "document" ? deps.scope.scope.pin : undefined,
+          capture: true as const,
+        };
       });
     },
     openPath(path: string) {
@@ -280,11 +337,13 @@ export function createFamiliesStore(deps: {
   };
 
   return {
+    scope: deps.scope,
     registry,
     atoms: {
       target,
       profilePath,
       plan,
+      applyRefusal,
       excludedIds,
       applyData,
       draft,

@@ -19,7 +19,8 @@ public static class LabelExtensions {
             if (UnitUtils.IsSymbol(typeId)) return LabelUtils.GetLabelForSymbol(typeId);
             if (SpecUtils.IsSpec(typeId)) return LabelUtils.GetLabelForSpec(typeId);
             if (Category.IsBuiltInCategory(typeId)) return LabelUtils.GetLabelFor(Category.GetBuiltInCategory(typeId)); // Add category support
-            return LabelUtils.GetLabelForDiscipline(typeId);
+            try { return LabelUtils.GetLabelForDiscipline(typeId); }
+            catch (Autodesk.Revit.Exceptions.ArgumentException) { return typeId.TypeId; } // legacy or custom ids (seen: Old_Template VMB 'Voltage') have no label
         }
 
     }

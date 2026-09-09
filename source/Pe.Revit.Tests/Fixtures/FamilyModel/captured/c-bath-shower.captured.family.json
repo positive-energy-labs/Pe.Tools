@@ -1,0 +1,607 @@
+{
+  "family": {
+    "name": "PE Bath-Shower",
+    "category": "PlumbingFixtures",
+    "template": "Unknown",
+    "placement": "OneLevelBased"
+  },
+  "parameters": {
+    "PE_G___Building": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Controller": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Description": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Fluid": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___FuelType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Location": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Manufacturer": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Model": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___NotesInstance": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___NotesType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___RefrigerantType": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___Serves": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___SoundLevel": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___TagInstance": {
+      "shared": true,
+      "isInstance": true
+    },
+    "PE_G___TagType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___URL": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___Weight": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_G___WeightLoaded": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_CWFU": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_DFU": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_FixtureSubtype": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_FixtureType": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_HWFU": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_MinFixtPipeSize": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_MinFixtTrapSize": {
+      "shared": true,
+      "isInstance": false
+    },
+    "PE_P_LoadCalc_WSFU": {
+      "shared": true,
+      "isInstance": false
+    },
+    "_conn angle": {
+      "dataType": "Angle",
+      "isInstance": false
+    },
+    "_conn size": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_conn x offset between": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_conn z offset": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_drain angle": {
+      "dataType": "Angle",
+      "isInstance": false,
+      "formula": "90°"
+    },
+    "_drain size": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_drain visible": {
+      "dataType": "YesNo",
+      "isInstance": false
+    },
+    "_drain x offset": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_drain y offset": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_drain z offset": {
+      "dataType": "Length",
+      "isInstance": true
+    },
+    "_FOUNDRY LAST PROCESSED AT": {
+      "dataType": "Text",
+      "isInstance": true
+    },
+    "_hot conn visible": {
+      "dataType": "YesNo",
+      "isInstance": false
+    }
+  },
+  "types": {
+    "Shower": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "SH-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "1.500000",
+      "PE_P_LoadCalc_DFU": "2.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "Single",
+      "PE_P_LoadCalc_FixtureType": "Shower",
+      "PE_P_LoadCalc_HWFU": "1.500000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 1/2\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 2\"",
+      "PE_P_LoadCalc_WSFU": "2.000000",
+      "_conn angle": "0deg",
+      "_conn size": "0' - 0 1/2\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "2' - 6\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "Yes",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "2' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    },
+    "Bathtub/Shower": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "BT-SH-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "3.000000",
+      "PE_P_LoadCalc_DFU": "2.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "1/2\" Fill Valve",
+      "PE_P_LoadCalc_FixtureType": "Bathtub or Bath/Shower",
+      "PE_P_LoadCalc_HWFU": "3.000000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 1/2\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 1 1/2\"",
+      "PE_P_LoadCalc_WSFU": "4.000000",
+      "_conn angle": "0deg",
+      "_conn size": "0' - 0 1/2\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "2' - 6\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "Yes",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "2' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    },
+    "Bathtub Floor Mounted": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "BT-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "7.500000",
+      "PE_P_LoadCalc_DFU": "2.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "3/4\" Fill Valve",
+      "PE_P_LoadCalc_FixtureType": "Bathtub or Bath/Shower",
+      "PE_P_LoadCalc_HWFU": "7.500000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 3/4\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 1 1/2\"",
+      "PE_P_LoadCalc_WSFU": "10.000000",
+      "_conn angle": "90deg",
+      "_conn size": "0' - 0 3/4\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "0' - 0 1/2\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "Yes",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "2' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    },
+    "Bathtub Wall Mounted": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "BT-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "7.500000",
+      "PE_P_LoadCalc_DFU": "2.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "3/4\" Fill Valve",
+      "PE_P_LoadCalc_FixtureType": "Bathtub or Bath/Shower",
+      "PE_P_LoadCalc_HWFU": "7.500000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 3/4\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 1 1/2\"",
+      "PE_P_LoadCalc_WSFU": "10.000000",
+      "_conn angle": "0deg",
+      "_conn size": "0' - 0 3/4\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "1' - 4\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "Yes",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "2' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    },
+    "Double Shower (w/ drain)": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "SH-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "1.500000",
+      "PE_P_LoadCalc_DFU": "4.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "Double (w/ drain)",
+      "PE_P_LoadCalc_FixtureType": "Shower",
+      "PE_P_LoadCalc_HWFU": "1.500000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 1/2\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 2\"",
+      "PE_P_LoadCalc_WSFU": "2.000000",
+      "_conn angle": "0deg",
+      "_conn size": "0' - 0 1/2\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "2' - 6\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "Yes",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "2' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    },
+    "Double Shower (head only)": {
+      "PE_G___Building": "",
+      "PE_G___Controller": "",
+      "PE_G___Description": "",
+      "PE_G___Fluid": "",
+      "PE_G___FuelType": "",
+      "PE_G___Location": "",
+      "PE_G___Manufacturer": "",
+      "PE_G___Model": "",
+      "PE_G___NotesInstance": "",
+      "PE_G___NotesType": "",
+      "PE_G___RefrigerantType": "",
+      "PE_G___Serves": "",
+      "PE_G___SoundLevel": "0.000000",
+      "PE_G___TagInstance": "SH-#",
+      "PE_G___TagType": "",
+      "PE_G___URL": "",
+      "PE_G___Weight": "0.000000",
+      "PE_G___WeightLoaded": "0.000000",
+      "PE_P_LoadCalc_CWFU": "1.500000",
+      "PE_P_LoadCalc_DFU": "0.000000",
+      "PE_P_LoadCalc_FixtureSubtype": "Double (head only)",
+      "PE_P_LoadCalc_FixtureType": "Shower",
+      "PE_P_LoadCalc_HWFU": "1.500000",
+      "PE_P_LoadCalc_MinFixtPipeSize": "0' - 0 1/2\"",
+      "PE_P_LoadCalc_MinFixtTrapSize": "0' - 2\"",
+      "PE_P_LoadCalc_WSFU": "2.000000",
+      "_conn angle": "0deg",
+      "_conn size": "0' - 0 1/2\"",
+      "_conn x offset between": "0' - 6\"",
+      "_conn z offset": "2' - 6\"",
+      "_drain size": "0' - 2\"",
+      "_drain visible": "No",
+      "_drain x offset": "3' - 0\"",
+      "_drain y offset": "0' - 0\"",
+      "_drain z offset": "0' - 0 1/2\"",
+      "_FOUNDRY LAST PROCESSED AT": "2026-02-02 16:56:25",
+      "_hot conn visible": "Yes"
+    }
+  },
+  "datums": {
+    "Ref. Level": {
+      "normal": "Z",
+      "isLevel": true
+    },
+    "Center (Front/Back)": {
+      "normal": "Y"
+    },
+    "Reference Plane": {
+      "normal": "Z"
+    },
+    "Center (Left/Right)": {
+      "normal": "X"
+    }
+  },
+  "refPlanes": {
+    "conn (right)": {
+      "normal": "PlusX",
+      "at": "0.25ft"
+    },
+    "conn (left)": {
+      "normal": "PlusX",
+      "at": "-0.25ft"
+    },
+    "drain y": {
+      "normal": "PlusY",
+      "at": "0ft",
+      "isReference": "StrongReference"
+    },
+    "drain x": {
+      "normal": "MinusX",
+      "at": "0ft",
+      "isReference": "StrongReference"
+    },
+    "arbitrary plane for positioning": {
+      "normal": "MinusX",
+      "at": "3ft"
+    }
+  },
+  "refLines": {},
+  "dimensions": {
+    "drain-x-offset": {
+      "between": [
+        "arbitrary plane for positioning",
+        "drain x"
+      ],
+      "label": "_drain x offset",
+      "view": "RefLevel"
+    },
+    "lock-arbitrary-plane-for-positioning-center-left-right": {
+      "between": [
+        "arbitrary plane for positioning",
+        "Center (Left/Right)"
+      ],
+      "locked": "3ft",
+      "view": "RefLevel"
+    },
+    "conn-x-offset-between": {
+      "between": [
+        "conn (left)",
+        "conn (right)"
+      ],
+      "label": "_conn x offset between",
+      "view": "RefLevel"
+    },
+    "eq-conn-left-center-left-right-conn-right": {
+      "between": [
+        "conn (left)",
+        "Center (Left/Right)",
+        "conn (right)"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "drain-y-offset": {
+      "between": [
+        "Center (Front/Back)",
+        "drain y"
+      ],
+      "label": "_drain y offset",
+      "view": "RefLevel"
+    }
+  },
+  "forms": {},
+  "nested": {
+    "puck": {
+      "family": "puck",
+      "type": "default",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Center (Left/Right)",
+          "to": "conn (left)"
+        }
+      ],
+      "associate": {
+        "Elevation from Level": "param:_conn z offset",
+        "_angle": "param:_conn angle",
+        "_diameter": "param:_conn size"
+      }
+    },
+    "puck-2": {
+      "family": "puck",
+      "type": "default",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Center (Left/Right)",
+          "to": "conn (right)"
+        }
+      ],
+      "associate": {
+        "Elevation from Level": "param:_conn z offset",
+        "_angle": "param:_conn angle",
+        "_diameter": "param:_conn size"
+      },
+      "visible": "param:_hot conn visible"
+    },
+    "puck-3": {
+      "family": "puck",
+      "type": "default",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Center (Front/Back)",
+          "to": "drain y"
+        },
+        {
+          "instance": "Center (Left/Right)",
+          "to": "drain x"
+        }
+      ],
+      "associate": {
+        "Elevation from Level": "param:_drain z offset",
+        "_angle": "param:_drain angle",
+        "_diameter": "param:_drain size"
+      },
+      "visible": "param:_drain visible"
+    }
+  },
+  "arrays": {},
+  "connectors": {},
+  "details": {},
+  "settings": {
+    "alwaysVertical": true,
+    "partType": "Normal",
+    "omniClass": "23.45.00.00"
+  },
+  "lookupTables": {},
+  "coverage": {
+    "parameters": "Read",
+    "types": "Read",
+    "datums": "Read",
+    "refPlanes": "Read",
+    "refLines": "Read",
+    "dimensions": "Read",
+    "forms": "Read",
+    "nested": "Read",
+    "arrays": "Read",
+    "connectors": "Read",
+    "details": "NotRead",
+    "settings": "Read",
+    "lookupTables": "Read",
+    "roomCalculationPoint": "Read"
+  },
+  "unmodeled": [
+    {
+      "reason": "ConnectorOnNestedFace",
+      "path": "$.connectors",
+      "facts": {
+        "domain": "Pipe",
+        "systemType": "Sanitary",
+        "family": "puck",
+        "instance": "puck-3",
+        "origin": "(0,0,-0)"
+      }
+    },
+    {
+      "reason": "ConnectorOnNestedFace",
+      "path": "$.connectors",
+      "facts": {
+        "domain": "Pipe",
+        "systemType": "DomesticColdWater",
+        "family": "puck",
+        "instance": "puck",
+        "origin": "(-0.25,-0.0417,2.5)"
+      }
+    },
+    {
+      "reason": "ConnectorOnNestedFace",
+      "path": "$.connectors",
+      "facts": {
+        "domain": "Pipe",
+        "systemType": "DomesticHotWater",
+        "family": "puck",
+        "instance": "puck-2",
+        "origin": "(0.25,-0.0417,2.5)"
+      }
+    },
+    {
+      "reason": "TemplateUnknown",
+      "path": "$.family.template",
+      "facts": {
+        "category": "PlumbingFixtures",
+        "placement": "OneLevelBased"
+      }
+    }
+  ]
+}

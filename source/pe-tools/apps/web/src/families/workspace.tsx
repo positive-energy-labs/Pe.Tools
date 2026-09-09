@@ -65,6 +65,10 @@ function useFamiliesWorkspaceModel(
   const status = useHostStatusQuery({ ...scope, enabled: !fixture });
   const connected = fixture || (status.data?.bridgeIsConnected ?? false);
 
+  useEffect(() => {
+    if (connected && !fixture) store.actions.refreshReads();
+  }, [connected, fixture, store]);
+
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
   const draftFamilyNames = fixture
@@ -210,9 +214,9 @@ function useFamiliesWorkspaceModel(
         if (done) {
           return done.success
             ? {
-                word: "applied",
-                tone: "done",
-                note: `${done.parametersChanged} parameter(s) changed · +${done.diffSummary.added} −${done.diffSummary.removed} ~${done.diffSummary.modified}`,
+                word: done.converged ? "converged" : "residue",
+                tone: done.converged ? "done" : "alarm",
+                note: `${done.residue.length} change(s) remaining; ${done.errors.length} error(s)`,
               }
             : {
                 // A refused write is the one thing on this row asking for a person: the ONE alarm.
@@ -254,7 +258,7 @@ function useFamiliesWorkspaceModel(
                  and a state dot wearing it would spend the one filled blue on a readout. */
               word: "included",
               tone: "caution",
-              note: `${entry.plan.loweredActions.length} action(s) queued`,
+              note: `${entry.changes.length + entry.runEffects.length} action(s) queued`,
             };
       },
     [plan, planByFamilyId, receiptByFamilyId, excludedIds],

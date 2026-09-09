@@ -32,11 +32,11 @@ export interface ParamColumn {
 
 type Cluster = "built-in" | "common" | "uncommon" | "project-only";
 
-/** family-matrix's clustering semantics, kept verbatim: built-ins, then common, then the tail. */
+/** Built-ins, then parameters shared by at least 30% of the scoped families, then the tail. */
 function clusterOf(col: ParamColumn, totalFamilies: number): Cluster {
   if (col.isProjectOnly) return "project-only";
   if (col.isBuiltIn) return "built-in";
-  return col.familyCount >= Math.max(2, totalFamilies * COMMON_SHARE) ? "common" : "uncommon";
+  return col.familyCount >= Math.max(1, totalFamilies * COMMON_SHARE) ? "common" : "uncommon";
 }
 
 const CLUSTER_ORDER: Record<Cluster, number> = {
@@ -144,7 +144,7 @@ export function useFamiliesColumns({
         cell: (row) => (
           <ReadCell
             value={row.familyName}
-            reason={`${row.familyName} — ${row.typeCount} type(s), element id ${row.familyId}. Click the row to open this one family in /family, in the bound session's family editor.`}
+            reason={`${row.familyName} — ${row.typeCount} type(s), element id ${row.familyId}. Click the row to open this one family in /family, using this route's source.`}
           />
         ),
       },

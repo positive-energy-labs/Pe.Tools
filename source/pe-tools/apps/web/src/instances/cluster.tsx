@@ -3,6 +3,8 @@ import {
   scopeSchema,
   type InstancesDocument,
   type Scope,
+  sdkSessionSelectorOf,
+  sdkSessionTargetOf,
 } from "@pe/agent-contracts";
 import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
 import { useSearch } from "@tanstack/react-router";
@@ -207,12 +209,12 @@ function InstancesClusterView({
   const [yearPick, setYearPick] = useState<string | null>(null);
   const [localStaged, setLocalStaged] = useState<Staged | null>(null);
   const intent = route?.slice;
-  target = intent?.selectedSession?.slice("session:".length) ?? target;
+  target = intent?.selectedSession ? sdkSessionTargetOf(intent.selectedSession) : target;
   const originalSetTarget = setTarget;
   setTarget = (next) => {
     if (route)
       void route.apply([
-        { path: ["selectedSession"], value: next ? `session:${next}` : null },
+        { path: ["selectedSession"], value: next ? sdkSessionSelectorOf(next) : null },
         { path: ["staged"], value: null },
       ]);
     else originalSetTarget(next);
@@ -231,7 +233,7 @@ function InstancesClusterView({
     : null;
   const storedWorld =
     stored?.kind === "open"
-      ? worldTrunk.resolve(liveWorlds, stored.session.slice("session:".length))
+      ? worldTrunk.resolve(liveWorlds, sdkSessionTargetOf(stored.session))
       : undefined;
   const staged: Staged | null = route
     ? stored
@@ -256,7 +258,7 @@ function InstancesClusterView({
             : next.kind === "open"
               ? {
                   kind: "open",
-                  session: `session:${worldTrunk.option(next.world).id}`,
+                  session: sdkSessionSelectorOf(worldTrunk.option(next.world).id),
                   document: next.doc.selector,
                 }
               : {

@@ -243,6 +243,105 @@ test("settings open composes global includes from bridge-discovered module optio
   }
 });
 
+test("composition preserves authored JSON, substitutes keyed presets, and fails closed", async () => {
+  const profile = withTempUserProfile();
+  try {
+    const root = join(profile.path, "Documents", "Pe.Tools", "settings", "FamilyFoundry", "models");
+    mkdirSync(join(root, "_fragments"), { recursive: true });
+    writeFileSync(
+      join(root, "_fragments", "parameters.json"),
+      '{"Width":{"dataType":"Length","value":"24in"}}',
+    );
+    writeFileSync(join(root, "_fragments", "item.json"), '{"name":"Width"}');
+    writeFileSync(join(root, "_fragments", "list.json"), '[{"$preset":"@local/_fragments/item"}]');
+    writeFileSync(
+      join(root, "_fragments", "cycle.json"),
+      '[{"$include":"@local/_fragments/cycle"}]',
+    );
+    const documentId = { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "main" };
+    const module = {
+      moduleKey: "FamilyFoundry",
+      defaultRootKey: "models",
+      roots: [{ rootKey: "models", displayName: "Models" }],
+      storageOptions: { includeRoots: ["_fragments"], presetRoots: ["_fragments"] },
+    };
+    const open = async (raw: string) => {
+      writeFileSync(join(root, "main.json"), raw);
+      return runDispatch(
+        openSettingsDocumentWithModule({ documentId, includeComposedContent: true }, module),
+      );
+    };
+    const raw =
+      '{"parameters":{"$preset":"@local/_fragments/parameters"},"items":[{"$include":"@local/_fragments/list"}]}';
+    const snapshot = await open(raw);
+    expect(snapshot.rawContent).toBe(raw);
+    expect(JSON.parse(snapshot.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "24in" } },
+      items: [{ name: "Width" }],
+    });
+    expect(snapshot.dependencies).toHaveLength(3);
+    writeFileSync(
+      join(root, "_fragments", "later.json"),
+      '{"Width":{"value":"42in"},"Enabled":{"value":true}}',
+    );
+    const keyedRaw =
+      '{"parameters":{"$include":["@local/_fragments/parameters","@local/_fragments/later"]}}';
+    const keyed = await open(keyedRaw);
+    expect(keyed.rawContent).toBe(keyedRaw);
+    expect(JSON.parse(keyed.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "42in" }, Enabled: { value: true } },
+    });
+    expect(keyed.dependencies).toHaveLength(2);
+    writeFileSync(
+      join(root, "_fragments", "defaults.json"),
+      JSON.stringify({
+        parameters: { $include: ["@local/_fragments/parameters", "@local/_fragments/later"] },
+        filter: {
+          IncludeNames: { Equaling: ["earlier"], Containing: ["preserved"] },
+          ExcludeNames: { Equaling: ["excluded"] },
+        },
+      }),
+    );
+    const overrideRaw = JSON.stringify({
+      $preset: "@local/_fragments/defaults",
+      parameters: { Width: { value: "48in" } },
+      filter: { IncludeNames: { Equaling: ["profile"] }, ExcludeNames: {} },
+    });
+    const overridden = await open(overrideRaw);
+    expect(overridden.validation.isValid).toBe(true);
+    expect(overridden.rawContent).toBe(overrideRaw);
+    expect(JSON.parse(overridden.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "48in" }, Enabled: { value: true } },
+      filter: {
+        IncludeNames: { Equaling: ["profile"], Containing: ["preserved"] },
+        ExcludeNames: { Equaling: ["excluded"] },
+      },
+    });
+    expect(overridden.dependencies.map((d) => d.directivePath)).toEqual([
+      "@local/_fragments/defaults",
+      "@local/_fragments/parameters",
+      "@local/_fragments/later",
+    ]);
+    for (const invalid of [
+      '{"parameters":{"$include":"@local/_fragments/parameters","Width":{}}}',
+      '{"parameters":{"$include":"@local/_fragments/list"}}',
+      '{"items":[{"$include":"@local/_fragments/list","ignored":true}]}',
+      '{"items":[{"$include":"@local/_fragments/cycle"}]}',
+      '{"parameters":{"$preset":"@local/forbidden/parameters"}}',
+    ]) {
+      const result = await open(invalid);
+      expect(result.rawContent).toBe(invalid);
+      expect(result.validation.isValid).toBe(false);
+      expect(result.validation.issues.some((issue) => issue.code === "CompositionError")).toBe(
+        true,
+      );
+      expect(result.composedContent).toBeNull();
+    }
+  } finally {
+    profile.dispose();
+  }
+});
+
 test("settings open preserves missing document as not found", async () => {
   const profile = withTempUserProfile();
   try {

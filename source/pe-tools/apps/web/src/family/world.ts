@@ -110,6 +110,8 @@ export interface ProtoLive {
   familyName: string;
   worldLabel: string;
   readAgo: string;
+  /** Captured types, including types with no reported literal values. */
+  typeNames?: string[];
   /** paramName → typeName → live value */
   values: Record<string, Record<string, ProtoLiveValue>>;
   /** params that exist in Revit but not in the profile */

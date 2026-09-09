@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 using Pe.Revit.Global;
+using Pe.Revit.Parameters;
 
 namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
@@ -16,7 +17,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.Integer, StorageType.String) => true,
             (StorageType.Integer, StorageType.Double) => true,
             (StorageType.Double, StorageType.String) => true,
-            (StorageType.Double, StorageType.Integer) => true,
+            (StorageType.Double, StorageType.Integer) => context.SourceValue is double,
             (StorageType.String, StorageType.Integer) => CanParseStringToInteger(context),
             (StorageType.String, StorageType.Double) => CanParseStringToDouble(context),
             _ => false
@@ -41,15 +42,17 @@ public class CoerceByStorageType : ICoercionStrategy {
             // Try to use the SourceValueString if it is available, otherwise fall back to ToString()
             (StorageType.Double, StorageType.String) => context.SourceValueString ?? sourceValueText,
 
-            // Set to integer by extracting integer from the doubleParam's "value string"
+            // Round the numeric value; the display string is formatted ("1' - 6\"", "$1,200") and scraping it loses or throws.
+            // ponytail: rounds the internal-unit double, so a measurable source lands in feet; add a unit convert if an
+            // integer destination ever needs display units.
             (StorageType.Double, StorageType.Integer) =>
-                Regexes.ExtractInteger(context.SourceValueString ?? string.Empty),
+                (int)Math.Round(context.SourceValue as double? ?? 0, MidpointRounding.AwayFromZero),
 
             // Set to integer by extracting integer from the stringParam's value
             (StorageType.String, StorageType.Integer) =>
                 Regexes.TryExtractInteger(sourceValueText, out var integer)
                     ? integer
-                    : ParseStringToYesNo(sourceValueText),
+                    : TryParseNumberWord(sourceValueText, out var word) ? word : ParseStringToYesNo(sourceValueText),
 
             // Set to double by parsing string - uses Revit's parser for measurable specs (imperial notation)
             (StorageType.String, StorageType.Double) =>
@@ -91,6 +94,7 @@ public class CoerceByStorageType : ICoercionStrategy {
 
         // Check for Yes/No boolean values
         if (stringValue is "Yes" or "No") return true;
+        if (TryParseNumberWord(stringValue, out _)) return true;
 
         // Check for numeric integer values
         return Regexes.TryExtractInteger(stringValue, out _);
@@ -114,13 +118,14 @@ public class CoerceByStorageType : ICoercionStrategy {
         // SpecTypeId.Number is reported as "measurable" by Revit but has no units,
         // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
+        // Number words ("Single", "Two-Pole") only ever mean a count: unitless targets only, never a measurable spec.
         var isNumberType = dataType?.TypeId == SpecTypeId.Number.TypeId;
         if (isNumberType)
-            return regexResult;
+            return regexResult || TryParseNumberWord(stringValue, out _);
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            var parseResult = UnitFormatUtils.TryParse(
+            var parseResult = ParameterStringIo.TryParseMeasuredValue(
                 context.FamilyDocument.GetUnits(),
                 dataType,
                 stringValue,
@@ -128,7 +133,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             );
             if (!parseResult) {
                 var normalizedValue = NormalizeForUnitParsing(stringValue);
-                parseResult = UnitFormatUtils.TryParse(
+                parseResult = ParameterStringIo.TryParseMeasuredValue(
                     context.FamilyDocument.GetUnits(),
                     dataType,
                     normalizedValue,
@@ -155,15 +160,18 @@ public class CoerceByStorageType : ICoercionStrategy {
         // SpecTypeId.Number is reported as "measurable" by Revit but has no units,
         // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
-        if (dataType?.TypeId == SpecTypeId.Number.TypeId) return Regexes.ExtractDouble(stringValue);
+        if (dataType?.TypeId == SpecTypeId.Number.TypeId)
+            return Regexes.TryExtractDouble(stringValue, out var number) ? number
+                : TryParseNumberWord(stringValue, out var word) ? word
+                : Regexes.ExtractDouble(stringValue);
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
+            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
                 return parsed;
 
             var normalizedValue = NormalizeForUnitParsing(stringValue);
-            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
+            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
                 return parsed;
 
             throw new ArgumentException(
@@ -172,6 +180,31 @@ public class CoerceByStorageType : ICoercionStrategy {
 
         // For non-measurable doubles, use simple regex extraction
         return Regexes.ExtractDouble(stringValue);
+    }
+
+    private static readonly (string Word, int Value)[] NumberWords = [
+        ("zero", 0), ("none", 0),
+        ("single", 1), ("one", 1), ("mono", 1),
+        ("double", 2), ("dual", 2), ("two", 2), ("twin", 2), ("bi", 2),
+        ("triple", 3), ("three", 3), ("tri", 3),
+        ("quad", 4), ("four", 4),
+        ("five", 5), ("six", 6), ("seven", 7), ("eight", 8), ("nine", 9), ("ten", 10), ("eleven", 11), ("twelve", 12)
+    ];
+
+    /// <summary>
+    ///     Text that names a count ("Single", "Three-Pole", "dual", "Twelve") coerces to that number when no digit is present.
+    ///     Longest word wins so "twin" is not read as "two"; the word must start the text and end at a non-letter.
+    /// </summary>
+    internal static bool TryParseNumberWord(string text, out int value) {
+        var word = text.Trim().ToLowerInvariant();
+        foreach (var (candidate, number) in NumberWords.OrderByDescending(entry => entry.Word.Length)) {
+            if (!word.StartsWith(candidate, StringComparison.Ordinal)) continue;
+            if (word.Length > candidate.Length && char.IsLetter(word[candidate.Length])) continue;
+            value = number;
+            return true;
+        }
+        value = 0;
+        return false;
     }
 
     private static int ParseStringToYesNo(string stringValue) {

@@ -22,7 +22,6 @@ const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument =>
       version: "v1",
       observedAt: "2026-08-25T00:00:00Z",
     },
-    planHash: "hash-1",
     entries: [fixtureFamilyPlanEntry],
   },
   excludedIds: [],
@@ -37,6 +36,7 @@ const slice = (doc: FamiliesRouteDocument) => ({
   connected: null,
   error: null,
   peaActive: false,
+  outcomeUnknown: false,
 });
 const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
@@ -59,7 +59,11 @@ const fixture = () => {
     categories: async () => [],
     families: async () => [],
     profiles: async () => [],
-    project: async () => ({ projections: [], diagnostics: [] }),
+    project: async () => ({ families: [], diagnostics: [] }),
+    openFamily: async (target, familyId) => {
+      calls.push({ op: "openFamily", input: { target, familyId } });
+      return { savedPath: "C:\\Scratch\\Selected.rfa" };
+    },
     openPath: async () => ({}),
   };
   const writer = {
@@ -93,7 +97,10 @@ const make = (
         },
       },
       host: testFixture.host,
-      slice: docSlice,
+      navigateTarget: async (target) => {
+        testFixture.calls.push({ op: "navigate", input: target });
+      },
+      slice: Atom.make((get) => get(docSlice)),
       writer: testFixture.writer,
     }),
   };
@@ -101,6 +108,72 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("families route store", () => {
+  it("refuses external Apply for unknown outcomes and empty plans without crossing the host", async () => {
+    const { registry, docSlice, store, calls } = make();
+    await tick();
+    registry.set(docSlice, AsyncResult.success({ ...slice(document()), outcomeUnknown: true }));
+    expect(registry.get(store.atoms.applyRefusal)).toContain("outcome is unknown");
+    await expect(store.actions.applyFoundry()).rejects.toThrow("outcome is unknown");
+    const empty = document();
+    empty.plan!.entries = [{ ...fixtureFamilyPlanEntry, changes: [], runEffects: [] }];
+    registry.set(docSlice, AsyncResult.success(slice(empty)));
+    expect(registry.get(store.atoms.applyRefusal)).toContain("No included family");
+    await expect(store.actions.applyFoundry()).rejects.toThrow("No included family");
+    expect(calls).toEqual([]);
+  });
+
+  it("refreshes family choices when categories change without waiting for cache expiry", async () => {
+    const testFixture = fixture();
+    const reads: string[][] = [];
+    testFixture.host.families = async (_target, draft) => {
+      reads.push(draft.categories);
+      return ["PE Box"];
+    };
+    const { registry, store } = make(testFixture);
+    await tick();
+    store.actions.setDraft({
+      placement: "AllLoaded",
+      categories: ["Electrical Equipment"],
+      families: [],
+    });
+    await tick();
+    await tick();
+    expect(reads).toEqual([["Electrical Equipment"]]);
+    expect(registry.get(store.feeds.family).options?.map((option) => option.id)).toEqual([
+      "PE Box",
+    ]);
+    store.actions.setDraft({
+      placement: "PlacedOnly",
+      categories: ["Mechanical Equipment"],
+      families: [],
+    });
+    await tick();
+    await tick();
+    expect(reads).toEqual([["Electrical Equipment"], ["Mechanical Equipment"]]);
+  });
+
+  it("retries catalog and profile reads when the connected world returns", async () => {
+    const testFixture = fixture();
+    let categories = 0;
+    let profiles = 0;
+    testFixture.host.categories = async () => {
+      if (++categories === 1) throw new Error("disconnected");
+      return ["Mechanical Equipment"];
+    };
+    testFixture.host.profiles = async () => {
+      if (++profiles === 1) throw new Error("disconnected");
+      return ["company.json"];
+    };
+    const { registry, store } = make(testFixture);
+    await tick();
+    store.actions.refreshReads();
+    await tick();
+    await tick();
+
+    expect(registry.get(store.feeds.category).options?.[0]?.id).toBe("Mechanical Equipment");
+    expect(registry.get(store.feeds.profile).options?.[0]?.id).toBe("company.json");
+  });
+
   it("unbinds a persisted plan from another document", () => {
     const { registry, store } = make(fixture(), undefined, document("C:\\Models\\Other.rvt"));
 
@@ -187,9 +260,9 @@ describe("families route store", () => {
 
   it("binding another target is a navigation, never a document write", async () => {
     const { calls, registry, store } = make();
-    await store.actions.bind("session:new");
+    await store.actions.bind("new");
     expect(registry.get(store.atoms.failure)).toBeNull();
-    expect(calls.filter(({ op }) => op === "apply")).toEqual([]);
+    expect(calls).toEqual([{ op: "navigate", input: "new" }]);
   });
 
   it("reloads a persisted document binding before plan", async () => {
@@ -207,4 +280,18 @@ describe("families route store", () => {
       { op: "plan", input: expect.any(Object) },
     ]);
   });
+});
+
+it("family row opens its exact id and returns the new document scope with the user's pin", async () => {
+  const { store, calls } = make();
+  expect(await store.actions.openFamily(731)).toEqual({
+    doc: address("C:\\Scratch\\Selected.rfa"),
+    target: "test",
+    capture: true,
+  });
+  expect(calls.at(-1)).toEqual({
+    op: "openFamily",
+    input: { target: "pin:test|doc:" + address("C:\\Models\\Test.rvt"), familyId: 731 },
+  });
+  store.dispose();
 });

@@ -6,6 +6,8 @@ import {
   familyRouteState,
   here,
   settingsRouteState,
+  settingsFieldSegments,
+  settingsFieldDirectives,
   type FamilyDocument,
   type RouteStatePatch,
   type RouteStateWriteResult,
@@ -57,16 +59,18 @@ type FamilySlices = {
 };
 
 export function createFamilyStore(deps: {
+  source?: "fixture";
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamilyHost;
+  navigateTarget?: (target: string) => Promise<void>;
   slices?: FamilySlices;
   writers?: {
     settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
     settingsCommand(name: "open" | "save", input?: unknown): Promise<RouteStateWriteResult>;
     familyApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
     familyCommand(
-      name: "capture_evidence" | "build_evidence",
+      name: "capture_evidence" | "build_evidence" | "plan" | "apply",
       input?: unknown,
     ): Promise<RouteStateWriteResult>;
   };
@@ -153,9 +157,13 @@ export function createFamilyStore(deps: {
     if (!session) return null;
     return here(value, documentAddress(session)) as EvidenceSlice | null;
   }).pipe(owned("view/evidence"));
-  const lane = Atom.make((get) => familyLane(get(snapshot), get(evidence))).pipe(
-    owned("view/lane"),
-  );
+  const reconciliation = Atom.make((get) => ({
+    plan: get(familyDoc)?.plan,
+    apply: get(familyDoc)?.apply,
+  })).pipe(owned("view/reconciliation"));
+  const lane = Atom.make((get) =>
+    familyLane(get(snapshot), get(evidence), deps.source === "fixture"),
+  ).pipe(owned("view/lane"));
   const saved = Atom.make((get) => savedFrom(initialDraft(get(lane).world))).pipe(
     owned("view/saved"),
   );
@@ -186,6 +194,9 @@ export function createFamilyStore(deps: {
     Atom.autoDispose,
   );
   const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed"));
+  const sharedEdit = Atom.make<{ pointer: string; directives: string[] } | null>(null).pipe(
+    owned("page/shared-edit"),
+  );
 
   const profileSource = runtime.atom(() =>
     hostRead([registry.get(target)], () => deps.host.profile(registry.get(target))),
@@ -209,6 +220,7 @@ export function createFamilyStore(deps: {
     write("system", "slice-reset", () =>
       Atom.batch(() => {
         registry.set(seededRef, nextLane.seedKey);
+        registry.set(sharedEdit, null);
         registry.set(draft, initialDraft(nextLane.world));
         registry.set(stageType, nextLane.world.typeNames[1] ?? nextLane.world.typeNames[0] ?? "");
         registry.set(drillType, null);
@@ -261,8 +273,10 @@ export function createFamilyStore(deps: {
         ? "arm build .rfa in the sheet pane first"
         : null;
   };
-  type CommandName = "open" | "save" | "capture" | "build";
+  type CommandName = "open" | "save" | "capture" | "build" | "plan" | "apply";
   const keys: Record<CommandName, readonly string[]> = {
+    plan: ["family"],
+    apply: ["family"],
     open: ["settings"],
     save: ["settings"],
     capture: ["family"],
@@ -270,6 +284,24 @@ export function createFamilyStore(deps: {
   };
   const writer = {
     async command(name: CommandName, input: unknown) {
+      if (name === "plan" || name === "apply") {
+        const current = registry.get(lane);
+        if (current.fixture || !current.document)
+          refuse("Open a saved family JSON and bind a family document first.");
+        if (registry.get(buildFacts).unsavedCount || registry.get(buildFacts).stagedCount)
+          refuse("Save authored edits before planning or applying.");
+        const result = expectRouteWrite(
+          await writers.familyCommand(
+            name,
+            name === "plan"
+              ? { documentId: { ...FAMILY_MODULE, relativePath: current.document!.relativePath } }
+              : { expectedPlanHash: registry.get(reconciliation).plan?.entry.planHash ?? "" },
+          ),
+        );
+        return name === "plan"
+          ? "Review the current-family plan before applying."
+          : JSON.stringify(result.result);
+      }
       if (name === "open") {
         expectRouteWrite(await writers.settingsCommand("open", input as Record<string, unknown>));
         return "opened";
@@ -286,6 +318,7 @@ export function createFamilyStore(deps: {
       if (name === "save") {
         const current = registry.get(lane);
         if (!current.document) {
+          if (!current.fixture) refuse("Open a family document before saving.");
           write("save", "page/draft", () =>
             registry.update(draft, (value) => ({ ...value, dirty: false })),
           );
@@ -313,7 +346,7 @@ export function createFamilyStore(deps: {
       const receipt = readBuildReceipt(result.result);
       if (receipt == null) return BUILD_OUTCOME_UNKNOWN;
       write("build", "page/armed", () => registry.set(armedBuild, null));
-      return `built ${receipt.rfaPath}`;
+      return `built ${receipt.rfaPath}${receipt.converged == null ? "" : receipt.converged ? " — converged" : ` — ${receipt.residueCount ?? "unknown"} changes remain`}`;
     },
   };
   const commandVerb = (name: CommandName, input: () => unknown = () => undefined) => ({
@@ -321,6 +354,8 @@ export function createFamilyStore(deps: {
     refuse: name === "build" ? buildRefusal : () => null,
   });
   const verbs = {
+    plan: commandVerb("plan"),
+    apply: commandVerb("apply"),
     save: commandVerb("save"),
     capture: commandVerb("capture"),
     build: commandVerb("build"),
@@ -341,7 +376,28 @@ export function createFamilyStore(deps: {
       }),
     );
   const actions = {
-    setDraft: (value: Setter<Draft>) => set("set-draft", draft, value),
+    setDraft(this: void, value: Setter<Draft>): string | void {
+      const previous = registry.get(draft);
+      const next = typeof value === "function" ? value(previous) : value;
+      const current = registry.get(lane);
+      const raw = registry.get(snapshot)?.rawContent;
+      if (current.document && raw) {
+        const authored: unknown = JSON.parse(raw);
+        for (const patch of draftToPatches(current.document.model, next, previous)) {
+          const pointer = String(patch.path[1]);
+          const directives = settingsFieldDirectives(authored, settingsFieldSegments(pointer));
+          if (directives) {
+            const text = `Edit the shared source for ${pointer}. The profile contains a pointer; no local edit was staged.`;
+            write("edit-shared", "page/shared-edit", () => {
+              registry.set(sharedEdit, { pointer, directives });
+              registry.set(core.receipt, { verb: "page", text, at: Date.now() });
+            });
+            return text;
+          }
+        }
+      }
+      set("set-draft", draft, next);
+    },
     setOverlay: (value: Setter<Overlay>) => set("set-overlay", overlay, value),
     setTable: (value: Setter<MasterTableState>) => set("set-table", tableState, value),
     setDrill: (value: Setter<MasterTableState>) => set("set-drill", drillState, value),
@@ -372,6 +428,18 @@ export function createFamilyStore(deps: {
         registry.set(core.receipt, { verb: "page", text, at: Date.now() }),
       );
     },
+    async openShared(
+      documentId: NonNullable<FamilySnapshot["dependencies"]>[number]["documentId"],
+    ) {
+      if (
+        registry.get(buildFacts).unsavedCount ||
+        Object.values(registry.get(fields)).some((field) => field.staged || field.proposal)
+      )
+        throw new Error(
+          "Save or resolve the current authored edits before opening a shared fragment.",
+        );
+      expectRouteWrite(await writers.settingsCommand("open", { documentId }));
+    },
     save: verbs.save.run!,
     open(relativePath: string) {
       return runVerb(
@@ -393,10 +461,15 @@ export function createFamilyStore(deps: {
     capture: verbs.capture.run!,
     build: verbs.build.run!,
     bind(nextTarget: string) {
+      if (deps.source === "fixture")
+        return Promise.reject(new Error("fixture family writes are disabled"));
       return runVerb(
         "bind",
         async () => {
-          // ponytail: the world lives in the page Scope (`?target`); owed: family route navigation.
+          if (registry.get(buildFacts).unsavedCount || registry.get(buildFacts).stagedCount)
+            refuse("Save or resolve authored edits before changing the target.");
+          if (!deps.navigateTarget) refuse("Target navigation is unavailable on this surface.");
+          await deps.navigateTarget(nextTarget);
           return `bound ${nextTarget}`;
         },
         ["family", "profile"],
@@ -407,8 +480,12 @@ export function createFamilyStore(deps: {
     },
   };
   return {
+    scope: deps.scope,
     registry,
     atoms: {
+      ready: familyDoc,
+      evidence,
+      reconciliation,
       target,
       profile,
       routeStage,
@@ -431,6 +508,7 @@ export function createFamilyStore(deps: {
       binding,
       picker,
       armedBuild,
+      sharedEdit,
       buildFacts,
       buildOutcome,
       ...core.verbAtoms,

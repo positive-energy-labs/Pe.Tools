@@ -1,55 +1,6 @@
-using Newtonsoft.Json;
-using NJsonSchema.Annotations;
 using Pe.Revit.FamilyFoundry.Operations;
-using System.ComponentModel;
 
 namespace Pe.Revit.FamilyFoundry.OperationGroups;
-
-public class CleanFamilyDocumentSettings : IOperationSettings {
-    [Description("Whether to purge nested families from the family")]
-    public bool EnablePurgeNestedFamilies { get; init; } = true;
-
-    [Description("Whether to purge reference planes from the family")]
-    public bool EnablePurgeReferencePlanes { get; init; } = true;
-
-    [Description("Whether to purge model lines from the family")]
-    public bool EnablePurgeModelLines { get; init; } = true;
-
-    [Description("Whether to purge unused parameters from the family")]
-    public bool EnablePurgeParams { get; init; } = true;
-
-    // TODO: describe
-    public PurgeParamsBase PurgeParamsSettings { get; init; } = new();
-
-
-    [JsonIgnore]
-    [JsonSchemaIgnore]
-    public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
-
-    [JsonIgnore]
-    [JsonSchemaIgnore]
-    public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
-
-    [JsonIgnore]
-    [JsonSchemaIgnore]
-    public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
-
-    [JsonIgnore]
-    [JsonSchemaIgnore]
-    public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
-
-    [JsonIgnore]
-    [JsonSchemaIgnore]
-    public PurgeParamsSettings ResolvedPurgeParamsSettings => new() {
-        Enabled = this.ShouldPurgeParams,
-        DirectDeleteEmptyParameters = this.PurgeParamsSettings.DirectDeleteEmptyParameters,
-        ConsiderZeroValueAsEmpty = this.PurgeParamsSettings.ConsiderZeroValueAsEmpty,
-        ConsiderEmptyStringAsEmpty = this.PurgeParamsSettings.ConsiderEmptyStringAsEmpty,
-        ExcludeNames = this.PurgeParamsSettings.ExcludeNames
-    };
-
-    public bool Enabled { get; init; } = true;
-}
 
 public class CleanFamilyDocument(
     CleanFamilyDocumentSettings settings,
@@ -61,9 +12,15 @@ public class CleanFamilyDocument(
 ) {
     public static List<IOperation> InitializeOperations(CleanFamilyDocumentSettings settings,
         IEnumerable<string> ExcludeParamNames) => [
-        new PurgeNestedFamilies(new DefaultOperationSettings { Enabled = settings.ShouldPurgeNestedFamilies }),
-        new PurgeReferencePlanes(new PurgeReferencePlanesSettings { Enabled = settings.ShouldPurgeReferencePlanes }),
-        new PurgeModelLines(new DefaultOperationSettings { Enabled = settings.ShouldPurgeModelLines }),
-        new PurgeParams(settings.ResolvedPurgeParamsSettings, ExcludeParamNames)
+        new PurgeNestedFamilies(new DefaultOperationSettings { Enabled = settings.Enabled && settings.EnablePurgeNestedFamilies }),
+        new PurgeReferencePlanes(new PurgeReferencePlanesSettings { Enabled = settings.Enabled && settings.EnablePurgeReferencePlanes }),
+        new PurgeModelLines(new DefaultOperationSettings { Enabled = settings.Enabled && settings.EnablePurgeModelLines }),
+        new PurgeParams(new PurgeParamsSettings {
+            Enabled = settings.Enabled && settings.EnablePurgeParams,
+            DirectDeleteEmptyParameters = settings.PurgeParamsSettings.DirectDeleteEmptyParameters,
+            ConsiderZeroValueAsEmpty = settings.PurgeParamsSettings.ConsiderZeroValueAsEmpty,
+            ConsiderEmptyStringAsEmpty = settings.PurgeParamsSettings.ConsiderEmptyStringAsEmpty,
+            ExcludeNames = settings.PurgeParamsSettings.ExcludeNames
+        }, ExcludeParamNames)
     ];
 }

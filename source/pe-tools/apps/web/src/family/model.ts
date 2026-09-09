@@ -79,7 +79,12 @@ export function buildPageWorld(source: ProtoWorld): PageWorld {
    * the link is the document's claim rather than a hand-authored map. */
   const paramsOf = (description: string) =>
     params.map((param) => param.name).filter((name) => description.includes(name));
-  const typeNames = Object.keys(source.profile.types);
+  const typeNames = [
+    ...new Set([
+      ...Object.keys(source.profile.types),
+      ...(live?.typeNames ?? Object.values(live?.values ?? {}).flatMap(Object.keys)),
+    ]),
+  ];
   return {
     source,
     path: source.profile.path,
@@ -455,7 +460,7 @@ export function agreementOf(
 
 export function rowAgreement(world: PageWorld, draft: Draft, row: PRow): Agreement {
   const seen = new Set(world.typeNames.map((typeName) => agreementOf(world, draft, row, typeName)));
-  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "agree";
+  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "unread";
 }
 
 // ── the three readings of one cell ──────────────────────────────────────────────────────────────

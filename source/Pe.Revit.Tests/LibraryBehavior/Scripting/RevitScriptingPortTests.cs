@@ -176,6 +176,7 @@ public sealed class RevitScriptingPortTests {
             runtimeAssemblyPath
         );
 
+        Assert.That(generated, Does.Contain("""<Reference Include="Newtonsoft.Json">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.HostContracts">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.Product">"""));
         Assert.That(generated, Does.Not.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));
@@ -748,6 +749,47 @@ public sealed class RevitScriptingPortTests {
         ), "test-write-transaction-owned-transaction");
 
         AssertPolicyRejected(result, "transaction");
+    }
+
+    [Test]
+    public void NoTransaction_executes_script_and_library_owned_transactions(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+
+        var ownedTransaction = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            using var transaction = new Transaction(doc!, "Script owned");
+            WriteLine(transaction.Start().ToString());
+            WriteLine(transaction.RollBack().ToString());
+            """,
+            PermissionMode: ScriptPermissionMode.NoTransaction
+        ), "test-no-transaction-script-owned");
+
+        Assert.That(ownedTransaction.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(ownedTransaction.Output, Does.Contain("Started"));
+        Assert.That(ownedTransaction.Output, Does.Contain("RolledBack"));
+
+        var familyFoundryBuild = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            var model = new Pe.Shared.RevitData.Families.FamilyModel
+            {
+                Family = new Pe.Shared.RevitData.Families.FamilyModelHeader
+                {
+                    Name = "Script FF Build",
+                    Category = Pe.Shared.RevitData.Families.FamilyCategory.GenericModels,
+                    Template = "Generic Model",
+                    Placement = Pe.Shared.RevitData.Families.FamilyModelPlacement.OneLevelBased
+                }
+            };
+            var built = Pe.Revit.FamilyFoundry.Apply.FamilyModelBuild.Build(app.Application, model);
+            try { WriteLine("ff-build-complete"); }
+            finally { _ = built.Document.Close(false); }
+            """,
+            PermissionMode: ScriptPermissionMode.NoTransaction
+        ), "test-no-transaction-family-foundry-build");
+
+        Assert.That(familyFoundryBuild.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(familyFoundryBuild.Output, Does.Contain("ff-build-complete"));
     }
 
     [Test]

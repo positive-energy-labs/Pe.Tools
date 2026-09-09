@@ -1,0 +1,86 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [
+      "Electrical Equipment"
+    ],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Utility Meter",
+        "Current Transformer Cabinet",
+        "AC Disconnect",
+        "DC Disconnect",
+        "Surge-Protective Device",
+        "Emergency Stop",
+        "Automatic Transfer Switch",
+        "Panelboard_Main Distribution Panel",
+        "Panelboard_Load Center",
+        "Panelboard_Lighting Control Panel",
+        "Manual Transfer Switch",
+        "Generator",
+        "Microgrid Interconnect Device",
+        "Battery Energy Storage System",
+        "SEPARATOR NAME FOR project-c",
+        "Electrical Equipment_Generic Objects",
+        "Inverter_Hybrid_FB",
+        "Automatic Transfer Switch (ATS)_FB",
+        "Battery Energy Storage System (BESS)",
+        "Generator (25 kW - 36 kW)",
+        "Generator (40 kW - 60 kW)",
+        "Electric Vehicle Supply Equipment (EVSE)_FB_ABB",
+        "BESS_HomeGrid_Stack'd Series",
+        "Meter_Combo_FB",
+        "Generator (80 kW - 125 kW)",
+        "Generator (150 kW - 200 kW)",
+        "Current Transformer (CT) Cabinet_FB",
+        "Disconnect_FB",
+        "Generator (14 kW - 26 kW)"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/elec-equip-other"
+        }
+      ],
+      "StartingWith": [
+        "PE_G___",
+        "PE_E___"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {
+    "Enabled": false
+  },
+  "AddFamilyParams": {
+    "Parameters": [],
+    "Enabled": false
+  },
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "Enabled": false
+  },
+  "MakeElectricalConnector": {
+    "Enabled": false
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

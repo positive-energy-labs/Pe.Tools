@@ -1,3 +1,5 @@
+import { familyFixtures } from "#/family/fixture";
+import { parameterText, type FamilyModel } from "#/family/family-model";
 import { pageScope } from "#/state/route-store";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -33,17 +35,16 @@ function planEntry(familyId: number, familyName: string, ...targets: string[]): 
   return {
     familyId,
     familyName,
-    plan: {
-      parameters: [],
-      requiredApsParameterNames: [],
-      familyParameterNames: [],
-      loweredActions: targets.map((target) => ({
-        operation: "set",
-        target,
-        sources: [],
-        reason: "profile",
-      })),
-    },
+    planHash: `fixture-${familyId}`,
+    changes: targets.map((key) => ({
+      section: "parameters",
+      key,
+      kind: "Modify",
+      mappedFrom: null,
+    })),
+    runEffects: [],
+    refusals: [],
+    warnings: [],
   };
 }
 
@@ -282,23 +283,63 @@ export const fixtureFamilyRows: FamilySnapshotRecord[] = [
   },
 ];
 
-export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) {
+export const nativeFixtureFamilies = Object.entries(familyFixtures).map(([key, raw], index) => {
+  const model = JSON.parse(raw) as FamilyModel;
+  const typeNames = Object.keys(model.types);
+  const row: FamilySnapshotRecord = {
+    familyId: 200 + index,
+    familyUniqueId: `fixture-native-${key}`,
+    familyName: model.family.name,
+    categoryName: model.family.category,
+    typeNames,
+    parameters: Object.entries(model.parameters ?? {}).map(([name, spec]) => {
+      const result = parameter(
+        name,
+        Object.fromEntries(
+          typeNames.map((type) => [
+            type,
+            spec.formula ? null : parameterText(model.types[type]?.[name] ?? spec.value),
+          ]),
+        ),
+        { formula: spec.formula },
+      );
+      result.definition.isInstance = spec.isInstance ?? false;
+      return result;
+    }),
+    issues: [],
+    isPartial: false,
+    placedInstanceCount: 0,
+  };
+  return { key, raw, model, row };
+});
+export const nativeFixtureRows = nativeFixtureFamilies.map((entry) => entry.row);
+
+export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry, native = false) {
+  const rows = native ? nativeFixtureRows : fixtureFamilyRows;
+  const draft = native
+    ? {
+        placement: "AllLoaded" as const,
+        categories: [...new Set(rows.map((r) => r.categoryName!))],
+        families: rows.map((r) => r.familyName),
+      }
+    : fixtureFamiliesDraft;
   let envelope: RouteEnvelope<FamiliesRouteDocument> = {
     version: 1,
     revision: 0,
     doc: {
       bindings: {},
-      profilePath: "desk.json",
-      plan: {
-        reading: {
-          at: fixtureFamiliesAddress,
-          version: "fixture-v1",
-          observedAt: "2026-08-30T00:00:00Z",
-        },
-        planHash: "fixture-plan",
-        entries: fixtureFamilyPlanEntries,
-      },
-      excludedIds: [104],
+      profilePath: native ? null : "desk.json",
+      plan: native
+        ? null
+        : {
+            reading: {
+              at: fixtureFamiliesAddress,
+              version: "fixture-v1",
+              observedAt: "2026-08-30T00:00:00Z",
+            },
+            entries: fixtureFamilyPlanEntries,
+          },
+      excludedIds: native ? [] : [104],
       apply: null,
     },
   };
@@ -327,32 +368,77 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
         openDocumentCount: 1,
       },
     ],
-    categories: async () => fixtureFamiliesDraft.categories,
-    families: async () => fixtureFamiliesDraft.families,
+    categories: async () => draft.categories,
+    families: async () => draft.families,
     profiles: async () => ["desk.json"],
     project: async (_target, familyIds) => ({
-      projections: familyIds.map((familyId) => {
-        const family = fixtureFamilyRows.find((candidate) => candidate.familyId === familyId);
+      families: familyIds.map((familyId) => {
+        const authored = native
+          ? nativeFixtureFamilies.find((entry) => entry.row.familyId === familyId)
+          : null;
+        if (authored)
+          return {
+            familyId,
+            familyName: authored.row.familyName,
+            success: true,
+            modelJson: authored.raw,
+            coverage: {} as Record<string, string>,
+            unmodeledCount: authored.model.unmodeled?.length ?? 0,
+            issues: [],
+          };
+        const family = rows.find((candidate) => candidate.familyId === familyId);
         return family
           ? {
               familyId,
               familyName: family.familyName,
               success: true,
-              profileJson: JSON.stringify(
+              coverage: { parameters: "Read", types: "Read" },
+              unmodeledCount: 0,
+              issues: [],
+              modelJson: JSON.stringify(
                 {
-                  FilterFamilies: { IncludeNames: { Equaling: [family.familyName] } },
-                  FamilyParameters: family.parameters.map((parameter) => ({
-                    Name: parameter.definition.identity.name,
-                  })),
+                  family: {
+                    name: family.familyName,
+                    category: family.categoryName,
+                    template: "Generic Model",
+                    placement: "OneLevelBased",
+                  },
+                  parameters: Object.fromEntries(
+                    family.parameters.map((parameter) => [
+                      parameter.definition.identity.name,
+                      { dataType: "Text" },
+                    ]),
+                  ),
+                  types: Object.fromEntries(
+                    family.typeNames.map((name) => [
+                      name,
+                      Object.fromEntries(
+                        family.parameters.flatMap((parameter) => {
+                          const value = parameter.valuesPerType[name];
+                          return value == null ? [] : [[parameter.definition.identity.name, value]];
+                        }),
+                      ),
+                    ]),
+                  ),
                 },
                 null,
                 2,
               ),
             }
-          : { familyId, success: false, error: "fixture family not found" };
+          : {
+              familyId,
+              success: false,
+              coverage: {} as Record<string, string>,
+              unmodeledCount: 0,
+              issues: [],
+              error: "fixture family not found",
+            };
       }),
       diagnostics: [],
     }),
+    openFamily: async () => {
+      throw new Error("Fixture families cannot open a Revit document.");
+    },
     openPath: async () => {
       throw new Error("fixture path opening is disabled");
     },
@@ -384,12 +470,12 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
       }),
     },
   });
-  registry.set(store.atoms.draft, fixtureFamiliesDraft);
+  registry.set(store.atoms.draft, draft);
   registry.set(store.atoms.applied, {
-    placementScope: fixtureFamiliesDraft.placement,
-    categoryNames: fixtureFamiliesDraft.categories,
-    familyNames: fixtureFamiliesDraft.families,
+    placementScope: draft.placement,
+    categoryNames: draft.categories,
+    familyNames: draft.families,
   });
-  registry.set(store.atoms.pickedIds, new Set([101]));
+  registry.set(store.atoms.pickedIds, new Set([native ? 200 : 101]));
   return store;
 }

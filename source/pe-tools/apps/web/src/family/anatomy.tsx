@@ -110,6 +110,29 @@ export function AnatomyDrawing({
             </HelpTip>
           </p>
         </div>
+        {model?.parameters && (
+          <div className="hairline-b mb-2 pb-2 t-small">
+            <p>Native authored declarations</p>
+            {(["datums", "refPlanes", "refLines", "dimensions", "nested", "arrays"] as const).map(
+              (section) => {
+                const entries = Object.entries(model[section] ?? {});
+                return entries.length ? (
+                  <details key={section}>
+                    <summary>
+                      {section} / {entries.length}
+                    </summary>
+                    {entries.map(([name, spec]) => (
+                      <details key={name}>
+                        <summary>{name}</summary>
+                        <pre className="overflow-auto">{JSON.stringify(spec, null, 2)}</pre>
+                      </details>
+                    ))}
+                  </details>
+                ) : null;
+              },
+            )}
+          </div>
+        )}
         {world.constituents.map((part) => {
           const geom = world.geomBySlug.get(part.slug);
           const unbound =

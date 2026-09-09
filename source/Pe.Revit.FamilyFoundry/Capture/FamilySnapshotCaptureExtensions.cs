@@ -23,7 +23,5 @@ public static class FamilySnapshotCaptureExtensions {
     private static SnapshotCapturePipeline CreateDefaultSnapshotCapturePipeline() =>
         new SnapshotCapturePipeline()
             .Add(new ParameterSnapshotCollector())
-            .Add(new LookupTableSnapshotCollector())
-            .Add(new ReferencePlaneSnapshotCollector())
-            .Add(new ParamDrivenSolidsSnapshotCollector());
+            .Add(new LookupTableSnapshotCollector());
 }

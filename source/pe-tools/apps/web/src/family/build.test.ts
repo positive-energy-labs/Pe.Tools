@@ -185,12 +185,16 @@ describe("readBuildReceipt — a build with no receipt is not a success", () => 
         typeNames: ["Compact"],
         parameterCount: 12,
         documentVersionToken: "7",
+        converged: false,
+        residueCount: 2,
       }),
     ).toEqual({
       familyName: "Fan Coil Unit",
       rfaPath: "C:/x/.artifacts/tmp/family/fcu-20260817-141500.rfa",
       documentVersionToken: "7",
       parameterCount: 12,
+      converged: false,
+      residueCount: 2,
     });
   });
 
@@ -208,6 +212,8 @@ describe("readBuildReceipt — a build with no receipt is not a success", () => 
       rfaPath: "out.rfa",
       documentVersionToken: null,
       parameterCount: null,
+      converged: null,
+      residueCount: null,
     });
   });
 });

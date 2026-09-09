@@ -39,6 +39,19 @@ public static class RevitLabelCatalog {
     public static Dictionary<string, ForgeTypeId> GetLabelToSpecMap() =>
         new(SpecLabelMap.Value, SpecLabelMap.Value.Comparer);
 
+    public static ForgeTypeId ResolveSpec(string value) {
+        if (SpecLabelMap.Value.TryGetValue(value, out var labeled)) return labeled;
+        if (value.StartsWith("autodesk.", StringComparison.Ordinal)) {
+            var requested = new ForgeTypeId(value);
+            return SpecUtils.GetAllSpecs().FirstOrDefault(spec => spec == requested)
+                ?? throw new InvalidOperationException($"Unknown specification id '{value}'.");
+        }
+        const string common = " (Common)";
+        if (value.EndsWith(common, StringComparison.Ordinal) && SpecLabelMap.Value.TryGetValue(value.Substring(0, value.Length - common.Length), out var scalar) &&
+            !UnitUtils.IsMeasurableSpec(scalar)) return scalar;
+        throw new InvalidOperationException($"Unknown specification label '{value}'.");
+    }
+
     public static Dictionary<ForgeTypeId, string> GetSpecToLabelMap() =>
         new(SpecValueMap.Value);
 

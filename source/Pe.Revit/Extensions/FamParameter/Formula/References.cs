@@ -5,32 +5,31 @@ namespace Pe.Revit.Extensions.FamParameter.Formula;
 /// </summary>
 public static class FormulaReferences {
     /// <summary>
-    ///     Checks if this parameter is referenced in a formula with strict boundary validation.
-    ///     Validates that the parameter name is properly bounded by formula operators/delimiters.
+    ///     Checks if this parameter is referenced in a formula, matching names longest-first against
+    ///     <paramref name="siblingNames" /> so a longer name that contains this one wins its span first
+    ///     ("Width" is not referenced by the formula "Half Width").
     /// </summary>
     /// <param name="param">The family parameter to check for</param>
     /// <param name="formula">The formula to search in</param>
-    /// <returns>True if the parameter name is properly bounded in the formula</returns>
-    public static bool IsReferencedIn(this FamilyParameter param, string formula) {
+    /// <param name="siblingNames">
+    ///     Every other parameter name that could shadow this one. Omit only when no sibling set is
+    ///     available: without it the check sees no longer names and over-reports, as it always did.
+    /// </param>
+    /// <returns>True if the parameter name owns a boundary-valid span of the formula</returns>
+    public static bool IsReferencedIn(this FamilyParameter param, string formula, IEnumerable<string>? siblingNames = null) {
         var parameterName = param.Definition.Name;
         if (string.IsNullOrEmpty(parameterName) || string.IsNullOrEmpty(formula)) return false;
 
-        var searchStart = 0;
-        while (searchStart < formula.Length) {
-            var leftIndex = formula.IndexOf(parameterName, searchStart, StringComparison.Ordinal);
-            if (leftIndex == -1) return false;
-            var leftValid = leftIndex == 0 || FormulaUtils.BoundaryChars.Contains(formula[leftIndex - 1]);
-
-            var rightIndex = leftIndex + parameterName.Length;
-            var rightValid = rightIndex >= formula.Length || FormulaUtils.BoundaryChars.Contains(formula[rightIndex]);
-            if (leftValid && rightValid) return true;
-
-            // Ok to only move index by 1 because this invalidates whatever parameter name was here (first letter chopped off)
-            searchStart = leftIndex + 1;
-        }
-
-        return false;
+        IEnumerable<string> candidates = siblingNames is null ? [parameterName] : siblingNames.Append(parameterName);
+        return GetReferencedNames(candidates, formula).Contains(parameterName);
     }
+
+    /// <summary>
+    ///     The subset of <paramref name="candidateNames" /> a formula actually references. Names are matched
+    ///     longest-first, so "Half Width" consumes its span before "Width" is tested.
+    /// </summary>
+    public static HashSet<string> GetReferencedNames(this IEnumerable<string> candidateNames, string formula) =>
+        FormulaUtils.ExtractReferencedNames(formula, candidateNames);
 
     /// <summary>
     ///     Gets all family parameters referenced in the given formula string.
@@ -44,9 +43,9 @@ public static class FormulaReferences {
         if (string.IsNullOrWhiteSpace(formula))
             return [];
 
-        return parameters
-            .OfType<FamilyParameter>()
-            .Where(p => p.IsReferencedIn(formula));
+        var all = parameters.OfType<FamilyParameter>().ToList();
+        var referenced = all.Select(p => p.Definition.Name).GetReferencedNames(formula);
+        return all.Where(p => referenced.Contains(p.Definition.Name));
     }
 
     /// <summary>

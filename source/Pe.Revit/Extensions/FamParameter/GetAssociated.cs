@@ -11,18 +11,13 @@ public static class FamilyParameterGetAssociated {
     /// <param name="doc">The family document</param>
     /// <returns>The associated dimensions</returns>
     public static IEnumerable<Dimension> AssociatedDimensions(this FamilyParameter param, FamilyDocument doc) {
-        var provider = new ParameterValueProvider(new ElementId(BuiltInParameter.DIM_LABEL));
-        var rule = new FilterElementIdRule(provider, new FilterNumericEquals(), param.Id);
-        var paramFilter = new ElementParameterFilter(rule);
-
-        var dimensionTypes = new List<Type> { typeof(Dimension) };
-        var dimensionFilter = new ElementMulticlassFilter(dimensionTypes);
-
-        var combinedFilter = new LogicalAndFilter(dimensionFilter, paramFilter);
-
         return new FilteredElementCollector(doc)
-            .WherePasses(combinedFilter)
-            .Cast<Dimension>();
+            .OfClass(typeof(Dimension))
+            .Cast<Dimension>().Where(dimension => {
+                try { return dimension.FamilyLabel?.Id == param.Id; }
+                // Native dimensions that cannot be labeled have no family-parameter association.
+                catch (Autodesk.Revit.Exceptions.InvalidOperationException) { return false; }
+            }).ToList();
     }
 
 
@@ -36,10 +31,11 @@ public static class FamilyParameterGetAssociated {
         if (param.Definition.GetDataType() != SpecTypeId.Int.Integer)
             return new List<BaseArray>();
 
+        // ponytail: scan elements because BaseArray is not a supported native class filter; narrow after a proven filter exists.
         return new FilteredElementCollector(doc)
-            .OfClass(typeof(BaseArray))
-            .Cast<BaseArray>()
-            .Where(array => array.Label?.Id == param.Id);
+            .WhereElementIsNotElementType()
+            .OfType<BaseArray>()
+            .Where(array => array.Label?.Id == param.Id).ToList();
     }
 
     /// <summary>
@@ -76,7 +72,7 @@ public static class FamilyParameterGetAssociated {
     /// <returns>True if the parameter has any direct physical associations</returns>
     public static bool HasDirectAssociation(this FamilyParameter param, FamilyDocument doc) =>
         param.AssociatedParameters
-            .Cast<Parameter>().Any(p => p.Id.Value() >= 0 && doc.Document.GetElement(p.Id) != null) ||
+            .Cast<Parameter>().Any(p => p.Element is { IsValidObject: true }) ||
         param.AssociatedArrays(doc).Any() ||
         param.AssociatedDimensions(doc).Any() ||
         param.AssociatedConnectors(doc).Any();

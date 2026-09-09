@@ -18,8 +18,8 @@ public sealed class DeleteParams(DeleteParamsSettings settings) : DocOperation<D
         var logs = new List<LogEntry>();
         var targetNames = this.Settings.Names
             .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Distinct(StringComparer.Ordinal)
+            .ToList(); // ordered: the reconciler sorts by formula length descending (gotcha 21)
 
         if (targetNames.Count == 0) {
             logs.Add(new LogEntry("DeleteParams").Skip("No parameter names were provided."));
@@ -59,19 +59,14 @@ public sealed class DeleteParams(DeleteParamsSettings settings) : DocOperation<D
                 continue;
             }
 
-            var hasBlockingDependentAssociation = stableParameters
-                .Where(candidate => candidate.Id != paramToDelete.Id)
-                .Where(candidate => !candidate.IsBuiltInParameter())
-                .Where(candidate => paramToDelete.IsReferencedIn(candidate.Formula))
-                .Any(candidate => candidate.HasDirectAssociation(doc));
-
-            if (hasBlockingDependentAssociation) {
-                logs.Add(new LogEntry(targetName).Skip("Blocked by dependent parameter association."));
-                continue;
-            }
-
-            if (paramToDelete.HasDirectAssociation(doc)) {
-                logs.Add(new LogEntry(targetName).Skip("Blocked by direct association."));
+            var blockers = stableParameters
+                .Where(candidate => candidate.Id != paramToDelete.Id && !candidate.IsBuiltInParameter())
+                .Where(candidate => paramToDelete.IsReferencedIn(candidate.Formula, stableParameters.Select(p => p.Definition.Name)) && candidate.HasDirectAssociation(doc))
+                .Select(candidate => candidate.Definition.Name)
+                .ToList();
+            if (paramToDelete.HasDirectAssociation(doc)) blockers.Insert(0, targetName);
+            if (blockers.Count > 0) {
+                logs.Add(new LogEntry(targetName).Error($"Blocked by association on: {string.Join(", ", blockers)}. Delete the dimension, array or connector binding first."));
                 continue;
             }
 

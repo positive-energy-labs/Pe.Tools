@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   addressSchema,
+  sdkSessionSelectorOf,
+  sdkSessionTargetOf,
   type InstancesDocument,
   type RouteStateCommandHandlers,
 } from "@pe/agent-contracts";
@@ -83,7 +85,7 @@ export function createInstancesCommandHandlers(
         if (staged.kind === "open") {
           path = "/docs/open";
           body = {
-            id: staged.session.slice(8),
+            id: sdkSessionTargetOf(staged.session),
             path: staged.document,
             ...(staged.document.startsWith("cld:") ? { conflictPolicy: "keep" } : {}),
           };
@@ -102,7 +104,7 @@ export function createInstancesCommandHandlers(
         }
       } else {
         if (!doc.selectedSession) return refuse("Select a session first.");
-        const id = doc.selectedSession.slice(8);
+        const id = sdkSessionTargetOf(doc.selectedSession);
         path = action === "close" ? "/docs/close" : "/sessions";
         body =
           action === "close"
@@ -116,14 +118,16 @@ export function createInstancesCommandHandlers(
       ) {
         const session =
           staged?.kind === "start"
-            ? `session:${staged.name}`
+            ? sdkSessionSelectorOf(staged.name)
             : staged?.kind === "open"
               ? staged.session
               : doc.selectedSession;
-        const current = await request(`/docs/current?id=${encodeURIComponent(session!.slice(8))}`);
+        const current = await request(
+          `/docs/current?id=${encodeURIComponent(sdkSessionTargetOf(session!))}`,
+        );
         const active = current.result.activeDocument;
         const document = addressSchema.safeParse(active?.modelGuid ?? active?.path).data ?? null;
-        receipt.target = { session: session!.slice(8), document };
+        receipt.target = { session: sdkSessionTargetOf(session!), document };
         if (!document)
           receipt.diagnostics.push({
             code: "document.target-unavailable",
@@ -139,7 +143,7 @@ export function createInstancesCommandHandlers(
       ) {
         doc.selectedSession =
           action === "start" && staged?.kind === "start"
-            ? `session:${staged.name}`
+            ? sdkSessionSelectorOf(staged.name)
             : doc.selectedSession;
         doc.staged = null;
       }

@@ -24,7 +24,7 @@ export function createLiveSettingsHost(): SettingsHost {
           rootKey,
           subDirectory: "",
           recursive: true,
-          includeFragments: false,
+          includeFragments: true,
           includeSchemas: false,
         })
       ).files;
@@ -45,6 +45,10 @@ export function createLiveSettingsHost(): SettingsHost {
         versionToken: result.metadata.versionToken?.value ?? null,
         observedAt: new Date().toISOString(),
         rawContent: result.rawContent,
+        dependencies: result.dependencies.map((d) => ({
+          directivePath: d.directivePath,
+          documentId: { ...d.documentId },
+        })),
         composedContent: result.composedContent ?? null,
         modifiedUtc: result.metadata.modifiedUtc ?? null,
         validation: {

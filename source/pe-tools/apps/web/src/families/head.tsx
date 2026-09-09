@@ -1,3 +1,5 @@
+import { scopeSession, sessionKey } from "#/host/target";
+import { scopePin } from "@pe/agent-contracts";
 import { useCallback } from "react";
 import { useAtomValue } from "@effect/atom-react";
 
@@ -15,14 +17,16 @@ const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 export function FamiliesHead({ store }: { store: FamiliesStore }) {
-  const target = useAtomValue(store.atoms.target);
   const profilePath = useAtomValue(store.atoms.profilePath);
   const draft = useAtomValue(store.atoms.draft);
   const applied = useAtomValue(store.atoms.applied);
   const plan = useAtomValue(store.atoms.plan);
+  const applyRefusal = useAtomValue(store.atoms.applyRefusal);
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
   const fleet = useFleet({ enabled: !useFamiliesWorkspace().fixture });
+  const resolved = scopeSession(store.scope.scope, fleet.sessions);
+  const target = scopePin(store.scope.scope) ?? (resolved ? sessionKey(resolved) : null);
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
@@ -50,11 +54,11 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
         : scopeDrifted
           ? "the draft changed — re-apply scope first"
           : null,
-    refuseApply: () => (plan ? null : "plan first"),
+    refuseApply: () => applyRefusal,
   });
   const state: BindingState<FamiliesSlot> = {
     bound: {
-      world: target || null,
+      world: target,
       profile: profilePath,
       scope: "scope",
       category: null,
@@ -70,7 +74,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
     (patch: BindingPatch<FamiliesSlot>) => {
       const world = patch.bound?.world;
       const profile = patch.bound?.profile;
-      if (world != null && world !== target) void store.actions.bind(world);
+      if (world != null && world !== target) void store.actions.bind(world).catch(() => undefined);
       if (profile != null && profile !== profilePath) void store.actions.setProfile(profile);
       if (patch.multi)
         store.actions.setDraft((previous) => ({
@@ -102,8 +106,8 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
       runner={runner}
       fact={
         plan ? (
-          <FactChip title="The plan hash that the apply command must return unchanged.">
-            plan hash · {plan.planHash.slice(0, 12)}
+          <FactChip title="Apply checks the reviewed hash for each included family.">
+            {plan.entries.length} family plans
           </FactChip>
         ) : undefined
       }

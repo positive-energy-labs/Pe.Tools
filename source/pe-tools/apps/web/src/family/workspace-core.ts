@@ -266,7 +266,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
       say(text);
       return text;
     }
-    setDraft((previous) => {
+    return setDraft((previous) => {
       const next = structuredClone(previous);
       next.authored[param] = trimmed;
       sever(next, param, null);
@@ -315,6 +315,12 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** apply — the profile wins. The one direction that MODIFIES the model, hence the commit tone. */
   const apply = (types: string[], only?: string) =>
     setDraft((previous) => {
+      if (!lane.fixture) {
+        say(
+          "Use plan current family to review and apply the saved JSON. Save any draft edits first.",
+        );
+        return previous;
+      }
       const next = structuredClone(previous);
       for (const row of rows) {
         if (row.kind !== "profile") continue;
@@ -337,9 +343,15 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   };
 
   const applyAll = (types: string[]) => {
+    if (!lane.fixture) {
+      say(
+        "Use plan current family to review and apply the saved JSON. Save any draft edits first.",
+      );
+      return;
+    }
     const count = driftCells.filter((cell) => types.includes(cell.typeName)).length;
     apply(types);
-    say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
+    say(`simulated ${count} value${count === 1 ? "" : "s"} in the fixture`);
   };
 
   const busy = useAtomValue(store.atoms.busy);
@@ -372,8 +384,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    */
   // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
   //
-  // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
-  // arithmetic on the draft — a page-local move that becomes real when `save profile` writes it.
+  // Capture and build below cross into Revit. The targeting header also runs native Plan/Apply
+  // through the store, using the saved composed profile and expected plan hash.
   //
   //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
   //                  and stamps the result into the evidence slice. It moves nothing into the
@@ -384,8 +396,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   //                  which materializes an .rfa and returns evidence pinned to that revision. It
   //                  is the whole reason the arming ceremony exists — see `#/family/build`.
   //
-  // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
-  // and the apply verbs above stay page-local and honest about it.
+  // Cell-level apply above simulates only in the explicit fixture lane. Native profile-wins
+  // writes use the header's reviewed familyfoundry plan/apply, not family.editor.apply.
 
   const capturing = busy?.id === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */

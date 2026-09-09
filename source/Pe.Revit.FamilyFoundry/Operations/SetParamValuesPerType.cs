@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.Extensions.FamParameter.Formula;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -28,7 +27,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
         }
 
         var fm = famDoc.FamilyManager;
-        var currentTypeName = fm.CurrentType?.Name;
+        var currentTypeName = fm.CurrentType?.Name?.Trim();
         var perTypeAssignmentsByParameter = this.Settings.GetPerTypeAssignmentsByParameter();
         var globalAssignmentsByParameter = this.Settings.GetGlobalAssignmentsByParameter();
 
@@ -61,7 +60,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 isFallback = true;
             }
 
-            if (string.IsNullOrWhiteSpace(valueToSet)) {
+            if (valueToSet is null) {
                 _ = log
                     .WithParameterEvent(
                         ParameterEventOutcome.PerTypeValueSkipped,
@@ -70,7 +69,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         details: currentTypeName is null
                             ? null
                             : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
-                    .Defer("No per-type value for current family type");
+                    .SkipForType("No per-type value for current family type");
                 continue;
             }
 
@@ -83,7 +82,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         details: currentTypeName is null
                             ? null
                             : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
-                    .Skip("Already has value");
+                    .SkipForType("Already has value");
                 continue;
             }
 
@@ -100,7 +99,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                             ["IsFallback"] = isFallback.ToString(),
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
                         }))
-                    .Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
+                    .SuccessForType(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
             } catch (Exception ex) {
                 _ = log
                     .WithParameterEvent(
@@ -119,19 +118,11 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
     }
 
     private static IReadOnlyDictionary<string, string> SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {
-        var fm = famDoc.FamilyManager;
         var trimmedUserValue = userValue.Trim();
 
         var actualValue = IsQuotedStringLiteral(userValue)
             ? trimmedUserValue.Substring(1, trimmedUserValue.Length - 2)
             : userValue;
-
-        var referencedParams = fm.Parameters.GetReferencedIn(actualValue).ToList();
-        if (referencedParams.Count != 0) {
-            throw new InvalidOperationException(
-                $"Per-type value '{actualValue}' contains parameter references. " +
-                $"Use {nameof(SetKnownParamsSettings.GlobalAssignments)} with Kind=Formula for formulas, not {nameof(SetKnownParamsSettings.PerTypeAssignmentsTable)}.");
-        }
 
         var details = famDoc.DescribeSetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
         _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));

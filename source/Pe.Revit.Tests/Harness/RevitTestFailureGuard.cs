@@ -1,6 +1,5 @@
 using Autodesk.Revit.DB.Events;
 using Pe.Revit.Failures;
-using Pe.Revit.Tasks;
 
 namespace Pe.Revit.Tests;
 
@@ -27,10 +26,12 @@ internal static class RevitTestFailureGuard {
             return;
 
         var diagnostics = new List<(bool IsError, string Message)>();
-        var result = PeToolsFailureHandling.ResolveFailures(accessor, diagnostics);
+        var result = PeToolsFailureHandling.RejectErrors(accessor, diagnostics);
         foreach (var (_, message) in diagnostics)
             Console.WriteLine($"[{nameof(RevitTestFailureGuard)}] {message}");
 
+        if (result == FailureProcessingResult.ProceedWithRollBack)
+            accessor.SetFailureHandlingOptions(accessor.GetFailureHandlingOptions().SetClearAfterRollback(true));
         args.SetProcessingResult(result);
     }
 }

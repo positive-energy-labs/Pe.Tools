@@ -79,6 +79,7 @@ const fixture = () => {
       versionToken: "v1",
       observedAt: "2026-08-25T00:00:00Z",
       rawContent: JSON.stringify(MODEL),
+      composedContent: JSON.stringify(MODEL),
       validation: { isValid: true, issues: [] },
     }),
   };
@@ -87,8 +88,10 @@ const fixture = () => {
     settingsCommand: (name: "open" | "save", input?: unknown) =>
       record(`settings.${name}`, input ?? {}),
     familyApply: (patches: RouteStatePatch[]) => record("family.apply", patches),
-    familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
-      record(`family.${name}`, input ?? {}),
+    familyCommand: (
+      name: "capture_evidence" | "build_evidence" | "plan" | "apply",
+      input?: unknown,
+    ) => record(`family.${name}`, input ?? {}),
   };
   return { host, writers, calls };
 };
@@ -117,7 +120,10 @@ const make = (
         },
       },
       host: testFixture.host,
-      slices: { settings: settingsSlice, family: familySlice },
+      navigateTarget: async (target) => {
+        testFixture.calls.push({ op: "navigate", input: target });
+      },
+      slices: { settings: Atom.make((get) => get(settingsSlice)), family: familySlice },
       writers: testFixture.writers,
     }),
   };
@@ -125,6 +131,16 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
+  it("reads a newly selected profile without waiting for snapshot cache expiry", async () => {
+    const { registry, settingsSlice, store } = make();
+    await tick();
+    const next = settings();
+    next.documentId = { ...next.documentId!, relativePath: "another.family.json" };
+    registry.set(settingsSlice, AsyncResult.success(slice(next)));
+    await tick();
+    expect(registry.get(store.atoms.snapshot)?.documentId.relativePath).toBe("another.family.json");
+  });
+
   it("projects matching host settings without a world binding", async () => {
     const { registry, store } = make();
     registry.get(store.atoms.snapshot);
@@ -159,9 +175,9 @@ describe("family route store", () => {
     expect(registry.get(store.atoms.lane).world.live?.worldLabel).toBe("C:\\Models\\Test.rfa");
 
     // Binding another target is a navigation of the page Scope, never a document write.
-    await store.actions.bind("session:new");
+    await store.actions.bind("new");
 
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([{ op: "navigate", input: "new" }]);
   });
 
   it("persists a picked profile before opening it", async () => {
@@ -212,7 +228,10 @@ describe("family route store", () => {
     const testFixture = fixture();
     const writers = {
       ...testFixture.writers,
-      familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
+      familyCommand: (
+        name: "capture_evidence" | "build_evidence" | "plan" | "apply",
+        input?: unknown,
+      ) =>
         name === "capture_evidence"
           ? new Promise<RouteStateWriteResult>((resolve) => {
               release = resolve;
@@ -298,3 +317,53 @@ describe("family route store", () => {
     expect(registry.get(store.feeds.profile).state).toBe("error");
   });
 });
+
+it("preserves unsaved authored edits when target navigation is requested", async () => {
+  const { registry, store, calls } = make();
+  registry.get(store.atoms.lane);
+  await tick();
+  store.actions.setDraft((d) => ({ ...d, authored: { ...d.authored, Width: "42in" } }));
+  await expect(store.actions.bind("new")).rejects.toThrow("Save or resolve authored edits");
+  expect(calls.filter((c) => c.op === "navigate")).toEqual([]);
+  expect(registry.get(store.atoms.draft).authored.Width).toBe("42in");
+});
+
+it.each([
+  { $preset: "@global/_parameters/base" },
+  { $include: ["@global/_parameters/base", "@global/_parameters/later"] },
+])(
+  "keeps inherited edits out of the local draft and leaves shared navigation available: %j",
+  async (directive) => {
+    const f = fixture();
+    const documentId = {
+      moduleKey: "Global",
+      rootKey: "fragments",
+      relativePath: "_parameters/base",
+    };
+    const { familyParameters, ...rest } = MODEL;
+    const host: FamilyHost = {
+      ...f.host,
+      settings: async (id) => ({
+        ...(await f.host.settings(id)),
+        rawContent: JSON.stringify({ ...rest, parameters: directive }),
+        composedContent: JSON.stringify({ ...rest, parameters: familyParameters }),
+        dependencies: [{ directivePath: "@global/_parameters/base", documentId }],
+      }),
+    };
+    const { registry, store, calls } = make({ ...f, host });
+    registry.get(store.atoms.lane);
+    await tick();
+    const before = registry.get(store.atoms.draft);
+    expect(
+      store.actions.setDraft((d) => ({ ...d, authored: { ...d.authored, Width: "42in" } })),
+    ).toContain("Edit the shared source");
+    expect(registry.get(store.atoms.draft)).toBe(before);
+    expect(registry.get(store.atoms.sharedEdit)?.pointer).toBe("/parameters/Width/value");
+    expect(calls).toEqual([]);
+    await store.actions.openShared(documentId);
+    expect(calls).toEqual([{ op: "settings.open", input: { documentId } }]);
+    // An explicitly authored type cell is still local even when its default is inherited.
+    store.actions.setDraft((d) => ({ ...d, types: { ...d.types, Standard: { Width: "36in" } } }));
+    expect(registry.get(store.atoms.draft).types.Standard?.Width).toBe("36in");
+  },
+);

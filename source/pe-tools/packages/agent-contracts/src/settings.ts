@@ -83,6 +83,9 @@ export const settingsSnapshotSchema = z.object({
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
+  dependencies: z
+    .array(z.object({ directivePath: z.string(), documentId: settingsDocumentIdSchema }))
+    .optional(),
   modifiedUtc: z.string().nullish(),
   validation: settingsValidationSchema.nullish(),
 });
@@ -157,6 +160,29 @@ export function settingsFieldSegments(pointer: string): string[] {
     .slice(1)
     .split("/")
     .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"));
+}
+
+/** Locate a raw directive boundary without expanding or choosing a fragment's winning fields. */
+export function settingsFieldDirectives(root: unknown, segments: string[]): string[] | null {
+  let cursor = root;
+  let inherited: string[] | null = null;
+  for (const [index, segment] of segments.entries()) {
+    if (cursor == null || typeof cursor !== "object") return inherited;
+    const object = cursor as Record<string, unknown>;
+    if (
+      ("$preset" in object || "$include" in object) &&
+      !(index === segments.length - 1 && segment.startsWith("$"))
+    ) {
+      const directive = object.$preset ?? object.$include;
+      inherited = (Array.isArray(directive) ? directive : [directive]).filter(
+        (value): value is string => typeof value === "string",
+      );
+      if ("$include" in object || !Object.hasOwn(object, segment)) return inherited;
+    }
+    if (!Object.hasOwn(object, segment)) return inherited;
+    cursor = object[segment];
+  }
+  return null;
 }
 
 /** Encode property segments as an RFC 6901 JSON Pointer field key. */

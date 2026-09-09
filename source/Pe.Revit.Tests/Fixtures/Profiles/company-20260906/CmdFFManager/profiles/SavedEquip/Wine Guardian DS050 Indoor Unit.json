@@ -1,0 +1,555 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "Wine Guardian - DS050 - Indoor Unit.rfa"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_E___EquipmentConnection",
+        "PE_E___FLA",
+        "PE_E___Frequency",
+        "PE_E___NumberOfPoles",
+        "PE_E___Phase",
+        "PE_E___Voltage",
+        "PE_G___Controller",
+        "PE_G___Description",
+        "PE_G___Manufacturer",
+        "PE_G___Model",
+        "PE_G___NotesType",
+        "PE_G___RefrigerantType",
+        "PE_G___TagInstance",
+        "PE_G___URL",
+        "PE_G___Weight",
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1",
+        "PE_M_Fan_AirFlowDesign",
+        "PE_M_Fan_AirFlowMax",
+        "PE_M_Fan_ExternalStaticPressure",
+        "PE_M_PerfCool_CapacityRated"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "MakeRefPlaneAndDims": {
+    "Enabled": true,
+    "MirrorSpecs": [],
+    "OffsetSpecs": [
+      {
+        "Name": "Return Air Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "ReturnAirCenterElevation",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Service Panel Center",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "ServicePanelOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Service Line Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "ServiceLineElevation",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Liquid Line Center",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "LiquidLineCenterOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Suction Line Center",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "SuctionLineCenterOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Drain Side",
+        "AnchorName": "Center (Front/Back)",
+        "Direction": "Positive",
+        "Parameter": "DrainSideOffset",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Drain Elevation",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "DrainElevation",
+        "Strength": "StrongRef"
+      }
+    ]
+  },
+  "AddFamilyParams": {
+    "Parameters": [
+      {
+        "Name": "SupplyAirDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "SupplyAirDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ReturnAirDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ReturnAirDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ReturnAirCenterElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServicePanelOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceLineHalfSpacing",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "LiquidLineCenterOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "SuctionLineCenterOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceLineElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "RefrigerantDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "LiquidLineDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "SuctionLineDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DrainDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DrainDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DrainSideOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DrainElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G___Manufacturer",
+        "Kind": "Value",
+        "Value": "Wine Guardian"
+      },
+      {
+        "Parameter": "PE_G___Description",
+        "Kind": "Value",
+        "Value": "Ducted split wine cellar cooling unit indoor fan-coil"
+      },
+      {
+        "Parameter": "PE_G___URL",
+        "Kind": "Value",
+        "Value": "https://wineguardian.com/wp-content/uploads/2013/09/Split-60Hz-Spec-Sheet-Sentinel-CHASSIS-B-12-06-2022.pdf"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Kind": "Value",
+        "Value": "WGI-#"
+      },
+      {
+        "Parameter": "PE_G___RefrigerantType",
+        "Kind": "Value",
+        "Value": "R-134a"
+      },
+      {
+        "Parameter": "PE_G___Controller",
+        "Kind": "Value",
+        "Value": "Remote interface controller and control cable"
+      },
+      {
+        "Parameter": "PE_E___EquipmentConnection",
+        "Kind": "Value",
+        "Value": "Plug"
+      },
+      {
+        "Parameter": "PE_E___Voltage",
+        "Kind": "Value",
+        "Value": "115 V"
+      },
+      {
+        "Parameter": "PE_E___Frequency",
+        "Kind": "Value",
+        "Value": "60 Hz"
+      },
+      {
+        "Parameter": "PE_E___Phase",
+        "Kind": "Value",
+        "Value": "1"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Kind": "Value",
+        "Value": "1"
+      },
+      {
+        "Parameter": "LiquidLineCenterOffset",
+        "Kind": "Formula",
+        "Value": "ServicePanelOffset - ServiceLineHalfSpacing"
+      },
+      {
+        "Parameter": "SuctionLineCenterOffset",
+        "Kind": "Formula",
+        "Value": "ServicePanelOffset + ServiceLineHalfSpacing"
+      },
+      {
+        "Parameter": "PE_E___FLA",
+        "Kind": "Value",
+        "Value": "0.9 A"
+      },
+      {
+        "Parameter": "PE_G___NotesType",
+        "Kind": "Value",
+        "Value": "Source set from Wine Guardian DS050 product page, Sentinel split spec sheet, current ducted split manual, and DS050 chassis-B CAD PDF. Modeled with one 10 in top supply collar, one 10 in back return collar, 1/4 in liquid and 1/2 in suction refrigerant connectors, and one 1/2 in condensate drain connector. Fan-coil airflow is 410 CFM free blow and 359 CFM at 0.20 in. w.g. external static. Heater and humidifier options were not modeled; manual lists 9.6 A heating current and 11.8 A minimum circuit size with heat option. Wine Guardian's current DS050 shop page contains conflicting max-capacity copy, so PE_M_PerfCool_CapacityRated was set to 6458 BTU/h from the additional-information table/spec sheet instead of the lower marketing blurbs."
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      {
+        "Parameter": "PE_G___Model",
+        "DS050": "DS050"
+      },
+      {
+        "Parameter": "PE_G___Weight",
+        "DS050": "54 lbs"
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "DS050": "23.81\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "DS050": "25.04\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "DS050": "19.65\""
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowDesign",
+        "DS050": "410 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMax",
+        "DS050": "410 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_ExternalStaticPressure",
+        "DS050": "0.20\""
+      },
+      {
+        "Parameter": "PE_M_PerfCool_CapacityRated",
+        "DS050": "6458 BTU/h"
+      },
+      {
+        "Parameter": "SupplyAirDiameter",
+        "DS050": "10\""
+      },
+      {
+        "Parameter": "SupplyAirDepth",
+        "DS050": "6\""
+      },
+      {
+        "Parameter": "ReturnAirDiameter",
+        "DS050": "10\""
+      },
+      {
+        "Parameter": "ReturnAirDepth",
+        "DS050": "6\""
+      },
+      {
+        "Parameter": "ReturnAirCenterElevation",
+        "DS050": "9.84\""
+      },
+      {
+        "Parameter": "ServicePanelOffset",
+        "DS050": "7.50\""
+      },
+      {
+        "Parameter": "ServiceLineHalfSpacing",
+        "DS050": "0.75\""
+      },
+      {
+        "Parameter": "ServiceLineElevation",
+        "DS050": "13.85\""
+      },
+      {
+        "Parameter": "RefrigerantDepth",
+        "DS050": "2\""
+      },
+      {
+        "Parameter": "LiquidLineDiameter",
+        "DS050": "0.25\""
+      },
+      {
+        "Parameter": "SuctionLineDiameter",
+        "DS050": "0.50\""
+      },
+      {
+        "Parameter": "DrainDiameter",
+        "DS050": "0.50\""
+      },
+      {
+        "Parameter": "DrainDepth",
+        "DS050": "2\""
+      },
+      {
+        "Parameter": "DrainSideOffset",
+        "DS050": "8.50\""
+      },
+      {
+        "Parameter": "DrainElevation",
+        "DS050": "1.00\""
+      }
+    ]
+  },
+  "ParamDrivenSolids": {
+    "Enabled": true,
+    "Rectangles": [
+      {
+        "Name": "Cabinet",
+        "IsSolid": true,
+        "Sketch": {
+          "Kind": "ReferencePlane",
+          "Plane": "Ref. Level"
+        },
+        "Width": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Width1",
+          "CenterAnchor": "Center (Front/Back)",
+          "PlaneNameBase": "cabinet width",
+          "Strength": "StrongRef"
+        },
+        "Length": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Length1",
+          "CenterAnchor": "Center (Left/Right)",
+          "PlaneNameBase": "cabinet length",
+          "Strength": "StrongRef"
+        },
+        "Height": {
+          "Mode": "Offset",
+          "Parameter": "PE_G_Dim_Height1",
+          "Anchor": "Reference Plane",
+          "Direction": "Positive",
+          "PlaneNameBase": "cabinet top",
+          "Strength": "StrongRef"
+        }
+      }
+    ],
+    "Cylinders": [],
+    "Connectors": [
+      {
+        "Name": "SupplyAir",
+        "Domain": "Duct",
+        "Host": {
+          "SketchPlane": "Cabinet.Height.Top",
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "SupplyAirDepth",
+            "Anchor": "Cabinet.Height.Top",
+            "Direction": "Positive",
+            "PlaneNameBase": "supply air face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": "Center (Left/Right)",
+          "CenterFrontBackPlane": "Center (Front/Back)",
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "SupplyAirDiameter",
+            "CenterAnchor": "Center (Left/Right)",
+            "PlaneNameBase": "supply air diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Duct": {
+            "SystemType": "SupplyAir",
+            "FlowConfiguration": "Preset",
+            "FlowDirection": "Out",
+            "LossMethod": "NotDefined"
+          }
+        }
+      },
+      {
+        "Name": "ReturnAir",
+        "Domain": "Duct",
+        "Host": {
+          "SketchPlane": "Cabinet.Width.Back",
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "ReturnAirDepth",
+            "Anchor": "Cabinet.Width.Back",
+            "Direction": "Negative",
+            "PlaneNameBase": "return air face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": "Center (Left/Right)",
+          "CenterFrontBackPlane": "Return Air Elevation",
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "ReturnAirDiameter",
+            "CenterAnchor": "Center (Left/Right)",
+            "PlaneNameBase": "return air diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Duct": {
+            "SystemType": "ReturnAir",
+            "FlowConfiguration": "Preset",
+            "FlowDirection": "In",
+            "LossMethod": "NotDefined"
+          }
+        }
+      },
+      {
+        "Name": "LiquidLine",
+        "Domain": "Pipe",
+        "Host": {
+          "SketchPlane": "Cabinet.Length.Left",
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "RefrigerantDepth",
+            "Anchor": "Cabinet.Length.Left",
+            "Direction": "Negative",
+            "PlaneNameBase": "liquid line face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": "Liquid Line Center",
+          "CenterFrontBackPlane": "Service Line Elevation",
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "LiquidLineDiameter",
+            "CenterAnchor": "Liquid Line Center",
+            "PlaneNameBase": "liquid line diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Pipe": {
+            "SystemType": "OtherPipe"
+          }
+        }
+      },
+      {
+        "Name": "SuctionLine",
+        "Domain": "Pipe",
+        "Host": {
+          "SketchPlane": "Cabinet.Length.Left",
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "RefrigerantDepth",
+            "Anchor": "Cabinet.Length.Left",
+            "Direction": "Negative",
+            "PlaneNameBase": "suction line face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": "Suction Line Center",
+          "CenterFrontBackPlane": "Service Line Elevation",
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "SuctionLineDiameter",
+            "CenterAnchor": "Suction Line Center",
+            "PlaneNameBase": "suction line diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Pipe": {
+            "SystemType": "OtherPipe"
+          }
+        }
+      },
+      {
+        "Name": "CondensateDrain",
+        "Domain": "Pipe",
+        "Host": {
+          "SketchPlane": "Cabinet.Length.Left",
+          "Depth": {
+            "Mode": "Offset",
+            "Parameter": "DrainDepth",
+            "Anchor": "Cabinet.Length.Left",
+            "Direction": "Negative",
+            "PlaneNameBase": "condensate drain face",
+            "Strength": "StrongRef"
+          }
+        },
+        "Geometry": {
+          "Profile": "Round",
+          "CenterLeftRightPlane": "Drain Side",
+          "CenterFrontBackPlane": "Drain Elevation",
+          "Diameter": {
+            "Mode": "Mirror",
+            "Parameter": "DrainDiameter",
+            "CenterAnchor": "Drain Side",
+            "PlaneNameBase": "condensate drain diameter",
+            "Strength": "StrongRef"
+          }
+        },
+        "Config": {
+          "Pipe": {
+            "SystemType": "Sanitary"
+          }
+        }
+      }
+    ]
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+}

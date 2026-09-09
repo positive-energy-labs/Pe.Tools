@@ -1,8 +1,11 @@
+using Pe.Revit.Parameters;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json.Linq;
+using System.Reflection;
 
 namespace Pe.Revit.DocumentData.Families.Extraction;
 
@@ -38,38 +41,32 @@ public static class FamilySnapshotExtractor {
     }
 
     /// <summary>
-    ///     Extracts a loaded family's authored truth from a project document: reuses an already-open family
-    ///     document when present, otherwise EditFamily (must be called outside any transaction), always
+    ///     Extracts a loaded family's authored truth from its exact project via EditFamily (outside any transaction), always
     ///     Close(false) when we opened it. Failure degrades to an IsPartial record with an issue.
     /// </summary>
     public static FamilySnapshotRecord ExtractFromProjectFamily(Document projectDocument, Family family) {
         var issues = new List<RevitDataIssue>();
         IReadOnlyList<FamilyParameterSnapshot> parameters = [];
         IReadOnlyList<string> typeNames = [];
-
-        Document? familyDocument = null;
-        var shouldClose = false;
+        var editDiagnostics = new List<(bool IsError, string Message)>();
         try {
-            var existingFamilyDocument = projectDocument.Application.FindOpenFamilyDocument(family);
-            familyDocument = existingFamilyDocument ?? projectDocument.EditFamily(family);
-            shouldClose = existingFamilyDocument == null;
-
-            var famDoc = new FamilyDocument(familyDocument);
-            parameters = ExtractParameters(famDoc, issues, out typeNames);
+            _ = projectDocument.ReadFamilyCopy(family, famDoc => {
+                parameters = ExtractParameters(famDoc, issues, out typeNames);
+                return true;
+            }, editDiagnostics);
         } catch (Exception ex) {
-            issues.Add(new RevitDataIssue(
-                "FamilySnapshotExtractionFailed",
-                RevitDataIssueSeverity.Error,
-                $"Could not extract family document truth for '{family.Name}': {ex.Message}"
-            ));
+            if (!editDiagnostics.Any(diagnostic => diagnostic.IsError))
+                issues.Add(new RevitDataIssue(
+                    "FamilySnapshotExtractionFailed",
+                    RevitDataIssueSeverity.Error,
+                    $"Could not extract family document truth for '{family.Name}': {ex.Message}"
+                ));
         } finally {
-            if (shouldClose && familyDocument != null) {
-                try {
-                    _ = familyDocument.Close(false);
-                } catch {
-                    // Best effort only; extraction must not fail because a temp family doc could not close.
-                }
-            }
+            issues.AddRange(editDiagnostics.Select(diagnostic => new RevitDataIssue(
+                diagnostic.IsError ? "FamilyEditError" : "FamilyEditWarning",
+                diagnostic.IsError ? RevitDataIssueSeverity.Error : RevitDataIssueSeverity.Warning,
+                $"EditFamily for '{family.Name}': {diagnostic.Message}"
+            )));
         }
 
         return new FamilySnapshotRecord(
@@ -100,12 +97,13 @@ public static class FamilySnapshotExtractor {
         var snapshots = new List<FamilyParameterSnapshot>();
         foreach (var familyParameter in fm.GetParameters()) {
             try {
-                snapshots.Add(ExtractParameter(famDoc, familyParameter, types));
+                snapshots.Add(ExtractParameter(famDoc, familyParameter, types, issues));
             } catch (Exception ex) {
                 issues.Add(new RevitDataIssue(
                     "FamilyParameterSnapshotReadFailed",
-                    RevitDataIssueSeverity.Warning,
-                    $"Could not read family parameter '{familyParameter.Definition?.Name}': {ex.Message}"
+                    RevitDataIssueSeverity.Error,
+                    $"Could not read required fields for family parameter '{familyParameter.Definition?.Name}': {ex.GetType().FullName}: {ex.Message}",
+                    ParameterName: familyParameter.Definition?.Name
                 ));
             }
         }
@@ -119,7 +117,8 @@ public static class FamilySnapshotExtractor {
     private static FamilyParameterSnapshot ExtractParameter(
         FamilyDocument famDoc,
         FamilyParameter familyParameter,
-        IReadOnlyList<FamilyType> types
+        IReadOnlyList<FamilyType> types,
+        List<RevitDataIssue> issues
     ) {
         var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
         var dataType = NormalizeForgeTypeId(familyParameter.Definition.GetDataType());
@@ -127,8 +126,11 @@ public static class FamilySnapshotExtractor {
         var formula = string.IsNullOrWhiteSpace(familyParameter.Formula) ? null : familyParameter.Formula;
 
         var valuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var spec = familyParameter.Definition.GetDataType();
+        var format = familyParameter.StorageType == StorageType.Double ? ParameterPortableFormat.ForSpec(spec) : null;
         foreach (var type in types)
-            valuesPerType[type.Name] = famDoc.GetValueString(type, familyParameter);
+            valuesPerType[type.Name] = format is not null && type.HasValue(familyParameter) && type.AsDouble(familyParameter) is { } value
+                ? format(value) : famDoc.GetValueString(type, familyParameter);
 
         return new FamilyParameterSnapshot(
             new ParameterDefinitionDescriptor(
@@ -139,7 +141,10 @@ public static class FamilySnapshotExtractor {
                 groupType,
                 groupType == null
                     ? null
-                    : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId())
+                    : RevitLabelCatalog.GetLabelForPropertyGroup(familyParameter.Definition.GetGroupTypeId()),
+                (familyParameter.Definition as InternalDefinition)?.Visible,
+                familyParameter.UserModifiable,
+                ReadDescription(famDoc.Document, familyParameter, issues)
             ),
             familyParameter.IsShared ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
             LoadedFamilyParameterPresence.Family,
@@ -152,4 +157,30 @@ public static class FamilySnapshotExtractor {
 
     private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
         string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
+
+    private static string? ReadDescription(Document document, FamilyParameter parameter, List<RevitDataIssue> issues) {
+        if (Autodesk.Revit.DB.ParameterUtils.IsBuiltInParameter(parameter.Id)) return null;
+        try {
+            var getSchema = typeof(Autodesk.Revit.DB.ParameterUtils).GetMethod(
+                "GetParameterSchema",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                [typeof(ElementId), typeof(Document)],
+                null
+            ) ?? throw new MissingMethodException(typeof(Autodesk.Revit.DB.ParameterUtils).FullName, "GetParameterSchema");
+            var json = (string)getSchema.Invoke(null, [parameter.Id, document])!;
+            return JObject.Parse(json)["constants"]?.OfType<JObject>()
+                .SingleOrDefault(constant => constant.Value<string>("id") == "description")?
+                .Value<string>("value");
+        } catch (Exception ex) {
+            var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            issues.Add(new RevitDataIssue(
+                "FamilyParameterDescriptionReadFailed",
+                RevitDataIssueSeverity.Warning,
+                $"Could not read optional description for family parameter '{parameter.Definition.Name}' via ParameterUtils.GetParameterSchema: {cause.GetType().FullName}: {cause.Message}",
+                ParameterName: parameter.Definition.Name
+            ));
+            return null;
+        }
+    }
 }

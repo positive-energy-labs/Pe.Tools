@@ -3,6 +3,7 @@ import {
   type SettingsRouteDocument,
   type SettingsSnapshot,
   settingsFieldSegments,
+  settingsFieldDirectives,
   stagedEntries,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers } from "@pe/agent-contracts";
@@ -13,6 +14,19 @@ import type {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+
+/** Execution uses the same validated composition as the settings reader; raw JSON stays authored. */
+export function executionContent(snapshot: SettingsDocumentSnapshot): string {
+  if (!snapshot.validation.isValid)
+    throw new Error(
+      snapshot.validation.issues.map((issue) => `${issue.path}: ${issue.message}`).join("\n"),
+    );
+  if (snapshot.composedContent == null)
+    throw new Error(
+      "No composed settings content was returned. Open with includeComposedContent=true.",
+    );
+  return snapshot.composedContent;
+}
 
 /** Build the settings command handlers, bound to a resolved host base URL. */
 export function createSettingsCommandHandlers(
@@ -45,17 +59,27 @@ export function createSettingsCommandHandlers(
       document.fields = {};
       document.savedAt = new Date().toISOString();
       await ctx.setDoc(document);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     open: async (input, ctx) => {
       const { documentId } = input as { documentId: SettingsDocumentId };
       const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
+      const changed =
+        document.documentId == null ||
+        (["moduleKey", "rootKey", "relativePath"] as const).some(
+          (key) => document.documentId?.[key] !== documentId[key],
+        );
+      if (changed && Object.values(document.fields).some((field) => field.staged || field.proposal))
+        throw new Error(
+          "Save or resolve the current document's edits before opening another document.",
+        );
+      if (changed) document.fields = {};
       document.bindings.file = { id: snapshot.path, label: snapshot.path };
       document.documentId = documentId;
       await ctx.setDoc(document);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     refresh: async (_input, ctx) => {
@@ -67,7 +91,7 @@ export function createSettingsCommandHandlers(
         );
       }
       const snapshot = await openSnapshot(caller, documentId);
-      return summarizeSnapshot(snapshot);
+      return snapshot;
     },
 
     validate: async (input, ctx) => {
@@ -176,6 +200,10 @@ async function openSnapshot(
     versionToken: versionToken ?? null,
     observedAt: new Date().toISOString(),
     rawContent: raw.rawContent,
+    dependencies: raw.dependencies.map((d) => ({
+      directivePath: d.directivePath,
+      documentId: { ...d.documentId },
+    })),
     composedContent: raw.composedContent ?? null,
     modifiedUtc: raw.metadata.modifiedUtc ?? null,
     validation: toRouteValidation(raw.validation),
@@ -221,6 +249,10 @@ function applyFieldEdit(
   edit: { value?: unknown; delete?: true },
 ) {
   if (segments.length === 0) return;
+  if (settingsFieldDirectives(root, segments))
+    throw new Error(
+      "This value belongs to a shared fragment. Open and edit that fragment; the raw JSON is a pointer.",
+    );
   let cursor = root;
   for (let i = 0; i < segments.length - 1; i += 1) {
     const key = segments[i];
@@ -240,15 +272,6 @@ function toRouteValidation(validation: SettingsValidationResult): SettingsSnapsh
   return {
     isValid: validation.isValid,
     issues: validation.issues.map((issue) => ({ ...issue })),
-  };
-}
-
-function summarizeSnapshot(snapshot: SettingsSnapshot) {
-  return {
-    documentId: snapshot.documentId,
-    versionToken: snapshot.versionToken,
-    isValid: snapshot.validation?.isValid ?? null,
-    issueCount: snapshot.validation?.issues.length ?? 0,
   };
 }
 

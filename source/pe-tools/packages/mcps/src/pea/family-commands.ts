@@ -1,8 +1,9 @@
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import {
   readingSchema,
   type FamilyDocument,
+  type FamilyExecutionOptions,
   type RouteStateCommandHandlers,
   type SettingsDocumentId,
   bridgeSelector,
@@ -10,6 +11,7 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { executionContent } from "./settings-commands.ts";
 
 export function createFamilyCommandHandlers(
   options: { hostBaseUrl?: string } = {},
@@ -18,6 +20,73 @@ export function createFamilyCommandHandlers(
   const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
+    plan: async (input, ctx) => {
+      const { documentId, executionOptions } = input as {
+        documentId: SettingsDocumentId;
+        executionOptions?: FamilyExecutionOptions;
+      };
+      const rpc = caller(bridgeSelector(ctx.scope));
+      // The capture operation requires a family document; a project must use /families.
+      await rpc.call("revit.detail.family-model", {});
+      const opened = await rpc.call("settings.document.open", {
+        documentId,
+        includeComposedContent: true,
+      });
+      const patchJson = JSON.stringify({ patch: JSON.parse(executionContent(opened)) });
+      const planned = await rpc.call("familyfoundry.plan", {
+        patchJson,
+        ...(executionOptions ? { executionOptions } : {}),
+      });
+      if (planned.diagnostics.length || planned.families.length !== 1)
+        throw new Error(
+          planned.diagnostics.map((d) => d.message).join("; ") ||
+            "Expected one current family plan.",
+        );
+      const document = ctx.getDoc();
+      document.plan = { documentId, patchJson, entry: planned.families[0], executionOptions };
+      document.apply = null;
+      await ctx.setDoc(document);
+      return planned;
+    },
+    apply: async (input, ctx) => {
+      const { expectedPlanHash } = input as { expectedPlanHash: string };
+      const document = ctx.getDoc();
+      const plan = document.plan;
+      if (
+        !plan ||
+        !expectedPlanHash ||
+        plan.entry.planHash !== expectedPlanHash ||
+        plan.entry.refusals.length
+      )
+        throw new Error("Review a valid current-family plan before applying.");
+      const rpc = caller(bridgeSelector(ctx.scope));
+      await rpc.call("revit.detail.family-model", {});
+      const opened = await rpc.call("settings.document.open", {
+        documentId: plan.documentId,
+        includeComposedContent: true,
+      });
+      if (JSON.stringify({ patch: JSON.parse(executionContent(opened)) }) !== plan.patchJson)
+        throw new Error("The composed family JSON changed. Plan again before applying.");
+      // Consume the review before crossing the mutation boundary, including ambiguous failures.
+      document.plan = null;
+      await ctx.setDoc(document);
+      const applied = await rpc.call("familyfoundry.apply", {
+        patchJson: plan.patchJson,
+        expectedPlanHashes: { [plan.entry.familyId]: expectedPlanHash },
+        ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
+      });
+      document.apply = applied;
+      await ctx.setDoc(document);
+      const captured = await rpc.call("revit.detail.family-model", {});
+      document.evidence = {
+        ...captured,
+        reading: readingSchema.parse(captured.reading),
+        origin: "capture",
+        rfaPath: null,
+      };
+      await ctx.setDoc(document);
+      return applied;
+    },
     parse_spec: async (input, ctx) => {
       const { url } = input as { url: string };
       const base = process.env.PE_WEB_URL ?? "http://localhost:3000";
@@ -84,7 +153,7 @@ export function createFamilyCommandHandlers(
 
       const document = ctx.getDoc();
       document.evidence = {
-        ...raw.evidence,
+        ...raw,
         reading: readingSchema.parse(raw.reading),
         origin: "capture",
         familyName: raw.familyName,
@@ -94,8 +163,7 @@ export function createFamilyCommandHandlers(
 
       return {
         familyName: raw.familyName,
-        typeNames: raw.evidence.typeNames,
-        parameterCount: raw.evidence.parameters.length,
+        coverage: raw.coverage,
         unmodeledCount: raw.unmodeledCount,
         modelJson: raw.modelJson,
       };
@@ -113,7 +181,7 @@ export function createFamilyCommandHandlers(
       // Build the SAVED revision — read it through the same open path every consumer uses.
       const opened = await rpc.call("settings.document.open", {
         documentId,
-        includeComposedContent: false,
+        includeComposedContent: true,
       });
       const sourcePath = opened.metadata.documentId.stableId;
       if (!sourcePath)
@@ -130,31 +198,25 @@ export function createFamilyCommandHandlers(
 
       const built = await rpc
         .call("revit.apply.family-model", {
-          modelJson: opened.rawContent,
+          modelJson: executionContent(opened),
           outputPath: rfaPath,
-          ...(modelDirectory ? { modelDirectory } : {}),
+          modelDirectory: modelDirectory ?? dirname(sourcePath),
         })
         .catch((error: unknown) => {
           throw new Error(`revit.apply.family-model failed (${message(error)}).`);
         });
-      if (!built.evidence)
-        throw new Error("The build succeeded but returned no evidence projection.");
-
       const document = ctx.getDoc();
-      document.evidence = {
-        ...built.evidence,
+      document.build = {
+        ...built,
         reading: readingSchema.parse(built.reading),
-        origin: "build",
-        familyName: built.familyName ?? documentId.relativePath,
-        rfaPath: built.outputPath ?? rfaPath,
       };
       await ctx.setDoc(document);
 
       return {
         familyName: built.familyName,
         rfaPath: built.outputPath ?? rfaPath,
-        typeNames: built.evidence.typeNames,
-        parameterCount: built.evidence.parameters.length,
+        converged: built.converged,
+        residueCount: built.residueCount,
         documentVersionToken: opened.metadata?.versionToken?.value ?? null,
       };
     },

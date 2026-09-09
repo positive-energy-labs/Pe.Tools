@@ -234,10 +234,6 @@ public class MergedTypeOperation(List<(IOperation Op, OperationContext? Ctx)> op
         };
 }
 
-public interface IOperationSettings {
-    bool Enabled { get; init; }
-}
-
 public class DefaultOperationSettings : IOperationSettings {
     public bool Enabled { get; init; } = true;
 }

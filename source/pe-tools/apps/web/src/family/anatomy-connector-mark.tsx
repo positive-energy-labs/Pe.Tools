@@ -102,7 +102,7 @@ export function ConnectorMark({
   return (
     <g key={conn.slug} {...hover(conn.slug)}>
       <title>
-        {`${conn.slug} — ${prose}. The tick is the connection face; the line is the stub${conn.stub != null ? `, ${conn.stub}in ${conn.stubDir === "In" ? "into the family" : "standing off"}` : ""}.`}
+        {`${conn.slug} — ${prose}. The tick is the connection face; the line ${conn.stub != null ? `is the stub, ${conn.stub}in ${conn.stubDir === "In" ? "into the family" : "standing off"}` : "marks direction only (no authored stub)"}.`}
       </title>
       {/* a fat transparent hit line, so a 1px stub is still hoverable */}
       <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
