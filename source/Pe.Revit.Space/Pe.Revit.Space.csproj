@@ -22,11 +22,14 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.4" Condition="'$(RevitVersion)' == '2025'"/>
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" Condition="'$(RevitVersion)' != '2025'"/>
         <PackageReference Include="Serilog" Version="4.3.0"/>
+        <!-- IDocumentTracker and GetDocumentKey come from the SDK loader, not from Pe.Revit.Global.
+             Referencing Global made Space -> Global, which turns Global -> Takeoff -> Partition ->
+             Space into a project cycle the moment the partition exists. -->
+        <PackageReference Include="Pe.Revit.Loader" Version="$(PeSdkCompanionVersion)"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
     </ItemGroup>
 
 </Project>

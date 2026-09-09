@@ -1,3 +1,4 @@
+import { difference } from "../world";
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
@@ -30,6 +31,7 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
     pickCur,
     pickBaseline,
   } = model;
+  const hasOverlay = model.reportCur?.Zones.some((zone) => zone.Ink || zone.Seals || zone.Close);
   return (
     <header
       className="flex shrink-0 flex-col gap-1.5 px-4 py-2"
@@ -48,8 +50,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
         )}
         {board && (
           <span className="">
-            B: {board.solved}/{board.zones} solved · {board.acceptedRooms} rooms ·{" "}
-            {fmtSqft(board.acceptedSqft)} accepted · {fmtSqft(board.heldSqft)} held
+            B: {board.solved}/{board.zones} solved · {board.acceptedRooms ?? "?"} accepted rooms /{" "}
+            {board.errors} errors · {fmtSqft(board.acceptedSqft)} accepted ·{" "}
+            {fmtSqft(board.heldSqft)} held
           </span>
         )}
         <PartialityChip part={partCur} prefix="B: " />
@@ -57,9 +60,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
         {boardPrev && board && (
           <span className="">
             Δ vs A: <Delta value={board.solved - boardPrev.solved} /> solved ·{" "}
-            <Delta value={board.acceptedSqft - boardPrev.acceptedSqft} suffix=" sf" /> ·{" "}
+            <Delta value={difference(board.acceptedSqft, boardPrev.acceptedSqft)} suffix=" sf" /> ·{" "}
             <Delta
-              value={board.heldSqft - boardPrev.heldSqft}
+              value={difference(board.heldSqft, boardPrev.heldSqft)}
               goodWhenUp={false}
               suffix=" sf held"
             />
@@ -70,7 +73,7 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
             A/B pairing caveat
           </Chip>
         ) : null}
-        <HeaderScores cur={scoresCur} prev={comparing ? scoresPrev : undefined} />
+        <HeaderScores runId={curId} cur={scoresCur} prev={comparing ? scoresPrev : undefined} />
         <span className="ml-auto flex items-center gap-1.5">
           {prevId ? (
             <Chip
@@ -111,8 +114,13 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
             tone="neutral"
             size="caption"
             state={underlay ? "selected" : "rest"}
+            disabled={!hasOverlay}
             onClick={() => setUnderlay((u) => !u)}
-            title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
+            title={
+              hasOverlay
+                ? "Show/hide additional ink and closure layers. The registered plan remains visible."
+                : "Raw slice evidence remains visible; this capture has no separate overlay layers."
+            }
           >
             ink evidence
           </Press>

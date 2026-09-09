@@ -1,3 +1,4 @@
+import { decisionRefusal } from "#/takeoff/room-actions";
 import { Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -12,6 +13,7 @@ import {
   type StagedRoomEdit,
   type TakeoffCarrierPreflight,
   type TakeoffSnapshot,
+  type PartitionReviewData,
   type TakeoffsRouteDocument,
   type ViewFacts,
 } from "@pe/agent-contracts";
@@ -44,7 +46,6 @@ import {
   STAGE_ORDER,
   type RoomEdit,
   type World,
-  type WorldLane,
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
@@ -100,14 +101,14 @@ interface AdoptItem {
   readonly systemTag: string;
 }
 
+// ADR 0011: the partition runs on the resident Space soup. The adopted Zoning Region carries its
+// own loop and level, so the replay path, the level fragment and the loops are gone.
 interface PartitionArgs {
-  readonly replayPath: string;
+  readonly zoneRegion: number;
   readonly view: string;
-  readonly levelFragment: string;
   readonly zoneName: string;
   readonly zoneGuid: string;
   readonly runId: string;
-  readonly loops: readonly (readonly (readonly [number, number])[])[];
 }
 
 export interface TakeoffHost {
@@ -134,10 +135,6 @@ export interface TakeoffHost {
     readonly bound?: string | null;
     readonly remaining: readonly string[];
   }>;
-  capture(
-    session: SessionFacts,
-    lane: Pick<WorldLane, "view" | "label">,
-  ): Promise<{ readonly replayPath: string; readonly rooms: number; readonly totalSqft: number }>;
   partition(session: SessionFacts, input: PartitionArgs): Promise<PartitionRun>;
   writeDecisions(
     session: SessionFacts,
@@ -262,14 +259,12 @@ const roomEdit = (room: WorldRoom): RoomEdit => ({
   ventilationCfm: room.data?.ventilationCfm,
 });
 
-const partitionInput = (zone: WorldZone, replayPath: string): PartitionArgs => ({
-  replayPath,
+const partitionInput = (zone: WorldZone, zoneRegion: number): PartitionArgs => ({
+  zoneRegion,
   view: zone.zone.lane.view,
-  levelFragment: zone.zone.lane.label,
   zoneName: zone.name,
   zoneGuid: zone.zone.guid,
-  runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-  loops: zone.zone.loops,
+  runId: `run-${crypto.randomUUID()}`,
 });
 
 export function atlasRoomState(room: WorldRoom, open: number): AtlasRoomState {
@@ -431,7 +426,11 @@ export function createTakeoffStore(deps: {
     sorts: [],
     query: "",
   }).pipe(owned("page/atlas-table"));
-  const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(Atom.autoDispose);
+  const freshReviewAtom = Atom.make<{
+    zone: string;
+    data: PartitionReviewData | null;
+    flags: string[];
+  } | null>(null).pipe(owned("page/partition-review"));
   const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(owned("page/panel"));
   const adoptPatchesAtom = Atom.make<Readonly<Record<string, Partial<AdoptDraft>>>>({}).pipe(
     Atom.autoDispose,
@@ -665,13 +664,11 @@ export function createTakeoffStore(deps: {
     feed(
       get(viewFactsResult),
       (views) =>
-        views
-          .filter((view) => view.regions > 0)
-          .map((view) => ({
-            id: view.name,
-            label: view.name,
-            sub: `${view.level} · ${view.regions} region${view.regions === 1 ? "" : "s"}`,
-          })),
+        views.map((view) => ({
+          id: view.name,
+          label: view.name,
+          sub: view.level,
+        })),
       "read",
       { needs: TAKEOFF_SLOTS.views.needs },
     ),
@@ -717,7 +714,7 @@ export function createTakeoffStore(deps: {
       ...authority,
       lanes: authority.lanes.map((lane) => ({
         ...lane,
-        replayPath: get(replaysAtom)[lane.label] ?? lane.replayPath,
+        replayPath: lane.replayPath,
       })),
       zones: authority.zones.map((zone) => ({
         ...zone,
@@ -725,13 +722,23 @@ export function createTakeoffStore(deps: {
           ...zone.zone,
           lane: {
             ...zone.zone.lane,
-            replayPath: get(replaysAtom)[zone.zone.lane.label] ?? zone.zone.lane.replayPath,
+            replayPath: zone.zone.lane.replayPath,
           },
         },
         rooms: zone.rooms.map((room) => applyEdit(room, staged[room.guid]?.next)),
       })),
     };
   }).pipe(owned("world"));
+  const reviewAtom = Atom.make((get) => {
+    const fresh = get(freshReviewAtom);
+    const zoneKey = get(zoneKeyAtom);
+    if (!zoneKey) return fresh ? { ...fresh, source: "fresh solver" as const } : null;
+    if (fresh?.zone === zoneKey) return { ...fresh, source: "fresh solver" as const };
+    const zone = get(worldAtom).zones.find((item) => item.zone.guid === zoneKey);
+    return zone?.savedReview
+      ? { zone: zoneKey, data: zone.savedReview, flags: [], source: "saved native" as const }
+      : null;
+  }).pipe(owned("page/selected-partition-review"));
   const roomsByIdAtom = Atom.make(
     (get) =>
       new Map(
@@ -746,7 +753,7 @@ export function createTakeoffStore(deps: {
       const zoneKey = get(zoneKeyAtom);
       return (
         zoneKey !== null &&
-        get(worldAtom).zones.some((zone) => zone.zone.key === zoneKey && zone.zone.guid === id)
+        get(worldAtom).zones.some((zone) => zone.zone.guid === zoneKey && zone.zone.guid === id)
       );
     }).pipe(Atom.autoDispose),
   );
@@ -755,7 +762,7 @@ export function createTakeoffStore(deps: {
     const stageFilter = get(stageFilterAtom);
     const decisions = get(decisionsAtom);
     const world = get(worldAtom);
-    const selected = zoneKey ? world.zones.find((zone) => zone.zone.key === zoneKey) : undefined;
+    const selected = zoneKey ? world.zones.find((zone) => zone.zone.guid === zoneKey) : undefined;
     const zones = selected
       ? [selected]
       : world.zones.filter((zone) => stageFilter === null || zone.stage === stageFilter);
@@ -801,7 +808,13 @@ export function createTakeoffStore(deps: {
     );
     const blockedZones = inScope.filter(
       (zone) =>
+        zone.driftSqft === null ||
         zone.driftSqft > 0 ||
+        zone.rooms.some(
+          (room) =>
+            !deps.host.fixture &&
+            (room.analysis?.state !== "current" || room.analysis.hold !== null),
+        ) ||
         zone.rooms.some((room) => room.flags.length > 0) ||
         zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
     );
@@ -1118,17 +1131,20 @@ export function createTakeoffStore(deps: {
       ).catch(() => undefined);
     },
     decideRoom(room: WorldRoom, flag: string, verdict: "accept" | "dismiss") {
-      write("decision", `entity/${room.guid}/decided`, () =>
-        registry.update(decisionsAtom, (decisions) => ({
-          ...decisions,
-          [`${room.guid}::${flag}`]: verdict,
-        })),
-      );
-      if (deps.host.fixture) return;
+      if (deps.host.fixture) {
+        write("decision", `entity/${room.guid}/decided`, () =>
+          registry.update(decisionsAtom, (decisions) => ({
+            ...decisions,
+            [`${room.guid}::${flag}`]: verdict,
+          })),
+        );
+        return;
+      }
       void runVerb(
         "decision",
         async () => {
-          if (room.elementId === null) throw Error(`room ${room.name} has no Room Region home`);
+          const refusal = decisionRefusal(room, flag);
+          if (refusal) throw Error(refusal);
           const session = await activeSession();
           const next: Resolution = {
             subject: room.provenance.sourceRoomId,
@@ -1139,40 +1155,51 @@ export function createTakeoffStore(deps: {
           };
           await deps.host.writeDecisions(
             session,
-            room.elementId,
+            room.elementId!,
             upsertResolution(room.decisions, next),
           );
         },
         ["snapshot"],
       ).catch(() => undefined);
     },
-    capture(lane: Pick<WorldLane, "view" | "label">) {
-      return runVerb("capture", async () => {
-        const session = await activeSession();
-        const result = await deps.host.capture(session, lane);
-        write("capture", "page/replays", () =>
-          registry.update(replaysAtom, (replays) => ({
-            ...replays,
-            [lane.label]: result.replayPath,
-          })),
-        );
-        return { ...result, text: `captured ${lane.label}: ${result.rooms} rooms` };
-      });
+    flagReview(key: string) {
+      const review = registry.get(freshReviewAtom);
+      if (!review) return;
+      write("flag-review", "page/partition-review", () =>
+        registry.set(freshReviewAtom, {
+          ...review,
+          flags: review.flags.includes(key)
+            ? review.flags.filter((flag) => flag !== key)
+            : [...review.flags, key],
+        }),
+      );
     },
     partition(zone: WorldZone) {
       return runVerb(
         "partition",
         async () => {
-          const replayPath = registry.get(replaysAtom)[zone.zone.lane.label];
-          if (!replayPath) throw Error(`capture ${zone.zone.lane.label} first`);
+          const zoneRegion = zone.zone.elementId;
+          if (zoneRegion === null) throw Error(`adopt ${zone.zone.key} first`);
           const session = await activeSession();
-          const result = await deps.host.partition(session, partitionInput(zone, replayPath));
+          let preparation;
+          do {
+            preparation = await deps.host.initializeCarrier(session, "Materialization");
+          } while (preparation.remaining.length > 0);
+          const result = await deps.host.partition(session, partitionInput(zone, zoneRegion));
+          write("partition", "page/partition-review", () =>
+            registry.set(freshReviewAtom, {
+              zone: zone.zone.guid,
+              data: result.review ?? null,
+              flags: [],
+            }),
+          );
           return { ...result, text: `partitioned ${zone.zone.key}` };
         },
         ["snapshot", "takeoff-views"],
       );
     },
     refresh() {
+      registry.set(freshReviewAtom, null);
       return runVerb("refresh", async () => "refreshing", ["snapshot", "takeoff-views"]);
     },
     launchRhvac() {
@@ -1284,6 +1311,7 @@ export function createTakeoffStore(deps: {
       visibleRows: visibleRowsAtom,
       decisions: decisionsAtom,
       panel: panelAtom,
+      review: reviewAtom,
       syncPlan: syncPlanAtom,
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,

@@ -26,7 +26,7 @@ export function ExportVerbs(props: {
   const btn = (verb: "chat" | "sheet" | "snip", label: string, does: string, primary = false) => (
     <Verb
       label={label}
-      reason={refusal + does}
+      reason={disabled ? refusal : does}
       tone={primary ? "commit" : "act"}
       disabled={disabled}
       busy={exporting === verb}
@@ -34,7 +34,7 @@ export function ExportVerbs(props: {
     />
   );
   return (
-    <div className={cn("flex items-center gap-1.5", props.compact && "gap-1")}>
+    <div className={cn("flex flex-wrap items-center gap-1.5", props.compact && "gap-1")}>
       {btn(
         "chat",
         "copy for chat",

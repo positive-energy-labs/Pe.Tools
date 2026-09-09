@@ -153,7 +153,7 @@ export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRe
   return regions.find(
     (region) =>
       region.role === "room-region" &&
-      containsEvenOdd([region.outer], room.label[0], room.label[1]),
+      containsEvenOdd([region.outer, ...region.holes], room.label[0], room.label[1]),
   );
 }
 

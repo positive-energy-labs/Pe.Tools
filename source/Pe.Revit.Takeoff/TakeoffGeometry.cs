@@ -16,8 +16,9 @@ namespace Pe.Revit.Takeoff;
 /// (measured on the project-a zones: closure error up to 1.3e-5 sqft under a 1e-6 ft grid).</item>
 /// <item><see cref="Coverage"/> — fixed 1e-6 ft. The shared-edge currency: the coverage simplifier
 /// and validator need two rooms' shared vertices to compare exactly equal, which floating overlay
-/// output does not guarantee. Used by <see cref="SpaceBoundaryNetwork"/>,
-/// <see cref="TakeoffEditability"/>, and TSV read-back validation.</item>
+/// output does not guarantee. Used by TSV read-back validation and the RHVAC candidate
+/// builder; SpaceBoundaryNetwork and TakeoffEditability, its other callers, went with the
+/// raster (ADR 0011).</item>
 /// </list>
 /// A call site picks one by passing it; it never copies the converter.
 /// </remarks>

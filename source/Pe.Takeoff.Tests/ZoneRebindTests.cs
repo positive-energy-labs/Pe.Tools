@@ -13,8 +13,58 @@ public sealed class ZoneRebindTests
 
     private static ExistingRegion Region(long id, Guid guid, double x0, double y0, double x1, double y1) =>
         new(id, guid,
-            new List<double[]> { new[] { x0, y0 }, new[] { x1, y0 }, new[] { x1, y1 }, new[] { x0, y1 } },
+            [new List<double[]> { new[] { x0, y0 }, new[] { x1, y0 }, new[] { x1, y1 }, new[] { x0, y1 } }],
             (x1 - x0) * (y1 - y0));
+
+    [Test]
+    public void Rebind_does_not_claim_a_label_inside_an_existing_hole()
+    {
+        var region = Region(1, Guid.NewGuid(), 0, 0, 10, 10) with { Sqft = 84 };
+        region.Loops.Add([[3, 3], [7, 3], [7, 7], [3, 7]]);
+        var inHole = Room("R01", 5, 5, 84);
+        var inRoom = Room("R02", 2, 2, 84);
+        var rebind = ZoneMaterializer.Rebind([inHole, inRoom], [region]);
+        Assert.Multiple(() => {
+            Assert.That(rebind.Matched.Single().Room, Is.SameAs(inRoom));
+            Assert.That(rebind.Unmatched.Single(), Is.SameAs(inHole));
+            Assert.That(region.Loops, Has.Count.EqualTo(2));
+        });
+    }
+
+    [TestCase(Pe.Revit.Partition.Disposition.Accepted, null)]
+    [TestCase(Pe.Revit.Partition.Disposition.Held, "too-small")]
+    [TestCase(Pe.Revit.Partition.Disposition.Void, "low-headroom")]
+    [TestCase(Pe.Revit.Partition.Disposition.Excluded, "outside")]
+    public void Provenance_retains_exact_partition_and_native_proposal_after_round_trip(
+        Pe.Revit.Partition.Disposition disposition, string? reason)
+    {
+        double[] outer = [0.123456789012345, 0, 10, 0, 10, 10, 0, 10];
+        double[] hole = [3, 3, 7, 3, 7, 7, 3, 7];
+        var proposal = new Pe.Revit.Partition.RoomProposal("source-document|link-unique-id|room-unique-id",
+            "Architectural Room", "101", [outer, hole]);
+        var room = new Pe.Revit.Partition.Room(8, disposition, reason, outer, 84, 2, 2, 1,
+            null, null, [], [hole], proposal);
+        var provenance = new RegionProvenance(1, Guid.NewGuid(), "immutable-run", "R09", 84)
+            { Partition = room };
+        var loaded = RegionProvenance.FromJson(provenance.ToJson());
+        // A normal provenance write must not drop fields after reading a saved blob.
+        var rewritten = RegionProvenance.FromJson((loaded with { Flags = ["review-needed"] }).ToJson());
+        Assert.Multiple(() => {
+            Assert.That(loaded.ToJson(), Is.EqualTo(provenance.ToJson()));
+            Assert.That(rewritten.Partition!.Disposition, Is.EqualTo(disposition));
+            Assert.That(rewritten.Partition.Reason, Is.EqualTo(reason));
+            Assert.That(rewritten.Partition.Proposal!.SourceKey, Is.EqualTo(proposal.SourceKey));
+            Assert.That(rewritten.Partition.Proposal.Name, Is.EqualTo(proposal.Name));
+            Assert.That(rewritten.Partition.Proposal.Number, Is.EqualTo(proposal.Number));
+            Assert.That(rewritten.Partition.Proposal.Loops, Is.EqualTo(proposal.Loops));
+            Assert.That(rewritten.Partition.Loop, Is.EqualTo(outer));
+            Assert.That(rewritten.Partition.Holes!.Single(), Is.EqualTo(hole));
+            Assert.That(rewritten.Partition.FloorZ, Is.Null);
+            Assert.That(rewritten.Partition.CeilingZ, Is.Null);
+            Assert.That(rewritten.RunId, Is.EqualTo("immutable-run"));
+            Assert.That(rewritten.SourceRoomId, Is.EqualTo("R09"));
+        });
+    }
 
     [Test]
     public void Rebind_matches_by_containment_and_area_and_survives_rank_shuffle()

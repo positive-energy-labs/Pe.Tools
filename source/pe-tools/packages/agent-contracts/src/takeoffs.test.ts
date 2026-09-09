@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { takeoffsRouteState } from "./takeoffs.ts";
+import { partitionReviewSchema, takeoffsRouteState } from "./takeoffs.ts";
+
+it("reads accepted review shapes when the transport omits a null reason", () => {
+  const data = partitionReviewSchema.parse({
+    source: { runId: "run", documentKey: "doc", scopeKey: "zone" },
+    zone: { key: "zone", name: "zone", loops: [] },
+    shapes: [
+      { id: "R01", kind: "room", disposition: "accepted", sqft: 10, label: [0, 0], loops: [] },
+    ],
+  });
+  expect(data.shapes[0]!.reason).toBeNull();
+});
 
 describe("takeoffsRouteState", () => {
   it("defaults a new route document to no world", () => {

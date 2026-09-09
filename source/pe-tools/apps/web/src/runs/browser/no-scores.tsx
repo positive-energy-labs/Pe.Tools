@@ -2,6 +2,8 @@ import { type ReactNode } from "react";
 import { FactChip as Chip } from "#/components/lang/chip";
 import {
   boardSummary,
+  comparableRuns,
+  difference,
   modalZoneCount,
   partiality,
   type RunIndexEntry,
@@ -36,7 +38,10 @@ export async function buildLedgerRows(
   return index.map((entry, i) => {
     const report = reports[i]!;
     const board = boardSummary(report);
-    const prev = i + 1 < index.length ? boardSummary(reports[i + 1]!) : null;
+    const previousIndex = reports.findIndex(
+      (candidate, j) => j > i && comparableRuns(report, candidate),
+    );
+    const prev = previousIndex >= 0 ? boardSummary(reports[previousIndex]!) : null;
     return {
       id: entry.id,
       label: entry.meta?.label ?? null,
@@ -44,13 +49,16 @@ export async function buildLedgerRows(
       when: entry.meta?.generatedUtc ?? report.GeneratedUtc,
       board,
       scores: rowScores(scoresAll[i]!),
-      scoreDelta: savedWorkDelta(scoresAll[i]!, i + 1 < index.length ? scoresAll[i + 1]! : null),
+      scoreDelta: savedWorkDelta(
+        scoresAll[i]!,
+        previousIndex >= 0 ? scoresAll[previousIndex]! : null,
+      ),
       delta: prev
         ? {
             solved: board.solved - prev.solved,
-            rooms: board.acceptedRooms - prev.acceptedRooms,
-            sqft: board.acceptedSqft - prev.acceptedSqft,
-            held: board.heldSqft - prev.heldSqft,
+            rooms: difference(board.acceptedRooms, prev.acceptedRooms),
+            sqft: difference(board.acceptedSqft, prev.acceptedSqft),
+            held: difference(board.heldSqft, prev.heldSqft),
           }
         : null,
       partiality: partiality(report, modal),
@@ -59,8 +67,7 @@ export async function buildLedgerRows(
 }
 
 export const NO_SCORES_TITLE =
-  "No scores.json in this run package — the scorer never ran for it (python unavailable at " +
-  "persist time, or the package predates persist-time scoring). Nothing is recomputed in its place.";
+  "No scores.json in this run package. Measurements are unavailable; nothing is recomputed in their place.";
 
 export function scoreCell(row: RunRow, value: number | null): ReactNode {
   if (row.scores === null) {
@@ -80,6 +87,7 @@ export const runName = (row: Pick<RunRow, "label" | "hash">) =>
  * currency-matched savedWork delta vs the A baseline. An absent file is said out loud; nothing
  * here is ever computed as a stand-in (SHIMS.md #1 close). */
 export function HeaderScores(props: {
+  runId?: string | null;
   cur: RunScores | null | undefined;
   prev: RunScores | null | undefined;
 }) {
@@ -90,6 +98,13 @@ export function HeaderScores(props: {
       <Chip tone="caution" title={NO_SCORES_TITLE}>
         no scores.json
       </Chip>
+    );
+  }
+  if (cur.metricSchemaVersion) {
+    return (
+      <a href={`/api/runs-data/${props.runId}/scores.json`} target="_blank" rel="noreferrer">
+        six-axis measurements (JSON) — legacy scores unavailable
+      </a>
     );
   }
   const { v11, v1 } = scoreBoards(cur);

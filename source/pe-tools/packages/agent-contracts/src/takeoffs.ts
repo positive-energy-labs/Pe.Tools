@@ -59,7 +59,16 @@ const roomDataSchema = z.object({
   ventilationCfm: z.number(),
 });
 
+export const takeoffRegionAnalysisSchema = z.object({
+  state: z.enum(["current", "stale", "unmeasured"]),
+  runId: z.string().nullable(),
+  floorZ: z.number().nullable(),
+  ceilingZ: z.number().nullable(),
+  hold: z.string().nullable(),
+});
+
 const worldRoomSchema = z.object({
+  analysis: takeoffRegionAnalysisSchema.nullable().optional(),
   guid: z.string(),
   elementId: z.number().nullable(),
   name: z.string(),
@@ -86,6 +95,35 @@ const worldRoomSchema = z.object({
 export type WorldRoom = z.infer<typeof worldRoomSchema>;
 export type RoomType = WorldRoom["type"];
 export type RoomData = NonNullable<WorldRoom["data"]>;
+
+export const partitionReviewSchema = z.object({
+  source: z.object({
+    runId: z.string().min(1).nullable(),
+    documentKey: z.string().min(1),
+    scopeKey: z.string().min(1),
+  }),
+  zone: z.object({ key: z.string(), name: z.string(), loops: z.array(z.array(pointSchema)) }),
+  shapes: z.array(
+    z.object({
+      original: z
+        .object({
+          runId: z.string(),
+          sourceRoomId: z.string(),
+          disposition: z.enum(["accepted", "held", "void", "excluded"]).nullable(),
+          reason: z.string().nullable(),
+        })
+        .optional(),
+      id: z.string(),
+      kind: z.enum(["room", "residue"]),
+      disposition: z.enum(["accepted", "held", "void", "excluded"]).nullable(),
+      reason: z.string().nullish().default(null),
+      sqft: z.number().nullable(),
+      label: pointSchema.nullable(),
+      loops: z.array(z.array(pointSchema)),
+    }),
+  ),
+});
+export type PartitionReviewData = z.infer<typeof partitionReviewSchema>;
 
 const worldZoneSchema = z.object({
   zone: z.object({
@@ -128,7 +166,8 @@ const worldZoneSchema = z.object({
       excludedSqft: z.number(),
     }),
   ),
-  driftSqft: z.number(),
+  driftSqft: z.number().nullable(),
+  savedReview: partitionReviewSchema.nullable().optional(),
 });
 
 export type WorldZone = z.infer<typeof worldZoneSchema>;
@@ -149,6 +188,7 @@ const candidateRegionSchema = z.object({
 export type CandidateRegion = z.infer<typeof candidateRegionSchema>;
 
 const liveRegionSchema = z.object({
+  analysis: worldRoomSchema.shape.analysis,
   elementId: z.number(),
   role: z.string(),
   guid: z.string(),
@@ -156,14 +196,16 @@ const liveRegionSchema = z.object({
   roomType: z.string().optional(),
   blob: z.string(),
   outer: z.array(pointSchema),
+  holes: z.array(z.array(pointSchema)),
 });
 
 export type LiveRegion = z.infer<typeof liveRegionSchema>;
 
+// ADR 0011 deleted takeoffs.views with the raster, and with it the per-view FilledRegion count.
+// A field that is always 0 is a lie, so it is gone rather than restored.
 const viewFactsSchema = z.object({
   name: z.string(),
   level: z.string(),
-  regions: z.number(),
 });
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 
@@ -199,6 +241,8 @@ const detectedResidueSchema = z.object({
 });
 
 const partitionRunSchema = z.object({
+  /** Exact returned geometry; absent until the partition producer supplies this projection. */
+  review: partitionReviewSchema.nullable().optional(),
   levelName: z.string(),
   elevation: z.number(),
   created: z.number(),

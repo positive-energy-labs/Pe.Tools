@@ -4,6 +4,8 @@ export type RunMeta = {
   optionsHash: string;
   label: string | null;
   zoneFilter?: string | null;
+  documentKey?: string;
+  scopeKey?: string;
 };
 
 export type RunIndexEntry = { id: string; meta: RunMeta | null };
@@ -22,29 +24,46 @@ export type ZoneRecord = {
   Ink: string;
   Seals: string;
   Close: string;
-  OracleRooms: number;
-  RawRooms: number;
-  AcceptedRooms: number;
-  HeldRooms: number;
-  PartitionSqft: number;
-  AcceptedSqft: number;
-  HeldSqft: number;
-  VoidSqft: number;
-  ExcludedSqft: number;
+  OracleRooms: number | null;
+  RawRooms: number | null;
+  AcceptedRooms: number | null;
+  HeldRooms: number | null;
+  PartitionSqft: number | null;
+  AcceptedSqft: number | null;
+  HeldSqft: number | null;
+  VoidSqft: number | null;
+  ExcludedSqft: number | null;
   ZoneSqft: number;
-  InkBackedEdgeFraction: number;
-  StrictlyEditable: boolean;
-  Contained: boolean;
+  InkBackedEdgeFraction: number | null;
+  StrictlyEditable: boolean | null;
+  Contained: boolean | null;
   Rejections: Record<string, number>;
   RejectionDetails: Record<string, string>;
   adaptedKnobs: Record<string, string>;
-  census: { zoneSqft: number; inkSqft: number; inkRatio: number; edgeBandInkFraction: number };
-  triage: { verdict: "solve" | "hold"; reason: string };
+  census: {
+    zoneSqft: number;
+    inkSqft: number;
+    inkRatio: number;
+    edgeBandInkFraction: number;
+  } | null;
+  triage: { verdict: "solve" | "hold" | "error"; reason: string };
   closure: {
     doorHeadSqft: number;
     doorHeadOversizeSqft?: number;
     wallRunGapSqft: number;
     gapCloseSqft: number;
+  } | null;
+  plan?: { image: string; registration: string };
+  capture?: {
+    documentKey: string;
+    capturedUtc: string;
+    stamp: { Fresh: boolean; Epoch: number; BuiltUtc: string };
+    result: string;
+    manifest: string;
+    hash: string;
+    note: string;
+    input?: string | null;
+    proof?: Record<string, unknown> | null;
   };
   /** Stable cross-run zone identity (report v4, SHIMS.md #2 close): sha256 of level +
    * 0.5ft-quantized bbox, 12 hex chars. Absent on pre-v4 packages — pairing then falls back to
@@ -53,6 +72,8 @@ export type ZoneRecord = {
 };
 
 export type RunReport = {
+  documentKey?: string;
+  scopeKey?: string;
   SchemaVersion: number;
   GeneratedUtc: string;
   optionsHash: string;
@@ -94,8 +115,8 @@ export type TsvRoom = {
   sqft: number;
   lx: number;
   ly: number;
-  ceil: number;
-  disposition: "accepted" | "held" | null;
+  ceil: number | null;
+  disposition: "accepted" | "held" | "void" | "excluded" | null;
 };
 export type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
 export type ZoneGeometry = {
@@ -140,13 +161,20 @@ export type ScoreBoard = {
   meanEditCostAccepted: number | null;
 };
 
-export type RunScores = {
-  currency?: string;
-  board: ScoreBoard;
-  boardV1RawOracle?: ScoreBoard;
-};
+export type RunScores =
+  | {
+      metricSchemaVersion?: never;
+      currency?: string;
+      board: ScoreBoard;
+      boardV1RawOracle?: ScoreBoard;
+    }
+  | {
+      metricSchemaVersion: number;
+      board: { axes: Record<string, unknown> };
+    };
 
 export function scoreBoards(scores: RunScores): { v11: ScoreBoard | null; v1: ScoreBoard | null } {
+  if (scores.metricSchemaVersion !== undefined) return { v11: null, v1: null };
   const isV11 = scores.currency?.startsWith("v1.1") ?? false;
   return {
     v11: isV11 ? scores.board : null,
@@ -219,6 +247,7 @@ export function reportKeyed(report: RunReport | null): boolean {
 }
 
 export function pairZones(cur: RunReport, prev: RunReport | null): ZonePair[] {
+  if (prev && !comparableRuns(cur, prev)) prev = null;
   const byKey = reportKeyed(cur) && reportKeyed(prev);
   const pairedBy: ZonePair["pairedBy"] = byKey ? "key" : "name";
   const prevZones = prev?.Zones ?? [];
@@ -307,8 +336,13 @@ export function planSidecarPaths(inkPath: string): { image: string; registration
 }
 
 const planCache = new Map<string, Promise<RegisteredPlan | null>>();
-export function loadPlan(runId: string, inkPath: string): Promise<RegisteredPlan | null> {
-  const paths = planSidecarPaths(inkPath);
+export function loadPlan(
+  runId: string,
+  inkPath: string,
+  explicit?: ZoneRecord["plan"],
+): Promise<RegisteredPlan | null> {
+  if (!explicit && !inkPath) return Promise.resolve(null);
+  const paths = explicit ?? planSidecarPaths(inkPath);
   const key = `${runId}/${paths.registration}`;
   let cached = planCache.get(key);
   if (!cached) {
@@ -477,8 +511,14 @@ export function parseZoneTsv(text: string): ZoneGeometry {
         sqft: Number(parts[2]),
         lx: Number(parts[4]),
         ly: Number(parts[5]),
-        ceil: Number(parts[6]),
-        disposition: parts[7] === "accepted" || parts[7] === "held" ? parts[7] : null,
+        ceil: parts[6]?.trim() ? Number(parts[6]) : null,
+        disposition:
+          parts[7] === "accepted" ||
+          parts[7] === "held" ||
+          parts[7] === "void" ||
+          parts[7] === "excluded"
+            ? parts[7]
+            : null,
       });
     } else if (parts[0] === "POLY") {
       const rings = polys.get(parts[1]!) ?? [];
@@ -506,7 +546,11 @@ export type ZoneViewport = {
   heightPx: number;
 };
 
-export function zoneViewport(zone: ZoneRecord, pxPerFt: number, padFt = 4): ZoneViewport {
+export function zoneViewport(
+  zone: Pick<ZoneRecord, "MinX" | "MinY" | "MaxX" | "MaxY">,
+  pxPerFt: number,
+  padFt = 4,
+): ZoneViewport {
   const minX = zone.MinX - padFt;
   const minY = zone.MinY - padFt;
   const maxX = zone.MaxX + padFt;
@@ -609,7 +653,7 @@ export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string 
         ring
           .map((point, index) => {
             const [x, y] = toPx(vp, point[0], point[1]);
-            return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+            return `${index === 0 ? "M" : "L"}${x} ${y}`;
           })
           .join(" ") + " Z",
     )
@@ -701,14 +745,32 @@ export function paintClassRaster(
   ctx.putImageData(image, 0, 0);
 }
 
+export const difference = (b: number | null, a: number | null): number | null =>
+  b === null || a === null ? null : b - a;
+
+export const sumKnown = (values: (number | null)[]): number | null =>
+  values.some((v) => v === null) ? null : values.reduce<number>((sum, v) => sum + v!, 0);
+
+/** Legacy pairs keep their original behavior; a known document never pairs with an unknown one. */
+export function comparableRuns(
+  a: Pick<RunReport, "documentKey" | "scopeKey">,
+  b: Pick<RunReport, "documentKey" | "scopeKey">,
+): boolean {
+  if (!a.documentKey && !b.documentKey) return true;
+  return (
+    !!a.documentKey && a.documentKey === b.documentKey && !!a.scopeKey && a.scopeKey === b.scopeKey
+  );
+}
+
 export function boardSummary(report: RunReport) {
   const zones = report.Zones;
   return {
     zones: zones.length,
     solved: zones.filter((zone) => zone.triage.verdict === "solve").length,
-    acceptedRooms: zones.reduce((sum, zone) => sum + zone.AcceptedRooms, 0),
-    acceptedSqft: zones.reduce((sum, zone) => sum + zone.AcceptedSqft, 0),
-    heldSqft: zones.reduce((sum, zone) => sum + zone.HeldSqft, 0),
+    errors: zones.filter((zone) => zone.triage.verdict === "error").length,
+    acceptedRooms: sumKnown(zones.map((zone) => zone.AcceptedRooms)),
+    acceptedSqft: sumKnown(zones.map((zone) => zone.AcceptedSqft)),
+    heldSqft: sumKnown(zones.map((zone) => zone.HeldSqft)),
     rejectionTop: Object.entries(report.RejectionHistogram)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3),

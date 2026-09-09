@@ -10,7 +10,7 @@ import type { PaneShortcut } from "#/components/lang/pane";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
-import { MANUAL_J, decideReason } from "#/takeoff/room-actions";
+import { MANUAL_J, decideReason, decisionRefusal } from "#/takeoff/room-actions";
 import { STATE_META, stateMeta } from "#/takeoff/room-state";
 import type { AtlasRow as Row, TakeoffStore } from "#/takeoff/store";
 import type { RoomEdit, WorldRoom } from "#/takeoff/world";
@@ -112,15 +112,15 @@ function RoomPanel({
                     <Verb
                       tone={live ? "commit" : "act"}
                       label="accept · a"
-                      disabled={live && room.elementId === null}
-                      reason={decideReason(live, room, "accept")}
+                      disabled={live && decisionRefusal(room, flag) !== null}
+                      reason={decideReason(live, room, "accept", flag)}
                       onClick={() => onDecide(room, flag, "accept")}
                     />
                     <Verb
                       tone={live ? "commit" : "act"}
                       label="dismiss · d"
-                      disabled={live && room.elementId === null}
-                      reason={decideReason(live, room, "dismiss")}
+                      disabled={live && decisionRefusal(room, flag) !== null}
+                      reason={decideReason(live, room, "dismiss", flag)}
                       onClick={() => onDecide(room, flag, "dismiss")}
                     />
                   </span>

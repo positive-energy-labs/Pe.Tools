@@ -45,10 +45,6 @@ internal sealed class RevitDataRequestService {
         RunTakeoff(activeDocument.Value, document =>
             new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document)));
 
-    [Op("takeoffs.views", Does = "Read non-template plan views with the Filled Region count for each view.", Title = "Get Takeoff Views", Finds = ["takeoffs", "views", "plans", "filled-regions"])]
-    private static TakeoffViewsData GetTakeoffViewsCore(NoRequest _, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => new TakeoffViewsData(TakeoffAtlas.Views(document)));
-
     [Op("takeoffs.candidates", Does = "Read Filled Regions and their boundary loops from one named plan view.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded)]
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
@@ -64,16 +60,11 @@ internal sealed class RevitDataRequestService {
             document => TakeoffCarriers.InitializeNext(document, request.Stage),
             "Pe Initialize Takeoff Carrier");
 
-    [Op("takeoffs.prepare-capture", Does = "Prepare the capture views for one Takeoff plan view in one transaction.", Title = "Prepare Takeoff Capture", Finds = ["takeoffs", "capture", "prepare", "views"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.PrepareCapture(document, request), "Pe Prepare Takeoff Capture");
-
-    [Op("takeoffs.detect-capture", Does = "Capture one level, detect room geometry, and write replay evidence without committing Revit changes.", Title = "Detect Takeoff Capture", Finds = ["takeoffs", "capture", "detect", "replay", "rooms"], Cost = OpCost.Expensive)]
-    private static TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.DetectCapture(document, request));
-
-    [Op("takeoffs.partition", Does = "Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.partition", Does = "Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request, ProjectDocument activeDocument) =>
+        // ADR 0011: TakeoffAtlas.Partition calls Pe.Revit.Partition.Verbs.Partition and hands the
+        // PartitionAnswer to ZoneMaterializer. The call cannot live in this file: Pe.Revit.Space
+        // references Pe.Revit.Global, so Global referencing Partition is a project cycle.
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
 
     [Op("takeoffs.decisions", Does = "Write review decisions to one Room Region provenance blob in one transaction.", Title = "Write Takeoff Decisions", Finds = ["takeoffs", "decisions", "review", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]

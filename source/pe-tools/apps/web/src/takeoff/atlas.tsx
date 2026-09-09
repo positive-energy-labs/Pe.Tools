@@ -10,7 +10,6 @@ import {
   STAGE_ORDER,
   type RoomEdit,
   type Stage,
-  type WorldLane,
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
@@ -23,7 +22,6 @@ export type Verdict = "accept" | "dismiss";
 export interface AtlasActions {
   patch: (guid: string, patch: RoomEdit) => void;
   decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  capture: (lane: WorldLane) => void;
   partition: (zone: WorldZone) => void;
   refresh: () => void;
 }
@@ -38,7 +36,6 @@ export interface AtlasProps {
 const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-  capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
   partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
   refresh: () => void store.actions.refresh().catch(() => undefined),
 });
@@ -96,7 +93,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     [world, stageFilter],
   );
 
-  const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
+  const selected = zoneKey ? (world.zones.find((z) => z.zone.guid === zoneKey) ?? null) : null;
   const setTableState = useCallback(
     (state: MasterTableState) => store.actions.setTableState(state),
     [store],
@@ -187,7 +184,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   ];
 
   const selectZone = (z: WorldZone | null) => {
-    setZoneKey(z ? z.zone.key : null);
+    setZoneKey(z ? z.zone.guid : null);
     setCursor(null);
     if (z) setLevel(z.zone.lane.label);
   };
@@ -212,7 +209,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
 
   const proposedUrl =
     `/takeoffs?level=${level}` +
-    (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
+    (selected ? `&zone=${encodeURIComponent(selected.zone.guid)}` : "") +
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
 
   return {

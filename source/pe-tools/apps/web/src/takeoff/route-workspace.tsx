@@ -1,3 +1,4 @@
+import { PartitionReview } from "#/takeoff/partition-review";
 import { token } from "#/lib/token";
 import { Workspace } from "#/components/anatomy";
 import { useMemo, useState } from "react";
@@ -69,6 +70,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const busyState = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
   const panel = useAtomValue(store.atoms.panel);
+  const review = useAtomValue(store.atoms.review);
   const targetingOpen = useAtomValue(store.atoms.targetingOpen);
   const targetingLevel = useAtomValue(store.atoms.targetingLevel);
   const targetingQuery = useAtomValue(store.atoms.targetingQuery);
@@ -107,10 +109,13 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         folder: dir || null,
         r10: r10 || null,
       },
-      multi: { views: new Set(views), zones: new Set(zones) },
+      multi: {
+        views: new Set(views),
+        zones: new Set(zones.filter((id) => world.zones.some((zone) => zone.zone.guid === id))),
+      },
       stage,
     }),
-    [target, activeDocument?.documentId, views, dir, r10, zones, stage],
+    [target, activeDocument?.documentId, views, dir, r10, zones, world.zones, stage],
   );
   const moveToDocument = (documentId: string) => {
     const at = addressSchema.safeParse(documentId);
@@ -183,34 +188,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         label: "audit",
         verbs: [
           {
-            key: "capture",
-            label: "capture level",
-            demands: ["views"],
-            kind: live ? "act" : "seam",
-            run: live
-              ? async () => {
-                  for (const view of views) {
-                    const lane = world.lanes.find((candidate) => candidate.view === view);
-                    if (!lane) throw new Error(`unknown zoning view ${view}`);
-                    await store.actions.capture(lane);
-                  }
-                }
-              : async () => {
-                  throw Error("a live document — the fixture is already captured");
-                },
-            refuse: () => null,
-            needs: "a live document — the fixture is already captured",
-          },
-          {
             key: "partition",
-            label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
+            label: `partition ${boundZones.length || ""} zone${boundZones.length === 1 ? "" : "s"}`,
             demands: ["zones"],
             kind: live ? "act" : "seam",
             refuse: () => {
-              const uncaptured = boundZones.find((zone) => !zone.zone.lane.replayPath);
-              return uncaptured
-                ? `capture ${uncaptured.zone.lane.label} first — the partition replays its snapshot`
-                : null;
+              // ADR 0011: no capture pass. The partition reads the adopted Zoning Region directly.
+              const unadopted = boundZones.find((zone) => zone.zone.elementId === null);
+              return unadopted ? `adopt ${unadopted.zone.key} first` : null;
             },
             run: live
               ? async () => {
@@ -370,6 +355,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       <AdoptPanel store={store} />
     ) : scope && panel === "sync" ? (
       <SyncPanel store={store} />
+    ) : review ? (
+      <PartitionReview
+        key={review.data?.source.runId ?? review.zone}
+        review={review}
+        onFlag={
+          review.source === "fresh solver" ? (key) => store.actions.flagReview(key) : undefined
+        }
+      />
     ) : null;
   if (live && !session)
     return (

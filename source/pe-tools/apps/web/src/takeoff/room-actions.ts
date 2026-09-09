@@ -9,12 +9,20 @@ export const MANUAL_J: { field: keyof RoomData; label: string; width: string }[]
   { field: "ventilationCfm", label: "vent", width: "w-16" },
 ];
 
-export const decideReason = (live: boolean, room: WorldRoom, verb: Verdict): string =>
+export const decisionRefusal = (room: WorldRoom, flag: string): string | null =>
+  room.elementId === null
+    ? "Partition must create a native Room Region first"
+    : room.analysis?.state !== "current"
+      ? "Edit in Revit, then remeasure this zone before reviewing"
+      : room.analysis.hold === flag
+        ? "This measurement hold requires corrected model evidence and remeasurement"
+        : null;
+
+export const decideReason = (live: boolean, room: WorldRoom, verb: Verdict, flag: string): string =>
   !live
     ? `Marks this call ${verb === "accept" ? "accepted" : "dismissed"} for this session only (fixture)`
-    : room.elementId === null
-      ? "no Room Region home yet — partition must materialize this room before a verdict can be written"
-      : `Writes the ${verb} onto this room's Room Region provenance blob in the live model`;
+    : (decisionRefusal(room, flag) ??
+      `Writes the ${verb} onto this room's Room Region provenance blob in the live model`);
 
 export const hostReason = (
   live: boolean,

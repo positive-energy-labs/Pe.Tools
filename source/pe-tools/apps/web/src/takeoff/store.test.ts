@@ -203,8 +203,8 @@ function harness() {
     async readViews() {
       calls.views += 1;
       return [
-        { name: bound.views[0]!, level: "Main", regions: 1 },
-        { name: "Zero Regions", level: "Roof", regions: 0 },
+        { name: bound.views[0]!, level: "Main" },
+        { name: "Zero Regions", level: "Roof" },
       ];
     },
     async listRhvac(dir) {
@@ -237,9 +237,6 @@ function harness() {
         bound: "b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001",
         remaining: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002"],
       };
-    },
-    async capture() {
-      return { replayPath: "C:\\Takeoffs\\replay_Main.bin", rooms: 1, totalSqft: 100 };
     },
     async partition() {
       throw new Error("partition is outside this harness");
@@ -280,6 +277,158 @@ const ProjectA_SCOPE = {
 };
 
 describe("takeoff route store", () => {
+  it("prepares all materialization carriers before partition and retains its immutable review ID", async () => {
+    const h = harness();
+    const fixtureRegistry = AtomRegistry.make();
+    registries.push(fixtureRegistry);
+    const fixture = createFixtureTakeoffStore(fixtureRegistry, ProjectA_SCOPE);
+    const original = fixtureRegistry.get(fixture.atoms.world).zones[0]!;
+    const zone = { ...original, zone: { ...original.zone, elementId: 123 } };
+    let preparationCalls = 0;
+    const host: TakeoffHost = {
+      ...h.host,
+      async initializeCarrier(_session, stage) {
+        expect(stage).toBe("Materialization");
+        preparationCalls += 1;
+        return {
+          status: preparationCalls === 1 ? "needs-initialization" : "ready",
+          bound: "carrier",
+          remaining: preparationCalls === 1 ? ["last-carrier"] : [],
+        };
+      },
+      async partition() {
+        expect(preparationCalls).toBe(2);
+        return {
+          review: {
+            source: { runId: "immutable-captured-run", documentKey: "document", scopeKey: "scope" },
+            zone: { key: "zone", name: "zone", loops: [] },
+            shapes: [],
+          },
+          levelName: "Main",
+          elevation: 0,
+          created: 0,
+          held: 6,
+          rebound: 0,
+          orphaned: 0,
+          domainSqft: 0,
+          claimedWallSqft: 0,
+          excludedResidueSqft: 0,
+          totalSqft: 0,
+          profile: "test",
+          failures: [],
+          rooms: [],
+          residues: [],
+          regions: [],
+        };
+      },
+    };
+    const store = createStore({ host, sessions: h.sessions });
+    await store.actions.partition(zone);
+    expect(store.registry.get(store.atoms.review)).toEqual({
+      zone: zone.zone.guid,
+      source: "fresh solver",
+      data: {
+        source: { runId: "immutable-captured-run", documentKey: "document", scopeKey: "scope" },
+        zone: { key: "zone", name: "zone", loops: [] },
+        shapes: [],
+      },
+      flags: [],
+    });
+    await store.actions.refresh();
+    expect(store.registry.get(store.atoms.review)).toBeNull();
+    store.dispose();
+    fixture.dispose();
+  });
+
+  it("selects a saved held native review after reload", async () => {
+    const h = harness();
+    const fixtureRegistry = AtomRegistry.make();
+    registries.push(fixtureRegistry);
+    const fixture = createFixtureTakeoffStore(fixtureRegistry, ProjectA_SCOPE);
+    const zone = structuredClone(fixtureRegistry.get(fixture.atoms.world).zones[0]!);
+    zone.zone.key = "Main#09";
+    zone.stage = "partitioned";
+    zone.rooms = [];
+    const loops = zone.zone.loops.map((loop) => loop.map(([x, y]) => [x, y] as [number, number]));
+    zone.savedReview = {
+      source: {
+        runId: "saved-run-09",
+        documentKey: "C:\\Models\\Harness.rvt",
+        scopeKey: zone.zone.guid,
+      },
+      zone: { key: zone.zone.guid, name: "Main Level 09", loops },
+      shapes: [
+        {
+          id: "R01",
+          kind: "residue",
+          disposition: "held",
+          reason: "no-floor",
+          sqft: 100,
+          label: [0, 0],
+          loops,
+        },
+      ],
+    };
+    h.snapshot.world.zones = [zone];
+    const store = createStore({ host: h.host, sessions: h.sessions });
+    await store.actions.settle(store.atoms.snapshot);
+
+    store.actions.setAtlasPage({ zoneKey: zone.zone.guid });
+
+    expect(store.registry.get(store.atoms.review)).toMatchObject({
+      zone: zone.zone.guid,
+      source: "saved native",
+      data: {
+        source: { runId: "saved-run-09" },
+        shapes: [{ disposition: "held", reason: "no-floor" }],
+      },
+    });
+    zone.zone.key = "Renamed#99";
+    zone.savedReview.zone.name = "Renamed after reorder";
+    await store.actions.refresh();
+    await store.actions.settle(store.atoms.snapshot);
+    expect(store.registry.get(store.atoms.zoneKey)).toBe(zone.zone.guid);
+    expect(store.registry.get(store.atoms.review)?.data?.zone.name).toBe("Renamed after reorder");
+    store.dispose();
+    fixture.dispose();
+  });
+
+  it("keeps held and void residues out of the RHVAC sync plan", async () => {
+    const h = harness();
+    const fixtureRegistry = AtomRegistry.make();
+    registries.push(fixtureRegistry);
+    const fixture = createFixtureTakeoffStore(fixtureRegistry, ProjectA_SCOPE);
+    const zone = structuredClone(
+      fixtureRegistry
+        .get(fixture.atoms.world)
+        .zones.find((candidate) => candidate.rooms.some((room) => room.data !== null))!,
+    );
+    const eligible = zone.rooms.find((room) => room.data !== null)!;
+    eligible.elementId = 42;
+    eligible.r10 = null;
+    eligible.analysis = { state: "current", runId: "measure", floorZ: 0, ceilingZ: 8, hold: null };
+    zone.rooms = [eligible];
+    zone.residues = [
+      { id: "held", reason: "held", rawSqft: 10, label: [0, 0], outer: [], holes: [] },
+      { id: "void", reason: "void", rawSqft: 5, label: [0, 0], outer: [], holes: [] },
+    ];
+    zone.heldSqft = 15;
+    h.snapshot.world.zones = [zone];
+    const store = createStore({ host: h.host, sessions: h.sessions });
+    await store.actions.settle(store.atoms.snapshot);
+
+    expect(store.registry.get(store.atoms.syncPlan).inserts.map(({ room }) => room.guid)).toEqual([
+      eligible.guid,
+    ]);
+    expect(store.registry.get(store.atoms.world).zones[0]!.residues).toEqual(zone.residues);
+    eligible.analysis = { ...eligible.analysis!, state: "stale", hold: "geometry-changed" };
+    await store.actions.refresh();
+    await store.actions.settle(store.atoms.snapshot);
+    expect(store.registry.get(store.atoms.syncPlan).inserts).toEqual([]);
+    store.dispose();
+    fixture.dispose();
+  });
+
   it("starts the fixture lane with the dense project-a world before Host transport", () => {
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
     registries.push(registry);
@@ -352,22 +501,6 @@ describe("takeoff route store", () => {
     expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
     await store.actions.openAdopt();
     expect(registry.get(store.atoms.panel)).toBe("adopt");
-    store.dispose();
-  });
-
-  it("does not offer a view with zero filled regions", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-    });
-    store.actions.setSelection(bound);
-
-    await store.actions.settle(store.atoms.viewFacts);
-
-    expect(store.atoms.registry.get(store.feeds.views).options).toEqual([
-      { id: bound.views[0], label: bound.views[0], sub: "Main · 1 region" },
-    ]);
     store.dispose();
   });
 
@@ -660,7 +793,7 @@ describe("takeoff route store", () => {
 
     store.actions.setAtlasPage({
       level: "Main",
-      zoneKey: zone.zone.key,
+      zoneKey: zone.zone.guid,
       cursor: room.guid,
       planOpen: false,
       statsOpen: true,
@@ -780,28 +913,6 @@ describe("takeoff route store", () => {
       dirty: true,
       conflict: false,
     });
-    store.dispose();
-  });
-
-  it("brackets capture and publishes its replay through the store world", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-    });
-    store.actions.setSelection(bound);
-    await store.actions.settle(store.atoms.snapshot);
-
-    await store.actions.capture({ view: bound.views[0]!, label: "Main" });
-
-    expect(store.atoms.registry.get(store.atoms.busy)).toBeNull();
-    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
-      verb: "capture",
-      text: "captured Main: 1 rooms",
-    });
-    expect(store.atoms.registry.get(store.atoms.world).lanes[0]?.replayPath).toBe(
-      "C:\\Takeoffs\\replay_Main.bin",
-    );
     store.dispose();
   });
 

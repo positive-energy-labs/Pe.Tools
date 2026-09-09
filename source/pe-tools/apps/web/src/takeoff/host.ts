@@ -1,3 +1,4 @@
+import { partitionReviewSchema } from "@pe/agent-contracts";
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
@@ -20,7 +21,9 @@ function buildRhvacInsert(
   number: number,
   systemNumber: number,
 ): RhvacInsertRoomData {
-  const height = room.ceilingFt || 8;
+  if (!Number.isFinite(room.ceilingFt) || room.ceilingFt <= 0)
+    throw Error(`room '${room.name}' has invalid ceiling height ${room.ceilingFt}`);
+  const height = room.ceilingFt;
   const outer = room.outer ?? [];
   const walls = outer.map(([x1, y1], index) => {
     const [x2, y2] = outer[(index + 1) % outer.length]!;
@@ -183,12 +186,14 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     return snapshot;
   },
   async readViews(session) {
-    const scope = { bridgeSessionId: session.sessionId };
-    const [views, projectIndex] = await Promise.all([
-      callHostRpc("takeoffs.views", undefined, scope),
-      callHostRpc("revit.catalog.project-index", takeoffProjectIndexRequest, scope),
-    ]);
-    return projectTakeoffViews(views, projectIndex);
+    const projectIndex = await callHostRpc(
+      "revit.catalog.project-index",
+      takeoffProjectIndexRequest,
+      {
+        bridgeSessionId: session.sessionId,
+      },
+    );
+    return projectTakeoffViews(projectIndex);
   },
   async listRhvac(dir) {
     const response = await callHostRpc("rhvac.list", { dir });
@@ -218,22 +223,20 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
   },
   initializeCarrier: (session, stage) =>
     callHostRpc("takeoffs.initialize-carrier", { stage }, { bridgeSessionId: session.sessionId }),
-  async capture(session, lane) {
-    const scope = { bridgeSessionId: session.sessionId };
-    const prepared = await callHostRpc("takeoffs.prepare-capture", { view: lane.view }, scope);
-    return callHostRpc("takeoffs.detect-capture", { level: prepared.level }, scope);
-  },
   async partition(session, input) {
     const response = await callHostRpc(
       "takeoffs.partition",
+      { ...input },
       {
-        ...input,
-        loops: input.loops.map((loop) => loop.map(([x, y]) => [x, y])),
+        bridgeSessionId: session.sessionId,
       },
-      { bridgeSessionId: session.sessionId },
     );
     return {
       ...response,
+      review:
+        "review" in response && response.review != null
+          ? partitionReviewSchema.parse(response.review)
+          : null,
       rooms: response.rooms.map((room) => ({
         ...room,
         label: toPoint(room.label),
@@ -247,6 +250,7 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
       regions: response.regions.map((region) => ({
         ...region,
         outer: toPoints(region.outer),
+        holes: region.holes.map(toPoints),
       })),
     };
   },
