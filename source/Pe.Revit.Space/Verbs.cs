@@ -234,8 +234,8 @@ public static class Verbs {
                 List<double[]>? mine = null;
                 for (var k = starts[i]; k < starts[i + 1]; k++) {
                     var t = tris[k];
-                    var lo = MathF.Min(t.A.Z, MathF.Min(t.B.Z, t.C.Z));
-                    var hi = MathF.Max(t.A.Z, MathF.Max(t.B.Z, t.C.Z));
+                    var lo = Math.Min(t.A.Z, Math.Min(t.B.Z, t.C.Z));
+                    var hi = Math.Max(t.A.Z, Math.Max(t.B.Z, t.C.Z));
                     if (hi < z0 || lo > z1) continue;
                     var ring = ClipToSlab(t, z0, z1);
                     if (ring is null) continue;

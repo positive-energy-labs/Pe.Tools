@@ -192,9 +192,11 @@ type HostUpdateStatus = {
 
 function readInstallReceipt(): InstallReceipt | null {
   try {
-    return JSON.parse(
+    const receipt = JSON.parse(
       readFileSync(join(installRoot(), "install.receipt.json"), "utf8"),
     ) as InstallReceipt;
+    const releaseVersion = readFileSync(join(installRoot(), "current.txt"), "utf8").trim();
+    return { ...receipt, releaseVersion: releaseVersion || undefined };
   } catch {
     return null;
   }
