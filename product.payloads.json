@@ -111,11 +111,6 @@
       "name": "pea",
       "target": "versionedApp:pea",
       "dev": "corepack pnpm@11.13.1 --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
-    },
-    {
-      "type": "PathShim",
-      "name": "pe-dev",
-      "dev": "dotnet run --project \"{root}/source/Pe.Dev.Cli\" --"
     }
   ]
 }

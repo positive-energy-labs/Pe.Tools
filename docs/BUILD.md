@@ -349,7 +349,7 @@ Useful dev-lane refresh commands:
 
 ```powershell
 pe-revit path ensure     # once per machine: registers <appBase>\shims on the user PATH (safely)
-pe-revit dev link        # from this checkout: routes pea and pe-dev shims to source
+pe-revit dev link        # from this checkout: routes the pea shim to source
 pe-revit dev status      # shows each shim's resolved lane
 pnpm --dir source/pe-tools dev
 pea
@@ -414,15 +414,15 @@ Operation metadata travels with the thing it describes, and the connected sessio
 Design Automation flows touch no Revit session. Keep first-pass audit manifests intentionally small: one or two models before broadening.
 
 ```powershell
-pe-dev automation auth login
-pe-dev automation browse hubs
-pe-dev automation manifest create --path docs/context/my-run/schedules.json
-pe-dev automation submit schedules --manifest docs/context/my-run/schedules.json
-pe-dev automation inspect receipt --receipt latest --download-artifacts true
+dotnet run --project source/Pe.Dev.Cli -- automation auth login
+dotnet run --project source/Pe.Dev.Cli -- automation browse hubs
+dotnet run --project source/Pe.Dev.Cli -- automation manifest create --path docs/context/my-run/schedules.json
+dotnet run --project source/Pe.Dev.Cli -- automation submit schedules --manifest docs/context/my-run/schedules.json
+dotnet run --project source/Pe.Dev.Cli -- automation inspect receipt --receipt latest --download-artifacts true
 ```
 
 The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. Desktop and DA remain
-sibling shells over shared DA-safe runtime packages. `pe-dev automation` is an interim thin terminal
+sibling shells over shared DA-safe runtime packages. `Pe.Dev.Cli` (`dotnet run --project source/Pe.Dev.Cli -- automation`, no shim) is an interim thin terminal
 adapter; a future Pea/host workflow can replace it when product use proves the right operation shape.
 
 ## Build matrix and configuration facts
@@ -467,7 +467,7 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer`                                                        |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
-| Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev automation`                                              |
+| Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea`                                                                    |
 | Run source web dev explicitly     | `pnpm --dir source/pe-tools dev`                                                                                                  |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
 | Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (offline); `codegen:verify-live -- --session <id>` for live parity                    |
