@@ -3,6 +3,7 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Services.AutoTag;
+using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
@@ -475,7 +476,7 @@ public class CmdAutoTag : IExternalCommand {
         // so value-domain samples always reflect the current session.
         var document = JObject.Parse(JsonConvert.SerializeObject(settings, JsonSettings));
         document["$schema"] =
-            $"{HostProcessIdentity.ResolveHostBaseUrl().TrimEnd('/')}/schemas/settings/AutoTag/autotag.json";
+            $"{HostEndpoint.ResolveHostBaseUrl().TrimEnd('/')}/schemas/settings/AutoTag/autotag.json";
         File.WriteAllText(settingsFilePath, JsonConvert.SerializeObject(document, Formatting.Indented));
 
         FileUtils.OpenInDefaultApp(settingsFilePath);

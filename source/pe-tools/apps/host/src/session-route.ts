@@ -296,7 +296,7 @@ export function executeSessionCli<R>(
   });
 }
 
-// Real shell layer: same launcher chain as hostUpdateRoute/install convergence. An empty stdout means
+// Real shell layer: the same launcher chain as hostUpdateRoute. An empty stdout means
 // the resolved CLI does not speak this verb (e.g. a pre-session installed shim) — fail loudly
 // instead of relaying a blank 200.
 const runPeRevitCli: SessionCliRunner<ChildProcessSpawner.ChildProcessSpawner> = (args) =>

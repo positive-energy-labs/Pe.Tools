@@ -1,10 +1,11 @@
 namespace Pe.Shared.Product;
 
+/// <summary>
+///     Names of product-owned directories and files: mutable state, user content, and logs.
+///     Installed-binary names (bin, shims, dev, host, pea) belong to
+///     <c>product.payloads.json</c> and are not restated here.
+/// </summary>
 public static class ProductPathNames {
-    public const string BinDirectoryName = "bin";
-    public const string DevelopmentDirectoryName = "dev";
-    public const string HostDirectoryName = "host";
-    public const string PeaDirectoryName = "pea";
     public const string StateDirectoryName = "state";
     public const string LogsDirectoryName = "logs";
     public const string CacheDirectoryName = "cache";

@@ -23,6 +23,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
         <ProjectReference Include="..\Pe.Revit.DocumentData\Pe.Revit.DocumentData.csproj" />
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />

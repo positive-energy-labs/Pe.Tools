@@ -1,21 +1,20 @@
 // The codegen that produced contracts/product.ts is deleted; the mirror is hand-maintained.
-// This test is the sync gate: every `public const string` in the mirrored Pe.Shared.Product
-// classes must appear in the TS object (camelCase) with an identical value. TS-only extras are
-// tolerated (tracked separately as dead-constant cleanup), C#-side drift is not.
+// This test is the sync gate: every `public const string` in the mirrored C# classes must appear
+// in the TS object (camelCase) with an identical value. TS-only extras are tolerated (tracked
+// separately as dead-constant cleanup), C#-side drift is not. The INSTALLED LAYOUT is not mirrored
+// here at all — product.payloads.json is its single authority.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 import {
   hostProcessIdentity,
-  peaCliIdentity,
   productIdentity,
   productPathNames,
-  revitDeploymentIdentity,
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
 
-const sharedProductDir = fileURLToPath(new URL("../../../../Pe.Shared.Product/", import.meta.url));
+const sourceDir = fileURLToPath(new URL("../../../../", import.meta.url));
 
 type ConstMap = Record<string, string>;
 
@@ -23,7 +22,7 @@ type ConstMap = Record<string, string>;
 function parseCsharpConsts(fileNames: readonly string[]): Record<string, ConstMap> {
   const raw: Record<string, Record<string, { literal?: string; ref?: string }>> = {};
   for (const fileName of fileNames) {
-    const source = readFileSync(`${sharedProductDir}${fileName}`, "utf8");
+    const source = readFileSync(`${sourceDir}${fileName}`, "utf8");
     for (const classMatch of source.matchAll(/(?:class|record)\s+(\w+)[^{]*\{([\s\S]*?)^\}/gm)) {
       const [, className, body] = classMatch;
       const consts: Record<string, { literal?: string; ref?: string }> = (raw[className] ??= {});
@@ -54,12 +53,10 @@ function parseCsharpConsts(fileNames: readonly string[]): Record<string, ConstMa
 }
 
 const csharp = parseCsharpConsts([
-  "ProductIdentity.cs",
-  "ProductPathNames.cs",
-  "HostProcessIdentity.cs",
-  "PeaCliIdentity.cs",
-  "RevitDeploymentIdentity.cs",
-  "ScriptingWorkspaceLayout.cs",
+  "Pe.Shared.Product/ProductIdentity.cs",
+  "Pe.Shared.Product/ProductPathNames.cs",
+  "Pe.Shared.Product/ScriptingWorkspaceLayout.cs",
+  "Pe.Shared.HostContracts/Transport/HostEndpoint.cs",
 ]);
 
 const mirrors: readonly {
@@ -70,17 +67,11 @@ const mirrors: readonly {
 }[] = [
   { csharpClass: "ProductIdentity", ts: productIdentity },
   { csharpClass: "ProductPathNames", ts: productPathNames },
-  { csharpClass: "HostProcessIdentity", ts: hostProcessIdentity },
-  {
-    csharpClass: "PeaCliIdentity",
-    ts: peaCliIdentity,
-    aliases: { ExecutableName: "installedExecutableName" },
-  },
-  { csharpClass: "RevitDeploymentIdentity", ts: revitDeploymentIdentity },
+  { csharpClass: "HostEndpoint", ts: hostProcessIdentity },
   { csharpClass: "ScriptingWorkspaceLayout", ts: scriptingWorkspaceIdentity },
 ];
 
-test("contracts/product.ts mirrors Pe.Shared.Product string constants", () => {
+test("contracts/product.ts mirrors the C# product and host-endpoint constants", () => {
   for (const { csharpClass, ts, aliases } of mirrors) {
     const consts = csharp[csharpClass];
     expect(consts, `parsed no consts for ${csharpClass}`).toBeTruthy();

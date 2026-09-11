@@ -2,6 +2,7 @@ using Pe.Dev.RevitAutomation;
 using Pe.Revit.Loader;
 using Pe.Revit.ServiceClient;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 
@@ -31,6 +32,10 @@ public sealed class DeploymentRuntimeContractTests {
                 Is.True
             );
             var runtime = ProductRuntimeLayout.ForCurrentUser(localAppData);
+            Assert.That(
+                runtime.RootPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools"))
+            );
             Assert.That(
                 runtime.State.RootPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
@@ -165,66 +170,6 @@ public sealed class DeploymentRuntimeContractTests {
         );
     }
 
-    [Test]
-    public void Development_runtime_layout_keeps_only_runtime_host_in_dev_root() {
-        var localAppData = Path.Combine(Path.GetTempPath(), $"pe-dev-layout-{Guid.NewGuid():N}");
-
-        try {
-            var developmentRuntime = ProductDevelopmentRuntimeLayout.ForCurrentUser(localAppData);
-
-            Assert.That(
-                developmentRuntime.RootPath,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev"))
-            );
-            Assert.That(
-                developmentRuntime.Binaries.HostDirectoryPath,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev", "bin", "host"))
-            );
-        } finally {
-            TryDeleteDirectory(localAppData);
-        }
-    }
-
-    [Test]
-    public void Development_runtime_layout_pins_the_self_hosted_dev_host_and_pea_launcher() {
-        // The dev lane is self-hosted: PePayloadContext.Deployment is null, so PeRuntimeContext falls
-        // back to these two paths. Pin them here (the installed lane is pinned by the InstalledProduct
-        // grammar test below).
-        var localAppData = Path.Combine(Path.GetTempPath(), $"pe-dev-runtime-{Guid.NewGuid():N}");
-
-        try {
-            var devHost = ProductDevelopmentRuntimeLayout.ForCurrentUser(localAppData).Binaries.HostExecutablePath;
-            var peaLauncher = ProductRuntimeLayout.ForCurrentUser(localAppData).Binaries.PeaLauncherPath;
-
-            Assert.That(
-                devHost,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev", "bin", "host", "Pe.Host.exe"))
-            );
-            Assert.That(
-                peaLauncher,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "pea", "pea.cmd"))
-            );
-        } finally {
-            TryDeleteDirectory(localAppData);
-        }
-    }
-
-    [Test]
-    public void Development_runtime_projects_the_sdk_source_root_to_the_ts_host() {
-        var root = Path.Combine(Path.GetTempPath(), $"pe-source-root-{Guid.NewGuid():N}");
-        var expected = Path.Combine(root, "source", "pe-tools");
-        Directory.CreateDirectory(Path.Combine(expected, "apps", "host"));
-        File.WriteAllText(Path.Combine(expected, "apps", "host", "package.json"), "{}");
-        try {
-            Assert.Multiple(() => {
-                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(root), Is.EqualTo(expected));
-                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(null), Is.Null);
-                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(Path.Combine(root, "missing")), Is.Null);
-            });
-        } finally {
-            TryDeleteDirectory(root);
-        }
-    }
 
     [Test]
     public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
@@ -232,16 +177,16 @@ public sealed class DeploymentRuntimeContractTests {
 
         Assert.Multiple(() => {
             Assert.That(
-                HostProcessIdentity.ResolveServiceName(ProductRuntimeLane.Installed, null),
+                HostEndpoint.ResolveServiceName("installed", null),
                 Is.EqualTo("host")
             );
             Assert.That(
-                HostProcessIdentity.ResolveServiceName(ProductRuntimeLane.Dev, sourceRoot),
+                HostEndpoint.ResolveServiceName("dev", sourceRoot),
                 Is.EqualTo("host-source-a3684ea655f3")
             );
             Assert.That(
-                HostProcessIdentity.SourceServiceName(sourceRoot.ToLowerInvariant()),
-                Is.EqualTo(HostProcessIdentity.SourceServiceName(sourceRoot))
+                HostEndpoint.SourceServiceName(sourceRoot.ToLowerInvariant()),
+                Is.EqualTo(HostEndpoint.SourceServiceName(sourceRoot))
             );
         });
     }
@@ -282,55 +227,6 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
-    [Test]
-    public void Installed_product_grammar_resolves_the_host_executable_and_pea_launcher() {
-        // Consumer-side pin: the installed lane resolves host/pea through Pe.Revit.Loader's
-        // InstalledProduct, so this fixtures a minimal install root (as `pe-revit install converge`
-        // writes it) and asserts our payload names ("host", "pea") land where the launchers expect.
-        // The full round-trip grammar contract is owned by the SDK repo's Loader.Tests.
-        var appBase = Path.Combine(Path.GetTempPath(), $"pe-installed-product-{Guid.NewGuid():N}");
-        const string hostVersion = "1.2.3";
-
-        try {
-            File.WriteAllText(
-                Path.Combine(Directory.CreateDirectory(appBase).FullName, "product.payloads.json"),
-                """
-                {
-                  "product": "Pe.Tools",
-                  "vendor": "Positive Energy",
-                  "payloads": [
-                    { "type": "VersionedApp", "name": "host", "entry": "Pe.Host.exe" },
-                    { "type": "PathShim", "name": "pea" }
-                  ]
-                }
-                """
-            );
-
-            var hostVersionDir = Path.Combine(appBase, "bin", "host", "versions", hostVersion);
-            Directory.CreateDirectory(hostVersionDir);
-            File.WriteAllText(Path.Combine(hostVersionDir, "install.manifest.json"), "{}");
-            File.WriteAllText(Path.Combine(appBase, "bin", "host", "current.txt"), hostVersion);
-            var hostExe = Path.Combine(hostVersionDir, "Pe.Host.exe");
-            File.WriteAllText(hostExe, string.Empty);
-
-            var shimsDir = Directory.CreateDirectory(Path.Combine(appBase, "shims")).FullName;
-            var peaShim = Path.Combine(shimsDir, "pea.cmd");
-            File.WriteAllText(peaShim, "@echo off\r\n");
-
-            var deployment = InstalledProduct.Open(appBase);
-            Assert.That(deployment, Is.Not.Null);
-
-            // Host: VersionedApp resolves versions/<current>/<entry>.
-            Assert.That(deployment!.Resolve("host")?.EntryPath, Is.EqualTo(hostExe));
-
-            // Pea launcher: pea is now a dev-only PathShim, and a PathShim always lands at
-            // shims/<name>.cmd — the grammar the dev-lane pea shim resolves through.
-            Assert.That(Path.Combine(deployment.ShimsDirectory, "pea.cmd"), Is.EqualTo(peaShim));
-            Assert.That(File.Exists(Path.Combine(deployment.ShimsDirectory, "pea.cmd")), Is.True);
-        } finally {
-            TryDeleteDirectory(appBase);
-        }
-    }
 
     private static void TryDeleteDirectory(string path) {
         try {

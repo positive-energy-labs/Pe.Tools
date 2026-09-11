@@ -27,6 +27,8 @@ const recent = (modelGuid: string, path: string): RecentDocument => ({
   projectGuid: "project",
   rank: 0,
   region: "US",
+  savedYear: null,
+  savedYearFailure: null,
   title: "Equal title.rvt",
   year: 2026,
 });
@@ -36,6 +38,7 @@ const observation = (id: string, pid: number): SessionObservation => ({
   bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
   detail: "ready",
   id,
+  kind: "hr",
   observedAtUtc: "2026-08-30T12:00:00.000Z",
   origin: "test",
   process: {

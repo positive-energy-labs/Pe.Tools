@@ -31,7 +31,6 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: false },
-            includeInstallConverge: false,
             lifecycle: { handle, latch },
             mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
               createDeterministicRuntime({

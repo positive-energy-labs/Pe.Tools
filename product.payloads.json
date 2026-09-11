@@ -14,11 +14,9 @@
     "artifacts": ["RevitBundle", "Msi", "InstallZip"],
     "smokeService": "host",
     "smokePaths": [
-      "app/bin/host/versions/{version}/Pe.Host.exe",
-      "app/bin/host/versions/{version}/web/client/index.html",
-      "app/bin/host/versions/{version}/.pe-staged",
-      "app/bin/pea/versions/{version}/pea.exe",
-      "app/addin/versions/{version}"
+      "app/bin/host/Pe.Host.exe",
+      "app/bin/host/web/client/index.html",
+      "app/bin/pea/pea.exe"
     ]
   },
   "years": ["2023", "2024", "2025", "2026"],

@@ -1,8 +1,13 @@
 namespace Pe.Shared.Product;
 
+/// <summary>
+///     The per-user product root and the mutable state/log/cache trees the product owns underneath
+///     it. Installed BINARY paths are deliberately absent: <c>product.payloads.json</c> is the
+///     single authority for the installed layout, and the SDK's InstalledProduct reads it. Nothing
+///     here restates payload names, executable names, or bin/shim directories.
+/// </summary>
 public sealed record ProductRuntimeLayout(
     string RootPath,
-    ProductRuntimeBinaryLayout Binaries,
     ProductRuntimeStateLayout State,
     ProductRuntimeLogLayout Logs,
     ProductRuntimeCacheLayout Cache
@@ -13,43 +18,15 @@ public sealed record ProductRuntimeLayout(
             ProductIdentity.VendorName,
             ProductIdentity.ProductName
         );
-        var binRootPath = Path.Combine(rootPath, ProductPathNames.BinDirectoryName);
-        var stateRootPath = Path.Combine(rootPath, ProductPathNames.StateDirectoryName);
-        var logsRootPath = Path.Combine(rootPath, ProductPathNames.LogsDirectoryName);
-        var cacheRootPath = Path.Combine(rootPath, ProductPathNames.CacheDirectoryName);
 
         return new ProductRuntimeLayout(
             rootPath,
-            new ProductRuntimeBinaryLayout(
-                binRootPath,
-                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName),
-                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName)
-            ),
-            new ProductRuntimeStateLayout(stateRootPath),
-            new ProductRuntimeLogLayout(logsRootPath),
-            new ProductRuntimeCacheLayout(cacheRootPath)
+            new ProductRuntimeStateLayout(Path.Combine(rootPath, ProductPathNames.StateDirectoryName)),
+            new ProductRuntimeLogLayout(Path.Combine(rootPath, ProductPathNames.LogsDirectoryName)),
+            new ProductRuntimeCacheLayout(Path.Combine(rootPath, ProductPathNames.CacheDirectoryName))
         );
     }
 }
-
-/// <summary>
-///     Stable per-user binary paths. The versioned-layout path math (host <c>current.txt</c> +
-///     <c>versions/&lt;v&gt;</c> resolution, and the parallel pea versioned/packages helpers) was
-///     removed in Phase 2 — <c>Pe.Revit.Loader.InstalledProduct</c> now owns installed-lane
-///     resolution through the same grammar the installer wrote. What remains is the dev-lane surface:
-///     <see cref="PeaDirectoryPath" />/<see cref="PeaLauncherPath" /> are where SDK
-///     <c>pe-revit dev link</c> writes the source-linked launcher, and
-///     <see cref="HostExecutablePath" /> is the stable host candidate.
-/// </summary>
-public sealed record ProductRuntimeBinaryLayout(
-    string RootPath,
-    string HostDirectoryPath,
-    string HostExecutablePath,
-    string PeaDirectoryPath,
-    string PeaLauncherPath
-);
 
 public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);

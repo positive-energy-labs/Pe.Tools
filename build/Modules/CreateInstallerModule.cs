@@ -12,7 +12,6 @@ using ModularPipelines.FileSystem;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using ModularPipelines.Options;
-using Pe.Shared.Product;
 using Pe.Shared.RevitVersions;
 using Shouldly;
 using File = ModularPipelines.FileSystem.File;
@@ -78,8 +77,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         try {
             var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
             await Task.WhenAll(
-                PublishRuntimeAsync(context, hostPackageDirectory, signing, unsignedNode, cancellationToken),
-                PublishPeaAsync(context, peaPackageDirectory, signing, unsignedNode, cancellationToken)
+                PublishRuntimeAsync(context, rootDirectory, sourceManifestPath, hostPackageDirectory, signing, unsignedNode, cancellationToken),
+                PublishPeaAsync(context, sourceManifestPath, peaPackageDirectory, signing, unsignedNode, cancellationToken)
             );
         } finally {
             Directory.Delete(Path.GetDirectoryName(unsignedNode)!, recursive: true);
@@ -153,6 +152,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
     private static async Task PublishRuntimeAsync(
         IModuleContext context,
+        Folder rootDirectory,
+        string manifestPath,
         Folder hostPackageDirectory,
         PackageSigningResult signing,
         string unsignedNode,
@@ -167,7 +168,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         var builtHostDirectory = Path.Combine(hostPackageDirectory.Path, "dist-installed");
         var runtimePublishDirectory = new Folder(builtHostDirectory);
-        var builtHostExecutable = Path.Combine(builtHostDirectory, HostProcessIdentity.ExecutableName);
+        var hostExecutableName = PayloadEntryName(manifestPath, "host");
+        var builtHostExecutable = Path.Combine(builtHostDirectory, hostExecutableName);
         await BuildSignableSeaAsync(
             context,
             Path.Combine(builtHostDirectory, "bundle", "index.mjs"),
@@ -182,15 +184,34 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         runtimePublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
-        runtimePublishDirectory.GetFile(HostProcessIdentity.ExecutableName).Exists
+        runtimePublishDirectory.GetFile(hostExecutableName).Exists
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
         runtimePublishDirectory.GetFile("web/client/index.html").Exists
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
+        StageUsageIndex(context, rootDirectory, builtHostDirectory);
         context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
+    }
+
+    /// <summary>
+    ///     Ship the usage-index next to the Host executable. The installed layout is fixed, so
+    ///     local-docs findExamplesPath reads bin/host/examples.json — the same directory the bundle
+    ///     lands in. Absent index is not fatal: the API docs degrade to no examples.
+    /// </summary>
+    private static void StageUsageIndex(IModuleContext context, Folder rootDirectory, string builtHostDirectory) {
+        var examplesPath = Path.Combine(rootDirectory.Path, ".artifacts", "usage-index", "examples.json");
+        if (!System.IO.File.Exists(examplesPath)) {
+            context.Logger.LogWarning(
+                "No usage index at {Path}; the installed Host ships without API examples.", examplesPath);
+            return;
+        }
+
+        System.IO.File.Copy(examplesPath, Path.Combine(builtHostDirectory, "examples.json"), true);
+        context.Logger.LogInformation("Staged the usage index beside the installed Host.");
     }
 
     private static async Task PublishPeaAsync(
         IModuleContext context,
+        string manifestPath,
         Folder peaPackageDirectory,
         PackageSigningResult signing,
         string unsignedNode,
@@ -205,7 +226,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         var builtPeaDirectory = Path.Combine(peaPackageDirectory.Path, "dist-installed");
         var peaPublishDirectory = new Folder(builtPeaDirectory);
-        var builtPeaExecutable = Path.Combine(builtPeaDirectory, PeaCliIdentity.ExecutableName);
+        var peaExecutableName = PayloadEntryName(manifestPath, "pea");
+        var builtPeaExecutable = Path.Combine(builtPeaDirectory, peaExecutableName);
         await BuildSignableSeaAsync(
             context,
             Path.Combine(builtPeaDirectory, "bundle", "main.mjs"),
@@ -220,7 +242,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         peaPublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the pea runtime for installer packaging.");
-        peaPublishDirectory.GetFile(PeaCliIdentity.ExecutableName).Exists
+        peaPublishDirectory.GetFile(peaExecutableName).Exists
             .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
 
         context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
@@ -280,6 +302,22 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         } finally {
             if (System.IO.File.Exists(config)) System.IO.File.Delete(config);
         }
+    }
+
+    /// <summary>
+    ///     The executable a VersionedApp payload lands as, read from product.payloads.json — the
+    ///     single authority for the installed layout. The build never restates these names.
+    /// </summary>
+    private static string PayloadEntryName(string manifestPath, string payloadName) {
+        using var document = JsonDocument.Parse(System.IO.File.ReadAllText(manifestPath));
+        foreach (var payload in document.RootElement.GetProperty("payloads").EnumerateArray()) {
+            if (payload.GetProperty("type").GetString() != "VersionedApp") continue;
+            if (payload.GetProperty("name").GetString() != payloadName) continue;
+            return payload.GetProperty("entry").GetString()
+                   ?? throw new InvalidOperationException($"Payload '{payloadName}' has no entry in {manifestPath}.");
+        }
+
+        throw new InvalidOperationException($"No VersionedApp payload named '{payloadName}' in {manifestPath}.");
     }
 
     private static void ValidateManifestYears(string manifestPath, IReadOnlyCollection<string> configurations) {

@@ -14,7 +14,7 @@ Owns the repo-level pack and publish automation.
 - `Modules/ResolveBuildMatrixModule.cs` - packaging configuration resolution from SDK-facing repo props.
 - `Modules/ResolveBuildLayoutModule.cs` - resolves the build-side `ProductLayoutAuthority`.
 - `BuildArtifactLayout.cs` - repo-local `.artifacts` topology: build, publish, staging, package, installer, and tools roots.
-- `ProductLayoutAuthority.cs` - build/install projection authority that composes repo root, `Pe.Shared.Product` layout, artifact layout, and SDK installer payload paths.
+- `ProductLayoutAuthority.cs` - repo/artifact path authority: repo root, artifact layout, and SDK installer payload/receipt paths. Installed-layout facts come from `product.payloads.json`, read directly where needed.
 - `Modules/CreateBundleModule.cs` - publishes the Revit matrix once for both desktop and installer packaging.
 - `Modules/CreateInstallerModule.cs` - remaining package outputs. (`Modules/CreateAutomationBundleModule.cs` is preserved-for-posterity: unregistered, no pack target — the automation worker is unused.)
 - `Modules/ValidateSolutionParityModule.cs` - `.slnx` parity validation without treating `.slnx` as build truth.
@@ -34,7 +34,7 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
   mechanically reject any mismatch rather than treating the JSON as an independent authority.
 - `Pe.Revit.Sdk` owns project taxonomy, target-framework projection, Revit package policy, deploy, and generated configuration behavior.
 - `Pe.Revit.Versioning` owns Revit suffixes and Design Automation eligibility outside MSBuild.
-- `Pe.Shared.Product` owns durable product identity and local runtime/user layout; `ProductLayoutAuthority` owns repo/build/install projection from that product truth.
+- `product.payloads.json` owns the installed layout; `Pe.Shared.Product` owns product identity and product-owned local/user paths; `ProductLayoutAuthority` owns repo/artifact topology.
 - `BuildArtifactLayout` owns `.artifacts/...` path math. Do not recreate `.artifacts`, `packages`, `publish`, `staging`, or installer output roots in modules.
 - `CreateBundleModule` builds the product-specific Revit source once; `CreateInstallerModule` builds
   Host and Pea, then consumes that Revit output. The checked

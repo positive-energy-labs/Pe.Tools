@@ -57,7 +57,6 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
         mastraLayer: DyingMastraLive,
         lifecycle: { latch, handle },
         webRoot: null,
-        includeInstallConverge: false,
       });
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),

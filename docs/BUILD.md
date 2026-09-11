@@ -145,7 +145,7 @@ dotnet tool run pe-revit -- session start --year 25 --id pe.app-25-probe --json 
 dotnet tool run pe-revit -- session start --project .\source\Pe.App\Pe.App.csproj --year 25 --json   # this checkout's bytes
 ```
 
-Bare `start` (no `--project`) is the **installed** lane — every product on its `current.txt` pointer, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
+Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
 
 Every session pe-revit starts is `controlled`, so `session list`, `doc *`, `op list`, and stop/hr all work against it. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
 
@@ -179,6 +179,8 @@ Package outputs:
 - Design Automation appbundle: `.artifacts/packages/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
 - Portable install package: `.artifacts/packages/installers/Pe.Tools.<version>.install.zip`
 - Installer: `.artifacts/packages/installers/*.msi`
+
+**Testing the installer:** Windows Sandbox, runbook at `%USERPROFILE%\WindowsSandbox\InstallerTests\README.md`. SDK `--msi-authoring` only proves the MSI builds and passes ICE.
 
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
@@ -235,11 +237,13 @@ dotnet run --project .\build\Build.csproj -c Release -- pack publish
 
 ## Runtime and install layout decisions
 
-`Pe.Shared.Product` owns durable product identity and local runtime/user layout. Generated build projections are not the authority.
+`product.payloads.json` at the repo root is the single authority for the installed layout: payload names, entry executables, `bin/`/`shims/` shape, the host service's port and health/shutdown routes, and the release version. The SDK's `InstalledProduct` reads it, the MSI copies it to the install root, and the installed host reads its own version back out of it (`host-lifecycle.ts resolveHostVersion`). Build and installer code reads that manifest directly rather than restating any of it.
+
+`Pe.Shared.Product` owns only what the product itself owns: identity (vendor/product/user-visible name) and the local paths for product-owned state, logs, caches, and user-authored documents. It holds no binary paths and no build projection.
 
 ### Shared service primitive and explicit lifecycle
 
-The SDK service primitive (`InstalledProduct.EnsureRunning` and the shipped TypeScript client) owns one named out-of-process service incarnation per product root: atomic service-file identity, actual bound port, version/lane matching, bounded startup, managed shutdown/takeover, and PID-reuse safety. Pe.Tools uses it for `Pe.Host` instead of maintaining a second product-specific supervisor.
+The SDK service-file contract (`ServiceFile` and the shipped TypeScript client) owns one named out-of-process service incarnation per product root: atomic service-file identity, actual bound port, and version/lane matching. Pe.Tools reads and writes that file for `Pe.Host` instead of inventing a second identity format; the start-if-not-healthy loop itself lives in `TsHostLauncher` (C#) and `host-ownership.ts` (TS).
 
 That boundary is deliberately narrower than Revit orchestration:
 
@@ -286,21 +290,19 @@ Key local roots:
 
 Do not validate installed behavior against the dev host root. MSI upgrades intentionally replace the installed host runtime tree under `bin\host`; installer cleanup must never target `dev\bin\host`.
 
-Installed Pea is an SDK `VersionedApp` payload (`product.payloads.json` → `{type: VersionedApp, name: pea, entry: pea.exe}`), fronted by a lane-aware PathShim (`target: versionedApp:pea`). The SDK install kernel owns the layout:
+Installed Pea ships at a fixed path; the installer lays it and MSI replaces it in place. There is no version pointer and no `versions\` tree:
 
 ```text
 %LOCALAPPDATA%\Positive Energy\Pe.Tools\
-  shims\pea.cmd                       # SDK-written lane-aware shim (installed by default; dev when pea.dev.txt present)
+  shims\pea.exe                       # the PATH-visible launcher (dev when pea.dev.txt present)
   bin\pea\
-    current.txt                       # active version pointer
-    versions\<version>\
-      pea.exe                         # the Node SEA (entry)
-      bundle\                         # the SEA bundle sources
-      node_modules\                   # sidecars staged beside the exe (see apps/pea/scripts/stage-native-sidecars.mjs)
-      package.json                    # mastracode package-root decoy
+    pea.exe                           # the Node SEA (entry)
+    bundle\                           # the SEA bundle sources
+    node_modules\                     # sidecars staged beside the exe (see apps/pea/scripts/stage-native-sidecars.mjs)
+    package.json                      # mastracode package-root decoy
 ```
 
-The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `source/pe-tools` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target through `current.txt`; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
+The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `source/pe-tools` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
 
 Private `source/pe-tools` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 
@@ -320,7 +322,7 @@ The clean source-linked CLI model is:
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
 - `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `source/pe-tools/apps/pea`.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
-- `Pe.App`'s lane comes from `PePayloadContext`: loaded by the installed loader shim ⇒ `Deployment` is the lane-pinned `InstalledProduct` (host via `EnsureRunning`, siblings via `Resolve`); self-hosted classic deploy ⇒ dev lane. There is no `Pe.App.runtime.json` descriptor anymore, and no ambient lane inference.
+- `Pe.App`'s lane comes from `PePayloadContext.SourceRoot`: a checkout root recorded by an SDK dev-link session descriptor ⇒ dev lane; absent ⇒ the fixed installed layout (`bin\host\Pe.Host.exe`). There is no loader, no `Pe.App.runtime.json` descriptor, and no ambient lane inference.
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 

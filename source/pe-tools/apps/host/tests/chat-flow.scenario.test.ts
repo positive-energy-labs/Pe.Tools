@@ -121,7 +121,6 @@ async function launchHost(options: {
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: false },
-            includeInstallConverge: false,
             lifecycle: { handle, latch },
             mastraLayer: makeMastraRuntimeLive(
               { revit: false },

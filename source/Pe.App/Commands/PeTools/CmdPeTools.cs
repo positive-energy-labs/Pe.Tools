@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Host;
 using Pe.Revit.Global.Services.Host;
@@ -187,7 +187,7 @@ public class CmdPeTools : IExternalCommand {
 
         // Which Pe.App this Revit session loaded (dev = self-hosted checkout; installed = loader shim).
         // Fixed at add-in startup, so it also tells you which host lane the launcher resolves.
-        _ = sb.AppendLine($"Lane: {PeRuntimeContext.Lane}");
+        _ = sb.AppendLine($"Lane: {TsHostLauncher.Lane}");
         _ = sb.AppendLine($"Bridge: {status.BridgeUri}");
         _ = sb.AppendLine($"Process: {status.ProcessId}");
         _ = sb.AppendLine($"Modules: {status.AvailableModuleCount}");

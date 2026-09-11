@@ -8,7 +8,6 @@
  * agent-free and harnesses talk to Pea through this CLI mode instead.
  */
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { MastraDBMessage } from "@mastra/core/agent-controller";
@@ -178,7 +177,6 @@ async function ensureTsHostRunning(): Promise<string> {
       entryPath: installed.entryPath,
       health: hostProcessIdentity.healthPath,
       shutdown: hostProcessIdentity.shutdownPath,
-      expectedVersion: installed.version,
       lane: "installed",
     });
     if (result.state === "failed") {
@@ -225,35 +223,16 @@ async function ensureTsHostRunning(): Promise<string> {
 async function resolveInstalledHostLaunch(): Promise<{
   appBase: string;
   entryPath: string;
-  version: string;
 } | null> {
-  // Installed SEA layout: <appBase>/bin/pea/versions/<version>/pea.exe. Walking to the copied
-  // manifest keeps this independent of CWD and uses the same product root the SDK installer wrote.
-  for (let directory = path.dirname(process.execPath); ; directory = path.dirname(directory)) {
-    const manifest = path.join(directory, "product.payloads.json");
-    if (existsSync(manifest)) {
-      try {
-        const receipt = JSON.parse(
-          await readFile(path.join(directory, "install.receipt.json"), "utf8"),
-        ) as { releaseVersion?: unknown };
-        const version = (
-          await readFile(path.join(directory, "bin", "host", "current.txt"), "utf8")
-        ).trim();
-        if (typeof receipt.releaseVersion !== "string" || receipt.releaseVersion !== version) {
-          throw new Error("installed host pointer does not match the install receipt");
-        }
-        const entryPath = path.join(directory, "bin", "host", "versions", version, "Pe.Host.exe");
-        if (!existsSync(entryPath))
-          throw new Error(`installed host entry is missing: ${entryPath}`);
-        return { appBase: directory, entryPath, version };
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Installed Pe.Tools host resolution failed at ${directory}: ${detail}`);
-      }
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) return null;
-  }
+  // Fixed installed layout under the product root (service-identity.ts pins it): this pea is
+  // `<root>\bin\pea\pea.exe` and the host it supervises is `<root>\bin\host\Pe.Host.exe`.
+  // Being inside `bin\pea` is what makes this the installed lane; there is no pointer or receipt.
+  const appBase = productRoot();
+  const peaDirectory = path.join(appBase, "bin", "pea");
+  if (path.relative(peaDirectory, path.dirname(process.execPath)) !== "") return null;
+  const entryPath = path.join(appBase, "bin", "host", "Pe.Host.exe");
+  if (!existsSync(entryPath)) throw new Error(`installed host entry is missing: ${entryPath}`);
+  return { appBase, entryPath };
 }
 
 async function sendPeaMessageWithTimeout(

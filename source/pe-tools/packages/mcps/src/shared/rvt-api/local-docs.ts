@@ -306,12 +306,10 @@ export function findExamplesPath(): string | null {
   if (process.env.PE_API_EXAMPLES_JSON && existsSync(process.env.PE_API_EXAMPLES_JSON)) {
     return process.env.PE_API_EXAMPLES_JSON;
   }
-  // Installed layout: addin/current.txt names the live version; src/ rides in its version dir.
-  const payloadRoot = join(productRoot(), "addin");
-  const pointer = join(payloadRoot, "current.txt");
-  if (!existsSync(pointer)) return null;
-  const version = readFileSync(pointer, "utf8").trim();
-  const candidate = join(payloadRoot, "versions", version, "src", "examples.json");
+  // Installed layout is fixed: the index ships beside the Host bundle. The add-in no longer lives
+  // under the product root, so nothing here reaches into a Revit payload. The index is staged into
+  // dist-installed/ beside Pe.Host.exe by CreateInstallerModule.StageUsageIndex at pack time.
+  const candidate = join(productRoot(), "bin", "host", "examples.json");
   return existsSync(candidate) ? candidate : null;
 }
 

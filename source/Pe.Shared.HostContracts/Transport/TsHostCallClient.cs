@@ -5,7 +5,7 @@ using Newtonsoft.Json.Serialization;
 using System.Net.Http;
 using System.Text;
 
-namespace Pe.Shared.Product;
+namespace Pe.Shared.HostContracts.Transport;
 
 /// <summary>
 ///     The Revit-side caller for the TS host's single wire: POST /call { key, request }.
@@ -26,7 +26,7 @@ public static class TsHostCallClient {
 
     public static TResponse Call<TResponse>(string key, object request, TimeSpan timeout)
         where TResponse : class {
-        var url = $"{HostProcessIdentity.ResolveHostBaseUrl().TrimEnd('/')}/call";
+        var url = $"{HostEndpoint.ResolveHostBaseUrl().TrimEnd('/')}/call";
         var body = new JObject {
             ["key"] = key,
             ["request"] = JObject.FromObject(request, JsonSerializer.Create(WireJsonSettings))

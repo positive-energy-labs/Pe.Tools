@@ -4,14 +4,12 @@ namespace Build;
 
 public sealed record ProductLayoutAuthority(
     string RepositoryRoot,
-    ProductBuildLayoutProjection Product,
     BuildArtifactLayout Artifacts
 ) {
     public static ProductLayoutAuthority ForRepository(string repositoryRoot) {
         var fullRepositoryRoot = Path.GetFullPath(repositoryRoot);
         return new ProductLayoutAuthority(
             fullRepositoryRoot,
-            ProductBuildLayoutProjection.CreateDefault(),
             BuildArtifactLayout.ForRepository(fullRepositoryRoot)
         );
     }

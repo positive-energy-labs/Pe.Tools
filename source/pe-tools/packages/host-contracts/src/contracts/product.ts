@@ -1,17 +1,15 @@
-// Hand-authored wire contract. Keep aligned with Pe.Shared.Product (C#) — the codegen that
-// once produced this file is deleted; changes here are ordinary code review, not regeneration.
+// Product identity and the installed layout are SDK-generated from product.payloads.json
+// (vendor/generated/product.g.ts). This file holds only what the manifest does not declare:
+// product-owned path names, transport env vars, and scripting identity.
+
+import { payload, productIdentity as generatedIdentity } from "../vendor/generated/product.g.ts";
 
 export const productIdentity = {
-  vendorName: "Positive Energy",
-  productName: "Pe.Tools",
+  ...generatedIdentity,
   userVisibleProductName: "Pe.Tools",
 } as const;
 
 export const productPathNames = {
-  binDirectoryName: "bin",
-  developmentDirectoryName: "dev",
-  hostDirectoryName: "host",
-  peaDirectoryName: "pea",
   stateDirectoryName: "state",
   logsDirectoryName: "logs",
   cacheDirectoryName: "cache",
@@ -27,43 +25,26 @@ export const productPathNames = {
   revitAppLogFileName: "revit.log.txt",
 } as const;
 
+const hostService = payload("VersionedApp", "host")?.service;
+if (!hostService?.health || !hostService.shutdown || !hostService.preferredPort)
+  throw new Error("product.payloads.json declares no complete host service block");
+
+type RoutePath = `/${string}`;
+const routePath = (value: string): RoutePath => {
+  if (!value.startsWith("/")) throw new Error(`host service route must start with '/': ${value}`);
+  return value as RoutePath;
+};
+
 export const hostProcessIdentity = {
-  directoryName: "host",
-  executableName: "Pe.Host.exe",
   serviceName: "host",
   serviceNameVariable: "PE_TOOLS_HOST_SERVICE_NAME",
-  healthPath: "/host/status",
-  shutdownPath: "/admin/shutdown",
+  healthPath: routePath(hostService.health),
+  shutdownPath: routePath(hostService.shutdown),
   frontendBaseUrlVariable: "PE_TOOLS_FRONTEND_BASE_URL",
   hostBaseUrlVariable: "PE_TOOLS_HOST_BASE_URL",
   hostExecutablePathVariable: "PE_TOOLS_HOST_EXECUTABLE_PATH",
   defaultFrontendBaseUrl: "http://localhost:5150",
-  defaultHostBaseUrl: "http://127.0.0.1:5180",
-} as const;
-
-export const peaCliIdentity = {
-  directoryName: "pea",
-  launcherName: "pea.cmd",
-  appDirectoryName: "app",
-  installedExecutableName: "pea.exe",
-  currentVersionFileName: "current.txt",
-  versionsDirectoryName: "versions",
-  packagesDirectoryName: "packages",
-  payloadManifestFileName: "pea-payload.json",
-  payloadManifestSchemaVersion: 1,
-} as const;
-
-export const revitDeploymentIdentity = {
-  addinManifestFileName: "Pe.App.addin",
-  runtimeDescriptorFileName: "Pe.App.runtime.json",
-  addinAssemblyDirectoryName: "Pe.App",
-  autodeskDirectoryName: "Autodesk",
-  revitDirectoryName: "Revit",
-  addinsDirectoryName: "Addins",
-} as const;
-
-export const peAppRuntimeDeploymentDescriptor = {
-  currentSchemaVersion: 1,
+  defaultHostBaseUrl: `http://127.0.0.1:${hostService.preferredPort}`,
 } as const;
 
 export const scriptingWorkspaceIdentity = {

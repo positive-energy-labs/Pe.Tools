@@ -1,11 +1,15 @@
-﻿using Pe.Revit.ServiceClient;
+using Pe.Revit.ServiceClient;
+using Pe.Shared.Product;
 
-namespace Pe.Shared.Product;
+namespace Pe.Shared.HostContracts.Transport;
 
-public static class HostProcessIdentity {
-    public const string DirectoryName = ProductPathNames.HostDirectoryName;
-    public const string ExecutableName = "Pe.Host.exe";
-
+/// <summary>
+///     How a .NET caller addresses the TS host: service identity, loopback probe routes, the
+///     product-owned override env vars, and base-URL resolution. This is transport, not product
+///     identity — the installed file layout (which directory, which executable) is the installer
+///     manifest's business, not this type's.
+/// </summary>
+public static class HostEndpoint {
     // The installed service is "host"; source hosts derive a stable key from their checkout root.
     // HealthPath/ShutdownPath are the loopback routes the SDK primitive probes and authorizes.
     public const string ServiceName = "host";
@@ -39,8 +43,9 @@ public static class HostProcessIdentity {
     /// </summary>
     public static string? ConfiguredServiceName { get; set; }
 
-    public static string ResolveServiceName(ProductRuntimeLane lane, string? sourceRoot) {
-        if (lane == ProductRuntimeLane.Installed)
+    /// <param name="lane">The SDK lane string: <c>"installed"</c> or <c>"dev"</c>.</param>
+    public static string ResolveServiceName(string lane, string? sourceRoot) {
+        if (lane == "installed")
             return ServiceName;
         if (string.IsNullOrWhiteSpace(sourceRoot))
             throw new ArgumentException("A dev host requires a source root for service identity.", nameof(sourceRoot));
@@ -54,10 +59,10 @@ public static class HostProcessIdentity {
 
     /// <summary>
     ///     The actual bound port from the SDK runtime service file, via the vendored
-    ///     platform-neutral discovery client (<see cref="PeServiceDiscovery"/> — the D8 answer:
-    ///     Pe.Shared.Product cannot reference the Revit-flavored Pe.Revit.Loader, so the SDK ships
-    ///     this read-only client for exactly this seam). Liveness-checked: a crashed host's
-    ///     leftover file reads as null, never as an address.
+    ///     platform-neutral discovery client (<see cref="PeServiceDiscovery"/>). The service files
+    ///     live under the product root, which is the one thing this transport still asks
+    ///     <see cref="ProductRuntimeLayout"/> for. Liveness-checked: a crashed host's leftover file
+    ///     reads as null, never as an address.
     /// </summary>
     private static string? TryReadServiceFileBaseUrl() {
         try {

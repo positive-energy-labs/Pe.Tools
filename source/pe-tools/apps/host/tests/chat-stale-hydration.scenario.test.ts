@@ -53,7 +53,6 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
           Layer.launch(
             makeHttpLive({
               capabilities: { revit: false },
-              includeInstallConverge: false,
               lifecycle: { handle, latch },
               mastraLayer: makeMastraRuntimeLive(
                 { revit: false },

@@ -6,11 +6,9 @@ import {
   HttpServerResponse as Response,
 } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
-import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
@@ -21,12 +19,12 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
 import { productRoot } from "./host-ownership.ts";
-import { installRoot, peRevitLauncher } from "./pe-revit-launch.ts";
 import { docsRoute, sessionsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
   announceServedSession,
   HostLifecycle,
+  resolveHostVersion,
   ServiceFileLive,
 } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -172,152 +170,20 @@ export const noRevitBoundary = (spa: SpaFallback) =>
     HttpRouter.add("*", "/events", emptyNotFound),
     HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
     HttpRouter.add("*", "/host/install", emptyNotFound),
-    HttpRouter.add("*", "/host/update", emptyNotFound),
   );
 
-// One-click update starts the installed kernel without awaiting it: the add-in is staged for the
-// next Revit start, while the versioned host restarts onto the new pointer.
-type InstallReceipt = {
-  releaseVersion?: string;
-  releasesRepo?: string;
-  appliedAtUtc?: string;
-};
-
-type HostUpdateStatus = {
-  installedVersion: string | null;
-  latestVersion: string | null;
-  updateAvailable: boolean;
-  error?: string;
-};
-
-function readInstallReceipt(): InstallReceipt | null {
-  try {
-    const receipt = JSON.parse(
-      readFileSync(join(installRoot(), "install.receipt.json"), "utf8"),
-    ) as InstallReceipt;
-    const releaseVersion = readFileSync(join(installRoot(), "current.txt"), "utf8").trim();
-    return { ...receipt, releaseVersion: releaseVersion || undefined };
-  } catch {
-    return null;
-  }
-}
-
-// Match `install converge --release latest`: GitHub's latest stable release is the authority.
-async function readHostUpdateStatus(): Promise<HostUpdateStatus> {
-  const receipt = readInstallReceipt();
-  const installedVersion = receipt?.releaseVersion ?? null;
-  if (hostOwnership.lane !== "installed" || !receipt?.releasesRepo)
-    return { installedVersion, latestVersion: null, updateAvailable: false };
-
-  try {
-    const repo = receipt.releasesRepo;
-    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
-      throw new Error("installed receipt has an invalid releasesRepo");
-    const latest = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: {
-        accept: "application/vnd.github+json",
-        "user-agent": "Pe.Tools",
-      },
-    });
-    if (!latest.ok) throw new Error(`GitHub latest release returned ${latest.status}`);
-    const tag = ((await latest.json()) as { tag_name?: unknown }).tag_name;
-    if (typeof tag !== "string" || !tag.trim()) throw new Error("latest release has no tag");
-    const latestVersion = tag.replace(/^v/i, "");
-    return {
-      installedVersion,
-      latestVersion,
-      // ponytail: exact equality matches the latest-only installer. Add semver ordering only if
-      // locally-ahead or prerelease installs become supported.
-      updateAvailable: installedVersion !== latestVersion,
-    };
-  } catch (error) {
-    return {
-      installedVersion,
-      latestVersion: null,
-      updateAvailable: false,
-      error: String(error),
-    };
-  }
-}
-
-const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
-  Effect.tryPromise({
-    try: async () => {
-      const status = await readHostUpdateStatus();
-      if (!status.updateAvailable)
-        return Response.jsonUnsafe(
-          {
-            accepted: false,
-            reason:
-              status.installedVersion !== null && status.installedVersion === status.latestVersion
-                ? "already-current"
-                : "update-unavailable",
-            ...status,
-          },
-          { status: 409 },
-        );
-
-      const launch = peRevitLauncher();
-      const args = ["install", "converge", "--release", "latest", "--json"] as const;
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(launch.cmd, [...launch.args, ...args], {
-          cwd: launch.cwd,
-          // Windows detached children get their own console window. A normal unreferenced child
-          // survives this host's planned shutdown without flashing Windows Terminal.
-          detached: process.platform !== "win32",
-          stdio: "ignore",
-          windowsHide: true,
-        });
-        child.once("error", reject);
-        child.once("spawn", () => {
-          child.removeAllListeners("error");
-          child.on("error", (error) => console.error("pe-revit update child failed", error));
-          child.unref();
-          resolve();
-        });
-      });
-      return Response.jsonUnsafe({ accepted: true }, { status: 202 });
-    },
-    catch: (error) => error,
-  }).pipe(
-    Effect.catch((error) =>
-      Response.json({ accepted: false, error: String(error) }, { status: 500 }),
-    ),
-  ),
-);
-
-// Installed-version readout for the web Update button — the kernel's receipt is the truth.
+// Installed-version readout for the web release chip. The installed layout is fixed (no receipt,
+// no pointer), so the only truth about "which release is this" is the version baked into this
+// bundle at pack time.
 const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   Effect.sync(() => {
-    const receipt = readInstallReceipt();
+    const installed = hostOwnership.lane === "installed";
     return Response.jsonUnsafe({
-      installed: receipt !== null,
-      releaseVersion: receipt?.releaseVersion ?? null,
-      releasesRepo: receipt?.releasesRepo ?? null,
-      appliedAtUtc: receipt?.appliedAtUtc ?? null,
+      installed,
+      releaseVersion: installed ? resolveHostVersion() : null,
     });
   }),
 );
-
-const hostUpdateStatusRoute = HttpRouter.add("GET", "/host/update", () =>
-  Effect.promise(async () => Response.jsonUnsafe(await readHostUpdateStatus())),
-);
-
-// Routine convergence, always on: the kernel prunes version dirs, sweeps the manifest's declared
-// legacy paths and rename-aside strays, and repairs selectors — lock-tolerant and idempotent.
-// Runs at host start and on every Revit session disconnect (the moment its file locks vanish),
-// so hot-swap releases never accumulate cruft. Failures are swallowed: convergence is best-effort.
-const runInstallConverge = Effect.gen(function* () {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const launch = peRevitLauncher();
-  yield* Effect.result(
-    spawner.string(
-      ChildProcess.make(launch.cmd, [...launch.args, "install", "converge", "--json"], {
-        cwd: launch.cwd,
-      }),
-    ),
-  );
-});
 
 /**
  * Service-file schema 3, second half: once a Revit payload registers on the bridge and reports the
@@ -354,23 +220,7 @@ const ServedSessionLive = Layer.effectDiscard(
   }),
 );
 
-const InstallConvergeLive = Layer.effectDiscard(
-  Effect.gen(function* () {
-    yield* Effect.forkScoped(runInstallConverge);
-    const bridge = yield* RevitBridge;
-    yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.events).pipe(
-        Stream.filter((event) => event.kind === "disconnected"),
-        Stream.runForEach(() => runInstallConverge),
-      ),
-    );
-  }),
-);
-
-function makeRevitComposition(
-  includeInstallConverge: boolean,
-  spa: SpaFallback = () => emptyNotFound,
-) {
+function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
   return {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
@@ -379,14 +229,11 @@ function makeRevitComposition(
       opsCatalogRoute(spa),
       settingsSchemaRoute,
       hostStatusRoute,
-      hostUpdateRoute,
-      hostUpdateStatusRoute,
       hostInstallRoute,
       sessionsRoute,
       docsRoute,
       callRoute,
       ServedSessionLive,
-      ...(includeInstallConverge ? [InstallConvergeLive] : []),
     ),
   };
 }
@@ -408,11 +255,6 @@ export interface HttpLiveOptions {
   readonly lifecycle: HostLifecycle["Service"];
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
-  /**
-   * Whether to run background install convergence. Omitted in the boundary test so it does not
-   * spawn the install kernel; defaults on for production.
-   */
-  readonly includeInstallConverge?: boolean;
   /** Test sentinel for the complete Revit/SDK/proxy composition. */
   readonly revitCompositionFactory?: typeof makeRevitComposition;
 }
@@ -462,10 +304,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : () => emptyNotFound;
 
   if (options.capabilities.revit) {
-    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
-      options.includeInstallConverge !== false,
-      spa,
-    );
+    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(spa);
     return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
       Layer.provide(withMastraDegrade(options.mastraLayer)),
       Layer.provide(ClaimedServerLive),

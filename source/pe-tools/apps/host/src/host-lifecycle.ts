@@ -41,19 +41,26 @@ export class HostLifecycle extends Context.Service<
 >()("pe/HostLifecycle") {}
 
 /**
- * The host version reported in the service file: the install pointer's canonical version in the
- * installed lane, "dev" otherwise — mirroring what `/host/install` surfaces.
+ * The host version reported in the service file. On the installed lane it is read from the payload
+ * manifest the MSI copies to the install root — `product.payloads.json` is the single authority for
+ * the installed layout and its version, so nothing is stamped into this package at pack time. A
+ * missing or unparsable manifest is fatal: reporting a placeholder version to `session list` would
+ * be a lie about which build is serving. The source lane is "dev" and reads nothing.
  */
 export function resolveHostVersion(): string {
-  if (hostOwnership.lane === "installed") {
-    try {
-      const version = readFileSync(join(productRoot(), "current.txt"), "utf8").trim();
-      if (version) return version;
-    } catch {
-      /* no pointer (or unreadable) -> fall through to the dev sentinel */
-    }
+  if (hostOwnership.lane !== "installed") return "dev";
+  const manifestPath = join(productRoot(), "product.payloads.json");
+  let version: unknown;
+  try {
+    version = (JSON.parse(readFileSync(manifestPath, "utf8")) as { version?: unknown }).version;
+  } catch (cause) {
+    throw new Error(`Installed host cannot read its payload manifest at ${manifestPath}.`, {
+      cause,
+    });
   }
-  return "dev";
+  if (typeof version !== "string" || version.length === 0)
+    throw new Error(`Payload manifest ${manifestPath} has no usable "version".`);
+  return version;
 }
 
 /**

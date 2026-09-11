@@ -68,7 +68,7 @@ dotnet tool run pe-revit -- <command> --json
 - `session hr --id <session>` is the edit loop. Its hot or cold verdict proves delivery, not product behavior. Re-run the behavior.
 - Use `doc current` before acting on a document. Use `op list`, `op status`, and `op result` to recover durable operation receipts after interruption.
 - Terminal `dotnet build` and `publish` are isolated compile or artifact lanes. Raw `dotnet test` is forbidden for Revit-backed projects.
-- `install status|converge|remove` is the install surface. `converge` is the only mutator and owns cleanup; self-update uses `install converge --release latest --json`.
+- `install status` reports the installed product. The MSI is the only installer: there is no `converge`/`remove` verb and no self-update from the host.
 - Never use `Stop-Process`, `taskkill`, or direct Revit launch. `pe-revit session` owns controlled Revit lifecycle. Never mutate installed product state without explicit authority.
 
 ## Host, web, Pea, and browser

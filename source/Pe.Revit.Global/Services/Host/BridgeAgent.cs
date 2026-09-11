@@ -8,6 +8,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.HostContracts;
 using Pe.Revit.Scripting.Transport;
+using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -746,7 +747,7 @@ internal sealed record BridgeConnectionOptions(
 ) {
     public static BridgeConnectionOptions FromEnvironment() =>
         new(
-            CreateBridgeUri(HostProcessIdentity.ResolveHostBaseUrl()),
+            CreateBridgeUri(HostEndpoint.ResolveHostBaseUrl()),
             Process.GetCurrentProcess().Id,
             GetBridgeConnectTimeoutMs(),
             GetHostRegistrationTimeoutMs()

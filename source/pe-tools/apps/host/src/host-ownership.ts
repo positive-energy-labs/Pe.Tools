@@ -62,8 +62,8 @@ function resolveHostOwnership(): HostOwnership {
 }
 
 function resolveHostLane(): HostLane {
-  // PE_LANE is the SINGLE authoritative lane signal: InstalledService sets it on every installed
-  // spawn, TsHostLauncher sets it for the Revit-dev spawn, and ensure-source-lane.ts sets it for
+  // PE_LANE is the SINGLE authoritative lane signal: TsHostLauncher sets it on every Revit-driven
+  // spawn (installed and dev alike), and ensure-source-lane.ts sets it for
   // bare source runs. No PE_TOOLS_HOST_LANE, no path/argv heuristic, no silent default — an unknown
   // lane is a launch-configuration bug, so fail fast loudly rather than guess (IPC-SEAM-SPEC D7).
   const lane = process.env.PE_LANE?.trim().toLowerCase();

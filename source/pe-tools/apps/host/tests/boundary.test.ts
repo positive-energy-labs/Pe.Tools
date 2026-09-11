@@ -69,7 +69,6 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
         mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },
         webRoot: webDir,
-        includeInstallConverge: false,
       });
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),
@@ -141,18 +140,10 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(inspect.status).toBe(200);
     expect(await inspect.json()).toMatchObject({ controllerId: "pea" });
 
-    // (5) the server is authoritative: a client cannot launch update when this lane has no update.
-    const updateStatus = await fetch(`${base}/host/update`);
-    expect(updateStatus.status).toBe(200);
-    expect(await updateStatus.json()).toMatchObject({ updateAvailable: false });
-
-    const update = await fetch(`${base}/host/update`, { method: "POST" });
-    expect(update.status).toBe(409);
-    expect(await update.json()).toMatchObject({
-      accepted: false,
-      reason: "update-unavailable",
-      updateAvailable: false,
-    });
+    // (5) the release readout is lane-truthful: a source-lane host reports no installed release.
+    const installStatus = await fetch(`${base}/host/install`);
+    expect(installStatus.status).toBe(200);
+    expect(await installStatus.json()).toMatchObject({ installed: false, releaseVersion: null });
 
     // (6) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {

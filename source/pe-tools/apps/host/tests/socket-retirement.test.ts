@@ -29,7 +29,6 @@ async function launchHost(databasePath: string, port: number, previousToken?: st
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: false },
-            includeInstallConverge: false,
             lifecycle: { handle, latch },
             // The real agent app: the socket under test carries a live controller session stream.
             mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>

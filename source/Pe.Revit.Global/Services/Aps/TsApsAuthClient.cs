@@ -1,5 +1,5 @@
 using Pe.Shared.ApsAuth;
-using Pe.Shared.Product;
+using Pe.Shared.HostContracts.Transport;
 
 namespace Pe.Revit.Global.Services.Aps;
 

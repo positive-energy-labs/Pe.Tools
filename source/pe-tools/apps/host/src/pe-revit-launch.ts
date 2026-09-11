@@ -33,7 +33,7 @@ export function peRevitLauncher(
   );
 }
 
-/** Product root under `%LOCALAPPDATA%\<vendor>\<product>` (install receipts, shims, logs). */
+/** Product root under `%LOCALAPPDATA%\<vendor>\<product>` (bin, shims, logs). */
 export function installRoot(): string {
   return sdkInstallRoot(productIdentity.vendorName, productIdentity.productName);
 }

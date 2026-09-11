@@ -92,7 +92,6 @@ test("no-Revit routes return empty 404 before the web fallback", async () => {
       "/events",
       "/schemas/settings/module/root.json",
       "/host/install",
-      "/host/update",
     ]) {
       const response = await web.handler(new Request(`http://host.test${pathName}`));
       expect(response.status, pathName).toBe(404);

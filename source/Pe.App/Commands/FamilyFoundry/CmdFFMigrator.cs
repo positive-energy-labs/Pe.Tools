@@ -16,6 +16,7 @@ using Pe.Revit.Global.Lib;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts;
+using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
@@ -154,7 +155,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(
                 LogEventLevel.Warning,
                 new StackFrame(),
-                $"Could not open external Pe Tools route. Check {HostProcessIdentity.FrontendBaseUrlVariable}."
+                $"Could not open external Pe Tools route. Check {HostEndpoint.FrontendBaseUrlVariable}."
             )
             .Show();
     }

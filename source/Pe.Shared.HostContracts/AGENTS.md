@@ -17,6 +17,7 @@ Owns durable host-facing contracts: operation definitions, request/response/prob
 - `SettingsStorage/` - settings storage DTO contracts.
 - `HostRuntimeDefaults.cs` - shared host timing/default constants.
 - `Bridge/` - private Host/Revit transport contracts.
+- `Transport/` - `HostEndpoint` (host service identity and base-URL resolution) and `TsHostCallClient` (the Revit-side `/call` caller).
 
 ## Shared Language
 
@@ -33,7 +34,7 @@ Owns durable host-facing contracts: operation definitions, request/response/prob
 ## Living Memory
 
 - Keep contracts stable and explicit. Avoid host implementation services, caller-local route aliases, and Revit runtime dependencies here.
-- Product names, executable names, env var names, default local URLs, and filesystem roots come from `Pe.Shared.Product`.
+- Product names and product-owned filesystem roots come from `Pe.Shared.Product`; the installed layout (payload names, entry executables) comes from `product.payloads.json`. Host transport identity — service name, health/shutdown paths, `PE_TOOLS_*` env vars, default local URLs, base-URL resolution — lives here in `Transport/HostEndpoint.cs`, with `Transport/TsHostCallClient.cs` and the SDK-owned `Vendor/PeServiceDiscovery.cs`.
 - Operation metadata is a compact routing/callability surface for Pea, CLI output, generated TypeScript contracts, and frontend views. It is not a workflow planner.
 - Keys carry primary taxonomy. Keep Revit public keys layer-first as `revit.<layer>.<noun>[.<variant>]`; do not encode document kind as `rvt.*`, `rfa.*`, or `rvtrfa.*` route families.
 - Keep taxonomy helpers such as family, domain noun, Revit layer, and derived read/mutate intent internal to scoring, filtering, codegen grouping, and validation. Do not echo them as public search-result fields when the key and safety summary already carry the signal.

@@ -36,9 +36,8 @@ public sealed class AppCore : IPePayload {
     private BridgeConnectionSupervisor? _bridgeConnectionSupervisor;
 
     public void Startup(PePayloadContext context) {
-        // Capture lane + install location from the loader once, so host/pea launchers resolve
-        // sibling payloads honestly (installed lane via InstalledProduct; dev lane self-hosted).
-        PeRuntimeContext.Capture(context);
+        // The SDK decided the lane and roots at load time; the launcher only reads them.
+        TsHostLauncher.Capture(context);
 
         var app = context.Application;
 
