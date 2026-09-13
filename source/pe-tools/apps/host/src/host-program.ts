@@ -1,6 +1,4 @@
-import { Deferred, Effect, Layer } from "effect";
-import type { Server } from "node:http";
-import type { ViteDevServer } from "vite-plus";
+import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
@@ -14,14 +12,14 @@ import { makeMastraRuntimeLive } from "./mastra-runtime.ts";
 const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
 /** The shared host lifecycle used by both installed startup and source web development. */
-export const hostProgram = <A, E, R>(options: {
-  readonly beforeHost: Effect.Effect<A, E, R>;
-  readonly nodeServer?: Server;
-  readonly viteServer?: ViteDevServer;
-}) =>
+export const hostProgram = (
+  web?: (
+    handle: ServiceHostHandle,
+    ready: Deferred.Deferred<string>,
+  ) => Effect.Effect<never, Error, Scope.Scope>,
+) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* options.beforeHost;
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
@@ -44,10 +42,10 @@ export const hostProgram = <A, E, R>(options: {
       // publishes the claim handle here. No pre-bind takeover, no locally minted token.
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
+      const webUrl = web ? yield* Deferred.make<string>() : undefined;
       const HttpLive = makeHttpLive({
         port,
-        nodeServer: options.nodeServer,
-        viteServer: options.viteServer,
+        webUrl,
         capabilities: hostCapabilities,
         mastraLayer: makeMastraRuntimeLive(hostCapabilities),
         lifecycle: { latch, handle },
@@ -64,6 +62,13 @@ export const hostProgram = <A, E, R>(options: {
       // line follows once NodeHttpServer binds; a gap between these two in host.log localizes a hang
       // or crash to the layer build (e.g. bridge/service-claim/tenant) rather than earlier startup.
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
-      yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
+      const frontend =
+        web && webUrl
+          ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))
+          : Effect.never;
+      yield* Effect.raceFirst(
+        Effect.raceFirst(Layer.launch(HttpLive), frontend),
+        Deferred.await(latch),
+      );
     }),
   );

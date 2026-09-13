@@ -259,7 +259,8 @@ The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` �
 
 ```mermaid
 flowchart LR
-  Web["Browser"] --> SourceHost["Worktree Pe.Host<br/>Effect + Vite on one dynamic port"]
+  Web["Browser"] --> Vite["Worktree Vite frontend<br/>HMR and documents"]
+  Vite -->|API proxy to claimed endpoint| SourceHost["Worktree Pe.Host<br/>Effect API and Revit bridge"]
   Pea["Pea / MCP / raw caller"] -->|service-file baseUrl + selector| SourceHost
   SourceHost -->|bridgeSessionId| DevSession["dev-lane session (converged, hot reload)"]
   SourceHost -->|bridgeSessionId| RoutedInstalled["installed-lane session"]
@@ -316,7 +317,7 @@ The clean source-linked CLI model is:
 
 - Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
 - The source-linked `pea` package script uses `vp exec jiti src/main.ts`. This keeps the runtime under Vite+'s managed Node while letting `jiti` handle the repo's TypeScript/NodeNext source graph. Raw `vp exec node src/main.ts` is not enough for this source graph because Node's built-in TypeScript support is still strip/transform limited and does not resolve the repo's `.js` source specifiers back to `.ts`.
-- `pnpm --dir source/pe-tools dev` runs the source host and its programmatic Vite server in one Node process.
+- `vp run dev` from `source/pe-tools` starts the checkout's host and its separately owned Vite frontend.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `pea --prompt "..." [--thread <id>] [--json]` runs one headless Pea turn and prints `{ threadId, response }` — the black-box product probe lane.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
@@ -332,16 +333,15 @@ an interim adapter over Pe.Tools-specific APS workflows. It is not a web or host
 
 ### Source-linked web dev
 
-Source-linked web dev is one command and one Node application process:
+Source-linked web dev is one command, one checkout, and one browser origin. The backend and frontend run in separate Node processes.
 
-- `pnpm --dir source/pe-tools dev` runs the watched source `@pe/host` entrypoint.
-- It creates one Node `http.Server`; Effect owns product APIs/WebSockets and the final dev fallback delegates to Vite/TanStack middleware and HMR.
-- The server reuses its last available port or binds an ephemeral one. The SDK service file is the URL authority; there is no Vite proxy or second listener. A service file counts only while its pid is alive — crashed leftovers are never routed to (dev discovery fails fast instead of falling back to a default port) and are swept on the next host start.
-- Each checkout owns `host-source-<hash-of-canonical-source-root>.json`. Different worktrees coexist; the installed lane remains `host.json` and coexists with every source host.
-- `--take-over-host` replaces only an older incarnation with the same service name. The candidate binds a free port first, claims ownership, shuts down the incumbent, then initializes product state.
-- React edits use Vite HMR without restarting the process. Host edits restart the whole process and normally reclaim the worktree's preferred port.
-
-The browser remains same-origin because the literal server owns both surfaces. Revit, Pea, MCPs, and spawned sessions receive or discover that worktree's service-file URL; callers never assume `5180`.
+- `vp run dev` from `source/pe-tools` or `apps/host` runs the watched host. After the SDK grants its service claim, it starts Vite from the same checkout and passes the claimed backend address over IPC. The launcher prints the checkout, browser URL, and backend URL.
+- Vite owns document serving, its dependency optimizer, and HMR. Product APIs, SSE, and the Revit bridge proxy to the exact claimed backend. `/ops` document navigation stays in Vite; JSON catalog requests reach the host.
+- Each checkout retains `host-source-<hash-of-canonical-source-root>.json`. Revit, Pea, and MCPs discover that backend receipt exactly as before. Installed `host.json` remains separate. Browser navigation to the dev backend redirects to its frontend and preserves the path and query.
+- `dev` authorizes same-checkout takeover. `attach` starts the same pair without takeover or a Node watcher, for supervisors. `dev:no-revit` retains its separate service identity and disables native capabilities. No command changes SDK session custody.
+- React edits and Vite configuration reloads leave the backend process intact. Host source edits restart the pair. Each listener remembers its own port preference; neither chooses another checkout as a fallback.
+- Host scope shutdown closes its frontend child. An unexpected frontend exit fails the host rather than leaving a half-running pair. The child also closes on IPC disconnect, including an abrupt backend exit.
+- Optimizer caches belong to individual frontend launches. This prevents concurrent or retiring launchers from deleting each other's bundles, at the cost of cold optimization after a backend restart. Normal frontend HMR and configuration reloads reuse the launch's cache.
 
 Installed/product web behavior is separate: the installed host serves the built SPA itself. The source dev entrypoint is not installed-lane proof.
 

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
+import { devHostProxy } from "../../web/dev-proxy.ts";
 import { expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
@@ -38,11 +39,7 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
   process.env.LOCALAPPDATA = localAppData;
   const webRoot = resolve(import.meta.dirname, "..", "..", "web");
   const nodeServer = createNodeServer();
-  const vite = await createViteServer({
-    root: webRoot,
-    configFile: join(webRoot, "vite.config.ts"),
-    server: { hmr: false, middlewareMode: true },
-  });
+  let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   const appBase = productRoot();
   const done = Effect.runPromise(
     Effect.scoped(
@@ -61,7 +58,6 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
               ),
               nodeServer,
               port: 0,
-              viteServer: vite,
               webRoot: null,
             }),
           ),
@@ -75,7 +71,19 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
 
   try {
     service = await waitForService(appBase);
-    const baseUrl = `http://127.0.0.1:${service.port}`;
+    vite = await createViteServer({
+      root: webRoot,
+      configFile: join(webRoot, "vite.config.ts"),
+      cacheDir: join(localAppData, "vite"),
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        hmr: false,
+        proxy: devHostProxy(`http://127.0.0.1:${service.port}`),
+      },
+    });
+    await vite.listen();
+    const baseUrl = vite.resolvedUrls!.local[0]!.replace(/\/$/, "");
     const { chromium } = await import(
       pathToFileURL(
         resolve(
@@ -147,7 +155,7 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
         headers: { "x-pe-service-token": service.token },
       }).catch(() => undefined);
     await done.catch(() => undefined);
-    await vite.close();
+    await vite?.close();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
     rmSync(localAppData, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });

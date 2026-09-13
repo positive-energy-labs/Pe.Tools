@@ -1,5 +1,4 @@
-﻿import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer as createNodeServer } from "node:http";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -10,104 +9,155 @@ import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { VITE_HMR_PATH } from "../src/vite-web.ts";
+import { devHostProxy } from "../../web/dev-proxy.ts";
 
 const StubMastraLive = Layer.succeed(MastraRuntime, {
-  fetch: () => Promise.resolve(new Response("not found", { status: 404 })),
+  fetch: async (req) =>
+    Response.json({
+      url: req.url,
+      body: await req.text(),
+      selector: req.headers.get("x-pe-bridge-session-id"),
+    }),
 });
 
-async function waitForService(appBase: string) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const file = await readServiceFile(appBase, hostOwnership.serviceName);
-    if (file) return file;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error("service file did not appear");
-}
-
-async function connectHmr(baseUrl: string): Promise<void> {
-  const socket = new WebSocket(baseUrl.replace(/^http/, "ws") + VITE_HMR_PATH, "vite-hmr");
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Vite HMR WebSocket timed out")), 5000);
-    socket.addEventListener("open", () => {
+function socketMessage(socket: WebSocket, predicate: (data: string) => boolean) {
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("WebSocket message timed out"));
+    }, 5_000);
+    const message = (event: MessageEvent) => {
+      if (predicate(String(event.data))) {
+        cleanup();
+        resolve(String(event.data));
+      }
+    };
+    const cleanup = () => {
       clearTimeout(timeout);
-      socket.close();
-      resolve();
-    });
-    socket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      reject(new Error("Vite HMR WebSocket failed"));
-    });
+      socket.removeEventListener("message", message);
+    };
+    socket.addEventListener("message", message);
   });
 }
 
-test("dev serves Vite and Effect from one Node server", async () => {
+test("Vite owns HMR, proxies the claimed backend, and restarts without replacing it", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-host-vite-"));
-  const webRoot = mkdtempSync(join(tmpdir(), "pe-host-vite-web-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
-  writeFileSync(join(webRoot, "index.html"), '<main id="shared-server">hello</main>', "utf8");
-
-  const nodeServer = createNodeServer();
-  const vite = await createViteServer({
-    appType: "spa",
-    configFile: false,
-    root: webRoot,
-    server: {
-      hmr: { path: VITE_HMR_PATH, server: nodeServer },
-      middlewareMode: true,
-    },
-  });
-  const appBase = productRoot();
-  const program = Effect.scoped(
-    Effect.gen(function* () {
-      const latch = yield* Deferred.make<void>();
-      const handle = yield* Deferred.make<ServiceHostHandle>();
-      yield* Effect.raceFirst(
+  const webRoot = join(localAppData, "web");
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(webRoot);
+  writeFileSync(
+    join(webRoot, "index.html"),
+    '<main>frontend</main><script type="module" src="/main.js"></script>',
+  );
+  writeFileSync(join(webRoot, "main.js"), 'import "/style.css";');
+  writeFileSync(join(webRoot, "style.css"), "body { color: red; }");
+  const webUrl = Deferred.makeUnsafe<string>();
+  const latch = Deferred.makeUnsafe<void>();
+  const handle = Deferred.makeUnsafe<ServiceHostHandle>();
+  const done = Effect.runPromise(
+    Effect.scoped(
+      Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: true },
             lifecycle: { handle, latch },
             mastraLayer: StubMastraLive,
-            nodeServer,
             port: 0,
-            viteServer: vite,
             webRoot: null,
+            webUrl,
           }),
         ),
         Deferred.await(latch),
-      );
-    }),
+      ),
+    ),
   );
-  const done = Effect.runPromise(program);
-
+  const appBase = productRoot();
+  let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
+  let socket: WebSocket | undefined;
   try {
-    const file = await waitForService(appBase);
-    const baseUrl = `http://127.0.0.1:${file.port}`;
-    const status = await fetch(`${baseUrl}/host/status`);
-    const page = await fetch(baseUrl);
-    const html = await page.text();
-
-    expect(status.status).toBe(200);
-    expect(page.status).toBe(200);
-    expect(html).toContain("shared-server");
-    expect(html).toContain("/@vite/client");
-    expect((await fetch(`${baseUrl}/@vite/client`)).status).toBe(200);
-    await expect(connectHmr(baseUrl)).resolves.toBeUndefined();
-
-    const shutdown = await fetch(`${baseUrl}/admin/shutdown`, {
-      method: "POST",
-      headers: { "x-pe-service-token": file.token },
+    const claimed = await Effect.runPromise(
+      Deferred.await(handle).pipe(Effect.timeout("10 seconds")),
+    );
+    const backend = `http://127.0.0.1:${claimed.serviceFile.port}`;
+    vite = await createViteServer({
+      appType: "spa",
+      configFile: false,
+      root: webRoot,
+      cacheDir: join(localAppData, "cache"),
+      server: { host: "127.0.0.1", port: 0, proxy: devHostProxy(backend) },
     });
-    expect(shutdown.status).toBe(200);
-    await done;
+    await vite.listen();
+    const browser = vite.resolvedUrls!.local[0]!.replace(/\/$/, "");
+    await Effect.runPromise(Deferred.succeed(webUrl, browser));
+    expect(browser).not.toBe(backend);
+    expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
+    const navigation = { headers: { accept: "text/html" } };
+    const redirected = await fetch(`${backend}/chat?thread=kept`, {
+      ...navigation,
+      redirect: "manual",
+    });
+    expect(redirected.headers.get("location")).toBe(`${browser}/chat?thread=kept`);
+    expect(await fetch(`${browser}/ops`, navigation).then((r) => r.text())).toContain("frontend");
+    expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
+    expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
+      await fetch(`${backend}/host/status`).then((r) => r.json()),
+    );
+    for (const path of ["/pe/thread/one?x=1", "/api/agent-controller/threads"]) {
+      expect(
+        await fetch(browser + path, {
+          method: "POST",
+          body: "body",
+          headers: { "x-pe-bridge-session-id": "selected-session" },
+        }).then((r) => r.json()),
+      ).toEqual({ url: backend + path, body: "body", selector: "selected-session" });
+    }
+    const events = await fetch(`${browser}/events`);
+    const reader = events.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(": open");
+    await reader.cancel();
+    const bridge = new WebSocket(browser.replace("http:", "ws:") + "/api/bridge");
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        bridge.close();
+        reject(new Error("Bridge proxy timed out"));
+      }, 5000);
+      bridge.addEventListener("open", () => {
+        clearTimeout(timer);
+        bridge.close();
+        resolve();
+      });
+      bridge.addEventListener("error", () => {
+        clearTimeout(timer);
+        reject(new Error("Bridge proxy failed"));
+      });
+    });
+    await fetch(`${browser}/main.js`);
+    await fetch(`${browser}/style.css`);
+    const client = await fetch(`${browser}/@vite/client`).then((r) => r.text());
+    const token = /const wsToken = "([^"]+)"/.exec(client)?.[1];
+    socket = new WebSocket(
+      browser.replace("http:", "ws:") + (token ? `/?token=${token}` : "/"),
+      "vite-hmr",
+    );
+    await socketMessage(socket, (data) => data.includes('"connected"'));
+    const update = socketMessage(socket, (data) => data.includes('"update"'));
+    writeFileSync(join(webRoot, "style.css"), "body { color: blue; }");
+    expect(await update).toContain("style.css");
+    socket.close();
+    await vite.restart();
+    expect(await fetch(`${browser}/host/status`).then((r) => r.status)).toBe(200);
+    expect((await readServiceFile(appBase, hostOwnership.serviceName))?.instanceId).toBe(
+      claimed.serviceFile.instanceId,
+    );
   } finally {
-    await done.catch(() => {});
-    await vite.close();
+    socket?.close();
+    await vite?.close();
+    await Effect.runPromise(Deferred.succeed(latch, undefined));
+    await done;
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
     rmSync(localAppData, { force: true, recursive: true });
-    rmSync(webRoot, { force: true, recursive: true });
   }
 }, 30_000);

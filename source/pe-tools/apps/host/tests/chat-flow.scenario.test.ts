@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
+import { devHostProxy } from "../../web/dev-proxy.ts";
 import { expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
@@ -109,7 +110,6 @@ async function launchHost(options: {
   port: number;
   preseed?: { threadId: string; messages: typeof preseeded };
   previousToken?: string;
-  vite: Awaited<ReturnType<typeof createViteServer>>;
 }) {
   const nodeServer = createNodeServer();
   const appBase = productRoot();
@@ -129,7 +129,6 @@ async function launchHost(options: {
             ),
             nodeServer,
             port: options.port,
-            viteServer: options.vite,
             webRoot: null,
           }),
         ),
@@ -158,11 +157,7 @@ test("the browser walks one durable chat lifecycle", async () => {
   const databasePath = join(databaseRoot, "chat-flow.db");
   const threadId = crypto.randomUUID();
   const webRoot = resolve(import.meta.dirname, "..", "..", "web");
-  const vite = await createViteServer({
-    root: webRoot,
-    configFile: join(webRoot, "vite.config.ts"),
-    server: { hmr: false, middlewareMode: true },
-  });
+  let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let host: Awaited<ReturnType<typeof launchHost>> | undefined;
   let browser: { close(): Promise<void> } | undefined;
 
@@ -171,9 +166,20 @@ test("the browser walks one durable chat lifecycle", async () => {
       databasePath,
       port: 0,
       preseed: { threadId, messages: preseeded },
-      vite,
     });
-    const baseUrl = `http://127.0.0.1:${host.service.port}`;
+    vite = await createViteServer({
+      root: webRoot,
+      configFile: join(webRoot, "vite.config.ts"),
+      cacheDir: join(localAppData, "vite"),
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        hmr: false,
+        proxy: devHostProxy(`http://127.0.0.1:${host.service.port}`),
+      },
+    });
+    await vite.listen();
+    const baseUrl = vite.resolvedUrls!.local[0]!.replace(/\/$/, "");
     const playwrightUrl = pathToFileURL(
       resolve(
         import.meta.dirname,
@@ -409,7 +415,6 @@ test("the browser walks one durable chat lifecycle", async () => {
       databasePath,
       port: firstHost.service.port,
       previousToken: firstHost.service.token,
-      vite,
     });
     const controllerHydrated = page.waitForResponse(
       (response: { status(): number; url(): string }) =>
@@ -460,7 +465,7 @@ test("the browser walks one durable chat lifecycle", async () => {
   } finally {
     await browser?.close();
     if (host) await stopHost(host).catch(() => undefined);
-    await vite.close();
+    await vite?.close();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
     for (const directory of [databaseRoot, localAppData])

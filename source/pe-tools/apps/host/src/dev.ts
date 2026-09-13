@@ -1,57 +1,92 @@
-import "./ensure-source-lane.ts"; // MUST be first: sets PE_LANE=dev before host ownership loads
-import { createServer as createNodeServer } from "node:http";
-import path from "node:path";
-import { Effect } from "effect";
+import "./ensure-source-lane.ts";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { Deferred, Effect } from "effect";
 import { NodeRuntime } from "@effect/platform-node";
-import { createServer as createViteServer } from "vite-plus";
+import { hostOwnership } from "./host-ownership.ts";
 import { hostProgram } from "./host-program.ts";
-import { VITE_HMR_PATH } from "./vite-web.ts";
 
-const webRoot = path.resolve(import.meta.dirname, "..", "..", "web");
+// Reject foreign spawn plumbing before claiming or evicting any checkout's host.
+if (
+  resolve(hostOwnership.sourceRoot ?? "").toLowerCase() !==
+  resolve(import.meta.dirname, "../../..").toLowerCase()
+)
+  throw new Error("Dev host source identity does not match this checkout.");
 
 NodeRuntime.runMain(
-  Effect.scoped(
+  hostProgram((handle, ready) =>
     Effect.gen(function* () {
-      const nodeServer = createNodeServer();
-      const vite = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: () =>
-            createViteServer({
-              root: webRoot,
-              configFile: path.join(webRoot, "vite.config.ts"),
-              server: {
-                middlewareMode: true,
-                // ponytail: PE_DEV_NO_HMR for WS-less clients (agent browser proxies) — the
-                // vite client otherwise reload-loops when the HMR upgrade can't connect.
-                hmr: process.env.PE_DEV_NO_HMR
-                  ? false
-                  : { server: nodeServer, path: VITE_HMR_PATH },
-              },
-            }),
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        }),
-        (server) => Effect.promise(() => server.close()),
+      const child = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          spawn(
+            process.execPath,
+            [
+              "--import",
+              "jiti/register",
+              fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url)),
+            ],
+            {
+              cwd: new URL("../", import.meta.url),
+              stdio: ["ignore", "inherit", "inherit", "ipc"],
+              // Node --watch uses this env flag to make children report imports over IPC.
+              // The frontend owns its watcher; its imports must never restart the backend.
+              env: { ...process.env, WATCH_REPORT_DEPENDENCIES: undefined },
+              windowsHide: true,
+            },
+          ),
+        ),
+        (child) =>
+          Effect.promise(async () => {
+            if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+            await new Promise<void>((resolve) => {
+              const timeout = setTimeout(() => child.kill(), 5_000);
+              child.once("exit", () => {
+                clearTimeout(timeout);
+                resolve();
+              });
+              if (child.connected) child.disconnect();
+            });
+          }),
       );
-
-      // Effect's NodeHttpServer registers its own unconditional 'upgrade' listener that routes
-      // every WebSocket handshake through the router — which answers vite's HMR handshake with
-      // the 426 stray-client route and kills the socket, so the web client reload-loops forever.
-      // Vite registered its HMR listener in createViteServer above; shield the HMR path from any
-      // listener registered after this point so vite alone owns those sockets.
-      const register = nodeServer.on.bind(nodeServer);
-      const shielded =
-        (listener: (...args: unknown[]) => void) =>
-        (req: { url?: string }, ...rest: unknown[]) => {
-          if (req.url?.startsWith(VITE_HMR_PATH)) return;
-          listener(req, ...rest);
-        };
-      nodeServer.on = nodeServer.addListener = ((event: string, listener: never) =>
-        register(event, event === "upgrade" ? shielded(listener) : listener)) as never;
-
-      yield* hostProgram({
-        beforeHost: Effect.void,
-        nodeServer,
-        viteServer: vite,
+      // Only the SDK claim winner starts an optimizer. The child receives the exact bound
+      // endpoint over IPC, never discovers a host by port or another checkout's environment.
+      const url = yield* Effect.tryPromise({
+        try: () =>
+          new Promise<string>((resolve, reject) => {
+            const timeout = setTimeout(
+              () => reject(new Error("Dev frontend did not start within 60s")),
+              60_000,
+            );
+            child.once("error", (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            });
+            child.once("exit", (code) => {
+              clearTimeout(timeout);
+              reject(new Error(`Dev frontend exited (${code})`));
+            });
+            child.once("message", (message) => {
+              clearTimeout(timeout);
+              if (typeof message !== "string" || !/^http:\/\/127\.0\.0\.1:\d+$/.test(message))
+                reject(new Error("Invalid dev frontend address"));
+              else resolve(message);
+            });
+            child.send({
+              port: handle.serviceFile.port,
+              sourceRoot: handle.serviceFile.sourceRoot,
+              name: hostOwnership.serviceName,
+            });
+          }),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+      });
+      yield* Deferred.succeed(ready, url);
+      return yield* Effect.callback<never, Error>((resume) => {
+        child.once("exit", (code) =>
+          resume(Effect.fail(new Error(`Dev frontend exited (${code})`))),
+        );
+        if (child.exitCode !== null || child.signalCode !== null)
+          resume(Effect.fail(new Error("Dev frontend stopped")));
       });
     }),
   ),

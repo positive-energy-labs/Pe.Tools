@@ -30,8 +30,6 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { runViteMiddleware, viteWebLayer } from "./vite-web.ts";
-import type { ViteDevServer } from "vite-plus";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -242,10 +240,10 @@ export interface HttpLiveOptions {
   /** Preferred listen port (0 = ephemeral, used by the boundary test). */
   readonly port: number;
   readonly capabilities: PeaRuntimeCapabilities;
-  /** Optional shared Node listener; dev gives the same object to Vite middleware/HMR. */
+  /** Injected listener for socket lifecycle tests. */
   readonly nodeServer?: Server;
-  /** Programmatic Vite server in dev; installed mode leaves this absent and serves static files. */
-  readonly viteServer?: ViteDevServer;
+  /** Browser origin of the separately owned dev frontend. API requests stay here. */
+  readonly webUrl?: Deferred.Deferred<string>;
   /**
    * The Mastra tenant layer; the boundary test swaps a trivial stub (RIn = never) for the real
    * runtime (RIn = HttpServer). `HttpServer` is satisfied by the shared `NodeHttpServer.layer`.
@@ -290,18 +288,20 @@ export function makeHttpLive(options: HttpLiveOptions) {
     ServiceFileLive.pipe(Layer.provide(ServerLive)),
   );
 
-  const CommonAppLive = Layer.mergeAll(
-    adminShutdownRoute,
-    MastraMountLive,
-    options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
-  );
-  const vite = options.viteServer;
+  const webUrl = options.webUrl;
   const webRoot = options.webRoot;
-  const spa: SpaFallback = vite
-    ? (req) => runViteMiddleware(req, vite)
+  const spa: SpaFallback = webUrl
+    ? (req) => Effect.map(Deferred.await(webUrl), (url) => Response.redirect(url + req.originalUrl))
     : webRoot
       ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
       : () => emptyNotFound;
+  const CommonAppLive = Layer.mergeAll(
+    adminShutdownRoute,
+    MastraMountLive,
+    webUrl
+      ? HttpRouter.add("GET", "/*", (req) => (isNavigation(req) ? spa(req) : emptyNotFound))
+      : staticSpaLayer(options.webRoot),
+  );
 
   if (options.capabilities.revit) {
     const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(spa);
