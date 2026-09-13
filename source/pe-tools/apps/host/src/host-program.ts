@@ -17,6 +17,7 @@ export const hostProgram = (
     handle: ServiceHostHandle,
     ready: Deferred.Deferred<string>,
   ) => Effect.Effect<never, Error, Scope.Scope>,
+  onShutdown?: () => void,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -68,7 +69,7 @@ export const hostProgram = (
           : Effect.never;
       yield* Effect.raceFirst(
         Effect.raceFirst(Layer.launch(HttpLive), frontend),
-        Deferred.await(latch),
+        Deferred.await(latch).pipe(Effect.tap(() => Effect.sync(() => onShutdown?.()))),
       );
     }),
   );

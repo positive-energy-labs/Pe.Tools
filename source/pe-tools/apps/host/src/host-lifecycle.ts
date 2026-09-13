@@ -133,20 +133,6 @@ export async function announceServedSession(
 export async function evictLiveHost(appBase: string, name: string, why: string): Promise<void> {
   const incumbent = await readServiceFile(appBase, name);
   if (!incumbent || !(await isRecordedOwnerAlive(incumbent))) return;
-  // A just-claimed live incumbent is a concurrent spawn, not a wedged predecessor: session
-  // supervisors respawn the host on every bridge drop, and each takeover drops the bridge, so
-  // evicting fresh claims livelocks the service (observed: 396 orphaned watchers, ~12s claim
-  // churn, no host ever answering). Let the fresh incumbent win; this claim will be refused and
-  // this spawn exits. Intentional dev-over-dev takeover of an older host still evicts. Defense
-  // in depth: supervisors now spawn `@pe/host#attach` (no takeover flag), so only a human
-  // `pnpm dev` reaches this eviction at all.
-  const incumbentAgeMs = Date.now() - Date.parse(incumbent.processStartUtc);
-  if (Number.isFinite(incumbentAgeMs) && incumbentAgeMs < 60_000) {
-    console.log(
-      `pe-host not evicting ${name} pid=${incumbent.pid} (claimed ${Math.round(incumbentAgeMs / 1000)}s ago; concurrent spawn)`,
-    );
-    return;
-  }
   console.log(`pe-host evicting ${name} pid=${incumbent.pid} port=${incumbent.port} (${why})`);
   try {
     await fetch(`http://127.0.0.1:${incumbent.port}${hostProcessIdentity.shutdownPath}`, {

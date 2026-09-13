@@ -14,8 +14,15 @@ if (
 )
   throw new Error("Dev host source identity does not match this checkout.");
 
-NodeRuntime.runMain(
-  hostProgram((handle, ready) =>
+const parentDisconnected = Effect.callback<never>((resume) => {
+  const stop = () => resume(Effect.interrupt);
+  process.once("disconnect", stop);
+  if (process.send && !process.connected) stop();
+  return Effect.sync(() => process.removeListener("disconnect", stop));
+});
+
+const program = hostProgram(
+  (handle, ready) =>
     Effect.gen(function* () {
       const child = yield* Effect.acquireRelease(
         Effect.sync(() =>
@@ -29,9 +36,6 @@ NodeRuntime.runMain(
             {
               cwd: new URL("../", import.meta.url),
               stdio: ["ignore", "inherit", "inherit", "ipc"],
-              // Node --watch uses this env flag to make children report imports over IPC.
-              // The frontend owns its watcher; its imports must never restart the backend.
-              env: { ...process.env, WATCH_REPORT_DEPENDENCIES: undefined },
               windowsHide: true,
             },
           ),
@@ -89,5 +93,10 @@ NodeRuntime.runMain(
           resume(Effect.fail(new Error("Dev frontend stopped")));
       });
     }),
-  ),
+  () => {
+    if (process.connected) process.send?.("retired");
+    else console.log("Dev session retiring after host shutdown.");
+  },
 );
+
+NodeRuntime.runMain(Effect.raceFirst(program, parentDisconnected));

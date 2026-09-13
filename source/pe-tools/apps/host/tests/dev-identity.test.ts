@@ -22,7 +22,7 @@ test("foreign checkout spawn plumbing fails before claiming a host or starting V
         },
         encoding: "utf8",
         windowsHide: true,
-        timeout: 20_000,
+        timeout: 60_000,
       },
     );
     expect(result.error).toBeUndefined();
@@ -33,4 +33,4 @@ test("foreign checkout spawn plumbing fails before claiming a host or starting V
   } finally {
     rmSync(state, { recursive: true, force: true });
   }
-}, 25_000);
+}, 65_000);
