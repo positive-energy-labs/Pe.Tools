@@ -22,7 +22,7 @@ export function MissingPanel(props: { w: number; h: number; label: string }) {
   );
 }
 
-export function StageButton(props: {
+export function RunPickButton(props: {
   name: string;
   runA: string | null;
   runB: string;

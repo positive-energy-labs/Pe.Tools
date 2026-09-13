@@ -20,13 +20,13 @@ import { token } from "#/lib/token";
  */
 import { useMemo, useState } from "react";
 
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 
 import {
   legalRefs,
   nodeValue,
   showcaseModel,
-  type SlotKind,
+  type FieldKind,
 } from "#/family-review/proto-editor/model";
 import type { FamilyModel } from "#/family/family-model";
 import { Press } from "#/components/lang/press";
@@ -181,7 +181,7 @@ export function StatePanel({
           </ul>
         )}
         <div className="mt-2 flex flex-wrap items-baseline gap-2">
-          <Verb
+          <ActionButton
             label="write to family.json"
             reason={
               staged.length === 0
@@ -191,7 +191,7 @@ export function StatePanel({
             disabled={staged.length === 0}
             onClick={editor.write}
           />
-          <Verb
+          <ActionButton
             label="discard"
             reason={
               staged.length === 0
@@ -226,7 +226,7 @@ export function RefToken({
 }: {
   editor: Editor;
   value: string | undefined;
-  kind: SlotKind;
+  kind: FieldKind;
   onPick: (ref: string) => void;
   /** What binding this token DOES — never what the token is called. */
   title: string;
@@ -352,7 +352,7 @@ export function TextToken({
 }
 
 /** The staged type. Every resolved number on every paradigm reads through it. */
-export function TypeStage({ editor }: { editor: Editor }) {
+export function TypeBand({ editor }: { editor: Editor }) {
   return (
     <span className="flex items-baseline gap-1">
       <span>type</span>

@@ -10,7 +10,7 @@
  * - "Design the empty states. Distinguish 'nothing in scope', which is the route's story, from
  *   'filtered to nothing', which is the surface's own. They have different exits." The REQUIRED
  *   `story` discriminant is that distinction; the REQUIRED `exit` is the different exit — the
- *   same constructor-argument enforcement that makes `Verb.reason` work.
+ *   same constructor-argument enforcement that makes `ActionButton.reason` work.
  * - The exit renders ON the surface, not in a title: "tooltips deepen; they never rescue" (§0),
  *   and an empty state with a hidden way out is a rescue.
  */

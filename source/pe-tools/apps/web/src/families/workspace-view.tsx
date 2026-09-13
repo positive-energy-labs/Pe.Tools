@@ -1,18 +1,19 @@
 import { Workspace } from "#/components/anatomy";
-import { FamiliesHead } from "#/families/head";
 import { FamiliesMatrix } from "#/families/matrix";
+import { manifest } from "#/families/manifest";
 import { FamiliesReadoutBands } from "#/families/readout-bands";
-import { FamiliesScopeBand } from "#/families/scope-band";
+import { FamiliesFilterBand } from "#/families/scope-band";
+import { RouteShell } from "#/route";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
 export function FamiliesWorkspaceView() {
   const { store } = useFamiliesWorkspace();
   return (
     <Workspace
-      headRail={<FamiliesHead store={store} />}
+      headRail={<RouteShell manifest={manifest} handle={store.handle} />}
       readoutBand={
         <>
-          <FamiliesScopeBand />
+          <FamiliesFilterBand />
           <FamiliesReadoutBands />
         </>
       }

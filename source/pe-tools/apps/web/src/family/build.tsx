@@ -1,44 +1,4 @@
-/**
- * /family — THE BUILD LANE: the crossing that materializes the open family.json into a real .rfa.
- *
- * SETTLED LAW, verbatim: "Materialize ceremony: foundry-grade — human-readable
- * reason, planHash-style drift refusal, receipts — presented as an arming preview strip. Never
- * hover-height." This module is that ruling, and nothing else lives here.
- *
- * WHY THE REFUSALS ARE PURE FUNCTIONS AND NOT `disabled` EXPRESSIONS. The build reads the SAVED
- * document — `build_evidence` re-opens it host-side through `settings.document.open` and hands its
- * `rawContent` to `revit.apply.family-model`. So every fact that decides whether the file on disk
- * is the file the table is showing is a fact the ceremony has to STATE, not merely obey: a greyed
- * verb with a hover reason would be exactly the "hover-height" presentation the ruling forbids.
- * `buildRefusals` is therefore the whole safety model in one testable place, and the strip renders
- * its words.
- *
- *   unsaved      the draft (or a staged field) carries values the file does not → the build would
- *                build something other than what the table shows. Exit: save profile.
- *   invalid      the host's own schema verdict on the SAVED document is false → the build feeds
- *                that same file to Revit. Its first issue is quoted verbatim.
- *   unbound      no session bound. The build runs INSIDE Revit; there is nowhere to run it.
- *   superseded   THE planHash-STYLE DRIFT REFUSAL. The strip is armed against a version token; if
- *                the document is saved underneath it, the .rfa this would build is not the one the
- *                strip described. The token IS the plan hash — there is no separate plan to hash,
- *                because the document at a revision is the plan.
- *   no-document  the fixture lane has no file behind it. Defensive: the verb is already dark there.
- *
- * WHAT THE STRIP CANNOT SAY, and how this file adapts without touching the primitive (findings for
- * the design pass):
- *   1. `ArmingState.refused` carries ONE refusal string. Several can be true at once (a dirty draft
- *      AND a schema failure), so they are JOINED here. A refusal LIST is the honest shape.
- *   2. There is no in-flight phase. A write that leaves the page and takes seconds inside Revit has
- *      to say so at strip scale, so the slot renders `OutcomeLine kind="busy"` in the strip's place
- *      while the command is out. The verb also wears `busy`, which is the house pattern.
- *   3. There is no UNKNOWN-OUTCOME phase. `build_evidence` mutates outside the page (it writes a
- *      file), so a command that returns without a receipt is not a success and not a refusal — it
- *      is unprovable. It is latched onto the refusal channel, worded as unknown rather than as no.
- *   4. `re-plan` is the only exit the refused phase offers, and for these refusals re-planning is
- *      genuinely all it can do: re-arm against the file as it now stands. If you saved in the
- *      meantime the refusal clears; if you did not, it comes straight back. Pressing it never
- *      writes anything — which is why it is safe to give every refusal the same exit.
- */
+/** Build consumes a frozen saved file through the shared action journal. Original IDs and output paths survive lost responses; unknown requires original-ID recovery. */
 import { ArmingStrip, type ArmingState } from "#/components/lang/arming-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 
@@ -82,15 +42,9 @@ export interface BuildFacts {
   armedToken: string | null;
 }
 
-/**
- * The .rfa the default build writes, mirroring `build_evidence`'s own default exactly — including
- * the `.json` that stays in the middle of the name, because the host builds it from the relative
- * path verbatim. `<timestamp>` is a literal: the host stamps it, and a surface that invented a
- * timestamp would be naming a file that does not exist. The stamp is not decoration —
- * `revit.apply.family-model` refuses to overwrite, so a fixed name would Conflict on every rebuild.
- */
-export function buildOutputPath(relativePath: string): string {
-  return `.artifacts/tmp/family/${relativePath.replace(/\//g, "-")}-<timestamp>.rfa`;
+/** The host freezes the actual action-ID output path at admission. */
+export function buildOutputPath(_relativePath: string): string {
+  return ".artifacts/tmp/family/<action-id-sha256>.rfa";
 }
 
 /** WHICH family, from WHICH document, to WHICH .rfa — the human-readable reason, in one line. */
@@ -213,9 +167,7 @@ export function readBuildReceipt(result: unknown): BuildReceipt | null {
 
 /** What the surface says when it cannot vouch for its own write (finding 3 above). */
 export const BUILD_OUTCOME_UNKNOWN =
-  "OUTCOME UNKNOWN — the build command returned without a receipt, so this surface cannot say whether " +
-  "the .rfa was written. It writes a NEW timestamped file rather than overwriting, so a second build " +
-  "cannot undo a first one: look in .artifacts/tmp/family before pressing again.";
+  "OUTCOME UNKNOWN - read or recover the original action receipt before another Build. A new capture cannot establish whether the original file was written.";
 
 interface BuildStripProps {
   /** null → unarmed; the strip is not on the page at all. */

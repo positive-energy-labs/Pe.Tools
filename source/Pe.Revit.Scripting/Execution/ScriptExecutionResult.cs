@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
@@ -9,6 +9,7 @@ namespace Pe.Revit.Scripting.Execution;
 
 internal sealed record ScriptExecutionPlan(
     UIApplication UiApplication,
+    Autodesk.Revit.DB.Document? Document,
     string ExecutionId,
     string RevitVersion,
     string TargetFramework,

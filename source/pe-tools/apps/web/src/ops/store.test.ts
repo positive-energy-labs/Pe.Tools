@@ -1,223 +1,155 @@
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import { Context, Effect, Layer } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import {
-  address,
-  type OpsReceipt,
-  type OpsRouteDocument,
-  type RouteStatePatch,
-  type RouteStateWriteResult,
-} from "@pe/agent-contracts";
+import { expect, test, vi } from "vite-plus/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { ActionJournal } from "../../../host/src/action-journal";
+import { RevitBridge } from "../../../host/src/bridge";
+import { makeCallRoute } from "../../../host/src/call-route";
+import { opsCatalogRoute } from "../../../host/src/ops-catalog";
+import { createOpsStore, type OpsPageSeed } from "./store";
+import { opsRefusal, type HostOperationCatalogEntry } from "./manifest";
+import { readAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-import {
-  OPS_PRODUCT,
-  opsRefusal,
-  type HostOperationCatalogEntry,
-  type OpsSlot,
-} from "#/ops/product";
-import { createOpsStore } from "#/ops/store";
-import { refusal, type Feeds } from "#/targeting/model";
-
-const operation = (intent: "read" | "mutate"): HostOperationCatalogEntry => ({
-  key: intent === "read" ? "revit.context.document-session" : "revit.apply.schedule",
-  displayName: intent,
-  intent,
-  costTier: "cheap",
-  visibility: "public",
-  needs: "document",
-  description: intent,
-  searchTerms: [],
-  requestExamples: [],
-  callGuidance: [],
-  requestSchemaJson: "{}",
-  responseSchemaJson: "{}",
-});
-const oldReceipt = {
-  opKey: "revit.context.document-session",
-  value: { title: "old" },
-  elapsedMs: 1,
-  target: "old",
-  observedAt: "2026-08-25T00:00:00.000Z",
-};
-const document = (_target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
-  bindings: {},
-  receipt,
-});
-const feeds: Feeds<OpsSlot> = {
-  world: {
-    options: [{ id: "observed", label: "observed" }],
-    state: "ready",
-    lane: "live",
-    stale: false,
-  },
-  op: { options: [], state: "ready", lane: "live", stale: false },
-};
-const registries: AtomRegistry.AtomRegistry[] = [];
-afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
-
-function make(
-  routeDocument = document(),
-  options: { hydrated?: boolean; applyResult?: RouteStateWriteResult } = {},
-) {
-  const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
-  registries.push(registry);
-  const calls = vi.fn(async () => ({ title: "project-a" }));
-  const writes: RouteStatePatch[][] = [];
-  const store = createOpsStore({
+test("host-only Ops uses actual catalogue/router/journal; two page seeds isolate drafts and original receipt survives lost response/remount/catalog loss", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ops-journal-"));
+  const journal = join(dir, "actions.json");
+  let owner = new ActionJournal(journal),
+    launches = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const native = vi.fn(() => Effect.die("No native catalogue or execution without selection"));
+  const bridge = { list: Effect.succeed([]), invoke: native } as unknown as RevitBridge["Service"];
+  const makeWeb = () =>
+    HttpRouter.toWebHandler(
+      Layer.mergeAll(
+        makeCallRoute(owner, undefined, {
+          launchShell: async () => {
+            launches++;
+            await held;
+          },
+        }),
+        opsCatalogRoute(() => Effect.die("not navigation")),
+      ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      { disableLogger: true },
+    );
+  let web = makeWeb();
+  let lost = false,
+    catalogGone = false;
+  const paths: string[] = [];
+  vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    const url = new URL(input, "http://ops");
+    // The read caller emits existing analytics; keep this owner proof local and offline.
+    if (url.origin !== "http://ops") return new Response(null, { status: 204 });
+    paths.push(url.pathname);
+    if (catalogGone && url.pathname === "/ops") throw Error("catalogue disappeared");
+    const response = await web.handler(new Request(url, init), Context.empty() as never);
+    if (!lost && url.pathname === "/actions" && init?.method === "POST") {
+      lost = true;
+      throw Error("lost acceptance reply");
+    }
+    return response;
+  });
+  const registry = AtomRegistry.make();
+  let seed: OpsPageSeed | undefined;
+  const a = createOpsStore({
     registry,
-    scope: { scope: { kind: "document" as const, document: address("C:\\Models\\Test.rvt") } },
-    slice: Atom.make(
-      AsyncResult.success({
-        doc: routeDocument,
-        revision: options.hydrated === false ? null : 0,
-        hydrated: options.hydrated ?? true,
-        connected: true,
-        error: null,
-        peaActive: false,
-      }),
-    ),
-    apply: async (patches) => {
-      writes.push(patches);
-      return options.applyResult ?? { ok: true, revision: 1 };
+    hostBaseUrl: "http://ops",
+    onSeed: (value) => {
+      seed = value;
     },
-    call: calls,
-    now: () => new Date("2026-08-25T01:02:03.000Z"),
   });
-  return { registry, store, calls, writes };
-}
-
-function gatedRun(store: ReturnType<typeof createOpsStore>, selected: HostOperationCatalogEntry) {
-  const productFeeds: Feeds<OpsSlot> = {
-    ...feeds,
-    op: { ...feeds.op, options: [{ id: selected.key, label: selected.key }] },
-  };
-  const product = OPS_PRODUCT(productFeeds, {
-    run: () =>
-      store.actions.run({
-        opKey: selected.key,
-        request: () => ({}),
-        target: "observed",
-        bridgeSessionId: "bridge-observed",
-      }),
-    refuse: () => opsRefusal(selected, "observed"),
-  });
-  const verb = product.stages[0]!.verbs[0]!;
-  const bound = { world: "observed", op: selected.key };
-  const why = refusal(product, verb, bound, {});
-  return { why, run: () => (why ? Promise.resolve() : verb.run(bound, productFeeds)) };
-}
-
-describe("ops route store", () => {
-  it("refuses an observed mutation before HTTP", async () => {
-    const { store, calls } = make();
-    const gated = gatedRun(store, operation("mutate"));
-
-    await gated.run();
-
-    expect(gated.why).toBe("mutating operations require a controlled world");
-    expect(calls).not.toHaveBeenCalled();
-  });
-
-  it("allows an observed read and persists its plain receipt", async () => {
-    const { store, calls, writes } = make();
-    const gated = gatedRun(store, operation("read"));
-
-    await gated.run();
-
-    expect(gated.why).toBeNull();
-    expect(calls).toHaveBeenCalledOnce();
-    expect(writes.at(-1)?.[0]?.value).toMatchObject({
-      opKey: "revit.context.document-session",
-      target: "observed",
-      observedAt: "2026-08-25T01:02:03.000Z",
-    });
-  });
-
-  it("projects a mismatched persisted receipt as unbound", async () => {
-    const { registry, store } = make();
-
-    await store.actions.syncBindings("observed", oldReceipt.opKey, {
-      target: "new",
-    });
-
-    expect(registry.get(store.atoms.result)).toBeNull();
-  });
-
-  it("projects a matching persisted receipt as bound", async () => {
-    const matching: OpsReceipt = {
-      ...oldReceipt,
-      target: "observed",
-    };
-    const { registry, store } = make(document("observed", matching));
-
-    await store.actions.syncBindings("observed", matching.opKey, {
-      target: "observed",
-    });
-
-    expect(registry.get(store.atoms.result)).toEqual(matching);
-  });
-
-  it("does not write bindings before the route document hydrates", async () => {
-    const { store, writes } = make(document("persisted"), { hydrated: false });
-
-    await store.actions.syncBindings("", oldReceipt.opKey, null);
-
-    expect(writes).toEqual([]);
-  });
-
-  it("binds the op without clearing the receipt; the world is the page Scope, never a binding", async () => {
-    const { store, writes } = make();
-
-    await store.actions.setBindings(
-      { bound: { world: "session:new", op: oldReceipt.opKey } },
-      { target: "new" },
+  const b = createOpsStore({ registry, hostBaseUrl: "http://ops" });
+  let restored: ReturnType<typeof createOpsStore> | undefined;
+  try {
+    const catalogue = await (await fetch("http://ops/ops")).json();
+    const host = catalogue.operations.find(
+      (row: HostOperationCatalogEntry) => row.key === "host.shell.open",
     );
-
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toEqual([
-      { path: ["bindings", "op"], value: { id: oldReceipt.opKey, label: oldReceipt.opKey } },
-    ]);
-  });
-
-  it("routes binding write failures to the store failure atom", async () => {
-    const { registry, store } = make(document(), {
-      applyResult: { ok: false, kind: "error", error: "binding write failed", hint: "" },
+    expect(host).toBeDefined();
+    expect(native).not.toHaveBeenCalled();
+    // The manifest answers readiness directly now; the Product/ActionButton indirection is deleted.
+    expect(opsRefusal(host, undefined, {})).toBeNull();
+    await a.actions.setBindings({ bound: { op: host.key } }, { target: "host" });
+    a.actions.setArgs("pane A");
+    b.actions.setArgs("pane B");
+    const run = a.actions.run({ opKey: host.key, request: () => ({ path: dir }), target: "host" });
+    await vi.waitFor(() => expect(launches).toBe(1));
+    expect(seed?.actionId).toBeTruthy();
+    b.actions.setArgs("pane B edited during action");
+    a.dispose();
+    restored = createOpsStore({
+      registry,
+      initial: seed,
+      hostBaseUrl: "http://ops",
     });
-
-    await expect(
-      store.actions.setBindings(
-        { bound: { world: "session:new", op: oldReceipt.opKey } },
-        { target: "new" },
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(registry.get(store.atoms.failure)).toMatchObject({
-      kind: "error",
-      verb: "set-bindings",
-      message: "binding write failed",
+    expect(registry.get(restored.atoms.args)).toBe("pane A");
+    expect(registry.get(b.atoms.args)).toBe("pane B edited during action");
+    expect(registry.get(restored.atoms.actionId)).toBe(seed!.actionId);
+    expect((await readAction(seed!.actionId!, "http://ops"))?.state).toBe("running");
+    await restored.actions.run({
+      opKey: "bridge.sessions.list",
+      request: () => undefined,
+      target: "host",
     });
-  });
-
-  it("keeps a stale-revision binding refusal typed as refused", async () => {
-    const { registry, store } = make(document(), {
-      applyResult: {
-        ok: false,
-        kind: "refused",
-        code: "stale_revision",
-        error: "the document moved",
-        hint: "re-read it before writing again.",
-      },
+    expect(registry.get(restored.atoms.actionId)).toBe(seed!.actionId);
+    expect(launches).toBe(1);
+    // A Refusal is RETURNED, never thrown.
+    expect(
+      (
+        await restored.actions.run({
+          opKey: host.key,
+          request: () => ({ path: dir }),
+          target: "host",
+        })
+      )?.message,
+    ).toContain("original action");
+    release();
+    await run;
+    await web.dispose();
+    owner = new ActionJournal(journal);
+    web = makeWeb();
+    catalogGone = true;
+    const receipt = await readAction(seed!.actionId!, "http://ops");
+    expect(receipt).toMatchObject({
+      state: "succeeded",
+      kind: "operation",
+      destination: { kind: "host" },
+      result: { opened: true },
+      publication: { state: "unrequested" },
     });
+    expect(launches).toBe(1);
+    expect(
+      paths.every((path) => path === "/ops" || path === "/actions" || path === "/call"),
+      JSON.stringify(paths),
+    ).toBe(true);
+    expect(native).not.toHaveBeenCalled();
+  } finally {
+    release();
+    a.dispose();
+    b.dispose();
+    restored?.dispose();
+    registry.dispose();
+    vi.unstubAllGlobals();
+    await web.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
-    await store.actions.setBindings(
-      { bound: { world: "session:new", op: oldReceipt.opKey } },
-      { target: "new" },
-    );
-
-    expect(registry.get(store.atoms.failure)).toMatchObject({
-      kind: "refused",
-      verb: "set-bindings",
-    });
-  });
+test("Ops demands exact native session and lifetime only for the selected operation", () => {
+  const native = {
+    key: "revit.apply.schedule",
+    intent: "Mutate",
+    needs: "document",
+  } as HostOperationCatalogEntry;
+  expect(opsRefusal(native, undefined, {})).toMatch(/exact Revit session/);
+  expect(opsRefusal(native, "controlled", { session: "B" })).toMatch(/exact open document/);
+  expect(opsRefusal(native, "controlled", { session: "B", openId: "original" })).toBeNull();
+  expect(opsRefusal(native, "observed", { session: "B", openId: "original" })).toMatch(
+    /controlled/,
+  );
 });

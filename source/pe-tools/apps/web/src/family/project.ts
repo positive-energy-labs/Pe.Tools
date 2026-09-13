@@ -1,7 +1,7 @@
 /**
  * /family — THE PROJECTION, both directions, and the only place the two schemas meet.
  *
- * The page renders a `ProtoWorld` (a reading of a family, in the page's own vocabulary). The host
+ * The page renders a `FamilySpecModel` (a reading of a family, in the page's own vocabulary). The host
  * owns a `FamilyModel` (the authored `family.json`, in Revit's). Phase B's whole job is that this
  * module is the ONE translator between them, so nothing above it has to know which lane it is on:
  *
@@ -34,7 +34,7 @@ import {
   parameterText,
 } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
-import { bindingOf, isFormula, type Draft, type PageWorld } from "#/family/model";
+import { bindingOf, isFormula, type Draft, type FamilyPageModel } from "#/family/model";
 import type {
   GeomConstituent,
   GeomDim,
@@ -42,7 +42,7 @@ import type {
   ProtoLive,
   ProtoLiveValue,
   ProtoParam,
-  ProtoWorld,
+  FamilySpecModel,
 } from "#/family/world";
 
 /** The length dataType a promoted literal inherits when nothing in the document says otherwise.
@@ -72,7 +72,7 @@ export function projectFamilyModel(
   model: FamilyModel,
   evidence: EvidenceSlice | null,
   options: ProjectionOptions = {},
-): ProtoWorld {
+): FamilySpecModel {
   const params = projectParams(model);
   const lengthType = lengthDataType(model);
   return {
@@ -410,7 +410,7 @@ const CONNECTOR_DIM_FIELDS = ["diameter", "width", "height"] as const;
  * evidence-resolved values survive (a blanket rewrite would erase them); an untouched draft
  * returns a model that draws identically to the document.
  */
-export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld): FamilyModel {
+export function draftedModel(model: FamilyModel, draft: Draft, world: FamilyPageModel): FamilyModel {
   const next = structuredClone(model);
 
   // Promoted literals are WHOLE new parameters — seeded first, so their authored value below

@@ -1,7 +1,7 @@
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Press } from "#/components/lang/press";
 import { diagnosticLine, warningLine } from "#/host/familyfoundry";
 import { familyFlag, provenanceSummary } from "#/families/plan";
@@ -238,7 +238,7 @@ export function FamiliesReadoutBands() {
                     {entry.artifactDirectory && (
                       /* Leaving the app entirely — nav:out, which is the direction browsers
                          already taught. It writes nothing, so it is not blue-filled. */
-                      <Verb
+                      <ActionButton
                         label="artifacts"
                         tone="nav"
                         direction="out"
@@ -317,7 +317,7 @@ export function FamiliesReadoutBands() {
                     : "coverage not captured / unmodeled not captured"}
                 </span>
                 {entry.modelJson && (
-                  <Verb
+                  <ActionButton
                     label="copy"
                     onClick={() => void navigator.clipboard.writeText(entry.modelJson ?? "")}
                     reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."

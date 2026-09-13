@@ -7,7 +7,7 @@
     "paths": {
       "#/*": ["./src/*"]
     },
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "types": ["node"],
 
     "allowImportingTsExtensions": true,

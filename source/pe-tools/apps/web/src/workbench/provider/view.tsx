@@ -1,6 +1,6 @@
+import { CHAT_ACTIONS } from "../actions";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
 import type { ToolResume } from "./thread-summary";
 import { resolveWorkbenchConfig } from "../config";
@@ -10,9 +10,9 @@ import {
   PERMISSION_LEVELS,
   type AccessLevel,
 } from "../chat-state";
-import { usePeInfo } from "#/host/info";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
+import { previousOf, useHostStatus } from "#/readings";
+import { appAtomRegistry } from "#/route";
+import { useRouteOwner } from "#/route";
 import { createChatPageStore, type WorkbenchAttachment } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
@@ -20,19 +20,24 @@ import { useThreadStream } from "./thread-stream";
 import {
   errorMessage,
   forkSessionThread,
-  rejectApproval,
   resumeDataForSuspension,
-  toFiles,
   toSummaries,
 } from "./use-workbench";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
-  const queryClient = useQueryClient();
   const navigate = useNavigate({ from: "/chat" });
   const search = useSearch({ from: "/chat" });
-  const [currentThreadId] = useState(() => search.thread ?? crypto.randomUUID());
-  const store = useRouteStore(() =>
+  const [initialThreadId] = useState(() => search.thread ?? crypto.randomUUID());
+  const currentThreadId = search.thread ?? initialThreadId;
+  useEffect(() => {
+    if (!search.thread)
+      void navigate({
+        search: (previous) => ({ ...previous, thread: currentThreadId }),
+        replace: true,
+      });
+  }, [currentThreadId, navigate, search.thread]);
+  const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
       search: {
@@ -43,19 +48,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
   );
 
-  const infoQuery = usePeInfo(config);
-  const info = infoQuery.data;
+  // The one `host-status` Reading. Its own lifecycle is the freshness claim; `previousOf` keeps
+  // the last good answer through loading and failure so the surface never invents one.
+  const hostStatus = useHostStatus();
+  const info = previousOf(hostStatus);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [error, setError] = useState<string>();
   const settlingApprovalsRef = useRef(new Set<string>());
 
+  const controllerId = info?.controllerId;
+  const resourceId = info?.resourceId;
   const session = useMemo(() => {
-    if (!info) return undefined;
+    if (!controllerId || !resourceId) return undefined;
     const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
-      info.controllerId,
+      controllerId,
     );
-    return controller.session(info.resourceId, currentThreadId);
-  }, [config.origin, currentThreadId, info]);
+    return controller.session(resourceId, currentThreadId);
+  }, [config.origin, currentThreadId, controllerId, resourceId]);
 
   const refreshThreads = useCallback(async () => {
     if (!session) return;
@@ -73,10 +82,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     invalidate,
   } = useThreadStream({
     origin: config.origin,
-    queryClient,
     thread: session ? { id: currentThreadId, session } : null,
   });
-  const loading = infoQuery.isPending || threadPending;
+  const loading = hostStatus.state === "loading" || threadPending;
 
   const status = selectRunStatus(chat);
   const isRunning = status !== "idle";
@@ -96,24 +104,29 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
       if ((!prompt && !attachments?.length) || !session) return;
-      const files = toFiles(attachments);
       try {
         setError(undefined);
         // The host admits the turn under the thread's Scope; the browser names no target.
-        await session.sendMessage({ content: prompt, files });
+        const context = { session, display: chat.display };
+        const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
+        if (refusal) {
+          setError(refusal);
+          return;
+        }
+        await CHAT_ACTIONS.send.run(context, { text, attachments });
         if (threadPending) await invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [invalidate, session, threadPending],
+    [invalidate, session, threadPending, chat.display],
   );
 
   const cancel = useCallback(() => {
     if (!session) return;
-    for (const approval of selectApprovals(chat.display))
-      void rejectApproval(session, approval).catch((caught) => setError(errorMessage(caught)));
-    void session.abort().catch((caught) => setError(errorMessage(caught)));
+    void CHAT_ACTIONS.cancel
+      .run({ session, display: chat.display })
+      .catch((caught: unknown) => setError(errorMessage(caught)));
   }, [chat.display, session]);
 
   const newThread = useCallback(() => {
@@ -238,18 +251,19 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const operationError =
-    error ?? (infoQuery.error ? errorMessage(infoQuery.error) : streamFault?.message);
+    error ?? (hostStatus.state === "failed" ? hostStatus.message : streamFault?.message);
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       store,
       config,
+      session,
       chat,
       loading,
       error,
       threads,
       currentThreadId,
       revit: info?.capabilities.revit,
-      world: info?.world,
+      world: info?.world as WorkbenchContextValue["world"],
       isRunning,
       operationError,
       sendPrompt,
@@ -276,6 +290,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       store,
       config,
+      session,
     ],
   );
 

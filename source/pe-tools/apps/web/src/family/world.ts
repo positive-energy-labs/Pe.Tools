@@ -147,7 +147,7 @@ export interface ProtoProposal {
   confidence?: "high" | "low";
 }
 
-export interface ProtoWorld {
+export interface FamilySpecModel {
   profile: ProtoProfile;
   live: ProtoLive | null;
   spec: ProtoSpec | null;
@@ -470,7 +470,7 @@ const GEOMETRY: GeomConstituent[] = [
   },
 ];
 
-export const WORLD: ProtoWorld = {
+export const WORLD: FamilySpecModel = {
   profile: {
     path: "mechanical/fan-coil-fc42.family.json",
     familyName: "PE Fan Coil FC42",

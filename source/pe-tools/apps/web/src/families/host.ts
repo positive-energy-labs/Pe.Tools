@@ -1,35 +1,27 @@
-import { type AppliedScope } from "@pe/agent-contracts";
+import { type AppliedFilter, type DocumentRef } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
-import { FF_PROFILE_MODULE, type FfProjectData } from "#/host/familyfoundry";
-import { fromBridgeSessions, type SessionFacts } from "#/host/target";
+import { FF_PROFILE_MODULE } from "#/host/familyfoundry";
 
 export type FamiliesDraft = {
-  placement: AppliedScope["placementScope"];
+  placement: AppliedFilter["placementScope"];
   categories: string[];
   families: string[];
 };
 
 export interface FamiliesHost {
-  sessions(): Promise<SessionFacts[]>;
-  categories(target: string): Promise<string[]>;
-  families(target: string, draft: FamiliesDraft): Promise<string[]>;
+  categories(target: DocumentRef): Promise<string[]>;
+  families(target: DocumentRef, draft: FamiliesDraft): Promise<string[]>;
   profiles(): Promise<string[]>;
-  project(target: string, familyIds: number[]): Promise<FfProjectData>;
-  openFamily(target: string, familyId: number): Promise<{ savedPath?: string | null }>;
-  openPath(target: string, path: string): Promise<unknown>;
 }
 
 export function createLiveFamiliesHost(): FamiliesHost {
   return {
-    async sessions() {
-      return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
-    },
     async categories(target) {
       const result = await callHostRpc(
         "revit.catalog.loaded-families",
         { filter: { placementScope: "AllLoaded" }, budget: { maxEntries: 5000 } },
-        { bridgeSessionId: target || undefined },
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
       );
       return [
         ...new Set(
@@ -49,7 +41,7 @@ export function createLiveFamiliesHost(): FamiliesHost {
           },
           budget: { maxEntries: 5000 },
         },
-        { bridgeSessionId: target || undefined },
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
       );
       return [
         ...new Set(
@@ -72,11 +64,5 @@ export function createLiveFamiliesHost(): FamiliesHost {
         .map((entry) => entry.relativePath)
         .sort((a, b) => a.localeCompare(b));
     },
-    project: (target, familyIds) =>
-      callHostRpc("familyfoundry.project", { familyIds }, { bridgeSessionId: target || undefined }),
-    openFamily: (target, familyId) =>
-      callHostRpc("family.editor.open", { familyId }, { bridgeSessionId: target || undefined }),
-    openPath: (target, path) =>
-      callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
   };
 }

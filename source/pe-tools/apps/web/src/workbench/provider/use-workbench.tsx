@@ -66,7 +66,10 @@ export function resumeDataForSuspension(
   return reject ? "Rejected" : "Approved";
 }
 
-export async function rejectApproval(session: SessionClient, approval: Approval): Promise<void> {
+export async function rejectApproval(
+  session: Pick<SessionClient, "respondToToolSuspension" | "approveTool">,
+  approval: Approval,
+): Promise<void> {
   if (approval.kind === "suspension") {
     await session.respondToToolSuspension(
       approval.toolCallId,

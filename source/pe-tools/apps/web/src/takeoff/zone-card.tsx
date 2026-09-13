@@ -1,15 +1,14 @@
-import { useAtomValue } from "@effect/atom-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import { Verb, VerbGroup } from "#/components/lang/verb";
+import { ActionButton, ActionGroup } from "#/components/lang/action-button";
 import { fmtNum } from "#/components/master-table/model";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
 import type { TakeoffStore } from "#/takeoff/store";
 import { ZonePeek } from "#/takeoff/zone-peek";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
-import type { WorldRoom, WorldSystem, WorldZone } from "#/takeoff/world";
+import type { ModelRoom, ModelSystem, ModelZone } from "#/takeoff/world";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { hostReason } from "#/takeoff/room-actions";
 import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
@@ -27,17 +26,17 @@ export function ZoneCard({
   onClose,
 }: {
   store: TakeoffStore;
-  zone: WorldZone;
-  cursorRoom: WorldRoom | null;
+  zone: ModelZone;
+  cursorRoom: ModelRoom | null;
   geoReady: boolean;
   live: boolean;
   busy: string | null;
   actions: AtlasActions;
-  stateOf: (room: WorldRoom) => RoomState;
-  systems: WorldSystem[];
+  stateOf: (room: ModelRoom) => RoomState;
+  systems: ModelSystem[];
   onClose: () => void;
 }) {
-  const entity = useAtomValue(store.atoms.entity(zone.zone.guid));
+  const entity = store.entity(zone.zone.guid);
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
   const closure = run
@@ -117,8 +116,8 @@ export function ZoneCard({
 
           {live && (
             <div className="pt-0.5">
-              <VerbGroup title="zone verbs" radius="document · model">
-                <Verb
+              <ActionGroup title="zone verbs" radius="document · model">
+                <ActionButton
                   tone="commit"
                   label={
                     zone.rooms.length + zone.residues.length > 0
@@ -138,7 +137,7 @@ export function ZoneCard({
                   }
                   onClick={() => actions.partition(zone)}
                 />
-              </VerbGroup>
+              </ActionGroup>
             </div>
           )}
         </div>

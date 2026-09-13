@@ -1,20 +1,64 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { familiesRouteState } from "./families.ts";
+import { familiesBasis, familiesIncluded, familiesRouteState } from "./families.ts";
 
 describe("familiesRouteState", () => {
-  it("supplies the empty plan-hash chain defaults", () => {
+  it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      bindings: {},
       profilePath: null,
-      plan: null,
+      scope: null,
       excludedIds: [],
-      apply: null,
     });
+    // The whole document is agent-writable because the whole document is authored input.
+    expect(familiesRouteState.agentWriteMask).toEqual([
+      ["profilePath"],
+      ["scope"],
+      ["excludedIds"],
+      ["executionOptions"],
+    ]);
   });
 
-  it("keeps apply human-only and exposes only the two agent patch homes", () => {
-    expect(familiesRouteState.agentWriteMask).toEqual([["excludedIds"], ["profilePath"]]);
-    expect(familiesRouteState.commands.apply?.actor).toBe("human");
+  it("advertises no route command at all: reading and applying are host ports", () => {
+    expect(Object.keys(familiesRouteState.commands)).toEqual([]);
+  });
+
+  it("stamps the basis on the planning inputs, and only those", () => {
+    const work = familiesRouteState.schema.parse({
+      profilePath: "desk.json",
+      scope: { categoryNames: ["Ducts"], familyNames: ["Box"], placementScope: "AllLoaded" },
+    });
+    const excluded = { ...work, excludedIds: [7] };
+    // Excluding a family narrows a plan; it does not invalidate the native reading.
+    expect(familiesBasis(excluded)).toBe(familiesBasis(work));
+    expect(familiesBasis({ ...work, profilePath: "other.json" })).not.toBe(familiesBasis(work));
+    expect(
+      familiesBasis({
+        ...work,
+        scope: { ...work.scope!, placementScope: "PlacedOnly" as const },
+      }),
+    ).not.toBe(familiesBasis(work));
+  });
+
+  it("includes only unexcluded entries that have an effect and no refusal", () => {
+    const entry = (familyId: number, planHash: string, over: Record<string, unknown> = {}) => ({
+      familyId,
+      familyName: `f${familyId}`,
+      planHash,
+      changes: [{ section: "types", key: "W", kind: "set" }],
+      runEffects: [],
+      refusals: [],
+      warnings: [],
+      ...over,
+    });
+    const plan = {
+      entries: [
+        entry(1, "h1"),
+        entry(2, "h2"),
+        entry(3, "h3", { refusals: [{ code: "X", path: "/", message: "no" }] }),
+        entry(4, "h4", { changes: [], runEffects: [] }),
+      ],
+    };
+    expect(familiesIncluded(plan, [2])).toEqual({ "1": "h1" });
+    expect(familiesIncluded(plan, [])).toEqual({ "1": "h1", "2": "h2" });
   });
 });

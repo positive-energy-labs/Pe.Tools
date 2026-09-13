@@ -1,7 +1,7 @@
 import { type ComponentType, useCallback, useEffect, useState } from "react";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { callHostRpc } from "#/host/client";
 import type { HostSessionScope, OpCallArgs, OpKey } from "@pe/host-contracts/operation-types";
 
@@ -115,7 +115,7 @@ export function SyntheticRunner({
       )}
       {results && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Verb
+          <ActionButton
             label="refresh"
             onClick={() => void runAll()}
             busy={running}

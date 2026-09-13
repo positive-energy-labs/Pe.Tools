@@ -23,7 +23,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight, X } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
 import { isRenderable, toThreadMessages } from "./aui-adapter";
 import { APPROVAL_OPTIONS, readRecord, readString, toolTarget } from "./chat-state";
@@ -320,7 +320,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         toolCallId={toolCallId}
         toolName={toolName}
         args={args}
-        sessionState={{}}
+        sessionState={result}
         running={status?.type === "running"}
       />
       {question ? (
@@ -330,7 +330,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
           {(approval.options ?? APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");
             return (
-              <Verb
+              <ActionButton
                 key={option.id}
                 tone={allow ? "commit" : "act"}
                 icon={allow ? Check : X}
@@ -403,7 +403,7 @@ function AskUserPrompt({
             onChange={(event) => setAnswer(event.target.value)}
           />
           <div>
-            <Verb
+            <ActionButton
               tone="commit"
               icon={Check}
               label="Answer"
@@ -439,7 +439,7 @@ function AskUserPrompt({
             ))}
           </div>
           <div>
-            <Verb
+            <ActionButton
               tone="commit"
               icon={Check}
               label="Answer"
@@ -453,7 +453,7 @@ function AskUserPrompt({
         <div className="grid gap-1">
           {question.options.map((option) => (
             <div key={option.label} className="flex items-baseline gap-2">
-              <Verb
+              <ActionButton
                 tone="act"
                 label={option.label}
                 reason={option.description ?? `Answer ${option.label}`}

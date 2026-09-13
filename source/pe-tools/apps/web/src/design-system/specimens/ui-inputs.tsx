@@ -41,7 +41,7 @@ import {
   selectRecipe,
 } from "#/components/lang/select";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
-import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
+import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid } from "./recipe-grid";
 
 type Option = (typeof CATEGORY_OPTIONS)[number];

@@ -141,14 +141,12 @@ describe("buildRefusals — the ceremony's whole safety model", () => {
 });
 
 describe("the arming preview — which family, from which document, to which .rfa", () => {
-  it("names all three, and mirrors build_evidence's own default output path", () => {
-    // The `.json` really does stay in the middle: the host builds the name from the relative path
-    // verbatim. A prettier name here would be a path that does not exist.
+  it("names the source and the admitted action output pattern", () => {
     expect(buildOutputPath("models/fcu.family.json")).toBe(
-      ".artifacts/tmp/family/models-fcu.family.json-<timestamp>.rfa",
+      ".artifacts/tmp/family/<action-id-sha256>.rfa",
     );
     expect(buildTarget(CLEAN, "Fan Coil Unit")).toBe(
-      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/models-fcu.family.json-<timestamp>.rfa",
+      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
     );
   });
 

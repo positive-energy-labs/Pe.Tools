@@ -1,7 +1,7 @@
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
+import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/lang/verb-lane";
 import {
   Select,
   SelectContent,
@@ -10,25 +10,25 @@ import {
   SelectValue,
 } from "#/components/lang/select";
 import { HostIssuePanel } from "#/host/issues";
-import { LoadedFamilyPlacementScope } from "#/host/loaded-families-view";
+import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
-const PLACEMENT_LABELS: Record<LoadedFamilyPlacementScope, string> = {
-  [LoadedFamilyPlacementScope.AllLoaded]: "all loaded",
-  [LoadedFamilyPlacementScope.PlacedOnly]: "placed only",
-  [LoadedFamilyPlacementScope.UnplacedOnly]: "unplaced only",
+const PLACEMENT_LABELS: Record<LoadedFamilyPlacement, string> = {
+  [LoadedFamilyPlacement.AllLoaded]: "all loaded",
+  [LoadedFamilyPlacement.PlacedOnly]: "placed only",
+  [LoadedFamilyPlacement.UnplacedOnly]: "unplaced only",
 };
-const PLACEMENT_NOTES: Record<LoadedFamilyPlacementScope, string> = {
-  [LoadedFamilyPlacementScope.AllLoaded]:
+const PLACEMENT_NOTES: Record<LoadedFamilyPlacement, string> = {
+  [LoadedFamilyPlacement.AllLoaded]:
     "Every family loaded into the project, placed or not — this also catches library families sitting unused in the file.",
-  [LoadedFamilyPlacementScope.PlacedOnly]:
+  [LoadedFamilyPlacement.PlacedOnly]:
     "Only families with at least one placed instance — what the project actually uses. Narrower scope, cheaper matrix.",
-  [LoadedFamilyPlacementScope.UnplacedOnly]:
+  [LoadedFamilyPlacement.UnplacedOnly]:
     "Only families with no placed instance — the loaded-but-unused tail, usually the purge conversation.",
 };
 
-export function FamiliesScopeBand() {
+export function FamiliesFilterBand() {
   const {
     fixture,
     store,
@@ -69,7 +69,7 @@ export function FamiliesScopeBand() {
           <Select
             items={PLACEMENT_LABELS}
             value={placement}
-            onValueChange={(value: LoadedFamilyPlacementScope | null) =>
+            onValueChange={(value: LoadedFamilyPlacement | null) =>
               value && setPlacement(value)
             }
           >
@@ -80,7 +80,7 @@ export function FamiliesScopeBand() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
+              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacement[]).map((value) => (
                 <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
                   {PLACEMENT_LABELS[value]}
                 </SelectItem>
@@ -157,7 +157,7 @@ export function FamiliesScopeBand() {
       </div>
 
       <div className="hairline-b px-2 py-1 empty:hidden">
-        <VerbLane atoms={store.atoms} />
+        <OutcomeStrip failure={store.failure} />
       </div>
       {matrixIssue && (
         <div className="px-4 py-2">

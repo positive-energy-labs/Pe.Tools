@@ -27,14 +27,14 @@ import { Triptych } from "#/family-review/proto/views";
 import { token } from "#/lib/token";
 
 /** One family at one type — the unit the board judges. */
-export interface Stage {
+export interface BoardCase {
   family: BoardFamily;
   typeName: string;
   rows: ReviewRow[];
   key: string;
 }
 
-export function stages(families: BoardFamily[]): Stage[] {
+export function boardCases(families: BoardFamily[]): BoardCase[] {
   return families.flatMap((family) => {
     const typeNames = Object.keys(family.probes);
     // A refused family still stages: the refusal IS its content, not an error to hide.
@@ -87,7 +87,7 @@ const VERDICT_KEYS: Verdict[] = ["good", "unsure", "wrong"];
 /**
  * The human's call. Three buttons, no confirm — nothing leaves the page, so no ceremony is owed.
  *
- * GAP: a raw button element rather than a primitive. `lang/Verb` is a verb (it acts); this is a
+ * GAP: a raw button element rather than a primitive. `lang/ActionButton` is a verb (it acts); this is a
  * three-way EXCLUSIVE CHOICE that must also express "not judged yet". `ui/toggle-group` is the
  * right shape and cannot be used: it carries shadcn chrome (`rounded-lg`, `border-line`,
  * arbitrary translucent fills instead of role tokens and the 2px radius, and it has no empty member. Owed as
@@ -178,7 +178,7 @@ const SIDEBAR_PANEL = 80;
  * the document declares. Six drawings you can recognise a family by, and a list you can check a
  * json against — neither of them a verdict surface.
  */
-export function FamilySidebar({ stage }: { stage: Stage }) {
+export function FamilySidebar({ stage }: { stage: BoardCase }) {
   const probe = stage.family.probes[stage.typeName];
   const predicted = probe ? authoredScene(probe) : EMPTY_SCENE;
   const actual = probe ? actualScene(probe) : EMPTY_SCENE;

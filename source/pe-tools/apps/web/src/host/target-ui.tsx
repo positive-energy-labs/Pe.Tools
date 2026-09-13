@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import type { Lane } from "#/host/target";
+import type { Lane } from "#/readings";
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
@@ -44,7 +44,7 @@ export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) 
   return <span style={{ width: 6, height: 6, borderRadius: 1, backgroundColor: color }} />;
 }
 
-export function LaneBadge({ lane }: { lane: Lane }) {
+export function DeployBadge({ lane }: { lane: Lane }) {
   return (
     <span
       style={{

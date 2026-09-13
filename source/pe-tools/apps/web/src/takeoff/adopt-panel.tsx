@@ -1,10 +1,7 @@
-import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { Cause } from "effect";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
 import { fmtNum } from "#/components/master-table/model";
 import { type CandidateRegion } from "#/takeoff/model";
@@ -18,14 +15,12 @@ export interface AdoptRow {
   systemTag: string;
 }
 
-export function AdoptPanel({ store }: { store: TakeoffStore }) {
-  const views = useAtomValue(store.atoms.views);
-  const zones = useAtomValue(store.atoms.world).zones;
-  const listed = useAtomValue(store.atoms.adoptRows);
-  const candidates = useAtomValue(store.atoms.candidates);
-  const carriers = useAtomValue(store.atoms.carrierPreflight);
-  const busy = useAtomValue(store.atoms.busy)?.id ?? null;
-  const needsInitialization = carriers?.status === "needs-initialization";
+export function AdoptRegions({ store }: { store: TakeoffStore }) {
+  const views = store.views;
+  const zones = store.world.zones;
+  const listed = store.adoptRows;
+  const failure = store.failure;
+  const busy = store.busy?.key ?? null;
 
   const patchRow = (view: string, elementId: number, patch: Partial<AdoptRow>) =>
     store.actions.patchAdopt(view, elementId, patch);
@@ -38,29 +33,21 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
   };
 
   return (
-    <Panel
-      title={`adopt zoning regions — ${views.length} view${views.length === 1 ? "" : "s"}`}
-      onClose={() => store.actions.openPanel(null)}
-    >
+    <section aria-label="Adopt zoning regions" className="p-2 whitespace-normal">
       <p>
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
       </p>
-      {needsInitialization ? (
-        <div className="mt-2">
-          <OutcomeLine
-            kind="advisory"
-            label={`${carriers.missingCarrierGuids.length} carrier${carriers.missingCarrierGuids.length === 1 ? "" : "s"} need initialization`}
-            says={carriers.missingCarrierGuids.join(", ")}
-          />
-          <Verb
-            label="initialize next carrier"
-            disabled={busy !== null}
-            reason="Binds exactly one missing adoption carrier in its own Revit transaction and Host receipt."
-            onClick={() => void store.actions.initializeCarrier("Adoption").catch(() => undefined)}
-          />
-        </div>
-      ) : null}
+      {busy === "adopt" && (
+        <OutcomeLine
+          kind="busy"
+          label="adopting zones"
+          says="Preparing the model and stamping the selected regions."
+        />
+      )}
+      {store.busy === null && failure !== null && (
+        <OutcomeLine kind="error" label="adoption failed" says={failure.message} />
+      )}
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
           <div
@@ -69,6 +56,7 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
           >
             <input
               type="checkbox"
+              aria-label={`Select ${r.name} in ${r.view}`}
               checked={r.checked}
               onChange={(e) => patchRow(r.view, r.region.elementId, { checked: e.target.checked })}
             />
@@ -81,12 +69,14 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
             </span>
             <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
             <input
+              aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
               value={r.name}
               placeholder="zone name"
               onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
               className="h-6 min-w-0 flex-1 px-1.5"
             />
             <input
+              aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
               value={r.systemTag}
               placeholder="system tag"
               onChange={(e) => patchRow(r.view, r.region.elementId, { systemTag: e.target.value })}
@@ -104,15 +94,7 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
         ))}
         {listed === null && (
           <div className="px-2 py-3">
-            {AsyncResult.isFailure(candidates) ? (
-              <OutcomeLine
-                kind="error"
-                label="reading regions failed"
-                says={String(Cause.squash(candidates.cause))}
-              />
-            ) : (
-              <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
-            )}
+            <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
           </div>
         )}
         {listed !== null && listed.length === 0 && (
@@ -124,18 +106,16 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
         )}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <Verb
+        <ActionButton
           tone="commit"
           label={`stamp ${picked.length} as zoning regions`}
-          disabled={busy !== null || picked.length === 0 || needsInitialization}
+          disabled={busy !== null || picked.length === 0}
           reason={
             busy !== null
               ? `${busy} is in flight`
-              : needsInitialization
-                ? "initialize the listed Takeoff carriers first"
-                : picked.length === 0
-                  ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
-                  : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`
+              : picked.length === 0
+                ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
+                : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`
           }
           onClick={adopt}
         />
@@ -143,15 +123,16 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
           {zones.length} already adopted
         </FactChip>
       </div>
-    </Panel>
+    </section>
   );
 }
 
 export function SyncPanel({ store }: { store: TakeoffStore }) {
-  const { zones: zoneGuids, r10: r10Path } = useAtomValue(store.atoms.selection);
-  const { inScope, blockedZones, inserts, untagged, tags } = useAtomValue(store.atoms.syncPlan);
-  const busy = useAtomValue(store.atoms.busy)?.id ?? null;
+  const { zones: zoneGuids, r10: r10Path } = store.selection;
+  const { inScope, blockedZones, inserts, untagged, tags, linkedUpdates } = store.syncPlan;
+  const busy = store.busy?.key ?? null;
   const sync = () => void store.actions.syncRhvac().catch(() => undefined);
+  const refusal = store.handle.actions["commit-sync"].refusal;
 
   return (
     <Panel title={`sync to ${r10Path}`} onClose={() => store.actions.openPanel(null)}>
@@ -207,24 +188,33 @@ export function SyncPanel({ store }: { store: TakeoffStore }) {
       {blockedZones.length > 0 && (
         <OutcomeLine
           kind="advisory"
-          label={`${blockedZones.length} zone(s) excluded`}
+          label={`${blockedZones.length} zone(s) block this sync`}
           says="resolve room flags, orphaned regions, materialization failures, or post-sync area drift first"
         />
       )}
 
       <div className="mt-2 flex items-center gap-2">
-        <Verb
+        <ActionButton
           tone="commit"
-          label={`sync ${inserts.length} rooms`}
-          disabled={busy !== null || inserts.length === 0 || untagged > 0}
+          label={`sync ${inserts.length + linkedUpdates} rooms`}
+          disabled={
+            busy !== null ||
+            refusal !== null ||
+            blockedZones.length > 0 ||
+            (inserts.length === 0 && linkedUpdates === 0) ||
+            untagged > 0
+          }
           reason={
-            busy !== null
+            refusal ??
+            (busy !== null
               ? `${busy} is in flight`
-              : inserts.length === 0
-                ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
-                : untagged > 0
-                  ? `${untagged} eligible room(s) sit in zones with no system tag — tag those zones first`
-                  : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
+              : blockedZones.length > 0
+                ? "Resolve the blocked zones before syncing this scope"
+                : inserts.length === 0 && linkedUpdates === 0
+                  ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
+                  : untagged > 0
+                    ? `${untagged} eligible room(s) sit in zones with no system tag — tag those zones first`
+                    : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`)
           }
           onClick={sync}
         />

@@ -18,7 +18,7 @@ test("chat route store owns page atoms, URL projection, and verb receipts only",
   store.actions.setLensFollowing(false);
   store.actions.setMode("world");
   await store.actions.openThread("thread-2", true);
-  await store.runVerb("inspect", async () => "inspected");
+  await store.runAction("inspect", async () => null);
 
   expect(registry.get(store.atoms.lensInspectKey)).toBe("tool-1");
   expect(registry.get(store.atoms.lensFollowing)).toBe(false);
@@ -26,6 +26,5 @@ test("chat route store owns page atoms, URL projection, and verb receipts only",
     { partial: { mode: "world" }, replace: undefined },
     { partial: { thread: "thread-2" }, replace: true },
   ]);
-  expect(registry.get(store.atoms.receipt)?.text).toBe("inspected");
   store.dispose();
 });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import type { WorldEvent } from "#/host/use-target";
+import type { SessionEvent } from "#/host/use-target";
 import {
   imageSource,
   selectToolCalls,
@@ -171,7 +171,7 @@ export function buildTraceCells(state: ChatState): TraceCell[] {
   }));
 }
 
-export function ticksForMoment(log: WorldEvent[], moments: Moment[], index: number): WorldEvent[] {
+export function ticksForMoment(log: SessionEvent[], moments: Moment[], index: number): SessionEvent[] {
   if (log.length === 0) return [];
   const at = (i: number) => moments[i]?.createdAt?.getTime();
   const lower = index > 0 ? at(index - 1) : undefined;

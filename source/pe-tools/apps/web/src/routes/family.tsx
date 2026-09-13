@@ -1,36 +1,32 @@
+import { FileWorkspace, fileSearch } from "#/settings/file-workspace";
+import type { WorkKey, SettingsDocumentId } from "@pe/agent-contracts";
 import { useEffect } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import { bridgeSelector, sdkSessionIdSchema } from "@pe/agent-contracts";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamilyStore, familyFixtures, type FamilyFixtureName } from "#/family/fixture";
-import { createLiveFamilyHost } from "#/family/host";
-import { createFamilyStore } from "#/family/store";
+import { useFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
-import { RouteScope, routeScopeSearch } from "#/workbench/route-scope";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import type { Scope } from "#/state/route-store";
+import { manifest as familyManifest } from "#/family/manifest";
+export const manifest = familyManifest;
+import { routeSearch } from "#/route";
 
 export const familySearch = (
   search: Record<string, unknown>,
-): ReturnType<typeof routeScopeSearch> & {
+): ReturnType<typeof routeSearch> & {
+  mode?: "file";
+  module?: string;
+  root?: string;
+  file?: string;
   thread?: string;
-  source?: "fixture";
-  fixture?: FamilyFixtureName;
+  demo?: string;
   capture?: boolean;
 } => ({
-  ...routeScopeSearch(search),
+  ...routeSearch(search),
+  ...fileSearch(search),
   capture: search.capture === true || search.capture === "true" ? true : undefined,
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
-  fixture:
-    search.source === "fixture" &&
-    typeof search.fixture === "string" &&
-    Object.hasOwn(familyFixtures, search.fixture)
-      ? (search.fixture as FamilyFixtureName)
-      : undefined,
+  /** `?demo=<action>` mounts one seed of `manifest.seeds`; `?source=fixture` is gone. */
+  demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
 
 export const Route = createFileRoute("/family")({
@@ -39,52 +35,57 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  return <FamilyRouteContent {...Route.useSearch()} />;
+  const search = Route.useSearch();
+  return <FamilyRouteContent {...search} />;
 }
 
 export function FamilyRouteContent({
-  source,
-  fixture,
   capture,
+  target,
+  ...initial
 }: {
-  source?: "fixture";
-  fixture?: FamilyFixtureName;
   capture?: boolean;
-}) {
-  if (source === "fixture") return <FamilyFixtureRoute key={fixture} fixture={fixture} />;
+  target?: string;
+} & Partial<ReturnType<typeof fileSearch>>) {
+  // In the demo lane the SEED is the file: the picker and its host read stood between `?demo=`
+  // and the seeded surface, so the route's own proof never reached its own actions (same cut as
+  // `routes/settings.tsx`).
+  if (new URLSearchParams(globalThis.location?.search ?? "").get("demo"))
+    return (
+      <FamilyPage
+        fileKey={{ route: "family", target: null, work: "demo" }}
+        selectFile={async () => {}}
+        target={target}
+        capture={capture}
+      />
+    );
   return (
-    <RouteScope>
-      {(scope) => (
-        <FamilyStoreOwner key={bridgeSelector(scope.scope)} scope={scope} capture={capture} />
+    <FileWorkspace family initial={initial}>
+      {(fileKey, selectFile) => (
+        <FamilyPage
+          fileKey={fileKey}
+          selectFile={selectFile}
+          target={target}
+          capture={capture}
+        />
       )}
-    </RouteScope>
+    </FileWorkspace>
   );
 }
 
-function FamilyFixtureRoute({ fixture }: { fixture?: FamilyFixtureName }) {
-  const store = useRouteStore(() => createFixtureFamilyStore(appAtomRegistry, fixture));
-  return <FamilyWorkspace store={store} source="fixture" />;
-}
-
-function FamilyStoreOwner({ scope, capture }: { scope: Scope; capture?: boolean }) {
-  const navigate = useNavigate({ from: "/family" });
-  const store = useRouteStore(() => {
-    return createFamilyStore({
-      registry: appAtomRegistry,
-      scope,
-      host: createLiveFamilyHost(),
-      navigateTarget: (target) =>
-        navigate({
-          to: "/family",
-          search: (previous) => ({
-            ...previous,
-            doc: scope.scope.document,
-            target: sdkSessionIdSchema.parse(target),
-          }),
-        }),
-    });
-  });
-  const ready = useAtomValue(store.atoms.ready) != null;
+function FamilyPage({
+  fileKey,
+  selectFile,
+  target,
+  capture,
+}: {
+  fileKey: WorkKey;
+  selectFile: (id: SettingsDocumentId) => Promise<void>;
+  target?: string;
+  capture?: boolean;
+}) {
+  const store = useFamilyStore({ target, fileKey, selectFile });
+  const ready = store.ready != null;
   useEffect(() => {
     if (capture && ready) void store.actions.capture().catch(() => undefined);
   }, [capture, ready, store]);

@@ -2,9 +2,9 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import {
-  FieldOptionMultiSelect,
+  FieldOptionPicker,
   FieldOptionSelect,
   parameterReferenceFromOption,
   useFieldOptions,
@@ -109,7 +109,7 @@ export function DefinitionCard({
             aria-label="definition id"
             title="The definition's id — how assignments and receipts refer to it"
           />
-          <Verb
+          <ActionButton
             label="remove"
             icon={Trash2}
             disabled={disabled}
@@ -268,7 +268,7 @@ export function DefinitionCard({
       <div className="px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between">
           <span className="">Assignments</span>
-          <Verb
+          <ActionButton
             label="add assignment"
             icon={Plus}
             disabled={disabled}
@@ -301,7 +301,7 @@ export function DefinitionCard({
                     enabled
                   </label>
                   <span className="truncate">{assignment.id}</span>
-                  <Verb
+                  <ActionButton
                     label="remove"
                     icon={Trash2}
                     disabled={disabled}
@@ -310,7 +310,7 @@ export function DefinitionCard({
                   />
                 </div>
                 <Field label="Source elements">
-                  <FieldOptionMultiSelect
+                  <FieldOptionPicker
                     items={elements.items}
                     values={assignment.sourceElementUniqueIds}
                     disabled={disabled}

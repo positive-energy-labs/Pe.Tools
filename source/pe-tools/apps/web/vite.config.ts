@@ -71,6 +71,11 @@ const config = defineConfig(({ mode }) => {
               } as const;
               return {
                 "/call": options,
+                "^/actions(?:/(?:recover|resume))?(?:\\?|$)": options,
+                "^/family/readings(?:\\?|$)": options,
+                // Root-mounted host route, like /family/readings — `peUrl` would send it to
+                // /pe/schedule-grid/readings, which the host does not serve (call-route.ts:624).
+                "^/schedule-grid/readings(?:\\?|$)": options,
                 "/events": options,
                 "/ops": options,
                 "/schemas": options,
@@ -88,6 +93,11 @@ const config = defineConfig(({ mode }) => {
     // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
     // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
     optimizeDeps: {
+      // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
+      // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
+      // committed). Serve the bundle as soon as it exists; a hanging import then shows up as one
+      // pending request instead of a blank page.
+      holdUntilCrawlEnd: false,
       include: [
         "react",
         "react-dom",

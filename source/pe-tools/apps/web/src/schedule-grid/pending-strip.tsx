@@ -3,7 +3,7 @@ import { FactChip } from "#/components/lang/chip";
 import { StateCell } from "#/components/lang/cell";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
 import type { CellState } from "#/schedule-grid/route";
@@ -82,19 +82,19 @@ export function PendingStrip({
                 )}
                 <span className="flex shrink-0 items-center gap-1.5">
                   {isStaged ? (
-                    <Verb
+                    <ActionButton
                       label="unstage"
                       reason="Return this cell to its snapshot value. A proposal it was approved from is restored to the open list."
                       onClick={() => undo(key)}
                     />
                   ) : (
                     <>
-                      <Verb
+                      <ActionButton
                         label="deny"
                         reason="Clear pea's proposal for this cell — the snapshot value stands."
                         onClick={() => deny(key)}
                       />
-                      <Verb
+                      <ActionButton
                         label="approve"
                         reason={`Approve and stage "${String(cell.proposal?.value ?? "")}" for the next push.`}
                         onClick={() => stageValue(key, String(cell.proposal?.value ?? ""))}

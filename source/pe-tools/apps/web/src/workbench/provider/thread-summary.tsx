@@ -1,6 +1,6 @@
 import { createContext } from "react";
 import { MastraClient, type PlanResume } from "@mastra/client-js";
-import type { PeaWorldDescriptor } from "@pe/agent-contracts";
+import type { PeaSessionDescriptor } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
 import { type AccessLevel, type ChatState } from "../chat-state";
 import { type ChatPageStore, type WorkbenchAttachment } from "../store";
@@ -22,13 +22,20 @@ export type SessionClient = ReturnType<ReturnType<MastraClient["getAgentControll
 export interface WorkbenchContextValue {
   store: ChatPageStore;
   config: WorkbenchEndpointConfig;
+  /**
+   * The live session client, or undefined until the host answers. The chat MANIFEST's two actions
+   * refuse without it, and the provider never handed it out — so `chat/manifest.ts`'s `send` and
+   * `cancel` were unreachable from the route shell, refusing "Session is not ready" forever while
+   * the composer's own copy of the same two actions ran. One session, one owner.
+   */
+  session?: SessionClient;
   chat: ChatState;
   loading: boolean;
   error?: string;
   threads: StoredThreadSummary[];
   currentThreadId: string;
   revit?: boolean;
-  world?: PeaWorldDescriptor;
+  world?: PeaSessionDescriptor;
   isRunning: boolean;
   operationError?: string;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;

@@ -1,4 +1,41 @@
-import { Effect, Schema } from "effect";
+import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
+import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
+import { instancesActions } from "@pe/agent-contracts";
+import { semanticActions } from "@pe/agent-contracts";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import { hostActionJournal } from "./gateway-owner.ts";
+import {
+  admitGatewayAction,
+  recoverGatewayAction,
+  operationDefinition,
+  gatewayTarget,
+} from "./gateway-actions.ts";
+import { actionBasesSchema, actionListFilterSchema, routeBindingsSchema } from "@pe/agent-contracts";
+import {
+  admitFamilyAction,
+  recoverFamilyAction,
+  readFamily,
+  type FamilyActionDependencies,
+} from "./family-actions.ts";
+import { familyActions, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
+import { actionWorkspace } from "./takeoff-actions.ts";
+import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
+import { takeoffActions } from "@pe/agent-contracts";
+import { Effect, Layer, Schema } from "effect";
+import {
+  addressSchema,
+  sameAddress,
+  documentRefSchema,
+  actionStatusSchema,
+} from "@pe/agent-contracts";
+import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
+import {
+  projectTakeoffSnapshot,
+  projectTakeoffViews,
+  takeoffProjectIndexRequest,
+} from "../../../packages/mcps/src/shared/takeoff-ops.ts";
+import type { OpResponseOf } from "@pe/host-contracts/operation-types";
+import { ActionJournal } from "./action-journal.ts";
 import { boundedPayload, capture } from "@pe/runtime";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
@@ -36,6 +73,12 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
+/** A refusal's own words. `BridgeError` is a plain class, so `String()` would say [object Object]. */
+const said = (error: unknown): string =>
+  error !== null && typeof error === "object" && "message" in error
+    ? String((error as { message: unknown }).message)
+    : String(error);
+
 /**
  * The entire browser/CLI-facing wire: POST /call { key, request? } → JSON.
  * TS-only ops dispatch locally; every other key passes through to the bridge
@@ -45,113 +88,634 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
 // ponytail: dev-only escape — PE_TOOLS_CALL_FORWARD=<base-url> makes this host a pure
 // /call proxy (e.g. to the installed host that owns the Revit bridge) while still serving
 // the checkout's web UI with HMR. Delete when an installed-lane session can dial a dev host.
-const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
 
-export const callRoute = HttpRouter.add("POST", "/call", (req) => {
-  // Set once dispatch begins so the catch below can attribute failures to the op.
-  let op:
-    | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
-    | undefined;
-  return Effect.gen(function* () {
-    // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
-    // a missing header is counted as "unknown", never rejected. No registry, no validation.
-    const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
-    const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
-    if (CALL_FORWARD_BASE) {
-      const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
-      const documentHeader = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim();
-      const forwarded = yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(`${CALL_FORWARD_BASE}/call`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
-              ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
-              [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
-            },
-            body: JSON.stringify(body),
-          });
-          return {
-            status: response.status,
-            json: (await response.json()) as unknown,
-            headers: Object.fromEntries(
-              [RESOLVED_SESSION_HEADER, RESOLVED_DOCUMENT_HEADER].flatMap((key) => {
-                const value = response.headers.get(key);
-                return value ? [[key, value]] : [];
-              }),
+export type CallRouteDispatch = (
+  ...args: Parameters<typeof dispatchTsOnlyOperation>
+) => Effect.Effect<
+  unknown,
+  Effect.Error<ReturnType<typeof dispatchTsOnlyOperation>>,
+  Effect.Services<ReturnType<typeof dispatchTsOnlyOperation>>
+>;
+
+export function makeCallRoute(
+  operations?: ActionJournal,
+  captures?: TakeoffCaptures,
+  actionDeps: FamilyActionDependencies & { launchShell?: (path: string) => Promise<void> } = {},
+  composition?: {
+    readonly forwardBase: string | null;
+    readonly dispatch: CallRouteDispatch;
+    readonly captureHostOp?: typeof captureHostOp;
+    readonly local?: Parameters<typeof admitGatewayAction>[3];
+  },
+) {
+  const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
+  const captureOperation = composition?.captureHostOp ?? captureHostOp;
+  const forwardBase = composition ? composition.forwardBase : CALL_FORWARD_BASE;
+  const dispatch: CallRouteDispatch = (...args) =>
+    (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
+  const observations = () => (captures ??= hostTakeoffCaptures());
+  const owner = () => (operations ??= hostActionJournal());
+  const admit = (raw: unknown, bridge: RevitBridge["Service"], resume = false) => {
+    const input = actionAdmissionSchema.parse(raw);
+    return input.kind === "workflow" && input.key === "schedule-grid.apply"
+      ? admitScheduleAction(input, owner(), observations(), bridge, actionDeps, resume)
+      : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
+        ? admitInstancesAction(input, owner(), actionDeps, resume)
+        : input.kind === "workflow" && Object.hasOwn(familyActions, input.key)
+          ? admitFamilyAction(input, owner(), observations(), bridge, actionDeps, resume)
+          : input.kind === "workflow" && Object.hasOwn(takeoffActions, input.key)
+            ? admitTakeoffAction(input, owner(), observations(), bridge, actionDeps, resume)
+            : admitGatewayAction(
+                input,
+                owner(),
+                bridge,
+                composition?.local ??
+                  ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                actionDeps.sdk,
+                resume,
+              );
+  };
+  const post = HttpRouter.add("POST", "/call", (req) => {
+    let captureId: string | undefined;
+    // Set once dispatch begins so the catch below can attribute failures to the op.
+    let op:
+      | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
+      | undefined;
+    return Effect.gen(function* () {
+      // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
+      // a missing header is counted as "unknown", never rejected. No registry, no validation.
+      const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
+      const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
+      if (forwardBase) {
+        if (
+          !isRecord(body) ||
+          !tsOnlyOperationCatalog.some((row) => row.key === body.key && row.intent === "Read")
+        )
+          return yield* Effect.fail(
+            new BridgeError(
+              "Forwarded native/mutation calls require the integrated admission host",
+              409,
+              { notDispatched: true },
             ),
-          };
-        },
-        catch: (cause) =>
-          new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
-      });
-      // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
-      // page lists both surfaces (the forward target may run an older TS-only set).
-      if (isRecord(body) && body.key === "host.ops.catalog" && forwarded.status === 200) {
-        const catalog = forwarded.json as { operations?: { key?: string }[] };
-        if (Array.isArray(catalog.operations)) {
-          const seen = new Set(catalog.operations.map((op) => op.key));
-          catalog.operations.push(
-            ...tsOnlyOperationCatalog.filter((entry) => !seen.has(entry.key)),
+          );
+        const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
+        const documentHeader = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim();
+        const forwarded = yield* Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`${forwardBase}/call`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
+                ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
+                [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
+              },
+              body: JSON.stringify(body),
+            });
+            return {
+              status: response.status,
+              json: (await response.json()) as unknown,
+              headers: Object.fromEntries(
+                [
+                  RESOLVED_SESSION_HEADER,
+                  RESOLVED_DOCUMENT_HEADER,
+                  "x-pe-takeoff-capture-id",
+                ].flatMap((key) => {
+                  const value = response.headers.get(key);
+                  return value ? [[key, value]] : [];
+                }),
+              ),
+            };
+          },
+          catch: (cause) =>
+            new BridgeError(`call forward to ${forwardBase} failed: ${String(cause)}`, 503),
+        });
+        // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
+        // page lists both surfaces (the forward target may run an older TS-only set).
+        if (isRecord(body) && body.key === "host.ops.catalog" && forwarded.status === 200) {
+          const catalog = forwarded.json as { operations?: { key?: string }[] };
+          if (Array.isArray(catalog.operations)) {
+            const seen = new Set(catalog.operations.map((op) => op.key));
+            catalog.operations.push(
+              ...tsOnlyOperationCatalog.filter((entry) => !seen.has(entry.key)),
+            );
+          }
+        }
+        return Response.jsonUnsafe(forwarded.json ?? null, {
+          status: forwarded.status,
+          headers: forwarded.headers,
+        });
+      }
+      if (!isRecord(body) || typeof body.key !== "string")
+        return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
+      // The /call envelope is exactly { key, request? }. Reject any other top-level key so
+      // silently-ignored fields can't mis-target: a `bridgeSessionId` in the body once routed a
+      // call to the user's live Revit — session targeting travels ONLY in the header.
+      const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
+      if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
+      const key = body.key;
+      const request = "request" in body ? body.request : undefined;
+      let bridgeSessionId = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
+      let openDocumentId: string | null | undefined =
+        req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim() || undefined;
+
+      if (key === "takeoffs.saved") {
+        op = { key, request, tsOnly: true, startedAt: Date.now(), origin };
+        const value = yield* savedTakeoffs(request, observations());
+        captureOperation(op, { ok: true });
+        return Response.jsonUnsafe(value);
+      }
+
+      if (key === "host.ops.catalog") openDocumentId = null;
+      const bridge = yield* RevitBridge;
+      // Endpoint-level backstop for the data-loss path: an untargeted Revit op with several sessions
+      // connected must never fall through to one of them. bridge.invoke also hard-fails here, but its
+      // hint speaks the MCP `target=` selector; at the raw wire the fix is the header, so name it.
+      if (!isTsOnlyOperationKey(key) && !bridgeSessionId) {
+        const sessions = yield* bridge.list;
+        if (sessions.length > 1) return yield* Effect.fail(ambiguousBridgeTarget(sessions));
+      }
+      op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
+      if (key !== "takeoffs.snapshot" && key !== "host.ops.catalog") {
+        const definition = yield* Effect.tryPromise({
+          try: () => operationDefinition(key, bridge, bridgeSessionId),
+          catch: (error) => error,
+        });
+        if (definition.intent === "Mutate") {
+          return yield* Effect.fail(
+            new BridgeError(
+              "Submit the original exact admission to /actions; raw mutation dispatch is retired",
+              409,
+              { notDispatched: true },
+            ),
           );
         }
-      }
-      return Response.jsonUnsafe(forwarded.json ?? null, {
-        status: forwarded.status,
-        headers: forwarded.headers,
-      });
-    }
-    if (!isRecord(body) || typeof body.key !== "string")
-      return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
-    // The /call envelope is exactly { key, request? }. Reject any other top-level key so
-    // silently-ignored fields can't mis-target: a `bridgeSessionId` in the body once routed a
-    // call to the user's live Revit — session targeting travels ONLY in the header.
-    const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
-    if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
-    const key = body.key;
-    const request = "request" in body ? body.request : undefined;
-    const bridgeSessionId = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
-    const openDocumentId = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim() || undefined;
-
-    const bridge = yield* RevitBridge;
-    // Endpoint-level backstop for the data-loss path: an untargeted Revit op with several sessions
-    // connected must never fall through to one of them. bridge.invoke also hard-fails here, but its
-    // hint speaks the MCP `target=` selector; at the raw wire the fix is the header, so name it.
-    if (!isTsOnlyOperationKey(key) && !bridgeSessionId) {
-      const sessions = yield* bridge.list;
-      if (sessions.length > 1) return yield* Effect.fail(ambiguousBridgeTarget(sessions));
-    }
-    op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
-    const result = isTsOnlyOperationKey(key)
-      ? {
-          value: yield* dispatchTsOnlyOperation(
-            key,
-            request,
-            bridgeSessionId,
-            bridge,
-            openDocumentId,
-          ),
-          target: null,
+        if (definition.intent !== "Read")
+          return yield* Effect.fail(
+            new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
+          );
+        if (!isTsOnlyOperationKey(key)) {
+          const target = yield* Effect.tryPromise({
+            try: () =>
+              gatewayTarget(
+                key,
+                definition.needs,
+                bridge,
+                bridgeSessionId,
+                openDocumentId ?? undefined,
+              ),
+            catch: (error) => error,
+          });
+          if (target.kind !== "host")
+            bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
+          openDocumentId = target.kind === "document" ? target.ref.openId : null;
         }
-      : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
-    captureHostOp(op, { ok: true });
-    // Every /call response names the target it actually ran against, so a tool card can show
-    // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
-    // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
-    const headers = result.target ? resolvedTargetHeaders(result.target) : {};
-    return Response.jsonUnsafe(result.value ?? null, { headers });
-  }).pipe(
-    Effect.catch((error) => {
-      if (op) captureHostOp(op, { ok: false, problem: toProblem(error) });
-      return Effect.succeed(
-        Response.jsonUnsafe(toProblem(error), {
-          status: toProblem(error).status,
-          headers: { "content-type": "application/problem+json" },
-        }),
-      );
-    }),
+      }
+      const result = isTsOnlyOperationKey(key)
+        ? {
+            value: yield* dispatch(
+              key,
+              request,
+              bridgeSessionId,
+              bridge,
+              openDocumentId ?? undefined,
+            ),
+            target: null,
+          }
+        : key === "takeoffs.snapshot"
+          ? yield* Effect.tryPromise({
+              try: async () => {
+                const target = documentRefSchema.parse({
+                  session: bridgeSessionId,
+                  openId: openDocumentId,
+                });
+                const selected = async () => {
+                  const sessions = await Effect.runPromise(bridge.list);
+                  return sessions
+                    .find((session) => session.sessionId === target.session)
+                    ?.state?.openDocuments.find((document) => document.openId === target.openId);
+                };
+                const document = await selected();
+                if (!document?.address)
+                  throw new BridgeError("Snapshot requires an exact open saved document", 409);
+                const at = addressSchema.parse(document.address);
+                const published = await observations().refresh(
+                  target,
+                  async () => {
+                    const [result, index] = await Promise.all([
+                      Effect.runPromise(
+                        bridge.invoke(key, request ?? {}, target.session, target.openId),
+                      ),
+                      Effect.runPromise(
+                        bridge.invoke(
+                          "revit.catalog.project-index",
+                          takeoffProjectIndexRequest,
+                          target.session,
+                          target.openId,
+                        ),
+                      ),
+                    ]);
+                    const snapshot = projectTakeoffSnapshot(
+                      result.value as OpResponseOf<"takeoffs.snapshot">,
+                      document.title,
+                      projectTakeoffViews(
+                        index.value as OpResponseOf<"revit.catalog.project-index">,
+                      ),
+                    );
+                    if (!sameAddress(snapshot.reading.at, at))
+                      throw new BridgeError("Snapshot returned a different document", 409);
+                    return { result, snapshot };
+                  },
+                  async () => {
+                    const current = await selected();
+                    return (
+                      !!current?.address && sameAddress(addressSchema.parse(current.address), at)
+                    );
+                  },
+                );
+                captureId = published.capture.id;
+                return published.result;
+              },
+              catch: (error) =>
+                error instanceof BridgeError ? error : new BridgeError(String(error), 409),
+            })
+          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
+      captureOperation(op, { ok: true });
+      // Every /call response names the target it actually ran against, so a tool card can show
+      // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
+      // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
+      const headers = result.target ? resolvedTargetHeaders(result.target) : {};
+      if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
+      return Response.jsonUnsafe(result.value ?? null, { headers });
+    }).pipe(
+      Effect.catch((error) => {
+        if (op) captureOperation(op, { ok: false, problem: toProblem(error) });
+        return Effect.succeed(
+          Response.jsonUnsafe(toProblem(error), {
+            status: toProblem(error).status,
+            headers: { "content-type": "application/problem+json" },
+          }),
+        );
+      }),
+    );
+  });
+  const captured = HttpRouter.add("GET", "/takeoffs/observations", (req) =>
+    Effect.tryPromise({
+      try: async () => {
+        const query = new URL(req.url, "http://host").searchParams;
+        if (forwardBase) {
+          const response = await fetch(`${forwardBase}${req.url}`, {
+            headers: {
+              [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
+              [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
+            },
+          });
+          return Response.jsonUnsafe(await response.json(), { status: response.status });
+        }
+        const legacy = query.get("legacy");
+        if (legacy) {
+          const raw = await observations().legacyWork(legacy);
+          if (!isRecord(raw) || !isRecord(raw.doc)) throw Error("Invalid legacy Work archive");
+          const bindings = routeBindingsSchema.parse(raw.doc.bindings ?? {});
+          return Response.jsonUnsafe({
+            folder: bindings.folder?.id ?? null,
+            r10: bindings.r10?.id ?? null,
+          });
+        }
+        const id = query.get("capture");
+        if (id && query.has("text")) return Response.jsonUnsafe(await observations().savedText(id));
+        if (id) return Response.jsonUnsafe(await observations().saved(id));
+        if (query.has("saved")) {
+          const document = query.get("document");
+          const rows = await observations().list(
+            document ? addressSchema.parse(document) : undefined,
+          );
+          return Response.jsonUnsafe(
+            rows.map(({ snapshot, ...capture }) => ({
+              ...capture,
+              document: snapshot.reading.at,
+              title: snapshot.world.docName,
+            })),
+          );
+        }
+        return Response.jsonUnsafe(
+          observations().status(
+            documentRefSchema.parse({
+              session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
+              openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
+            }),
+          ),
+        );
+      },
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
+      ),
+    ),
   );
+  const actions = HttpRouter.add("POST", "/actions", (req) =>
+    Effect.gen(function* () {
+      const body = yield* req.json;
+      if (forwardBase)
+        return Response.jsonUnsafe(
+          { error: "Mutation forwarding is not admitted by this host", notDispatched: true },
+          { status: 409 },
+        );
+      const bridge = yield* RevitBridge;
+      const row = yield* Effect.tryPromise({
+        try: () => admit(body, bridge),
+        catch: (error) => error,
+      });
+      return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(
+          Response.jsonUnsafe(
+            {
+              error: String(error),
+              message:
+                typeof error === "object" && error && "message" in error
+                  ? String(error.message)
+                  : String(error),
+            },
+            { status: 409 },
+          ),
+        ),
+      ),
+    ),
+  );
+  const actionReads = HttpRouter.add("GET", "/actions", (req) =>
+    Effect.tryPromise({
+      try: async () => {
+        const query = new URL(req.url, "http://host").searchParams;
+        if (forwardBase) {
+          const forwarded = await fetch(`${forwardBase}${req.url}`, {
+            headers: {
+              [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
+              [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
+            },
+          });
+          return Response.jsonUnsafe(await forwarded.json(), { status: forwarded.status });
+        }
+        if (query.has("file"))
+          return Response.jsonUnsafe({
+            fileVersion: await (actionDeps.fileVersion ?? fileVersion)(query.get("file")!),
+          });
+        if (query.has("legacy")) return Response.jsonUnsafe(await owner().legacyStatus());
+        const session = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
+          openId = req.headers[HOST_RPC_DOCUMENT_HEADER];
+        const target = session && openId ? documentRefSchema.parse({ session, openId }) : undefined;
+        let rows = await owner().list(target, query.get("id") ?? undefined);
+        if (query.has("kind")) rows = rows.filter((row) => row.kind === query.get("kind"));
+        if (query.has("scope")) {
+          if (query.has("id")) throw Error("Choose original ID or subject listing");
+          const scope = actionListFilterSchema.parse(JSON.parse(query.get("scope")!));
+          const selected = [];
+          for (const row of rows) {
+            if (row.kind !== "workflow") continue;
+            if (
+              !["running", "unknown", "incomplete"].includes(row.state) &&
+              row.id !== query.get("include")
+            )
+              continue;
+            const workScope = actionBasesSchema.safeParse(row.bases).data?.work?.key;
+            if (scope.kind === "schedule-grid") {
+              if (
+                row.key === "schedule-grid.apply" &&
+                // The Work key names its workspace as `work` since fold-1; the filter still speaks
+                // the domain word `workspaceId`.
+                workScope?.work === scope.workspaceId
+              )
+                selected.push(row);
+              continue;
+            }
+            if (scope.kind === "instances") {
+              if (
+                Object.hasOwn(instancesActions, row.key) &&
+                row.request.workspaceId === scope.workspaceId
+              )
+                selected.push(row);
+              continue;
+            }
+            if (
+              row.key === "settings.write" &&
+              row.destination.kind === "host" &&
+              row.request.workspaceId === scope.workspaceId
+            )
+              selected.push(row);
+            else if (
+              row.destination.kind === "document" &&
+              (scope.kind === "family-file" ||
+                (scope.kind === "family" &&
+                  row.destination.ref.session === scope.target.session &&
+                  row.destination.ref.openId === scope.target.openId))
+            ) {
+              if (row.key === "family.build" && row.request.workspaceId === scope.workspaceId)
+                selected.push(row);
+              if (row.key === "family.apply" && typeof row.request.planId === "string") {
+                const plan = await observations().family(row.request.planId);
+                if (
+                  plan.reading.kind === "plan" &&
+                  plan.reading.value.workspaceId === scope.workspaceId
+                )
+                  selected.push(row);
+              }
+            }
+          }
+          rows = selected;
+        }
+        return Response.jsonUnsafe(query.has("id") ? rows : actionStatusSchema.array().parse(rows));
+      },
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
+      ),
+    ),
+  );
+  const controls = ["recover", "resume"].map((choice) =>
+    HttpRouter.add("POST", `/actions/${choice}`, (req) =>
+      RevitBridge.use((bridge) =>
+        Effect.tryPromise({
+          try: async () => {
+            const body = await Effect.runPromise(req.json);
+            if (!isRecord(body) || typeof body.id !== "string")
+              throw Error("An original action ID is required");
+            if (forwardBase)
+              throw Error(
+                "Action controls require the exact owning host journal; forwarding is unsupported",
+              );
+            const controlled = (await owner().list(undefined, body.id))[0];
+            if (body.kind !== undefined && body.kind !== controlled?.kind)
+              throw Error("Original admission kind mismatch");
+            if (body.actor !== undefined) {
+              if (body.actor !== "human" && body.actor !== "agent")
+                throw Error("Explicit control actor invalid");
+              const required =
+                controlled?.kind === "workflow"
+                  ? semanticActions[controlled.key as keyof typeof semanticActions]?.actor
+                  : controlled?.preparation.state === "ready"
+                    ? (controlled.preparation.value as { actor?: string }).actor
+                    : undefined;
+              if (required && required !== "any" && required !== body.actor)
+                throw Error("Control actor is not eligible for the original admission");
+            }
+            if (choice === "recover") {
+              const original = (await owner().list(undefined, body.id))[0];
+              return Response.jsonUnsafe(
+                await (original?.kind === "workflow" && original.key === "schedule-grid.apply"
+                  ? recoverScheduleAction(body.id, owner(), actionDeps)
+                  : original?.kind === "workflow" && Object.hasOwn(instancesActions, original.key)
+                    ? recoverInstancesAction(body.id, owner(), actionDeps)
+                    : original?.kind === "workflow" && Object.hasOwn(familyActions, original.key)
+                      ? recoverFamilyAction(body.id, owner(), actionDeps)
+                      : original?.kind === "workflow" && Object.hasOwn(takeoffActions, original.key)
+                        ? recoverTakeoffAction(body.id, owner(), actionDeps)
+                        : recoverGatewayAction(body.id, owner(), actionDeps.sdk)),
+              );
+            }
+            const prior = (await owner().list(undefined, body.id))[0];
+            if (!prior || prior.actor === "legacy-unknown")
+              throw Error("Original action has no resumable authored admission");
+            const row = await admit(
+              {
+                id: prior.id,
+                kind: prior.kind,
+                key: prior.key,
+                actor: prior.actor,
+                destination: prior.destination,
+                input: prior.request,
+                bases: prior.bases,
+              },
+              bridge,
+              true,
+            );
+            return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
+          },
+          catch: (error) => error,
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+          ),
+        ),
+      ),
+    ),
+  );
+  const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
+    RevitBridge.use((bridge) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (forwardBase) {
+            const response = await fetch(`${forwardBase}${req.url}`, {
+              method: req.method,
+              ...(req.method === "POST"
+                ? {
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(await Effect.runPromise(req.json)),
+                  }
+                : {}),
+            });
+            return Response.jsonUnsafe(await response.json(), { status: response.status });
+          }
+          if (req.method === "POST") {
+            const body = await Effect.runPromise(req.json);
+            if (!isRecord(body) || typeof body.key !== "string")
+              throw Error("A Family read key is required");
+            return Response.jsonUnsafe(
+              await readFamily(
+                { ...body, key: body.key, scope: body.scope },
+                observations(),
+                bridge,
+                actionDeps,
+              ),
+            );
+          }
+          const query = new URL(req.url, "http://host").searchParams;
+          if (query.has("id"))
+            return Response.jsonUnsafe(await observations().family(query.get("id")!));
+          const scope = workKeySchema.parse(JSON.parse(query.get("scope") ?? "{}"));
+          const legacyScope = query.has("legacyScope")
+            ? workKeySchema.parse(JSON.parse(query.get("legacyScope")!))
+            : scope;
+          const work = actionDeps.workspace ?? actionWorkspace();
+          for (const selected of [scope, legacyScope]) {
+            const reading = await work?.read(selected, "family");
+            if (reading?.migrationError) throw Error(reading.migrationError);
+          }
+          const values = [
+            ...(await observations().familyReadings(scope)),
+            ...(await observations().familyReadings(legacyScope)),
+          ];
+          return Response.jsonUnsafe(
+            [...new Map(values.map((value) => [value.id, value])).values()].sort((a, b) =>
+              b.capturedAt.localeCompare(a.capturedAt),
+            ),
+          );
+        },
+        catch: (error) => error,
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+        ),
+      ),
+    ),
+  );
+  const scheduleReadings = HttpRouter.add("POST", "/schedule-grid/readings", (req) =>
+    RevitBridge.use((bridge) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (forwardBase) throw Error("Schedule readings require their exact owning host");
+          const body = await Effect.runPromise(req.json);
+          if (!isRecord(body) || typeof body.key !== "string")
+            throw Error("Schedule read key required");
+          return Response.jsonUnsafe(
+            await readSchedule(
+              { key: body.key, input: body.input, target: body.target },
+              observations(),
+              bridge,
+              actionDeps,
+            ),
+          );
+        },
+        catch: (error) => error,
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+        ),
+      ),
+    ),
+  );
+  return Layer.mergeAll(
+    post,
+    captured,
+    actions,
+    actionReads,
+    familyReadings,
+    scheduleReadings,
+    ...controls,
+  );
+}
+
+export const callRoute = makeCallRoute();
+
+const savedTakeoffs = Effect.fnUntraced(function* (request: unknown, captures: TakeoffCaptures) {
+  const input = yield* decodeRequest("takeoffs.saved", request ?? {});
+  return yield* Effect.tryPromise({
+    try: async () =>
+      input.captureId && input.text
+        ? captures.savedText(input.captureId)
+        : input.captureId
+          ? captures.saved(input.captureId)
+          : (
+              await captures.list(input.document ? addressSchema.parse(input.document) : undefined)
+            ).map(({ snapshot, ...capture }) => ({
+              ...capture,
+              document: snapshot.reading.at,
+              title: snapshot.world.docName,
+            })),
+    catch: (error) => new BridgeError(String(error), 400),
+  });
 });
 
 /** The host_op event: input, outcome, duration. Outputs are deliberately NOT captured —
@@ -228,6 +792,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   openDocumentId?: string,
 ) {
   switch (key) {
+    case "takeoffs.saved":
+      return yield* savedTakeoffs(request, hostTakeoffCaptures());
     case "host.status":
       return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), (snapshot) =>
         getHostStatus(snapshot),
@@ -342,14 +908,24 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
   )) as Schema.Schema.Type<RequestSchemaOf<K>>;
 });
 
-type CallError = BridgeError | Error | InvalidHostRequest | LocalOpError | NoRevitSession;
-
-function toProblem(error: CallError): {
+function toProblem(error: unknown): {
   kind: HostErrorKind;
   message: string;
   status: number;
+  nativeOutcome?: string;
+  issues?: BridgeError["evidence"]["issues"];
+  notDispatched?: true;
 } {
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
+  if (
+    !(
+      error instanceof BridgeError ||
+      error instanceof InvalidHostRequest ||
+      error instanceof LocalOpError ||
+      error instanceof NoRevitSession
+    )
+  )
+    return { kind: "HostFailure", message: String(error), status: 500 };
   switch (error._tag) {
     case "InvalidHostRequest":
       return { kind: "InvalidRequest", message: error.message, status: 400 };
@@ -358,7 +934,8 @@ function toProblem(error: CallError): {
     case "BridgeError":
       return {
         kind:
-          error.statusCode === 423
+          error.statusCode === 423 &&
+          (error.evidence.notDispatched || error.nativeOutcome === "RefusedQueueUnresponsive")
             ? "BridgeBusy"
             : error.statusCode === 503
               ? "Disconnected"
@@ -367,6 +944,9 @@ function toProblem(error: CallError): {
                 : "HostFailure",
         message: error.message,
         status: error.statusCode,
+        nativeOutcome: error.nativeOutcome,
+        issues: error.evidence.issues,
+        notDispatched: error.evidence.notDispatched,
       };
     case "LocalOpError":
       return { kind: "HostFailure", message: error.message, status: localOpHttpStatus(error) };
@@ -375,4 +955,26 @@ function toProblem(error: CallError): {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function executeGatewayLocal(
+  key: string,
+  input: unknown,
+  bridge: RevitBridge["Service"],
+  launch?: (path: string) => Promise<void>,
+): Promise<unknown> {
+  if (!isTsOnlyOperationKey(key))
+    throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
+  if (key !== "host.shell.open")
+    return Effect.runPromise(
+      dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
+        Effect.provide(NodeServices.layer),
+        Effect.provide(NodeHttpClient.layerUndici),
+      ),
+    );
+  return Effect.runPromise(
+    Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
+      openShellPath(input, launch),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  );
 }

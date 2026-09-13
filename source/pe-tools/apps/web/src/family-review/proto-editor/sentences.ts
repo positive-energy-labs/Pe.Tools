@@ -21,7 +21,7 @@ import {
   setField,
   setFrameOrigin,
   setStub,
-  type SlotKind,
+  type FieldKind,
 } from "#/family-review/proto-editor/model";
 
 export type CellKind = "blank" | "name" | "ref" | "text";
@@ -34,7 +34,7 @@ export interface SentenceCell {
   kind: CellKind;
   value: string;
   /** `ref` cells only: which scoped picker is legal here (the legal-options law). */
-  slotKind?: SlotKind;
+  slotKind?: FieldKind;
   /** The JSON pointer this cell writes — cross-pane focus, and the pending write's address. */
   pointer?: string;
   write?: (model: FamilyModel, value: string) => FamilyModel;
@@ -237,7 +237,7 @@ function solids(model: FamilyModel): SentenceGroup {
             slot: "frame",
             kind: "ref",
             slotKind: "frame",
-            value: solid.frame,
+            value: solid.frame ?? "",
             pointer: `/solids/${slug}/frame`,
             title:
               "The frame this solid is built in — frame:family is the family origin, unrotated",
@@ -279,7 +279,7 @@ function connectors(model: FamilyModel): SentenceGroup {
             slot: "shape",
             kind: "ref",
             slotKind: "shape",
-            value: connector.shape,
+            value: connector.shape ?? "",
             pointer: `/connectors/${slug}/shape`,
             title: "Connector profile — the dimension columns follow it",
             write: (next, value) => setField(next, "connectors", slug, "shape", value),
@@ -298,7 +298,7 @@ function connectors(model: FamilyModel): SentenceGroup {
             slot: "frame",
             kind: "ref",
             slotKind: "frame",
-            value: connector.frame,
+            value: connector.frame ?? "",
             pointer: `/connectors/${slug}/frame`,
             title: "The frame that places and orients this connector",
             write: (next, value) => setField(next, "connectors", slug, "frame", value),

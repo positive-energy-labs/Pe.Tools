@@ -20,7 +20,7 @@ test("kernel names no Revit-only tool when Revit is absent", () => {
 });
 
 test("kernel names only the three doors; the Revit line is appended only with Revit", () => {
-  for (const door of ["pe_find", "pe_read", "pe_do", "scope_set"])
+  for (const door of ["pe_find", "pe_read", "pe_do", "target_set"])
     expect(peaAgentInstructions).toContain(door);
   expect(peaAgentInstructions).not.toContain("capture_view");
   const kernel = peaAgentInstructionsFor({ revit: true });

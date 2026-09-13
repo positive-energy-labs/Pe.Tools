@@ -31,6 +31,7 @@ public record RuntimeStatus(
 public static class HostRuntime {
     private static readonly object Sync = new();
     private static BridgeAgent? _agent;
+    internal static string? SessionId => _agent?.SessionId;
     private static BridgeConnectionOptions _connectionOptions = BridgeConnectionOptions.FromEnvironment();
     private static SettingsRuntimeRegistry? _moduleRegistry;
     private static RevitTaskQueue? _revitTaskQueue;

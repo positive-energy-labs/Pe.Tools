@@ -3,7 +3,7 @@ import { Check, RotateCcw, X } from "lucide-react";
 
 import { stagedEntries } from "@pe/agent-contracts";
 
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import type { RouteStateHandle } from "./route-state";
 
 export interface ReviewerCell {
@@ -17,10 +17,15 @@ export interface ReviewerCell {
 }
 
 export interface CellTrichotomyReviewerProps {
-  state: RouteStateHandle<unknown>;
+  state: Pick<RouteStateHandle<unknown>, "apply" | "busy"> &
+    Partial<Pick<RouteStateHandle<unknown>, "command" | "revision" | "failure">>;
   segment: string;
   cells: Record<string, ReviewerCell>;
-  commitCommand: string;
+  commitCommand?: string;
+  onCommit?: () => Promise<unknown>;
+  /** A string is both the block and the reason the disabled control shows. */
+  commitBlocked?: boolean | string;
+  commitInput?: unknown;
   commitLabel: (stagedCount: number) => string;
   reviewHint: string;
   renderLabel: (key: string, cell: ReviewerCell) => ReactNode;
@@ -32,6 +37,9 @@ export function CellTrichotomyReviewer({
   segment,
   cells,
   commitCommand,
+  commitInput,
+  onCommit,
+  commitBlocked,
   commitLabel,
   reviewHint,
   renderLabel,
@@ -81,7 +89,7 @@ export function CellTrichotomyReviewer({
                 ) : null}
               </div>
               {staged ? (
-                <Verb
+                <ActionButton
                   label="Undo"
                   icon={RotateCcw}
                   disabled={state.busy != null}
@@ -90,14 +98,14 @@ export function CellTrichotomyReviewer({
                 />
               ) : (
                 <div className="flex shrink-0 gap-1">
-                  <Verb
+                  <ActionButton
                     label="Deny"
                     icon={X}
                     disabled={state.busy != null}
                     reason="Drop pea's proposal — the current value stands"
                     onClick={() => deny(key)}
                   />
-                  <Verb
+                  <ActionButton
                     label="Approve"
                     icon={Check}
                     disabled={state.busy != null || !cell.proposal}
@@ -114,17 +122,30 @@ export function CellTrichotomyReviewer({
       <div className="flex items-center justify-between gap-2 pt-1.5">
         <span className="min-w-0 truncate">{state.failure?.message ?? reviewHint}</span>
 
-        <Verb
+        <ActionButton
           tone="commit"
           label={commitLabel(stagedCount)}
           icon={Check}
-          disabled={!canCommit || state.busy != null}
+          disabled={!canCommit || !!commitBlocked || state.busy != null}
           reason={
-            !canCommit
-              ? "Nothing staged yet — approve a proposal first"
-              : "Write every staged value through — this leaves the page"
+            typeof commitBlocked === "string"
+              ? commitBlocked
+              : !canCommit
+                ? "Nothing staged yet — approve a proposal first"
+                : "Write every staged value through — this leaves the page"
           }
-          onClick={() => void state.command(commitCommand).catch(() => undefined)}
+          onClick={() =>
+            void (
+              onCommit
+                ? onCommit()
+                : state.command?.(
+                    commitCommand!,
+                    commitInput,
+                    undefined,
+                    state.revision ?? undefined,
+                  )
+            )?.catch(() => undefined)
+          }
         />
       </div>
     </div>

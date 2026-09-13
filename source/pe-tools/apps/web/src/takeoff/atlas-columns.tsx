@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import { FactChip } from "#/components/lang/chip";
 import { CellSelect, NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
@@ -35,7 +34,7 @@ function RoomNameCell({
   row: Row;
   onCommit: (value: string) => void;
 }) {
-  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  const entity = store.entity(row.room.guid);
   const state = [
     entity.hovered ? "hovered" : null,
     entity.selected ? "table selection" : null,

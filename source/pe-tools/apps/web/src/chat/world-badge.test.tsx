@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { WorldBadge } from "./world-badge";
+import { SessionBadge } from "./world-badge";
 
 afterEach(cleanup);
 
 test("shows the honest local world fallback", () => {
   render(
-    <WorldBadge
+    <SessionBadge
       world={{
         id: "pea:root",
         root: "C:\\work",

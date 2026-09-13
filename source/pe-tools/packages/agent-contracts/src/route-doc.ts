@@ -138,6 +138,10 @@ export function commitDoc<S extends z.ZodType>(
   envelope: RouteEnvelope<z.infer<S>>,
   next: unknown,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
+  const writeSchema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
+  const checked = writeSchema.safeParse(next);
+  if (!checked.success)
+    return refuse("error", "the patched document is invalid", formatZodError(checked.error));
   const parsed = spec.schema.safeParse(next);
   if (!parsed.success)
     return refuse("error", "the patched document is invalid", formatZodError(parsed.error));

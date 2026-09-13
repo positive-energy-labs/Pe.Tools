@@ -29,7 +29,6 @@ test("native fixtures project parameters without inventing fixture content and a
     const input = snapshot(raw);
     const lane = familyLane(input, null);
     expect(lane.parseError).toBeNull();
-    expect(lane.fixture).toBe(false);
     expect(lane.world.params.length).toBe(Object.keys(JSON.parse(raw).parameters).length);
     expect(input.rawContent).toBe(raw);
     const baseline = initialDraft(lane.world);
@@ -68,7 +67,6 @@ test("lane reads composition and uses fixtures only on explicit request", () => 
   ).toBe("unread");
   expect(familyLane(null, null).world.params).toEqual([]);
   expect(familyLane(snapshot("bad json"), null).world.params).toEqual([]);
-  expect(familyLane(null, null, true).world.params.length).toBeGreaterThan(0);
 });
 
 test("native capture projects only read values and gates missing claims on coverage", () => {
@@ -128,7 +126,6 @@ test("native capture without an authored file renders a read-only family lane", 
     },
   };
   const lane = familyLane(null, evidence);
-  expect(lane.fixture).toBe(false);
   expect(lane.document).toBeNull();
   expect(lane.world.params[0]?.name).toBe("Width");
   expect(lane.parseError).toBeNull();

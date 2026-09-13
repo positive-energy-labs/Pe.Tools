@@ -23,14 +23,14 @@ import {
   setField,
   setFrameOrigin,
   setStub,
-  type SlotKind,
+  type FieldKind,
 } from "#/family-review/proto-editor/model";
 
 export interface NodeField {
   /** The authored field, as the document names it. */
   key: string;
   /** `text` = a literal typed here; anything else picks from a scoped, closed set. */
-  slot: SlotKind | "text";
+  slot: FieldKind | "text";
   value: string;
   /** True when the value points at ANOTHER node — the edges of the graph. */
   relation: boolean;
@@ -41,7 +41,7 @@ const paramFields = (spec: ParamSpec, name: string): NodeField[] => [
   {
     key: "dataType",
     slot: "text",
-    value: spec.dataType,
+    value: spec.dataType ?? "",
     relation: false,
     // Read-only in this prototype: retyping a parameter re-checks every slot that references it.
     write: (model) => model,
@@ -49,7 +49,7 @@ const paramFields = (spec: ParamSpec, name: string): NodeField[] => [
   {
     key: "value",
     slot: "text",
-    value: spec.value ?? "",
+    value: String(spec.value ?? ""),
     relation: false,
     write: (model, value) => setParamValue(model, name, value),
   },
@@ -118,7 +118,7 @@ export function fieldsOf(model: FamilyModel, id: string): NodeField[] {
       {
         key: "frame",
         slot: "frame",
-        value: solid.frame,
+        value: solid.frame ?? "",
         relation: true,
         write: (next, value) => setField(next, "solids", slug, "frame", value),
       },
@@ -171,7 +171,7 @@ export function fieldsOf(model: FamilyModel, id: string): NodeField[] {
       {
         key: "frame",
         slot: "frame",
-        value: connector.frame,
+        value: connector.frame ?? "",
         relation: true,
         write: (next, value) => setField(next, "connectors", slug, "frame", value),
       },

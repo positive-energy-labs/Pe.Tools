@@ -1,16 +1,23 @@
-import { instancesRouteState, routeScopeKey, type Scope } from "@pe/agent-contracts";
+/**
+ * Chat's in-realm panes: the same route bodies, drawn inside a thread. Each pane keys on the
+ * thread head's default Target, so a pane and its route always read the same Work.
+ */
+import { LiveScheduleGridWorkspace } from "#/schedule-grid/live";
+import { SettingsRouteContent } from "#/routes/settings";
+import { FamilyRouteContent } from "#/routes/family";
+import { TakeoffsPane } from "#/takeoff/pane";
+import { takeoffsRouteState, workKey, type WorkKey } from "@pe/agent-contracts";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
 import type { ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import {
   familiesRouteState,
   familyRouteState,
+  instancesRouteState,
   parameterLinksRouteState,
-  podsRouteState,
   scheduleGridRouteState,
   settingsRouteState,
   type RouteStatePatch,
@@ -20,24 +27,17 @@ import type { z } from "zod";
 
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import {
-  createRouteStoreCore,
-  docAtom,
-  docWriter,
-  expectRouteWrite,
-  worldSelector,
-} from "#/state/route-store";
-import { useRouteStore } from "#/state/use-route-store";
+import { createRouteOwner, docAtom, docWriter, useRouteOwner } from "#/route";
+import { previousOf } from "#/readings";
 import type { ChatPageStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";
-import { RouteWorkspaceShell } from "./route-workspace-shell";
 
 type PaneProps = { store: ChatPageStore };
 type Pane = (props: PaneProps) => ReactNode;
 
 const routePaneSpecs = {
   instances: instancesRouteState,
-  pods: podsRouteState,
+  takeoffs: takeoffsRouteState,
   family: familyRouteState,
   families: familiesRouteState,
   settings: settingsRouteState,
@@ -60,57 +60,70 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType> }) {
   const { currentThreadId } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId);
+  const work: WorkKey = {
+    route: spec.route,
+    target: threadScope.defaultTarget?.kind === "named" ? threadScope.defaultTarget.address : null,
+  };
   if (!threadScope.hydrated)
     return (
-      <EmptyState story="scope" exit="wait for the thread Scope">
+      <EmptyState story="scope" exit="wait for the thread head">
         opening {spec.title}
       </EmptyState>
     );
+  if (spec.route === "settings") return <SettingsRouteContent mode="file" />;
+  if (spec.route === "family") return <FamilyRouteContent mode="file" />;
+  if (spec.route === "takeoffs")
+    return <TakeoffsPane key={workKey(work)} scope={work} />;
+  if (spec.route === "schedule-grid") return <LiveScheduleGridWorkspace key={workKey(work)} />;
   if (spec.route === "instances")
-    return <InstancesPage target={worldSelector(threadScope.scope)} setTarget={() => {}} />;
-  return (
-    <ScopedRoutePaneOwner
-      key={routeScopeKey({ scope: threadScope.scope })}
-      chat={chat}
-      spec={spec}
-      scope={threadScope.scope}
-    />
-  );
+    return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
+  return <ScopedRoutePaneOwner key={workKey(work)} chat={chat} spec={spec} work={work} />;
 }
 
 function ScopedRoutePaneOwner({
   chat,
   spec,
-  scope,
+  work,
 }: {
   chat: ChatPageStore;
   spec: RouteStateSpec<z.ZodType>;
-  scope: Scope;
+  work: WorkKey;
 }) {
-  const store = useRouteStore(() => createRoutePaneStore(chat, spec, scope));
+  const store = useRouteOwner(() => createRoutePaneStore(chat, spec, work));
   return <RoutePane store={store} />;
 }
 
 function RoutePane({ store }: { store: RoutePaneStore }) {
-  const result = useAtomValue(store.slice);
+  const reading = useAtomValue(store.slice);
   const { spec } = store;
-  if (!AsyncResult.isSuccess(result)) {
+  const value = previousOf(reading);
+  const error = reading.state === "failed" ? reading.message : null;
+  if (!value) {
     return (
-      <EmptyState story="scope" exit="wait for the route document">
-        opening {spec.title}
+      <EmptyState
+        story="scope"
+        exit={error ? "restore the Work reading" : "wait for the Work reading"}
+      >
+        {error ?? `opening ${spec.title}`}
       </EmptyState>
     );
   }
-  const { doc, connected, error } = result.value;
+  const { doc, revision } = value;
   return (
-    <RouteWorkspaceShell title={spec.title} connected={connected === true} error={error}>
+    <section className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-baseline gap-3 border-b px-4 py-2">
+        <h2 className="text-sm font-medium">{spec.title}</h2>
+        <OutcomeLine
+          kind={error ? "refused" : "receipt"}
+          label={error ?? (reading.state === "ready" ? "Work current" : "Work stale")}
+        />
+      </header>
       {doc == null ? (
         <EmptyState story="scope" exit="bind or open the route document">
           no document is open
         </EmptyState>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          <OutcomeLine kind="receipt" label="document-scoped route document" />
           <textarea
             key={JSON.stringify(doc)}
             aria-label={`${spec.title} document`}
@@ -118,9 +131,10 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
             className="mt-3 min-h-[70vh] w-full resize-y p-3"
             onBlur={(event) => {
               try {
-                const value: unknown = JSON.parse(event.currentTarget.value);
-                const patches = topLevelPatches(doc, value);
-                if (patches.length) void store.actions.apply(patches).catch(() => undefined);
+                const next: unknown = JSON.parse(event.currentTarget.value);
+                const patches = topLevelPatches(doc, next);
+                if (patches.length)
+                  void store.actions.apply(patches, revision ?? 0).catch(() => undefined);
               } catch {
                 event.currentTarget.value = JSON.stringify(doc, null, 2);
               }
@@ -128,16 +142,15 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
           />
         </div>
       )}
-    </RouteWorkspaceShell>
+    </section>
   );
 }
 
-function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodType>, scope: Scope) {
-  const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
-  const routeScope = { scope };
+function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodType>, work: WorkKey) {
+  const core = createRouteOwner(`pane/${spec.route}`, chat.registry);
   // Shared family atom, never a labelled clone: one events stream per route document.
-  const slice = docAtom(spec, routeScope);
-  const searchState = core.owned("page/search", Atom.make({ target: worldSelector(scope) }));
+  const slice = docAtom(spec, work);
+  const searchState = core.owned("page/search", Atom.make({ target: work.target ?? "" }));
   const search = {
     get target() {
       return chat.registry.get(searchState).target;
@@ -148,7 +161,7 @@ function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodTyp
       );
     },
   };
-  const writer = docWriter(spec, routeScope, chat.registry, slice);
+  const writer = docWriter(spec, work, chat.registry, slice);
   return {
     registry: chat.registry,
     spec,
@@ -156,11 +169,11 @@ function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodTyp
     search,
     atoms: { search: searchState },
     actions: {
-      apply: (patches: RouteStatePatch[]) =>
-        core.runVerb(
+      apply: (patches: RouteStatePatch[], revision: number) =>
+        core.runAction(
           "apply",
           async () => {
-            return expectRouteWrite(await writer.apply(patches));
+            return writer.apply(patches, revision);
           },
           [spec.route],
         ),

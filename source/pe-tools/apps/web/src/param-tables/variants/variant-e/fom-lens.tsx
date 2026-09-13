@@ -1,5 +1,5 @@
 import { StateCell } from "#/components/lang/cell";
-import { FC_UNITS, FOM_HWCH_PLANT } from "#/param-tables/variants/fixture";
+import { FC_UNITS, FOM_HWCH_PLANT } from "#/param-tables/variants/data";
 import { HEAT_CAP_SUM, hairline, muted, secondary } from "./type-values";
 
 export function VariantFomLens() {

@@ -2,7 +2,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { Pane } from "#/components/lang/pane";
 import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
@@ -230,14 +230,14 @@ export function FamilyWorkspaceTable() {
       actions={
         drillType ? (
           <>
-            <Verb
+            <ActionButton
               label="all types"
               tone="nav"
               direction="back"
               onClick={() => setDrillType(null)}
               reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
             />
-            <Verb
+            <ActionButton
               label={`capture ${drillType}`}
               disabled={driftCells.every((cell) => cell.typeName !== drillType)}
               onClick={() => captureAll([drillType])}
@@ -247,7 +247,7 @@ export function FamilyWorkspaceTable() {
                   : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
               }
             />
-            <Verb
+            <ActionButton
               label={`apply ${drillType}`}
               tone="commit"
               disabled={driftCells.every((cell) => cell.typeName !== drillType)}
@@ -276,7 +276,7 @@ export function FamilyWorkspaceTable() {
             />
             {/* A BULK VERB IS DISABLED UNLESS YOU CAN SEE ITS FAR SIDE (SURFACE-PHILOSOPHY §2).
                 Both crossings belong to the LIVE overlay and are refused everywhere else. */}
-            <Verb
+            <ActionButton
               label="capture all"
               disabled={overlay !== "live" || driftCells.length === 0}
               onClick={() => captureAll(world.typeNames)}
@@ -288,7 +288,7 @@ export function FamilyWorkspaceTable() {
                     : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
               }
             />
-            <Verb
+            <ActionButton
               label="apply all"
               tone="commit"
               disabled={overlay !== "live" || driftCells.length === 0}
@@ -304,7 +304,7 @@ export function FamilyWorkspaceTable() {
             {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
                 changes what you are looking at, capture all / apply all move the draft, and these
                 two leave the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
-            <Verb
+            <ActionButton
               label="capture live"
               busy={capturing}
               disabled={lane.document == null || capturing}
@@ -315,7 +315,7 @@ export function FamilyWorkspaceTable() {
                   : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
               }
             />
-            <Verb
+            <ActionButton
               label={BUILD_VERB}
               tone="commit"
               busy={building}

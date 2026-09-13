@@ -5,7 +5,7 @@ import { useMemo } from "react";
 
 import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { fieldsOf } from "#/family-review/proto-editor/fields";
 import {
   addSolid,
@@ -183,7 +183,7 @@ export function SentenceGrids({
                 title="Name for a new solid — the slug every other sentence will refer to"
                 onCommit={setDraft}
               />
-              <Verb
+              <ActionButton
                 label="author solid"
                 reason={
                   draft === ""

@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import type { Lane } from "#/host/target";
-import { LaneBadge, LiveDot } from "#/host/target-ui";
+import type { Lane } from "#/readings";
+import { DeployBadge, LiveDot } from "#/host/target-ui";
 import { KVGrid } from "#/ops/primitives";
 import {
   asArray,
@@ -102,7 +102,7 @@ export function SessionRow({
   return (
     <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
       <LiveDot tone={connected ? "implicit" : "dangling"} lane={lane} />
-      {lane ? <LaneBadge lane={lane} /> : null}
+      {lane ? <DeployBadge lane={lane} /> : null}
       <span className="min-w-0 truncate" title={title}>
         {title ?? <span className="">no active document</span>}
       </span>

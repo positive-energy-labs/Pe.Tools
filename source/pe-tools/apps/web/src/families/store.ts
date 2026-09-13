@@ -1,371 +1,314 @@
-import { Layer } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+/**
+ * Families — the route's projections and its page memory, and nothing else.
+ *
+ * The owner, the registry, the Target resolution, busy, refusals and the host caller all live in
+ * `useRoute` now; the Work doc, the Readings and the two applies live in `families/manifest.ts`.
+ * What is left here is what only Families knows: which plan reading still describes the authored
+ * basis, what the last apply receipt said, and which picker is open. Plain values, no atoms.
+ */
+import { useCallback, useMemo, useState } from "react";
 import {
-  address,
-  familiesRouteState,
-  here,
-  type AppliedScope,
+  actionReceiptSchema,
+  actionStatusSchema,
+  diagnosticSchema,
+  familiesBasis,
+  familyCaptureSchema,
+  familiesPlanReadingSchema,
+  ffReceiptSchema,
+  type AppliedFilter,
   type FamiliesRouteDocument,
-  type RouteStatePatch,
-  type RouteStateWriteResult,
+  type Reading,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
+import { callHostRpc } from "#/host/client";
 import type { FfProjectData } from "#/host/familyfoundry";
-import { bridgeSelector } from "@pe/agent-contracts";
-import { documentAddress, scopeSession } from "#/host/target";
-import type { FamiliesDraft, FamiliesHost } from "#/families/host";
+import { useHostCall, previousOf } from "#/readings";
+import { useRoute } from "#/route";
+import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
 import { familyFlag } from "#/families/plan";
-import {
-  createRouteStoreCore,
-  docAtom,
-  docWriter,
-  expectRouteWrite,
-  refuse,
-  feed,
-  hostRead,
-  type Scope,
-  type Slice,
-} from "#/state/route-store";
+import { manifest, type FamiliesPage } from "#/families/manifest";
+
+/* ── Page memory ───────────────────────────────────────────────────────────── */
+
+export type PickerState = {
+  open: string | null;
+  level: string | null;
+  query: string;
+  stage: string;
+};
+
+export interface FamiliesPageMemory {
+  readonly draft: FamiliesDraft;
+  readonly pickedIds: ReadonlySet<number>;
+  readonly projection: FfProjectData | null;
+  readonly showUncommon: boolean;
+  readonly table: MasterTableState;
+  readonly picker: PickerState;
+}
+
+const EMPTY_MEMORY: FamiliesPageMemory = {
+  draft: { placement: "AllLoaded", categories: [], families: [] },
+  pickedIds: new Set<number>(),
+  projection: null,
+  showUncommon: false,
+  table: { filters: {}, sorts: [], query: "" },
+  picker: { open: null, level: null, query: "", stage: "scope" },
+};
 
 type Setter<A> = A | ((previous: A) => A);
-type PickerState = { open: string | null; level: string | null; query: string; stage: string };
-type FamiliesSlice = Atom.Atom<AsyncResult.AsyncResult<Slice<FamiliesRouteDocument>, Error>>;
+const next = <A>(value: Setter<A>, previous: A): A =>
+  typeof value === "function" ? (value as (previous: A) => A)(previous) : value;
 
-export function createFamiliesStore(deps: {
-  registry: AtomRegistry.AtomRegistry;
-  scope: Scope;
-  host: FamiliesHost;
-  navigateTarget?: (target: string) => Promise<void>;
-  slice?: FamiliesSlice;
-  writer?: {
-    apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-    command(name: "plan" | "apply", input?: unknown): Promise<RouteStateWriteResult>;
-  };
-}) {
-  const core = createRouteStoreCore("families", deps.registry);
-  const { registry, owned, write, runVerb } = core;
-  const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
-  const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
-  Reflect.set(runtime.layer, "keepAlive", false);
-  const invalidateReads = runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys));
+/** The option-list shape the pickers read. `feed()` and its `Atom.swr` runtime are deleted. */
+export interface OptionList {
+  readonly options: readonly { id: string; label: string }[] | null;
+  readonly state: "loading" | "ready" | "error";
+  readonly lane: "read";
+  readonly stale: boolean;
+}
 
-  const slice = owned("slice/families", deps.slice ?? docAtom(familiesRouteState, deps.scope));
-  const writer = deps.writer ?? docWriter(familiesRouteState, deps.scope, deps.registry, slice);
-  const document = Atom.make((get): FamiliesRouteDocument | null => {
-    const result = get(slice);
-    return AsyncResult.isSuccess(result) ? result.value.doc : null;
-  }).pipe(Atom.autoDispose);
-  // ponytail: the world is the page Scope's session; rebinding is a `?target` navigation, not a doc write.
-  // The host selector for this page: `doc:<Address>`, or `pin:<id>|doc:<Address>` when pinned.
-  const target = Atom.make(() => bridgeSelector(deps.scope.scope) ?? "").pipe(
-    owned("binding/world"),
-  );
-  const profilePath = Atom.make((get) => get(document)?.profilePath ?? null).pipe(
-    owned("view/profile-path"),
-  );
-  const persistedPlan = Atom.make((get) => get(document)?.plan ?? null).pipe(Atom.autoDispose);
-  const excludedIds = Atom.make((get) => get(document)?.excludedIds ?? []).pipe(
-    owned("view/excluded-ids"),
-  );
-  const applyData = Atom.make((get) => get(document)?.apply ?? null).pipe(owned("view/apply"));
+const asFeed = (call: {
+  data?: readonly string[];
+  error?: Error;
+  isPending: boolean;
+}): OptionList => ({
+  options: call.data ? call.data.map((id) => ({ id, label: id })) : null,
+  state: call.error ? "error" : call.isPending ? "loading" : "ready",
+  lane: "read",
+  stale: false,
+});
 
-  const draft = Atom.make<FamiliesDraft>({
-    placement: "AllLoaded",
-    categories: [],
-    families: [],
-  }).pipe(owned("page/draft"));
-  const applied = Atom.make<AppliedScope | null>(null).pipe(owned("page/applied"));
-  const pickedIds = Atom.make<Set<number>>(new Set<number>()).pipe(owned("page/picked-ids"));
-  const projection = Atom.make<FfProjectData | null>(null).pipe(owned("page/projection"));
-  const showUncommon = Atom.make(false).pipe(owned("page/show-uncommon"));
-  const seenFamilies = Atom.make<ReadonlySet<string>>(new Set<string>()).pipe(
-    owned("page/seen-families"),
-  );
-  const table = Atom.make<MasterTableState>({ filters: {}, sorts: [], query: "" }).pipe(
-    owned("page/table"),
-  );
-  const picker = Atom.make<PickerState>({
-    open: null,
-    level: null,
-    query: "",
-    stage: "scope",
-  }).pipe(owned("page/picker"));
-  const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
-  const sessionsResult = runtimeFactory
-    .withReactivity(["sessions"])(
-      Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false }),
-    )
-    .pipe(Atom.autoDispose);
-  const plan = Atom.make((get) => {
-    const value = get(persistedPlan);
-    const doc = get(document);
-    if (!value || !doc) return null;
-    const sessions = get(sessionsResult);
-    const session = AsyncResult.isSuccess(sessions)
-      ? scopeSession(deps.scope.scope, sessions.value.value)
-      : null;
-    if (!session) return null;
-    return value.reading
-      ? here(
-          value as typeof value & { reading: NonNullable<typeof value.reading> },
-          documentAddress(session),
-        )
-      : value;
-  }).pipe(owned("view/plan"));
-  const applyRefusal = Atom.make((get) => {
-    const state = get(slice);
-    if (AsyncResult.isSuccess(state) && state.value.outcomeUnknown)
-      return "The previous Apply outcome is unknown. Recover it before applying again.";
-    const current = get(plan);
-    if (!current) return "plan first";
-    return current.entries.some(
-      (entry) => !get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
-    )
-      ? null
-      : "No included family has changes to apply.";
-  }).pipe(owned("view/apply-refusal"));
-  const categorySource = runtime.atom(() =>
-    hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),
-  );
-  const categoryResult = runtimeFactory
-    .withReactivity(["category"])(
-      Atom.swr(categorySource, { staleTime: "5 minutes", revalidateOnMount: false }),
-    )
-    .pipe(Atom.autoDispose);
-  const familySource = runtime.atom(() => {
-    const draftScope = registry.get(draft);
-    const next = {
-      categories: draftScope.categories,
-      placement: draftScope.placement,
-      families: [],
-    };
-    const world = registry.get(target);
-    return hostRead([world, ...next.categories, next.placement], () =>
-      next.categories.length ? deps.host.families(world, next) : Promise.resolve([]),
-    );
-  });
-  const familyResult = runtimeFactory
-    .withReactivity(["family"])(familySource)
-    .pipe(Atom.autoDispose);
-  const profileSource = runtime.atom(() =>
-    hostRead(["family-foundry"], () => deps.host.profiles()),
-  );
-  const profileResult = runtimeFactory
-    .withReactivity(["profile"])(
-      Atom.swr(profileSource, { staleTime: "60 seconds", revalidateOnMount: false }),
-    )
-    .pipe(Atom.autoDispose);
+/* ── Pure projections ──────────────────────────────────────────────────────── */
 
-  const categoryFeed = Atom.make((get) =>
-    feed(get(categoryResult), (names) => names.map((name) => ({ id: name, label: name })), "read"),
-  ).pipe(owned("feed/category"));
-  const familyFeed = Atom.make((get) =>
-    feed(get(familyResult), (names) => names.map((name) => ({ id: name, label: name })), "read"),
-  ).pipe(owned("feed/family"));
-  const profileFeed = Atom.make((get) =>
-    feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read"),
-  ).pipe(owned("feed/profile"));
+/** The newest `families-plan` capture in the family-readings stream, with its capture id. */
+export function latestPlanOf(rows: unknown) {
+  if (!rows) return null;
+  const row = familyCaptureSchema
+    .array()
+    .parse(rows)
+    .find((capture) => capture.reading.kind === "families-plan");
+  return row && row.reading.kind === "families-plan"
+    ? { id: row.id, value: familiesPlanReadingSchema.parse(row.reading.value) }
+    : null;
+}
 
-  const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
-    write(verb, atom.label?.[0] ?? "page", () =>
-      registry.update(atom, (previous) =>
-        typeof next === "function" ? (next as (value: A) => A)(previous) : next,
-      ),
-    );
-  const unsubscribeFamilies = registry.subscribe(
-    familyFeed,
-    (nextFeed) => {
-      if (nextFeed.state !== "ready" || nextFeed.options === null) return;
-      const names = nextFeed.options.map((option) => option.id);
-      const available = new Set(names);
-      const seen = registry.get(seenFamilies);
-      Atom.batch(() => {
-        registry.set(seenFamilies, available);
-        registry.update(draft, (previous) => ({
-          ...previous,
-          families: names.filter((name) => !seen.has(name) || previous.families.includes(name)),
-        }));
-      });
-    },
-    { immediate: true },
+/** The last succeeded `families.apply` receipt, projected. Never Work: the receipt is the record. */
+export function applyDataOf(statuses: unknown, receipts: unknown) {
+  if (!statuses || !receipts) return null;
+  const row = actionStatusSchema
+    .array()
+    .parse(statuses)
+    .filter((entry) => entry.key === "families.apply" && entry.state === "succeeded")
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  if (!row) return null;
+  const parsed = actionReceiptSchema
+    .array()
+    .parse(receipts)
+    .find((entry) => entry.id === row.id);
+  const step = parsed?.steps.find(
+    (entry) => entry.key === "familyfoundry.apply" && entry.state === "succeeded",
   );
-
-  const actions = {
-    refreshReads() {
-      registry.set(invalidateReads, ["sessions", "category", "family", "profile"]);
-    },
-    setDraft(value: Setter<FamiliesDraft>) {
-      const before = registry.get(draft);
-      set("set-draft", draft, value);
-      const after = registry.get(draft);
-      if (
-        before.placement !== after.placement ||
-        before.categories.length !== after.categories.length ||
-        before.categories.some((category, index) => category !== after.categories[index])
-      )
-        registry.set(invalidateReads, ["family"]);
-    },
-    setPickedIds: (value: Setter<Set<number>>) => set("set-picked-ids", pickedIds, value),
-    setProjection: (value: Setter<FfProjectData | null>) =>
-      set("set-projection", projection, value),
-    setShowUncommon: (value: Setter<boolean>) => set("set-show-uncommon", showUncommon, value),
-    setTable: (value: Setter<MasterTableState>) => set("set-table", table, value),
-    setPicker: (value: Setter<PickerState>) => set("set-picker", picker, value),
-    applyScope() {
-      return runVerb(
-        "apply-scope",
-        async () => {
-          const value = registry.get(draft);
-          if (!value.categories.length || !value.families.length)
-            refuse("scope needs at least one category and family");
-          registry.set(applied, {
-            categoryNames: [...value.categories],
-            familyNames: [...value.families],
-            placementScope: value.placement,
-          });
-          return `scope applied to ${value.families.length} families`;
-        },
-        ["matrix"],
-      );
-    },
-    setProfile(nextProfile: string) {
-      return runVerb(
-        "profile",
-        async () =>
-          expectRouteWrite(
-            await writer.apply([
-              { path: ["profilePath"], value: nextProfile },
-              { path: ["plan"], value: null },
-              { path: ["excludedIds"], value: [] },
-              { path: ["apply"], value: null },
-            ]),
-          ),
-        ["families"],
-      );
-    },
-    exclude(id: number) {
-      return runVerb(
-        "exclude",
-        async () => {
-          const next = new Set(registry.get(excludedIds));
-          if (!next.delete(id)) next.add(id);
-          return expectRouteWrite(
-            await writer.apply([{ path: ["excludedIds"], value: [...next] }]),
-          );
-        },
-        ["families"],
-      );
-    },
-    plan() {
-      return runVerb(
-        "plan",
-        async () => {
-          const path = registry.get(profilePath);
-          const scope = registry.get(applied);
-          if (!path || !scope) refuse("plan needs a profile and applied scope");
-          return expectRouteWrite(await writer.command("plan", { profilePath: path, scope }));
-        },
-        ["families"],
-      );
-    },
-    applyFoundry() {
-      return runVerb(
-        "apply",
-        async () => {
-          const reason = registry.get(applyRefusal);
-          if (reason) refuse(reason);
-          const current = registry.get(plan);
-          if (!current) refuse("apply needs a plan");
-          return expectRouteWrite(
-            await writer.command("apply", {
-              expectedPlanHashes: Object.fromEntries(
-                current.entries
-                  .filter(
-                    (entry) =>
-                      !registry.get(excludedIds).includes(entry.familyId) && !familyFlag(entry),
-                  )
-                  .map((entry) => [String(entry.familyId), entry.planHash]),
-              ),
-            }),
-          );
-        },
-        ["families", "matrix"],
-      );
-    },
-    bind(nextTarget: string) {
-      return runVerb(
-        "bind",
-        async () => {
-          if (!deps.navigateTarget) refuse("Target navigation is unavailable on this surface.");
-          await deps.navigateTarget(nextTarget);
-          return `bound ${nextTarget}`;
-        },
-        ["session", "category", "family", "profile"],
-      );
-    },
-    project() {
-      return runVerb("project", async () => {
-        const ids = [...registry.get(pickedIds)];
-        if (!ids.length) refuse("project needs picked families");
-        const result = await deps.host.project(registry.get(target), ids);
-        registry.set(projection, result);
-        return `projected ${result.families.length} families`;
-      });
-    },
-    openFamily(familyId: number) {
-      return runVerb("open-family", async () => {
-        const opened = await deps.host.openFamily(registry.get(target), familyId);
-        if (!opened.savedPath)
-          refuse("The family editor returned no document path; navigation was not completed.");
-        return {
-          doc: address(opened.savedPath!),
-          target: deps.scope.scope.kind === "document" ? deps.scope.scope.pin : undefined,
-          capture: true as const,
-        };
-      });
-    },
-    openPath(path: string) {
-      return runVerb("open-path", async () => {
-        await deps.host.openPath(registry.get(target), path);
-        return `opened ${path}`;
-      });
-    },
-  };
-
+  if (!parsed || !step || step.state !== "succeeded") return null;
+  const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };
+  const ffReceipts = ffReceiptSchema.array().parse(native.receipts ?? []);
   return {
-    scope: deps.scope,
-    registry,
-    atoms: {
-      target,
-      profilePath,
-      plan,
-      applyRefusal,
-      excludedIds,
-      applyData,
-      draft,
-      applied,
-      pickedIds,
-      projection,
-      showUncommon,
-      table,
-      picker,
-      ...core.verbAtoms,
-    },
-    feeds: {
-      category: categoryFeed,
-      family: familyFeed,
-      profile: profileFeed,
-    },
-    actions,
-    dispose() {
-      unsubscribeFamilies();
-      core.dispose();
-    },
+    actionId: parsed.id,
+    appliedAt: parsed.startedAt,
+    diagnostics: diagnosticSchema.array().parse(native.diagnostics ?? []),
+    receipts: ffReceipts,
+    artifacts: [
+      ...new Set(
+        ffReceipts.flatMap((entry) => (entry.artifactDirectory ? [entry.artifactDirectory] : [])),
+      ),
+    ],
   };
 }
 
-export type FamiliesStore = ReturnType<typeof createFamiliesStore>;
+/** Why Apply is refused, or null. A saved plan is stale purely because its basis moved. */
+export function applyRefusalOf(
+  doc: FamiliesRouteDocument | null,
+  saved: { value: { basis: string } } | null,
+  plan: { entries: readonly { familyId: number }[] } | null,
+  excludedIds: readonly number[],
+): string | null {
+  if (saved && doc && saved.value.basis !== familiesBasis(doc))
+    return "The profile or scope changed after this plan. Plan again.";
+  if (!plan) return "plan first";
+  return plan.entries.some(
+    (entry) => !excludedIds.includes(entry.familyId) && !familyFlag(entry as never),
+  )
+    ? null
+    : "No included family has changes to apply.";
+}
+
+/* ── The hook ──────────────────────────────────────────────────────────────── */
+
+export function useFamiliesStore(options: { target?: string } = {}) {
+  const handle = useRoute(manifest, {
+    target: options.target ? (options.target as never) : null,
+  });
+  const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
+  const patch = useCallback(
+    (value: Partial<FamiliesPageMemory>) => setMemory((current) => ({ ...current, ...value })),
+    [],
+  );
+
+  const host = useMemo(() => createLiveFamiliesHost(), []);
+  const documentTarget =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
+  const target = documentTarget?.session ?? "";
+  const documentScope = useMemo(
+    () =>
+      documentTarget
+        ? { bridgeSessionId: documentTarget.session, openDocumentId: documentTarget.openId }
+        : undefined,
+    [documentTarget?.session, documentTarget?.openId],
+  );
+
+  const doc = handle.work.doc as FamiliesRouteDocument | null;
+  const profilePath = doc?.profilePath ?? null;
+  const excludedIds = doc?.excludedIds ?? [];
+  const applied = (doc?.scope ?? null) as AppliedFilter | null;
+
+  const familyReadings = handle.readings.families as Reading<unknown>;
+  const latestPlan = useMemo(() => latestPlanOf(previousOf(familyReadings)), [familyReadings]);
+  const plan = useMemo(
+    () =>
+      latestPlan && doc && latestPlan.value.basis === familiesBasis(doc) ? latestPlan.value : null,
+    [latestPlan, doc],
+  );
+  const receipts = handle.readings.receipts as Reading<unknown>;
+  const applyData = useMemo(() => {
+    const rows = previousOf(receipts);
+    return applyDataOf(rows, rows);
+  }, [receipts]);
+  const applyRefusal = applyRefusalOf(doc, latestPlan, plan, excludedIds);
+
+  const categoryCall = useHostCall(
+    () => host.categories(documentTarget!),
+    ["categories", documentTarget],
+    documentTarget !== null,
+  );
+  const familyCall = useHostCall(
+    () =>
+      memory.draft.categories.length
+        ? host.families(documentTarget!, memory.draft)
+        : Promise.resolve([]),
+    ["families", documentTarget, memory.draft.placement, memory.draft.categories.join("|")],
+    documentTarget !== null,
+  );
+  const profileCall = useHostCall(() => host.profiles(), ["profiles"]);
+  const feeds = {
+    category: asFeed(categoryCall),
+    family: asFeed(familyCall),
+    profile: asFeed(profileCall),
+  };
+
+  const actions = useMemo(
+    () => ({
+      refreshReads: () => {
+        categoryCall.refresh();
+        familyCall.refresh();
+        profileCall.refresh();
+      },
+      setDraft: (value: Setter<FamiliesDraft>) =>
+        setMemory((current) => ({ ...current, draft: next(value, current.draft) })),
+      setPickedIds: (value: Setter<Set<number>>) =>
+        setMemory((current) => ({
+          ...current,
+          pickedIds: next(value, current.pickedIds as Set<number>),
+        })),
+      setProjection: (value: Setter<FfProjectData | null>) =>
+        setMemory((current) => ({ ...current, projection: next(value, current.projection) })),
+      setShowUncommon: (value: Setter<boolean>) =>
+        setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
+      setTable: (value: Setter<MasterTableState>) =>
+        setMemory((current) => ({ ...current, table: next(value, current.table) })),
+      setPicker: (value: Setter<PickerState>) =>
+        setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
+      /** The authored scope is Work; a prior reading stays where it is and goes stale by basis. */
+      applyScope: () =>
+        handle.work.write([
+          {
+            path: ["scope"],
+            value: {
+              categoryNames: [...memory.draft.categories],
+              familyNames: [...memory.draft.families],
+              placementScope: memory.draft.placement,
+            },
+          },
+        ]),
+      setProfile: (profile: string) =>
+        handle.work.write([
+          { path: ["profilePath"], value: profile },
+          { path: ["excludedIds"], value: [] },
+        ]),
+      exclude: (id: number) => {
+        const set = new Set(excludedIds);
+        if (!set.delete(id)) set.add(id);
+        return handle.work.write([{ path: ["excludedIds"], value: [...set] }]);
+      },
+      plan: () => handle.actions.plan.run(),
+      applyFoundry: () => handle.actions.apply.run(),
+      project: async () => {
+        if (!documentScope) throw Error("Select an exact available project document");
+        const ids = [...memory.pickedIds];
+        if (!ids.length) return;
+        const result = await callHostRpc(
+          "familyfoundry.project",
+          { familyIds: ids },
+          documentScope,
+        );
+        patch({ projection: result });
+      },
+      openFamily: (familyId: number) => {
+        if (!documentScope)
+          return Promise.reject(Error("Select an exact available project document"));
+        return callHostRpc("family.editor.open", { familyId }, documentScope);
+      },
+      openPath: (path: string) =>
+        callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      handle.actions,
+      handle.work,
+      memory.draft,
+      memory.pickedIds,
+      excludedIds,
+      target,
+      documentScope,
+      patch,
+    ],
+  );
+
+  return {
+    handle,
+    manifest,
+    target,
+    documentScope,
+    profilePath,
+    excludedIds,
+    applied,
+    plan,
+    latestPlan,
+    applyData,
+    applyRefusal,
+    draft: memory.draft,
+    pickedIds: memory.pickedIds as Set<number>,
+    projection: memory.projection,
+    showUncommon: memory.showUncommon,
+    table: memory.table,
+    picker: memory.picker,
+    page: handle.page[0] as FamiliesPage,
+    busy: handle.busy,
+    failure: handle.failure,
+    feeds,
+    actions,
+  };
+}
+
+export type FamiliesStore = ReturnType<typeof useFamiliesStore>;

@@ -1,5 +1,4 @@
-import { scopeSession, sessionKey } from "#/host/target";
-import { scopePin } from "@pe/agent-contracts";
+import { ActionReceipts } from "#/actions/receipt";
 /**
  * /family — THE surface for ONE family.
  *
@@ -92,7 +91,7 @@ import { scopePin } from "@pe/agent-contracts";
  *
  * ── WHAT IS AND IS NOT WIRED (phase B, 2026-08-17) ──────────────────────────────────────────
  * TWO LANES, ONE SHAPE. The family store answers the only question that separates them — is a
- * family document open in `route:settings`? — and the page below it renders ONE `PageWorld` either
+ * family document open in `route:settings`? — and the page below it renders ONE `FamilyModel` either
  * way. Nothing in this file asks whether a host exists.
  *
  *   LIVE     — a real `family.json`, parsed and projected. The document slot lists what the bound
@@ -100,7 +99,7 @@ import { scopePin } from "@pe/agent-contracts";
  *              draft into staged field patches and runs settings `save`, whose refusal (a version
  *              conflict, a schema failure, a field still flagged for attention) is surfaced
  *              VERBATIM on the same receipt channel every other verb uses.
- *   FIXTURE  — no document. `FIXTURE_WORLD`, wearing the dashed seam chip, save page-local. Not a
+ *   FIXTURE  — no document. `EMPTY_FAMILY_MODEL`, wearing the dashed seam chip, save page-local. Not a
  *              fallback: a DECLARED lane, and the chip says what replaces it.
  *
  * ── THE TWO HOST CROSSINGS (phase D, 2026-08-17) ────────────────────────────────────────────
@@ -125,81 +124,16 @@ import { scopePin } from "@pe/agent-contracts";
  * with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
-import { useCallback } from "react";
-import { useAtomValue } from "@effect/atom-react";
-
-import { FAMILY_PRODUCT, type FamilySlot } from "#/family/product";
 import type { FamilyStore } from "#/family/store";
-import { useFleet } from "#/host/fleet";
-import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
-import { worldTrunk } from "#/targeting/world";
 import { FamilyWorkspaceProvider } from "#/family/workspace-context";
 import { FamilyWorkspaceView } from "#/family/workspace-view";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
 
-function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string, source?: "fixture") {
+function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string) {
   const core = useFamilyWorkspaceCore(store);
   const columnModel = useFamilyColumns(core);
-  const { profile, stage, busy } = core;
-
-  const picker = useAtomValue(store.atoms.picker);
-  const fleet = useFleet({ enabled: source !== "fixture" });
-  const resolved = scopeSession(store.scope.scope, fleet.sessions);
-  const target = scopePin(store.scope.scope) ?? (resolved ? sessionKey(resolved) : null);
-  const feeds = {
-    world: worldTrunk.feed(fleet),
-    profile: useAtomValue(store.feeds.profile),
-  };
-  const product = FAMILY_PRODUCT(feeds, {
-    open: store.commandVerb("open", () => ({
-      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile },
-    })),
-    ...store.verbs,
-  });
-  const bindingState: BindingState<FamilySlot> = {
-    bound: { world: target, profile: profile || null },
-    multi: {},
-    stage,
-  };
-  const setBindingState = useCallback(
-    (patch: BindingPatch<FamilySlot>) => {
-      const nextWorld = patch.bound?.world ?? null;
-      const nextProfile = patch.bound?.profile ?? null;
-      if (nextWorld !== null && nextWorld !== target)
-        void store.actions.bind(nextWorld).catch(() => undefined);
-      if (nextProfile !== null && nextProfile !== profile) void store.actions.open(nextProfile);
-      const nextStage = patch.stage === "evidence" ? "evidence" : "author";
-      if (patch.stage && nextStage !== stage) void store.actions.setStage(nextStage);
-    },
-    [profile, stage, store, target],
-  );
-  const bindings = useBindings(
-    product,
-    bindingState,
-    setBindingState,
-    picker.open,
-    (open) => store.actions.setPicker((previous) => ({ ...previous, open })),
-    picker.level,
-    (level) => store.actions.setPicker((previous) => ({ ...previous, level })),
-    picker.query,
-    (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
-  );
-  const runner = useRunner(product, bindings, busy?.id ?? null);
-
-  return {
-    ...core,
-    ...columnModel,
-    requestedFamily,
-    picker,
-    fleet,
-    feeds,
-    product,
-    bindingState,
-    setBindingState,
-    bindings,
-    runner,
-  };
+  return { ...core, ...columnModel, requestedFamily, picker: store.picker };
 }
 
 export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
@@ -207,15 +141,29 @@ export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
 export function FamilyWorkspace({
   store,
   requestedFamily,
-  source,
 }: {
   store: FamilyStore;
   requestedFamily?: string;
-  source?: "fixture";
 }) {
-  const model = useFamilyWorkspaceModel(store, requestedFamily, source);
+  const model = useFamilyWorkspaceModel(store, requestedFamily);
+  const { actionScope, readings } = store;
   return (
     <FamilyWorkspaceProvider value={model}>
+      <ActionReceipts scope={actionScope} />
+      {readings.length > 0 && (
+        <details>
+          <summary>Saved Family readings</summary>
+          {readings.map((capture) => (
+            <p key={capture.id}>
+              <a href={`/family/readings?id=${capture.id}`}>
+                {capture.reading.kind}{" "}
+                {capture.provenance.kind === "legacy-unknown" ? "archived" : "captured"}{" "}
+                {capture.capturedAt} ({capture.provenance.kind})
+              </a>
+            </p>
+          ))}
+        </details>
+      )}
       <FamilyWorkspaceView />
     </FamilyWorkspaceProvider>
   );

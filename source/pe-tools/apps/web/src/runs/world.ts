@@ -5,7 +5,7 @@ export type RunMeta = {
   label: string | null;
   zoneFilter?: string | null;
   documentKey?: string;
-  scopeKey?: string;
+  targetKey?: string;
 };
 
 export type RunIndexEntry = { id: string; meta: RunMeta | null };
@@ -73,7 +73,7 @@ export type ZoneRecord = {
 
 export type RunReport = {
   documentKey?: string;
-  scopeKey?: string;
+  targetKey?: string;
   SchemaVersion: number;
   GeneratedUtc: string;
   optionsHash: string;
@@ -753,12 +753,12 @@ export const sumKnown = (values: (number | null)[]): number | null =>
 
 /** Legacy pairs keep their original behavior; a known document never pairs with an unknown one. */
 export function comparableRuns(
-  a: Pick<RunReport, "documentKey" | "scopeKey">,
-  b: Pick<RunReport, "documentKey" | "scopeKey">,
+  a: Pick<RunReport, "documentKey" | "targetKey">,
+  b: Pick<RunReport, "documentKey" | "targetKey">,
 ): boolean {
   if (!a.documentKey && !b.documentKey) return true;
   return (
-    !!a.documentKey && a.documentKey === b.documentKey && !!a.scopeKey && a.scopeKey === b.scopeKey
+    !!a.documentKey && a.documentKey === b.documentKey && !!a.targetKey && a.targetKey === b.targetKey
   );
 }
 

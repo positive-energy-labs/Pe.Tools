@@ -1,19 +1,28 @@
 // /runs — the dev-only takeoff run browser. Promoted at find-the-product round close, 2026-08-17:
 // the round-2 combo IS the surface, so there is no variant search param and no switcher — one
 // capability, one path. The body lives in src/runs/browser.tsx.
+import { RouteShell, emptyManifest } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import RunBrowser from "../runs/browser";
-import { FixtureRunsProvider } from "../runs/fixture";
 
-export const runsSearch = (search: Record<string, unknown>): { source?: "fixture" } => ({
-  source: search.source === "fixture" ? "fixture" : undefined,
-});
+export const runsSearch = (_search: Record<string, unknown>) => ({});
+
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("runs", "Runs");
+
+function RouteShelledRunsPage() {
+  return (
+    <RouteShell manifest={manifest}>
+      <RunsPage />
+    </RouteShell>
+  );
+}
 
 export const Route = createFileRoute("/runs")({
   validateSearch: runsSearch,
-  component: RunsPage,
+  component: RouteShelledRunsPage,
 });
 
 function RunsPage() {
@@ -33,15 +42,9 @@ function RunsPage() {
   if (!import.meta.env.DEV) {
     return <div className="p-8 text-ink-2">/runs is a dev-only surface.</div>;
   }
-  return <RunsRouteContent source={Route.useSearch().source} />;
+  return <RunsRouteContent />;
 }
 
-export function RunsRouteContent({ source }: { source?: "fixture" }) {
-  return source === "fixture" ? (
-    <FixtureRunsProvider>
-      <RunBrowser />
-    </FixtureRunsProvider>
-  ) : (
-    <RunBrowser />
-  );
+export function RunsRouteContent() {
+  return <RunBrowser />;
 }

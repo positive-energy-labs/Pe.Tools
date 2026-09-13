@@ -1,9 +1,34 @@
+import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import type { Verdict } from "#/components/master-table/model";
-import { type WorldFacts, useFleet } from "#/host/fleet";
+import { sessionKey, type Inventory, useFleet } from "#/readings";
 import { InstancesWorkspace } from "#/instances/workspace";
 import { OutcomeLine } from "#/components/lang/outcome";
 
 export const YEARS = ["24", "25", "26"];
+
+/** What a world is CALLED: the SDK session id when pe-revit knows it, else its own identity. */
+export const worldLabel = (world: Pick<Inventory, "custody" | "id" | "pid" | "session">) =>
+  world.session?.sdkSessionId ??
+  (world.custody === "observed" ? `Revit ${world.pid ?? world.id}` : world.id);
+
+/** A world's `?target`: the session key the host matches a pin against, else its label. */
+export const worldTarget = (world: Inventory): string =>
+  world.session ? sessionKey(world.session) : worldLabel(world);
+
+export const findWorld = (worlds: readonly Inventory[], target: string) =>
+  worlds.find((world) => worldTarget(world) === target);
+
+/**
+ * The SDK's `--doc` grammar for one MRU row: the local path, or the exact `cld://` identity when
+ * Revit.ini carries it. Never a bare title when identity exists — substring matching refused
+ * `…ProjectA_R25` because the title prefixes its detached clones (field, 2026-09-01).
+ */
+export const docSelectorOf = (recent: RecentDocument): string =>
+  !recent.isCloud
+    ? recent.path
+    : recent.region && recent.projectGuid && recent.modelGuid
+      ? `cld://${recent.region}/{${recent.projectGuid}}p/{${recent.modelGuid}}${encodeURIComponent(recent.title)}.rvt`
+      : `recent:${recent.title}`;
 
 export function parseUtc(iso: string | null | undefined): number | undefined {
   if (!iso) return undefined;
@@ -11,7 +36,7 @@ export function parseUtc(iso: string | null | undefined): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-export function worldSub(world: WorldFacts): string {
+export function worldSub(world: Inventory): string {
   return [world.lane, world.row?.year, world.pid ? `pid ${world.pid}` : undefined]
     .filter(Boolean)
     .join(" · ");
@@ -23,9 +48,9 @@ const PHASE_VERDICT = {
   gone: { word: "gone", tone: "mute", dim: true },
   ready: { word: "ready", tone: "done" },
   unresponsive: { word: "unresponsive", tone: "caution" },
-} satisfies Record<WorldFacts["phase"], Omit<Verdict, "note">>;
+} satisfies Record<Inventory["phase"], Omit<Verdict, "note">>;
 
-export function phaseVerdict(world: WorldFacts): Verdict {
+export function phaseVerdict(world: Inventory): Verdict {
   return {
     ...PHASE_VERDICT[world.phase],
     note:
@@ -35,7 +60,7 @@ export function phaseVerdict(world: WorldFacts): Verdict {
   };
 }
 
-export function custodyVerdict(world: WorldFacts): Verdict {
+export function custodyVerdict(world: Inventory): Verdict {
   return world.custody === "controlled"
     ? {
         word: "controlled",
@@ -52,9 +77,12 @@ export function custodyVerdict(world: WorldFacts): Verdict {
 export function InstancesPage({
   target,
   setTarget,
+  shell = true,
 }: {
   target: string;
   setTarget: (target: string) => void;
+  /** false when another route mounts this page as its empty body: that route already owns the shell. */
+  shell?: boolean;
 }) {
   const fleet = useFleet({ all: true });
   const censusExceptions = fleet.unreadableReceipts
@@ -73,7 +101,7 @@ export function InstancesPage({
           />
         </aside>
       ) : null}
-      <InstancesWorkspace target={target} setTarget={setTarget} fleet={fleet} />
+      <InstancesWorkspace target={target} setTarget={setTarget} fleet={fleet} shell={shell} />
     </>
   );
 }

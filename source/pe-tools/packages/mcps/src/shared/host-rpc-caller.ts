@@ -1,5 +1,13 @@
+import {
+  actionAdmissionSchema,
+  canonicalRouteInput,
+  type ActionReceipt,
+} from "@pe/agent-contracts";
+import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { submitAction, readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { Effect } from "effect";
-import type { ResolvedTarget } from "@pe/agent-contracts";
+/** What a /call response says it actually ran against; headers absent means no Revit session. */
+export type ResolvedTarget = { session: string | null; document: string | null };
 import {
   hostProcessIdentity,
   type HostOperationCostTier,
@@ -21,6 +29,10 @@ import {
 type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
+  requestId?: string;
+  actor?: "human" | "agent";
+  /** Persist caller view identity before submitting a mutation; reads never invoke this. */
+  beforeAdmission?: (id: string) => Promise<void>;
   /** Test seam: skip the live /ops fetch and use this catalog. */
   catalogOverride?: readonly HostOperationDefinition[];
 };
@@ -109,7 +121,7 @@ type HostOperationSearchResult = {
   needs?: HostOperationNeeds;
 };
 
-type HostOperationCallResult =
+export type HostOperationCallResult =
   | {
       ok: true;
       key: string;
@@ -118,6 +130,7 @@ type HostOperationCallResult =
       /** The session and document the host actually resolved to (x-pe-resolved-* headers). */
       resolvedTarget?: ResolvedTarget;
       response: unknown;
+      action?: ActionReceipt | DetachedAction;
     }
   | {
       ok: false;
@@ -127,6 +140,7 @@ type HostOperationCallResult =
       status?: number;
       message: string;
       problem?: unknown;
+      action?: ActionReceipt | DetachedAction;
       bestRequestExample?: HostOperationRequestExample;
       nextSteps: readonly string[];
     };
@@ -147,12 +161,11 @@ export class HostRpcCaller {
     return this.options.hostBaseUrl;
   }
 
-  call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
-    return Effect.runPromise(
-      callHostRpcEffect(key, request, this.options).pipe(
-        Effect.map(({ rawBody }) => rawBody as OpResponseOf<K>),
-      ),
-    );
+  async call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
+    const result = await this.callOperation(key, request);
+    if (!result.ok)
+      throw new HostCallError(result.message, result.status ?? 409, result.problem as never);
+    return result.response as OpResponseOf<K>;
   }
 
   /** Enrichment lookup against the live catalog; undefined when the catalog is unreachable. */
@@ -166,7 +179,80 @@ export class HostRpcCaller {
     request?: unknown,
     verbosity: HostOperationVerbosity = "compact",
   ): Promise<HostOperationCallResult> {
-    const operation = await this.getOperation(key);
+    const prior = this.options.requestId
+      ? await readAction(this.options.requestId, this.options.hostBaseUrl).catch(() => undefined)
+      : undefined;
+    // Original receipt is the replay authority; no live metadata/target dependency on this branch.
+    const operation = prior ? undefined : await this.getOperation(key);
+    if (prior || operation?.intent === "Mutate") {
+      const actor = this.options.actor;
+      if (!actor) throw Error("Mutation caller must supply its initiating actor");
+      const destination =
+        prior?.destination ??
+        (isTsOnlyOperationKey(key)
+          ? { kind: "host" as const }
+          : operation?.needs === "nothing"
+            ? { kind: "session" as const, session: this.options.bridgeSessionId! }
+            : {
+                kind: "document" as const,
+                ref: {
+                  session: this.options.bridgeSessionId!,
+                  openId: this.options.openDocumentId!,
+                },
+              });
+      const admission = actionAdmissionSchema.parse({
+        id: this.options.requestId ?? crypto.randomUUID(),
+        kind: "operation",
+        key,
+        actor,
+        destination,
+        input: request ?? {},
+        bases: {},
+      });
+      if (
+        prior &&
+        (prior.kind !== "operation" ||
+          prior.key !== key ||
+          prior.actor !== actor ||
+          canonicalRouteInput(prior.request) !== canonicalRouteInput(admission.input))
+      )
+        throw Error("Original operation ID conflicts with the requested intent");
+      if (prior) {
+        const session =
+          prior.destination.kind === "document"
+            ? prior.destination.ref.session
+            : prior.destination.kind === "session"
+              ? prior.destination.session
+              : undefined;
+        const openId =
+          prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
+        if (
+          (this.options.bridgeSessionId && this.options.bridgeSessionId !== session) ||
+          (this.options.openDocumentId && this.options.openDocumentId !== openId)
+        )
+          throw Error("Original operation ID conflicts with the requested destination");
+      }
+      const started = Date.now();
+      await this.options.beforeAdmission?.(admission.id);
+      const action = await submitAction(
+        admission,
+        this.options.hostBaseUrl,
+        this.options.timeoutMs ?? 30_000,
+      );
+      return action.state === "succeeded"
+        ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action }
+        : {
+            ok: false,
+            key,
+            elapsedMs: Date.now() - started,
+            message: `${action.id}: ${action.state}`,
+            problem: action,
+            action,
+            nextSteps: [
+              "Read/recover the original receipt; do not submit a new ID for an uncertain effect.",
+            ],
+          };
+    }
     return Effect.runPromise(
       callHostRpcOperationEffect(this.options, key, operation, request, verbosity),
     );
@@ -249,6 +335,8 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
   return yield* Effect.tryPromise({
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };
+      if (options.requestId) headers["x-pe-action-id"] = options.requestId;
+      if (options.actor) headers["x-pe-action-actor"] = options.actor;
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
       if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
