@@ -11,7 +11,7 @@ import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 
 export function ExportSheet({
   rows,
@@ -59,7 +59,7 @@ export function ExportSheet({
         <span>
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
-        <Verb
+        <ActionButton
           label="print / save PDF"
           reason="Hands this sheet to the browser's print dialog, where it becomes a PDF. Nothing in the model or the row set changes."
           onClick={() => window.print()}
@@ -106,7 +106,7 @@ export function ExportSheet({
                 <span className="ml-auto">
                   free area <b>{pct(r.freeArea)}</b> · {r.actualFreeArea.toFixed(1)} in²
                 </span>
-                <Verb
+                <ActionButton
                   label=".svg"
                   reason="Saves this one drawing as a standalone .svg file, tokens baked in. Nothing in the model or the row set changes."
                   onClick={() => downloadSvg(r.id)}

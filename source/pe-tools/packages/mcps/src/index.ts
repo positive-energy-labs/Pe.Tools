@@ -3,6 +3,8 @@ export {
   buildCapabilities,
   bundledPeaSkills,
   configurePeaProductToolContext,
+  ownedTurnDocuments,
+
   createCapabilityCatalogSource,
   createRouteRegistrations,
   peDo,

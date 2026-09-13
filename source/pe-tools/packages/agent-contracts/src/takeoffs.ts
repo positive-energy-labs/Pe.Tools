@@ -1,7 +1,9 @@
 import { z } from "zod";
 
-import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
-import { readingSchema } from "./reading.ts";
+import { type RouteStateSpec } from "./route-state.ts";
+import { observationSchema } from "./reading.ts";
+import { addressSchema } from "./target.ts";
+import { documentRefSchema } from "./target.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
@@ -43,13 +45,13 @@ const resolutionSchema = z.object({
 
 export type Resolution = z.infer<typeof resolutionSchema>;
 
-const worldLaneSchema = z.object({
+const modelViewSchema = z.object({
   view: z.string(),
   label: z.string(),
   replayPath: z.string().nullable(),
 });
 
-export type WorldLane = z.infer<typeof worldLaneSchema>;
+export type ModelView = z.infer<typeof modelViewSchema>;
 
 const roomDataSchema = z.object({
   people: z.number(),
@@ -61,13 +63,13 @@ const roomDataSchema = z.object({
 
 export const takeoffRegionAnalysisSchema = z.object({
   state: z.enum(["current", "stale", "unmeasured"]),
-  runId: z.string().nullable(),
-  floorZ: z.number().nullable(),
-  ceilingZ: z.number().nullable(),
-  hold: z.string().nullable(),
+  runId: z.string().nullable().default(null),
+  floorZ: z.number().nullable().default(null),
+  ceilingZ: z.number().nullable().default(null),
+  hold: z.string().nullable().default(null),
 });
 
-const worldRoomSchema = z.object({
+const modelRoomSchema = z.object({
   analysis: takeoffRegionAnalysisSchema.nullable().optional(),
   guid: z.string(),
   elementId: z.number().nullable(),
@@ -92,15 +94,15 @@ const worldRoomSchema = z.object({
   holes: z.array(z.array(pointSchema)),
 });
 
-export type WorldRoom = z.infer<typeof worldRoomSchema>;
-export type RoomType = WorldRoom["type"];
-export type RoomData = NonNullable<WorldRoom["data"]>;
+export type ModelRoom = z.infer<typeof modelRoomSchema>;
+export type RoomType = ModelRoom["type"];
+export type RoomData = NonNullable<ModelRoom["data"]>;
 
 export const partitionReviewSchema = z.object({
   source: z.object({
     runId: z.string().min(1).nullable(),
     documentKey: z.string().min(1),
-    scopeKey: z.string().min(1),
+    zoneKey: z.string().min(1),
   }),
   zone: z.object({ key: z.string(), name: z.string(), loops: z.array(z.array(pointSchema)) }),
   shapes: z.array(
@@ -125,13 +127,13 @@ export const partitionReviewSchema = z.object({
 });
 export type PartitionReviewData = z.infer<typeof partitionReviewSchema>;
 
-const worldZoneSchema = z.object({
+const modelZoneSchema = z.object({
   zone: z.object({
     guid: z.string(),
     elementId: z.number().nullable(),
     key: z.string(),
     ordinal: z.number(),
-    lane: worldLaneSchema,
+    lane: modelViewSchema,
     color: z.string(),
     loops: worldLoopsSchema,
     declaredSqft: z.number(),
@@ -140,7 +142,7 @@ const worldZoneSchema = z.object({
   stage: z.enum(["declared", "registered", "partitioned", "reviewed", "data", "synced", "drifted"]),
   tags: z.array(z.string()),
   name: z.string(),
-  rooms: z.array(worldRoomSchema),
+  rooms: z.array(modelRoomSchema),
   residues: z.array(
     z.object({
       id: z.string(),
@@ -170,10 +172,10 @@ const worldZoneSchema = z.object({
   savedReview: partitionReviewSchema.nullable().optional(),
 });
 
-export type WorldZone = z.infer<typeof worldZoneSchema>;
-export type Stage = WorldZone["stage"];
+export type ModelZone = z.infer<typeof modelZoneSchema>;
+export type Phase = ModelZone["stage"];
 
-const candidateRegionSchema = z.object({
+export const candidateRegionSchema = z.object({
   elementId: z.number(),
   typeName: z.string(),
   view: z.string(),
@@ -188,7 +190,7 @@ const candidateRegionSchema = z.object({
 export type CandidateRegion = z.infer<typeof candidateRegionSchema>;
 
 const liveRegionSchema = z.object({
-  analysis: worldRoomSchema.shape.analysis,
+  analysis: modelRoomSchema.shape.analysis,
   elementId: z.number(),
   role: z.string(),
   guid: z.string(),
@@ -240,7 +242,7 @@ const detectedResidueSchema = z.object({
   outer: z.array(pointSchema),
 });
 
-const partitionRunSchema = z.object({
+export const partitionRunSchema = z.object({
   /** Exact returned geometry; absent until the partition producer supplies this projection. */
   review: partitionReviewSchema.nullable().optional(),
   levelName: z.string(),
@@ -261,11 +263,11 @@ const partitionRunSchema = z.object({
 });
 export type PartitionRun = z.infer<typeof partitionRunSchema>;
 
-const worldSchema = z.object({
+const takeoffModelSchema = z.object({
   docName: z.string(),
   r10Path: z.string().nullable(),
-  lanes: z.array(worldLaneSchema),
-  zones: z.array(worldZoneSchema),
+  lanes: z.array(modelViewSchema),
+  zones: z.array(modelZoneSchema),
   systems: z.array(
     z.object({
       guid: z.string(),
@@ -276,17 +278,79 @@ const worldSchema = z.object({
     }),
   ),
 });
-export type World = z.infer<typeof worldSchema>;
-export type WorldSystem = World["systems"][number];
+export type TakeoffModel = z.infer<typeof takeoffModelSchema>;
+export type ModelSystem = TakeoffModel["systems"][number];
 
-const takeoffSnapshotSchema = z.object({
-  reading: readingSchema,
+export const takeoffSnapshotSchema = z.object({
+  reading: observationSchema,
   carriers: takeoffCarrierPreflightSchema,
-  world: worldSchema,
+  world: takeoffModelSchema,
   zoneFrs: z.array(candidateRegionSchema),
   regionsByZone: z.record(z.string(), z.array(liveRegionSchema)),
 });
 export type TakeoffSnapshot = z.infer<typeof takeoffSnapshotSchema>;
+
+/** Immutable host-owned observation. A migrated capture has no fabricated Revit target. */
+export const takeoffCaptureSchema = z.object({
+  id: z.string().regex(/^[a-f0-9]{64}$/),
+  provenance: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("live"), target: documentRefSchema }),
+    z.object({
+      kind: z.literal("legacy-unknown"),
+      archiveId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+    }),
+  ]),
+  capturedAt: z.iso.datetime(),
+  snapshot: takeoffSnapshotSchema,
+});
+export type TakeoffCapture = z.infer<typeof takeoffCaptureSchema>;
+export const takeoffCaptureSummarySchema = takeoffCaptureSchema
+  .omit({ snapshot: true })
+  .extend({ document: addressSchema, title: z.string() });
+const liveCaptureSchema = takeoffCaptureSchema.extend({
+  provenance: z.object({ kind: z.literal("live"), target: documentRefSchema }),
+});
+export const takeoffObservationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("empty"), target: documentRefSchema }),
+  z.strictObject({
+    kind: z.literal("reading"),
+    target: documentRefSchema,
+    previous: liveCaptureSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("ready"),
+    target: documentRefSchema,
+    capture: liveCaptureSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("failed"),
+    target: documentRefSchema,
+    error: z.string(),
+    previous: liveCaptureSchema.optional(),
+  }),
+]);
+export type TakeoffObservation = z.infer<typeof takeoffObservationSchema>;
+
+/** Lightweight wire projection. Geometry is fetched once by immutable identity. */
+export const takeoffObservationStatusSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("empty"), target: documentRefSchema }),
+  z.strictObject({
+    kind: z.literal("reading"),
+    target: documentRefSchema,
+    previousId: z.string().optional(),
+  }),
+  z.strictObject({ kind: z.literal("ready"), target: documentRefSchema, captureId: z.string() }),
+  z.strictObject({
+    kind: z.literal("failed"),
+    target: documentRefSchema,
+    error: z.string(),
+    previousId: z.string().optional(),
+  }),
+]);
+export type TakeoffObservationStatus = z.infer<typeof takeoffObservationStatusSchema>;
 
 const stagedRoomEditSchema = z.object({
   roomId: z.string(),
@@ -295,41 +359,24 @@ const stagedRoomEditSchema = z.object({
 });
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
 
+// Parse older Work without retaining its former page fields or discarding authored proposals.
 const takeoffsDocumentSchema = z.object({
-  bindings: routeBindingsSchema,
-  stage: z.enum(["adopt", "audit", "sync"]).optional(),
-  snapshot: takeoffSnapshotSchema.nullable().default(null),
   staged: z.array(stagedRoomEditSchema).default([]),
 });
 export type TakeoffsRouteDocument = z.infer<typeof takeoffsDocumentSchema>;
 
-const selectionSchema = z.object({
-  view: z.string(),
-  zones: z.array(z.string()),
-});
-
 export const takeoffsRouteState = {
   route: "takeoffs",
   title: "Takeoffs",
-  description: "Adopt zoning regions, audit rooms, and sync reviewed takeoff data.",
+  description:
+    "Authored room proposals. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
   schema: takeoffsDocumentSchema,
   agentWriteMask: [["staged", "*"]],
-  commands: {
-    adopt: {
-      description: "Adopt the selected zoning regions from a view.",
-      input: selectionSchema,
-      actor: "any",
-    },
-    audit: {
-      description: "Capture the selected view and partition the selected zones.",
-      input: selectionSchema,
-      actor: "any",
-    },
-    sync: {
-      description: "HUMAN ONLY. Commit eligible staged rooms to the bound .r10.",
-      input: selectionSchema.extend({ commit: z.literal(true) }),
-      actor: "human",
-      mutatesExternal: true,
-    },
-  },
+  commands: {},
 } satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;
+
+/** Historical file choices are an explicit per-view seed, never an authored or native binding. */
+export const takeoffLegacySelectionSchema = z.strictObject({
+  folder: z.string().nullable(),
+  r10: z.string().nullable(),
+});

@@ -1,7 +1,7 @@
 import { cn } from "#/lib/utils";
 import { FactChip } from "#/components/lang/chip";
 import { StateDot } from "#/components/master-table/cells";
-import type { WorldZone } from "#/takeoff/world";
+import type { ModelZone } from "#/takeoff/world";
 import { ROOM_STATES, STATE_META, stateMeta, type RoomState } from "#/takeoff/room-state";
 
 export function ZoneStateBar({
@@ -9,7 +9,7 @@ export function ZoneStateBar({
   states,
   className,
 }: {
-  zone: WorldZone;
+  zone: ModelZone;
   states: RoomState[];
   className?: string;
 }) {

@@ -1,358 +1,181 @@
+import { ActionReceiptView } from "#/actions/receipt";
 import { PartitionReview } from "#/takeoff/partition-review";
-import { token } from "#/lib/token";
-import { useMemo, useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { Cause } from "effect";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
-import { VerbLane } from "#/components/lang/verb-lane";
-import { Verb } from "#/components/lang/verb";
-import { fuseFleet, useFleet } from "#/host/fleet";
-import { documentSession, scopeSession } from "#/host/target";
+import { OutcomeStrip } from "#/components/lang/outcome-strip";
+import { ActivityDisclosure, ActivityRow } from "#/components/lang/activity";
+import { ActionButton } from "#/components/lang/action-button";
 import { Atlas } from "#/takeoff/atlas";
-import { DEFAULT_ARTIFACT_DIR } from "#/takeoff/model";
-import { TAKEOFF_SLOTS, type TakeoffSlot, type TakeoffStore } from "#/takeoff/store";
-import { TargetingHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
-import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
-import { documentTrunk, worldTrunk } from "#/targeting/world";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { DIRS_KEY, PANES, readDirs, takeoffsWorkingCopyPath } from "#/takeoff/route";
-import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
-import { addressSchema } from "@pe/agent-contracts";
+import { previousOf } from "#/readings";
+import { type TakeoffStore } from "#/takeoff/store";
+import { RouteShell } from "#/route";
+import { manifest } from "#/takeoff/manifest";
+import { SyncPanel } from "#/takeoff/adopt-panel";
 
 export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
-  const { source, targeting } = useSearch({ from: "/takeoffs" });
-  const views = useAtomValue(store.atoms.views);
-  const zones = useAtomValue(store.atoms.zones);
-  const dir = useAtomValue(store.atoms.dir);
-  const r10 = useAtomValue(store.atoms.r10Path);
-  const stage = useAtomValue(store.atoms.stage);
-  const target = useAtomValue(store.atoms.target);
-  const sessionsResult = useAtomValue(store.atoms.sessions);
-  const activeDocumentResult = useAtomValue(store.atoms.activeDocument);
-  const recentDocumentsResult = useAtomValue(store.atoms.recentDocuments);
-  const live = source === "live";
-  const fleet = useFleet({ enabled: live });
-  const storedSessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];
-  const fixtureFleet = {
-    worlds: fuseFleet([], storedSessions),
-    sessions: storedSessions,
-    isLoading: AsyncResult.isInitial(sessionsResult),
-    stale: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.waiting : false,
-    error: AsyncResult.isFailure(sessionsResult)
-      ? Error(String(Cause.squash(sessionsResult.cause)))
-      : null,
-    at: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.at : undefined,
-    basis: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.basis : ["fixture"],
-    lane: "fixture" as const,
-  };
-  const targetingFleet = live ? fleet : fixtureFleet;
-  const sessions = targetingFleet.sessions;
-  const session = (live ? documentSession : scopeSession)(store.scope.scope, sessions);
-  const openDocuments = (session?.openDocuments ?? []).map((document) => ({
-    id: document.address ?? `open:${document.openId}`,
-    label: document.title,
-    sub: document.address ?? "unsaved — save before binding Takeoffs",
-  }));
-  const scope: HostSessionScope | null = session
-    ? { bridgeSessionId: session.sessionId, openDocumentId: session.openDocumentId }
-    : null;
-  const activeDocument =
-    AsyncResult.isSuccess(activeDocumentResult) && activeDocumentResult.value.bound
-      ? activeDocumentResult.value.value
-      : null;
-
-  const world = useAtomValue(store.atoms.world);
-  const busyState = useAtomValue(store.atoms.busy);
-  const failure = useAtomValue(store.atoms.failure);
-  const panel = useAtomValue(store.atoms.panel);
-  const review = useAtomValue(store.atoms.review);
-  const targetingOpen = useAtomValue(store.atoms.targetingOpen);
-  const targetingLevel = useAtomValue(store.atoms.targetingLevel);
-  const targetingQuery = useAtomValue(store.atoms.targetingQuery);
-  const busy = busyState?.id ?? null;
-  const [documentFailure, setDocumentFailure] = useState<string | null>(null);
-
-  const addDir = (d: string) => {
-    const dirs = readDirs();
-    const next = [d, ...dirs.filter((x) => x !== d)].slice(0, 8);
-    localStorage.setItem(DIRS_KEY, JSON.stringify(next));
-    store.actions.rememberDir(d);
-    store.actions.setBindings({ bound: { folder: d, r10: null }, multi: {} });
-  };
-  const r10Result = useAtomValue(store.atoms.r10);
-
-  const feeds: Feeds<TakeoffSlot> = {
-    world: worldTrunk.feed(targetingFleet),
-    rvt: documentTrunk.feed(
-      activeDocumentResult,
-      live ? recentDocumentsResult : undefined,
-      live ? "live" : "fixture",
-      openDocuments,
-    ),
-    views: useAtomValue(store.feeds.views),
-    zones: useAtomValue(store.feeds.zones),
-    folder: useAtomValue(store.feeds.folder),
-    r10: useAtomValue(store.feeds.r10),
-  };
-  const state: BindingState<TakeoffSlot> = useMemo(
-    () => ({
-      bound: {
-        world: target || null,
-        rvt: activeDocument?.documentId ?? null,
-        views: null,
-        zones: null,
-        folder: dir || null,
-        r10: r10 || null,
-      },
-      multi: {
-        views: new Set(views),
-        zones: new Set(zones.filter((id) => world.zones.some((zone) => zone.zone.guid === id))),
-      },
-      stage,
-    }),
-    [target, activeDocument?.documentId, views, dir, r10, zones, world.zones, stage],
+  return (
+    <TakeoffsView
+      store={store}
+      select={(patch) => {
+        void navigate({ search: (previous) => ({ ...previous, ...patch }) });
+      }}
+    />
   );
-  const moveToDocument = (documentId: string) => {
-    const at = addressSchema.safeParse(documentId);
-    if (!at.success) throw Error("Save this document before binding Takeoffs.");
-    void navigate({
-      search: (previous) => ({ ...previous, doc: at.data }),
-      replace: true,
-    });
-  };
-  const switchDocument = async (documentId: string) => {
-    if (openDocuments.some((document) => document.id === documentId)) {
-      moveToDocument(documentId);
-      return;
-    }
-    if (!session || !AsyncResult.isSuccess(recentDocumentsResult))
-      throw Error("document recents are not ready");
-    const recent = recentDocumentsResult.value.value.find(
-      (candidate) => (candidate.modelGuid ?? candidate.path) === documentId,
-    );
-    if (!recent) throw Error(`unknown recent document ${documentId}`);
-    if (recent.isCloud) throw Error("cloud Takeoffs working copies are not supported yet");
-    const destination = takeoffsWorkingCopyPath(recent.path);
-    if (destination === recent.path)
-      await documentTrunk.pick(session, recent.path, recentDocumentsResult.value.value);
-    else await documentTrunk.clone(session, recent.path, destination);
-    moveToDocument(destination);
-  };
-  const setState = (patch: BindingPatch<TakeoffSlot>) => {
-    const nextWorld = patch.bound?.world;
-    if (nextWorld && nextWorld !== state.bound.world) {
-      void navigate({ search: (previous) => ({ ...previous, target: nextWorld, doc: undefined }) });
-      return;
-    }
-    store.actions.setBindings(patch);
-    const nextDocument = patch.bound?.rvt;
-    if (live && nextDocument && nextDocument !== state.bound.rvt) {
-      setDocumentFailure(null);
-      void switchDocument(nextDocument).catch((error) =>
-        setDocumentFailure(error instanceof Error ? error.message : "document switch failed"),
-      );
-    }
-  };
-  const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
+}
 
-  const product = defineProduct(
-    "takeoffs",
-    "Takeoffs",
-    TAKEOFF_SLOTS,
-  )({
-    feeds,
-    panes: PANES,
-    stages: [
-      {
-        key: "adopt",
-        label: "adopt",
-        verbs: [
-          {
-            key: "adopt",
-            label: "adopt zones",
-            demands: ["views"],
-            kind: "act",
-            run: () => store.actions.openAdopt(),
-            refuse: () => null,
-            needs: "a zoning view with filled regions",
-          },
-        ],
-      },
-      {
-        key: "audit",
-        label: "audit",
-        verbs: [
-          {
-            key: "partition",
-            label: `partition ${boundZones.length || ""} zone${boundZones.length === 1 ? "" : "s"}`,
-            demands: ["zones"],
-            kind: live ? "act" : "seam",
-            refuse: () => {
-              // ADR 0011: no capture pass. The partition reads the adopted Zoning Region directly.
-              const unadopted = boundZones.find((zone) => zone.zone.elementId === null);
-              return unadopted ? `adopt ${unadopted.zone.key} first` : null;
-            },
-            run: live
-              ? async () => {
-                  for (const zone of boundZones) await store.actions.partition(zone);
-                }
-              : async () => {
-                  throw Error("a live document — the fixture is already partitioned");
-                },
-            needs: "a live document — the fixture is already partitioned",
-          },
-          {
-            key: "refresh",
-            label: "refresh",
-            demands: ["rvt"],
-            kind: live ? "act" : "seam",
-            run: live
-              ? () => store.actions.refresh()
-              : async () => {
-                  throw Error("a live document — the replay is already the whole world");
-                },
-            refuse: () => null,
-            needs: "a live document — the replay is already the whole world",
-          },
-        ],
-      },
-      {
-        key: "sync",
-        label: "sync",
-        verbs: [
-          {
-            key: "sync",
-            label: "sync .r10",
-            demands: ["r10"],
-            kind: live ? "commit" : "seam",
-            refuse: () => (AsyncResult.isFailure(r10Result) ? "the .r10 did not open" : null),
-            run: live
-              ? () => store.actions.openSync()
-              : async () => {
-                  throw Error("a live document — the fixture has no .r10 to sync into");
-                },
-            needs: "a live document — the fixture has no .r10 to sync into",
-          },
-          {
-            key: "launch",
-            label: "open in RHVAC",
-            demands: ["r10"],
-            kind: "nav",
-            run: async () => void (await store.actions.launchRhvac()),
-            refuse: () => null,
-            needs: "an .r10 file",
-          },
-          ...(AsyncResult.isFailure(r10Result)
-            ? [
-                {
-                  key: "retry-r10",
-                  label: "retry .r10",
-                  demands: ["r10"] as const,
-                  kind: "act" as const,
-                  run: () => store.actions.retryRhvac(),
-                  refuse: () => null,
-                  needs: "an .r10 file",
-                },
-              ]
-            : []),
-        ],
-      },
-    ],
-  });
+/** What the route can put in its own URL. `?source=` is gone; `?demo=` and `?work=` replace it. */
+export type TakeoffViewSelection = {
+  demo?: string;
+  work?: string;
+  doc?: import("@pe/agent-contracts").Address;
+  target?: string;
+};
 
-  const b = useBindings(
-    product,
-    state,
-    setState,
-    targetingOpen,
-    (open) => store.actions.setTargetingOpen(open),
-    targetingLevel,
-    (level) => store.actions.setTargetingLevel(level),
-    targetingQuery,
-    (query) => store.actions.setTargetingQuery(query),
-  );
-  const runner = useRunner(product, b, busy);
+export function TakeoffsView({
+  store,
+  select,
+}: {
+  store: TakeoffStore;
+  select: (patch: TakeoffViewSelection) => void;
+}) {
+  const operations = store.operations;
+  const [receiptId, setReceiptId] = useState<string>();
+  // Missing, loading, failed-with-previous and successful-empty are four different answers.
+  // Collapsing them to [] would let a failed status read read as "no activity".
+  const receipts = previousOf(operations) ?? [];
+  const unresolved = receipts.filter((row) => row.state !== "succeeded" && row.state !== "failed");
+  const unresolvedIds = new Set(unresolved.map((row) => row.id));
+  const activity = operations.state === "failed"
+    ? {
+        tone: "caution" as const,
+        summary: receipts.length
+          ? `could not read activity — showing ${receipts.length} from the last observation`
+          : "could not read activity — status unknown",
+        says: `Could not determine current status: ${operations.message}. This is a read failure, not a failed operation.`,
+      }
+    : operations.state === "absent"
+      ? {
+          tone: "meta" as const,
+          summary: "activity not read yet",
+          says: undefined,
+        }
+      : {
+          tone: unresolved.length ? ("caution" as const) : ("meta" as const),
+          summary: unresolved.length
+            ? `${unresolved.length} outcome${unresolved.length === 1 ? "" : "s"} unresolved`
+            : receipts.length
+              ? `no unresolved work · ${receipts.length} recorded`
+              : "no activity yet",
+          says: undefined,
+        };
+  const r10 = store.r10Path;
+  const geometry = store.snapshot;
+  const captured = geometry ? previousOf(geometry) : undefined;
+  const failure = store.failure;
+  const panel = store.panel;
+  const review = store.review;
 
-  const addFolder = (link: Link) =>
-    link.key === "folder" ? (
-      <form
-        className="px-2 pt-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const input = e.currentTarget.elements.namedItem("dir") as HTMLInputElement;
-          const d = input.value.trim();
-          if (d) addDir(d);
-        }}
-      >
-        <input
-          name="dir"
-          placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
-          className="w-full px-1 py-0.5"
-          style={{ borderTop: `1px solid ${token("line-2")}`, color: token("ink") }}
-        />
-      </form>
-    ) : null;
-
-  const headRail = (
+  const headRail = store.savedCapture ? (
     <div>
-      <TargetingHead
-        product={product}
-        b={b}
-        runner={runner}
-        mode={targeting}
-        extra={addFolder}
-        fact={
-          !live ? (
-            <FactChip
-              dashed
-              title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
-            >
-              fixture · project-a replay
+      <FactChip title="Explicit saved review; this capture does not assert current Revit geometry">
+        saved review · {store.savedCapture.capturedAt}
+      </FactChip>
+      <span>
+        {store.savedCapture.provenance.kind === "legacy-unknown"
+          ? "original target unknown"
+          : `${store.savedCapture.provenance.target.session} / ${store.savedCapture.provenance.target.openId}`}
+      </span>
+      {r10 && <span>file: {r10}</span>}
+      {failure && <span role="alert">{failure.message}</span>}
+      <ActionButton
+        label="choose capture"
+        reason="Choose another dated capture"
+        onClick={() => select({ work: undefined })}
+      />
+      <ActionButton
+        label="live"
+        reason="Explicitly return to the selected Revit document"
+        onClick={() => select({ work: undefined, demo: undefined })}
+      />
+    </div>
+  ) : (
+    <div>
+      <RouteShell
+        manifest={manifest}
+        aside={
+          captured ? (
+            <FactChip title="Time of the last captured geometry; refresh failures remain visible in the geometry readout">
+              capture · {captured.reading.observedAt}
+              {geometry?.state === "failed"
+                ? " · stale"
+                : geometry?.state === "loading"
+                  ? " · refreshing"
+                  : ""}
             </FactChip>
           ) : undefined
         }
-        receipt={
-          <span className="flex items-center gap-2">
-            <VerbLane atoms={store.atoms} />
-            {documentFailure ? <span role="alert">{documentFailure}</span> : null}
-            {documentFailure ? (
-              <Verb
-                label="dismiss"
-                onClick={() => setDocumentFailure(null)}
-                reason="Clears the document switch error. It does not retry."
-              />
-            ) : null}
+      >
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <OutcomeStrip
+              busy={store.busy ? `${store.busy.key} · ${store.busy.seconds}s` : null}
+              failure={store.failure}
+            />
+            <ActionButton
+              label="saved review"
+              reason="Choose a dated host capture without Revit"
+              onClick={() => select({ work: "latest" })}
+            />
             {failure ? (
-              <Verb
+              <ActionButton
                 label="dismiss"
                 onClick={() => store.actions.clearFailure()}
-                reason="Clears this error line. It does not retry — re-run the verb that failed."
+                reason="Clears this error line. It does not retry — re-run the action that failed."
               />
             ) : null}
-            {!live && (
-              <Verb
-                label="leave fixture → live"
-                onClick={() =>
-                  void navigate({ search: (previous) => ({ ...previous, source: "live" }) })
-                }
-                reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
-              />
-            )}
           </span>
-        }
-      />
+          <ActivityDisclosure summary={activity.summary} tone={activity.tone}>
+            {activity.says || receipts.length ? (
+              <>
+                {activity.says ? (
+                  <ActivityRow label="activity read" says={activity.says} tone="caution" />
+                ) : null}
+                {/* Every unresolved row stays listed. A newer success, or an unrelated read
+                    completing, never removes one. */}
+                {[...unresolved, ...receipts.filter((row) => !unresolvedIds.has(row.id))].map(
+                  (row) => (
+                    <ActivityRow
+                      key={row.id}
+                      label={`${row.key} / ${row.state}`}
+                      says={`action ${row.id} · started ${row.startedAt} (observed at, not proof of freshness)`}
+                      tone={row.state === "succeeded" || row.state === "failed" ? "meta" : "caution"}
+                    >
+                      <ActionButton
+                        label={receiptId === row.id ? "hide receipt" : "read status"}
+                        reason={`Read original action ${row.id} through this route's own owner. Opening adds no background stream.`}
+                        onClick={() => setReceiptId(receiptId === row.id ? undefined : row.id)}
+                      />
+                    </ActivityRow>
+                  ),
+                )}
+                {receiptId ? (
+                  <ActionReceiptView
+                    id={receiptId}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </ActivityDisclosure>
+        </span>
+      </RouteShell>
     </div>
   );
   // Null, not an empty fragment: the band's container pays inset for whatever it holds, so an
   // absent panel must be absent, not an empty strip (annotation, 2026-08-31).
   const readoutBand =
-    scope && panel === "adopt" ? (
-      <AdoptPanel store={store} />
-    ) : scope && panel === "sync" ? (
+    panel === "sync" ? (
       <SyncPanel store={store} />
     ) : review ? (
       <PartitionReview
@@ -363,5 +186,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         }
       />
     ) : null;
-  return <Atlas store={store} headRail={headRail} readoutBand={readoutBand} />;
+  return (
+    <Atlas
+      store={store}
+      // The receipt strip and its detail live in the head's activity disclosure, which reads
+      // through this route's own owner. A second mount here would re-read the same action on
+      // the default owner.
+      headRail={headRail}
+      readoutBand={readoutBand}
+    />
+  );
 }

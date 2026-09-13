@@ -13,5 +13,8 @@ export default defineConfig({
       typeCheck: true,
     },
   },
+  // schedule-callers.test.ts drives the real host fixture, whose module graph resolves the host
+  // lane at import; PE_LANE is the SDK-owned signal and the host refuses to guess it.
+  test: { env: { PE_LANE: "dev" } },
   fmt: {},
 });

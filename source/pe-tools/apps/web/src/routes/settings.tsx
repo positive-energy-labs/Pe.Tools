@@ -1,12 +1,21 @@
-import { useCallback, useEffect, useMemo } from "react";
-import { useAtomValue } from "@effect/atom-react";
+/**
+ * The settings route. One manifest (`settings/manifest.ts`), one shell, one body: the shell draws
+ * the head, the door, the chords, the help and the inspector; everything below reads the route
+ * handle's Work and Readings. There is no second store and no separate demo lane — `?demo=<action>`
+ * mounts a seed through `useRoute` like every other route.
+ */
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   settingsFieldPointer,
   settingsFieldSegments,
+  settingsWorkSnapshot,
+  type Reading,
   type RouteStatePatch,
+  type SettingsDocumentId,
   type SettingsFieldState,
   type SettingsValidation,
+  type WorkKey,
 } from "@pe/agent-contracts";
 import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
 
@@ -15,29 +24,27 @@ import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/lang/verb-lane";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
+import { RouteShell, useRoute, type RouteHandle } from "#/route";
 import { schemaFormModel } from "#/settings-panes/schema-form";
-import { SETTINGS_PRODUCT, type SettingsSlot } from "#/settings/product";
-import { createLiveSettingsHost } from "#/settings/host";
-import { createFixtureSettingsStore, fixtureSettingsPicker } from "#/settings/fixture";
-import { createSettingsStore, type SettingsStore } from "#/settings/store";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import type { Scope } from "#/state/route-store";
-import { TargetingHead } from "#/targeting/head";
-import { RouteScope } from "#/workbench/route-scope";
-import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
+import { FileWorkspace, fileSearch } from "#/settings/file-workspace";
+import { settingsManifest } from "#/settings/manifest";
+import type { SettingsAction, SettingsPage, SettingsReading } from "#/settings/seeds";
+import type { SettingsRouteDocument } from "@pe/agent-contracts";
+
+type Handle = RouteHandle<SettingsRouteDocument, SettingsReading, SettingsPage, SettingsAction>;
 
 export const settingsSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
+): ReturnType<typeof fileSearch> & { thread?: string } => ({
+  ...fileSearch(search),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
 });
+
+export const manifest = settingsManifest({ scope: { route: "settings", target: null } });
 
 export const Route = createFileRoute("/settings")({
   validateSearch: settingsSearch,
@@ -45,46 +52,58 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsRoute() {
-  return <SettingsRouteContent source={Route.useSearch().source} />;
+  return <SettingsRouteContent {...Route.useSearch()} />;
 }
 
-export function SettingsRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <SettingsFixtureRoute />;
+export function SettingsRouteContent(initial: Partial<ReturnType<typeof fileSearch>>) {
+  // In the demo lane the SEED is the file. `FileWorkspace` exists to pick one and have the host
+  // read it; standing it in front of `?demo=` meant the seeded surface never mounted at all, so
+  // the route's own proof could not reach its own actions.
+  const demo = new URLSearchParams(globalThis.location?.search ?? "").get("demo");
+  if (demo)
+    return (
+      <SettingsWorkspace
+        scope={{ route: "settings", target: null, work: "demo" }}
+        selectFile={async () => {}}
+      />
+    );
   return (
-    <RouteScope>
-      {(scope) => <SettingsStoreOwner key={scope.scope.document} scope={scope} />}
-    </RouteScope>
+    <FileWorkspace initial={initial}>
+      {(scope, selectFile) => <SettingsWorkspace scope={scope} selectFile={selectFile} />}
+    </FileWorkspace>
   );
 }
 
-export function SettingsFixtureRoute() {
-  const store = useRouteStore(() => createFixtureSettingsStore(appAtomRegistry));
-  useEffect(() => store.actions.setPicker(fixtureSettingsPicker), [store]);
-  return <SettingsWorkspace store={store} />;
+/** A file Reading's observation is its raw text. */
+function readingText(reading: Reading<unknown> | undefined): string | undefined {
+  if (!reading) return undefined;
+  if (reading.state === "ready") return typeof reading.observation === "string" ? reading.observation : undefined;
+  const previous = "previous" in reading ? reading.previous : undefined;
+  return typeof previous === "string" ? previous : undefined;
 }
 
-function SettingsStoreOwner({ scope }: { scope: Scope }) {
-  const store = useRouteStore(() => {
-    return createSettingsStore({
-      registry: appAtomRegistry,
-      scope,
-      host: createLiveSettingsHost(),
-    });
-  });
-  return <SettingsWorkspace store={store} />;
-}
-
-function SettingsWorkspace({ store }: { store: SettingsStore }) {
-  const snapshot = useAtomValue(store.atoms.snapshot);
-  const fields = useAtomValue(store.atoms.fields);
-  const validation = useAtomValue(store.atoms.validation);
-  const proposals = useAtomValue(store.atoms.proposals);
-  const formDirty = useAtomValue(store.atoms.formDirty);
-  const values = useAtomValue(store.atoms.formValues);
-  const schemaJson = useAtomValue(store.atoms.schemaJson);
-  const connected = useAtomValue(store.atoms.connected);
-  const sliceError = useAtomValue(store.atoms.sliceError);
-  const busy = useAtomValue(store.atoms.busy);
+function SettingsWorkspace({
+  scope,
+  selectFile,
+}: {
+  scope: WorkKey;
+  selectFile: (id: SettingsDocumentId) => Promise<void>;
+}) {
+  const routeManifest = useMemo(
+    () => settingsManifest({ scope, selectFile }),
+    [scope, selectFile],
+  );
+  const handle = useRoute(routeManifest);
+  const doc = handle.work.doc;
+  const snapshot = useMemo(() => (doc ? settingsWorkSnapshot(doc) : null), [doc]);
+  const candidate = useMemo(() => (doc ? settingsWorkSnapshot(doc, true) : null), [doc]);
+  const fields: Record<string, SettingsFieldState> = doc?.fields ?? {};
+  const validation = candidate?.validation ?? null;
+  const values = useMemo(() => formObject(candidate?.rawContent ?? "{}"), [candidate?.rawContent]);
+  const schemaJson = readingText(handle.readings.schema);
+  const busy = handle.busy != null;
+  const proposals = Object.values(fields).filter((field) => field.proposal != null);
+  const formDirty = Object.values(fields).some((field) => field.staged != null);
   const rows = useMemo(
     () => (snapshot ? buildFieldRows(snapshot.rawContent, fields) : []),
     [fields, snapshot],
@@ -98,14 +117,10 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const aside = (
     <>
       <FactChip
-        tone={connected === false ? "caution" : "meta"}
+        tone={handle.work.revision === null ? "caution" : "meta"}
         title="Route-state transport status."
       >
-        {connected === null
-          ? "bridge unknown"
-          : connected
-            ? "bridge connected"
-            : "bridge disconnected"}
+        {handle.work.revision === null ? "work disconnected" : "work connected"}
       </FactChip>
       <FactChip title="Open Pea proposals." tone={proposals.length ? "pea" : "meta"}>
         {proposals.length} proposed
@@ -115,83 +130,42 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       </FactChip>
       {validation ? (
         <FactChip
-          title="The last settings validation result."
+          title="Authored JSON syntax; run validate for host diagnostics."
           tone={validation.isValid ? "done" : "caution"}
         >
-          {validation.isValid ? "valid" : `${validation.issues.length} invalid`}
+          {validation.isValid ? "JSON parses" : `${validation.issues.length} invalid`}
         </FactChip>
       ) : null}
     </>
   );
-  const picker = useAtomValue(store.atoms.picker);
-  const targeting = useAtomValue(store.atoms.targeting);
-  const binding = useAtomValue(store.atoms.binding);
-  const receipt = useAtomValue(store.atoms.receipt);
-  const feeds = {
-    workspace: useAtomValue(store.feeds.workspace),
-    module: useAtomValue(store.feeds.module),
-    root: useAtomValue(store.feeds.root),
-    file: useAtomValue(store.feeds.file),
-  };
-  const product = SETTINGS_PRODUCT(feeds, {
-    open: store.actions.open,
-    refresh: store.actions.refresh,
-    validate: store.actions.validate,
-    save: store.actions.save,
-  });
-  const state: BindingState<SettingsSlot> = {
-    bound: {
-      workspace: picker.workspaceKey ?? null,
-      module: picker.moduleKey ?? null,
-      root: picker.rootKey ?? null,
-      file: picker.filePath ?? null,
-    },
-    multi: {},
-    stage: "document",
-  };
-  const setState = useCallback(
-    (patch: BindingPatch<SettingsSlot>) => {
-      if (!patch.bound) return;
-      store.actions.setPicker({
-        workspaceKey: patch.bound.workspace ?? undefined,
-        moduleKey: patch.bound.module ?? undefined,
-        rootKey: patch.bound.root ?? undefined,
-        filePath: patch.bound.file ?? undefined,
-      });
-      const file = patch.bound.file ?? null;
-      if (file !== (binding.target ?? null)) void store.actions.bind(file).catch(() => undefined);
-    },
-    [binding.target, store],
-  );
-  const bindings = useBindings(
-    product,
-    state,
-    setState,
-    targeting.open,
-    (open) => store.actions.setTargeting((previous) => ({ ...previous, open })),
-    targeting.level,
-    (level) => store.actions.setTargeting((previous) => ({ ...previous, level })),
-    targeting.query,
-    (query) => store.actions.setTargeting((previous) => ({ ...previous, query })),
-  );
-  const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden" data-surface="page">
-      <TargetingHead
-        product={product}
-        b={bindings}
-        runner={runner}
-        receipt={receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined}
-        fact={aside}
-      />
+      <RouteShell manifest={routeManifest} aside={aside} />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
         <div className="mx-auto max-w-5xl space-y-1.5">
-          <VerbLane atoms={store.atoms} />
-          {sliceError ? (
-            <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
+          {handle.failure ? (
+            <OutcomeLine
+              kind="error"
+              label={`settings ${handle.failure.code}`}
+              says={handle.failure.message}
+            />
           ) : null}
 
+          {snapshot && (
+            <details open={!validation?.isValid}>
+              <summary>Authored basis / candidate JSON</summary>
+              <RawEditor content={candidate?.rawContent ?? snapshot.rawContent} handle={handle} />
+              {validation?.issues.map((issue, index) => (
+                <OutcomeLine
+                  key={index}
+                  kind="error"
+                  label={issue.path ?? "$"}
+                  says={issue.message}
+                />
+              ))}
+            </details>
+          )}
           {snapshot && formModel ? (
             <>
               <ArtifactFrame
@@ -222,9 +196,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                     baselineValues={formModel.baseline}
                     values={values}
                     onChange={(path, value) =>
-                      void store.actions
-                        .stage(settingsFieldPointer(path.split(".")), value)
-                        .catch(() => undefined)
+                      void stage(handle, settingsFieldPointer(path.split(".")), value)
                     }
                     validationResult={toValidationResult(validation)}
                   />
@@ -243,7 +215,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 >
                   <div className="hairline-rows">
                     {proposalRows.map((row) => (
-                      <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
+                      <FieldRow key={row.path} row={row} busy={busy} handle={handle} />
                     ))}
                   </div>
                 </ArtifactFrame>
@@ -262,13 +234,15 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             >
               <div className="hairline-rows">
                 {rows.map((row) => (
-                  <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
+                  <FieldRow key={row.path} row={row} busy={busy} handle={handle} />
                 ))}
               </div>
             </ArtifactFrame>
           ) : (
             <EmptyState story="scope" exit="bind the settings address and run open">
-              no settings document is open
+              {snapshot
+                ? "Structured fields are unavailable; raw JSON is preserved above."
+                : "no settings document is open"}
             </EmptyState>
           )}
         </div>
@@ -276,6 +250,23 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     </main>
   );
 }
+
+function formObject(raw: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(raw.replace(/^﻿/, ""));
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+const stage = (handle: Handle, path: string, value: unknown) =>
+  handle.actions.stage.run({ path, value });
+
+const patchField = (handle: Handle, patches: RouteStatePatch[]) =>
+  void handle.work.write(patches);
 
 interface FieldRowModel {
   path: string;
@@ -306,11 +297,11 @@ function buildFieldRows(
 function FieldRow({
   row,
   busy,
-  store,
+  handle,
 }: {
   row: FieldRowModel;
   busy: boolean;
-  store: SettingsStore;
+  handle: Handle;
 }) {
   const staged = row.field?.staged != null;
   const proposal = staged ? null : row.field?.proposal;
@@ -324,33 +315,31 @@ function FieldRow({
         stage={staged ? "staged" : proposal ? "proposed" : "clean"}
         stagedBy="you"
         cap={busy ? "locked" : "editable"}
-        capReason={busy ? "A settings verb is running." : undefined}
-        onCommit={(value) =>
-          void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
-        }
+        capReason={busy ? "A settings action is running." : undefined}
+        onCommit={(value) => void stage(handle, row.path, parseLike(shown, value))}
         note={proposal?.note ?? undefined}
       />
       {staged ? (
-        <Verb
+        <ActionButton
           label="unstage"
           disabled={busy}
           reason="Return this field to its saved value."
-          onClick={() => patchField(store, [{ path: ["fields", row.path, "staged"] }])}
+          onClick={() => patchField(handle, [{ path: ["fields", row.path, "staged"] }])}
         />
       ) : proposal ? (
         <span className="flex shrink-0 gap-1.5">
-          <Verb
+          <ActionButton
             label="deny"
             disabled={busy}
             reason="Clear Pea's proposal."
-            onClick={() => patchField(store, [{ path: ["fields", row.path, "proposal"] }])}
+            onClick={() => patchField(handle, [{ path: ["fields", row.path, "proposal"] }])}
           />
-          <Verb
+          <ActionButton
             label="approve"
             disabled={busy}
             reason="Stage Pea's proposed value."
             onClick={() =>
-              patchField(store, [
+              patchField(handle, [
                 { path: ["fields", row.path, "staged"], value: { value: proposal.value } },
               ])
             }
@@ -359,10 +348,6 @@ function FieldRow({
       ) : null}
     </div>
   );
-}
-
-function patchField(store: SettingsStore, patches: RouteStatePatch[]) {
-  void store.actions.apply(patches).catch(() => undefined);
 }
 
 function toValidationResult(
@@ -415,4 +400,26 @@ function parseLike(before: unknown, value: string): unknown {
     }
   }
   return value;
+}
+
+function RawEditor({ content, handle }: { content: string; handle: Handle }) {
+  const [buffer, setBuffer] = useState(content);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setBuffer(content);
+  }, [content, focused]);
+  return (
+    <textarea
+      aria-label="Authored raw JSON"
+      className="min-h-48 w-full"
+      value={buffer}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={(event) => {
+        const value = event.target.value;
+        setBuffer(value);
+        void stage(handle, "", value);
+      }}
+    />
+  );
 }

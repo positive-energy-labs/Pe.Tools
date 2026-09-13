@@ -50,7 +50,21 @@ export class BridgeError {
   constructor(
     readonly message: string,
     readonly statusCode: number,
+    readonly evidence: {
+      readonly issues?: BridgeResponse["issues"];
+      readonly nativeOutcome?: string;
+      readonly notDispatched?: true;
+      readonly result?: unknown;
+    } = {},
   ) {}
+  get nativeOutcome(): string | undefined {
+    // BridgeAgent emits one root issue for a RevitTaskOutcome; preserve unknown future codes.
+    const issues = this.evidence.issues;
+    return (
+      this.evidence.nativeOutcome ??
+      (issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined)
+    );
+  }
 }
 
 /** No Revit process is currently connected to the bridge. */
@@ -176,7 +190,7 @@ const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LA
  * Selector grammar: `session:<id>` → the connection reporting that pe-revit session id;
  * `doc:<Address>` → the one connection holding that document (zero or several holders refuse,
  * naming every session and what it holds); `pin:<id>|doc:<Address>` → the pinned pe-revit session
- * while it holds the document, else the plain `doc:` rules; `controlled`/`observed` → custody; `dev`/`installed` → lane; all digits → pid; anything else
+ * only while it holds the document; a pin miss refuses; `controlled`/`observed` â†’ custody; `dev`/`installed` â†’ lane; all digits â†’ pid; anything else
  * → bridge session id (one process incarnation). Untargeted with one session is implicit
  * (ergonomic and safe); untargeted with several HARD-FAILS immediately with the listing —
  * read-only status/list surfaces aggregate via `list` instead, never through here.
@@ -218,7 +232,7 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
   // A Scope that names a document and no session resolves here: the document is the primary key
   // and the session is derived from its one holder. Two holders is the one case the user must
   // name a session, and the refusal lists them so the head can offer exactly those.
-  // The pin is a tiebreak, never a claim: it wins only while that session is a holder.
+  // A pin is a required selected session, never a fallback preference.
   const pinned = /^pin:([^|]+)\|doc:(.*)$/is.exec(selector);
   if (pinned || selector.toLowerCase().startsWith("doc:")) {
     const address = (pinned ? pinned[2]! : selector.slice("doc:".length)).trim();
@@ -227,6 +241,12 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     // An observed Revit (no pe-revit receipt) has no SDK id; its bridge id is its name on the head.
     const held = pin ? holders.find((s) => (s.sdkSessionId ?? s.sessionId) === pin) : undefined;
     if (held) return { _tag: "found", session: held };
+    if (pin)
+      return {
+        _tag: "error",
+        statusCode: 409,
+        message: `Pinned session '${pin}' does not hold document '${address}'. Connected sessions: ${listing}`,
+      };
     if (holders.length === 1) return { _tag: "found", session: holders[0] };
     if (holders.length === 0)
       return {
@@ -312,7 +332,8 @@ export class RevitBridge extends Context.Service<
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
-      openDocumentId?: string,
+      openDocumentId?: string | null,
+      requestId?: string,
     ) => Effect.Effect<
       { value: unknown; target: { session: string; document: string | null } },
       BridgeError | NoRevitSession
@@ -323,6 +344,8 @@ export class RevitBridge extends Context.Service<
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
     readonly events: PubSub.PubSub<HostBridgeEvent>;
+    /** Synchronous public observation tap; a slow network reader never backpressures the bridge. */
+    readonly subscribe: (listener: (event: HostBridgeEvent) => void) => () => void;
   }
 >()("RevitBridge") {}
 
@@ -352,7 +375,7 @@ const decodePayloadJson = Effect.fnUntraced(function* (payloadJson: string | nul
 const encodePayloadJson = Effect.fnUntraced(function* (payload: unknown) {
   return yield* Effect.try({
     try: () => JSON.stringify(payload ?? {}),
-    catch: (error) => new BridgeError(String(error), 400),
+    catch: (error) => new BridgeError(String(error), 400, { notDispatched: true }),
   });
 });
 
@@ -370,6 +393,7 @@ export const reserveBridgePending = Effect.fnUntraced(function* (
       new BridgeError(
         `Revit is busy executing '${activeOperationKey}'. Retry '${operationKey}' after the current request completes.`,
         423,
+        { notDispatched: true },
       ),
     );
 });
@@ -399,7 +423,17 @@ export const RevitBridgeLive = Layer.effect(
       PubSub.sliding<HostBridgeEvent>(EVENT_STREAM_CAPACITY),
       PubSub.shutdown,
     );
-    const emit = (event: HostBridgeEvent) => PubSub.publish(events, event).pipe(Effect.asVoid);
+    const listeners = new Set<(event: HostBridgeEvent) => void>();
+    const subscribe = (listener: (event: HostBridgeEvent) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    };
+    const emit = (event: HostBridgeEvent) =>
+      Effect.sync(() => {
+        for (const listener of listeners) listener(event);
+      }).pipe(Effect.andThen(PubSub.publish(events, event)), Effect.asVoid);
 
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
@@ -608,9 +642,9 @@ export const RevitBridgeLive = Layer.effect(
       operationKey: string,
       payload: unknown,
       openDocumentId: string | undefined,
+      requestId = randomUUID(),
     ) {
       const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
-      const requestId = randomUUID();
       yield* reserveBridgePending(session.pending, operationKey, requestId, reply);
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
@@ -626,7 +660,9 @@ export const RevitBridgeLive = Layer.effect(
         const res = yield* Deferred.await(reply);
         if (!res.ok)
           return yield* Effect.fail(
-            new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500),
+            new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
+              issues: res.issues,
+            }),
           );
         return {
           value: yield* decodePayloadJson(res.payloadJson),
@@ -643,14 +679,17 @@ export const RevitBridgeLive = Layer.effect(
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
-      openDocumentId?: string,
+      openDocumentId?: string | null,
+      requestId?: string,
     ) {
       // Every bridge invoke reaches into exactly one Revit process, so ambiguity hard-fails here
       // (no warning-only release). Read-only aggregation across sessions goes through `list`.
       const resolution = yield* resolveTarget(bridgeSessionId);
       if (resolution._tag === "none") return yield* Effect.fail(new NoRevitSession());
       if (resolution._tag === "error")
-        return yield* Effect.fail(new BridgeError(resolution.message, resolution.statusCode));
+        return yield* Effect.fail(
+          new BridgeError(resolution.message, resolution.statusCode, { notDispatched: true }),
+        );
       // The candidate is a spread copy carrying `documents`; the liveness check below compares by
       // identity, so take the map's own Session object. FOOTGUN: every invoke failed NoRevitSession
       // on a live Revit (2026-09-06) while `list` showed the session, because of this copy.
@@ -659,7 +698,9 @@ export const RevitBridgeLive = Layer.effect(
 
       const state = yield* Ref.get(session.state);
       const selectedDocument =
-        openDocumentId ?? state.openDocuments.find((document) => document.isActive)?.openId;
+        openDocumentId === null
+          ? undefined
+          : (openDocumentId ?? state.openDocuments.find((document) => document.isActive)?.openId);
 
       const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
       if (depth > MAX_QUEUED_OPS) {
@@ -668,6 +709,7 @@ export const RevitBridgeLive = Layer.effect(
           new BridgeError(
             `Revit queue is full (${MAX_QUEUED_OPS} waiting). Retry '${operationKey}' shortly.`,
             423,
+            { notDispatched: true },
           ),
         );
       }
@@ -700,7 +742,23 @@ export const RevitBridgeLive = Layer.effect(
         // The session may have died — or been taken over by a reconnect — while we queued.
         const live = (yield* Ref.get(sessions)).get(session.sessionId);
         if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        const result = yield* invokeSession(session, operationKey, payload, selectedDocument);
+        const currentState = yield* Ref.get(session.state);
+        if (
+          selectedDocument &&
+          !currentState.openDocuments.some((doc) => doc.openId === selectedDocument)
+        )
+          return yield* Effect.fail(
+            new BridgeError("The selected document lifetime closed before dispatch", 409, {
+              notDispatched: true,
+            }),
+          );
+        const result = yield* invokeSession(
+          session,
+          operationKey,
+          payload,
+          selectedDocument,
+          requestId,
+        );
         yield* Effect.logInfo(
           `Revit queue completed op=${operationKey} session=${session.sessionId} duration_ms=${Date.now() - startedAt}`,
         );
@@ -742,6 +800,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, events };
+    return { invoke, snapshot, list, handleConnection, events, subscribe };
   }),
 );

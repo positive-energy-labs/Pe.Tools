@@ -17,7 +17,7 @@ import { address } from "@pe/agent-contracts";
 
 import { buildSheet, planeGeos, type FamilyModel } from "./family-model.ts";
 import type { EvidenceSlice } from "./host.ts";
-import { buildPageWorld, ghostRows, initialDraft, type Draft } from "./model.ts";
+import { buildFamilyPageModel, ghostRows, initialDraft, type Draft } from "./model.ts";
 import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
 
 const L = "Length (Common)";
@@ -113,7 +113,7 @@ const SHOWCASE: FamilyModel = {
 };
 
 const world = () =>
-  buildPageWorld(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" }));
+  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" }));
 
 /** The page's own edit channel, condensed: clone the baseline and mutate it like a verb would. */
 function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
@@ -216,7 +216,7 @@ describe("projectFamilyModel — document → page world", () => {
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     expect(ghostRows(page, initialDraft(page)).map((row) => row.name)).toEqual([
       "core-bore.diameter",
     ]);
@@ -388,7 +388,7 @@ describe("draftToPatches — draft → staged field patches", () => {
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     const baseline = initialDraft(page);
     const draft = structuredClone(baseline);
     // Exactly what `bindToNew` does: keep the literal as the new parameter's family value, so the
@@ -459,7 +459,7 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     const draft = structuredClone(initialDraft(page));
     draft.authored["Core Bore Diameter"] = "3in";
     draft.newParams = [{ name: "Core Bore Diameter", dataType: L, group: "geometry" }];
@@ -475,7 +475,7 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
   it("keeps value XOR formula, and drops resolved values a changed formula no longer earns", () => {
     const withResolved: FamilyModel = structuredClone(SHOWCASE);
     withResolved.familyParameters["Core Height"]!.resolvedValues = { Standard: "34in" };
-    const page = buildPageWorld(projectFamilyModel(withResolved, null));
+    const page = buildFamilyPageModel(projectFamilyModel(withResolved, null));
 
     // Untouched: the evidence-resolved value survives the composition.
     const untouched = draftedModel(withResolved, initialDraft(page), page);

@@ -161,13 +161,11 @@ export const getSettingsWorkspaces = Effect.fnUntraced(function* (ctx: LocalOpCo
   const bridgeModules = ctx.bridge.connected
     ? yield* Effect.result(ctx.invokeBridge("settings.module-catalog"))
     : undefined;
+  const diskModules = yield* discoverSettingsModules();
   const modules =
     bridgeModules?._tag === "Success"
-      ? mergeSettingsModules(
-          neutralSettingsModules(),
-          normalizeBridgeModuleCatalog(bridgeModules.success),
-        )
-      : neutralSettingsModules();
+      ? mergeSettingsModules(diskModules, normalizeBridgeModuleCatalog(bridgeModules.success))
+      : diskModules;
 
   return {
     workspaces: [
@@ -296,6 +294,30 @@ function productLogPaths() {
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),
   };
 }
+
+const discoverSettingsModules = Effect.fnUntraced(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const base = defaultSettingsBasePath();
+  const names = yield* fs
+    .readDirectory(base)
+    .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+  const modules: SettingsModuleWorkspaceDescriptor[] = [];
+  for (const moduleKey of names) {
+    const roots = yield* fs
+      .readDirectory(join(base, moduleKey))
+      .pipe(Effect.catch(() => Effect.succeed([] as string[])));
+    const directories = [];
+    for (const rootKey of roots) {
+      const info = yield* fs
+        .stat(join(base, moduleKey, rootKey))
+        .pipe(Effect.catch(() => Effect.succeed(null)));
+      if (info?.type === "Directory") directories.push({ rootKey, displayName: rootKey });
+    }
+    if (directories.length)
+      modules.push({ moduleKey, defaultRootKey: directories[0].rootKey, roots: directories });
+  }
+  return mergeSettingsModules(neutralSettingsModules(), modules);
+});
 
 function neutralSettingsModules(): SettingsModuleWorkspaceDescriptor[] {
   return [

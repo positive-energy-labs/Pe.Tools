@@ -1,4 +1,6 @@
 import { useHotkeys } from "@tanstack/react-hotkeys";
+
+import { keyMeta } from "#/route/keys";
 import { dash, token } from "#/lib/token";
 import {
   type CSSProperties,
@@ -56,7 +58,16 @@ export function PlanPane(props: {
   };
   const vp = useMemo(() => levelViewport(frame), [frame]);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  useHotkeys([{ hotkey: "Escape", callback: () => setSelection(null) }], { target: hostRef });
+  useHotkeys(
+    [
+      {
+        hotkey: "Escape",
+        callback: () => setSelection(null),
+        options: { meta: keyMeta({ name: "clear selection", description: "drop the selected element", tier: "widget", region: "plan" }) },
+      },
+    ],
+    { target: hostRef },
+  );
   const planCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);

@@ -1,6 +1,4 @@
 import { useCallback, useMemo, type ReactNode } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
@@ -9,9 +7,9 @@ import { atlasRoomState, type AtlasRow as Row, type TakeoffStore } from "#/takeo
 import {
   STAGE_ORDER,
   type RoomEdit,
-  type Stage,
-  type WorldRoom,
-  type WorldZone,
+  type Phase,
+  type ModelRoom,
+  type ModelZone,
 } from "#/takeoff/world";
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
@@ -21,8 +19,8 @@ export type Verdict = "accept" | "dismiss";
 
 export interface AtlasActions {
   patch: (guid: string, patch: RoomEdit) => void;
-  decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  partition: (zone: WorldZone) => void;
+  decide: (room: ModelRoom, flag: string, verb: Verdict) => void;
+  partition: (zone: ModelZone) => void;
   refresh: () => void;
 }
 
@@ -36,7 +34,7 @@ export interface AtlasProps {
 const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-  partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
+  partition: () => void store.actions.partition().catch(() => undefined),
   refresh: () => void store.actions.refresh().catch(() => undefined),
 });
 
@@ -45,29 +43,29 @@ const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
 
 function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) {
-  const world = useAtomValue(store.atoms.world);
-  const views = useAtomValue(store.atoms.views);
+  const world = store.world;
+  const views = store.views;
   const live = store.source === "live";
-  const busyState = useAtomValue(store.atoms.busy);
-  const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
-  const snapshot = useAtomValue(store.atoms.snapshot);
-  const geoReady = AsyncResult.isSuccess(snapshot) && snapshot.value.bound;
+  const busyState = store.busy;
+  const busy = busyState ? `${busyState.key} · ${busyState.seconds}s queued/running` : null;
+  const snapshot = store.snapshot;
+  const geoReady = snapshot?.state === "ready";
   const actions = useMemo(() => createAtlasActions(store), [store]);
-  const stageFilter = useAtomValue(store.atoms.stageFilter);
-  const zoneKey = useAtomValue(store.atoms.zoneKey);
-  const pageLevel = useAtomValue(store.atoms.level);
-  const cursor = useAtomValue(store.atoms.cursor);
-  const fieldsMode = useAtomValue(store.atoms.fieldsMode);
-  const planOpen = useAtomValue(store.atoms.planOpen);
-  const statsOpen = useAtomValue(store.atoms.statsOpen);
-  const tableState = useAtomValue(store.atoms.atlasTableState);
-  const rows = useAtomValue(store.atoms.atlasRows);
-  const visibleKeys = useAtomValue(store.atoms.visibleRows);
-  const decided = useAtomValue(store.atoms.decisions);
+  const stageFilter = store.stageFilter;
+  const zoneKey = store.zoneKey;
+  const pageLevel = store.level;
+  const cursor = store.cursor;
+  const fieldsMode = store.fieldsMode;
+  const planOpen = store.planOpen;
+  const statsOpen = store.statsOpen;
+  const tableState = store.atlasTableState;
+  const rows = store.atlasRows;
+  const visibleKeys = store.visibleRows;
+  const decided = store.decisions;
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
-  const setStageFilter = (value: Stage | null) =>
+  const setStageFilter = (value: Phase | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
   const setLevel = useCallback(
     (value: string) => store.actions.setAtlasPage({ level: value }),
@@ -82,11 +80,11 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const setPlanOpen = (open: boolean) => store.actions.setAtlasPage({ planOpen: open });
   const setStatsOpen = (open: boolean) => store.actions.setAtlasPage({ statsOpen: open });
 
-  const openFlags = (room: WorldRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
+  const openFlags = (room: ModelRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
 
-  const stateOf = (room: WorldRoom) => atlasRoomState(room, openFlags(room).length);
-  const zoneStates = (z: WorldZone) => z.rooms.map((r) => stateOf(r));
-  const zoneCalls = (z: WorldZone) => zoneStates(z).filter((s) => s === "call").length;
+  const stateOf = (room: ModelRoom) => atlasRoomState(room, openFlags(room).length);
+  const zoneStates = (z: ModelZone) => z.rooms.map((r) => stateOf(r));
+  const zoneCalls = (z: ModelZone) => zoneStates(z).filter((s) => s === "call").length;
 
   const filteredZones = useMemo(
     () => world.zones.filter((z) => stageFilter === null || z.stage === stageFilter),
@@ -124,7 +122,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     return [...set].sort();
   }, [world]);
 
-  const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
+  const decide = (room: ModelRoom, flag: string, verb: Verdict) => {
     actions.decide(room, flag, verb);
   };
 
@@ -183,7 +181,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     },
   ];
 
-  const selectZone = (z: WorldZone | null) => {
+  const selectZone = (z: ModelZone | null) => {
     setZoneKey(z ? z.zone.guid : null);
     setCursor(null);
     if (z) setLevel(z.zone.lane.label);

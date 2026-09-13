@@ -1,3 +1,4 @@
+import { RouteShell, emptyManifest } from "#/route";
 import { token } from "#/lib/token";
 /**
  * /grilles — the custom wood floor grille calculator.
@@ -21,7 +22,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneWorkspace } from "#/components/lang/pane";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
@@ -29,7 +30,18 @@ import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";
 import { type SheetRow, Sheet, seedRows } from "#/grilles/sheet";
 import { SpecDrawing } from "#/grilles/spec-drawing";
 
-export const Route = createFileRoute("/grilles")({ component: GrillesRoute });
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("grilles", "Grilles");
+
+function RouteShelledGrillesRoute() {
+  return (
+    <RouteShell manifest={manifest}>
+      <GrillesRoute />
+    </RouteShell>
+  );
+}
+
+export const Route = createFileRoute("/grilles")({ component: RouteShelledGrillesRoute });
 
 function GrillesRoute() {
   const [rows, setRows] = useState<SheetRow[]>(seedRows);
@@ -78,7 +90,7 @@ function GrillesRoute() {
           : "plan + section A-A of the active profile · type on any dimension to set it for every row; rib auto-spaces"
       }
       actions={
-        <Verb
+        <ActionButton
           label={drawingCollapsed ? "show" : "hide"}
           onClick={() => setDrawingCollapsed((c) => !c)}
           reason={
@@ -104,12 +116,12 @@ function GrillesRoute() {
       meta={`${rows.length} candidate profiles · ${picked.size} on the export sheet`}
       actions={
         <>
-          <Verb
+          <ActionButton
             label={`export ${picked.size} drawing${picked.size === 1 ? "" : "s"}`}
             onClick={() => setExporting(true)}
             reason="Open the export sheet: the ticked profiles drawn read-only on one page, print to PDF or save each as .svg."
           />
-          <Verb
+          <ActionButton
             label="reset"
             onClick={() => setRows(seedRows())}
             reason="Throw away every edit and re-read the six workbook rows."

@@ -5,7 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 
 import { LangCellSpecimens } from "./lang-cells";
 import { LangStatusSpecimens } from "./lang-status";
-import { LangVerbSpecimens } from "./lang-verbs";
+import { LangPressSpecimens } from "./lang-verbs";
 import { LangWorkflowSpecimens } from "./lang-workflow";
 import { UiInputSpecimens } from "./ui-inputs";
 import { UiLayoutSpecimens } from "./ui-layout";
@@ -43,7 +43,7 @@ export function SwatchSpecimens() {
         <LangWorkflowSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
-        <LangVerbSpecimens />
+        <LangPressSpecimens />
         <p className="t-small t-upper text-ink-2">ui · the surviving application component layer</p>
         <UiInputSpecimens />
         <UiSurfaceSpecimens />

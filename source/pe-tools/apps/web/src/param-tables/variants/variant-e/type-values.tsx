@@ -1,6 +1,6 @@
 import { token } from "#/lib/token";
 import { type OutcomeKind } from "#/components/lang/outcome";
-import { FC_UNITS, PARAM_META, type FcRow, type ParamMeta } from "#/param-tables/variants/fixture";
+import { FC_UNITS, PARAM_META, type FcRow, type ParamMeta } from "#/param-tables/variants/data";
 
 export interface TypeVals {
   ewt: number;

@@ -136,7 +136,7 @@ it("keeps a failed capture unknown, preserves zero, and refuses cross-document p
   const current = {
     ...report([failed]),
     documentKey: "project-a",
-    scopeKey: "scope",
+    targetKey: "scope",
     RejectionHistogram: {},
   };
   const board = boardSummary(current);
@@ -153,7 +153,7 @@ it("keeps a failed capture unknown, preserves zero, and refuses cross-document p
   expect(comparableRuns(current, other)).toBe(false);
   expect(pairZones(current, other)[0]?.a).toBeNull();
   expect(comparableRuns(current, { ...current })).toBe(true);
-  expect(comparableRuns(current, { ...current, scopeKey: "another-loop" })).toBe(false);
+  expect(comparableRuns(current, { ...current, targetKey: "another-loop" })).toBe(false);
   expect(parseZoneTsv("ROOM\tR01\t0\t0\t1\t1\t\theld").rooms[0]).toMatchObject({
     sqft: 0,
     ceil: null,

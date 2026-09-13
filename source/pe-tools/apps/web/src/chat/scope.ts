@@ -1,94 +1,70 @@
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { peReadings } from "#/readings";
 import {
-  emptyScope,
-  headSchema,
-  putScopeResultSchema,
-  type Head,
-  type Scope,
+  threadHeadSchema,
+  putTargetResultSchema,
+  type DocumentRequest,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
 const scopeUrl = (threadId: string) =>
-  peUrl(resolveWorkbenchConfig(), `/scope/${encodeURIComponent(threadId)}`);
+  peUrl(resolveWorkbenchConfig(), `/target/${encodeURIComponent(threadId)}`);
 
 /**
- * One `?watch` stream per thread, shared by every `useThreadScope` caller. The head, each route
- * card, and the dock all read the Scope; a stream per caller once opened six long-lived
- * connections to the host, which is Chrome's per-origin limit, and every later POST queued forever.
- */
-const watchers = new Map<string, { source: EventSource; listeners: Set<(next: Head) => void> }>();
-function watchScope(threadId: string, listener: (next: Head) => void): () => void {
-  let entry = watchers.get(threadId);
-  if (!entry) {
-    const source = new EventSource(`${scopeUrl(threadId)}?watch`);
-    const listeners = new Set<(next: Head) => void>();
-    source.onmessage = (event) => {
-      const next = headSchema.safeParse(JSON.parse(String(event.data)));
-      if (next.success) for (const notify of listeners) notify(next.data);
-    };
-    entry = { source, listeners };
-    watchers.set(threadId, entry);
-  }
-  entry.listeners.add(listener);
-  return () => {
-    entry.listeners.delete(listener);
-    if (entry.listeners.size === 0) {
-      entry.source.close();
-      watchers.delete(threadId);
-    }
-  };
-}
-
-/**
- * The thread's Scope as the host holds it: one GET (with `?watch` for the stream) and one PUT.
+ * The thread's default Target comes from the shared resource stream; the head writes with PUT.
  * The head is the only writer; every tool call runs under the revision frozen at admission.
  */
 export function useThreadScope(threadId: string, enabled = true) {
-  const queryClient = useQueryClient();
-  const key = ["pe", "scope", threadId];
-  const query = useQuery({
-    queryKey: key,
-    enabled,
-    queryFn: async (): Promise<Head> => {
-      const response = await fetch(scopeUrl(threadId));
-      if (!response.ok) throw new Error(`scope read ${response.status}`);
-      return headSchema.parse(await response.json());
-    },
-  });
+  const [head, setHead] = useState<ThreadHead | undefined>(undefined);
+  const lifetime = useRef(0);
+  const [stale, setStale] = useState(true);
   const [refusal, setRefusal] = useState<string | null>(null);
 
   useEffect(() => {
+    lifetime.current++;
     if (!enabled) return;
-    return watchScope(threadId, (next) => queryClient.setQueryData(key, next));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId, enabled, queryClient]);
+    setStale(true);
+    const release = peReadings.subscribe({ kind: "thread-head", thread: threadId }, (update) => {
+      if (update.kind === "snapshot") {
+        const next = threadHeadSchema.safeParse(update.value);
+        if (next.success) {
+          setHead(next.data);
+          setStale(update.stale === true);
+        }
+      } else if (update.kind === "stale" || update.kind === "failure") setStale(true);
+    });
+    return () => {
+      lifetime.current++;
+      release();
+    };
+  }, [threadId, enabled]);
 
-  const current = query.data ?? { scope: emptyScope, revision: 0 };
-  const set = async (scope: Scope) => {
+  const current: ThreadHead = head ?? { defaultTarget: null, revision: 0 };
+  const set = async (defaultTarget: DocumentRequest | null) => {
+    const generation = lifetime.current;
     setRefusal(null);
     const response = await fetch(scopeUrl(threadId), {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scope, expectedRevision: current.revision }),
+      body: JSON.stringify({ defaultTarget, expectedRevision: current.revision }),
     });
-    const result = putScopeResultSchema.safeParse(await response.json().catch(() => null)).data;
+    const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
+    if (generation !== lifetime.current) return;
     if (!result) {
-      setRefusal(`scope set ${response.status}`);
+      setRefusal(`target set ${response.status}`);
       return;
     }
     if (result.ok) {
-      queryClient.setQueryData(key, result.head);
       return;
     }
     if (result.why === "stale") {
       // Someone wrote first: show what is current, and let the user decide again.
-      queryClient.setQueryData(key, result.head);
-      setRefusal(`the Scope changed to r${result.head.revision} under you; pick again.`);
+      setRefusal(`the target changed to r${result.head.revision} under you; pick again.`);
       return;
     }
-    setRefusal("pea is mid-turn; the turn keeps the Scope it was admitted under. Wait or stop it.");
+    setRefusal("pea is mid-turn; the turn keeps the target it was admitted under. Wait or stop it.");
   };
-  return { ...current, hydrated: query.data !== undefined, set, refusal };
+  return { ...current, hydrated: head !== undefined, stale, set, refusal };
 }

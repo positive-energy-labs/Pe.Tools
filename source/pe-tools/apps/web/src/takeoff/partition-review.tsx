@@ -47,7 +47,7 @@ export function PartitionReview({
         {data.source.runId ?? "mixed original runs"}
       </div>
       <div>
-        {data.source.documentKey} / {data.source.scopeKey}
+        {data.source.documentKey} / {data.source.zoneKey}
       </div>
       <div>
         Edit boundaries in Revit, then refresh. Geometry is{" "}
@@ -66,7 +66,7 @@ export function PartitionReview({
           <ReviewShapes
             shapes={shapes}
             zone={data.zone.key}
-            runId={data.source.runId ?? data.source.scopeKey}
+            runId={data.source.runId ?? data.source.zoneKey}
             vp={vp}
             selected={selected}
             flags={review.flags}
@@ -82,7 +82,7 @@ export function PartitionReview({
         />
       </div>
       <a
-        download={`${data.source.runId ?? data.source.scopeKey}-review.json`}
+        download={`${data.source.runId ?? data.source.zoneKey}-review.json`}
         href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...data, flags: review.flags }, null, 2))}`}
       >
         export review JSON

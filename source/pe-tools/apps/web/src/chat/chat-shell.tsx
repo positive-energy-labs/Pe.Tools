@@ -16,9 +16,11 @@ import { SidePane } from "#/components/lang/side-pane";
 import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
-import { ScopeLine } from "#/chat/scope-line";
-import { RouteHead } from "#/targeting/head";
-import { WorldBadge } from "#/chat/world-badge";
+import { ToLine } from "#/chat/scope-line";
+import { RouteShell, keyMeta } from "#/route";
+import { CHAT_SEED_SESSION } from "#/chat/seeds";
+import { chatManifest } from "#/chat/manifest";
+import { SessionBadge } from "#/chat/world-badge";
 import "#/workbench/lens.css";
 
 /** Routes hostable as in-realm chat workspace panes.
@@ -29,30 +31,20 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
-  live,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  live?: boolean;
 }) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} plugin={plugin} live={live} />
+        <Surface initialTurn={initialTurn} plugin={plugin} />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
 }
 
-function Surface({
-  initialTurn,
-  plugin,
-  live,
-}: {
-  initialTurn?: number;
-  plugin?: ChatPluginRoute;
-  live?: boolean;
-}) {
+function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
   const {
     store,
     chat,
@@ -60,6 +52,7 @@ function Surface({
     error,
     threads,
     currentThreadId,
+    session,
     world,
     operationError,
     newThread,
@@ -68,6 +61,25 @@ function Surface({
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
+  const demoSeed = useMemo(
+    () => Boolean(new URLSearchParams(globalThis.location?.search ?? "").get("demo")),
+    [],
+  );
+  // The route, re-declared with this thread and this session bound. `routes/chat.tsx` exports the
+  // static one; the actions only become runnable once the provider has a session.
+  const manifest = useMemo(
+    () =>
+      chatManifest({
+        thread: currentThreadId ?? "",
+        display: chat.display,
+        // The session is the caller chat's actions run through. `?demo=` is a seeded moment with
+        // no live turn to send, so it names a caller that answers and does nothing — without one
+        // the seed's own action refuses "Session is not ready" and the seed proves nothing.
+        session:
+          session ?? (demoSeed ? (CHAT_SEED_SESSION as unknown as typeof session) : undefined),
+      }),
+    [currentThreadId, chat.display, session, demoSeed],
+  );
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
   const handleDeleteThread = (id: string) => void deleteThread(id);
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
@@ -121,10 +133,30 @@ function Surface({
   }, []);
 
   useHotkeys([
-    { hotkey: "Mod+K", callback: () => store.actions.setPaletteOpen((open) => !open) },
-    { hotkey: "Mod+1", callback: () => setMode(MODES[0]!) },
-    { hotkey: "Mod+2", callback: () => setMode(MODES[1]!) },
-    { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
+    // Surface chords, not manifest actions: they move Page state and never refuse. Tagged so the
+    // help page lists them beside the route's chords.
+    {
+      hotkey: "Mod+K",
+      callback: () => store.actions.setPaletteOpen((open) => !open),
+      options: {
+        meta: keyMeta({
+          name: "palette",
+          description: "open or close the Do palette",
+          tier: "route",
+        }),
+      },
+    },
+    ...(["Mod+1", "Mod+2", "Mod+3"] as const).map((hotkey, i) => ({
+      hotkey,
+      callback: () => setMode(MODES[i]!),
+      options: {
+        meta: keyMeta({
+          name: `${MODES[i]} mode`,
+          description: `switch the chat to ${MODES[i]}`,
+          tier: "route",
+        }),
+      },
+    })),
   ]);
 
   const statusLine = loading ? "Loading thread state" : (error ?? operationError);
@@ -138,115 +170,111 @@ function Surface({
       data-surface="page"
       className="fixed inset-0 font-sans text-ink"
     >
-      {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
-          dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
-      <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
-        <header className="hairline-b block h-auto px-5 py-0 pb-2">
-          <RouteHead
-            name={threadLabel}
-            instrumentLive={live}
-            aside={
-              <>
-                {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
+      {/* The route shell owns the whole column: its head, then the lens as its body. When no
+          document is resolved the shell shows Instances in the body's place instead. */}
+      <div className="h-full px-5">
+        <RouteShell
+          manifest={manifest}
+          name={threadLabel}
+          aside={
+            <>
+              {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
                     your call is owed (caution), error = a bridge/run error (caution — NOT the
                     alarm), idle = muted. */}
-                <span
-                  title={status}
-                  className="size-2 shrink-0 rounded-full data-[s=idle]:bg-ink-mute"
-                  data-s={status}
-                  data-tone={
-                    status === "running" ? "pea" : status === "idle" ? undefined : "caution"
-                  }
-                  data-fill={status === "idle" ? undefined : "tone"}
-                />
-                <WorldBadge world={world} />
-              </>
-            }
-          />
-        </header>
+              <span
+                title={status}
+                className="size-2 shrink-0 rounded-full data-[s=idle]:bg-ink-mute"
+                data-s={status}
+                data-tone={status === "running" ? "pea" : status === "idle" ? undefined : "caution"}
+                data-fill={status === "idle" ? undefined : "tone"}
+              />
+              <SessionBadge world={world} />
+            </>
+          }
+        >
+          <div aria-live="polite" className="min-h-0">
+            {statusLine ? (
+              <div
+                data-tone={error || operationError ? "caution" : undefined}
+                className="hairline-b py-1.5 t-small t-upper"
+              >
+                {statusLine}
+              </div>
+            ) : null}
+          </div>
 
-        <div aria-live="polite" className="min-h-0 px-5">
-          {statusLine ? (
-            <div
-              data-tone={error || operationError ? "caution" : undefined}
-              className="hairline-b py-1.5 t-small t-upper"
-            >
-              {statusLine}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="relative flex min-h-0 min-w-0">
-          <div className="relative min-h-0 min-w-0 flex-1">
-            <Lens
-              state={chat}
-              mode={mode}
-              initialTurn={initialTurn}
-              scrollKey={currentThreadId}
-              onTurnChange={store.actions.setTurn}
-              sideOpen={sideOpen}
-              onSideOpenChange={openSide}
-              sideHead={<ModeDial mode={mode} setMode={setMode} />}
-              threadList={
-                <ThreadList
-                  threads={threads}
-                  currentThreadId={currentThreadId}
-                  onSelect={openThread}
-                  onNew={newThread}
-                  onRename={handleRenameThread}
-                  onDelete={handleDeleteThread}
-                  onSearch={() => store.actions.setPaletteOpen(true)}
-                />
-              }
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
-              <div className="pe-composer-lane">
-                <div ref={composerRef} className="pointer-events-auto">
-                  <Composer
-                    setMode={setMode}
-                    topBar={
-                      <>
-                        <ScopeLine live={live} />
-                        <ContextRibbon
-                          breakdown={breakdown}
-                          cache={cache}
-                          onOpenWorld={() => setMode("world")}
-                        />
-                      </>
-                    }
+          <div className="relative flex min-h-0 min-w-0">
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <Lens
+                state={chat}
+                mode={mode}
+                initialTurn={initialTurn}
+                scrollKey={currentThreadId}
+                onTurnChange={store.actions.setTurn}
+                sideOpen={sideOpen}
+                onSideOpenChange={openSide}
+                sideHead={<ModeDial mode={mode} setMode={setMode} />}
+                threadList={
+                  <ThreadList
+                    threads={threads}
+                    currentThreadId={currentThreadId}
+                    onSelect={openThread}
+                    onNew={newThread}
+                    onRename={handleRenameThread}
+                    onDelete={handleDeleteThread}
+                    onSearch={() => store.actions.setPaletteOpen(true)}
                   />
+                }
+              />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
+                <div className="pe-composer-lane">
+                  <div ref={composerRef} className="pointer-events-auto">
+                    <Composer
+                      setMode={setMode}
+                      topBar={
+                        <>
+                          <ToLine />
+                          <ContextRibbon
+                            breakdown={breakdown}
+                            cache={cache}
+                            onOpenWorld={() => setMode("world")}
+                          />
+                        </>
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {plugin ? (
-            <SidePane
-              side="right"
-              storageKey="pe.pluginWidth"
-              open={pluginOpen}
-              onOpenChange={openPlugin}
-              minWidth={480}
-              defaultWidth={640}
-              header={
-                <div className="flex items-center justify-between">
-                  <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
-                  <Press
-                    tone="neutral"
-                    size="icon"
-                    title="Close workspace"
-                    onClick={() => store.actions.setPlugin(undefined)}
-                  >
-                    <X />
-                  </Press>
-                </div>
-              }
-            >
-              {/* The pane resolves its route document from the active rvt Address. */}
-              {PluginPane ? <PluginPane store={store} /> : null}
-            </SidePane>
-          ) : null}
-        </div>
+            {plugin ? (
+              <SidePane
+                side="right"
+                storageKey="pe.pluginWidth"
+                open={pluginOpen}
+                onOpenChange={openPlugin}
+                minWidth={480}
+                defaultWidth={640}
+                header={
+                  <div className="flex items-center justify-between">
+                    <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
+                    <Press
+                      tone="neutral"
+                      size="icon"
+                      title="Close workspace"
+                      onClick={() => store.actions.setPlugin(undefined)}
+                    >
+                      <X />
+                    </Press>
+                  </div>
+                }
+              >
+                {/* The pane resolves its route document from the active rvt Address. */}
+                {PluginPane ? <PluginPane store={store} /> : null}
+              </SidePane>
+            ) : null}
+          </div>
+        </RouteShell>
       </div>
 
       <ThreadPalette

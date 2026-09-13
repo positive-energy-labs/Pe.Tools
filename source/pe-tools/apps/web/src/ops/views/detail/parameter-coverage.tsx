@@ -190,12 +190,26 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
   );
 }
 
+interface CaptureEvidence {
+  typeNames: string[];
+  parameters: unknown[];
+  diagnostics: {
+    provenance?: string;
+    code?: string;
+    path?: string;
+    confidence?: number | null;
+    message?: string;
+  }[];
+}
+
 export function FamilyModelView({ data }: OpViewProps) {
   const rec = asRecord(data);
   if (!rec || typeof rec.familyName !== "string" || !asRecord(rec.evidence))
     return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailFamilyModel.Res.Response;
-  const ev = res.evidence;
+  // The generated contract does not yet carry the capture evidence the operation actually returns;
+  // this view reads it off the wire and says so rather than inventing counts.
+  const ev = (res as unknown as { evidence: CaptureEvidence }).evidence;
 
   return (
     <div className="flex flex-col gap-3">

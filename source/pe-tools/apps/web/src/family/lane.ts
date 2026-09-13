@@ -1,6 +1,11 @@
+import {
+  settingsFieldSegments,
+  type FamilyDocument,
+  type SettingsFieldState,
+} from "@pe/agent-contracts";
 import type { FamilyModel } from "#/family/family-model";
 import type { EvidenceSlice, FamilySnapshot } from "#/family/host";
-import { FIXTURE_WORLD, type PageWorld, buildPageWorld } from "#/family/model";
+import { type FamilyPageModel, buildFamilyPageModel } from "#/family/model";
 import { projectFamilyModel } from "#/family/project";
 
 interface OpenFamilyDocument {
@@ -9,20 +14,20 @@ interface OpenFamilyDocument {
   versionToken: string | null;
 }
 interface FamilyLane {
-  world: PageWorld;
+  world: FamilyPageModel;
   document: OpenFamilyDocument | null;
   drawingModel: FamilyModel | null;
   parseError: string | null;
   seedKey: string;
-  fixture: boolean;
 }
 export function familyLane(
   snapshot: FamilySnapshot | null,
   evidence: EvidenceSlice | null,
-  fixture = false,
+  fields: Record<string, SettingsFieldState> = {},
+  spec?: FamilyDocument["doc"],
 ): FamilyLane {
   const relativePath = snapshot?.documentId.relativePath ?? "";
-  let projected: PageWorld | null = null;
+  let projected: FamilyPageModel | null = null;
   let model: FamilyModel | null = null;
   let parseError: string | null = null;
   let capturedModel: FamilyModel | null = null;
@@ -33,12 +38,12 @@ export function familyLane(
           snapshot.validation?.issues.map((issue) => issue.message).join(" · ") ||
             "No composed family document is available.",
         );
-      model = JSON.parse(snapshot.composedContent) as FamilyModel;
+      model = JSON.parse(snapshot.composedContent.replace(/^\uFEFF/, "")) as FamilyModel;
       if (!model?.family || typeof model.family.name !== "string")
         throw new Error("The document has no family header.");
       model.types ??= {};
       if (model.parameters == null && model.familyParameters == null) model.parameters = {};
-      projected = buildPageWorld(projectFamilyModel(model, evidence, { path: relativePath }));
+      projected = buildFamilyPageModel(projectFamilyModel(model, evidence, { path: relativePath }));
     } catch (error) {
       model = null;
       parseError = error instanceof Error ? error.message : String(error);
@@ -51,7 +56,7 @@ export function familyLane(
       if (!captured?.family || typeof captured.family.name !== "string")
         throw new Error("The capture has no family header.");
       captured.types ??= {};
-      projected = buildPageWorld(
+      projected = buildFamilyPageModel(
         projectFamilyModel(captured, evidence, { path: "Captured family (not an authored file)" }),
       );
     } catch (error) {
@@ -61,9 +66,7 @@ export function familyLane(
   const versionToken = snapshot?.versionToken ?? null;
   const world = projected
     ? projected
-    : fixture
-      ? FIXTURE_WORLD
-      : buildPageWorld({
+    : buildFamilyPageModel({
           profile: {
             path: relativePath,
             familyName: "No family document",
@@ -79,6 +82,37 @@ export function familyLane(
           spec: null,
           proposals: [],
         });
+  world.spec = spec
+      ? {
+          ...spec,
+          blocks: spec.blocks.map((block) => ({
+            ...block,
+            kind: block.kind === "heading" || block.kind === "table" ? block.kind : "text",
+          })),
+        }
+      : null;
+  world.proposals = Object.entries(fields).flatMap(([pointer, field]) => {
+      if (!field.proposal) return [];
+      const parts = settingsFieldSegments(pointer);
+      const typeName = parts[0] === "types" ? parts[1] : undefined;
+      const param = typeName ? parts[2] : parts[1];
+      if (!param) return [];
+      return [
+        {
+          id: pointer,
+          param,
+          current: null,
+          ...(typeName ? { typeName } : {}),
+          proposed:
+            typeof field.proposal.value === "string"
+              ? field.proposal.value
+              : (JSON.stringify(field.proposal.value, null, 2) ?? ""),
+          sourceBlockId: field.proposal.sources?.[0]?.blockId ?? "",
+          note: field.proposal.note ?? "",
+          confidence: field.proposal.confidence ?? "high",
+        },
+      ];
+    });
   return {
     world,
     drawingModel: model ?? capturedModel,
@@ -90,12 +124,9 @@ export function familyLane(
         }
       : null,
     parseError,
-    fixture,
     seedKey: model
       ? `${relativePath}@${versionToken ?? ""}`
-      : fixture
-        ? "fixture"
-        : evidence && "modelJson" in evidence
+      : evidence && "modelJson" in evidence
           ? `capture:${evidence.reading.observedAt}`
           : `empty:${relativePath}`,
   };

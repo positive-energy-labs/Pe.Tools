@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BOD_MAIN_HOUSE } from "#/param-tables/variants/fixture";
+import { BOD_MAIN_HOUSE } from "#/param-tables/variants/data";
 import type { FactKey } from "./type-values";
 import { hairline, muted, secondary } from "./type-values";
 

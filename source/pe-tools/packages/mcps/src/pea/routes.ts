@@ -1,5 +1,4 @@
 import { instancesRouteState } from "@pe/agent-contracts";
-import { createInstancesCommandHandlers } from "./instances-commands.ts";
 /**
  * The server-side route registry — the ONE place a new collaborative route is
  * wired (spec + command handlers). The host composition root registers
@@ -10,25 +9,13 @@ import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contra
 import {
   familiesRouteState,
   familyRouteState,
-  familyTypesRouteState,
-  opsRouteState,
   parameterLinksRouteState,
-  podsRouteState,
   scheduleGridRouteState,
   settingsRouteState,
   takeoffsRouteState,
 } from "@pe/agent-contracts";
 
-import { createFamilyCommandHandlers } from "./family-commands.ts";
-import { createFamiliesCommandHandlers } from "./families-commands.ts";
-import { createPodsCommandHandlers } from "./pods-commands.ts";
-import {
-  createFamilyTypesCommandHandlers,
-  createParameterLinksCommandHandlers,
-} from "./route-state-commands.ts";
-import { createScheduleGridCommandHandlers } from "./schedule-grid-commands.ts";
 import { createSettingsCommandHandlers } from "./settings-commands.ts";
-import { createTakeoffsCommandHandlers } from "./takeoffs-commands.ts";
 
 export interface RouteRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -49,15 +36,14 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string } = {},
 ): RouteRegistration[] {
   return [
-    entry(instancesRouteState, createInstancesCommandHandlers(options)),
-    entry(familiesRouteState, createFamiliesCommandHandlers(options)),
-    entry(familyRouteState, createFamilyCommandHandlers(options)),
-    entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),
-    entry(opsRouteState, {}),
-    entry(podsRouteState, createPodsCommandHandlers(options)),
-    entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
+    entry(instancesRouteState, {}),
+    // Families and Parameter Links carry no route commands: their readings are host reads and
+    // their applies are semantic actions, so neither can write into authored Work.
+    entry(familiesRouteState, {}),
+    entry(familyRouteState, {}),
+    entry(parameterLinksRouteState, {}),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),
-    entry(scheduleGridRouteState, createScheduleGridCommandHandlers(options)),
-    entry(takeoffsRouteState, createTakeoffsCommandHandlers(options)),
+    entry(scheduleGridRouteState, {}),
+    entry(takeoffsRouteState, {}),
   ];
 }

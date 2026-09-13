@@ -13,7 +13,7 @@ import {
   ComboboxTrigger,
   useComboboxAnchor,
 } from "#/components/lang/combobox";
-import { useHostOp } from "#/host/queries";
+import { useHostOp } from "#/readings";
 import type { ParameterReference } from "@pe/agent-contracts";
 
 export type FieldOption = {
@@ -51,11 +51,12 @@ export function useFieldOptions(
   contextValues: Record<string, string> = {},
   bridgeSessionId?: string,
   enabled = true,
+  openDocumentId?: string,
 ) {
   const query = useHostOp(
     "revit.catalog.field-options",
     { sourceKey, contextValues },
-    { bridgeSessionId, enabled, staleTime: 30_000 },
+    { bridgeSessionId, openDocumentId, enabled },
   );
   const items = (query.data?.items ?? []).filter(
     (item) => typeof item.value === "string" && typeof item.label === "string",
@@ -111,7 +112,7 @@ export function FieldOptionSelect({
   );
 }
 
-export function FieldOptionMultiSelect({
+export function FieldOptionPicker({
   items,
   values,
   disabled,

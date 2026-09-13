@@ -1,15 +1,54 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import type { SessionFacts } from "#/host/target";
+import type { SessionInventory } from "#/readings";
 import { InstancesCluster } from "#/instances/cluster";
 import type { InstancesFleet } from "#/instances/workspace";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useSearch: () => ({}),
+}));
+
+/** The SDK reads answer empty: this test drives staging, not the census. */
+vi.mock("#/readings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/readings")>()),
+  readReading: vi.fn(async () => ({ result: {} })),
+}));
+
+/**
+ * Work, held in the component tree instead of the host. The deleted `source="fixture"` lane made
+ * the cluster keep staging in local state; the route primitive has ONE staging model, so the test
+ * seeds the same Work the host would hold and lets `apply` advance it.
+ */
+vi.mock("#/workbench/route-state", () => ({
+  useRouteState: () => {
+    const [slice, setSlice] = useState<{ staged: unknown }>({ staged: null });
+    return {
+      slice,
+      revision: 0,
+      hydrated: true,
+      refreshing: false,
+      outcomeUnknown: false,
+      apply: async (patches: { path: string[]; value: unknown }[]) => {
+        setSlice((current) => {
+          const next = { ...current } as Record<string, unknown>;
+          for (const patch of patches) next[patch.path[0]!] = patch.value;
+          return next as { staged: unknown };
+        });
+        return { ok: true };
+      },
+      command: async () => ({ ok: true }),
+      peaActive: false,
+      connected: true,
+      failure: null,
+      busy: null,
+      atoms: {},
+      lastCommand: null,
+    };
+  },
 }));
 
 beforeEach(() => {
@@ -20,7 +59,7 @@ afterEach(cleanup);
 
 test("hands an explicitly staged inactive document to an embedding route without reopening it", () => {
   const activeDocumentId = "C:\\Models\\projectA.rvt";
-  const session: SessionFacts = {
+  const session: SessionInventory = {
     sessionId: "bridge-pe.app-25",
     sdkSessionId: "pe.app-25",
     processId: 25,
@@ -66,21 +105,17 @@ test("hands an explicitly staged inactive document to an embedding route without
     isLoading: false,
     stale: false,
     error: null,
-    at: 1,
     basis: ["test"],
   };
   const onDocument = vi.fn();
 
   const mounted = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <InstancesCluster
-        fleet={fleet}
-        target=""
-        setTarget={() => {}}
-        source="fixture"
-        onDocument={onDocument}
-      />
-    </QueryClientProvider>,
+    <InstancesCluster
+      fleet={fleet}
+      target="pe.app-25"
+      setTarget={() => {}}
+      onDocument={onDocument}
+    />,
   );
 
   fireEvent.click(within(screen.getAllByRole("grid")[1]!).getByText("projectA.rvt").closest("tr")!);
@@ -93,15 +128,12 @@ test("hands an explicitly staged inactive document to an embedding route without
   });
 
   mounted.rerender(
-    <QueryClientProvider client={new QueryClient()}>
-      <InstancesCluster
-        fleet={{ ...fleet, worlds: [], sessions: [] }}
-        target=""
-        setTarget={() => {}}
-        source="fixture"
-        requestedDocument="C:\\Models\\Unlisted.rvt"
-      />
-    </QueryClientProvider>,
+    <InstancesCluster
+      fleet={{ ...fleet, worlds: [], sessions: [] }}
+      target="pe.app-25"
+      setTarget={() => {}}
+      requestedDocument="C:\\Models\\Unlisted.rvt"
+    />,
   );
   fireEvent.click(screen.getByRole("button", { name: /recover Unlisted.rvt/i }));
   expect(

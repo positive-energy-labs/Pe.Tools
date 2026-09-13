@@ -28,7 +28,7 @@ export const capabilitySchema = z
     description: z.string(),
     needs: capabilityNeedsSchema,
     mutates: z.boolean(),
-    actor: z.enum(["any", "human"]),
+    actor: z.enum(["any", "human", "agent"]),
     /** JSON Schema of the row's input. */
     input: z.record(z.string(), z.unknown()),
     output: z.record(z.string(), z.unknown()).optional(),
@@ -47,6 +47,18 @@ export const capabilitySessionSchema = z.object({
   revitVersion: z.string().nullable().optional(),
   activeDocumentTitle: z.string().nullable().optional(),
   activeDocument: z.string().nullable().optional(),
+  openDocuments: z
+    .array(
+      z.object({
+        openId: z.string(),
+        address: z.string().nullable(),
+        title: z.string(),
+        isFamilyDocument: z.boolean(),
+        isActive: z.boolean(),
+      }),
+    )
+    .nullable()
+    .optional(),
 });
 
 /** What `GET /pe/capabilities` serves: rows plus the orientation `pe_find` folds in. */

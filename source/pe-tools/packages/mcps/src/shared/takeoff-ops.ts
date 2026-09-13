@@ -1,5 +1,5 @@
 import {
-  readingSchema,
+  observationSchema,
   takeoffCarrierPreflightSchema,
   takeoffRegionAnalysisSchema,
 } from "@pe/agent-contracts";
@@ -9,9 +9,9 @@ import type {
   PartitionReviewData,
   TakeoffSnapshot,
   ViewFacts,
-  World,
-  WorldRoom,
-  WorldZone,
+  TakeoffModel,
+  ModelRoom,
+  ModelZone,
 } from "@pe/agent-contracts";
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 
@@ -59,9 +59,9 @@ export function projectTakeoffSnapshot(
     ]),
   );
   const levelByView = new Map(views.map((view) => [view.name, view.level]));
-  const lanes: World["lanes"] = [];
+  const lanes: TakeoffModel["lanes"] = [];
   const ordinals = new Map<string, number>();
-  const zones: WorldZone[] = zoneFrs.map((region) => {
+  const zones: ModelZone[] = zoneFrs.map((region) => {
     const meta = JSON.parse(region.blob) as {
       view?: string;
       name?: string;
@@ -134,7 +134,7 @@ export function projectTakeoffSnapshot(
     };
   });
   return {
-    reading: readingSchema.parse(response.reading),
+    reading: observationSchema.parse(response.reading),
     carriers: takeoffCarrierPreflightSchema.parse(snapshot.status.carriers),
     zoneFrs,
     regionsByZone,
@@ -159,7 +159,7 @@ const DISPOSITIONS = ["accepted", "held", "void", "excluded"] as const;
 
 function savedReview(
   documentKey: string,
-  scopeKey: string,
+  zoneKey: string,
   name: string,
   zoneLoops: [number, number][][],
   regions: LiveRegion[],
@@ -187,9 +187,9 @@ function savedReview(
     source: {
       runId: runIds.length === 1 ? runIds[0]! : null,
       documentKey,
-      scopeKey,
+      zoneKey,
     },
-    zone: { key: scopeKey, name, loops: zoneLoops },
+    zone: { key: zoneKey, name, loops: zoneLoops },
     shapes: values.map(({ region, value }) => ({
       original: {
         runId: (value.RunId ?? value.runId)!,
@@ -241,7 +241,7 @@ const bounds = (loops: readonly (readonly (readonly [number, number])[])[]) => {
   };
 };
 
-function room(region: LiveRegion): WorldRoom {
+function room(region: LiveRegion): ModelRoom {
   const value = JSON.parse(region.blob) as {
     RunId?: string;
     runId?: string;
@@ -251,7 +251,7 @@ function room(region: LiveRegion): WorldRoom {
     sourceSqft?: number;
     resolutions?: Resolution[];
     flags?: string[];
-    r10?: WorldRoom["r10"];
+    r10?: ModelRoom["r10"];
     partition?: { floorZ?: number | null; ceilingZ?: number | null };
   };
   const runId = value.RunId ?? value.runId;
@@ -274,7 +274,7 @@ function room(region: LiveRegion): WorldRoom {
     guid: region.guid,
     elementId: region.elementId,
     name: sourceRoomId,
-    type: (region.roomType || "hall") as WorldRoom["type"],
+    type: (region.roomType || "hall") as ModelRoom["type"],
     sqft: Math.round(region.sqft),
     ceilingFt:
       current && analysis.floorZ != null && analysis.ceilingZ != null

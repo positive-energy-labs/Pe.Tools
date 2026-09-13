@@ -1,6 +1,5 @@
-import { nativeFixtureFamilies } from "#/families/fixture";
 import { EmptyState } from "#/components/lang/empty";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
@@ -52,7 +51,7 @@ export function FamiliesMatrix() {
               {params.length} parameters
             </span>
             <span className="hairline-l pl-2">
-              <Verb
+              <ActionButton
                 label="project → profile"
                 onClick={() => runProject()}
                 busy={busy === "project"}
@@ -98,23 +97,12 @@ export function FamiliesMatrix() {
         }
         /* The existing editor operation activates a scratch family copy; capture that returned document. */
         onRowClick={(row) => {
-          if (fixture) {
-            const native = nativeFixtureFamilies.find(
-              (entry) => entry.row.familyId === row.familyId,
-            );
-            if (native)
-              void navigate({
-                to: "/family",
-                search: {
-                  source: "fixture",
-                  fixture: native.key as "box" | "grd" | "bath" | "refline",
-                },
-              });
-            return;
-          }
           void store.actions
             .openFamily(row.familyId)
-            .then((search) => navigate({ to: "/family", search }))
+            .then((opened) => {
+              const path = (opened as { savedPath?: string | null }).savedPath;
+              if (path) void navigate({ to: "/family", search: { file: path } });
+            })
             .catch(() => undefined);
         }}
       />

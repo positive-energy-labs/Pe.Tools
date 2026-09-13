@@ -1,10 +1,5 @@
 import { Deferred, Effect, Layer, Stream } from "effect";
-import {
-  HttpRouter,
-  HttpServer,
-  type HttpServerRequest,
-  HttpServerResponse as Response,
-} from "effect/unstable/http";
+import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -15,10 +10,8 @@ import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  tsOnlyOperationCatalog,
-} from "@pe/host-contracts/operation-types";
+import { opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
+import { demoRoutes } from "./demo-owner.ts";
 import { callRoute } from "./call-route.ts";
 import { productRoot } from "./host-ownership.ts";
 import { installRoot, peRevitLauncher } from "./pe-revit-launch.ts";
@@ -40,59 +33,6 @@ export { resolveWebRoot } from "./static-spa.ts";
 const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
   Effect.flatMap(RevitBridge, (bridge) => bridge.handleConnection(req)),
 );
-
-// Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
-// connected Revit session (the standard selector header targets one; ?session is the raw query form)
-// op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
-// are appended so discovery (host_operation_search, pea `operations`, the web ops page)
-// sees both surfaces from one catalog; host-typegen skips them by their origin marker.
-// A disconnected bridge still lists the local ops (they need no Revit session) with a
-// bridgeCatalogError note, rather than a bare 503 — so discovery of e.g. settings workspaces
-// works with the host up and Revit closed. (host-typegen treats a bridge-op-less catalog
-// as "no session" and does not regenerate off the local ops alone.)
-/** A browser navigation (Accept: text/html) to an API path belongs to the SPA, not the JSON. */
-type SpaFallback = (
-  req: HttpServerRequest.HttpServerRequest,
-) => Effect.Effect<Response.HttpServerResponse, unknown, never>;
-const isNavigation = (req: HttpServerRequest.HttpServerRequest) =>
-  (req.headers.accept ?? "").includes("text/html");
-
-const opsCatalogRoute = (spa: SpaFallback) =>
-  HttpRouter.add("GET", "/ops", (req) =>
-    Effect.gen(function* () {
-      if (isNavigation(req)) return yield* spa(req);
-      const bridge = yield* RevitBridge;
-      const sessionParam =
-        new URL(req.url, "http://localhost").searchParams.get("session") ?? undefined;
-      const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
-      if (sessionParam && sessionHeader && sessionParam !== sessionHeader)
-        return Response.jsonUnsafe(
-          { error: "Conflicting bridge session selectors in header and query." },
-          { status: 400 },
-        );
-      // Catalog reads never hard-fail on multi-session ambiguity: untargeted falls back to the
-      // snapshot session (most recently registered), same as other status displays.
-      const readSessionId =
-        sessionHeader ?? sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
-      const result = yield* Effect.result(bridge.invoke("host.ops.catalog", {}, readSessionId));
-      const bridgeOps =
-        result._tag === "Success" &&
-        Array.isArray((result.success.value as { operations?: unknown }).operations)
-          ? (result.success.value as { operations: unknown[] }).operations
-          : [];
-      const body: {
-        operations: unknown[];
-        bridgeSessionId?: string;
-        bridgeCatalogError?: string;
-      } = {
-        operations: [...bridgeOps, ...tsOnlyOperationCatalog],
-        bridgeSessionId: readSessionId,
-      };
-      if (result._tag === "Failure")
-        body.bridgeCatalogError = String(result.failure.message ?? result.failure);
-      return Response.jsonUnsafe(body);
-    }),
-  );
 
 // Live settings authoring schema, straight from the connected session. This is
 // the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
@@ -163,11 +103,9 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
   }),
 );
 
-export const noRevitBoundary = (spa: SpaFallback) =>
+export const noRevitBoundary = () =>
   Layer.mergeAll(
     HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
-    HttpRouter.add("*", "/call", emptyNotFound),
-    HttpRouter.add("*", "/ops", (req) => (isNavigation(req) ? spa(req) : emptyNotFound)),
     HttpRouter.add("*", "/sessions", emptyNotFound),
     HttpRouter.add("*", "/events", emptyNotFound),
     HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
@@ -450,6 +388,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   const CommonAppLive = Layer.mergeAll(
     adminShutdownRoute,
+    demoRoutes(),
     MastraMountLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
   );
@@ -477,8 +416,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
   }
 
   return HttpRouter.serve(
-    Layer.mergeAll(noRevitBoundary(spa), noRevitHostStatusRoute, CommonAppLive),
+    Layer.mergeAll(
+      noRevitBoundary(),
+      callRoute,
+      opsCatalogRoute(spa),
+      noRevitHostStatusRoute,
+      CommonAppLive,
+    ),
   ).pipe(
+    // The empty in-memory bridge registry admits no native connection on this composition.
+    Layer.provide(RevitBridgeLive),
     // ClaimedServerLive binds and completes takeover before the tenant opens shared product state.
     // The tenant still receives that same HttpServer, and any runtime failure degrades only /pe/*.
     Layer.provide(withMastraDegrade(options.mastraLayer)),

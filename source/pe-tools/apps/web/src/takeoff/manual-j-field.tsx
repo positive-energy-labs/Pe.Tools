@@ -1,12 +1,12 @@
 import { NumberCell } from "#/components/master-table/cells";
-import type { RoomData, RoomEdit, WorldRoom } from "#/takeoff/world";
+import type { RoomData, RoomEdit, ModelRoom } from "#/takeoff/world";
 
 export function ManualJField({
   room,
   field,
   onPatch,
 }: {
-  room: WorldRoom;
+  room: ModelRoom;
   field: keyof RoomData;
   onPatch: (patch: RoomEdit) => void;
 }) {

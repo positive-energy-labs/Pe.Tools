@@ -4,12 +4,12 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { cellFromTrichotomy } from "#/components/lang/cell";
-import { bindingOf, isFormula, proposalCell, type PageWorld } from "#/family/model";
+import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
@@ -255,7 +255,7 @@ export function FamilyWorkspaceDocPane() {
           <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
-          <Verb
+          <ActionButton
             label="esc"
             tone="nav"
             direction="back"
@@ -315,7 +315,7 @@ export function FamilyWorkspaceDocPane() {
               },
             ]}
           />
-          <Verb
+          <ActionButton
             label="parse"
             onClick={() =>
               say(
@@ -389,7 +389,7 @@ export function FamilyWorkspaceDocPane() {
   return docPane;
 }
 
-function partProseOnly(world: PageWorld, slug: string) {
+function partProseOnly(world: FamilyPageModel, slug: string) {
   const prose = world.constituents.find((entry) => entry.slug === slug)?.text ?? null;
   return (
     <EmptyState story="scope" exit="declare its geometry in the profile to make it editable here">

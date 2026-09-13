@@ -13,7 +13,7 @@ import { outcomeLineRecipe } from "#/components/lang/outcome";
 import { pressRecipe } from "#/components/lang/press";
 import { sectionRecipe } from "#/components/lang/section";
 import { switcherRecipe } from "#/components/lang/switcher";
-import { verbRecipe } from "#/components/lang/verb";
+import { verbRecipe } from "#/components/lang/action-button";
 import { dialogRecipe } from "#/components/lang/dialog";
 import { inputGroupRecipe } from "#/components/lang/input-group";
 import { selectRecipe } from "#/components/lang/select";

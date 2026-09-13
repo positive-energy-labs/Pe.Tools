@@ -1,7 +1,8 @@
+import type { ChatPluginRoute } from "./route-chat-plugins";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-import { createRouteStoreCore } from "#/state/route-store";
+import { createRouteOwner } from "#/route";
 
 export interface WorkbenchAttachment {
   name?: string;
@@ -14,14 +15,7 @@ export interface ChatSearch {
   readonly thread?: string;
   readonly mode: string;
   readonly turn?: number;
-  readonly plugin?:
-    | "pods"
-    | "family"
-    | "families"
-    | "settings"
-    | "parameter-links"
-    | "schedule-grid"
-    | "instances";
+  readonly plugin?: ChatPluginRoute;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }
@@ -43,7 +37,7 @@ export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
 }) {
-  const core = createRouteStoreCore("chat", deps.registry);
+  const core = createRouteOwner("chat", deps.registry);
   const paletteOpen = core.owned("page/palette-open", Atom.make(false));
   const sideOpen = core.owned("page/side-open", Atom.make(true));
   const pluginOpen = core.owned("page/plugin-open", Atom.make(Boolean(deps.search.plugin)));
@@ -94,6 +88,18 @@ export function createChatPageStore(deps: {
     turnTimer = setTimeout(() => void deps.search.patch({ turn }, true), 1000);
   };
 
+  core.expose({
+    page: {
+      paletteOpen,
+      sideOpen,
+      pluginOpen,
+      lensInspectKey,
+      lensFollowing,
+      world,
+      worldCache,
+      draft,
+    },
+  });
   return {
     registry: deps.registry,
     search: deps.search,
@@ -106,7 +112,7 @@ export function createChatPageStore(deps: {
       world,
       worldCache,
       draft,
-      ...core.verbAtoms,
+
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
@@ -123,7 +129,7 @@ export function createChatPageStore(deps: {
       setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
       openThread: (thread: string, replace = false) => deps.search.patch({ thread }, replace),
     },
-    runVerb: core.runVerb,
+    runAction: core.runAction,
     dispose() {
       if (promptTimer) clearTimeout(promptTimer);
       if (turnTimer) clearTimeout(turnTimer);

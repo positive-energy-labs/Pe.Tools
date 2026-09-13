@@ -1,8 +1,8 @@
-import { routeScopeKey, scopeOfRoute, type RouteScope } from "@pe/agent-contracts";
+import { workKey, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
+import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
   applyPatches,
-  canonicalRouteInput,
   checkRevision,
   commitDoc,
   guardCommand,
@@ -13,17 +13,18 @@ import {
   type RouteActor,
   type RouteEnvelope,
   type RoutePatch,
-  type RouteRefusal,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 
-export type RouteWorkspaceScope = RouteScope;
+export type RouteWorkspaceScope = WorkKey;
 export type RouteWorkspaceActor = RouteActor;
 export type RouteWorkspacePatch = RoutePatch;
 
 export interface RouteWorkspaceRegistration {
   spec: RouteStateSpec<z.ZodType>;
+  /** One-time persisted-envelope conversion, before schema parsing can strip old data. */
+  migrate?: (raw: unknown, scope: RouteWorkspaceScope) => Promise<unknown>;
   // biome-ignore lint/suspicious/noExplicitAny: the schema/handler pairing is checked where registrations are built.
   handlers: RouteStateCommandHandlers<any>;
 }
@@ -42,8 +43,8 @@ export interface RouteWorkspaceEvent {
 }
 
 export interface RouteDocumentStore {
-  getState(input: { scopeKey: string; route: string }): Promise<unknown>;
-  setState(input: { scopeKey: string; route: string; value: unknown }): Promise<void>;
+  getState(input: { targetKey: string; route: string }): Promise<unknown>;
+  setState(input: { targetKey: string; route: string; value: unknown }): Promise<void>;
 }
 
 export interface RouteWorkspaceOptions {
@@ -56,12 +57,12 @@ export type RouteWorkspaceCommandResult = RouteStateWriteResult;
 
 const ENVELOPE_VERSION = 1;
 // ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
-export const RECEIPT_RESULT_MAX_BYTES = 8 * 1024;
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
   readonly #tails = new Map<string, Promise<void>>();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
+  readonly #reads = new OwnerReads();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
@@ -86,7 +87,8 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
-    const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec));
+    const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec, false));
+    if (!envelope) return null;
     return {
       route,
       title: spec.title,
@@ -95,6 +97,7 @@ export class RouteWorkspace {
       revision: envelope.revision,
       status: envelope.outcomeUnknown ? "outcomeUnknown" : "ready",
       outcomeUnknown: envelope.outcomeUnknown,
+      migrationError: this.pendingMigrations.get(`${workKey(scope)}\0${route}`)?.error,
       schema: toJsonSchema(spec.schema),
       agentWriteMask: spec.agentWriteMask,
       commands: describeCommands(spec),
@@ -138,6 +141,11 @@ export class RouteWorkspace {
     });
   }
 
+  private readonly pendingMigrations = new Map<
+    string,
+    { raw: Record<string, unknown>; error: string }
+  >();
+
   async command(
     scope: RouteWorkspaceScope,
     route: string,
@@ -145,152 +153,101 @@ export class RouteWorkspace {
     command: string,
     input: unknown,
     expectedRevision: number,
-    requestId?: string,
+    _requestId?: string,
   ): Promise<RouteWorkspaceCommandResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
-
+    if (spec.commands[command]?.mutatesExternal)
+      return refuse(
+        "refused",
+        `External route command '${route}.${command}' is retired; its semantic admission port is required`,
+        "No external effect was dispatched. Read the original journal/legacy uncertainty before choosing a new action.",
+      );
+    // Legacy envelopes remain evidence. Reads never clear their uncertain outcomes.
     return this.#serialized(scope, route, async () => {
-      let envelope = await this.#load(scope, spec);
-      const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
-        this.#publish({ type: "route_workspace", scope, route, actor, ...event });
-      const fail = async (refusal: RouteRefusal): Promise<RouteWorkspaceCommandResult> => {
-        await emit({
-          action: "command",
-          command,
-          revision: envelope.revision,
-          ok: false,
-          error: refusal.error,
-        });
-        return refusal;
+      const envelope = await this.#load(scope, spec);
+      const reject = async (result: RouteWorkspaceCommandResult) => {
+        if (!result.ok)
+          await this.#publish({
+            type: "route_workspace",
+            scope,
+            route,
+            actor,
+            action: "command",
+            command,
+            revision: envelope.revision,
+            ok: false,
+            error: result.error,
+          });
+        return result;
       };
-      let inputDigest: string | undefined;
-      if (requestId) {
-        try {
-          inputDigest = canonicalRouteInput(input);
-        } catch (error) {
-          return fail(refuse("error", message(error), "command input must be JSON."));
-        }
-        const receipt = envelope.receipts?.[requestId];
-        if (receipt) {
-          if (receipt.command !== command || receipt.inputDigest !== inputDigest)
-            return fail(
-              refuse(
-                "refused",
-                `request id '${requestId}' was already used for another command or input`,
-                "mint a new request id for a different command request.",
-                "request_id_conflict",
-              ),
-            );
-          if (!receipt.replayable)
-            return fail(
-              refuse(
-                "refused",
-                `request id '${requestId}' completed but its result is unavailable for replay`,
-                "re-read the document before continuing.",
-                "replay_unavailable",
-              ),
-            );
-          return {
-            ok: true,
-            revision: receipt.revision,
-            result: structuredClone(receipt.result),
-          };
-        }
-      }
       const stale = checkRevision(envelope, expectedRevision);
-      if (stale) return fail(stale);
+      if (stale) return reject(stale);
       const guarded = guardCommand(spec, envelope, actor, command, input);
-      if (!guarded.ok) return fail(guarded);
-      if (guarded.command.mutatesExternal && !requestId)
-        return fail(
-          refuse(
-            "error",
-            `command '${command}' requires a request id`,
-            "retry with one stable client request id.",
-          ),
-        );
+      if (!guarded.ok) return reject(guarded);
       const handler = handlers[command];
       if (!handler)
-        return fail(
+        return reject(
           refuse(
             "error",
             `command '${command}' has no registered handler`,
-            "this is a wiring bug in the route registration.",
+            "Route port unavailable.",
           ),
         );
-
-      const priorUnknown = envelope.outcomeUnknown;
-      if (guarded.command.mutatesExternal) {
-        envelope.inFlight = { command, startedAt: new Date().toISOString() };
-        await this.#persist(scope, route, envelope);
-      }
-
       let committed: RouteEnvelope<unknown> | null = null;
       try {
         const result = await handler(guarded.input, {
-          scope: scopeOfRoute(scope),
+          target: scope.target,
+          work: scope.work,
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
             const landed = commitDoc(spec, envelope, candidate);
-            if (!landed.ok) throw new Error(`${landed.error}: ${landed.hint}`);
+            if (!landed.ok) throw Error(`${landed.error}: ${landed.hint}`);
             committed = landed.envelope;
           },
         });
-
-        if (committed) envelope = committed;
-        delete envelope.inFlight;
-        if (guarded.command.recoversExternal) delete envelope.outcomeUnknown;
-        let returned = result;
-        if (guarded.command.mutatesExternal) {
-          const normalized = normalizeReceiptResult(result);
-          returned = normalized.returned;
-          // ponytail: receipts never evict; revisit only if a high-frequency external command ships.
-          envelope.receipts = {
-            ...envelope.receipts,
-            [requestId!]: {
-              command,
-              inputDigest: inputDigest!,
-              completedAt: new Date().toISOString(),
-              revision: envelope.revision,
-              ...normalized.receipt,
-            },
-          };
-        }
-        if (committed || guarded.command.mutatesExternal || guarded.command.recoversExternal)
-          await this.#persist(scope, route, envelope);
-
-        await emit({
+        const next = committed ?? envelope;
+        if (committed) await this.#persist(scope, route, next);
+        await this.#publish({
+          type: "route_workspace",
+          scope,
+          route,
+          actor,
           action: "command",
           command,
-          revision: envelope.revision,
+          revision: next.revision,
           ok: true,
         });
-        return {
-          ok: true,
-          revision: envelope.revision,
-          ...(returned === undefined ? {} : { result: returned }),
-        };
+        return { ok: true, revision: next.revision, ...(result === undefined ? {} : { result }) };
       } catch (error) {
-        // A thrown handler rolls back any setDoc candidate because only successful handlers commit it.
-        const errorMessage = message(error);
-        if (guarded.command.mutatesExternal) {
-          envelope.outcomeUnknown = priorUnknown ?? envelope.inFlight;
-          delete envelope.inFlight;
-          await this.#persist(scope, route, envelope);
-        }
-        return fail(
+        return reject(
           refuse(
             "error",
-            errorMessage,
-            guarded.command.mutatesExternal
-              ? "the external outcome is unknown; recover before another external mutation."
-              : "the command handler threw.",
+            message(error),
+            "The read/local handler failed; prior uncertainty remains unresolved.",
           ),
         );
       }
     });
+  }
+
+  observe(
+    scope: RouteWorkspaceScope,
+    route: string,
+    listener: (value: OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>) => void,
+  ): () => void {
+    const key = `${workKey(scope)}\0${route}`;
+    return this.#reads.observe(
+      key,
+      () => this.read(scope, route),
+      (notify) =>
+        this.subscribe((event) => {
+          if (event.route === route && workKey(event.scope) === workKey(scope))
+            notify();
+        }),
+      listener,
+    );
   }
 
   subscribe(listener: (event: RouteWorkspaceEvent) => void): () => void {
@@ -298,30 +255,54 @@ export class RouteWorkspace {
     return () => this.#listeners.delete(listener);
   }
 
+  #load(
+    scope: RouteWorkspaceScope,
+    spec: RouteStateSpec<z.ZodType>,
+  ): Promise<RouteEnvelope<unknown>>;
+  #load(
+    scope: RouteWorkspaceScope,
+    spec: RouteStateSpec<z.ZodType>,
+    create: false,
+  ): Promise<RouteEnvelope<unknown> | null>;
   async #load(
     scope: RouteWorkspaceScope,
     spec: RouteStateSpec<z.ZodType>,
-  ): Promise<RouteEnvelope<unknown>> {
-    const raw = await this.options.store.getState({
-      scopeKey: routeScopeKey(scope),
+    create = true,
+  ): Promise<RouteEnvelope<unknown> | null> {
+    let raw = await this.options.store.getState({
+      targetKey: workKey(scope),
       route: spec.route,
     });
     if (raw == null)
-      return {
-        version: ENVELOPE_VERSION,
-        revision: 0,
-        doc: spec.schema.parse({}),
-      };
-    const envelope = parseEnvelope(raw, spec);
-    if (envelope.inFlight) {
-      envelope.outcomeUnknown ??= envelope.inFlight;
-      delete envelope.inFlight;
-      await this.options.store.setState({
-        scopeKey: routeScopeKey(scope),
-        route: spec.route,
-        value: envelope,
-      });
+      return create
+        ? {
+            version: ENVELOPE_VERSION,
+            revision: 0,
+            doc: spec.schema.parse({}),
+          }
+        : null;
+    const migrate = this.#registry.get(spec.route)?.migrate;
+    const key = `${workKey(scope)}\0${spec.route}`;
+    if (migrate) {
+      try {
+        const converted = await migrate(raw, scope);
+        if (converted !== raw) {
+          await this.options.store.setState({
+            targetKey: workKey(scope),
+            route: spec.route,
+            value: converted,
+          });
+          raw = converted;
+        }
+        this.pendingMigrations.delete(key);
+      } catch (error) {
+        if (!isRecord(raw)) throw error;
+        // Authored projections stay usable, but writes must retain every unarchived legacy field.
+        this.pendingMigrations.set(key, { raw: structuredClone(raw), error: message(error) });
+      }
     }
+    const envelope = parseEnvelope(raw, spec);
+    if (envelope.inFlight) envelope.outcomeUnknown ??= envelope.inFlight;
     return envelope;
   }
 
@@ -331,9 +312,21 @@ export class RouteWorkspace {
     envelope: RouteEnvelope<unknown>,
   ): Promise<void> {
     await this.options.store.setState({
-      scopeKey: routeScopeKey(scope),
+      targetKey: workKey(scope),
       route,
-      value: envelope,
+      value: (() => {
+        const pending = this.pendingMigrations.get(`${workKey(scope)}\0${route}`);
+        return pending
+          ? {
+              ...pending.raw,
+              ...envelope,
+              doc: {
+                ...(isRecord(pending.raw.doc) ? pending.raw.doc : {}),
+                ...(isRecord(envelope.doc) ? envelope.doc : {}),
+              },
+            }
+          : envelope;
+      })(),
     });
   }
 
@@ -342,7 +335,7 @@ export class RouteWorkspace {
   }
 
   #serialized<T>(scope: RouteWorkspaceScope, route: string, work: () => Promise<T>): Promise<T> {
-    const key = `${routeScopeKey(scope)}\0${route}`;
+    const key = `${workKey(scope)}\0${route}`;
     const previous = this.#tails.get(key) ?? Promise.resolve();
     const run = previous.catch(() => undefined).then(work);
     const tail = run.then(
@@ -404,22 +397,6 @@ function parseReceipts(value: unknown, route: string): Record<string, CommandRec
       : parsed.data;
   }
   return receipts;
-}
-
-function normalizeReceiptResult(result: unknown): {
-  returned?: unknown;
-  receipt: Pick<CommandReceipt, "replayable" | "result">;
-} {
-  try {
-    const serialized = JSON.stringify(result);
-    if (serialized === undefined) return { receipt: { replayable: false } };
-    const returned = JSON.parse(serialized);
-    return new TextEncoder().encode(serialized).byteLength > RECEIPT_RESULT_MAX_BYTES
-      ? { returned, receipt: { replayable: false } }
-      : { returned, receipt: { replayable: true, result: returned } };
-  } catch {
-    return { receipt: { replayable: false } };
-  }
 }
 
 function describeCommands(spec: RouteStateSpec<z.ZodType>) {

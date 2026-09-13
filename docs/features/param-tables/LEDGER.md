@@ -36,7 +36,7 @@ linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synth
 
 ## Owed
 
-- Round-1 verdicts are unruled — five variants (`/param-tables?variant=a..e`) are built, typecheck-clean and browser-verified, awaiting a kaitpw sitting. Nothing is settled law until a round rules it. See [MAP.md](MAP.md).
+- 2026-09-09 — Revive Param Tables as a future product effort after the current Chat/Takeoffs priority. Current source retains `/param-tables` rendering Variant E; re-ground the surviving prototype and reconcile the older five-variant [MAP.md](MAP.md) before choosing a product shape. The surviving code does not establish a new user verdict or current runtime proof. Revival is owed, not part of the paused implementation scope.
 - Design-language gaps the round proved by independent re-invention (8 items: no mark for a linked value, no fan-out/staged-writes preview primitive, no binding-status axis or station strip, no old→new staged-transition token, no pinned authored band or type-group header row, unruled cross-pane subscriber highlight, receipt surfaces beyond `OutcomeLine`, no cell-scale parameter picker). Route them into the design-system frontier once the round rules.
 - Host-op gap is binding: `revit.apply.schedule` writes header-cell text tables and `revit.apply.parameter-links` writes param links, but nothing writes "table + linkage" atomically, and nothing renders an authored grid as a *placeable* exhibit with live cells.
 - pin as test: `revit.apply.parameter-links` REFUSES when the reviewed profile carried through the route command no longer matches the live draft — a later agent patch must not be able to silently change a human-reviewed write.

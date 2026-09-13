@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { capabilityNeedsSchema } from "./capability.ts";
-import { addressSchema, sameAddress } from "./reading.ts";
+
+const documentAddressPattern =
+  /^(?:[A-Za-z]:[\\/]|\\\\)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A Revit document's cloud model GUID or absolute Windows path. */
+export const addressSchema = z
+  .string()
+  .refine(
+    (value) => documentAddressPattern.test(value),
+    "an Address must be a cloud model GUID or absolute path",
+  )
+  .brand<"Address">();
+export type Address = z.infer<typeof addressSchema>;
+
+export const address = (value: string): Address => addressSchema.parse(value);
+
+/** GUID case and Windows path case/separators do not distinguish documents. */
+export const sameAddress = (a: Address, b: Address): boolean =>
+  a.replaceAll("/", "\\").toLowerCase() === b.replaceAll("/", "\\").toLowerCase();
 
 // The bridge identity already includes process incarnation. SDK labels are recovery choices,
 // never execution identities. openId must be minted for each Document lifetime by Revit.
@@ -61,13 +79,17 @@ export const targetInventorySchema = z.discriminatedUnion("kind", [
 ]);
 export type TargetInventory = z.infer<typeof targetInventorySchema>;
 
+export const executionTargetSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("host") }),
+  z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
+  z.strictObject({ kind: z.literal("document"), ref: documentRefSchema }),
+]);
+export type ExecutionTarget = z.infer<typeof executionTargetSchema>;
+
 export type TargetResolution =
   | {
       kind: "resolved";
-      target:
-        | { kind: "host" }
-        | { kind: "session"; session: string }
-        | { kind: "document"; ref: DocumentRef };
+      target: ExecutionTarget;
     }
   | { kind: "checking" }
   | { kind: "failed"; message: string }
@@ -114,4 +136,60 @@ export function resolveCallTarget(
     kind: "resolved",
     target: { kind: "document", ref: { session, openId: document.openId } },
   };
+}
+
+/** The stable key of a Target request; null is the empty key. */
+export const targetKey = (target: DocumentRequest | null): string =>
+  target === null
+    ? ""
+    : target.kind === "open"
+      ? `open:${target.ref.session}/${target.ref.openId}`
+      : `named:${target.session}/${target.address}`;
+
+/* ── Thread head: the default Target a thread carries ───────────────────────────────── */
+
+/**
+ * What the user chose for a chat thread: one default Target request plus the revision the host
+ * stamped on it. A default is not an execution target; every call resolves it through
+ * `resolveCallTarget` against the live inventory and never rewrites it.
+ */
+export const threadHeadSchema = z.object({
+  defaultTarget: documentRequestSchema.nullable(),
+  revision: z.number().int().nonnegative(),
+});
+export type ThreadHead = z.infer<typeof threadHeadSchema>;
+
+/** `PUT /pe/target/:thread`. `turn` is set only by pea's approved default-target proposal. */
+export const putTargetSchema = z.object({
+  defaultTarget: documentRequestSchema.nullable(),
+  expectedRevision: z.number().int().nonnegative(),
+  turn: z.uuid().optional(),
+});
+export type PutTarget = z.infer<typeof putTargetSchema>;
+
+export const putTargetResultSchema = z.discriminatedUnion("why", [
+  z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadSchema }),
+  /** Someone wrote first; `head` is current, re-read and decide again. */
+  z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadSchema }),
+  /** Pea is mid-turn and the write did not come from that turn; wait or stop it. */
+  z.object({ ok: z.literal(false), why: z.literal("in-turn") }),
+]);
+export type PutTargetResult = z.infer<typeof putTargetResultSchema>;
+
+/* ── Turn: the thread head frozen at admission ───────────────────────────────────── */
+
+/** The turn context frozen at admission and read by every tool through requestContext. */
+export const turnContextKey = "pea.turn";
+export const turnSchema = threadHeadSchema.extend({
+  id: z.uuid(),
+  thread: z.string().min(1),
+});
+export type Turn = z.infer<typeof turnSchema>;
+export function turnOf(context: unknown): Turn | null {
+  const requestContext = (context as { requestContext?: unknown } | undefined)?.requestContext;
+  const raw =
+    requestContext && typeof requestContext === "object" && "get" in requestContext
+      ? (requestContext as { get(key: string): unknown }).get(turnContextKey)
+      : (requestContext as Record<string, unknown> | undefined)?.[turnContextKey];
+  return turnSchema.safeParse(raw).data ?? null;
 }

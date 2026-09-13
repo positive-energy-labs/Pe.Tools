@@ -28,12 +28,12 @@ import { token } from "#/lib/token";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { ParamGrid } from "#/family-review/proto-editor/composed-params";
 import { PartSidebar, SentenceGrids } from "#/family-review/proto-editor/composed-parts";
 import { Triptych } from "#/family-review/proto-editor/composed-triptych";
 import { jsonWithSpans, pointerAtOffset } from "#/family-review/proto-editor/json-map";
-import { StatePanel, TypeStage, type Editor } from "#/family-review/proto-editor/shell";
+import { StatePanel, TypeBand, type Editor } from "#/family-review/proto-editor/shell";
 import { JsonView, type HighlightDecoration } from "#/settings-panes/json-editor";
 import type { FamilyModel } from "#/family/family-model";
 
@@ -101,7 +101,7 @@ function Chrome({
       <span>family-model-showcase.family.json</span>
       <span>· writes to</span>
       <span>the same json</span>
-      <TypeStage editor={editor} />
+      <TypeBand editor={editor} />
       <FactChip
         tone="meta"
         title="Every edit on this page lands in the json and nowhere else. A family.json may already be materialized into many documents across many years; landing a write here changes none of them, and this surface will never imply it can."
@@ -115,14 +115,14 @@ function Chrome({
       >
         seam · materialize into Revit
       </FactChip>
-      <Verb
+      <ActionButton
         label="materialize into Revit"
         disabled
         reason="Not built. Edits land in the json; pushing a json into a live document is a separate, future one-click that needs a host and a chosen document."
         onClick={() => {}}
       />
       <span className="ml-auto">
-        <Verb
+        <ActionButton
           label={jsonOpen ? "hide json" : "show json"}
           reason="Dock or undock the raw json pane. It is two-way: type in it and the structured surfaces move."
           onClick={onToggleJson}

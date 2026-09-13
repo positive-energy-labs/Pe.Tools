@@ -1,5 +1,5 @@
 import type { ConnGeo } from "#/family/family-model";
-import type { PageWorld } from "#/family/model";
+import type { FamilyPageModel } from "#/family/model";
 import { NORMAL_RE, hoverProps, type Axis, type ViewDef } from "#/family/anatomy-model";
 
 export function ConnectorMark({
@@ -16,7 +16,7 @@ export function ConnectorMark({
   conn: ConnGeo;
   view: ViewDef;
   focusedParts: Set<string>;
-  world: PageWorld;
+  world: FamilyPageModel;
   X: (value: number) => number;
   Y: (value: number) => number;
   scale: number;

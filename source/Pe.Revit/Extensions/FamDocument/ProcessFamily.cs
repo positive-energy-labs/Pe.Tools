@@ -21,25 +21,32 @@ public static class FamilyDocumentProcessFamily {
             return read(new FamilyDocument(source));
 
         Document? copy = null;
-        var firstDiagnostic = diagnostics.Count;
         try {
-            try {
-                copy = RevitFailureScope.Execute(source,
-                    accessor => PeToolsFailureHandling.RejectUnsafeFamilyCopyFailures(accessor, diagnostics),
-                    () => source.EditFamily(family));
-            } catch (Exception exception) when (diagnostics.Skip(firstDiagnostic).Any(diagnostic => diagnostic.IsError)) {
-                throw new InvalidOperationException(
-                    $"EditFamily refused '{family.Name}': {string.Join("; ", diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).Select(error => error.Message))}",
-                    exception);
-            }
-            var errors = diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).ToList();
-            if (errors.Count > 0)
-                throw new InvalidOperationException(
-                    $"EditFamily refused '{family.Name}': {string.Join("; ", errors.Select(error => error.Message))}");
-            return read(new FamilyDocument(copy));
+            source.HandleFamilyCopyFailures(family, () => copy = source.EditFamily(family), diagnostics);
+            return read(new FamilyDocument(copy!));
         } finally {
             if (copy != null) _ = copy.Close(false);
         }
+    }
+
+    /// <summary>Shared EditFamily failure policy. The caller captures ownership inside open;
+    /// diagnostics can reject the operation after native creation has returned.</summary>
+    public static T HandleFamilyCopyFailures<T>(this Document source, Family family, Func<T> open,
+        ICollection<(bool IsError, string Message)> diagnostics) {
+        var firstDiagnostic = diagnostics.Count;
+        T result;
+        try {
+            result = RevitFailureScope.Execute(source,
+                accessor => PeToolsFailureHandling.RejectUnsafeFamilyCopyFailures(accessor, diagnostics), open);
+        } catch (Exception exception) when (diagnostics.Skip(firstDiagnostic).Any(diagnostic => diagnostic.IsError)) {
+            throw new InvalidOperationException(
+                $"EditFamily refused '{family.Name}': {string.Join("; ", diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).Select(error => error.Message))}", exception);
+        }
+        var errors = diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).ToList();
+        if (errors.Count > 0)
+            throw new InvalidOperationException(
+                $"EditFamily refused '{family.Name}': {string.Join("; ", errors.Select(error => error.Message))}");
+        return result;
     }
 
     public static FamilyDocument GetFamilyDocument(this Document doc) {

@@ -18,10 +18,12 @@ using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Failures;
 using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Parameters;
 using Pe.Revit.Takeoff;
 using Pe.Revit.Tasks;
+using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
@@ -920,6 +922,38 @@ internal sealed class RevitDataRequestService {
             );
         }
     }
+
+    [Op("family.temporary.acquire", Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static TemporaryDocumentData AcquireTemporaryFamily(TemporaryFamilyAcquireRequest request, ProjectDocument source) {
+        var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
+        var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        var document = source.Value;
+        var trackedSource = tracker.Track(document);
+        var family = document.GetElement(request.FamilyId.ToElementId()) as Family
+            ?? throw new InvalidOperationException("Loaded family was not found in the selected project.");
+        var diagnostics = new List<(bool IsError, string Message)>();
+        var receipt = document.HandleFamilyCopyFailures(family,
+            () => OwnedTemporaryDocuments.Acquire(RevitUiSession.CurrentUIApplication, tracker, request.AcquisitionId,
+                $"{trackedSource.OpenId}:{request.FamilyId}", () => document.EditFamily(family)), diagnostics);
+        return TemporaryResult(session, receipt);
+    }
+
+    [Op("document.temporary.release", Does = "Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back.", Title = "Release Temporary Document", Finds = ["family", "temporary", "release", "cleanup"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Thread = OpThread.Revit)]
+    private static TemporaryDocumentData ReleaseTemporaryDocument(TemporaryDocumentReleaseRequest request) {
+        var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
+        var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        return TemporaryResult(session, OwnedTemporaryDocuments.Release(RevitUiSession.CurrentUIApplication, tracker,
+            request.AcquisitionId, request.ReleaseId, request.ExpectedOpenId, request.Discard));
+    }
+
+    [Op("document.temporary.status", Does = "Recover a temporary document by its original acquisitionId without opening it again. SDK op result uses the returned recoveryId.", Title = "Recover Temporary Document", Finds = ["family", "temporary", "recovery", "status"], Thread = OpThread.Revit)]
+    private static TemporaryDocumentData TemporaryDocumentStatus(TemporaryDocumentStatusRequest request) =>
+        TemporaryResult(HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable."),
+            OwnedTemporaryDocuments.Status(request.AcquisitionId));
+
+    private static TemporaryDocumentData TemporaryResult(string session, TemporaryDocumentReceipt receipt) =>
+        new(receipt.AcquisitionId, receipt.Status, receipt.OpenId is { } openId ? new(session, openId) : null,
+            receipt.RecoveryId, receipt.Detail, receipt.RecordedOpenId, receipt.RecordedStatus);
 
     [Op("family.editor.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private FamilyEditorOpenData OpenFamilyEditorCore(FamilyEditorOpenRequest request, ProjectDocument activeDocument) {

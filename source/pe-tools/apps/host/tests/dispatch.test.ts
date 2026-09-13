@@ -125,6 +125,7 @@ test("settings save uses content hash version tokens", async () => {
   try {
     const result = await runDispatch(
       saveSettingsDocument({
+        expected: { kind: "missing" },
         documentId: {
           moduleKey: "Global",
           rootKey: "fragments",
@@ -134,8 +135,9 @@ test("settings save uses content hash version tokens", async () => {
       }),
     );
 
-    expect(result.writeApplied).toBe(true);
-    expect(result.metadata.versionToken?.value).toBe(sha256('{"ok":true}\n'));
+    expect(result.kind).toBe("written");
+    if (result.kind !== "written") throw new Error("expected write");
+    expect(result.snapshot.metadata.versionToken?.value).toBe(sha256('{"ok":true}'));
   } finally {
     profile.dispose();
   }
@@ -147,6 +149,7 @@ test("settings save writes schema-invalid documents and returns validation issue
     const result = await runDispatch(
       saveSettingsDocument(
         {
+          expected: { kind: "missing" },
           documentId: {
             moduleKey: "CmdScheduleManager",
             rootKey: "schedules",
@@ -177,9 +180,10 @@ test("settings save writes schema-invalid documents and returns validation issue
       ),
     );
 
-    expect(result.writeApplied).toBe(true);
-    expect(result.validation.isValid).toBe(false);
-    expect(result.validation.issues.some((issue) => issue.code === "required")).toBe(true);
+    expect(result.kind).toBe("written");
+    if (result.kind !== "written") throw new Error("expected write");
+    expect(result.snapshot.validation.isValid).toBe(false);
+    expect(result.snapshot.validation.issues.some((issue) => issue.code === "required")).toBe(true);
   } finally {
     profile.dispose();
   }
@@ -423,16 +427,14 @@ test("settings create-only save refuses to overwrite an existing document", asyn
         relativePath: "create-only",
       },
       rawContent: '{"version":1}',
-      createOnly: true,
+      expected: { kind: "missing" as const },
     };
-    expect((await runDispatch(saveSettingsDocument(request))).writeApplied).toBe(true);
+    expect((await runDispatch(saveSettingsDocument(request))).kind).toBe("written");
 
     const conflict = await runDispatch(
       saveSettingsDocument({ ...request, rawContent: '{"version":2}' }),
     );
-    expect(conflict.writeApplied).toBe(false);
-    expect(conflict.conflictDetected).toBe(true);
-    expect(conflict.conflictMessage).toContain("already exists");
+    expect(conflict.kind).toBe("conflict");
   } finally {
     profile.dispose();
   }

@@ -13,7 +13,7 @@
  * instance runs the real sequence: type a reason to arm it, commit, take a drift refusal, re-plan
  * against a fresh hash, commit again for a receipt.
  *
- * FIXTURE, ANNOUNCED: `design-system/fixtures.ts`. No host, no plan, no model. The refusal is
+ * SPECIMEN DATA, ANNOUNCED: `design-system/specimens-data.ts`. No host, no plan, no model. The refusal is
  * simulated on the first commit because that is the case the ceremony exists for; nothing here
  * asks Revit anything.
  *
@@ -28,9 +28,9 @@ import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Gap } from "#/design-system/exhibit";
-import { ARMING_FIXTURE } from "#/design-system/fixtures";
+import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 export const Route = createFileRoute("/design-system_/arming")({ component: ArmingRoute });
 
@@ -50,7 +50,7 @@ function ArmingRoute() {
   /** Whether the plan has been re-made since the refusal. Drives which hash the strip cites. */
   const [replanned, setReplanned] = useState(false);
 
-  const planHash = replanned ? ARMING_FIXTURE.freshPlanHash : ARMING_FIXTURE.planHash;
+  const planHash = replanned ? ARMING_SPECIMEN.freshPlanHash : ARMING_SPECIMEN.planHash;
 
   const commit = () => {
     // The first commit refuses — that IS the case the ceremony exists for. After a re-plan the
@@ -94,11 +94,11 @@ function ArmingRoute() {
               <>
                 <OutcomeLine
                   kind="receipt"
-                  label={`${ARMING_FIXTURE.count} parameters written`}
+                  label={`${ARMING_SPECIMEN.count} parameters written`}
                   says={`against plan ${planHash}`}
                 />
                 <div className="flex items-center gap-2">
-                  <Verb
+                  <ActionButton
                     label="arm another write"
                     onClick={reset}
                     reason="Puts the strip back to unarmed with the original plan"
@@ -108,15 +108,15 @@ function ArmingRoute() {
               </>
             ) : (
               <ArmingStrip
-                verb={ARMING_FIXTURE.verb}
-                target={ARMING_FIXTURE.target}
-                count={ARMING_FIXTURE.count}
+                verb={ARMING_SPECIMEN.verb}
+                target={ARMING_SPECIMEN.target}
+                count={ARMING_SPECIMEN.count}
                 planHash={planHash}
                 reason={reason}
                 onReasonChange={setReason}
                 state={
                   phase === "refused"
-                    ? { phase: "refused", refusal: ARMING_FIXTURE.refusal, onReplan: replan }
+                    ? { phase: "refused", refusal: ARMING_SPECIMEN.refusal, onReplan: replan }
                     : { phase: "arming" }
                 }
                 onCommit={commit}
@@ -133,7 +133,7 @@ function ArmingRoute() {
                 {replanned ? " (re-planned)" : ""}
               </Tag>
               {reason.trim().length === 0 ? null : (
-                <Verb label="reset" onClick={reset} reason="Back to unarmed on the original plan" />
+                <ActionButton label="reset" onClick={reset} reason="Back to unarmed on the original plan" />
               )}
             </div>
 
@@ -156,10 +156,10 @@ function ArmingRoute() {
               says="present, legible, refused with its reason on the surface. No ceremony colour yet and the firm hairline is its edge: this is a thing that WILL be armed, not a thing that is."
             >
               <ArmingStrip
-                verb={ARMING_FIXTURE.verb}
-                target={ARMING_FIXTURE.target}
-                count={ARMING_FIXTURE.count}
-                planHash={ARMING_FIXTURE.planHash}
+                verb={ARMING_SPECIMEN.verb}
+                target={ARMING_SPECIMEN.target}
+                count={ARMING_SPECIMEN.count}
+                planHash={ARMING_SPECIMEN.planHash}
                 reason=""
                 onReasonChange={noop}
                 state={{ phase: "arming" }}
@@ -172,11 +172,11 @@ function ArmingRoute() {
               says="the one filled blue, at every blast radius. The reason stays visible and editable after arming — an armed strip that hides its own reason is a button with extra steps."
             >
               <ArmingStrip
-                verb={ARMING_FIXTURE.verb}
-                target={ARMING_FIXTURE.target}
-                count={ARMING_FIXTURE.count}
-                planHash={ARMING_FIXTURE.planHash}
-                reason={ARMING_FIXTURE.reasonExample}
+                verb={ARMING_SPECIMEN.verb}
+                target={ARMING_SPECIMEN.target}
+                count={ARMING_SPECIMEN.count}
+                planHash={ARMING_SPECIMEN.planHash}
+                reason={ARMING_SPECIMEN.reasonExample}
                 onReasonChange={noop}
                 state={{ phase: "arming" }}
                 onCommit={noop}
@@ -188,13 +188,13 @@ function ArmingRoute() {
               says="the one alarm, and exactly one way forward. The refused frame drops the target, the counts and the reason — it is no longer a thing you can press."
             >
               <ArmingStrip
-                verb={ARMING_FIXTURE.verb}
-                target={ARMING_FIXTURE.target}
-                count={ARMING_FIXTURE.count}
-                planHash={ARMING_FIXTURE.planHash}
-                reason={ARMING_FIXTURE.reasonExample}
+                verb={ARMING_SPECIMEN.verb}
+                target={ARMING_SPECIMEN.target}
+                count={ARMING_SPECIMEN.count}
+                planHash={ARMING_SPECIMEN.planHash}
+                reason={ARMING_SPECIMEN.reasonExample}
                 onReasonChange={noop}
-                state={{ phase: "refused", refusal: ARMING_FIXTURE.refusal, onReplan: noop }}
+                state={{ phase: "refused", refusal: ARMING_SPECIMEN.refusal, onReplan: noop }}
                 onCommit={noop}
                 onCancel={noop}
               />

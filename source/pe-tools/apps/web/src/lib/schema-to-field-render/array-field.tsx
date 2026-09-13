@@ -1,4 +1,4 @@
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import {
   Combobox,
   ComboboxChip,
@@ -102,7 +102,7 @@ export function ArrayField({
             <span className="t-small face-mono t-upper text-ink-2">
               {(Array.isArray(field.value) ? field.value : []).length} items
             </span>
-            <Verb
+            <ActionButton
               label="add item"
               reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
               onClick={() => {
@@ -117,7 +117,7 @@ export function ArrayField({
                 <div key={childPathPrefix} className="boundary-l space-y-2 px-3 py-2">
                   <div className="flex items-center justify-between">
                     <span className="t-small face-mono t-upper text-ink-2">item {index + 1}</span>
-                    <Verb
+                    <ActionButton
                       label="remove"
                       reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
                       onClick={() => {

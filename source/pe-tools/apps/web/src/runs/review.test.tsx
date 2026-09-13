@@ -79,7 +79,7 @@ it("keeps holes, exact points, dispositions and reasons through selection, flagg
   expect(svg).toContain("M0.123456789 5");
   expect(svg).toContain("⚑ ");
   const portable = partitionReviewSchema.parse({
-    source: { runId: "unchanged", documentKey: "doc", scopeKey: "scope" },
+    source: { runId: "unchanged", documentKey: "doc", zoneKey: "scope" },
     zone: { key: "zone", name: "zone", loops: [] },
     shapes: shapes.map(({ key, label, ...shape }) => ({
       ...shape,
@@ -91,7 +91,7 @@ it("keeps holes, exact points, dispositions and reasons through selection, flagg
   expect(portable.source.runId).toBe("unchanged");
   const review = render(
     <PartitionReview
-      review={{ zone: "zone", data: portable, flags: ["residue:R04"] }}
+      review={{ zone: "zone", data: portable, flags: ["residue:R04"], source: "fresh solver" }}
       onFlag={() => {}}
     />,
   );

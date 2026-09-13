@@ -8,9 +8,7 @@ import {
   type OpKey,
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
-
-const HOST_CALL_URL = "/call";
-type HostCallOptions = HostSessionScope & { signal?: AbortSignal };
+export type HostCallOptions = HostSessionScope & { signal?: AbortSignal; baseURL?: string };
 
 /**
  * The typed client: POST { key, request } as JSON, keys constrained to the
@@ -49,7 +47,7 @@ async function postCall(
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
   headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
-  const response = await fetch(HOST_CALL_URL, {
+  const response = await fetch(`${options?.baseURL ?? ""}/call`, {
     method: "POST",
     headers,
     body: JSON.stringify({ key, request }),
@@ -67,4 +65,9 @@ async function postCall(
     });
   }
   return response.json();
+}
+
+export function scopedHostRpc(baseURL: string): typeof callHostRpc {
+  return (key, ...args) =>
+    postCall(key, args[0], { ...args[1], baseURL }) as ReturnType<typeof callHostRpc<typeof key>>;
 }

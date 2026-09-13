@@ -23,6 +23,7 @@
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
         <!-- Pe.Host retired — HostOperationExecutorTests.cs removed with it. -->
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />

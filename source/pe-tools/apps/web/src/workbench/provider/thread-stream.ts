@@ -1,5 +1,5 @@
+import { useHostCall } from "#/readings";
 import type { AgentControllerEvent, MastraClient } from "@mastra/client-js";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { emptyChatState, type ChatDisplay, type ChatState } from "../chat-state";
 
@@ -21,23 +21,16 @@ export const threadQueryKey = (origin: string, threadId: string | null) =>
 
 export function useThreadStream(options: {
   origin: string;
-  queryClient: QueryClient;
   thread: { id: string; session: SessionClient } | null;
 }) {
-  const { origin, queryClient, thread } = options;
+  const { origin, thread } = options;
   const threadId = thread?.id ?? null;
   const session = thread?.session;
-  const queryKey = threadQueryKey(origin, threadId);
-  const query = useQuery({
-    queryKey,
-    queryFn: async (): Promise<ChatState> => {
+  const query = useHostCall(async (): Promise<ChatState> => {
       const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId ?? "")}`);
       if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
       return response.json() as Promise<ChatState>;
-    },
-    enabled: threadId !== null,
-    staleTime: Infinity,
-  });
+    }, [], threadId !== null);
   // The stream is the only source of display: the server opens every attach with a snapshot
   // frame, so no fetch ever competes with it and no clock is needed.
   const [frame, setFrame] = useState<ChatDisplay | null>(null);
@@ -49,12 +42,13 @@ export function useThreadStream(options: {
   }, [threadId]);
 
   // The one refetch path: cancel kills a fetch that left before the change, so an older body
-  // can never land after a newer one.
+  // can never land after a newer one. It closes over `refresh` ALONE — `query` is a fresh object
+  // every render, and an `invalidate` that changed identity per render tore the SSE subscription
+  // down and reopened it on every render, dropping whatever `message_end` fired in the gap.
+  const refresh = query.refresh;
   const invalidate = useCallback(async () => {
-    const key = threadQueryKey(origin, threadId);
-    await queryClient.cancelQueries({ queryKey: key });
-    await queryClient.invalidateQueries({ queryKey: key });
-  }, [queryClient, origin, threadId]);
+    refresh();
+  }, [refresh]);
 
   useEffect(() => {
     if (!session || !query.isSuccess) return;

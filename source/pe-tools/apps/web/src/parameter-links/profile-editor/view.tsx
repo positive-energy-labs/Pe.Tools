@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import type { ParameterLinkProfile } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { addDefinition } from "#/parameter-links/model";
 import { DefinitionCard } from "./definition-card";
 
@@ -24,7 +24,7 @@ export function ProfileEditor({
         <EmptyState story="scope" exit="add a definition to start linking parameters">
           no draft profile
         </EmptyState>
-        <Verb
+        <ActionButton
           label="add definition"
           icon={Plus}
           disabled={disabled}
@@ -52,7 +52,7 @@ export function ProfileEditor({
           onChange={onChange}
         />
       ))}
-      <Verb
+      <ActionButton
         label="add definition"
         icon={Plus}
         disabled={disabled}

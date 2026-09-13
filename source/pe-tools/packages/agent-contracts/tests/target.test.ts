@@ -1,6 +1,5 @@
 import { expect, it } from "vite-plus/test";
 import { address, here, superseded } from "../src/reading.ts";
-import { resolveScope } from "../src/scope.ts";
 import {
   callTargetSchema,
   resolveCallTarget,
@@ -49,11 +48,6 @@ it.each([
   };
   expect(
     resolveCallTarget(read, { kind: "named", session: "process-1", address: requested }, inventory),
-  ).toMatchObject({ kind: "resolved" });
-  expect(
-    resolveScope({ kind: "document", document: requested }, [
-      { id: "process-1", year: 2025, document: at },
-    ]),
   ).toMatchObject({ kind: "resolved" });
   const value = { reading: { at, version: "1", observedAt: "2026-09-08T00:00:00.000Z" } };
   expect(here(value, requested)).toBe(value);

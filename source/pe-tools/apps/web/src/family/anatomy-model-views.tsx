@@ -8,7 +8,7 @@ import {
   type FamilyModel,
   type SolidGeo,
 } from "#/family/family-model";
-import type { Draft, Focus, PageWorld } from "#/family/model";
+import type { Draft, Focus, FamilyPageModel } from "#/family/model";
 import { draftedModel } from "#/family/project";
 import { AXES, BOX, M, VIEWS, type Axis, hoverProps } from "#/family/anatomy-model";
 import { ConnectorMark } from "#/family/anatomy-connector-mark";
@@ -26,7 +26,7 @@ export function ModelViews({
   onInspect,
 }: {
   model: FamilyModel;
-  world: PageWorld;
+  world: FamilyPageModel;
   draft: Draft;
   typeName: string;
   focusedParts: Set<string>;

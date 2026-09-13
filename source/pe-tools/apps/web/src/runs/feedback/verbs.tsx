@@ -6,7 +6,7 @@ import { cn } from "#/lib/utils";
 import { fb, flagLabel, type StagedItem, useFb } from "./staging";
 import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 
 export function ExportVerbs(props: {
   items: StagedItem[];
@@ -24,7 +24,7 @@ export function ExportVerbs(props: {
         ? "An export is already running. "
         : "";
   const btn = (verb: "chat" | "sheet" | "snip", label: string, does: string, primary = false) => (
-    <Verb
+    <ActionButton
       label={label}
       reason={disabled ? refusal : does}
       tone={primary ? "commit" : "act"}

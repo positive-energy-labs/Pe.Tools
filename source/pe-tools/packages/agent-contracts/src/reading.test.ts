@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { address, here, superseded, type Reading } from "./reading.ts";
+import { address, here, superseded, type Observation } from "./reading.ts";
 
 const at = address("C:\\Models\\projectA.rvt");
 const elsewhere = address("C:\\Models\\Other.rvt");
-const reading = (version: string | null): Reading => ({
+const reading = (version: string | null): Observation => ({
   at,
   version,
   observedAt: "2026-08-26T00:00:00.000Z",
 });
 
-describe("Reading", () => {
+describe("Observation", () => {
   it("accepts only document identities", () => {
     expect(address("f2933e8d-9e16-4bf4-b9ca-484f461e4563")).toBe(
       "f2933e8d-9e16-4bf4-b9ca-484f461e4563",

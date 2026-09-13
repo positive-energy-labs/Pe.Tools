@@ -1,3 +1,10 @@
+import { useState } from "react";
+import {
+  saveSettingsAction,
+  actionResult,
+} from "../../../../../packages/mcps/src/shared/takeoff-action-client";
+import { ActionReceipts } from "#/actions/receipt";
+import { useRouteState } from "../route-state";
 import { Link } from "@tanstack/react-router";
 
 import { cellSummary, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
@@ -10,7 +17,46 @@ import {
 } from "../route-chat-plugins";
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
 
-export function SettingsChatPlugin({
+export function SettingsChatPlugin(props: RouteChatPluginProps) {
+  const args =
+    props.args && typeof props.args === "object" ? (props.args as Record<string, unknown>) : {};
+  const workspaceId = typeof args.workspaceId === "string" ? args.workspaceId : null;
+  return workspaceId ? (
+    <FileSettingsChatPlugin key={workspaceId} {...props} workspaceId={workspaceId} />
+  ) : (
+    <Link to="/settings" search={{ mode: "file" }}>
+      Open file Work
+    </Link>
+  );
+}
+
+function FileSettingsChatPlugin(props: RouteChatPluginProps & { workspaceId: string }) {
+  const work = { route: settingsRouteState.route, target: null, work: props.workspaceId };
+  const state = useRouteState(settingsRouteState, work);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const commands = {
+    ...state,
+    command: async (command: string, input?: unknown, receipt?: string, revision?: number) => {
+      if (command !== "save") return state.command(command, input, receipt, revision);
+      if (!state.slice || revision == null) throw Error("Review the file Work before saving");
+      const row = await saveSettingsAction(work, state.slice, revision);
+      setActionId(row.id);
+      return { ok: true as const, revision, result: actionResult(row) };
+    },
+  };
+  return (
+    <>
+      <SettingsReview {...props} sessionState={state.slice} routeState={commands} />
+      <ActionReceipts
+        key={props.workspaceId}
+        scope={{ kind: "file", workspaceId: props.workspaceId }}
+        lastId={actionId}
+      />
+    </>
+  );
+}
+
+function SettingsReview({
   toolName,
   args,
   sessionState,
@@ -20,7 +66,8 @@ export function SettingsChatPlugin({
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
-    document?.documentId?.moduleKey === "FamilyFoundry" && document.documentId.rootKey === "models";
+    document?.basis?.documentId.moduleKey === "FamilyFoundry" &&
+    document.basis?.documentId.rootKey === "models";
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -42,8 +89,13 @@ export function SettingsChatPlugin({
         <Metric value={summary.staged} label="staged" />
         <Link
           className="ml-auto"
-          to={isFamilyModel ? "/family" : "/chat"}
-          search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
+          to={isFamilyModel ? "/family" : "/settings"}
+          search={{
+            mode: "file",
+            module: document?.basis?.documentId.moduleKey,
+            root: document?.basis?.documentId.rootKey,
+            file: document?.basis?.documentId.relativePath,
+          }}
         >
           Open workspace
         </Link>
@@ -55,6 +107,7 @@ export function SettingsChatPlugin({
           segment="fields"
           cells={fields}
           commitCommand="save"
+          commitInput={{ versionToken: document?.basis?.versionToken }}
           commitLabel={(staged) => `Save ${staged}`}
           reviewHint="Pea can propose; only you can save."
           renderLabel={(path) => <span className="">{path}</span>}

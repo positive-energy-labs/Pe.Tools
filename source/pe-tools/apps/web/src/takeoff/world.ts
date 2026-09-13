@@ -1,17 +1,17 @@
-import type { RoomType, Stage, WorldRoom } from "@pe/agent-contracts";
+import type { RoomType, Phase, ModelRoom } from "@pe/agent-contracts";
 
 export type {
   RoomData,
   RoomType,
-  Stage,
-  World,
-  WorldLane,
-  WorldRoom,
-  WorldSystem,
-  WorldZone,
+  Phase,
+  TakeoffModel,
+  ModelView,
+  ModelRoom,
+  ModelSystem,
+  ModelZone,
 } from "@pe/agent-contracts";
 
-export const STAGE_ORDER: Stage[] = [
+export const STAGE_ORDER: Phase[] = [
   "declared",
   "registered",
   "partitioned",
@@ -41,7 +41,7 @@ export function readZoneMeta(blob: string): { view: string; name: string; system
   return { view: parsed.view, name: parsed.name, systemTag: parsed.systemTag ?? "" };
 }
 
-export const applyEdit = (room: WorldRoom, edit: RoomEdit | undefined): WorldRoom => {
+export const applyEdit = (room: ModelRoom, edit: RoomEdit | undefined): ModelRoom => {
   if (!edit) return room;
   const hasData =
     edit.people !== undefined ||

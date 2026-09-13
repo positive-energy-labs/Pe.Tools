@@ -30,7 +30,21 @@ public record ExecuteRevitScriptRequest(
     string WorkspaceKey = "default",
     string? SourceName = null,
     ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly,
-    int TimeoutSeconds = 600
+    int TimeoutSeconds = 600,
+    ScriptPodSourceBundle? SourceBundle = null
+);
+
+public record ScriptPodSourceFile(string Path, string BytesBase64);
+
+public record ScriptPodProjectSeed(
+    [property: JsonProperty(Required = Required.Always)] bool Present,
+    string? BytesBase64
+);
+
+public record ScriptPodSourceBundle(
+    string ManifestBase64,
+    ScriptPodProjectSeed Project,
+    List<ScriptPodSourceFile> Sources
 );
 
 public record ScriptArtifactData(

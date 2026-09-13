@@ -59,7 +59,10 @@ export async function createRuntimeLibSqlStorage(
   if (localPath) await mkdir(dirname(localPath), { recursive: true });
 
   // LibSQLStore builds stores.threadState (ThreadStateLibSQL) by default.
-  return new LibSQLStore(config);
+  const store = new LibSQLStore(config);
+  // Keyed by storage id, not instance: Mastra hands consumers an init-augmenting proxy of this store.
+  legacyConfigs.set(store.id, { ...config });
+  return store;
 }
 
 export function createMastraCodeStorageProfile(
@@ -167,4 +170,41 @@ function localFilePathFromLibSqlUrl(url: string): string | undefined {
   if (!url.startsWith("file:") || url.includes(":memory:")) return undefined;
   const localPath = url.slice("file:".length);
   return localPath.trim().length > 0 ? localPath : undefined;
+}
+
+const legacyConfigs = new Map<string, RuntimeLibSqlStorageConfig>();
+export interface LegacyRouteStateSource {
+  source: string;
+  rows: { key: string; value: string }[];
+}
+/** Finite read-only census of the actual configured Mastra database, across every resource/type. */
+export async function readLegacyRouteState(
+  store: MastraCompositeStore,
+): Promise<LegacyRouteStateSource> {
+  const config = legacyConfigs.get(store.id);
+  const file = config && localFilePathFromLibSqlUrl(config.url);
+  if (!file) throw Error("Legacy route census requires a known configured local file database");
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(file, { readOnly: true });
+  try {
+    const rows = database
+      .prepare(
+        'SELECT "threadId", "type", "value" FROM "mastra_thread_state" ORDER BY "threadId", "type"',
+      )
+      .all();
+    return {
+      source: path.resolve(file),
+      rows: rows.map((row) => {
+        if (
+          typeof row.threadId !== "string" ||
+          typeof row.type !== "string" ||
+          typeof row.value !== "string"
+        )
+          throw Error("Unreadable legacy thread-state row");
+        return { key: JSON.stringify([row.threadId, row.type]), value: row.value };
+      }),
+    };
+  } finally {
+    database.close();
+  }
 }

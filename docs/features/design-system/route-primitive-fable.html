@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route primitive — the shape</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --page: light-dark(#fdfaf2,#15120d);
+  --artifact: light-dark(#f1eee6,#1e1c16);
+  --recess: light-dark(#e4e1d9,#27251f);
+  --select: light-dark(#d9d6ce,#33302a);
+  --ink: light-dark(#38352d,#eeebe2);
+  --ink-2: light-dark(#5f5a4e,#c1bcae);
+  --ink-mute: light-dark(#888682,#868481);
+  --line: light-dark(color-mix(in srgb,#38352d 12%,transparent),color-mix(in srgb,#eeebe2 14%,transparent));
+  --line-2: light-dark(color-mix(in srgb,#38352d 22%,transparent),color-mix(in srgb,#eeebe2 26%,transparent));
+  --pea: light-dark(#42815e,#74b48f);
+  --alarm: light-dark(#8e4120,#fba381);
+  --caution: light-dark(#77531b,#ddb47e);
+  --done: light-dark(#486531,#a7c890);
+  --commit: light-dark(#325e88,#92c1f1);
+  --font-body:"Open Sans",system-ui,-apple-system,sans-serif;
+  --font-display:"Spectral",Georgia,"Times New Roman",serif;
+  --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font:13px/1.5 var(--font-body)}
+main{max-width:1080px;margin:0 auto;padding:24px 20px 80px}
+h1,h2,h3{font-family:var(--font-display);font-weight:500;margin:0}
+h1{font-size:28px;line-height:1.15}
+h2{font-size:20px;margin-top:44px;padding-top:12px;border-top:1px solid var(--line-2)}
+h3{font-size:15px;margin-top:20px}
+p{margin:8px 0;max-width:78ch}
+small,.mute{color:var(--ink-mute)}
+code,pre,kbd{font-family:var(--font-mono);font-size:11.5px}
+code{background:var(--artifact);padding:0 3px;border-radius:2px}
+pre{background:var(--artifact);border:1px solid var(--line);padding:10px 12px;overflow:auto;margin:8px 0;line-height:1.45}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+th,td{text-align:left;vertical-align:top;padding:5px 8px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--ink-2);border-bottom:1px solid var(--line-2)}
+td code{white-space:nowrap}
+.tag{display:inline-block;font:600 10px/1.4 var(--font-mono);letter-spacing:.02em;padding:0 5px;border:1px solid;border-radius:2px;vertical-align:middle}
+.tag.cur{color:var(--commit);border-color:var(--commit)}
+.tag.gap{color:var(--alarm);border-color:var(--alarm)}
+.tag.proof{color:var(--done);border-color:var(--done)}
+.verdict{border:1px solid var(--line-2);background:var(--artifact);padding:12px 16px;margin:16px 0}
+.verdict ol{margin:6px 0 0 18px;padding:0}
+.toc{font-size:12px;columns:2;column-gap:24px;margin:10px 0 0}
+a{color:var(--commit);text-decoration:none}
+a:hover{text-decoration:underline}
+ul{margin:6px 0;padding-left:20px}
+li{margin:2px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Route primitive — the shape</h1>
+<p class="mute">Ruled 2026-09-10 on <code>codex/route-primitive</code>. This page is the spec until every section is code, then it is deleted and the code is the spec. Verdicts and owed work live in <code>docs/features/design-system/LEDGER.md</code>; this page repeats none of them.</p>
+<p><span class="tag cur">CUR</span> exists in the checkout · <span class="tag gap">GAP</span> not built yet · <span class="tag proof">PROOF</span> the guard or test that holds it</p>
+<ol class="toc">
+<li><a href="#nouns">Six nouns</a></li>
+<li><a href="#laws">Laws</a></li>
+<li><a href="#manifest">The manifest</a></li>
+<li><a href="#wire">Wire</a></li>
+<li><a href="#lanes">Address and lanes</a></li>
+<li><a href="#surfaces">Surfaces, keys, help, inspector</a></li>
+<li><a href="#routes">Routes</a></li>
+<li><a href="#guards">Guards</a></li>
+<li><a href="#folds">Folds</a></li>
+</ol>
+
+<h2 id="nouns">1 · Six nouns</h2>
+<p>A route author learns these and nothing else. Three are data, one is capability, two are projections.</p>
+<table>
+<tr><th>Noun</th><th>Kind</th><th>Definition</th><th>Home</th></tr>
+<tr><td><b>Target</b></td><td>data</td><td>Where a call runs. <code>host</code>, a <code>session</code>, or a <code>document</code> named by <code>{session, openId}</code>. An <code>openId</code> is one open lifetime minted by Revit; close and reopen mints a new one. A thread stores a default Target request; a call may override it and never rewrites it.</td><td><code>agent-contracts/src/target.ts</code> <span class="tag cur">CUR</span></td></tr>
+<tr><td><b>Work</b></td><td>data</td><td>The persisted, revisioned JSON a route and the agent co-edit. Schema, write mask, commands. Writes carry <code>expectedRevision</code>. A Reading never writes into Work; an operation's status never advances Work's revision.</td><td><code>agent-contracts/src/route-state.ts</code>, <code>route-doc.ts</code> <span class="tag cur">CUR</span></td></tr>
+<tr><td><b>Reading</b></td><td>data</td><td>Anything observed from Revit, the host, or disk. One subject, one observation time, one lifecycle: <code>absent · loading · ready · stale · failed</code>. Readings arrive on one stream with gap frames. Receipts, inventory, files, and captures are Reading kinds, not nouns.</td><td><code>agent-contracts/src/reading.ts</code> <span class="tag cur">CUR</span></td></tr>
+<tr><td><b>Action</b></td><td>capability</td><td>A named, typed, refusable, at-most-once unit of work. One record projects to a button, a refusal, a chord, a help row, an agent tool, a demo id, and a host admission. Nothing is declared twice.</td><td><code>agent-contracts/src/semantic-actions.ts</code> <span class="tag cur">CUR</span>, chord and says <span class="tag cur">CUR</span></td></tr>
+<tr><td><b>Page</b></td><td>data</td><td>Cursor, filters, open panels, draft. Per route instance. Never persisted. One typed record, seedable as a unit, with granular subscriptions.</td><td><code>apps/web/src/route/use-route.ts</code> one record <span class="tag cur">CUR</span></td></tr>
+<tr><td><b>View</b></td><td>projection</td><td>Panes, tables, plans. A pure function of (Work, Readings, Page). A JSON view is a View. A View offers Actions and opens no connection.</td><td>route modules <span class="tag cur">CUR</span></td></tr>
+</table>
+<pre>Target ──▶ Reading ──┐
+Work ────────────────┼──▶ View ──offers──▶ Action ──writes──▶ Work
+Page ────────────────┘                        └──dirties──▶ Reading</pre>
+<p>Dead words, with the noun that replaced them: Scope, Document, World, Verb, Feed, Lane, Link, Slot, Bound, Multi, Stage, Store, Resource, fixture. A grep for any of them in <code>apps/web/src</code> outside a Revit or file-system sense is a defect.</p>
+
+<h2 id="laws">2 · Laws</h2>
+<ol>
+<li><b>The empty manifest is valid.</b> A route with only <code>key</code> and <code>name</code> renders its name and the host lamp. The primitive never demands a Target, Work, or Actions.</li>
+<li><b>A default is not an execution target.</b> A call resolves to <code>resolved · checking · choose · failed</code>. <code>choose</code> never picks another session. The host re-validates the <code>openId</code> at dequeue and refuses with 409 if it closed.</li>
+<li><b>Everything else is a projection.</b> If a value can be computed from Target, Work, Readings, and Page, it is not stored. The URL, refusals, the targeting sentence, stages, and the help overlay are projections.</li>
+<li><b>No invalid states.</b> Delete every runtime guard and the types still refuse the bad state. A surviving guard names a type to fix.</li>
+<li><b>One registry, one stream.</b> One <code>AtomRegistry</code> per app (ADR 0009). One <code>EventSource</code> per page. No component opens a connection. <code>docWriter</code> reads the registry synchronously and POSTs; nothing sits between a click and the revision that click is guarded by.</li>
+<li><b>Two lifetimes.</b> Work outlives a Revit process; a Reading and an operation's Target do not. Mount identity includes the route instance so two panes on one document keep separate Page.</li>
+<li><b>At most once.</b> A request id is reused on retry, never regenerated. A lost acknowledgement is <code>unknown</code>, recovered by the same id, and is never an invented success.</li>
+</ol>
+
+<h2 id="manifest">3 · The manifest</h2>
+<p>Static, at module scope, one per route file. Every field after <code>name</code> is optional. Keys are const generics so demo ids and chords are unions, not strings.</p>
+<pre><code>interface Route&lt;W, R extends string, P, A extends string&gt; {
+  key: string                                    // URL segment, agent tool prefix, atom key prefix
+  name: string                                   // head line
+  needs?: "session" | "document" | "project" | "family"   // absent = host only; drives the head sentence
+  work?: WorkSpec&lt;W&gt;                             // zod schema, write mask, commands (route-state.ts)
+  readings?: Readonly&lt;Record&lt;R, ReadingSpec&gt;&gt;    // subject kind per key; file kind carries id + zod
+  page?: z.ZodType&lt;P&gt;                            // one record; default = the schema's default
+  actions?: Readonly&lt;Record&lt;A, Action&lt;W, R, P&gt;&gt;&gt;
+  views?: readonly View&lt;R&gt;[]                     // key, label, draws; a JSON view is a View
+  seeds?: Readonly&lt;Record&lt;A, Seed&lt;W, R, P&gt;&gt;&gt;     // total once declared; a missing key does not compile
+  docs?: ReactNode                               // orientation prose; the only prose channel
+}
+
+interface Action&lt;W, R, P, I = void&gt; {
+  label: string
+  says: string                                   // one sentence for a stranger; the agent tool description
+  needs: "host" | "session" | "document" | "project" | "family"
+  actor: "any" | "human"
+  input: z.ZodType&lt;I&gt;
+  dirties: readonly R[]                          // Readings invalidated on success
+  chord?: Hotkey                                 // @tanstack/react-hotkeys literal type
+  ready: (ctx: Ctx&lt;W, R, P&gt;, input: I) =&gt; string | null   // refusal sentence, or null
+  run:   (ctx: Ctx&lt;W, R, P&gt;, input: I) =&gt; Promise&lt;void&gt;
+}
+
+interface Seed&lt;W, R, P&gt; {                        // one moment; Layer-free
+  title: string
+  work: W
+  readings: Partial&lt;Record&lt;R, unknown&gt;&gt;
+  page: Partial&lt;P&gt;
+  failure?: { action: string; message: string }  // failure injection for the demo lane
+}</code></pre>
+<p><code>Ctx</code> is what <code>ready</code> and <code>run</code> receive: the resolved Target, Work with its revision, every Reading's current state, Page, and a host caller bound to that Target. Actions never import React and never close over render state. The agent consumes the same record through the capability catalogue.</p>
+<p><b>File readings.</b> <code>{kind: "file", id: SettingsDocumentId, content: zod}</code> yields <code>raw</code>, <code>token</code>, <code>parsed</code>, <code>parseError</code>, and <code>drift: fresh · stale · conflict · gone</code>. Edits stage in Work as pointer patches; the user's file never receives route state. Save checks the token that was reviewed. No watcher, no lock. <span class="tag cur">CUR</span> <span class="tag proof">PROOF</span> <code>demo-lane.scenario.test.ts</code> settings seeds</p>
+
+<h2 id="wire">4 · Wire</h2>
+<p>Branded strings are validated, server-issued ids, not security boundaries. The host checks every reference. <span class="tag cur">CUR</span> in <code>target.ts</code>, <code>reading.ts</code>, <code>action-receipts.ts</code>.</p>
+<pre><code>type DocumentRef     = { session: SessionId; openId: OpenId }
+type DocumentRequest = { kind: "open"; ref: DocumentRef } | { kind: "named"; session: SessionId; address: Address }
+type CallTarget      = { needs: "nothing" } | { needs: "session"; target: SessionId }
+                     | { needs: Document-ish; target?: DocumentRequest }         // omitted = the turn's default
+type Resolution      = { kind: "resolved"; target: ExecutionTarget } | { kind: "checking" }
+                     | { kind: "failed"; message } | { kind: "choose"; reason: "missing" | "session-gone" | "document-closed" | "wrong-document-kind" | "ambiguous" }
+
+type ReadingRequest  = { kind: "work"; route; scope } | { kind: "inventory" } | { kind: "receipts"; ... } | { kind: "file"; id } | { kind: "&lt;route&gt;-reading"; target: DocumentRef }
+type ReadingFrame    = { kind: "snapshot"; key; value } | { kind: "failure"; key; error } | { kind: "event"; key; value } | { kind: "gap"; key }
+type Reading&lt;T&gt;      = { state: "absent" } | { state: "loading"; requestId; deadline; previous? }
+                     | { state: "ready"; observation } | { state: "stale"; previous; reason } | { state: "failed"; message; previous? }
+
+type Receipt         = { state: "running" | "succeeded" | "failed" | "unknown"; id: RequestId; target: ExecutionTarget; ... }
+type ThreadHead      = { revision: number; defaultTarget: DocumentRequest | null }   // frozen into a Turn at admission</code></pre>
+<p>A response for a previous Target cannot land in the current Reading. A response started before a known invalidation cannot erase it. Reconnect reacquires snapshots; gap frames diagnose loss and never substitute for reacquisition. Session identity is one branded string; the broker id already hashes pid and process start, so incarnation is inside it.</p>
+
+<h2 id="lanes">5 · Address and lanes</h2>
+<table>
+<tr><th>URL</th><th>Lane</th><th>Meaning</th></tr>
+<tr><td><code>?target=&lt;session&gt;/&lt;openId&gt;</code></td><td>live</td><td>A Target request. Absent on a route with <code>needs</code> shows the Instances picker in place. Confirmed session closure removes the parameter; an outage keeps it.</td></tr>
+<tr><td><code>?demo=&lt;action&gt;</code></td><td>demo</td><td>Mounts <code>seeds[action]</code> in an isolated owner with its own registry and receipts. The demo can write. It is the deterministic proof lane and the design-system catalogue's source. Replaces <code>?source=fixture</code>. <span class="tag cur">CUR</span> <span class="tag proof">PROOF</span> <code>apps/host/tests/demo-lane.scenario.test.ts</code>, 21 seeds</td></tr>
+<tr><td><code>?work=&lt;id&gt;</code></td><td>live</td><td>A Work identity that is not document-scoped: a saved Takeoffs capture, the Instances workspace. Not a lane.</td></tr>
+</table>
+<p>Seeds are declared where fixtures were worth keeping: takeoffs, family, families, chat, settings, instances. Every other fixture dies with no seed. A route may declare no seeds; once it declares one it covers every action.</p>
+
+<h2 id="surfaces">6 · Surfaces, keys, help, inspector</h2>
+<ul>
+<li><b>Head.</b> One component for every route: the name, the host lamp, and, when the manifest has <code>needs</code>, the targeting sentence with its picker. Outlier routes get the name and the lamp. <span class="tag cur">CUR</span> as <code>route/shell.tsx</code>.</li>
+<li><b>Keys.</b> Three tiers, one registration shape. A manifest action's <code>chord</code> is bound by one loop in <code>route/keys.tsx</code>; a pane's <code>shortcuts</code> are bound by <code>Pane</code> scoped to its focus; a widget binds its own. Every registration carries <code>meta: {name, description, tier, region?, refusal?}</code> through <code>keyMeta()</code>. A chord with a refusal fires and speaks the sentence, never silently ignored: a route chord on the outcome line, a pane key on its card. No root manifest exists; the <code>root</code> tier is a word in the meta until a navigation chord needs one. <span class="tag cur">CUR</span></li>
+<li><b>Help.</b> The page (Alt+/) measures the rendered panes, reads every registration back from TanStack, and joins them by <code>region</code>: manifest chords in a band above, pane and widget keys on cards with leaders to their region in the chart, the route's <code>docs</code> prose below. No hand-written keymap exists. <span class="tag cur">CUR</span> <code>route/help.tsx</code></li>
+<li><b>Door.</b> One control beside the head opens keys, views, <code>docs</code> prose, and, in dev builds, the inspector.</li>
+<li><b>Inspector.</b> Dev only. For every declared value: owner, subject, readiness, revision or token, active request, and the Action that last changed it. Exports the current moment as a Seed. It has no write channel into production state. <span class="tag cur">CUR</span> as <code>route/inspector.tsx</code>.</li>
+</ul>
+
+<h2 id="routes">7 · Routes</h2>
+<table>
+<tr><th>Route</th><th>needs</th><th>Work</th><th>Readings</th><th>Actions</th><th>Seeds</th></tr>
+<tr><td>chat</td><td>—</td><td>thread head (default Target)</td><td>thread, receipts, hosted route readings</td><td>send; tool calls resolve their own needs</td><td>yes</td></tr>
+<tr><td>takeoffs</td><td>project</td><td>staged edits, decisions, views</td><td>capture keyed by DocumentRef, inventory</td><td>adopt, partition, refresh, sync, open RHVAC</td><td>yes</td></tr>
+<tr><td>family</td><td>family, optional</td><td>authored plan, file pointers</td><td>file, family evidence, plan receipt</td><td>author, stage, save, query, apply</td><td>yes</td></tr>
+<tr><td>families, parameter-links</td><td>document, optional</td><td>profile path, drafts</td><td>file, family plan / links evaluation</td><td>apply</td><td>families yes</td></tr>
+<tr><td>settings</td><td>—</td><td>staged edits</td><td>file</td><td>save</td><td>yes</td></tr>
+<tr><td>instances</td><td>—</td><td>workspace (<code>?work=instances</code>)</td><td>SDK census, doctor, recents</td><td>start, open, restart, stop, close through the journal</td><td>yes</td></tr>
+<tr><td>schedule-grid</td><td>document</td><td>staged cells</td><td>schedule capture</td><td>apply, readback</td><td>no</td></tr>
+<tr><td>ops</td><td>—</td><td>—</td><td>receipts</td><td>—</td><td>no</td></tr>
+<tr><td>runs, grilles, data-tables, param-tables, design-system, doc-lab, the protos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>empty manifest, law 1</td></tr>
+</table>
+<p>Chat hosts other routes as panes. A hosted pane is a second route instance with its own Page and its own Target request; it shares Work and Readings by subject key, never by store. Cutover is for compile only: no route gets a new UX decision in this pass.</p>
+
+<h2 id="guards">8 · Guards</h2>
+<p>Disposable tests in <code>tests/repo-guards</code>, deleted when the shape is boring. <span class="tag proof">PROOF</span> for the laws above.</p>
+<table>
+<tr><th>Guard</th><th>Holds</th></tr>
+<tr><td>no <code>fixture.ts*</code> under <code>apps/web/src</code>; no <code>source=fixture</code>; no <code>"fixture"</code> literal</td><td>lane law, section 5</td></tr>
+<tr><td>no importer of <code>targeting/model</code>, <code>targeting/actions</code>, <code>host/route-target</code>, <code>host/target</code>; those files do not exist</td><td>one vocabulary, section 1</td></tr>
+<tr><td>no <code>@tanstack/react-query</code> import under <code>apps/web</code>; the dependency is gone</td><td>one stream, law 5</td></tr>
+<tr><td>every <code>routes/*.tsx</code> exports exactly one <code>manifest</code> and mounts it through the one shell</td><td>manifest, section 3</td></tr>
+<tr><td>exactly one <code>new EventSource</code> and one <code>AtomRegistry</code> construction in <code>apps/web/src</code></td><td>law 5</td></tr>
+<tr><td>dead-word grep: Scope, World, Verb, Feed, Lane, Link, Slot, Bound, Multi, Stage, Resource as identifiers under <code>apps/web/src</code> and <code>agent-contracts</code>, allowlist empty by ruling</td><td>section 1</td></tr>
+<tr><td>no hand-written keymap: no <code>Alt+${</code>-style template outside <code>route/keys.tsx</code></td><td>section 6</td></tr>
+</table>
+
+<h2 id="folds">9 · Folds</h2>
+<p>Delete, then fix; the compile errors are the map. One writing line per fold, one commit per fold, in this order.</p>
+<ol>
+<li><b>Contracts.</b> <code>resource.ts</code> becomes <code>reading.ts</code> with typed subject keys; <code>scope.ts</code> collapses into <code>target.ts</code> (thread default is a <code>DocumentRequest</code>); <code>Action</code> gains <code>chord</code>, <code>says</code>, <code>dirties</code>; <code>Seed</code> type lands.</li>
+<li><b>Web primitive.</b> One <code>Route</code> manifest type, one shell (head, door, keys, help, inspector), one <code>useRoute(manifest)</code> hook over the registry. <code>targeting/model.ts</code>, <code>actions.ts</code>, <code>kit/*</code>, <code>flow.tsx</code>, <code>host/route-target.ts</code>, <code>host/target.ts</code>, the ten refusal symbols in <code>route-store.ts</code> die.</li>
+<li><b>Readings replace Query.</b> <code>@tanstack/react-query</code> removed; the 36 <code>useQuery</code> sites become Readings, one-shot lookups as <code>once</code> readings.</li>
+<li><b>Fixtures to seeds.</b> Six seeds land; eight fixture files and <code>takeoff/proto</code> die; <code>?demo=</code> mounts the isolated owner.</li>
+<li><b>Route cutovers.</b> chat and takeoffs first, then family, families, parameter-links, settings, instances, schedule-grid, ops; outliers get the empty manifest.</li>
+<li><b>Guards and docs.</b> Section 8 lands; the ledger is rebuilt; this page is deleted when every GAP tag is gone.</li>
+</ol>
+</main>
+</body>
+</html>

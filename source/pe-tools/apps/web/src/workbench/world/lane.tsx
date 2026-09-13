@@ -32,7 +32,7 @@ import {
 import { ContextBudgetBar, whySentence } from "./bar";
 import { PressContent } from "#/components/anatomy/press-content";
 
-export function WorldLane({
+export function SessionStrip({
   breakdown,
   cache,
   sendNumber,

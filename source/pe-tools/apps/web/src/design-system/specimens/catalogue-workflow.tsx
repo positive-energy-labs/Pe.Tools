@@ -6,9 +6,9 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
-import { ARMING_FIXTURE } from "#/design-system/fixtures";
+import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 const noop = () => {};
 
@@ -34,7 +34,7 @@ export function CatalogueWorkflow() {
             foot={
               <>
                 <Tag>2 unsaved</Tag>
-                <Verb
+                <ActionButton
                   tone="commit"
                   label="save profile"
                   icon={Save}
@@ -77,10 +77,10 @@ function ArmingCatalogue() {
     >
       <div className="w-full max-w-3xl">
         <ArmingStrip
-          verb={ARMING_FIXTURE.verb}
-          target={ARMING_FIXTURE.target}
-          count={ARMING_FIXTURE.count}
-          planHash={ARMING_FIXTURE.planHash}
+          verb={ARMING_SPECIMEN.verb}
+          target={ARMING_SPECIMEN.target}
+          count={ARMING_SPECIMEN.count}
+          planHash={ARMING_SPECIMEN.planHash}
           reason={reason}
           onReasonChange={setReason}
           state={{ phase: "arming" }}
@@ -88,8 +88,8 @@ function ArmingCatalogue() {
           onCancel={() => setReason("")}
         />
       </div>
-      <CounterExample why="a commit Verb alone hides the reason, target, plan identity, and refusal path">
-        <Verb tone="commit" label="apply to Revit" onClick={noop} reason="Writes 42 parameters" />
+      <CounterExample why="a commit ActionButton alone hides the reason, target, plan identity, and refusal path">
+        <ActionButton tone="commit" label="apply to Revit" onClick={noop} reason="Writes 42 parameters" />
       </CounterExample>
       <Gap>
         the component has no armed-at or armed-by identity. It must say that the plan age is unknown

@@ -5,9 +5,9 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
-import { PARAM_ROWS, cellProps } from "#/design-system/fixtures";
+import { PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 
 const noop = () => {};
 const row = (key: string) => PARAM_ROWS.find((item) => item.key === key)!;
@@ -113,9 +113,9 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
       <Law
         name="refuse per option"
         owner={owner("refuse per option")}
-        ruling="Keep an unavailable option in place and give it its own reason. Verb requires the reason at every call site."
+        ruling="Keep an unavailable option in place and give it its own reason. ActionButton requires the reason at every call site."
       >
-        <Verb
+        <ActionButton
           tone="commit"
           label="sync to .r10"
           onClick={noop}

@@ -6,7 +6,7 @@ import { tv } from "#/lib/tv";
 
 /**
  * SidePane — one width-adjustable flanking pane for the workbench. Replaces the ad-hoc
- * sidebars (chat-shell `--side`, family-types `w-[40%]`, the plugin lane). Native-first:
+ * sidebars (chat-shell `--side`, parameter-links `w-[40%]`, the plugin lane). Native-first:
  * plain divs + tokens, Radix-style `data-state`/`data-side`. Open state is controlled OR
  * uncontrolled; width persists to a caller-supplied localStorage key. When closed it does
  * NOT vanish — it collapses to an interactive rail with an expander (plus any caller icons).

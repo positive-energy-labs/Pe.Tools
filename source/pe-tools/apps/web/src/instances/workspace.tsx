@@ -3,13 +3,14 @@ import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import type { useFleet } from "#/host/fleet";
+import type { useFleet } from "#/readings";
 import { useWorldLog } from "#/host/use-target";
 import { timeAgo } from "#/lib/utils";
-import { RouteHead } from "#/targeting/head";
+import { RouteShell } from "#/route";
 import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
 import { InstancesCluster } from "#/instances/cluster";
+import { instancesManifest } from "#/instances/manifest";
 
 export type InstancesFleet = ReturnType<typeof useFleet>;
 
@@ -23,12 +24,12 @@ export function InstancesWorkspace({
   target,
   setTarget,
   fleet,
-  source,
+  shell = true,
 }: {
   target: string;
   setTarget: (target: string) => void;
   fleet: InstancesFleet;
-  source?: "fixture";
+  shell?: boolean;
 }) {
   const worldLog = useWorldLog(fleet.sessions);
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
@@ -47,10 +48,12 @@ export function InstancesWorkspace({
   }, [ledger.length, ledgerOpen]);
 
   return (
-    <div className="min-h-screen" data-testid="instances-workspace">
-      <div className="mx-auto max-w-6xl px-6 pt-6">
-        <RouteHead name="Instances" aside={source === "fixture" ? <Tag>fixture</Tag> : undefined} />
-      </div>
+    <div className={shell ? "min-h-screen" : undefined} data-testid="instances-workspace">
+      {shell ? (
+        <div className="mx-auto max-w-6xl px-6 pt-6">
+          <RouteShell manifest={instancesManifest} />
+        </div>
+      ) : null}
       {/* No min-height: the tables are content-sized; a forced 75vh made MasterTable's flex-1
        * scroll body stretch and left dead space under the documents table (annotation 2). */}
       <div className="mx-auto flex max-w-6xl gap-0 px-6 py-5">
@@ -59,7 +62,6 @@ export function InstancesWorkspace({
             fleet={fleet}
             target={target}
             setTarget={setTarget}
-            source={source}
             onEvent={(event) =>
               setLocalLog((log) => [
                 ...log.slice(-99),

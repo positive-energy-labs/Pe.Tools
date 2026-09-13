@@ -87,7 +87,10 @@ export const rhvacAssemblies = Effect.fnUntraced(function* (input: RhvacPathRequ
  * This writes the target ITSELF rather than a separate output file: the .r10 is the engineer's
  * home for this data, and a sync that leaves a copy behind moves the truth question onto the user.
  */
-export const rhvacSync = Effect.fnUntraced(function* (input: RhvacSyncRequest) {
+export const rhvacSync = Effect.fnUntraced(function* (
+  input: RhvacSyncRequest,
+  expectedVersion?: string,
+) {
   const key = "rhvac.sync";
   yield* assertR10File(key, input.targetPath);
   if (input.inserts.length === 0 && input.updates.length === 0 && !input.deleteUntouchedSeedRoom)
@@ -138,6 +141,7 @@ export const rhvacSync = Effect.fnUntraced(function* (input: RhvacSyncRequest) {
           syncPath,
           "-ResultJson",
           resultPath,
+          ...(expectedVersion ? ["-ExpectedVersion", expectedVersion] : []),
           ...(input.whatIf ? ["-WhatIf"] : []),
         ],
         SAVE_TIMEOUT_MS,
@@ -167,9 +171,19 @@ export const rhvacSync = Effect.fnUntraced(function* (input: RhvacSyncRequest) {
  * returns as soon as the shell accepts the open, and RHVAC's load recalculation stays a manual
  * step (there is no headless calc — see docs/features/takeoffs/rhvac-and-mj-reference.md).
  */
-export const rhvacLaunch = Effect.fnUntraced(function* (input: RhvacPathRequest) {
+export const rhvacLaunch = Effect.fnUntraced(function* (
+  input: RhvacPathRequest,
+  launch?: (path: string) => Promise<void>,
+) {
   const key = "rhvac.launch";
   yield* assertR10File(key, input.path);
+  if (launch) {
+    yield* Effect.tryPromise({
+      try: () => launch(input.path),
+      catch: (error) => new LocalOpError(key, describeError(error)),
+    });
+    return { path: input.path, launched: true, simulated: true };
+  }
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   // `start` is a cmd builtin, not an executable; the empty string is its window-title argument,
   // without which cmd treats a quoted path as the title and opens nothing.

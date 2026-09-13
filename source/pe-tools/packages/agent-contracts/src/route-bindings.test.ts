@@ -1,26 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  familiesRouteState,
-  familyRouteState,
-  opsRouteState,
-  settingsRouteState,
-  takeoffsRouteState,
-} from "./index.ts";
+import { familiesRouteState, familyProjectionSchema } from "./index.ts";
 
 describe("route bindings", () => {
-  it("accepts named bindings on every routed document and never a world", () => {
+  it("bindings live on the Family projection, never on a route's authored Work", () => {
     const bind = { id: "profile-a", label: "Profile A" } as const;
-    for (const spec of [
-      takeoffsRouteState,
-      familyRouteState,
-      familiesRouteState,
-      settingsRouteState,
-      opsRouteState,
-    ]) {
-      const doc = spec.schema.parse({ bindings: { profile: bind } });
-      expect(doc.bindings.profile).toEqual(bind);
-      expect(spec.schema.parse({}).bindings).toEqual({});
-    }
+    const projection = familyProjectionSchema.parse({ bindings: { profile: bind } });
+    expect(projection.bindings.profile).toEqual(bind);
+    expect(familyProjectionSchema.parse({}).bindings).toEqual({});
+  });
+
+  it("Families Work drops a binding: a target is a navigation, not authored input", () => {
+    // Zod strips undeclared keys, so the write simply never lands as Work.
+    expect(
+      familiesRouteState.schema.parse({ bindings: { profile: { id: "a", label: "A" } } }),
+    ).not.toHaveProperty("bindings");
   });
 });

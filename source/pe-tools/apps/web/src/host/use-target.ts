@@ -1,14 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 
-import type { SessionFacts } from "#/host/target";
-import { usePeInfo } from "#/host/info";
-import { useHostEvents } from "#/host/events";
-import { worldTrunk } from "#/targeting/world";
+import type { SessionInventory } from "#/readings";
+import { previousOf, useHostEvents, useHostStatus } from "#/readings";
 
 export type HostEvent = {
   atMs: number;
   sessionId: string;
-  kind: "event" | "state-sync" | "connected" | "disconnected";
+  kind: "event" | "state-sync" | "connected" | "disconnected" | "gap";
+  dropped?: number | null;
   eventName?: string;
   payloadJson?: string | null;
   origin?: string;
@@ -17,9 +16,9 @@ export type HostEvent = {
   prevDocTitle?: string | null;
 };
 
-type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
+type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed" | "gap";
 
-export interface WorldEvent {
+export interface SessionEvent {
   atMs: number;
   kind: WorldEventKind;
   sessionId: string;
@@ -28,17 +27,22 @@ export interface WorldEvent {
 
 const LOG_CAP = 100;
 
-function toWorldEvent(event: HostEvent, sessions: SessionFacts[]): WorldEvent | null {
+function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEvent | null {
   const base = { atMs: event.atMs, sessionId: event.sessionId };
   switch (event.kind) {
+    case "gap":
+      return {
+        ...base,
+        kind: "gap",
+        label:
+          event.dropped == null
+            ? "World history unavailable across connection gap"
+            : `${event.dropped} World events omitted by slow reader`,
+      };
     case "connected": {
       const session = sessions.find((s) => s.sessionId === event.sessionId);
       const who = session
-        ? worldTrunk.label({
-            id: session.sdkSessionId ?? String(session.processId),
-            custody: session.custody,
-            session,
-          })
+        ? (session.sdkSessionId ?? `Revit ${session.processId}`)
         : event.sessionId;
       return {
         ...base,
@@ -67,12 +71,12 @@ function toWorldEvent(event: HostEvent, sessions: SessionFacts[]): WorldEvent | 
 /**
  * Broker-fed world history. Timestamps are host publish time, not tab observation time.
  */
-export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
-  const revit = usePeInfo().data?.capabilities.revit === true;
+export function useWorldLog(sessions: SessionInventory[]): SessionEvent[] {
+  const revit = previousOf(useHostStatus())?.capabilities.revit === true;
   // Label enrichment only — the stream must not reopen on session-list churn.
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const [log, setLog] = useState<WorldEvent[]>([]);
+  const [log, setLog] = useState<SessionEvent[]>([]);
   useHostEvents<HostEvent>(
     revit,
     useCallback((event) => {

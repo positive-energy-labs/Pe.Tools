@@ -1,3 +1,6 @@
+import { bindLegacyRouteSource, hostActionJournal } from "./gateway-owner.ts";
+import { readLegacyRouteState } from "@pe/runtime";
+import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Cause, Context, Effect, Layer, Option, Stream } from "effect";
@@ -6,6 +9,9 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createCapabilityCatalogSource, createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp, type ServableRuntime } from "@pe/runtime";
+import { hostTakeoffCaptures } from "./takeoff-captures.ts";
+import type { WorkKey } from "@pe/agent-contracts";
+import { hostResourceObserver } from "./resource-adapters.ts";
 import {
   createPeaRuntime,
   type PeaRuntimeCapabilities,
@@ -130,6 +136,14 @@ export function makeMastraRuntimeLive(
       // With Revit present the op and pod rows describe the connected session, so a session
       // arriving or leaving drops the 30 s cache; without Revit there is no bridge to watch.
       yield* invalidateOnSessionChange(catalog);
+      const bridge = yield* Effect.serviceOption(RevitBridge);
+      const observeHostResource = hostResourceObserver(
+        Option.getOrUndefined(bridge),
+        undefined,
+        undefined,
+        undefined,
+        hostBaseUrl,
+      );
 
       const handle = yield* Effect.acquireRelease(
         Effect.tryPromise(async () => {
@@ -137,7 +151,54 @@ export function makeMastraRuntimeLive(
           const app = await buildAgentControllerApp({
             runtime,
             label: "pea",
-            routeRegistrations: registrations,
+            observeHostResource,
+            onRouteWorkspace: (workspace, storage) => {
+              bindActionWorkspace(workspace);
+              bindLegacyRouteSource(() => {
+                if (!storage) throw Error("Configured route storage unavailable");
+                return readLegacyRouteState(storage);
+              });
+            },
+            routeRegistrations: registrations.map((registration) =>
+              registration.spec.route === "takeoffs"
+                ? {
+                    ...registration,
+                    migrate: async (raw: unknown) => {
+                      await hostActionJournal().importLegacy();
+                      return hostTakeoffCaptures().migrateWork(raw);
+                    },
+                  }
+                : registration.spec.route === "family"
+                  ? {
+                      ...registration,
+                      migrate: async (raw, scope) => {
+                        await hostActionJournal().importLegacy();
+                        return hostTakeoffCaptures().migrateFamilyWork(raw, scope);
+                      },
+                    }
+                  : registration.spec.route === "families" ||
+                      registration.spec.route === "parameter-links"
+                    ? {
+                        ...registration,
+                        migrate: async (raw: unknown, scope: WorkKey) => {
+                          await hostActionJournal().importLegacy();
+                          return hostTakeoffCaptures().migrateRouteWork(
+                            raw,
+                            scope,
+                            registration.spec.route as "families" | "parameter-links",
+                          );
+                        },
+                      }
+                    : registration.spec.route === "instances"
+                      ? {
+                          ...registration,
+                          migrate: async (raw: unknown) => {
+                            await hostActionJournal().importLegacy();
+                            return raw;
+                          },
+                        }
+                      : registration,
+            ),
             capabilityCatalog: catalog,
           });
           setAgentRuntimeStatus({ available: true, error: null });

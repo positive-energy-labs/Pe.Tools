@@ -5,7 +5,7 @@ import { type RunIndexEntry, type ZoneRecord } from "../world";
 import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown";
 import { ZonePanel } from "./zone-panel";
-import { MissingPanel, STAT_ROWS, StageButton } from "./missing-panel";
+import { MissingPanel, STAT_ROWS, RunPickButton } from "./missing-panel";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export function ZoneCard(props: {
@@ -83,7 +83,7 @@ export function ZoneCard(props: {
           </span>
         ) : null}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          <StageButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
+          <RunPickButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
           {locatable ? (
             <Press
               type="button"

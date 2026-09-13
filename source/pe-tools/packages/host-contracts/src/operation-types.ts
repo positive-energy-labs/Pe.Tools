@@ -174,6 +174,7 @@ export type SettingsDocumentMetadata = Schema.Schema.Type<typeof settingsDocumen
 
 export const settingsDocumentMetadataSchema = Schema.Struct({
   documentId: settingsDocumentIdSchema,
+  workspaceId: Schema.String,
   kind: settingsFileKindSchema,
   modifiedUtc: Schema.optional(Schema.NullOr(Schema.String)),
   versionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
@@ -223,6 +224,8 @@ export type OpenSettingsDocumentRequest = Schema.Schema.Type<
 >;
 
 export const openSettingsDocumentRequestSchema = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["file", "module"])),
+  workspaceId: Schema.optional(Schema.String),
   documentId: settingsDocumentIdSchema,
   includeComposedContent: Schema.optional(Schema.Boolean),
 });
@@ -232,9 +235,13 @@ export type SaveSettingsDocumentRequest = Schema.Schema.Type<
 >;
 
 export const saveSettingsDocumentRequestSchema = Schema.Struct({
-  createOnly: Schema.optional(Schema.Boolean),
+  mode: Schema.optional(Schema.Literals(["file", "module"])),
+  workspaceId: Schema.optional(Schema.String),
   documentId: settingsDocumentIdSchema,
-  expectedVersionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
+  expected: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("present"), version: Schema.String }),
+    Schema.Struct({ kind: Schema.Literal("missing") }),
+  ]),
   rawContent: Schema.String,
 });
 
@@ -243,6 +250,7 @@ export type ValidateSettingsDocumentRequest = Schema.Schema.Type<
 >;
 
 export const validateSettingsDocumentRequestSchema = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["file", "module"])),
   documentId: settingsDocumentIdSchema,
   rawContent: Schema.String,
 });
@@ -251,13 +259,13 @@ export type SaveSettingsDocumentResult = Schema.Schema.Type<
   typeof saveSettingsDocumentResultSchema
 >;
 
-export const saveSettingsDocumentResultSchema = Schema.Struct({
-  conflictDetected: Schema.Boolean,
-  conflictMessage: Schema.optional(Schema.NullOr(Schema.String)),
-  metadata: settingsDocumentMetadataSchema,
-  validation: settingsValidationResultSchema,
-  writeApplied: Schema.Boolean,
-});
+export const saveSettingsDocumentResultSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("written"), snapshot: settingsDocumentSnapshotSchema }),
+  Schema.Struct({
+    kind: Schema.Literal("conflict"),
+    current: Schema.NullOr(settingsDocumentSnapshotSchema),
+  }),
+]);
 
 export type SettingsRootDescriptor = Schema.Schema.Type<typeof settingsRootDescriptorSchema>;
 
@@ -363,6 +371,7 @@ export const settingsDiscoveryResultSchema = Schema.Struct({
 export type SettingsTreeRequest = Schema.Schema.Type<typeof settingsTreeRequestSchema>;
 
 export const settingsTreeRequestSchema = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["file", "module"])),
   includeFragments: Schema.optional(Schema.Boolean),
   includeSchemas: Schema.optional(Schema.Boolean),
   moduleKey: Schema.optional(Schema.String),
@@ -749,6 +758,16 @@ export const rhvacTakeoffDataSchema = Schema.Struct({
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
 
 export const tsOnlyOperationSchemas = {
+  "takeoffs.saved": {
+    request: Schema.Struct({
+      captureId: Schema.optional(Schema.String),
+      document: Schema.optional(Schema.String),
+      /** With a captureId: return that file's exact stored text and path instead of its data. */
+      text: Schema.optional(Schema.Boolean),
+    }),
+    // Portable capture validation belongs to agent-contracts, beside TakeoffSnapshot.
+    response: Schema.Unknown,
+  },
   "aps.auth.login": {
     request: apsTokenRequestSchema,
     response: apsPersistedTokenStatusSchema,
@@ -873,6 +892,20 @@ export type HostLocalCatalogEntry = HostOperationDefinition & {
  * key — the index test asserts full coverage.
  */
 export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
+  {
+    key: "takeoffs.saved",
+    origin: "host-local",
+    displayName: "Saved Takeoffs captures",
+    description:
+      "Read durable geometry without Revit. With captureId, return that immutable dated capture. Otherwise list capture identities, times and documents; optional document filters the list. Migrated captures explicitly have unknown original target provenance and are never live evidence.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "SavedTakeoffsRequest",
+    responseTypeName: "TakeoffCapture",
+    searchTerms: ["takeoffs", "saved", "capture", "offline", "geometry", "review"],
+  },
   {
     key: "host.shell.open",
     origin: "host-local",

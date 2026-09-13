@@ -12,13 +12,10 @@ public static class DocumentTrackerAccessor {
 }
 
 public static class DocumentTrackerExtensions {
-    private sealed class OpenIdentity {
-        public string Value { get; } = Guid.NewGuid().ToString("N");
-    }
-
+    private sealed record OpenIdentity(string Value);
     /// <summary>Stable across wrapper access and SaveAs, replaced after close/reopen.</summary>
     public static string OpenId(this TrackedDocument document) =>
-        document.State(_ => new OpenIdentity()).Value;
+        document.State(tracked => new OpenIdentity(tracked.OpenId)).Value;
 
     public static TrackedDocument? FindOpenId(this IDocumentTracker tracker, string openId) =>
         tracker.Open.SingleOrDefault(document => document.OpenId() == openId);

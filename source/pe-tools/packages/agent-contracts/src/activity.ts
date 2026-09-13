@@ -10,7 +10,7 @@
 
 import { parseRouteKey } from "./capability.ts";
 
-export type SentenceVerb =
+export type SentenceAction =
   | "working"
   | "looking"
   | "reading docs"
@@ -23,7 +23,7 @@ export type SentenceVerb =
   | "asking";
 
 export interface Activity {
-  verb: SentenceVerb;
+  verb: SentenceAction;
   /** Verb phrase in gerund form, e.g. "opening", "editing", "looking at". */
   gerund: string;
   /** Short noun the gerund acts on (doc name, op tail, route) when derivable. */
@@ -84,7 +84,7 @@ export const TOOL_TITLES: Record<string, string> = {
   pe_find: "Find a capability",
   pe_read: "Read",
   pe_do: "Do",
-  scope_set: "Propose the Scope",
+  target_set: "Propose the default Target",
   request_access: "Ask for access",
   read_image: "Look at an image",
   capture_view: "Capture a view",
