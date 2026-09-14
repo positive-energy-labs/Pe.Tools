@@ -336,6 +336,7 @@ an interim adapter over Pe.Tools-specific APS workflows. It is not a web or host
 Source-linked web dev is one command, one checkout, and one browser origin. The backend and frontend run in separate Node processes.
 
 - `vp run dev` from `source/pe-tools` or `apps/host` runs the watched host. After the SDK grants its service claim, it starts Vite from the same checkout and passes the claimed backend address over IPC. The launcher prints the checkout, browser URL, and backend URL.
+- On Windows, stopping `vp run dev` also stops Revit launched through that Host. Ordinary Host source reloads preserve Revit.
 - Vite owns document serving, its dependency optimizer, and HMR. Product APIs, SSE, and the Revit bridge proxy to the exact claimed backend. `/ops` document navigation stays in Vite; JSON catalog requests reach the host.
 - Each checkout retains `host-source-<hash-of-canonical-source-root>.json`. Revit, Pea, and MCPs discover that backend receipt exactly as before. Installed `host.json` remains separate. Browser navigation to the dev backend redirects to its frontend and preserves the path and query.
 - `dev` authorizes same-checkout takeover. `attach` starts the same pair without takeover or a source watcher, for supervisors. `dev:no-revit` retains its separate service identity and disables native capabilities. No command changes SDK session custody.
