@@ -8,10 +8,10 @@ import {
   installRoot as sdkInstallRoot,
   peRevitLaunch,
   type PeRevitLaunch,
-} from "./pe-revit-cli.ts";
+} from "@pe/host-contracts/pe-revit-cli";
 
-export { validatePeRevitEnvelope, parsePeRevitEnvelope } from "./pe-revit-cli.ts";
-export type { PeRevitLaunch, PeRevitEnvelope } from "./pe-revit-cli.ts";
+export { validatePeRevitEnvelope, parsePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
+export type { PeRevitLaunch, PeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
 
 export function peRevitLauncher(
   ownership: Pick<HostOwnership, "lane" | "sourceRoot"> = hostOwnership,
