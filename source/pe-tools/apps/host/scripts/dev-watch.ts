@@ -8,6 +8,13 @@ let stopped = false;
 let retired = false;
 let debounce: NodeJS.Timeout | undefined;
 let killTimeout: NodeJS.Timeout | undefined;
+const launchedByVpRun = process.argv.includes("--vp-run-dev");
+const childArguments = process.argv.slice(2).filter((argument) => argument !== "--vp-run-dev");
+if (process.platform === "win32" && launchedByVpRun) {
+  console.log(
+    "On Windows, stopping this vp run dev command also stops Revit launched through this Host. Host reloads preserve it.",
+  );
+}
 const disconnect = () => {
   if (child?.connected) {
     child.disconnect();
@@ -42,7 +49,7 @@ try {
         "--import",
         "jiti/register",
         fileURLToPath(new URL("../src/dev.ts", import.meta.url)),
-        ...process.argv.slice(2),
+        ...childArguments,
       ],
       {
         cwd: new URL("../", import.meta.url),
