@@ -1,4 +1,3 @@
-import { JsonView } from "#/settings-panes/json-editor";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -9,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { createLiveSettingsHost } from "#/settings/host";
 import { useRoute } from "#/route";
-import { settingsManifest } from "#/settings/manifest";
+import { settingsManifest, type SettingsHandle } from "#/settings/manifest";
 import { ActionButton } from "#/components/lang/action-button";
 import { OutcomeLine } from "#/components/lang/outcome";
 
@@ -40,6 +39,7 @@ export function FileWorkspace({
     scope: WorkKey,
     select: (id: SettingsDocumentId) => Promise<void>,
     observation: FileObservation,
+    handle: SettingsHandle,
   ) => ReactNode;
 }) {
   const navigate = useNavigate();
@@ -93,7 +93,7 @@ export function FileWorkspace({
       {error && <OutcomeLine kind="error" label="file read failed" says={error} />}
       {opened?.workspaceId && (
         <FileWorkOwner key={opened.workspaceId} opened={opened}>
-          {(scope, observation) => children(scope, select, observation)}
+          {(scope, observation, handle) => children(scope, select, observation, handle)}
         </FileWorkOwner>
       )}
     </div>
@@ -226,7 +226,7 @@ function FileWorkOwner({
   children,
 }: {
   opened: SettingsSnapshot;
-  children: (scope: WorkKey, observation: FileObservation) => ReactNode;
+  children: (scope: WorkKey, observation: FileObservation, handle: SettingsHandle) => ReactNode;
 }) {
   const scope: WorkKey = useMemo(
     () => ({ route: "settings", target: null, work: opened.workspaceId! }),
@@ -244,8 +244,8 @@ function FileWorkOwner({
     work: opened.workspaceId!,
     provided: { document: reading },
   });
-  const [readError, setReadError] = useState("");
   const generation = useRef(0);
+  const initialized = useRef(false);
   const observation =
     reading.state === "ready"
       ? reading.observation
@@ -253,21 +253,14 @@ function FileWorkOwner({
         ? reading.previous
         : opened;
   useEffect(() => {
-    if (route.work.revision !== null && !route.work.doc?.basis)
-      void route.actions.open.run({ documentId: opened.documentId });
-  }, [route.work.revision]);
+    if (!route.work.current || route.work.doc?.basis || initialized.current) return;
+    initialized.current = true;
+    void route.actions.open.run({ documentId: opened.documentId });
+  }, [route.work.current, route.work.doc?.basis, route.actions.open, opened.documentId]);
   useEffect(() => () => void generation.current++, []);
-  const basis = route.work.doc?.basis;
-  const query = new URLSearchParams({
-    mode: "file",
-    module: opened.documentId.moduleKey,
-    root: opened.documentId.rootKey,
-    file: opened.documentId.relativePath,
-  });
   const refresh = async () => {
     const attempt = ++generation.current;
     setReading({ state: "stale", previous: observation, reason: "dirtied" });
-    setReadError("");
     try {
       const next = await host.open(opened.documentId);
       if (attempt === generation.current) setReading({ state: "ready", observation: next });
@@ -275,50 +268,8 @@ function FileWorkOwner({
       if (attempt === generation.current) {
         const message = String(cause);
         setReading({ state: "failed", message, previous: observation });
-        setReadError(message);
       }
     }
   };
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-2 p-2">
-        <span>{opened.path}</span>
-        <a href={`/settings?${query}`}>Settings pane</a>
-        <a href={`/family?${query}`}>Family pane</a>
-        <ActionButton
-          label="Read disk"
-          reason="Observe disk without rebasing authored work"
-          onClick={() => void refresh()}
-        />
-        {basis && observation.versionToken !== basis.versionToken && (
-          <>
-            <OutcomeLine kind="advisory" label="disk differs from edit basis" />
-            <ActionButton
-              label="Adopt disk and discard old edits"
-              reason="Replace the basis and discard existing proposals and staged edits"
-              onClick={() =>
-                void route.actions.adopt.run({ versionToken: observation.versionToken })
-              }
-            />
-          </>
-        )}
-      </div>
-      {readError && <OutcomeLine kind="error" label="file observation failed" says={readError} />}
-      {route.failure && (
-        <OutcomeLine kind="error" label="file work refused" says={route.failure.message} />
-      )}
-      {/* The current observation's own text. Expanding is display-only: it does not read the
-          file again, adopt disk, or reset authored fields. */}
-      <details className="p-2">
-        <summary>Disk observation · raw text as stored</summary>
-        <JsonView code={observation.rawContent} />
-        {observation.validation?.issues.map((issue, index) => (
-          <p key={index}>
-            {issue.path}: {issue.message}
-          </p>
-        ))}
-      </details>
-      {children(scope, { reading, refresh })}
-    </>
-  );
+  return children(scope, { reading, refresh }, route);
 }

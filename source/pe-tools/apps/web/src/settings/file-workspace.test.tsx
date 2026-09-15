@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   openWork: vi.fn(),
   adoptWork: vi.fn(),
   workDoc: { basis: { versionToken: "v1" } } as { basis: { versionToken: string } } | null,
+  workCurrent: true,
+  workRevision: 1 as number | null,
   navigate: vi.fn(),
   location: {
     pathname: "/settings",
@@ -31,7 +33,7 @@ vi.mock("#/settings/host", () => ({
 vi.mock("#/route", async (original) => ({
   ...(await original<typeof import("#/route")>()),
   useRoute: () => ({
-    work: { doc: mocks.workDoc, revision: 1 },
+    work: { doc: mocks.workDoc, revision: mocks.workRevision, current: mocks.workCurrent },
     actions: {
       open: { run: mocks.openWork },
       adopt: { run: mocks.adoptWork },
@@ -44,6 +46,8 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.workDoc = { basis: { versionToken: "v1" } };
+  mocks.workCurrent = true;
+  mocks.workRevision = 1;
 });
 const snapshot = (file: string) => ({
   documentId: { moduleKey: "Global", rootKey: "fragments", relativePath: file },
@@ -112,31 +116,52 @@ test("a file refresh exposes stale and failed Reading lifecycle", async () => {
     .mockImplementationOnce(() => new Promise((_resolve, reject) => void (rejectRefresh = reject)));
   render(
     <FileWorkspace>
-      {(_scope, _select, observation) => <span>Profile {observation.reading.state}</span>}
+      {(_scope, _select, observation) => (
+        <>
+          <span>Profile {observation.reading.state}</span>
+          {observation.reading.state === "failed" ? (
+            <span>{observation.reading.message}</span>
+          ) : null}
+          <ActionButton
+            label="Refresh profile"
+            reason="Observe the current file"
+            onClick={() => void observation.refresh()}
+          />
+        </>
+      )}
     </FileWorkspace>,
   );
   expect(await screen.findByText("Profile ready")).toBeTruthy();
-  fireEvent.click(screen.getByText("Read disk"));
+  fireEvent.click(screen.getByText("Refresh profile"));
   expect(screen.getByText("Profile stale")).toBeTruthy();
   await act(async () => rejectRefresh(new Error("unreadable")));
   expect(screen.getByText("Profile failed")).toBeTruthy();
   expect(screen.getByText("unreadable", { exact: false })).toBeTruthy();
 });
 
-test("canonical Work actions open an empty workspace and adopt a reviewed disk version", async () => {
+test("authoritative absent Work opens the selected file and projects it through the shared handle", async () => {
   mocks.workDoc = null;
+  mocks.workRevision = null;
   mocks.open.mockResolvedValueOnce(snapshot("a.json"));
-  const view = render(<FileWorkspace>{() => null}</FileWorkspace>);
-  await screen.findByText("Disk observation · raw text as stored");
+  const ui = () => (
+    <FileWorkspace>
+      {(_scope, _select, observation, handle) => (
+        <span>
+          {handle.work.doc?.basis
+            ? `Authoring ${observation.reading.state === "ready" ? observation.reading.observation.path : ""}`
+            : "choose a family file"}
+        </span>
+      )}
+    </FileWorkspace>
+  );
+  const view = render(ui());
+  await screen.findByText("choose a family file");
   await waitFor(() =>
     expect(mocks.openWork).toHaveBeenCalledWith({ documentId: snapshot("a.json").documentId }),
   );
 
   mocks.workDoc = { basis: { versionToken: "v1" } };
-  mocks.open.mockResolvedValueOnce({ ...snapshot("a.json"), versionToken: "v2" });
-  view.rerender(<FileWorkspace>{() => null}</FileWorkspace>);
-  fireEvent.click(screen.getByText("Read disk"));
-  await screen.findByText("disk differs from edit basis");
-  fireEvent.click(screen.getByText("Adopt disk and discard old edits"));
-  expect(mocks.adoptWork).toHaveBeenCalledWith({ versionToken: "v2" });
+  mocks.workRevision = 1;
+  view.rerender(ui());
+  expect(screen.getByText("Authoring a.json")).toBeTruthy();
 });

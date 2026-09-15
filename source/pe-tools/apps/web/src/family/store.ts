@@ -45,7 +45,7 @@ import {
 } from "#/family/manifest";
 import { documentAddress, previousOf, useHostCall, inventoryOf, useReading } from "#/readings";
 import { useRoute } from "#/route";
-import { settingsManifest } from "#/settings/manifest";
+import type { SettingsHandle } from "#/settings/manifest";
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -132,6 +132,8 @@ export function useFamilyStore(options: {
   thread?: string;
   /** The settings file Work this page edits; `?mode=file` names it, the route resolves it. */
   fileKey: WorkKey;
+  /** The FileWorkspace-owned Settings route for this authored file. */
+  settingsHandle: SettingsHandle;
   /** Current saved-file observation supplied by FileWorkspace; absent only in a seed. */
   profile?: Reading<SettingsSnapshot>;
   refreshProfile?: () => Promise<void>;
@@ -141,8 +143,7 @@ export function useFamilyStore(options: {
   const workspaceId = options.fileKey.work;
   if (!workspaceId) throw Error("Family requires an authored file workspace");
   const fileKey = options.fileKey;
-  const settingsRoute = useMemo(() => settingsManifest({ scope: fileKey }), [fileKey]);
-  const settingsHandle = useRoute(settingsRoute, { work: workspaceId });
+  const settingsHandle = options.settingsHandle;
   const settingsDoc = settingsHandle.work.doc as SettingsRouteDocument | null;
   const settingsRevision = settingsHandle.work.revision;
   const edits = useMemo(
@@ -177,7 +178,7 @@ export function useFamilyStore(options: {
           ).length
         : 0,
       stagedCount: Object.values(fields).filter((field) => field.staged != null).length,
-      current: settingsRevision !== null && editState.failure === null,
+      current: settingsHandle.work.current && editState.failure === null,
     }),
     [
       authoredLane,
@@ -185,6 +186,7 @@ export function useFamilyStore(options: {
       fields,
       snapshot?.validation,
       settingsRevision,
+      settingsHandle.work.current,
       editState.failure,
     ],
   );

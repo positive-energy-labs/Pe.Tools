@@ -12,10 +12,8 @@ import {
   settingsWorkSnapshot,
   type Reading,
   type RouteStatePatch,
-  type SettingsDocumentId,
   type SettingsFieldState,
   type SettingsValidation,
-  type WorkKey,
 } from "@pe/agent-contracts";
 import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
 
@@ -27,14 +25,12 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
-import { RouteShell, useRoute, type RouteHandle } from "#/route";
+import { RouteShell, useRoute } from "#/route";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 import { FileWorkspace, fileSearch } from "#/settings/file-workspace";
-import { settingsManifest } from "#/settings/manifest";
-import type { SettingsAction, SettingsPage, SettingsReading } from "#/settings/seeds";
-import type { SettingsRouteDocument } from "@pe/agent-contracts";
+import { settingsManifest, type SettingsHandle } from "#/settings/manifest";
 
-type Handle = RouteHandle<SettingsRouteDocument, SettingsReading, SettingsPage, SettingsAction>;
+type Handle = SettingsHandle;
 
 export const settingsSearch = (
   search: Record<string, unknown>,
@@ -60,18 +56,18 @@ export function SettingsRouteContent(initial: Partial<ReturnType<typeof fileSear
   // read it; standing it in front of `?demo=` meant the seeded surface never mounted at all, so
   // the route's own proof could not reach its own actions.
   const demo = new URLSearchParams(globalThis.location?.search ?? "").get("demo");
-  if (demo)
-    return (
-      <SettingsWorkspace
-        scope={{ route: "settings", target: null, work: "demo" }}
-        selectFile={async () => {}}
-      />
-    );
+  if (demo) return <SettingsDemoWorkspace />;
   return (
     <FileWorkspace initial={initial}>
-      {(scope, selectFile) => <SettingsWorkspace scope={scope} selectFile={selectFile} />}
+      {(_scope, _selectFile, _observation, handle) => <SettingsWorkspace handle={handle} />}
     </FileWorkspace>
   );
+}
+
+function SettingsDemoWorkspace() {
+  const scope = useMemo(() => ({ route: "settings", target: null, work: "demo" }) as const, []);
+  const routeManifest = useMemo(() => settingsManifest({ scope }), [scope]);
+  return <SettingsWorkspace handle={useRoute(routeManifest)} />;
 }
 
 /** A file Reading's observation is its raw text. */
@@ -83,15 +79,8 @@ function readingText(reading: Reading<unknown> | undefined): string | undefined 
   return typeof previous === "string" ? previous : undefined;
 }
 
-function SettingsWorkspace({
-  scope,
-  selectFile,
-}: {
-  scope: WorkKey;
-  selectFile: (id: SettingsDocumentId) => Promise<void>;
-}) {
-  const routeManifest = useMemo(() => settingsManifest({ scope, selectFile }), [scope, selectFile]);
-  const handle = useRoute(routeManifest);
+function SettingsWorkspace({ handle }: { handle: SettingsHandle }) {
+  const routeManifest = handle.manifest;
   const doc = handle.work.doc;
   const snapshot = useMemo(() => (doc ? settingsWorkSnapshot(doc) : null), [doc]);
   const candidate = useMemo(() => (doc ? settingsWorkSnapshot(doc, true) : null), [doc]);
@@ -139,7 +128,7 @@ function SettingsWorkspace({
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden" data-surface="page">
-      <RouteShell manifest={routeManifest} aside={aside} />
+      <RouteShell manifest={routeManifest} handle={handle} aside={aside} />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
         <div className="mx-auto max-w-5xl space-y-1.5">
           {handle.failure ? (

@@ -17,7 +17,7 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 
-import { defineRoute, semanticActionFacts, type RouteManifest } from "#/route";
+import { defineRoute, semanticActionFacts, type RouteHandle, type RouteManifest } from "#/route";
 import {
   SETTINGS_SEEDS,
   SETTINGS_SEED_DOCUMENT_ID,
@@ -34,6 +34,13 @@ import {
 export type { SettingsAction, SettingsPage, SettingsReading };
 
 export type SettingsRouteManifest = RouteManifest<
+  SettingsRouteDocument,
+  SettingsReading,
+  SettingsPage,
+  SettingsAction
+>;
+
+export type SettingsHandle = RouteHandle<
   SettingsRouteDocument,
   SettingsReading,
   SettingsPage,
