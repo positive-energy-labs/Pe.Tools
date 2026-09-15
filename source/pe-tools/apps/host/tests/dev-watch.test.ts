@@ -4,17 +4,19 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 
-test("source edits restart the child, but retirement exits the entire watcher", async () => {
+test("host and workspace package source edits restart the child, but retirement exits the watcher", async () => {
   const root = mkdtempSync(join(resolve(import.meta.dirname, ".."), ".watch-test-"));
-  mkdirSync(join(root, "scripts"));
-  mkdirSync(join(root, "src"));
+  const host = join(root, "apps/host");
+  mkdirSync(join(host, "scripts"), { recursive: true });
+  mkdirSync(join(host, "src"));
+  mkdirSync(join(root, "packages/mcps/src"), { recursive: true });
   copyFileSync(
     new URL("../scripts/dev-watch.ts", import.meta.url),
-    join(root, "scripts/dev-watch.ts"),
+    join(host, "scripts/dev-watch.ts"),
   );
-  writeFileSync(join(root, "retire"), "");
+  writeFileSync(join(host, "retire"), "");
   writeFileSync(
-    join(root, "src/dev.ts"),
+    join(host, "src/dev.ts"),
     `
     import { appendFileSync, watch } from "node:fs";
     appendFileSync("events", "started\\n");
@@ -26,7 +28,7 @@ test("source edits restart the child, but retirement exits the entire watcher", 
   `,
   );
   const launcher = spawn(process.execPath, ["--import", "jiti/register", "scripts/dev-watch.ts"], {
-    cwd: root,
+    cwd: host,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -40,21 +42,25 @@ test("source edits restart the child, but retirement exits the entire watcher", 
   });
   const events = () => {
     try {
-      return readFileSync(join(root, "events"), "utf8");
+      return readFileSync(join(host, "events"), "utf8");
     } catch {
       return "";
     }
   };
   try {
     await expect.poll(events, { timeout: 15_000 }).toBe("started\n");
-    writeFileSync(join(root, "src/edit.ts"), "// source edit\n");
+    writeFileSync(join(host, "src/edit.ts"), "// host source edit\n");
     await expect.poll(events, { timeout: 15_000 }).toBe("started\nstopped\nstarted\n");
-    writeFileSync(join(root, "retire"), "retire");
+    writeFileSync(join(root, "packages/mcps/src/edit.ts"), "// package source edit\n");
+    await expect
+      .poll(events, { timeout: 15_000 })
+      .toBe("started\nstopped\nstarted\nstopped\nstarted\n");
+    writeFileSync(join(host, "retire"), "retire");
     await expect.poll(() => launcher.exitCode, { timeout: 10_000 }).toBe(0);
     await exited;
     expect(output).toContain("Dev session retired. Host, frontend, and watcher stopped.");
-    writeFileSync(join(root, "src/edit.ts"), "// later edit\n");
-    expect(events()).toBe("started\nstopped\nstarted\n");
+    writeFileSync(join(host, "src/edit.ts"), "// later edit\n");
+    expect(events()).toBe("started\nstopped\nstarted\nstopped\nstarted\n");
   } finally {
     if (launcher.exitCode === null) {
       launcher.kill();

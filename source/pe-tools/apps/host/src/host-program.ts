@@ -24,12 +24,6 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      // Pre-bind eviction (dev lane, see evictLiveHost): clearing THIS checkout's own same-name
-      // predecessor BEFORE chooseServicePort lets it reuse the remembered port (stable dev URL)
-      // instead of drifting to an ephemeral one. The installed host is a SIBLING, never an
-      // incumbent to clear (ruled 2026-08-20): a dev host starting beside a live installed session
-      // must leave that session's bridge intact, and every client picks a host BY LANE
-      // (`--host dev | installed`, packages/mcps/src/shared/host-config.ts).
       if (hostOwnership.lane === "dev" && process.argv.includes(DEV_TAKEOVER_ARGUMENT)) {
         yield* Effect.promise(() =>
           evictLiveHost(productRoot(), hostOwnership.serviceName, "dev takeover"),
@@ -39,8 +33,6 @@ export const hostProgram = (
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
       );
 
-      // The service-file identity + eviction is SDK-owned (D3): ServiceFileLive claims it on bind and
-      // publishes the claim handle here. No pre-bind takeover, no locally minted token.
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
@@ -59,9 +51,6 @@ export const hostProgram = (
         ),
       );
 
-      // Last pre-bind breadcrumb: the HTTP layer is about to launch. The bound "Listening on ..."
-      // line follows once NodeHttpServer binds; a gap between these two in host.log localizes a hang
-      // or crash to the layer build (e.g. bridge/service-claim/tenant) rather than earlier startup.
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
       const frontend =
         web && webUrl

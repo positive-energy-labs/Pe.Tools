@@ -18,7 +18,6 @@ public sealed record ProductRuntimeLayout(
             ProductIdentity.VendorName,
             ProductIdentity.ProductName
         );
-
         return new ProductRuntimeLayout(
             rootPath,
             new ProductRuntimeStateLayout(Path.Combine(rootPath, ProductPathNames.StateDirectoryName)),

@@ -4,7 +4,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Services.AutoTag;
 using Pe.Shared.HostContracts.Transport;
-using Pe.Shared.Product;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;

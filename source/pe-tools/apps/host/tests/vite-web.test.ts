@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -45,7 +45,6 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
   const webRoot = join(localAppData, "web");
-  const { mkdirSync } = await import("node:fs");
   mkdirSync(webRoot);
   writeFileSync(
     join(webRoot, "index.html"),
@@ -122,7 +121,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       const timer = setTimeout(() => {
         bridge.close();
         reject(new Error("Bridge proxy timed out"));
-      }, 5000);
+      }, 5_000);
       bridge.addEventListener("open", () => {
         clearTimeout(timer);
         bridge.close();
