@@ -71,7 +71,7 @@ const complaint = (resolution: TargetResolution): string | null =>
 export function ComposerHead({ handle }: { handle: ChatHandle }) {
   const { currentThreadId, threads, chat, resolveApproval } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
-  const head = useThreadScope(currentThreadId);
+  const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
   );
