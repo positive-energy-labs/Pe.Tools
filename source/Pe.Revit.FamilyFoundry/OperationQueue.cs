@@ -41,7 +41,8 @@ public class OperationQueue {
     /// <summary>
     ///     Resets all group contexts for a new family processing cycle.
     /// </summary>
-    public void ResetAllGroupContexts() =>
+    public void ResetAllGroupContexts() {
+        foreach (var operation in this.Operations.OfType<Reconcile.ReconcileFamily>()) operation.Reset();
         this._operations
             .Select(o => o.Ctx)
             .Where(c => c != null)
@@ -49,6 +50,7 @@ public class OperationQueue {
             .Distinct()
             .ToList()
             .ForEach(c => c.Reset());
+    }
 
     /// <summary>
     ///     Get metadata about all queued operations for frontend display
@@ -131,10 +133,28 @@ public class OperationQueue {
                 Callback: pair.Executable.ToFunc(pair.Ctx ?? new OperationContext())))
             .ToArray();
 
+        // Finalize each shared context after its last executable, including merged type batches.
+        for (var index = 0; index < executableOps.Count; index++) {
+            var contexts = Contexts(executableOps[index]).Where(ctx =>
+                !executableOps.Skip(index + 1).SelectMany(Contexts).Contains(ctx)).Distinct().ToList();
+            if (contexts.Count == 0) continue;
+            var callback = namedFuncs[index].Callback;
+            namedFuncs[index].Callback = (doc, context) => {
+                var logs = callback(doc, context);
+                logs.AddRange(contexts.Select(ctx => ctx.Complete()));
+                return logs;
+            };
+        }
+
         return singleTransaction
             ? this.BundleFuncs(namedFuncs)
             : namedFuncs;
     }
+
+    private static IEnumerable<OperationContext> Contexts((IExecutable Executable, OperationContext? Ctx) pair) =>
+        pair.Executable is MergedTypeOperation merged
+            ? merged.Operations.Select(p => p.Ctx).OfType<OperationContext>()
+            : pair.Ctx is { } context ? [context] : [];
 
     private List<(IExecutable Executable, OperationContext? Ctx)> ToExecutableList() =>
         this._operations.Select(o => ((IExecutable)o.Op, o.Ctx)).ToList();

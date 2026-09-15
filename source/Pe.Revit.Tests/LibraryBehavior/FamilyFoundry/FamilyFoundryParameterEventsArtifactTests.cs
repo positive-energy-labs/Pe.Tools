@@ -11,7 +11,7 @@ public sealed class FamilyFoundryParameterEventsArtifactTests {
         var outputPath = Path.Combine(Path.GetTempPath(), $"ff-parameter-events-{Guid.NewGuid():N}");
         try {
             var builder = new ProcessingResultBuilder(OutputStorage.ExactDir(outputPath))
-                .WithCustomProfile(new { Name = "TestProfile" }, "TestProfile");
+                .WithProfile(new { Name = "TestProfile" }, "TestProfile");
             var ctx = new FamilyProcessingContext { FamilyName = "Event Family" };
             SetOperationLogs(ctx, [
                 new OperationLog("MapParams", [

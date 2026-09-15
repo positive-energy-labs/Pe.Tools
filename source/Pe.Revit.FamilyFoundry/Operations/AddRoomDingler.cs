@@ -2,10 +2,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit.Extensions.FamDocument;
 using System.ComponentModel;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
-public sealed class AddRoomDingler(AddRoomDinglerSettings settings) : DocOperation<AddRoomDinglerSettings>(settings) {
+public sealed class AddRoomDingler(AddRoomDinglerSettings settings, FamilyModelRoomCalculationPoint? desired = null) : DocOperation<AddRoomDinglerSettings>(settings) {
 
     public override string Description =>
         "Enable the family room calculation point and move it to the host-inferred room-facing default.";
@@ -20,8 +21,15 @@ public sealed class AddRoomDingler(AddRoomDinglerSettings settings) : DocOperati
         if (family == null)
             return new OperationLog(this.Name, [new LogEntry("Owner family").Error("Family document has no owner family.")]);
 
+        if (desired?.Enabled == false) {
+            family.ShowSpatialElementCalculationPoint = false;
+            return new OperationLog(this.Name, [new LogEntry("Room calculation point").Success("Disabled.")]);
+        }
+        if (desired?.Offset?.Parameter is not null)
+            throw new InvalidOperationException("Room calculation point offset requires an explicit length; a parameter binding cannot be preserved by this operation.");
+
         var placement = GetRoomDinglerPlacement(family);
-        var offsetFeet = this.Settings.OffsetFeet;
+        var offsetFeet = desired?.Offset?.Feet ?? this.Settings.OffsetFeet;
         if (!family.ShowSpatialElementCalculationPoint)
             family.ShowSpatialElementCalculationPoint = true;
         doc.Document.Regenerate();

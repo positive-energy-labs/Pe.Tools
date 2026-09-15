@@ -1,454 +1,88 @@
 using Autodesk.Revit.UI;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.DesiredState;
-using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Resolution;
-using Pe.Revit.Global;
-using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Parameters;
-using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
-using Pe.Shared.RevitData;
-using Pe.Shared.StorageRuntime.Modules;
-using JsonValidationException = Pe.Revit.SettingsRuntime.Json.JsonValidationException;
+using Pe.Shared.RevitData.Families;
+using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
-///     Fluent builder for creating Family Foundry palette UIs.
-///     Handles all infrastructure (storage, profile discovery, preview, palette wiring)
-///     while keeping command-specific logic (queue building, actions) in command files.
+///     The foundry palette: lists every `*.family.json` and `*.patch.json` in the FamilyFoundry module, parses
+///     the selection for the preview, and hands the command its actions. Commands decide what to do with a
+///     model or a patch; the palette only reads.
 /// </summary>
-/// <typeparam name="TProfile">The profile type (must inherit from BaseProfile)</typeparam>
-public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new() {
-    private readonly List<FoundryAction<TProfile>> _actions = [];
-    private readonly string _commandName;
-    private readonly Document _doc;
+public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDocument uiDoc) {
+    private readonly List<(string Name, Action<FoundryContext> Handler, Func<FoundryContext, bool>? CanExecute)> _actions = [];
 
-    private readonly ISettingsRootBinding<TProfile> _settingsRoot;
-    private readonly UIDocument _uiDoc;
-    private Action<FoundryContext<TProfile>, List<string>>? _postProcess;
-    private Func<TProfile, List<SharedParameterDefinition>, OperationQueue>? _queueBuilder;
-
-    public FoundryPaletteBuilder(
-        string displayName,
-        ISettingsRootBinding<TProfile> settingsRoot,
-        Document doc,
-        UIDocument uiDoc
-    ) {
-        this._commandName = displayName;
-        this._settingsRoot = settingsRoot;
-        this._doc = doc;
-        this._uiDoc = uiDoc;
-    }
-
-    /// <summary>
-    ///     Adds an action to the palette.
-    /// </summary>
-    /// <param name="name">Action name displayed in the palette</param>
-    /// <param name="handler">Action handler that receives the context</param>
-    /// <param name="canExecute">Optional predicate to enable/disable the action</param>
-    public FoundryPaletteBuilder<TProfile> WithAction(
-        string name,
-        Action<FoundryContext<TProfile>> handler,
-        Func<FoundryContext<TProfile>, bool>? canExecute = null
-    ) {
-        this._actions.Add(new FoundryAction<TProfile> { Name = name, Handler = handler, CanExecute = canExecute });
+    public FoundryPaletteBuilder WithAction(string name, Action<FoundryContext> handler, Func<FoundryContext, bool>? canExecute = null) {
+        this._actions.Add((name, handler, canExecute));
         return this;
     }
 
-    /// <summary>
-    ///     Sets the queue builder function.
-    ///     This function receives the profile and APS parameters and returns an OperationQueue.
-    /// </summary>
-    public FoundryPaletteBuilder<TProfile> WithQueueBuilder(
-        Func<TProfile, List<SharedParameterDefinition>, OperationQueue> queueBuilder
-    ) {
-        this._queueBuilder = queueBuilder;
-        return this;
-    }
-
-    /// <summary>
-    ///     Sets the post-processing callback.
-    ///     Called after family processing completes with the context and list of processed family names.
-    /// </summary>
-    public FoundryPaletteBuilder<TProfile> WithPostProcess(
-        Action<FoundryContext<TProfile>, List<string>> postProcess
-    ) {
-        this._postProcess = postProcess;
-        return this;
-    }
-
-    /// <summary>
-    ///     Builds and returns the palette window.
-    /// </summary>
     public EphemeralWindow Build() {
-        if (this._queueBuilder == null)
-            throw new InvalidOperationException("Queue builder must be set via WithQueueBuilder()");
+        var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
+        var documents = RuntimeStorageClient.Default.Root(FamilyModelSettingsRegistration.Root).Documents();
+        var files = ProfileListItem.Discover(documents);
+        if (files.Count == 0)
+            throw new InvalidOperationException($"No *.family.json or *.patch.json under {documents.ResolveRootDirectory()}.");
 
-        // Setup storage and settings
-        var storage = RuntimeStorageClient.Default.Root(this._settingsRoot);
-        var persistence = RuntimeStorageClient.Default.Module(this._settingsRoot.Module.ModuleKey);
-        var documents = storage.Documents();
-        var settings = storage.State().Json<BaseSettings<TProfile>>("settings").Read();
-        var profilesRootDirectory = documents.ResolveRootDirectory();
-
-        // Discover profiles
-        var profiles = ProfileListItem.DiscoverProfiles(documents);
-        if (profiles.Count == 0) {
-            throw new InvalidOperationException(
-                $"No profiles found in {profilesRootDirectory}. Create a profile JSON file to continue.");
-        }
-
-        // Create context
-        var context = new FoundryContext<TProfile> {
-            Doc = this._doc,
-            UiDoc = this._uiDoc,
-            Storage = storage,
-            Settings = storage.Settings(),
-            Documents = documents,
-            OnFinishSettings = settings.OnProcessingFinish
-        };
-
-        // Create preview panel with injected preview building logic
+        var context = new FoundryContext { Doc = doc, UiDoc = uiDoc, Storage = storage, Documents = documents };
         var previewPanel = new ProfilePreviewPanel(async (item, ct) => {
-            if (item == null)
-                return null;
-
-            var data = await this.BuildPreviewDataAsync(item, context, ct);
+            if (item == null) return null;
+            var data = await BuildPreview(item, context, ct);
             context.SelectedProfile = item;
             context.PreviewData = data;
             return data;
         });
 
-        // Convert FoundryActions to PaletteActions
         var paletteActions = this._actions.Select(a => new PaletteAction<ProfileListItem> {
             Name = a.Name,
             Execute = _ => a.Handler(context),
             CanExecute = _ => a.CanExecute?.Invoke(context) ?? true
         }).ToList();
 
-        // Create the palette with sidebar
-        var window = PaletteFactory.Create(
-            $"{this._commandName} - Select Profile",
-            new PaletteOptions<ProfileListItem> {
-                Persistence = (persistence, item => item.TextPrimary),
-                SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                SidebarPanel = previewPanel,
-                Tabs = [
-                    new TabDefinition<ProfileListItem>(
-                        "All",
-                        () => profiles,
-                        paletteActions
-                    ) { FilterKeySelector = _ => "Profiles" }
-                ]
-            });
-
-        return window;
+        return PaletteFactory.Create($"{displayName} - Select family.json or patch", new PaletteOptions<ProfileListItem> {
+            Persistence = (storage, item => item.RelativePath),
+            SearchConfig = SearchConfig.PrimaryAndSecondary(),
+            SidebarPanel = previewPanel,
+            Tabs = [
+                new TabDefinition<ProfileListItem>("Models", () => files.Where(f => f.Kind == FoundryFileKind.FamilyModel).ToList(), paletteActions) { FilterKeySelector = _ => "Models" },
+                new TabDefinition<ProfileListItem>("Patches", () => files.Where(f => f.Kind == FoundryFileKind.Patch).ToList(), paletteActions) { FilterKeySelector = _ => "Patches" }
+            ]
+        });
     }
 
-    private async Task<PreviewData?> BuildPreviewDataAsync(
-        ProfileListItem profileItem,
-        FoundryContext<TProfile> context,
-        CancellationToken ct
-    ) {
-        if (ct.IsCancellationRequested) return null;
-        if (profileItem == null) return null;
-
-        return await this.TryLoadPreviewDataAsync(profileItem, context, ct);
-    }
-
-    private async Task<PreviewData?> TryLoadPreviewDataAsync(
-        ProfileListItem profileItem,
-        FoundryContext<TProfile> context,
-        CancellationToken ct
-    ) {
+    private static async Task<PreviewData> BuildPreview(ProfileListItem item, FoundryContext context, CancellationToken ct) {
+        var json = File.ReadAllText(item.FilePath);
+        var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
-            return await this.LoadValidPreviewDataAsync(profileItem, context, ct);
-        } catch (JsonValidationException ex) {
-            return CreateValidationErrorPreview(profileItem, ex);
-        } catch (Exception ex) {
-            return CreateGenericErrorPreview(profileItem, ex);
-        }
-    }
-
-    private async Task<PreviewData?> LoadValidPreviewDataAsync(
-        ProfileListItem profileItem,
-        FoundryContext<TProfile> context,
-        CancellationToken ct
-    ) {
-        if (ct.IsCancellationRequested) return null;
-
-        // Load the profile
-        var profile = context.Settings.ReadRequired(profileItem.TextPrimary);
-        var authoredWarnings = new List<string>();
-        var authoredErrors = new List<string>();
-
-        if (ct.IsCancellationRequested) return null;
-
-        if (profile is FFManagerProfile familyProfile) {
-            var compileResult = AuthoredParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
-            authoredWarnings = compileResult.Diagnostics
-                .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
-                .Select(diagnostic => diagnostic.ToDisplayMessage())
-                .ToList();
-            authoredErrors = compileResult.Diagnostics
-                .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error)
-                .Select(diagnostic => diagnostic.ToDisplayMessage())
-                .ToList();
-        }
-
-        // Get raw APS parameter models (no Revit API dependencies, safe to store)
-        var requiredSharedNames = GetRequiredSharedParameterNames(profile);
-        var apsParamModels = profile.GetSelectedApsParamModels(requiredSharedNames);
-
-        if (ct.IsCancellationRequested) return null;
-
-        // Build queue structure for preview (using temp file just for structure, not storing definitions)
-        var previewApsParamData = await PaletteThreading.RunRevitAsync(() => {
-            using var previewTempFile = new TempSharedParamFile(context.Doc);
-            return BaseProfile.ConvertToSharedParameterDefinitions(apsParamModels, previewTempFile);
-        }, ct);
-
-        if (ct.IsCancellationRequested || previewApsParamData == null) return null;
-
-        var profileJson = JsonConvert.SerializeObject(
-            profile,
-            Formatting.Indented,
-            new JsonSerializerSettings {
-                Converters = [new StringEnumConverter()],
-                ContractResolver = new RequiredAwareContractResolver(),
-                NullValueHandling = NullValueHandling.Ignore
-            });
-
-        if (authoredErrors.Count > 0) {
-            return new PreviewData {
-                ProfileName = profileItem.TextPrimary,
-                FilePath = profileItem.FilePath,
-                CreatedDate = profileItem._fileInfo.CreationTime,
-                ModifiedDate = profileItem._fileInfo.LastWriteTime,
-                LineCount = profileItem.LineCount,
-                ProfileJson = profileJson,
-                IsValid = false,
-                RemainingErrors = authoredErrors,
-                Warnings = authoredWarnings
-            };
-        }
-
-        var queueBuilder = this._queueBuilder
-                           ?? throw new InvalidOperationException(
-                               "Queue builder must be configured before building previews.");
-        var queue = queueBuilder(profile, previewApsParamData);
-        var operationMetadata = queue.GetExecutableMetadata();
-
-        var families = await PaletteThreading.RunRevitAsync(() => profile.GetFamilies(context.Doc), ct);
-
-        if (ct.IsCancellationRequested || families == null) return null;
-
-        // Extract APS parameter info
-        var apsParameters = apsParamModels.Select(p => new ParameterInfo(
-            ToParameterDefinition(p),
-            GetDataTypeName(p.DownloadOptions.GetSpecTypeId())
-        )).ToList();
-
-        // Extract AddAndSet parameter info - this is profile-specific, so we skip it for now
-        // Commands can override this if needed
-        var addAndSetParameters = new List<ParameterInfo>();
-
-        // Extract family info with categories
-        var familyInfos = families.Select(f => new FamilyInfo(
-            f.Name,
-            f.FamilyCategory?.Name ?? "Unknown"
-        )).ToList();
-
-        if (ct.IsCancellationRequested) return null;
-
-        // Check operation enabled status from queue
-        var operationInfos = new List<OperationInfo>();
-        foreach (var op in queue.Operations) {
-            var metadata = operationMetadata.FirstOrDefault(m => m.Name == op.Name);
-            if (metadata != default) {
-                var isEnabled = op.Settings?.Enabled ?? true;
-                operationInfos.Add(new OperationInfo(
-                    metadata.Name,
-                    metadata.Description,
-                    metadata.Type,
-                    metadata.IsMerged,
-                    isEnabled
-                ));
+            if (item.Kind == FoundryFileKind.Patch) {
+                var patch = new ModuleSettingsStorage<FamilyPatch>(context.Documents)
+                    .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
+                var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
+                    ? []
+                    : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
+                return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-        }
-
-        if (ct.IsCancellationRequested) return null;
-
-        return new PreviewData {
-            ProfileName = profileItem.TextPrimary,
-            FilePath = profileItem.FilePath,
-            CreatedDate = profileItem._fileInfo.CreationTime,
-            ModifiedDate = profileItem._fileInfo.LastWriteTime,
-            LineCount = profileItem.LineCount,
-            Operations = operationInfos,
-            ApsParameters = apsParameters,
-            AddAndSetParameters = addAndSetParameters,
-            Families = familyInfos,
-            ProfileJson = profileJson,
-            IsValid = true,
-            Warnings = authoredWarnings
-        };
-    }
-
-    private static ParameterDefinitionDescriptor ToParameterDefinition(ParametersApi.Parameters.ParametersResult parameter) {
-        var downloadOptions = parameter.DownloadOptions;
-        var sharedGuid = TryGetSharedGuid(downloadOptions);
-        var name = parameter.Name ?? string.Empty;
-        var identity = sharedGuid.HasValue
-            ? new ParameterIdentity(
-                $"shared-guid:{sharedGuid.Value:D}",
-                ParameterIdentityKind.SharedGuid,
-                name,
-                null,
-                sharedGuid.Value.ToString("D"),
-                null
-            )
-            : new ParameterIdentity(
-                $"name:{NormalizeParameterName(name)}",
-                ParameterIdentityKind.NameFallback,
-                name,
-                null,
-                null,
-                null
-            );
-
-        var specTypeId = downloadOptions.GetSpecTypeId();
-        return new ParameterDefinitionDescriptor(
-            identity,
-            downloadOptions.IsInstance,
-            NormalizeForgeTypeId(specTypeId),
-            GetDataTypeName(specTypeId),
-            NormalizeForgeTypeId(downloadOptions.GetGroupTypeId()),
-            null
-        );
-    }
-
-    private static Guid? TryGetSharedGuid(ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts downloadOptions) {
-        try {
-            return downloadOptions.GetGuid();
-        } catch {
-            return null;
+            var composed = new ModuleSettingsStorage<FamilyModel>(context.Documents)
+                .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.RootKey);
+            var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
+            if (parsed.Value is null || parsed.Diagnostics.Count > 0)
+                return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };
+            var m = parsed.Value;
+            return data with {
+                Model = m, IsValid = true,
+                Sections = [
+                    $"parameters: {m.Parameters.Count}", $"types: {m.Types.Count}", $"datums: {m.Datums.Count}", $"refPlanes: {m.RefPlanes.Count}", $"refLines: {m.RefLines.Count}",
+                    $"dimensions: {m.Dimensions.Count}", $"forms: {m.Forms.Count}", $"nested: {m.Nested.Count}", $"arrays: {m.Arrays.Count}", $"connectors: {m.Connectors.Count}", $"details: {m.Details.Count}"
+                ]
+            };
+        } catch (Exception ex) {
+            return data with { IsValid = false, RemainingErrors = [$"{ex.GetType().Name}: {ex.Message}"] };
         }
     }
-
-    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
-        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
-
-    private static string NormalizeParameterName(string name) =>
-        string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().ToLowerInvariant();
-
-    private static string GetDataTypeName(ForgeTypeId dataType) {
-        if (dataType == null || string.IsNullOrEmpty(dataType.TypeId))
-            return "Text";
-
-        var typeId = dataType.TypeId;
-        var lastDash = typeId.LastIndexOf('-');
-        return lastDash >= 0 ? typeId.Substring(lastDash + 1) : typeId;
-    }
-
-    private static IReadOnlyList<string> GetRequiredSharedParameterNames(TProfile profile) =>
-        profile is IDesiredMigrationParameterProfile migrationProfile
-            ? DesiredParameterCompiler.GetExplicitSharedParameterNames(migrationProfile, migrationProfile.MappingData)
-            : profile is IDesiredParameterProfile parameterProfile
-                ? DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile)
-                : [];
-
-    private static PreviewData CreateValidationErrorPreview(ProfileListItem profileItem, JsonValidationException ex) =>
-        new() {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = ex.ValidationErrors,
-            AppliedFixes = new List<string>()
-        };
-
-    private static PreviewData CreateGenericErrorPreview(ProfileListItem profileItem, Exception ex) =>
-        new() {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = BuildGenericErrorMessages(ex),
-            AppliedFixes = new List<string>()
-        };
-
-    private static List<string> BuildGenericErrorMessages(Exception ex) {
-        if (ex is InvalidOperationException invalidOp &&
-            invalidOp.Message.StartsWith("Duplicate parameter names in AddFamilyParams.Parameters:",
-                StringComparison.Ordinal)) {
-            return new List<string> {
-                invalidOp.Message,
-                "Fix: keep exactly one entry per parameter name under AddFamilyParams.Parameters.",
-                "Tip: if you define _FOUNDRY LAST PROCESSED AT in the profile, remove duplicate definitions."
-            };
-        }
-
-        if (ex is InvalidOperationException invalidOpConflict &&
-            invalidOpConflict.Message.Contains(
-                "cannot define both GlobalAssignments and PerTypeAssignmentsTable values",
-                StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidOpConflict.Message,
-                "Fix: remove one source so each parameter uses only one value source.",
-                "Use SetKnownParams.GlobalAssignments for uniform assignments, or SetKnownParams.PerTypeAssignmentsTable for per-type assignment."
-            };
-        }
-
-        if (ex is InvalidOperationException invalidOpBlankGlobal &&
-            invalidOpBlankGlobal.Message.Contains("GlobalAssignments contains a blank value",
-                StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidOpBlankGlobal.Message,
-                "Fix: every SetKnownParams.GlobalAssignments row must include a non-empty Value.",
-                "Use SetKnownParams.PerTypeAssignmentsTable when values vary by family type."
-            };
-        }
-
-        if (ex is InvalidOperationException invalidUnresolved &&
-            invalidUnresolved.Message.Contains("SetKnownParams references", StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidUnresolved.Message,
-                "Fix: assignment targets must be defined in AddFamilyParams.Parameters or included by FilterApsParams."
-            };
-        }
-
-        if (ex is InvalidOperationException invalidReferenced &&
-            invalidReferenced.Message.Contains("must be defined in AddFamilyParams.Parameters before it can be used",
-                StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidReferenced.Message,
-                "Fix: add the referenced local parameter to AddFamilyParams.Parameters, or include the shared parameter through FilterApsParams."
-            };
-        }
-
-        if (ex is ArgumentException arg &&
-            arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                $"{arg.GetType().Name}: {arg.Message}",
-                "Likely cause: duplicate keys in profile collections (commonly AddFamilyParams or SetKnownParams parameter names).",
-                "Fix: ensure parameter names are unique per profile."
-            };
-        }
-
-        return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
-    }
-}
-
-/// <summary>
-///     Represents an action in the Foundry palette.
-/// </summary>
-internal class FoundryAction<TProfile> where TProfile : BaseProfile, new() {
-    public required string Name { get; init; }
-    public required Action<FoundryContext<TProfile>> Handler { get; init; }
-    public Func<FoundryContext<TProfile>, bool>? CanExecute { get; init; }
 }

@@ -1,0 +1,50 @@
+{
+  "family": { "name": "PE GRD Exhaust", "category": "AirTerminals", "template": "Generic Model face based", "placement": "WorkPlaneBased" },
+  "parameters": {
+    "PE_M_Grd_OpenWidth":  { "dataType": "Length", "value": "24in" },
+    "PE_M_Grd_OpenLength": { "dataType": "Length", "value": "12in" },
+    "_flange thickness":   { "dataType": "Length", "value": "1in" },
+    "_vane spacing":       { "dataType": "Length", "value": "2in" },
+    "_calc vane half count": { "dataType": "Integer", "formula": "if(_vane spacing = 0mm, 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))" },
+    "Duct Width":  { "dataType": "Length", "value": "12in" },
+    "Duct Height": { "dataType": "Length", "value": "8in" }
+  },
+  "types": { "24x12": {}, "Slot": { "_vane spacing": "0in" } },
+  "datums": {
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" },
+    "Center (Front/Back)": { "normal": "Y" }
+  },
+  "forms": {
+    "flange": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",
+                "width": "param:PE_M_Grd_OpenWidth", "depth": "param:PE_M_Grd_OpenLength", "height": "param:_flange thickness" }
+  },
+  "refPlanes": {
+    "opening (Front)": { "normal": "PlusY", "at": "-12in", "isReference": "NotAReference" },
+    "opening (Back)":  { "normal": "PlusY", "at": "12in",  "isReference": "NotAReference" }
+  },
+  "dimensions": {
+    "opening-eq": { "between": ["opening (Front)", "Center (Front/Back)", "opening (Back)"], "equality": true },
+    "opening":    { "between": ["opening (Front)", "opening (Back)"], "label": "PE_M_Grd_OpenLength" }
+  },
+  "nested": {
+    "vane": {
+      "family": "vane", "type": "type one", "host": "Ref. Level",
+      "align": [
+        { "instance": "Center (Left/Right)", "to": "Center (Left/Right)" },
+        { "instance": "Center (Front/Back)", "to": "Center (Front/Back)" }
+      ],
+      "associate": { "_vane length": "param:PE_M_Grd_OpenLength", "_vane thickness": "param:_flange thickness" }
+    }
+  },
+  "arrays": {
+    "vanes-back":  { "member": "vane", "direction": "PlusY",  "label": "param:_calc vane half count", "moveTo": "Last", "spacingPlane": "opening (Back)" },
+    "vanes-front": { "member": "vane", "direction": "MinusY", "label": "param:_calc vane half count", "moveTo": "Last", "spacingPlane": "opening (Front)" }
+  },
+  "connectors": {
+    "exhaust": {
+      "domain": "Duct", "systemType": "ExhaustAir", "on": "flange.top", "at": ["Center (Left/Right)", "Center (Front/Back)"],
+      "shape": "Rectangular", "width": "param:Duct Width", "height": "param:Duct Height", "flowDirection": "In"
+    }
+  }
+}

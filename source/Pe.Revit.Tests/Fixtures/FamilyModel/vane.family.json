@@ -1,0 +1,17 @@
+{
+  "family": { "name": "vane", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
+  "parameters": {
+    "_vane length": { "dataType": "Length", "value": "12in", "isInstance": true },
+    "_vane thickness": { "dataType": "Length", "value": "1in", "isInstance": true }
+  },
+  "types": { "type one": {} },
+  "datums": {
+    "Ref. Level": { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" },
+    "Center (Front/Back)": { "normal": "Y" }
+  },
+  "forms": {
+    "blade": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",
+      "width": "param:_vane length", "depth": "param:_vane thickness", "height": "1in" }
+  }
+}

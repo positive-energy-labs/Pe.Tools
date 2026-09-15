@@ -9,14 +9,20 @@ internal static class LookupFormulaInspector {
             return keyCounts;
 
         var parameterSnapshotList = parameterSnapshots.ToList();
-        var uniformParameterValues = parameterSnapshotList
+        var uniformParameterValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in parameterSnapshotList
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Name))
             .Select(snapshot => new {
                 ParameterName = snapshot.Name.Trim(),
                 Value = snapshot.Formula == null ? snapshot.TryGetUniformValueOrFormula() : null
             })
-            .Where(item => !string.IsNullOrWhiteSpace(item.Value))
-            .ToDictionary(item => item.ParameterName, item => item.Value!, StringComparer.OrdinalIgnoreCase);
+            .Where(item => !string.IsNullOrWhiteSpace(item.Value))) {
+            if (ambiguousNames.Contains(item.ParameterName)) continue;
+            if (uniformParameterValues.TryAdd(item.ParameterName, item.Value!)) continue;
+            uniformParameterValues.Remove(item.ParameterName);
+            ambiguousNames.Add(item.ParameterName);
+        }
 
         foreach (var parameterSnapshot in parameterSnapshotList) {
             if (!TryParseSizeLookup(parameterSnapshot.Formula, uniformParameterValues, out var lookupReference))

@@ -1,0 +1,224 @@
+{
+  "files": [
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json",
+      "sha256": "1752fe0071db70f2cbf798ea179e38b5138fc7e6b62c6087e81a27d49a05f02a"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json",
+      "sha256": "36b0e5a5efa27d0df949635adc6693fe80515928a22dc325079926e8c4970f17"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Build Equinox CERV2.json",
+      "sha256": "252dc89fafa301ee7703e67a04efc212198baad634132b3b0b907acc2ac26af4"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Constrained Box.json",
+      "sha256": "0c41004327b312665af7c9dece884e60e1bcfbdee67e57fb40f10c5d6cf9fdde"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json",
+      "sha256": "46a690063ea7db65ccedb02961a2e77bcd5df67c1f47966c48476f599d8b0020"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/First Co_MB.json",
+      "sha256": "87f4506ea384ef68c98d91814d797ef2a9890cf7e4ee088a2d4a208f98618e92"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json",
+      "sha256": "3982df82a076875d15a7b7b49ac6ae96d97953b02d9a577e40321b5e5f7d4c81"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Modine HHD Series.json",
+      "sha256": "a1cce6f948acab15944de9a8fb0239d33941dc3d89a2b6ee7712310c888101d4"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/WaterFurnace-500A11-Packaged.json",
+      "sha256": "c54d35c20f0e818015f5d7739f2d8f2e3c17f9ccf1ae62738c4aea60fd6d7c82"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/WaterFurnace-500R11-AirHandler.json",
+      "sha256": "3b61f731eaf4947112fd663a6d1598230178265a6415612d6e71ba24d8ce1b8c"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/WaterFurnace-500R11-SplitHeatPump.json",
+      "sha256": "c605ec2f9cf6dbfc8741afe8b9f0afd12d0640c03824a3c5cd7b593cd4079485"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json",
+      "sha256": "3478b891461b9ab9a0ea86e151b179fcbab0a91466c69ea1bb485d4597bae88a"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json",
+      "sha256": "1d69495ed3049d13ba2f5e7486e27cf0019703b32e671b7ed3df9347584746f9"
+    },
+    {
+      "path": "CmdFFManager/profiles/SavedEquip/Zehnder ComfoAir 550 R Luxe ERV.json",
+      "sha256": "cbe990f61dc5a4a93a1b9b7a4987eb2bc1215dbd0e085ceefc3618ceb8a0c5e1"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/ElecEquip/Equip.json",
+      "sha256": "435c837737ad61f14cd98f989b9b50912c1d62cafda44e5b2bf93f843961065d"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/ElecEquip/Fixtures.json",
+      "sha256": "d1dc04f4521e574b83bc3981a776e7e26178c3e0dea61936911ca20ee5a0f72e"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/ElecEquip/Panels.json",
+      "sha256": "8126c866f16e925437b146ed0043d929f106d926123242587564f25e96f8c12f"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/ALL PARAMS.json",
+      "sha256": "0eaf1ed0b5e8dbccacdcd86b6ff8d0ff2b2b9d5274d1af843244df367835640a"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/AWHP.json",
+      "sha256": "dba3b465c90ca182ec05f29571cfbb6cb8fb3a21667448d7518287642e964a75"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/B.json",
+      "sha256": "0f10a5558345c68765c2c56fa2d8c16088e505c8a5da10cc51cdef1f33ccff63"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/BASE.json",
+      "sha256": "024c3ca18281ab53b011ba56d28c22e6f5d641e99133cd8bce0e2f656649ef96"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/BT.json",
+      "sha256": "8507ff3496e7bea7df94bf68d8369d64bb32058e2650a98d1a1a95200287e6c5"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/DH.json",
+      "sha256": "e621b524c03f4e15353534c7982bfea312230c46b58b7504f8d8214c64e5a166"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/DS.json",
+      "sha256": "7c65f74d254e733026d9337bcdad696ff9cbcb4a1dbcec23e9134739bc9a4649"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/FR.json",
+      "sha256": "da594a1ce968f21d324590ae7bb46069ae64dbcf91b24c1780135108a2931b16"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/Fan.json",
+      "sha256": "ffe33bd5573a328e10206c5dc3b29c4b53a7e02a75fe098bf1443fa6f59159b4"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/GRD.json",
+      "sha256": "12ad61afdcfadae33e62b2f35d856264054f838d670d14f941c18c6cf0f89a65"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/HP.json",
+      "sha256": "52cd75f9fa674caa22bde48e4ee6ef1498758c6ba19d44cb2fa685a1d3ab6d74"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/HU.json",
+      "sha256": "fda0b0cf2d6a6da7cddf6c54d7deceb1f16ad71ebc199cebca95c32ca8c01cc2"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/IU Hydronic.json",
+      "sha256": "2e15c0eb4cf5e6de72da260cbad996568afa936c2b222bc88c249adbe8d023ad"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/IU VRF.json",
+      "sha256": "2837914a87e85ab1388fda68cd16921854a5df942785357c79f9ea4a9c2e03c3"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/MUAS.json",
+      "sha256": "5dcb3d85f54d0f537b4c879f9d4eb2d4c8b2666ea646b294d1b83e9990995863"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/P.json",
+      "sha256": "ca69a9028d764a7472aa5c92d53c421c1389428a78b1c688bccb0b5e4ef02b21"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/RV.json",
+      "sha256": "216b32bf113c520faf84ac1e7786e4d439a7d82ef40620ad8a96d9d19c48c89d"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/SH.json",
+      "sha256": "f7b262cbc7361ed4e0037ff36e45e1c0d885b291afbcd189abd39c8bc89b10ec"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/WAHP.json",
+      "sha256": "ee83647814aae43a39d6d76f2798425380c45e886c325a51a82f7a9cf15eae37"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/MechEquip/WWHP.json",
+      "sha256": "69f292f926a99692f5937a58e7605d9d4b0a4d54642a2742ccd90195e49c8f1e"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/PlumbEquip/HPWH.json",
+      "sha256": "f0248779108acf676df3bfec5d233411d641a24b4b30f7660ba0c6972e0edaba"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/PlumbEquip/P.json",
+      "sha256": "1fee32e7aa568dcbcdbc520b7793e8ddc5393e4e10180e21ded4d6a7d8eae191"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/PlumbEquip/ST.json",
+      "sha256": "497417a62fb8f457a9159613f71953cb92c2c835cde072722adcffc88ad8034e"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/default.json",
+      "sha256": "6f4f1339b7dc83000c38172074127a967345d340ece755cadf89edd6f8c73764"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/one-off/m-all-params.json",
+      "sha256": "d6631df6b612ead5867b1caa0f0d63672ac64684a2724ba8553cc2dc9e858bbc"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/one-off/new-param-migration.json",
+      "sha256": "bf2ef5ef69d6c80f746c79d82797a4a2ec3479b6452b8458c76e11f276862cf3"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/one-off/p-all-params.json",
+      "sha256": "d64589be0c95efc504265e2401c779c95b1ae3a590870c6794850ec2922ce106"
+    },
+    {
+      "path": "CmdFFMigrator/profiles/one-off/p-migration.json",
+      "sha256": "0c5259d4b9048fa72afc259f934c9ee27341dadd468061b0a34d038b3a6f0b7d"
+    },
+    {
+      "path": "Global/fragments/_mapping-data/mech-equip-mapping-data.json",
+      "sha256": "35f26fa8faadacfca749512fe138be19d3e89387e24ffe1f8410b0398bbd54ea"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/elec-equip-base.json",
+      "sha256": "6a049e7ec902c25afae68f11d94f0fffbcce8360669faa28ec86d8e5b5bcbcee"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/elec-equip-other.json",
+      "sha256": "9fdbc2326df0b1a05703b421d54d58e51f10375a048abb81088304ba1c85ed59"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/elec-equip-panels.json",
+      "sha256": "1861a3c7090a8ca81721527bd326d2e655f0811873d4606351c6d29e7319d788"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/exclude-elec-panel-params.json",
+      "sha256": "d0ef90922fd5ef166bdee8de1354559c37c9d905751d74dee0c0d043264c510b"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/fluid-flow-general.json",
+      "sha256": "7d0f3d7a45ab99f1f956daebf07476785f49313ab4468246289d188326d08c5e"
+    },
+    {
+      "path": "Global/fragments/_shared-parameter-names/include-dim-params.json",
+      "sha256": "d6a936e6f37ce78070111ab5a8e8b80b83fb29c92380f19446a914a0ad1d526d"
+    }
+  ],
+  "unresolved": [
+    {
+      "source": "CmdFFMigrator/profiles/MechEquip/DH.json",
+      "directive": "$preset",
+      "reference": "@global/_filter-aps-params/Dehumidifier"
+    },
+    {
+      "source": "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json",
+      "directive": "$preset",
+      "reference": "@global/_filter-aps-params/Dehumidifier"
+    }
+  ]
+}

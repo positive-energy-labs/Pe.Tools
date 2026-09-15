@@ -1,23 +1,7 @@
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
-
-internal sealed record RoundtripArtifact(
-    FFManagerProfile Profile,
-    AuthoredParamDrivenSolidsSettings Authored,
-    ParamDrivenSolidsPlan Compiled,
-    FamilyProcessingContext Context,
-    string SavedFamilyPath,
-    Document? SourceDocument,
-    Document SavedDocument
-) {
-    public void CloseDocuments() {
-        RevitFamilyFixtureHarness.CloseDocument(this.SavedDocument);
-        RevitFamilyFixtureHarness.CloseDocument(this.SourceDocument);
-    }
-}
 
 internal sealed record FamilyModelRoundtripArtifact(
     FamilyModel Authored,
@@ -31,67 +15,6 @@ internal sealed record FamilyModelRoundtripArtifact(
         RevitFamilyFixtureHarness.CloseDocument(this.ReopenedA);
         RevitFamilyFixtureHarness.CloseDocument(this.ReopenedB);
     }
-}
-
-internal sealed record AuthoredGraphExpectation(
-    int PlaneCount,
-    int SpanCount,
-    int PrismCount,
-    int CylinderCount,
-    int ConnectorCount,
-    IReadOnlyList<string> PlaneNames,
-    IReadOnlyList<string> PrismNames,
-    IReadOnlyList<string> CylinderNames,
-    IReadOnlyList<string> ConnectorNames
-) {
-    public static AuthoredGraphExpectation From(AuthoredParamDrivenSolidsSettings authored) =>
-        new(
-            authored.Planes.Count,
-            authored.Spans.Count,
-            authored.Prisms.Count,
-            authored.Cylinders.Count,
-            authored.Connectors.Count,
-            authored.Planes.Keys.OrderBy(name => name, StringComparer.Ordinal).ToList(),
-            authored.Prisms.Select(spec => spec.Name).OrderBy(name => name, StringComparer.Ordinal).ToList(),
-            authored.Cylinders.Select(spec => spec.Name).OrderBy(name => name, StringComparer.Ordinal).ToList(),
-            authored.Connectors.Select(spec => spec.Name).OrderBy(name => name, StringComparer.Ordinal).ToList());
-}
-
-internal sealed record CompiledPlanExpectation(
-    int SymmetricPairCount,
-    int OffsetCount,
-    int RectangleExtrusionCount,
-    int CircleExtrusionCount,
-    int ConnectorCount,
-    IReadOnlyList<string> ExpectedPlaneNames,
-    IReadOnlyList<string> ExpectedDimensionDrivers,
-    IReadOnlyList<string> ExpectedConnectorNames
-) {
-    public static CompiledPlanExpectation From(ParamDrivenSolidsPlan compiled) =>
-        new(
-            compiled.RefPlanesAndDims.SymmetricPairs.Count,
-            compiled.RefPlanesAndDims.Offsets.Count,
-            compiled.Extrusions.Rectangles.Count,
-            compiled.Extrusions.Circles.Count,
-            compiled.Connectors.Connectors.Count,
-            compiled.RefPlanesAndDims.SymmetricPairs
-                .SelectMany(spec => new[] { spec.CenterPlaneName, spec.NegativePlaneName, spec.PositivePlaneName })
-                .Concat(compiled.RefPlanesAndDims.Offsets.Select(spec => spec.PlaneName))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(name => name, StringComparer.Ordinal)
-                .ToList(),
-            compiled.RefPlanesAndDims.SymmetricPairs
-                .Select(spec => spec.Parameter)
-                .Concat(compiled.RefPlanesAndDims.Offsets.Select(spec => spec.Parameter))
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!.Trim())
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(name => name, StringComparer.Ordinal)
-                .ToList(),
-            compiled.Connectors.Connectors
-                .Select(spec => spec.Name)
-                .OrderBy(name => name, StringComparer.Ordinal)
-                .ToList());
 }
 
 internal sealed record RuntimePlaneProbe(
@@ -177,33 +100,4 @@ internal sealed record RuntimeFamilySettingsProbe(
     bool RoomCalculationPointEnabled,
     double? RoomCalculationPointOffsetFeet,
     IReadOnlyList<string> LookupTableNames
-);
-
-internal sealed record ExtrusionVerticalSpan(
-    bool IsSolid,
-    double MinZ,
-    double MaxZ,
-    double Volume
-);
-
-internal sealed record RectangularConnectorOrientationMeasurement(
-    XYZ WidthAxis,
-    XYZ LengthAxis,
-    XYZ FaceNormal
-);
-
-internal sealed record ConnectorExpectation(
-    string Name,
-    string FacePlaneName,
-    ParamDrivenConnectorDomain Domain,
-    ParamDrivenConnectorProfile Profile,
-    string? CenterPlane1,
-    string? CenterPlane2,
-    string? WidthAxisPlaneName,
-    string? LengthAxisPlaneName,
-    string? SizeParameter1,
-    string? SizeParameter2,
-    string? DepthParameter,
-    FlowDirectionType? FlowDirection,
-    MEPSystemClassification? SystemClassification
 );

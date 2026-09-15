@@ -1,0 +1,412 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        },
+        "PE_M_Eff_LatentRecovery",
+        "PE_M_Eff_TRE",
+        "PE_M_Eff_SRE"
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G___",
+        "PE_M_Fan",
+        "PE_M___Serves",
+        "PE_M_PerfHeat_Capacity",
+        "PE_M_PerfCool_Capacity"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ]
+    }
+  },
+  "AddFamilyParams": {
+    "Parameters": [
+      {
+        "Name": "CollarDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "CollarDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "CollarCenterSpacingLR",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "BackRowOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "FrontRowOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceClearanceDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ElectricalClearanceHeight",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "FrontClearanceFromCenter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "TopClearanceFromBottom",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Kind": "Value",
+        "Value": "RV-#"
+      },
+      {
+        "Parameter": "PE_G___Manufacturer",
+        "Kind": "Value",
+        "Value": "Zehnder"
+      },
+      {
+        "Parameter": "PE_G___Description",
+        "Kind": "Value",
+        "Value": "Energy recovery ventilator"
+      },
+      {
+        "Parameter": "PE_G___URL",
+        "Kind": "Value",
+        "Value": "https://zehnderamerica.com/wp-content/uploads/2024/08/ComfoAir-550-Specifications.pdf"
+      },
+      {
+        "Parameter": "PE_G___Controller",
+        "Kind": "Value",
+        "Value": "ComfoSense 67"
+      },
+      {
+        "Parameter": "PE_E___EquipmentConnection",
+        "Kind": "Value",
+        "Value": "Hardwired"
+      },
+      {
+        "Parameter": "PE_E___Voltage",
+        "Kind": "Value",
+        "Value": "230 V"
+      },
+      {
+        "Parameter": "PE_E___Frequency",
+        "Kind": "Value",
+        "Value": "60 Hz"
+      },
+      {
+        "Parameter": "PE_E___Phase",
+        "Kind": "Value",
+        "Value": "1"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Kind": "Value",
+        "Value": "2"
+      },
+      {
+        "Parameter": "PE_M_Fan_Filter",
+        "Kind": "Value",
+        "Value": "Extract air: G4 (MERV 7/8); outside air: G4, optional F7 (MERV 13)"
+      },
+      {
+        "Parameter": "FrontClearanceFromCenter",
+        "Kind": "Formula",
+        "Value": "PE_G_Dim_Width1 / 2 + ServiceClearanceDepth"
+      },
+      {
+        "Parameter": "TopClearanceFromBottom",
+        "Kind": "Formula",
+        "Value": "PE_G_Dim_Height1 + ElectricalClearanceHeight"
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      {
+        "Parameter": "PE_G___Model",
+        "CA550-R": "ComfoAir 550 R Luxe ERV"
+      },
+      {
+        "Parameter": "PE_G___Weight",
+        "CA550-R": "103.6 lbs"
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "CA550-R": "28.5\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "CA550-R": "22.4\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "CA550-R": "31.5\""
+      },
+      {
+        "Parameter": "PE_G_Dim_ClearanceLength1",
+        "CA550-R": "28.5\""
+      },
+      {
+        "Parameter": "PE_G_Dim_ClearanceWidth1",
+        "CA550-R": "5' - 1 3/4\""
+      },
+      {
+        "Parameter": "PE_G_Dim_ClearanceHeight1",
+        "CA550-R": "3' - 3 3/8\""
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMin",
+        "CA550-R": "29 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowMax",
+        "CA550-R": "324 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_AirFlowDesign",
+        "CA550-R": "177 CFM"
+      },
+      {
+        "Parameter": "PE_M_Fan_ExternalStaticPressure",
+        "CA550-R": "0.40\""
+      },
+      {
+        "Parameter": "PE_M_Eff_SRE",
+        "CA550-R": "95"
+      },
+      {
+        "Parameter": "PE_M_Eff_TRE"
+      },
+      {
+        "Parameter": "PE_M_Eff_LatentRecovery",
+        "CA550-R": "65"
+      },
+      {
+        "Parameter": "PE_E___FLA",
+        "CA550-R": "2.46 A"
+      },
+      {
+        "Parameter": "CollarDiameter",
+        "CA550-R": "7.09\""
+      },
+      {
+        "Parameter": "CollarDepth",
+        "CA550-R": "6\""
+      },
+      {
+        "Parameter": "CollarCenterSpacingLR",
+        "CA550-R": "19.3\""
+      },
+      {
+        "Parameter": "BackRowOffset",
+        "CA550-R": "6.3\""
+      },
+      {
+        "Parameter": "FrontRowOffset",
+        "CA550-R": "4.8\""
+      },
+      {
+        "Parameter": "ServiceClearanceDepth",
+        "CA550-R": "39.37\""
+      },
+      {
+        "Parameter": "ElectricalClearanceHeight",
+        "CA550-R": "7.9\""
+      },
+      {
+        "Parameter": "PE_G___NotesType",
+        "CA550-R": "Modeled as the ComfoAir 550 R Luxe ERV using the service side as the family front. Top collar layout follows the installer manual right-hand orientation: outside air at back-left, supply air at back-right, exhaust air at front-left, and return air at front-right. Duct center spacing and row offsets come from the published top-view dimensions. Front maintenance clearance uses the 1 m minimum from the installer manual, while top clearance uses the 7.9 in electrical connection zone shown on the spec drawing. PE_M_Fan_AirFlowDesign was set to a reasonable middle value of 177 CFM. PE_M_Eff_SRE uses the published up-to-95% heat recovery figure; PE_M_Eff_LatentRecovery uses the up-to-65% moisture transfer note for the ERV enthalpy exchanger; TRE and branch-circuit protection values were not published."
+      }
+    ]
+  },
+  "ParamDrivenSolids": {
+    "Frame": "NonHosted",
+    "Planes": {
+      "Back Row Center": {
+        "From": "@CenterFB",
+        "By": "param:BackRowOffset",
+        "Dir": "in"
+      },
+      "Front Row Center": {
+        "From": "@CenterFB",
+        "By": "param:FrontRowOffset",
+        "Dir": "out"
+      },
+      "Front Clearance": {
+        "From": "@CenterFB",
+        "By": "param:FrontClearanceFromCenter",
+        "Dir": "out"
+      },
+      "Top Clearance": {
+        "From": "@Bottom",
+        "By": "param:TopClearanceFromBottom",
+        "Dir": "out"
+      }
+    },
+    "Spans": [
+      {
+        "About": "@CenterLR",
+        "By": "param:CollarCenterSpacingLR",
+        "Negative": "Duct Left Center",
+        "Positive": "Duct Right Center"
+      }
+    ],
+    "Prisms": [
+      {
+        "Name": "Cabinet",
+        "IsSolid": true,
+        "On": "@Bottom",
+        "Width": {
+          "About": "@CenterFB",
+          "By": "param:PE_G_Dim_Width1",
+          "Negative": "Cabinet Back",
+          "Positive": "Cabinet Front"
+        },
+        "Length": {
+          "About": "@CenterLR",
+          "By": "param:PE_G_Dim_Length1",
+          "Negative": "Cabinet Left",
+          "Positive": "Cabinet Right"
+        },
+        "Height": {
+          "Name": "Cabinet Top",
+          "From": "@Bottom",
+          "By": "param:PE_G_Dim_Height1",
+          "Dir": "out"
+        }
+      }
+    ],
+    "Cylinders": [],
+    "Connectors": [
+      {
+        "Name": "OutsideAir",
+        "Domain": "Duct",
+        "Face": "plane:Cabinet Top",
+        "Depth": {
+          "By": "param:CollarDepth",
+          "Dir": "out"
+        },
+        "Round": {
+          "Center": [
+            "plane:Duct Left Center",
+            "plane:Back Row Center"
+          ],
+          "Diameter": {
+            "By": "param:CollarDiameter"
+          }
+        },
+        "Config": {
+          "SystemType": "OtherAir",
+          "FlowConfiguration": "Preset",
+          "FlowDirection": "In",
+          "LossMethod": "NotDefined"
+        }
+      },
+      {
+        "Name": "SupplyAir",
+        "Domain": "Duct",
+        "Face": "plane:Cabinet Top",
+        "Depth": {
+          "By": "param:CollarDepth",
+          "Dir": "out"
+        },
+        "Round": {
+          "Center": [
+            "plane:Duct Right Center",
+            "plane:Back Row Center"
+          ],
+          "Diameter": {
+            "By": "param:CollarDiameter"
+          }
+        },
+        "Config": {
+          "SystemType": "SupplyAir",
+          "FlowConfiguration": "Preset",
+          "FlowDirection": "Out",
+          "LossMethod": "NotDefined"
+        }
+      },
+      {
+        "Name": "ExhaustAir",
+        "Domain": "Duct",
+        "Face": "plane:Cabinet Top",
+        "Depth": {
+          "By": "param:CollarDepth",
+          "Dir": "out"
+        },
+        "Round": {
+          "Center": [
+            "plane:Duct Left Center",
+            "plane:Front Row Center"
+          ],
+          "Diameter": {
+            "By": "param:CollarDiameter"
+          }
+        },
+        "Config": {
+          "SystemType": "ExhaustAir",
+          "FlowConfiguration": "Preset",
+          "FlowDirection": "Out",
+          "LossMethod": "NotDefined"
+        }
+      },
+      {
+        "Name": "ReturnAir",
+        "Domain": "Duct",
+        "Face": "plane:Cabinet Top",
+        "Depth": {
+          "By": "param:CollarDepth",
+          "Dir": "out"
+        },
+        "Round": {
+          "Center": [
+            "plane:Duct Right Center",
+            "plane:Front Row Center"
+          ],
+          "Diameter": {
+            "By": "param:CollarDiameter"
+          }
+        },
+        "Config": {
+          "SystemType": "ReturnAir",
+          "FlowConfiguration": "Preset",
+          "FlowDirection": "In",
+          "LossMethod": "NotDefined"
+        }
+      }
+    ]
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+}

@@ -22,8 +22,12 @@ public static class FormulaDependencies {
     public static IEnumerable<FamilyParameter> GetDependents(
         this FamilyParameter param,
         FamilyParameterSet parameters
-    ) => parameters
-        .OfType<FamilyParameter>()
-        .Where(p => !p.IsBuiltInParameter())
-        .Where(p => param.IsReferencedIn(p.Formula));
+    ) {
+        var all = parameters.OfType<FamilyParameter>().ToList();
+        // Siblings are needed so a formula naming only "Half Width" does not report "Width" as a dependency.
+        var siblings = all.Select(p => p.Definition.Name).ToList();
+        return all
+            .Where(p => !p.IsBuiltInParameter())
+            .Where(p => param.IsReferencedIn(p.Formula, siblings));
+    }
 }

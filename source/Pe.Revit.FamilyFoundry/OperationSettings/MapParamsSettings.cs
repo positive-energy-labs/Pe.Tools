@@ -19,7 +19,14 @@ public class MapParamsSettings : IOperationSettings {
 
     public IReadOnlyDictionary<string, MappingData> GetMappingsByNewName() => this.MappingData
         .GroupBy(mapping => mapping.NewName, StringComparer.Ordinal)
-        .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        .ToDictionary(group => group.Key, group => {
+            var first = group.First();
+            if (group.Any(m => m.OnlyAddIfSourceExists != first.OnlyAddIfSourceExists || m.MappingStrategy != first.MappingStrategy))
+                throw new InvalidOperationException($"Mapping target '{group.Key}' has conflicting conditional/coercion policies.");
+            return new MappingData { NewName = group.Key, CurrNames = group.SelectMany(m => m.CurrNames).Distinct(StringComparer.Ordinal).ToList(),
+                OnlyAddIfSourceExists = first.OnlyAddIfSourceExists, MappingStrategy = first.MappingStrategy,
+                SourceValuesTreatedAsMissing = group.SelectMany(m => m.SourceValuesTreatedAsMissing).Distinct(StringComparer.Ordinal).ToList() };
+        }, StringComparer.Ordinal);
 
     public IEnumerable<(MappingData Mapping, LogEntry Log)> GetIncompleteMappings(OperationContext groupContext) {
         var mappingsByNewName = this.GetMappingsByNewName();
@@ -40,11 +47,13 @@ public class MapParamsSettings : IOperationSettings {
     /// <param name="currNames">Ordered list of candidate parameter names (priority order)</param>
     /// <param name="fm">FamilyManager instance for resolving parameters</param>
     /// <param name="processingContext">Optional context for snapshot data and value counts; may be null</param>
+    /// <param name="includeEmpty">Retain explicitly named empty parameters while preserving populated-first ranking</param>
     /// <returns>FamilyParameters ranked by data quality (most populated types first) and user priority</returns>
     public List<FamilyParameter> GetRankedCurrParams(
         List<string> currNames,
         FamilyManager fm,
-        FamilyProcessingContext? processingContext = null
+        FamilyProcessingContext? processingContext = null,
+        bool includeEmpty = false
     ) {
         // No context? Return params in user priority order
         if (processingContext == null) {
@@ -68,7 +77,7 @@ public class MapParamsSettings : IOperationSettings {
         var candidateSnapshots = currNames
             .Select(processingContext.FindParameterSnapshot)
             .OfType<ParameterSnapshot>()
-            .Where(x => x.GetTypesWithValue().Count > 0);
+            .Where(x => includeEmpty || x.GetTypesWithValue().Count > 0);
 
         var paramSnapshots = candidateSnapshots.ToList();
         if (paramSnapshots.Count == 0) return [];
@@ -125,4 +134,7 @@ public class MappingData {
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
+
+    [Description("Exact source string values treated as missing for this mapping.")]
+    public List<string> SourceValuesTreatedAsMissing { get; init; } = [];
 }

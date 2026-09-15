@@ -1,0 +1,108 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "VMB_Rev.A_v1.0",
+        "Magic Aire_HCA Series_Horizontal Air Handlers",
+        "Magic Aire_NBD Series_NDB Series_CWHW_Vertical Discharge.0018",
+        "LVZ-H",
+        "Jaga_Briza 22_Wall_BT",
+        "Sentinel Series_R23",
+        "14_LIVE.USA_EL_2025_1_AVS012v-R-MFCHV_280275259",
+        "First Co_MB",
+        "Jaga_Briza 22_Ceiling_BT"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        },
+        "PE_M_PerfCool_CapacityDesignSensible",
+        "PE_M_PerfCool_CapacityDesignLatent",
+        "PE_M_PerfCool_CapacityDesignTotal",
+        "PE_M_PerfCool_CapacityRated",
+        "PE_M_PerfHeat_CapacityDesignSensible",
+        "PE_M_PerfHeat_CapacityDesignLatent",
+        "PE_M_PerfHeat_CapacityDesignTotal",
+        "PE_M_PerfHeat_CapacityRated",
+        "PE_M_PerfHeat_FluidFlowLoadSide",
+        "PE_M_PerfHeat_FluidEWT",
+        "PE_M_PerfHeat_FluidLWT",
+        "PE_M_PerfCool_FluidFlowLoadSide",
+        "PE_M_PerfCool_FluidEWT",
+        "PE_M_PerfCool_FluidLwT"
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G___",
+        "PE_M_Fan",
+        "PE_M___Serves"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_G___RefrigerantType",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ],
+      "StartingWith": []
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___ApparentPower",
+        "Value": "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Value": "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "IU-#",
+        "Kind": "Value"
+      },
+      {
+        "Parameter": "PE_G___NotesType",
+        "Value": "Hydronic Fan Coil Unit",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "SourceParameterNames": {
+      "NumberOfPoles": "PE_E___NumberOfPoles",
+      "ApparentPower": "PE_E___ApparentPower",
+      "Voltage": "PE_E___Voltage",
+      "MinimumCircuitAmpacity": "PE_E___MCA"
+    }
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

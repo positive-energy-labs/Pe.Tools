@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Extensions.FamParameter.Formula;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -26,9 +27,18 @@ public class SetParamValues(SetKnownParamsSettings settings)
 
         var fm = doc.FamilyManager;
         var assignmentsByName = this.Settings.GetGlobalAssignmentsByParameter();
-        var incomplete = groupContext.GetAllInComplete();
+        var incomplete = groupContext.GetAllInComplete().ToList();
 
-        foreach (var (parameterName, log) in incomplete) {
+        while (incomplete.Count > 0) {
+            // Revit does not update an earlier dependent when a later size_lookup formula is assigned.
+            var next = incomplete.FindIndex(entry => !assignmentsByName.TryGetValue(entry.Key, out var value)
+                || !this.Settings.OverrideExistingValues && fm.FindParameter(entry.Key) is { } existing && doc.HasValue(existing)
+                || value.Kind != ParamAssignmentKind.Formula
+                || !fm.Parameters.GetReferencedIn(value.Value).Any(reference =>
+                    incomplete.Any(other => other.Key == reference.Definition.Name && assignmentsByName.ContainsKey(other.Key))));
+            if (next < 0) throw new InvalidOperationException($"Cyclic formula assignments: {string.Join(", ", incomplete.Select(p => p.Key))}");
+            var (parameterName, log) = incomplete[next];
+            incomplete.RemoveAt(next);
             if (!assignmentsByName.TryGetValue(parameterName, out var assignment))
                 continue;
 

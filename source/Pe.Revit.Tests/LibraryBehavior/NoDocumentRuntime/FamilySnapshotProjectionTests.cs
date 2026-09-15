@@ -1,166 +1,107 @@
-using Pe.Revit.FamilyFoundry.Profiles;
+using NUnit.Framework;
+using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
 
+/// <summary>Deterministic lane: the parameter matrix → <c>parameters</c> + <c>types</c> projection, no Document.</summary>
 [TestFixture]
 public sealed class FamilySnapshotProjectionTests {
-    [Test]
-    public void ProjectProfiles_empty_allowed_preserves_definition_only_family_and_identity_shared_parameters() {
-        var snapshot = new FamilySnapshot {
-            FamilyName = "SeedFamily",
-            Parameters = new CapturedCollection<ParameterSnapshot> {
-                Data = [
-                    new ParameterSnapshot {
-                        Name = "Width",
-                        IsInstance = false,
-                        PropertiesGroup = GroupTypeId.Geometry,
-                        DataType = SpecTypeId.Length,
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
-                    },
-                    new ParameterSnapshot {
-                        Name = "SharedWidth",
-                        IsInstance = false,
-                        SharedGuid = Guid.NewGuid(),
-                        PropertiesGroup = GroupTypeId.Geometry,
-                        DataType = SpecTypeId.Length,
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
-                    }
-                ]
-            }
-        };
+    private static FamilyParameterSnapshot Row(
+        string name, bool isInstance, string? dataTypeId, string? sharedGuid = null, string? formula = null,
+        params (string Type, string? Value)[] cells
+    ) => new(
+        new ParameterDefinitionDescriptor(
+            new ParameterIdentity(sharedGuid != null ? $"shared-guid:{sharedGuid}" : $"name:{name}",
+                sharedGuid != null ? ParameterIdentityKind.SharedGuid : ParameterIdentityKind.NameFallback, name, null, sharedGuid, null),
+            isInstance, dataTypeId, null, "autodesk.parameter.group:geometry-1.0.0", "Localized dimensions label"),
+        sharedGuid != null ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
+        LoadedFamilyParameterPresence.Family,
+        "Double",
+        formula == null ? FormulaState.None : FormulaState.Present,
+        formula,
+        cells.ToDictionary(c => c.Type, c => c.Value, StringComparer.Ordinal));
 
-        var projection = FamilySnapshotProfileProjector.ProjectProfiles(snapshot, "__CURRENT_FAMILY__");
+    [Test]
+    public void Family_parameter_carries_token_dataType_and_group_and_emits_cells_as_read() {
+        var result = FamilyModelParameterProjection.Project(
+            [Row("Width", false, "autodesk.spec.aec:length-2.0.1", cells: [("A", "1' - 0\""), ("B", "2' - 0\"")])],
+            ["A", "B"]);
 
         Assert.Multiple(() => {
-            Assert.That(projection.EmptyAllowedProfile.FamilyParameters.Select(parameter => parameter.Name),
-                Does.Contain("Width"));
-            Assert.That(projection.EmptyAllowedProfile.SharedParameters.Select(parameter => parameter.Name),
-                Does.Contain("SharedWidth"));
-            Assert.That(projection.EmptyAllowedProfile.FamilyParameters.Select(parameter => parameter.Name),
-                Does.Not.Contain("SharedWidth"));
-            Assert.That(projection.DenseProfile.FamilyParameters.Select(parameter => parameter.Name),
-                Does.Not.Contain("Width"));
-            Assert.That(projection.DenseProfile.SharedParameters.Select(parameter => parameter.Name), Does.Not.Contain("SharedWidth"));
-            Assert.That(projection.EmptyAllowedProfile.FilterFamilies.IncludeNames.Equaling,
-                Does.Contain("__CURRENT_FAMILY__"));
+            var p = result.Parameters["Width"];
+            Assert.That(p.Shared, Is.Null);
+            Assert.That(p.DataType, Is.EqualTo(DataType.Length));
+            Assert.That(p.PropertiesGroup, Is.EqualTo("autodesk.parameter.group:geometry-1.0.0"));
+            Assert.That(p.IsInstance, Is.False);
+            Assert.That(p.Value, Is.Null, "no hoisting at capture; the reconciler canonicalizes");
+            Assert.That(result.Types["A"]["Width"].Kind, Is.EqualTo(PortableValueKind.Length));
+            Assert.That(result.Types["A"]["Width"].Number, Is.EqualTo(1.0).Within(1e-9));
+            Assert.That(result.Types["B"]["Width"].Number, Is.EqualTo(2.0).Within(1e-9));
+            Assert.That(result.Unmodeled, Is.Empty);
         });
     }
 
     [Test]
-    public void ProjectProfiles_treats_prefix_named_parameters_without_shared_identity_as_local_family_parameters() {
-        var snapshot = new FamilySnapshot {
-            FamilyName = "SeedFamily",
-            Parameters = new CapturedCollection<ParameterSnapshot> {
-                Data = [
-                    new ParameterSnapshot {
-                        Name = "PE_LocalOnly",
-                        IsInstance = true,
-                        PropertiesGroup = GroupTypeId.IdentityData,
-                        DataType = SpecTypeId.String.Text,
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                            ["Default"] = "local"
-                        }
-                    }
-                ]
-            }
-        };
-
-        var projection = FamilySnapshotProfileProjector.ProjectProfiles(snapshot, "__CURRENT_FAMILY__");
+    public void Shared_parameter_owns_its_dataType_so_the_slot_stays_empty() {
+        var result = FamilyModelParameterProjection.Project(
+            [Row("PE_P_LoadCalc_DFU", false, "autodesk.spec:spec.number-2.0.0", "11111111-2222-3333-4444-555555555555", cells: [("A", "2")])],
+            ["A"]);
 
         Assert.Multiple(() => {
-            Assert.That(
-                projection.DenseProfile.FamilyParameters.Select(parameter => parameter.Name),
-                Does.Contain("PE_LocalOnly"));
-            Assert.That(projection.DenseProfile.SharedParameters.Select(parameter => parameter.Name),
-                Does.Not.Contain("PE_LocalOnly"));
-            Assert.That(projection.EmptyAllowedProfile.SharedParameters.Select(parameter => parameter.Name),
-                Does.Not.Contain("PE_LocalOnly"));
+            Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].Shared, Is.True);
+            Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].DataType, Is.Null);
+            Assert.That(result.Parameters["PE_P_LoadCalc_DFU"].PropertiesGroup, Is.EqualTo("autodesk.parameter.group:geometry-1.0.0"));
+            Assert.That(result.Types["A"]["PE_P_LoadCalc_DFU"].Kind, Is.EqualTo(PortableValueKind.Integer));
         });
     }
 
     [Test]
-    public void ProjectProfiles_treats_shared_identity_without_prefix_as_shared_parameter() {
-        var snapshot = new FamilySnapshot {
-            FamilyName = "SeedFamily",
-            Parameters = new CapturedCollection<ParameterSnapshot> {
-                Data = [
-                    new ParameterSnapshot {
-                        Definition = new ParameterDefinitionDescriptor(
-                            new ParameterIdentity(
-                                "shared-guid:11111111-2222-3333-4444-555555555555",
-                                ParameterIdentityKind.SharedGuid,
-                                "SharedWithoutPrefix",
-                                null,
-                                "11111111-2222-3333-4444-555555555555",
-                                null),
-                            false,
-                            SpecTypeId.Length.TypeId,
-                            null,
-                            GroupTypeId.Geometry.TypeId,
-                            null),
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
-                    }
-                ]
-            }
-        };
-
-        var projection = FamilySnapshotProfileProjector.ProjectProfiles(snapshot, "__CURRENT_FAMILY__");
+    public void Formula_parameter_emits_no_cells() {
+        var result = FamilyModelParameterProjection.Project(
+            [Row("CalcWidth", false, "autodesk.spec.aec:length-2.0.1", formula: "Width / 2", cells: [("A", "0' - 6\"")])],
+            ["A"]);
 
         Assert.Multiple(() => {
-            Assert.That(
-                projection.EmptyAllowedProfile.SharedParameters.Select(parameter => parameter.Name),
-                Does.Contain("SharedWithoutPrefix"));
-            Assert.That(
-                projection.EmptyAllowedProfile.FamilyParameters.Select(parameter => parameter.Name),
-                Does.Not.Contain("SharedWithoutPrefix"));
+            Assert.That(result.Parameters["CalcWidth"].Formula, Is.EqualTo("Width / 2"));
+            Assert.That(result.Types["A"], Is.Empty);
         });
     }
 
     [Test]
-    public void ProjectProfiles_keeps_value_assignments_in_both_variants() {
-        var snapshot = new FamilySnapshot {
-            FamilyName = "SeedFamily",
-            Parameters = new CapturedCollection<ParameterSnapshot> {
-                Data = [
-                    new ParameterSnapshot {
-                        Name = "Width",
-                        IsInstance = false,
-                        PropertiesGroup = GroupTypeId.Geometry,
-                        DataType = SpecTypeId.Length,
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                            ["Default"] = "2' - 0\""
-                        }
-                    },
-                    new ParameterSnapshot {
-                        Name = "CalcWidth",
-                        IsInstance = false,
-                        PropertiesGroup = GroupTypeId.Geometry,
-                        DataType = SpecTypeId.Length,
-                        Formula = "Width / 2",
-                        ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                            ["Default"] = "1' - 0\""
-                        }
-                    }
-                ]
-            }
-        };
-
-        var projection = FamilySnapshotProfileProjector.ProjectProfiles(snapshot, "__CURRENT_FAMILY__");
+    public void Angle_display_string_becomes_the_portable_degree_literal_and_yesno_stays() {
+        var result = FamilyModelParameterProjection.Project([
+                Row("_conn angle", false, "autodesk.spec.aec:angle-2.0.0", cells: [("A", "90.00°")]),
+                Row("_drain visible", false, "autodesk.spec:spec.bool-1.0.0", cells: [("A", "Yes")])
+            ],
+            ["A"]);
 
         Assert.Multiple(() => {
-            Assert.That(
-                projection.DenseProfile.FamilyParameters.Single(parameter => parameter.Name == "Width").Value,
-                Is.EqualTo("2' - 0\""));
-            Assert.That(
-                projection.EmptyAllowedProfile.FamilyParameters.Single(parameter => parameter.Name == "Width").Value,
-                Is.EqualTo("2' - 0\""));
-            Assert.That(
-                projection.EmptyAllowedProfile.FamilyParameters.Single(parameter => parameter.Name == "CalcWidth").Formula,
-                Is.EqualTo("Width / 2"));
-            Assert.That(
-                projection.DenseProfile.FamilyParameters.Single(parameter => parameter.Name == "CalcWidth").Formula,
-                Is.EqualTo("Width / 2"));
+            Assert.That(result.Types["A"]["_conn angle"].Text, Is.EqualTo("90deg"));
+            Assert.That(result.Types["A"]["_conn angle"].Kind, Is.EqualTo(PortableValueKind.Angle));
+            Assert.That(result.Types["A"]["_drain visible"].Kind, Is.EqualTo(PortableValueKind.YesNo));
+        });
+    }
+
+    [Test]
+    public void Built_in_and_internal_helper_parameters_are_skipped_and_unknown_spec_is_unmodeled() {
+        var builtIn = Row("Family Name", false, "autodesk.spec:spec.string-2.0.0") with {
+            Definition = new ParameterDefinitionDescriptor(
+                new ParameterIdentity("bip:-1002001", ParameterIdentityKind.BuiltInParameter, "Family Name", -1002001, null, null), false, null, null, null, null)
+        };
+        var result = FamilyModelParameterProjection.Project([
+                builtIn,
+                Row("FF_Internal_Probe", true, "autodesk.spec.aec:length-2.0.1"),
+                Row("Weird", true, "autodesk.spec.aec:not-a-spec-1.0.0")
+            ],
+            ["A"]);
+
+        Assert.Multiple(() => {
+            Assert.That(result.Parameters.Keys, Is.EquivalentTo(new[] { "Weird" }));
+            Assert.That(result.Parameters["Weird"].DataType, Is.Null);
+            Assert.That(result.Unmodeled.Single().Reason, Is.EqualTo(UnmodeledReason.KindNotInVocabulary));
+            Assert.That(result.Unmodeled.Single().Path, Is.EqualTo("$.parameters.Weird.dataType"));
         });
     }
 }
