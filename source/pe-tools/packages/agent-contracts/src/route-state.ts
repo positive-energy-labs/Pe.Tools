@@ -12,7 +12,7 @@
  * (unmasked) and receives document snapshots through its route-specific event stream.
  */
 import { z } from "zod";
-import { emptyScope, scopeKey, scopeSchema, type Scope } from "./scope.ts";
+import { addressSchema, type Address } from "./target.ts";
 
 /** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
@@ -26,7 +26,7 @@ export interface RouteStateCommandSpec {
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
-  /** Route name, e.g. `family-types` — the URL segment transport adapters key on. */
+  /** Route name, e.g. `parameter-links` — the URL segment transport adapters key on. */
   route: string;
   /** Human-facing discovery metadata; adapters should not duplicate this. */
   title: string;
@@ -41,18 +41,26 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   commands: Record<string, RouteStateCommandSpec>;
 }
 
-/** A route document lives under a chat Scope (session + document) or a named standalone workspace. */
-export type RouteScope =
-  | { scope: Scope; workspaceId?: never }
-  | { workspaceId: string; scope?: never };
-export const routeScopeKey = (scope: RouteScope): string =>
-  scope.workspaceId !== undefined ? `workspace:${scope.workspaceId}` : scopeKey(scope.scope);
-export const routeScopeSchema = z.union([
-  z.object({ scope: scopeSchema }),
-  z.object({ workspaceId: z.string().trim().min(1).max(200) }),
-]);
-/** The Scope a route command runs under; workspace routes carry the empty Scope. */
-export const scopeOfRoute = (scope: RouteScope): Scope => scope.scope ?? emptyScope;
+/**
+ * The identity a Work document lives under: its route, the Address it is bound to, and an
+ * optional named standalone workspace (`?work=<id>`) for Work that is not document-scoped.
+ *
+ * Work outlives a Revit process (section 2, law 6), so it keys by Address, never by an
+ * `open` request's openId. A caller holding a `DocumentRequest` resolves it to an Address
+ * through the inventory before it names Work.
+ */
+export const workKeySchema = z.object({
+  route: z.string().min(1).max(100),
+  target: addressSchema.nullable(),
+  work: z.string().trim().min(1).max(200).optional(),
+});
+export type WorkKey = z.infer<typeof workKeySchema>;
+
+/** The one key function: the persisted key a Work document lives under. */
+export const workKey = (key: WorkKey): string =>
+  key.work !== undefined
+    ? `${key.route}/workspace:${key.work}`
+    : `${key.route}/target:${key.target === null ? "" : key.target.replaceAll("/", "\\").toLowerCase()}`;
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =
@@ -81,7 +89,7 @@ export type RouteStateWriteResult =
 /* ── Bindings (substrate-owned doc segment) ────────────────────────────────── */
 
 /** A route document's named external bindings (a profile, a settings file). The Revit session is
- * never a binding: it is the Scope the document is keyed under. */
+ * never a binding: it is part of the Target the document is keyed under. */
 export const bindSchema = z.object({ id: z.string(), label: z.string() });
 export type Bind = z.infer<typeof bindSchema>;
 export const routeBindingsSchema = z.object({}).catchall(bindSchema).default({});
@@ -98,8 +106,10 @@ export function parseRouteDoc<TSchema extends z.ZodType>(
 
 /** What a command handler receives: read the current document, write the next one. */
 export interface RouteStateCommandContext<TDoc = unknown> {
-  /** The Scope this route document is keyed under. */
-  scope: Scope;
+  /** The Address this route document is keyed under. */
+  target: Address | null;
+  /** The named standalone workspace when this Work is not document-scoped. */
+  work?: string;
   /** The current document (schema-parsed; a fresh empty document when absent). */
   getDoc(): TDoc;
   /** Replace the document (schema-validated before it lands). */
