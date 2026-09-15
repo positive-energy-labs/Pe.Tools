@@ -4,7 +4,8 @@ import { useRoute } from "#/route/use-route";
 import { settingsManifest } from "#/settings/manifest";
 import { Link } from "@tanstack/react-router";
 
-import { cellSummary, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
+import { cellSummary, settingsRouteState } from "@pe/agent-contracts";
+import { recordedRouteDoc } from "#/workbench/route-chat-plugins/tool-names";
 
 import {
   InlineRoutePlugin,
@@ -67,7 +68,7 @@ function SettingsReview({
   state: ComponentProps<typeof CellTrichotomyReviewer>["state"];
   onCommit: () => Promise<unknown>;
 }) {
-  const document = parseRouteDoc(sessionState, settingsRouteState);
+  const document = recordedRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
     document?.basis?.documentId.moduleKey === "FamilyFoundry" &&
     document.basis?.documentId.rootKey === "models";

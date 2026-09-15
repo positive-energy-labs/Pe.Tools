@@ -60,19 +60,10 @@ export interface Ctx<W, R extends string, P> {
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   readonly page: P;
   readonly call: HostCaller;
+  /** The patch lane on the Work document. Throws the refusal; the runner reports it. */
   readonly write: (patch: RouteStatePatch[]) => Promise<Refusal | null>;
-  /**
-   * One of the Work spec's own commands. `write` is the patch lane and this is the command lane;
-   * both belong to the primitive so the demo lane can neutralize them. The runner reports any
-   * refusal.
-   */
+  /** The command lane on the Work document, one of the Work spec's own commands. */
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
-  /**
-   * An external mutation — one that earns a receipt outside the Work document. It runs for real
-   * everywhere except the demo lane, where the seed IS the outcome and `null` comes back instead
-   * of a receipt. Without this lane a seeded `save` reached the live host and failed there.
-   */
-  readonly external: <A>(run: () => Promise<A>) => Promise<A | null>;
   readonly setPage: (next: Partial<P>) => void;
 }
 

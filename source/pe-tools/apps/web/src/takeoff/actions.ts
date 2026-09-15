@@ -215,15 +215,14 @@ const adoption = (ctx: Ctx) => {
   }
   return [...grouped].map(([view, items]) => ({ view, items }));
 };
-const dispatch = (
+const dispatch = async (
   ctx: Ctx,
   key: "takeoffs.initialize" | "takeoffs.adopt" | "takeoffs.partition",
   input: Record<string, unknown>,
-) =>
-  ctx.external(async () => {
-    if (ctx.target.kind !== "document") throw Error("An open document is required");
-    actionResult(await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref));
-  });
+) => {
+  if (ctx.target.kind !== "document") throw Error("An open document is required");
+  actionResult(await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref));
+};
 
 export interface SyncPlan {
   readonly linkedUpdates: number;
@@ -444,14 +443,12 @@ export const takeoffActions = {
     ready: syncRefusal,
     run: async (ctx: Ctx) => {
       const review = ctx.page.syncReview!;
-      await ctx.external(async () =>
-        actionResult(
-          await runSemanticAction(
-            "takeoffs.sync",
-            semanticActionInput("takeoffs.sync", { path: review.path, zones: review.zones }),
-            review.target,
-            { captureId: review.captureId, fileVersion: review.fileVersion, work: review.work },
-          ),
+      actionResult(
+        await runSemanticAction(
+          "takeoffs.sync",
+          semanticActionInput("takeoffs.sync", { path: review.path, zones: review.zones }),
+          review.target,
+          { captureId: review.captureId, fileVersion: review.fileVersion, work: review.work },
         ),
       );
       ctx.setPage({ panel: null, syncReview: null });

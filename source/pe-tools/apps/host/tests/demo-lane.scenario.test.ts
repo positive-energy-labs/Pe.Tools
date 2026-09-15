@@ -1,9 +1,11 @@
 /**
  * THE PROOF LANE. Every route manifest that declares `seeds`, every `[action, seed]` pair, in a
- * real browser against the real host: `?demo=<action>` mounts the seed in an isolated owner, the
- * head names the route, the action fires from its chord or its button, and the outcome line says
- * what happened. Seeds are plain data, so this file enumerates them from the manifests themselves
- * — a new seed is a new test with no edit here.
+ * real browser against the real host: `?demo=<action>` mounts the seed in an isolated owner and
+ * the head draws the seed's words. A seed is a READ-ONLY proof input — `useRoute` refuses every
+ * action under `?demo=` ("frozen seed is read-only") — so this lane proves render and parity, not
+ * execution: the Situation renders, every verb is disabled with that one sentence, nothing throws
+ * and nothing is POSTed. Seeds are plain data, so this file enumerates them from the manifests
+ * themselves — a new seed is a new test with no edit here.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -25,8 +27,8 @@ import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
 type AnyManifest = {
   key: string;
   name: string;
-  actions: Record<string, { label: string; chord?: string }>;
-  seeds?: Record<string, { title: string; failure?: { action: string; message: string } }>;
+  actions: Record<string, { label: string }>;
+  seeds?: Record<string, { title: string }>;
 };
 
 /**
@@ -69,19 +71,6 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
   },
 ];
 
-/** `mod+shift+a` (the manifest's word) becomes `Control+Shift+A` (Playwright's). */
-const playwrightChord = (chord: string): string =>
-  chord
-    .split("+")
-    .map((part) =>
-      part === "mod"
-        ? "Control"
-        : part.length === 1
-          ? part.toUpperCase()
-          : part[0]!.toUpperCase() + part.slice(1),
-    )
-    .join("+");
-
 async function waitForService(appBase: string) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -93,6 +82,9 @@ async function waitForService(appBase: string) {
 }
 
 let baseUrl = "";
+// The host's own origin: `/admin/shutdown` is not one of the paths `devHostProxy` forwards, so
+// posting it at `baseUrl` (the browser's vite server) 404s and `hostDone` never settles.
+let hostUrl = "";
 // biome-ignore lint/suspicious/noExplicitAny: playwright-core is imported by URL, untyped here.
 let browser: { close(): Promise<void>; newPage(): Promise<any> } | undefined;
 let hostDone: Promise<unknown> | undefined;
@@ -111,7 +103,6 @@ beforeAll(async () => {
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: false },
-            includeInstallConverge: false,
             lifecycle: { handle, latch },
             // The demo lane never asks the model anything; the runtime only has to boot.
             mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
@@ -133,6 +124,7 @@ beforeAll(async () => {
   hostDone = Effect.runPromise(program);
   const service = await waitForService(productRoot());
   serviceToken = service.token;
+  hostUrl = `http://127.0.0.1:${service.port}`;
   browserVite = await createViteServer({
     root: webRoot,
     configFile: join(webRoot, "vite.config.ts"),
@@ -163,32 +155,38 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close();
-  await fetch(`${baseUrl}/admin/shutdown`, {
+  await fetch(`${hostUrl}/admin/shutdown`, {
     method: "POST",
     headers: { "x-pe-service-token": serviceToken },
   }).catch(() => undefined);
   await hostDone;
   await browserVite?.close();
   await vite.close();
-});
+}, 200_000);
 
 for (const { path, manifest } of ROUTES)
   for (const [action, seed] of Object.entries(manifest.seeds ?? {})) {
     if (!seed) continue;
-    const declared = manifest.actions[action]!;
     test(`${manifest.key} ?demo=${action}`, async () => {
       const page = await browser!.newPage();
-      // What the demo lane must not do: throw, or log an error. Route BODIES outside the
-      // primitive still issue live host queries (`/call`, `/actions`) that 4xx/5xx without
-      // Revit, and the browser logs one resource line per such response; those are recorded in
-      // the report as an owed cut, not asserted here, because they are not the primitive's.
+      // What the demo lane must not do: throw, log an error, or write anything. Route BODIES
+      // outside the primitive still issue live host queries that 4xx/5xx without Revit, and the
+      // browser logs one resource line per such response; those are not the primitive's.
       const errors: string[] = [];
+      const posts: string[] = [];
       page.on("pageerror", (error: { message: string }) =>
         errors.push(`page error: ${error.message}`),
       );
       page.on("console", (message: { type(): string; text(): string }) => {
         if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
           errors.push(message.text());
+      });
+      // The two write lanes: a semantic action's receipt (`/actions`) and a route-state write
+      // (`/route-state/...`). Route BODIES outside the primitive still POST `/call` to read the
+      // live host under a seed; that is an owed cut, not a write, so it is not asserted here.
+      page.on("request", (request: { method(): string; url(): string }) => {
+        const url = request.url();
+        if (request.method() === "POST" && /\/(actions|route-state)/.test(url)) posts.push(url);
       });
       try {
         await page.goto(`${baseUrl}${path}?demo=${encodeURIComponent(action)}`, {
@@ -201,38 +199,26 @@ for (const { path, manifest } of ROUTES)
             timeout: 30_000,
           })
           .toBeGreaterThan(0);
-        // The verbs stand in the head itself — the Door that used to hide them is gone, and so is
-        // the single "Action outcome" status line: an outcome now paints as the verb's own
-        // popover, portalled to the body, which is why the receipt is read from the body text.
-        const outcome = page.locator("body");
-        const button = page.getByRole("button", { name: new RegExp(`^${declared.label}`) }).first();
-        await button.waitFor({ timeout: 15_000 });
-
-        // 4. Parity FIRST, while nothing has run: a refused action is `aria-disabled` with its
-        // refusal sentence on the button, and its chord says exactly the same sentence.
-        const refused = (await button.getAttribute("aria-disabled")) === "true";
-        const sentence = (await button.getAttribute("title")) ?? "";
-        if (refused) expect(sentence, `${manifest.key}.${action} refusal sentence`).not.toBe("");
-        if (refused && declared.chord) {
-          await page.keyboard.press(playwrightChord(declared.chord));
-          await expect.poll(() => outcome.innerText(), { timeout: 15_000 }).toContain(sentence);
+        // 2. Where the route draws the shared Situation's verb row (the rest still wear the
+        // shell head), its meter says the seeded Work revision: a seed IS the Work, so r0.
+        const body = page.locator("body");
+        if ((await page.getByRole("button", { name: /verbs$/ }).count()) > 0)
+          await expect.poll(() => body.innerText(), { timeout: 15_000 }).toContain("r0");
+        // 3. Every verb the head draws is disabled by the one sentence the primitive refuses a
+        // seed with. Nothing here can run, so nothing here is clicked.
+        for (const [name, spec] of Object.entries(manifest.actions)) {
+          const verb = page.getByRole("button", { name: new RegExp(`^${spec.label}`) }).first();
+          if ((await verb.count()) === 0) continue;
+          expect(
+            await verb.getAttribute("aria-disabled"),
+            `${manifest.key}.${name} is operable under a frozen seed`,
+          ).toBe("true");
+          expect(await verb.getAttribute("title"), `${manifest.key}.${name} refusal sentence`).toBe(
+            "frozen seed is read-only",
+          );
         }
-        // A seed that leaves its own action refused is a defect in the seed, not in the proof:
-        // the seed IS the moment the action is for.
-        expect(
-          refused,
-          `${manifest.key}.${action} seed leaves its own action refused: ${sentence}`,
-        ).toBe(false);
-
-        // 2. Fire it the way the manifest declares it: the chord when there is one, the button
-        // otherwise.
-        if (declared.chord) await page.keyboard.press(playwrightChord(declared.chord));
-        else await button.click();
-
-        // 3. The outcome line is the receipt: the seed's injected failure, or the action ran.
-        const expected = seed.failure ? seed.failure.message : `${declared.label} · ran`;
-        await expect.poll(() => outcome.innerText(), { timeout: 30_000 }).toContain(expected);
         expect(errors, `${manifest.key}.${action} threw or logged`).toEqual([]);
+        expect(posts, `${manifest.key}.${action} wrote under a frozen seed`).toEqual([]);
       } finally {
         await page.close();
       }

@@ -188,9 +188,7 @@ export const manifest = defineRoute({
       count: (ctx: Ctx) => ctx.work.doc?.scope?.familyNames.length ?? null,
       ready: (ctx: Ctx) => (ctx.work.doc?.profilePath ? null : "Choose a profile"),
       run: async (ctx: Ctx) => {
-        await ctx.external(async () => {
-          await readFamilyCapture("families.plan", {}, workOf(ctx).key, targetOf(ctx));
-        });
+        await readFamilyCapture("families.plan", {}, workOf(ctx).key, targetOf(ctx));
       },
     },
     apply: {
@@ -211,19 +209,17 @@ export const manifest = defineRoute({
         const { latest, plan } = planOf(ctx);
         const doc = ctx.work.doc;
         if (!latest || !plan || !doc) throw Error("A current reviewed Families plan is required");
-        await ctx.external(async () => {
-          actionResult(
-            await runSemanticAction(
-              "families.apply",
-              semanticActionInput("families.apply", {
-                planId: latest.id,
-                expectedPlanHashes: familiesIncluded(plan, doc.excludedIds),
-              }),
-              targetOf(ctx),
-              { work: workOf(ctx) },
-            ),
-          );
-        });
+        actionResult(
+          await runSemanticAction(
+            "families.apply",
+            semanticActionInput("families.apply", {
+              planId: latest.id,
+              expectedPlanHashes: familiesIncluded(plan, doc.excludedIds),
+            }),
+            targetOf(ctx),
+            { work: workOf(ctx) },
+          ),
+        );
       },
     },
   } as never,

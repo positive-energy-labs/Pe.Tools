@@ -40,9 +40,7 @@ const targetOf = (ctx: Ctx) => {
 };
 
 const read = async (ctx: Ctx, evaluate: boolean) => {
-  await ctx.external(() =>
-    readFamilyCapture("parameter-links.read", { evaluate }, ctx.work.key, targetOf(ctx)),
-  );
+  await readFamilyCapture("parameter-links.read", { evaluate }, ctx.work.key, targetOf(ctx));
 };
 
 export const manifest = defineRoute<
@@ -94,17 +92,15 @@ export const manifest = defineRoute<
         const revision = ctx.work.revision;
         if (revision === null) throw Error("Parameter Links Work unavailable");
         const { readingId } = input;
-        await ctx.external(async () => {
-          actionResult(
-            await runSemanticAction(
-              "parameter-links.apply",
-              { readingId },
-              targetOf(ctx),
-              { work: { key: ctx.work.key, revision } },
-              "human",
-            ),
-          );
-        });
+        actionResult(
+          await runSemanticAction(
+            "parameter-links.apply",
+            { readingId },
+            targetOf(ctx),
+            { work: { key: ctx.work.key, revision } },
+            "human",
+          ),
+        );
       },
     },
   } as never,

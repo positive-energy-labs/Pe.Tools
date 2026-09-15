@@ -215,7 +215,7 @@ test("document-owned Work stays unbound until an Address or named workspace exis
 test("a frozen seed owns an isolated registry, refuses actions, and never reaches live resources", async () => {
   const previousUrl = location.href;
   history.replaceState({}, "", "/?demo=show");
-  let externalRan = false;
+  let actionRan = false;
   const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
   const dirty = vi.spyOn(peReadings, "dirty").mockImplementation(() => {});
   const manifest = defineRoute({
@@ -242,10 +242,8 @@ test("a frozen seed owns an isolated registry, refuses actions, and never reache
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         ready: () => null,
-        run: async (ctx) => {
-          await ctx.external(async () => {
-            externalRan = true;
-          });
+        run: async () => {
+          actionRan = true;
         },
       },
     },
@@ -274,7 +272,7 @@ test("a frozen seed owns an isolated registry, refuses actions, and never reache
       result.current.work.reload();
       expect(await result.current.actions.show.run()).toMatchObject({ code: "not-ready" });
     });
-    expect(externalRan).toBe(false);
+    expect(actionRan).toBe(false);
     expect(subscribe).not.toHaveBeenCalled();
     expect(dirty).not.toHaveBeenCalled();
     expect(

@@ -906,7 +906,6 @@ export function useRoute<W, R extends string, P, A extends string>(
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
-      external: <T>(run: () => Promise<T>) => run(),
       setPage,
     };
     return Object.fromEntries(

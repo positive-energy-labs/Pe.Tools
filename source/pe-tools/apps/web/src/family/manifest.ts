@@ -226,9 +226,7 @@ const read = async (
   key: "family.capture" | "family.plan",
   input: Record<string, unknown>,
 ) => {
-  await ctx.external(async () => {
-    await readFamilyCapture(key, input, captureScopeOf(ctx), targetOf(ctx));
-  });
+  await readFamilyCapture(key, input, captureScopeOf(ctx), targetOf(ctx));
 };
 
 const run = async (
@@ -236,9 +234,7 @@ const run = async (
   key: "family.build" | "family.apply",
   input: Record<string, unknown>,
 ) => {
-  await ctx.external(async () => {
-    actionResult(await runSemanticAction(key, semanticActionInput(key, input), targetOf(ctx)));
-  });
+  actionResult(await runSemanticAction(key, semanticActionInput(key, input), targetOf(ctx)));
 };
 
 const emptyWork: FamilyRouteDocument = {};

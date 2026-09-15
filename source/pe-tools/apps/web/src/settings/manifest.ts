@@ -160,8 +160,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
           const doc = ctx.work?.doc;
           const revision = ctx.work.revision;
           if (!doc || revision === null) throw new Error("Settings Work unavailable");
-          const row = await ctx.external(() => saveSettingsAction(deps.scope, doc, revision));
-          if (!row) return;
+          const row = await saveSettingsAction(deps.scope, doc, revision);
           const result = actionResult(row) as { kind?: string } | undefined;
           if (result?.kind === "conflict")
             throw new Error(

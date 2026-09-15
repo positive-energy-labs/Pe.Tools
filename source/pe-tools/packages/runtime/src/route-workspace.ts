@@ -127,7 +127,13 @@ export class RouteWorkspace {
         patchCount: patches.length,
         ok: true,
       });
-      return { ok: true, revision: landed.envelope.revision };
+      // The write's own evidence: the doc the patches landed on, so a caller that only sees the
+      // outcome (a chat card reading a `pe_do` result) shows what is staged without a second read.
+      return {
+        ok: true,
+        revision: landed.envelope.revision,
+        doc: structuredClone(landed.envelope.doc),
+      };
     });
   }
 

@@ -60,12 +60,10 @@ export const chatManifest = (
             return "Pea is working";
           return input ? CHAT_ACTIONS.send.ready(context, input as PromptInput) : null;
         },
-        run: async (ctx, input) => {
+        run: async (_ctx, input) => {
           const prompt = input as PromptInput;
-          await ctx.external(async () => {
-            if (deps.send) await deps.send(prompt);
-            else await CHAT_ACTIONS.send.run(context, prompt);
-          });
+          if (deps.send) await deps.send(prompt);
+          else await CHAT_ACTIONS.send.run(context, prompt);
         },
       },
       cancel: {
@@ -76,8 +74,8 @@ export const chatManifest = (
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["receipts"],
         ready: () => CHAT_ACTIONS.cancel.ready(context),
-        run: async (ctx) => {
-          await ctx.external(() => CHAT_ACTIONS.cancel.run(context));
+        run: async () => {
+          await CHAT_ACTIONS.cancel.run(context);
         },
       },
     },

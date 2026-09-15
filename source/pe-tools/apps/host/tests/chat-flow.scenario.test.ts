@@ -255,7 +255,9 @@ test("the browser walks one durable chat lifecycle", async () => {
         if ((await rows.allTextContents()).some((row: string) => row.includes(finalText))) {
           // Settled means the run ended, not just that the text painted; the next send needs that.
           await expect
-            .poll(() => page.getByRole("button", { name: "Stop" }).count(), { timeout: 15_000 })
+            .poll(() => page.getByRole("button", { name: "cancel", exact: true }).count(), {
+              timeout: 15_000,
+            })
             .toBe(0);
           return;
         }
@@ -272,17 +274,20 @@ test("the browser walks one durable chat lifecycle", async () => {
 
     await composer.fill("APPROVAL_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
-    const approvalRow = page.getByRole("region", { name: "Assistant message" }).last();
-    const approve = approvalRow.getByRole("button", { name: "Approve" });
+    // Allow/refuse lives in the composer head's proposals band, not in the stream row
+    // (`web/src/chat/composer-head.tsx`, `web/src/workbench/aui.tsx`): one location for the gate,
+    // the stream stays a record.
+    const proposals = page.locator('[aria-label="Pea proposals"]');
+    const approve = proposals.getByRole("button", { name: "Approve" });
     await approve.waitFor({ timeout: 15_000 });
-    expect(await approvalRow.innerText()).toContain("Scenario Approval");
+    expect(await proposals.innerText()).toContain("Scenario Approval");
     await approve.click();
     await waitForRowText(approvalFinalText);
     // Display is stream-only now: the settled gate is proven by the DOM, not the body.
     await expect
       .poll(
         async () => ({
-          stop: await page.getByRole("button", { name: "Stop" }).count(),
+          stop: await page.getByRole("button", { name: "cancel", exact: true }).count(),
           gates: await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count(),
         }),
         { timeout: 15_000 },
@@ -295,7 +300,9 @@ test("the browser walks one durable chat lifecycle", async () => {
     await composer.fill("QUESTION_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
     const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
-    await questionRow.getByRole("button", { name: "Approve" }).click();
+    // `ask_user` asks for permission in the band first; its question then answers in the stream,
+    // beside what it asks about.
+    await proposals.getByRole("button", { name: "Approve" }).click();
     await waitForRowText(questionText);
     expect(await questionRow.innerText()).toContain("Use the current session");
     await questionRow.getByRole("button", { name: questionAnswer }).click();
@@ -324,9 +331,16 @@ test("the browser walks one durable chat lifecycle", async () => {
         revision: 1,
       },
     });
+    // The head's revision lives in the Situation's ledger now (`route/situation.tsx` `Ledger`),
+    // reached through the route-state gauge; `scope-line.tsx` and its testid are gone.
+    const routeState = page
+      .getByTestId("composer-head")
+      .getByRole("button", { name: "Route state" });
+    await routeState.click();
     await expect
-      .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })
+      .poll(() => page.locator('dt:has-text("target") + dd').innerText(), { timeout: 15_000 })
       .toBe("r1");
+    await page.keyboard.press("Escape");
     // pe_find under that Target: the map, the connected sessions (none), and the silent sources.
     await driveTurn("FIND_TURN", findFinalText);
     const findBody = JSON.stringify((await readThread()).messages);
@@ -389,18 +403,20 @@ test("the browser walks one durable chat lifecycle", async () => {
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
     await waitForRowText(abortedText);
-    await page.getByRole("button", { name: "Stop" }).click();
+    await page.getByRole("button", { name: "cancel", exact: true }).click();
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(abortedText);
     await expect
-      .poll(() => page.getByRole("button", { name: "Stop" }).count(), { timeout: 15_000 })
+      .poll(() => page.getByRole("button", { name: "cancel", exact: true }).count(), {
+        timeout: 15_000,
+      })
       .toBe(0);
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await waitForRowText(abortedText);
     expect(await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count()).toBe(0);
-    expect(await page.getByRole("button", { name: "Stop" }).count()).toBe(0);
+    expect(await page.getByRole("button", { name: "cancel", exact: true }).count()).toBe(0);
     const beforeRestart = (await readThread()).messages;
     const beforeRestartKeys = await rows.evaluateAll((elements: AttributeElement[]) =>
       elements.map((element) => element.getAttribute("data-key")),

@@ -83,7 +83,7 @@ export function recordedTarget(sessionState: unknown): {
 }
 
 /** The route document the call recorded (route-state outcome: `{ ok, revision, doc }`). */
-function recordedRouteDoc<TSchema extends z.ZodType>(
+export function recordedRouteDoc<TSchema extends z.ZodType>(
   sessionState: unknown,
   spec: RouteStateSpec<TSchema>,
 ): z.infer<TSchema> | null {
@@ -374,7 +374,7 @@ function InstancesChatPlugin({
   running,
   revision,
 }: RouteChatPluginProps) {
-  const doc = parseRouteDoc(sessionState, instancesRouteState);
+  const doc = recordedRouteDoc(sessionState, instancesRouteState);
   const staged = doc?.staged;
   return (
     <InlineRoutePlugin
