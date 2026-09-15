@@ -889,6 +889,7 @@ function toProblem(error: unknown): {
   nativeOutcome?: string;
   issues?: BridgeError["evidence"]["issues"];
   notDispatched?: true;
+  resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
   if (
@@ -906,6 +907,15 @@ function toProblem(error: unknown): {
     case "NoRevitSession":
       return { kind: "Disconnected", message: error.message, status: 503 };
     case "BridgeError":
+      if (error.message.startsWith("Unsupported bridge operation '"))
+        return {
+          kind: "CatalogLookup",
+          message: `${error.message} Discover product operation keys with pe_find.`,
+          status: 404,
+          nativeOutcome: error.nativeOutcome,
+          issues: error.evidence.issues,
+          resolvedTarget: error.evidence.resolvedTarget,
+        };
       return {
         kind:
           error.statusCode === 423 &&
@@ -921,6 +931,7 @@ function toProblem(error: unknown): {
         nativeOutcome: error.nativeOutcome,
         issues: error.evidence.issues,
         notDispatched: error.evidence.notDispatched,
+        resolvedTarget: error.evidence.resolvedTarget,
       };
     case "LocalOpError":
       return { kind: "HostFailure", message: error.message, status: localOpHttpStatus(error) };

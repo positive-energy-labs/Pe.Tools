@@ -141,6 +141,7 @@ export type HostOperationCallResult =
       message: string;
       problem?: unknown;
       action?: ActionReceipt | DetachedAction;
+      resolvedTarget?: ResolvedTarget;
       bestRequestExample?: HostOperationRequestExample;
       nextSteps: readonly string[];
     };
@@ -295,6 +296,10 @@ const callHostRpcOperationEffect = Effect.fnUntraced(function* (
     status: error instanceof HostCallError ? error.status : undefined,
     message: error instanceof Error ? error.message : String(error),
     problem: error instanceof HostCallError ? error.problem : undefined,
+    resolvedTarget:
+      error instanceof HostCallError
+        ? parseResolvedTarget(error.problem?.resolvedTarget)
+        : undefined,
     bestRequestExample: operation?.requestExamples?.[0],
     nextSteps: createFailureNextSteps(operation, error),
   } satisfies HostOperationCallResult;
@@ -351,12 +356,13 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
       });
       if (!response.ok) {
         const problem = (await response.json().catch(() => undefined)) as
-          | { kind?: string; message?: string }
+          | { kind?: string; message?: string; [key: string]: unknown }
           | undefined;
         throw new HostCallError(
           `${key}: ${problem?.message ?? response.statusText}`,
           response.status,
           {
+            ...problem,
             kind: problem?.kind,
             operationKey: key,
             title: problem?.message ?? response.statusText,
@@ -380,6 +386,15 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
           }),
   });
 });
+
+function parseResolvedTarget(value: unknown): ResolvedTarget | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { session, document } = value as Record<string, unknown>;
+  return (typeof session === "string" || session === null) &&
+    (typeof document === "string" || document === null)
+    ? { session, document }
+    : undefined;
+}
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;

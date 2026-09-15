@@ -55,6 +55,7 @@ export class BridgeError {
       readonly nativeOutcome?: string;
       readonly notDispatched?: true;
       readonly result?: unknown;
+      readonly resolvedTarget?: { readonly session: string; readonly document: string | null };
     } = {},
   ) {}
   get nativeOutcome(): string | undefined {
@@ -658,12 +659,22 @@ export const RevitBridgeLive = Layer.effect(
           },
         });
         const res = yield* Deferred.await(reply);
-        if (!res.ok)
+        if (!res.ok) {
+          const state = yield* Ref.get(session.state);
+          const targetOpenId = res.openDocumentId ?? openDocumentId;
           return yield* Effect.fail(
             new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
               issues: res.issues,
+              resolvedTarget: {
+                session: session.sdkSessionId ?? session.sessionId,
+                document: targetOpenId
+                  ? (state.openDocuments.find((document) => document.openId === targetOpenId)
+                      ?.address ?? null)
+                  : null,
+              },
             }),
           );
+        }
         return {
           value: yield* decodePayloadJson(res.payloadJson),
           openDocumentId: res.openDocumentId,

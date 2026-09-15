@@ -520,6 +520,7 @@ function writeLogs(logs: HostOpResponse<"logs.tail">) {
 }
 
 function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
+  if (result.status !== "Succeeded") process.exitCode = 1;
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);

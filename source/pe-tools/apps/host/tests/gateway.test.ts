@@ -411,6 +411,78 @@ test("real bridge session reads omit document and queued exact document cannot d
   );
 }, 15000);
 
+test("/call refusal preserves the exact target and guides unknown operation discovery", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
+        const web = HttpRouter.toWebHandler(
+          makeCallRoute().pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+          { disableLogger: true },
+        );
+        const reply = (requestId: string, response: Record<string, unknown>) =>
+          Queue.offer(
+            incoming,
+            JSON.stringify({
+              kind: "Response",
+              response: {
+                requestId,
+                metrics: {
+                  requestBytes: 0,
+                  responseBytes: 0,
+                  revitExecutionMs: 0,
+                  roundTripMs: 0,
+                  serializationMs: 0,
+                },
+                ...response,
+              },
+            }),
+          );
+        try {
+          const pending = web.handler(
+            new Request("http://host/call", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-pe-bridge-session-id": target.session,
+                "x-pe-open-document-id": target.openId,
+              },
+              body: JSON.stringify({ key: "missing.operation" }),
+            }),
+            Context.empty() as never,
+          );
+          const catalog = yield* Queue.take(outgoing);
+          yield* reply(catalog.request!.requestId, {
+            ok: true,
+            statusCode: 200,
+            payloadJson: JSON.stringify({
+              operations: [{ key: "missing.operation", intent: "Read", needs: "document" }],
+            }),
+          });
+          const call = yield* Queue.take(outgoing);
+          expect(call.request?.openDocumentId).toBe(target.openId);
+          yield* reply(call.request!.requestId, {
+            ok: false,
+            statusCode: 500,
+            openDocumentId: target.openId,
+            errorMessage: "Unsupported bridge operation 'missing.operation'.",
+          });
+
+          const response = yield* Effect.promise(() => pending);
+          expect(response.status).toBe(404);
+          expect(yield* Effect.promise(() => response.json())).toMatchObject({
+            kind: "CatalogLookup",
+            message: expect.stringContaining("pe_find"),
+            resolvedTarget: { session: target.session, document: "C:/model.rvt" },
+          });
+        } finally {
+          yield* Effect.promise(() => web.dispose());
+        }
+      }),
+    ).pipe(Effect.provide(RevitBridgeLive)),
+  );
+});
+
 test("durable large action results replay; unserializable effect results remain unknown without redispatch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "journal-results-"));
   let calls = 0;

@@ -125,3 +125,32 @@ test("unknown dynamic operation keys fail at transport with catalog enrichment a
   if (result.ok) throw new Error("expected rejected operation");
   expect(result.operation).toBeUndefined();
 });
+
+test("a refused call preserves the host's resolved target", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        kind: "CatalogLookup",
+        message: "Unsupported bridge operation 'revit.context.summary'. Use pe_find.",
+        resolvedTarget: { session: "session-a", document: "C:/Models/A.rvt" },
+      }),
+      { status: 404, headers: { "content-type": "application/problem+json" } },
+    );
+  try {
+    const result = await new HostRpcCaller({
+      hostBaseUrl: "http://host.test",
+      catalogOverride: catalog,
+    }).callOperation("revit.context.summary");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected rejected operation");
+    expect(result.resolvedTarget).toEqual({
+      session: "session-a",
+      document: "C:/Models/A.rvt",
+    });
+    expect(result.problem).toMatchObject({ kind: "CatalogLookup" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -147,7 +147,7 @@ restated here.
 - `heldDocuments` is the active document only (`ponytail:` at `apps/host/src/bridge.ts`), so a Revit tab switch flips the Scope to `unheld` while the file is open two feet away (F11).
 - Admission reads the head before it records the turn; a PUT in that window lands under a Scope the turn never sees (F12), and `ScopeStore.#turns` is never cleared (F14).
 - The capability catalog cache invalidates on session connect only, never on an active-document change, so `pe_find` can be 30 s stale on the one field resolution turns on (F18).
-- Stamp fidelity: a `/call` refusal drops the resolved target (`host-rpc-caller.ts` reads it on the 200 path only), and pods resolve the target before the run while `/call` snapshots after it, so the two stamps can name different sessions (review F4, F7). One resolution per call, read from the call itself.
+- Stamp fidelity: pods resolve the target before the run while `/call` snapshots after it, so the two stamps can name different sessions (review F7). One resolution per call, read from the call itself.
 - `ScopeDocument.year` means the holder's Revit year for a held document and the file's saved year for a recent (F10); a picked document in neither list makes `fileYear` null and every session eligible (F9).
 - `Pe.Tools-lean` worktree and its dev host on port 5180 (`close/lean-scope`, merged) are still up; retire them.
 - `takeoff/store.ts` `reconcileWorld` still persists `bindings.world`, the pre-lean world-as-binding idea `ops/store.ts` dropped; `FleetFeed.sessions` in `targeting/world.ts` is unused; `pea host operations` searches the whole catalog and wants the name `pea find`.
