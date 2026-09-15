@@ -144,7 +144,10 @@ public class ParametersApi {
                 public ForgeTypeId GetParameterTypeId() =>
                     this._parameterTypeId ??= new ForgeTypeId(this._parent.Id ?? "");
 
-                public ForgeTypeId GetGroupTypeId() => this._groupTypeId ??= new ForgeTypeId(this._groupId ?? "");
+                // APS uses the generic group schema as its no-group marker; Revit expects an empty id for Other.
+                public ForgeTypeId GetGroupTypeId() => this._groupTypeId ??=
+                    new ForgeTypeId(this._groupId ?? "") == new ForgeTypeId("autodesk.parameter:group-1.0.0")
+                        ? new ForgeTypeId("") : new ForgeTypeId(this._groupId ?? "");
                 public ForgeTypeId GetSpecTypeId() => this._specTypeId ??= new ForgeTypeId(this._parent.SpecId ?? "");
 
                 public Guid GetGuid() {

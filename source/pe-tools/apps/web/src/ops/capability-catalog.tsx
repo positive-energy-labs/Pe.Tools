@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   capabilityCatalogSchema,
@@ -9,6 +8,7 @@ import {
   type CapabilityCatalog,
 } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
+import { useHostCall } from "#/readings";
 
 /** The same rows pe_find ranks, rendered for the human. `GET /pe/capabilities`, no Revit needed. */
 export function CapabilityCatalogSection({
@@ -20,24 +20,23 @@ export function CapabilityCatalogSection({
   document?: Address | null;
 }) {
   const [query, setQuery] = useState("");
-  const live = useQuery({
-    queryKey: ["pe", "capabilities", document ?? ""],
-    queryFn: async () => {
+  const live = useHostCall(
+    async () => {
       const search = document ? `?doc=${encodeURIComponent(document)}` : "";
       const response = await fetch(`/pe/capabilities${search}`);
       if (!response.ok) throw new Error(`GET /pe/capabilities ${response.status}`);
       return capabilityCatalogSchema.parse(await response.json());
     },
-    enabled: !fixture,
-    staleTime: 30_000,
-  });
+    ["pe", "capabilities", document ?? ""],
+    !fixture,
+  );
   const catalog = fixture ?? live.data;
   if (!catalog)
     return (
       <section className="flex flex-col gap-2" data-testid="capability-catalog">
         <h2>Capabilities</h2>
         <p className="text-ink-2">
-          {live.isError ? String(live.error) : "reading the capability catalog…"}
+          {live.error ? String(live.error) : "reading the capability catalog…"}
         </p>
       </section>
     );

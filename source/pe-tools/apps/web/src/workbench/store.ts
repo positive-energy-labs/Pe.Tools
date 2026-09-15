@@ -1,7 +1,8 @@
+import type { ChatPluginRoute } from "./route-chat-plugins";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-import { createRouteStoreCore } from "#/state/route-store";
+import { createRouteOwner } from "#/route";
 
 export interface WorkbenchAttachment {
   name?: string;
@@ -10,18 +11,16 @@ export interface WorkbenchAttachment {
   data?: string;
 }
 
+interface ChatDraft {
+  text: string;
+  attachments: WorkbenchAttachment[];
+}
+
 export interface ChatSearch {
   readonly thread?: string;
   readonly mode: string;
   readonly turn?: number;
-  readonly plugin?:
-    | "pods"
-    | "family"
-    | "families"
-    | "settings"
-    | "parameter-links"
-    | "schedule-grid"
-    | "instances";
+  readonly plugin?: ChatPluginRoute;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }
@@ -43,14 +42,18 @@ export function createChatPageStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   search: ChatSearch;
 }) {
-  const core = createRouteStoreCore("chat", deps.registry);
-  const paletteOpen = core.owned("page/palette-open", Atom.make(false));
-  const sideOpen = core.owned("page/side-open", Atom.make(true));
-  const pluginOpen = core.owned("page/plugin-open", Atom.make(Boolean(deps.search.plugin)));
+  const core = createRouteOwner("chat", deps.registry);
+  const paletteOpen = core.owned("widget/palette-open", Atom.make(false));
+  const expandedPane = core.owned(
+    "widget/expanded-pane",
+    Atom.make<"side" | "plugin" | null>(deps.search.plugin ? "plugin" : "side"),
+  );
+  const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
+  const pluginOpen = Atom.map(expandedPane, (pane) => pane === "plugin");
   const lensInspectKey = core.owned("page/lens-inspect-key", Atom.make<string | null>(null));
-  const lensFollowing = core.owned("page/lens-following", Atom.make(!deps.search.turn));
+  const lensFollowing = core.owned("widget/lens-following", Atom.make(!deps.search.turn));
   const world = core.owned<Atom.Writable<WorldState>>(
-    "page/world",
+    "widget/world",
     Atom.make<WorldState>({
       density: "inspect",
       diff: false,
@@ -59,12 +62,12 @@ export function createChatPageStore(deps: {
     }),
   );
   const worldCache = core.owned(
-    "page/world-cache",
+    "widget/world-cache",
     Atom.make<WorldCacheState>({ lastTurn: null, prevSig: new Map(), baseline: null }),
   );
   const draft = core.owned(
     "page/composer",
-    Atom.make<{ text: string; attachments: WorkbenchAttachment[] }>({
+    Atom.make<ChatDraft>({
       text: deps.search.prompt ?? "",
       attachments: [],
     }),
@@ -78,7 +81,7 @@ export function createChatPageStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const setDraft = (next: Setter<{ text: string; attachments: WorkbenchAttachment[] }>) => {
+  const setDraft = (next: Setter<ChatDraft>) => {
     set("set-draft", draft, next);
     if (promptTimer) clearTimeout(promptTimer);
     const value = deps.registry.get(draft);
@@ -89,11 +92,22 @@ export function createChatPageStore(deps: {
     }
     promptTimer = setTimeout(() => void deps.search.patch({ prompt }, true), 300);
   };
+  const setPaneOpen = (pane: "side" | "plugin", value: Setter<boolean>) =>
+    set(`set-${pane}`, expandedPane, (previous) => {
+      const open = typeof value === "function" ? value(previous === pane) : value;
+      return open ? pane : previous === pane ? null : previous;
+    });
   const setTurn = (turn?: number) => {
     if (turnTimer) clearTimeout(turnTimer);
     turnTimer = setTimeout(() => void deps.search.patch({ turn }, true), 1000);
   };
 
+  core.expose({
+    page: {
+      lensInspectKey,
+      draft,
+    },
+  });
   return {
     registry: deps.registry,
     search: deps.search,
@@ -106,24 +120,26 @@ export function createChatPageStore(deps: {
       world,
       worldCache,
       draft,
-      ...core.verbAtoms,
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
-      setSideOpen: (value: Setter<boolean>) => set("set-side", sideOpen, value),
-      setPluginOpen: (value: Setter<boolean>) => set("set-plugin", pluginOpen, value),
+      setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),
+      setPluginOpen: (value: Setter<boolean>) => setPaneOpen("plugin", value),
       setLensInspectKey: (value: Setter<string | null>) =>
         set("set-lens-inspect-key", lensInspectKey, value),
       setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
       setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
       setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
       setDraft,
+      clearDraftIfUnchanged: (sent: ChatDraft) => {
+        if (deps.registry.get(draft) === sent) setDraft({ text: "", attachments: [] });
+      },
       setMode: (mode: string) => void deps.search.patch({ mode }),
       setTurn,
       setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
       openThread: (thread: string, replace = false) => deps.search.patch({ thread }, replace),
     },
-    runVerb: core.runVerb,
+    runAction: core.runAction,
     dispose() {
       if (promptTimer) clearTimeout(promptTimer);
       if (turnTimer) clearTimeout(turnTimer);

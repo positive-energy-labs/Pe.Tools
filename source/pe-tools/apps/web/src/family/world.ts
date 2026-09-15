@@ -110,6 +110,8 @@ export interface ProtoLive {
   familyName: string;
   worldLabel: string;
   readAgo: string;
+  /** Captured types, including types with no reported literal values. */
+  typeNames?: string[];
   /** paramName → typeName → live value */
   values: Record<string, Record<string, ProtoLiveValue>>;
   /** params that exist in Revit but not in the profile */
@@ -145,7 +147,7 @@ export interface ProtoProposal {
   confidence?: "high" | "low";
 }
 
-export interface ProtoWorld {
+export interface FamilySpecModel {
   profile: ProtoProfile;
   live: ProtoLive | null;
   spec: ProtoSpec | null;
@@ -468,7 +470,7 @@ const GEOMETRY: GeomConstituent[] = [
   },
 ];
 
-export const WORLD: ProtoWorld = {
+export const FAMILY_SPEC: FamilySpecModel = {
   profile: {
     path: "mechanical/fan-coil-fc42.family.json",
     familyName: "PE Fan Coil FC42",

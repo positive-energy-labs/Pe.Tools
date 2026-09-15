@@ -84,50 +84,20 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
+/** Authored Work for one schedule subject. Readings are immutable references, not editable facts. */
 export const scheduleGridDocumentSchema = z.object({
-  /** Every schedule in the bound document — the picker both actors choose from. */
-  catalog: scheduleCatalogSchema.nullish(),
-  snapshot: scheduleGridSnapshotSchema.nullish(),
-  /** `${rowNumber}::${columnNumber}` -> cell trichotomy state. */
+  basis: z.object({ captureId: z.string().regex(/^[a-f0-9]{64}$/) }).nullish(),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
-  pushedAt: z.string().nullish(),
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
-
 export const scheduleGridRouteState = {
   route: "schedule-grid",
   title: "Schedule Grid",
-  description: "Review and apply proposed edits to bound Revit schedule cells.",
+  description:
+    "Review schedule cell edits. Read op:schedule-grid.snapshot for the subject Work address and binding basis; only humans apply.",
   schema: scheduleGridDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
-  commands: {
-    catalog: {
-      description:
-        "List every schedule in the bound document (id, name, category, row count) into the catalog, so either actor can choose which schedule to open with refresh.",
-      input: z.object({ target: z.string().optional() }),
-      actor: "any",
-      recoversExternal: true,
-    },
-    refresh: {
-      description:
-        "Read a schedule (by name/id, or the current active view when omitted) into the snapshot with cell binding handles. Re-reading the same schedule preserves proposals and review marks; resolving a different schedule clears them (cell keys are row/column positions and do not transfer).",
-      input: z.object({
-        scheduleName: z.string().optional(),
-        scheduleId: z.number().int().optional(),
-        maxRows: z.number().int().positive().optional(),
-        target: z.string().optional(),
-      }),
-      actor: "any",
-      recoversExternal: true,
-    },
-    push: {
-      description:
-        "HUMAN ONLY. Redeem every staged cell's binding handle through revit.apply.parameter-values in one transaction, fold successes into the snapshot, and clear those cells. Failed edits stay staged. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
-      input: z.object({ target: z.string().optional() }),
-      actor: "human",
-      mutatesExternal: true,
-    },
-  },
+  commands: {},
 } satisfies RouteStateSpec<typeof scheduleGridDocumentSchema>;
 
 export function scheduleCellKey(rowNumber: number, columnNumber: number): string {

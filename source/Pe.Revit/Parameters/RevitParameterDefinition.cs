@@ -108,7 +108,7 @@ public record RevitParameterDefinition {
                 IdentityFromFamilyParameter(parameter),
                 parameter.Definition.GetDataType(),
                 parameter.Definition.GetGroupTypeId(),
-                parameter.IsInstance)
+                parameter.IsInstance) with { Visible = (parameter.Definition as InternalDefinition)?.Visible, UserModifiable = parameter.UserModifiable }
         };
     }
 

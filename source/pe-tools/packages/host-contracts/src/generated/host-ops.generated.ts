@@ -4,6 +4,60 @@
 // Drift gate: pnpm --filter @pe/host-contracts codegen:check  (offline, deterministic)
 // Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>
 
+/** Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back. */
+export namespace DocumentTemporaryRelease {
+  export namespace Req {
+    /**
+     * Unchanged is the automatic cleanup policy. Discard requires an explicit decision.
+     */
+    export interface Request {
+      acquisitionId: string;
+      releaseId: string;
+      expectedOpenId?: null | string;
+      discard?: boolean;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      acquisitionId: string;
+      status: string;
+      document?: null | TemporaryDocumentRef;
+      recoveryId: string;
+      detail?: null | string;
+      recordedOpenId?: null | string;
+      recordedStatus?: null | string;
+    }
+    export interface TemporaryDocumentRef {
+      session: string;
+      openId: string;
+    }
+  }
+}
+
+/** Recover a temporary document by its original acquisitionId without opening it again. SDK op result uses the returned recoveryId. */
+export namespace DocumentTemporaryStatus {
+  export namespace Req {
+    export interface Request {
+      acquisitionId: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      acquisitionId: string;
+      status: string;
+      document?: null | TemporaryDocumentRef;
+      recoveryId: string;
+      detail?: null | string;
+      recordedOpenId?: null | string;
+      recordedStatus?: null | string;
+    }
+    export interface TemporaryDocumentRef {
+      session: string;
+      openId: string;
+    }
+  }
+}
+
 /** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
 export namespace FamilyEditorApply {
   export namespace Req {
@@ -114,37 +168,104 @@ export namespace FamilyEditorSnapshot {
   }
 }
 
-/** Recompile inline desired-state Family Foundry profile JSON, refuse plan drift, then migrate each explicit loaded family independently with receipts. */
-export namespace FamilyfoundryApply {
+/** Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back. */
+export namespace FamilyTemporaryAcquire {
   export namespace Req {
+    /**
+     * Caller retains this UUID before submission; reuse it to recover, never open twice.
+     */
     export interface Request {
-      profileJson: string;
-      familyIds: number[];
-      expectedPlanHash: string;
+      acquisitionId: string;
+      familyId: number;
     }
   }
   export namespace Res {
     export interface Response {
-      planHash?: null | string;
-      refused: boolean;
+      acquisitionId: string;
+      status: string;
+      document?: null | TemporaryDocumentRef;
+      recoveryId: string;
+      detail?: null | string;
+      recordedOpenId?: null | string;
+      recordedStatus?: null | string;
+    }
+    export interface TemporaryDocumentRef {
+      session: string;
+      openId: string;
+    }
+  }
+}
+
+/** Reconcile the current family document or explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family. */
+export namespace FamilyfoundryApply {
+  export namespace Req {
+    /**
+     * Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.
+     */
+    export interface Request {
+      patchJson: string;
+      expectedPlanHashes: {
+        [k: string]: string;
+      };
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
+      /**
+       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
+       */
+      captureDependencyGraph?: boolean;
+    }
+  }
+  export namespace Res {
+    export interface Response {
       receipts: FamilyFoundryApplyReceipt[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
+    /**
+     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
+     */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
       familyName?: null | string;
       success: boolean;
+      converged: boolean;
       error?: null | string;
-      operationsRun: string[];
-      parametersChanged: number;
-      diffSummary: FamilyFoundryParameterDiffSummary;
-      artifactDirectoryPath?: null | string;
+      planHash?: null | string;
+      residue: FamilyFoundryChangeData[];
+      errors: string[];
+      artifactDirectory?: null | string;
     }
-    export interface FamilyFoundryParameterDiffSummary {
-      added: number;
-      removed: number;
-      modified: number;
+    /**
+     * One change the reconciler would make: section + key is the address, kind is the verb.
+     */
+    export interface FamilyFoundryChangeData {
+      section: string;
+      key: string;
+      kind: string;
+      mappedFrom?: null | string;
     }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
     export interface FamilyFoundryDiagnostic {
       code: string;
       path: string;
@@ -154,115 +275,128 @@ export namespace FamilyfoundryApply {
   }
 }
 
-/** Strictly compile inline desired-state Family Foundry profile JSON into per-family reconciliation plans with provenance and a deterministic drift hash. */
+/** Diff an inline family patch (`{ select, patch, run }`) against the current family document or each loaded family it selects and return the plan per family with a deterministic hash. */
 export namespace FamilyfoundryPlan {
   export namespace Req {
+    /**
+     * Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.
+     */
     export interface Request {
-      profileJson: string;
+      patchJson: string;
       familyId?: number | null;
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
+      /**
+       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
+       */
+      captureDependencyGraph?: boolean;
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
-      reading: Reading;
-      planHash?: null | string;
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
-    }
-    export interface Reading {
-      at: string;
-      version?: null | string;
-      observedAt: string;
     }
     export interface FamilyFoundryFamilyPlanData {
       familyId: number;
       familyName: string;
-      plan: FamilyFoundryReconciliationPlanData;
+      planHash: string;
+      changes: FamilyFoundryChangeData[];
+      runEffects: string[];
+      refusals: FamilyFoundryDiagnostic[];
+      warnings: RevitDataIssue[];
     }
-    export interface FamilyFoundryReconciliationPlanData {
-      parameters: FamilyFoundryResolvedParameterData[];
-      requiredApsParameterNames: string[];
-      familyParameterNames: string[];
-      loweredActions: FamilyFoundryLoweredActionData[];
-    }
-    export interface FamilyFoundryResolvedParameterData {
-      definition: FamilyFoundryResolvedParameterDefinitionData;
-      isShared: boolean;
-      assignment?: null | FamilyFoundryAssignmentData;
-      valuesByType: {
-        [k: string]: null | string;
-      };
-      migration?: null | FamilyFoundryMigrationData;
-      provenance: FamilyFoundryParameterProvenanceData;
-    }
-    export interface FamilyFoundryResolvedParameterDefinitionData {
-      identity: ParameterIdentity;
-      name: string;
-      dataTypeId: string;
-      propertiesGroupId: string;
-      isInstance: boolean;
-      tooltip?: null | string;
-    }
-    export interface ParameterIdentity {
+    /**
+     * One change the reconciler would make: section + key is the address, kind is the verb.
+     */
+    export interface FamilyFoundryChangeData {
+      section: string;
       key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-    export interface FamilyFoundryAssignmentData {
       kind: string;
-      value: string;
+      mappedFrom?: null | string;
     }
-    export interface FamilyFoundryMigrationData {
-      sourceNames: string[];
-      onlyAddIfSourceExists: boolean;
-      mappingStrategy: string;
-    }
-    export interface FamilyFoundryParameterProvenanceData {
-      identity: string;
-      dataType: string;
-      propertiesGroup: string;
-      isInstance: string;
-      tooltip: string;
-    }
-    export interface FamilyFoundryLoweredActionData {
-      operation: string;
-      target: string;
-      sources: string[];
-      reason: string;
-    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
     export interface FamilyFoundryDiagnostic {
       code: string;
       path: string;
       message: string;
       suggestion?: null | string;
     }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
   }
 }
 
-/** Open selected loaded families read-only, capture full snapshots, and return dense runnable FFManagerProfile JSON inline. */
+/** Open selected loaded families read-only and capture each as family.json with coverage. */
 export namespace FamilyfoundryProject {
   export namespace Req {
+    /**
+     * Capture loaded families read-only as family.json.
+     */
     export interface Request {
       familyIds: number[];
     }
   }
   export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
     export interface Response {
-      projections: FamilyFoundryProfileProjectionData[];
+      families: FamilyFoundryFamilyModelData[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
-    export interface FamilyFoundryProfileProjectionData {
+    export interface FamilyFoundryFamilyModelData {
       familyId: number;
       familyName?: null | string;
       success: boolean;
-      profileJson?: null | string;
+      modelJson?: null | string;
+      coverage: {
+        [k: string]: string;
+      };
+      unmodeledCount: number;
+      issues: RevitDataIssue[];
       error?: null | string;
     }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
     export interface FamilyFoundryDiagnostic {
       code: string;
       path: string;
@@ -336,7 +470,7 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path. */
+/** Build a Revit family from portable family.json by reconciling a fresh template document, save it to an explicit .rfa path, and report the receipt residue. */
 export namespace RevitApplyFamilyModel {
   export namespace Req {
     export interface Request {
@@ -347,51 +481,18 @@ export namespace RevitApplyFamilyModel {
     }
   }
   export namespace Res {
-    export type FamilyModelValueSource =
-      | "AuthoredGlobal"
-      | "AuthoredTypeOverride"
-      | "Formula"
-      | "RevitDefault"
-      | "Unresolved";
-    export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
-
     export interface Response {
       reading: Reading;
       familyName: string;
       outputPath: string;
       templatePath: string;
-      evidence: FamilyModelEvidence;
+      converged: boolean;
+      residueCount: number;
     }
     export interface Reading {
       at: string;
       version?: null | string;
       observedAt: string;
-    }
-    export interface FamilyModelEvidence {
-      typeNames: string[];
-      parameters: FamilyModelParameterEvidence[];
-      diagnostics: FamilyModelEvidenceDiagnostic[];
-    }
-    export interface FamilyModelParameterEvidence {
-      name: string;
-      isShared: boolean;
-      propertiesGroup?: null | string;
-      valuesPerType: {
-        [k: string]: FamilyModelResolvedValue;
-      };
-    }
-    export interface FamilyModelResolvedValue {
-      value?: null | string;
-      source: FamilyModelValueSource;
-      provenance: FamilyModelEvidenceProvenance;
-      formula?: null | string;
-    }
-    export interface FamilyModelEvidenceDiagnostic {
-      code: string;
-      path: string;
-      message: string;
-      provenance: FamilyModelEvidenceProvenance;
-      confidence?: null | number;
     }
   }
 }
@@ -880,6 +981,9 @@ export namespace RevitCatalogConceptEvidence {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1063,6 +1167,9 @@ export namespace RevitCatalogElectricalCircuits {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1501,6 +1608,9 @@ export namespace RevitCatalogParameterBindings {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -1603,6 +1713,9 @@ export namespace RevitCatalogParameterEvidence {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -2182,6 +2295,9 @@ export namespace RevitCatalogSchedules {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -3024,6 +3140,9 @@ export namespace RevitDetailElements {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -3120,57 +3239,36 @@ export namespace RevitDetailElements {
   }
 }
 
-/** Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics. */
+/** Capture the active Revit family document as portable family.json, with per-section coverage and the unmodeled ledger. */
 export namespace RevitDetailFamilyModel {
   export namespace Req {
     export interface Request {}
   }
   export namespace Res {
-    export type FamilyModelValueSource =
-      | "AuthoredGlobal"
-      | "AuthoredTypeOverride"
-      | "Formula"
-      | "RevitDefault"
-      | "Unresolved";
-    export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
       reading: Reading;
       familyName: string;
       modelJson: string;
       unmodeledCount: number;
-      evidence: FamilyModelEvidence;
+      coverage: {
+        [k: string]: string;
+      };
+      issues: RevitDataIssue[];
     }
     export interface Reading {
       at: string;
       version?: null | string;
       observedAt: string;
     }
-    export interface FamilyModelEvidence {
-      typeNames: string[];
-      parameters: FamilyModelParameterEvidence[];
-      diagnostics: FamilyModelEvidenceDiagnostic[];
-    }
-    export interface FamilyModelParameterEvidence {
-      name: string;
-      isShared: boolean;
-      propertiesGroup?: null | string;
-      valuesPerType: {
-        [k: string]: FamilyModelResolvedValue;
-      };
-    }
-    export interface FamilyModelResolvedValue {
-      value?: null | string;
-      source: FamilyModelValueSource;
-      provenance: FamilyModelEvidenceProvenance;
-      formula?: null | string;
-    }
-    export interface FamilyModelEvidenceDiagnostic {
+    export interface RevitDataIssue {
       code: string;
-      path: string;
+      severity: RevitDataIssueSeverity;
       message: string;
-      provenance: FamilyModelEvidenceProvenance;
-      confidence?: null | number;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
     }
   }
 }
@@ -3418,6 +3516,9 @@ export namespace RevitDetailSchedules {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4000,6 +4101,9 @@ export namespace RevitMatrixLoadedFamilies {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4091,6 +4195,9 @@ export namespace RevitMatrixParameterCoverage {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4438,6 +4545,9 @@ export namespace RevitMatrixScheduleProfiles {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ScheduleCatalogCustomParameterValue {
       definition: ParameterDefinitionDescriptor;
@@ -4553,7 +4663,7 @@ export namespace ScriptingCancel {
   }
 }
 
-/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction. */
+/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
 export namespace ScriptingExecute {
   export namespace Req {
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
@@ -4565,6 +4675,20 @@ export namespace ScriptingExecute {
       sourceName?: null | string;
       permissionMode?: ScriptPermissionMode;
       timeoutSeconds?: number;
+      sourceBundle?: null | ScriptPodSourceBundle;
+    }
+    export interface ScriptPodSourceBundle {
+      manifestBase64: string;
+      project: ScriptPodProjectSeed;
+      sources: ScriptPodSourceFile[];
+    }
+    export interface ScriptPodProjectSeed {
+      present: boolean;
+      bytesBase64?: null | string;
+    }
+    export interface ScriptPodSourceFile {
+      path: string;
+      bytesBase64: string;
     }
   }
   export namespace Res {
@@ -4887,6 +5011,9 @@ export namespace SettingsParameterCatalog {
       dataTypeLabel?: null | string;
       groupTypeId?: null | string;
       groupTypeLabel?: null | string;
+      visible?: boolean | null;
+      userModifiable?: boolean | null;
+      description?: null | string;
     }
     export interface ParameterIdentity {
       key: string;
@@ -4964,48 +5091,6 @@ export namespace TakeoffsCandidates {
   }
 }
 
-/** Write review decisions to one Room Region provenance blob in one transaction. */
-export namespace TakeoffsDecisions {
-  export namespace Req {
-    export interface Request {
-      elementId: number;
-      resolutions: TakeoffResolution[];
-    }
-    export interface TakeoffResolution {
-      subject: string;
-      flag: string;
-      verb: string;
-      at: string;
-      runId: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      elementId: number;
-      zoneGuid: string;
-      bytes: number;
-      blob: string;
-    }
-  }
-}
-
-/** Capture one level, detect room geometry, and write replay evidence without committing Revit changes. */
-export namespace TakeoffsDetectCapture {
-  export namespace Req {
-    export interface Request {
-      level: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      level: string;
-      replayPath: string;
-      rooms: number;
-      totalSqft: number;
-    }
-  }
-}
-
 /** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
 export namespace TakeoffsInitializeCarrier {
   export namespace Req {
@@ -5024,17 +5109,15 @@ export namespace TakeoffsInitializeCarrier {
   }
 }
 
-/** Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction. */
+/** Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
     export interface Request {
-      replayPath: string;
+      zoneRegion: number;
       view: string;
-      levelFragment: string;
       zoneName: string;
       zoneGuid: string;
       runId: string;
-      loops: number[][][];
     }
   }
   export namespace Res {
@@ -5055,6 +5138,7 @@ export namespace TakeoffsPartition {
       rooms: TakeoffDetectedRoom[];
       residues: TakeoffDetectedResidue[];
       regions: TakeoffLiveRegion[];
+      review?: null | TakeoffPartitionReview;
     }
     export interface TakeoffPromotionFacts {
       accepted: number;
@@ -5085,20 +5169,42 @@ export namespace TakeoffsPartition {
       roomType: string;
       blob: string;
       outer: number[][];
+      holes: number[][][];
+      analysis?: null | TakeoffRegionAnalysis;
     }
-  }
-}
-
-/** Prepare the capture views for one Takeoff plan view in one transaction. */
-export namespace TakeoffsPrepareCapture {
-  export namespace Req {
-    export interface Request {
-      view: string;
+    /**
+     * Freshness against native region and zone geometry, not a claim about all model evidence.
+     */
+    export interface TakeoffRegionAnalysis {
+      state: string;
+      runId?: null | string;
+      floorZ?: null | number;
+      ceilingZ?: null | number;
+      hold?: null | string;
     }
-  }
-  export namespace Res {
-    export interface Response {
-      level: string;
+    export interface TakeoffPartitionReview {
+      source: TakeoffReviewSource;
+      zone: TakeoffReviewZone;
+      shapes: TakeoffReviewShape[];
+    }
+    export interface TakeoffReviewSource {
+      runId: string;
+      documentKey: string;
+      scopeKey: string;
+    }
+    export interface TakeoffReviewZone {
+      key: string;
+      name: string;
+      loops: number[][][];
+    }
+    export interface TakeoffReviewShape {
+      id: string;
+      kind: string;
+      disposition?: null | string;
+      reason?: null | string;
+      sqft?: null | number;
+      label?: number[] | null;
+      loops: number[][][];
     }
   }
 }
@@ -5129,21 +5235,6 @@ export namespace TakeoffsRhvacLinks {
       zoneGuid: string;
       bytes: number;
       blob: string;
-    }
-  }
-}
-
-/** Write and read back one Room Region room type in one transaction. */
-export namespace TakeoffsRoomType {
-  export namespace Req {
-    export interface Request {
-      elementId: number;
-      roomType: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      roomType: string;
     }
   }
 }
@@ -5204,31 +5295,30 @@ export namespace TakeoffsSnapshot {
       roomType: string;
       blob: string;
       outer: number[][];
+      holes: number[][][];
+      analysis?: null | TakeoffRegionAnalysis;
     }
-  }
-}
-
-/** Read non-template plan views with the Filled Region count for each view. */
-export namespace TakeoffsViews {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export interface Response {
-      views: TakeoffViewFacts[];
-    }
-    export interface TakeoffViewFacts {
-      elementId: number;
-      regions: number;
+    /**
+     * Freshness against native region and zone geometry, not a claim about all model evidence.
+     */
+    export interface TakeoffRegionAnalysis {
+      state: string;
+      runId?: null | string;
+      floorZ?: null | number;
+      ceilingZ?: null | number;
+      hold?: null | string;
     }
   }
 }
 
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
+  "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
+  "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
+  "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "familyfoundry.apply": { request: FamilyfoundryApply.Req.Request; response: FamilyfoundryApply.Res.Response };
   "familyfoundry.plan": { request: FamilyfoundryPlan.Req.Request; response: FamilyfoundryPlan.Res.Response };
   "familyfoundry.project": { request: FamilyfoundryProject.Req.Request; response: FamilyfoundryProject.Res.Response };
@@ -5284,22 +5374,20 @@ export interface HostOps {
   "settings.schema": { request: SettingsSchema.Req.Request; response: SettingsSchema.Res.Response };
   "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
-  "takeoffs.decisions": { request: TakeoffsDecisions.Req.Request; response: TakeoffsDecisions.Res.Response };
-  "takeoffs.detect-capture": { request: TakeoffsDetectCapture.Req.Request; response: TakeoffsDetectCapture.Res.Response };
   "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
-  "takeoffs.prepare-capture": { request: TakeoffsPrepareCapture.Req.Request; response: TakeoffsPrepareCapture.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
-  "takeoffs.room-type": { request: TakeoffsRoomType.Req.Request; response: TakeoffsRoomType.Res.Response };
   "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
-  "takeoffs.views": { request: TakeoffsViews.Req.Request; response: TakeoffsViews.Res.Response };
 }
 
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
 export const hostOpKeys = [
+  "document.temporary.release",
+  "document.temporary.status",
   "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
+  "family.temporary.acquire",
   "familyfoundry.apply",
   "familyfoundry.plan",
   "familyfoundry.project",
@@ -5355,13 +5443,8 @@ export const hostOpKeys = [
   "settings.schema",
   "takeoffs.adopt",
   "takeoffs.candidates",
-  "takeoffs.decisions",
-  "takeoffs.detect-capture",
   "takeoffs.initialize-carrier",
   "takeoffs.partition",
-  "takeoffs.prepare-capture",
   "takeoffs.rhvac-links",
-  "takeoffs.room-type",
   "takeoffs.snapshot",
-  "takeoffs.views",
 ] as const satisfies readonly (keyof HostOps)[];

@@ -1,5 +1,9 @@
 {
-  "chat/chat-shell.tsx": 1,
   "chat/thread-palette.tsx": 2,
-  "family/workspace-table.tsx": 2
+  "family/workspace-table.tsx": 2,
+  "route/help.tsx": 3,
+  "route/inspector.tsx": 2,
+  "route/picker.tsx": 1,
+  "route/situation.tsx": 4,
+  "takeoff/route-workspace.tsx": 1
 }

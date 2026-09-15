@@ -59,5 +59,6 @@ test("family evidence parses the C# projection shape with an origin stamp", () =
     familyName: "PE VAV",
     rfaPath: "C:\\Families\\PE VAV.rfa",
   });
+  if (!("parameters" in parsed)) throw new Error("expected the fixture evidence arm");
   expect(parsed.parameters[0].valuesPerType.Standard.value).toBe("21in");
 });

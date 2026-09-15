@@ -28,14 +28,14 @@ import {
   TallyChips,
   VerdictStrip,
   type EditDesk,
-  type Stage,
+  type BoardCase,
   type VerdictBook,
 } from "#/family-review/proto/review-board-parts";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
 import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
 
-export { stages, useEdits, useVerdicts } from "#/family-review/proto/review-board-parts";
+export { boardCases, useEdits, useVerdicts } from "#/family-review/proto/review-board-parts";
 
 // ── the board ───────────────────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ export function ReviewBoard({
   verdicts,
   edits,
 }: {
-  board: Stage[];
+  board: BoardCase[];
   verdicts: VerdictBook;
   edits: EditDesk;
 }) {

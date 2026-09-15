@@ -4,7 +4,7 @@ import { fmtNum } from "#/components/master-table/model";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { type StagedItem } from "../feedback/staging";
 import { HELD_HATCH, type ResidueKind } from "../palette";
-import { type Partiality, type ZoneRecord } from "../world";
+import { difference, type Partiality, type ZoneRecord } from "../world";
 
 // the export must not dress a disposition-unknown room as accepted either (SHIMS.md #3).
 
@@ -14,9 +14,17 @@ export const UNKNOWN_TITLE =
 
 export const PX_PER_FT = 4;
 
-export const fmtSqft = (v: number) => `${Math.round(v).toLocaleString()} sf`;
+export const fmtSqft = (v: number | null) =>
+  v === null ? "unavailable" : `${Math.round(v).toLocaleString()} sf`;
 
-export const fmtPct = (v: number) => `${Math.round(v * 100)}%`;
+export const fmtPct = (v: number | null) =>
+  v === null ? "unavailable" : `${Math.round(v * 100)}%`;
+
+export const roomCount = (z: ZoneRecord) => `${z.AcceptedRooms ?? "?"}/${z.OracleRooms ?? "?"}r`;
+export const closureText = (z: ZoneRecord) =>
+  z.closure
+    ? `dh ${Math.round(z.closure.doorHeadSqft)} / wall ${Math.round(z.closure.wallRunGapSqft)} / gap ${Math.round(z.closure.gapCloseSqft)}`
+    : "unavailable";
 
 export function fmtTime(utc: string): string {
   const d = new Date(utc);
@@ -37,8 +45,8 @@ export function topRejections(zone: ZoneRecord, n = 3): [string, number][] {
 }
 
 export const partialTitle = (zone: string) =>
-  `Partial run — the harness executed under PE_TAKEOFF_ZONE, so this package holds only zones ` +
-  `matching "${zone}". Its board and scores cover that slice, not the full baseline scope; ` +
+  `Partial run — this package declares only zones matching "${zone}". ` +
+  `Its board and scores cover that slice, not the full baseline scope; ` +
   `pairing it against a full run measures the filter, not the knobs.`;
 
 export const possiblyPartialTitle = (zones: number, modal: number) =>
@@ -105,7 +113,8 @@ export function materiallyChanged(a: ZoneRecord | null, b: ZoneRecord | null): b
   if (!a || !b) return true;
   return (
     a.AcceptedRooms !== b.AcceptedRooms ||
-    Math.abs(b.AcceptedSqft - a.AcceptedSqft) > 0.5 ||
+    a.capture?.hash !== b.capture?.hash ||
+    Math.abs(difference(b.AcceptedSqft, a.AcceptedSqft) ?? 0) > 0.5 ||
     a.triage.verdict !== b.triage.verdict
   );
 }

@@ -1,5 +1,7 @@
 namespace Pe.Revit.FamilyFoundry.Snapshots;
 
+using Pe.Shared.RevitData;
+
 /// <summary>
 ///     Indicates where snapshot data was collected from.
 /// </summary>
@@ -25,4 +27,5 @@ public class CapturedCollection<T> {
     ///     When true, subsequent collectors may replace this section with complete data.
     /// </summary>
     public bool IsPartial { get; init; }
+    public List<RevitDataIssue> Issues { get; init; } = [];
 }

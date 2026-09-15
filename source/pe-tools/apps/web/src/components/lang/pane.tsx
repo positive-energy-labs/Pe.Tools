@@ -11,13 +11,18 @@ import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 
 import { HelpTip } from "#/components/lang/help";
-import { VerbChrome } from "#/components/lang/verb";
+import { keyMeta } from "#/route/keys";
+import { ActionChrome } from "#/components/lang/action-button";
 import { tv, type VariantProps } from "#/lib/tv";
 
 export type PaneKind = "navigation" | "visual" | "content" | "inspector";
 
 export type PaneShortcut = UseHotkeyDefinition & {
   label: string;
+  /** One sentence for the help page. Defaults to the label. */
+  says?: string;
+  /** The sentence the key refuses with right now; the key fires, the card speaks, nothing runs. */
+  refusal?: string | null;
 };
 
 export const paneRecipe = tv({
@@ -85,13 +90,30 @@ export function Pane({
   const [cardVisible, setCardVisible] = useState(false);
   const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, tabLeft: 0 });
 
-  useHotkeys([...shortcuts], { target: rootRef });
-
   const revealShortcuts = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     setCardVisible(true);
     timerRef.current = setTimeout(() => setCardVisible(false), 4000);
   }, []);
+
+  // Every pane key is a registration with the shared meta, so the help page can hang it off this
+  // region. A refused key fires and reveals the card instead of running — the same posture as a
+  // refused route chord, never a silent ignore.
+  const bound: UseHotkeyDefinition[] = shortcuts.map((s) => ({
+    ...s,
+    callback: s.refusal ? () => revealShortcuts() : s.callback,
+    options: {
+      ...s.options,
+      meta: keyMeta({
+        name: s.label,
+        description: s.says ?? s.label,
+        tier: "pane",
+        region: id ?? kind,
+        refusal: s.refusal ?? null,
+      }),
+    },
+  }));
+  useHotkeys(bound, { target: rootRef });
 
   useEffect(
     () => () => {
@@ -191,8 +213,8 @@ export function Pane({
           </div>
           {actions != null && (
             <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
-              {/* A header is chrome: a verb's refusal hovers, it does not wrap (see `VerbChrome`). */}
-              <VerbChrome value>{actions}</VerbChrome>
+              {/* A header is chrome: a verb's refusal hovers, it does not wrap (see `ActionChrome`). */}
+              <ActionChrome value>{actions}</ActionChrome>
             </div>
           )}
         </div>
@@ -245,7 +267,12 @@ export function Pane({
                         >
                           {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
                         </kbd>
-                        <span className="whitespace-nowrap">{shortcut.label}</span>
+                        <span className="whitespace-nowrap">
+                          {shortcut.label}
+                          {shortcut.refusal ? (
+                            <span className="text-ink-mute"> — {shortcut.refusal}</span>
+                          ) : null}
+                        </span>
                       </div>
                     );
                   })}

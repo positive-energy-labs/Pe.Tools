@@ -1,25 +1,15 @@
-import { bridgeSelector, routeScopeKey, type CapabilityCatalog } from "@pe/agent-contracts";
+import type { MastraCompositeStore } from "@mastra/core/storage";
+import { addressSchema, type CapabilityCatalog, type WorkKey } from "@pe/agent-contracts";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
 import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
-import { streamSSE } from "hono/streaming";
+import { observeResources, resourceResponse, type ResourceObserver } from "./resource-stream.ts";
 import { z } from "zod";
-import {
-  emptyScope,
-  putScopeSchema,
-  routeStatePatchSchema,
-  scopeSchema,
-  type Head,
-  type PutScopeResult,
-} from "@pe/agent-contracts";
+import { putTargetSchema, routeStatePatchSchema, type PutTargetResult } from "@pe/agent-contracts";
 import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, toWireDisplayState } from "./thread-state.ts";
-import {
-  RouteWorkspace,
-  type RouteWorkspaceRegistration,
-  type RouteWorkspaceScope,
-} from "./route-workspace.ts";
+import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
@@ -31,7 +21,6 @@ const routeStateCommandBodySchema = z.object({
   command: z.string(),
   input: z.unknown().optional(),
   expectedRevision: z.number().int().nonnegative(),
-  requestId: z.string().trim().min(1).optional(),
 });
 
 export interface ServableRuntime {
@@ -74,6 +63,8 @@ export interface BuildAgentControllerAppOptions {
   runtime: ServableRuntime;
   label: string;
   routeRegistrations?: readonly RouteWorkspaceRegistration[];
+  onRouteWorkspace?: (workspace: RouteWorkspace, storage: MastraCompositeStore | undefined) => void;
+  observeHostResource?: ResourceObserver;
   /** The one capability catalog, read for a bridge selector; served at GET /pe/capabilities. */
   capabilityCatalog?: { read(bridgeSelector?: string): Promise<CapabilityCatalog> };
 }
@@ -130,50 +121,49 @@ export async function buildAgentControllerApp(
     ).invalidateAvailableModelsCache?.();
     return c.json({ ok: true });
   });
-  // The ONE endpoint pair for Scope: read (or watch with ?watch) and set. A set while pea is
-  // mid-turn is refused unless it comes from that turn itself (pea's approved scope_set), and the
+  // The ONE endpoint pair for the thread head: read (or watch with ?watch) and set. A set while pea
+  // is mid-turn is refused unless it comes from that turn itself, and the
   // new revision applies to the next turn; the running turn keeps the revision it was admitted under.
   app.get("/pe/scope/:threadId", async (c) => {
     const threadId = c.req.param("threadId");
-    if (c.req.query("watch") === undefined) return c.json(await runtime.scopes.read(threadId));
-    return streamSSE(c, async (stream) => {
-      const send = (next: Head) => stream.writeSSE({ data: JSON.stringify(next) });
-      const unsubscribe = runtime.scopes.subscribe((thread, next) => {
-        if (thread === threadId) void send(next);
-      });
-      await send(await runtime.scopes.read(threadId));
-      await new Promise<void>((resolve) => stream.onAbort(resolve));
-      unsubscribe();
-    });
+    return c.json(await runtime.scopes.read(threadId));
   });
   app.put("/pe/scope/:threadId", async (c) => {
     const threadId = c.req.param("threadId");
-    const parsed = putScopeSchema.safeParse(await c.req.json().catch(() => null));
+    const parsed = putTargetSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json(
         {
           error: "invalid body",
-          hint: "expected { scope: { kind, ... }, expectedRevision, turn? }",
+          hint: "expected { defaultTarget: { kind, ... } | null, expectedRevision, turn? }",
         },
         400,
       );
     const session = await openSession(threadId);
     const admitted = runtime.scopes.admittedTurn(threadId);
-    const result: PutScopeResult =
+    const result: PutTargetResult =
       session.run.isRunning() && parsed.data.turn !== admitted
         ? { ok: false, why: "in-turn" }
-        : await runtime.scopes.set(threadId, parsed.data.scope, parsed.data.expectedRevision);
+        : await runtime.scopes.set(
+            threadId,
+            parsed.data.defaultTarget,
+            parsed.data.expectedRevision,
+          );
     return c.json(result, result.ok ? 200 : 409);
   });
   // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
-  // Scope query as a route document: ?doc= with an optional ?pin=, or neither.
+  // Work key query as a route document: ?target=<address>, or neither.
   app.get("/pe/capabilities", async (c) => {
     if (!options.capabilityCatalog) return c.json({ error: "no capability catalog" }, 503);
     const scope = scopeOr400(c, "read");
     if (scope instanceof Response) return scope;
     try {
+      const selector =
+        c.req.query("session") ?? (scope.target !== null ? `doc:${scope.target}` : undefined);
       return c.json(
-        await options.capabilityCatalog.read(scope.scope ? bridgeSelector(scope.scope) : undefined),
+        // TODO(fold-2): the catalogue should take the ExecutionTarget from resolveCallTarget
+        // instead of a selector string; no inventory is in hand here.
+        await options.capabilityCatalog.read(selector),
       );
     } catch (error) {
       return c.json({ error: errorMessage(error) }, 502);
@@ -188,19 +178,23 @@ export async function buildAgentControllerApp(
   const routeWorkspace = new RouteWorkspace({
     registrations,
     store: {
-      getState: ({ scopeKey, route }) =>
-        threadState!.getState({ threadId: resourceId, type: routeDocumentKey(scopeKey, route) }),
-      setState: ({ scopeKey, route, value }) =>
+      getState: ({ targetKey, route }) =>
+        threadState!.getState({ threadId: resourceId, type: routeDocumentKey(targetKey, route) }),
+      setState: ({ targetKey, route, value }) =>
         threadState!.setState({
           threadId: resourceId,
-          type: routeDocumentKey(scopeKey, route),
+          type: routeDocumentKey(targetKey, route),
           value,
         }),
     },
   });
 
+  options.onRouteWorkspace?.(routeWorkspace, storage);
+  const observe = observeResources(routeWorkspace, runtime.scopes, options.observeHostResource);
+  app.get("/pe/resources", (c) => resourceResponse(c.req.raw, observe));
+
   // Discovery is unscoped; every document read or write names one route scope: a chat Scope
-  // (?doc with an optional ?pin, or neither) or a standalone ?workspace.
+  // (?target=<address>, or neither) or a standalone ?work=<id>.
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
     const scope = scopeOr400(c, "read");
@@ -214,24 +208,12 @@ export async function buildAgentControllerApp(
       return c.json({ error: errorMessage(error) }, 403);
     }
   });
-  app.get("/pe/route-state/:route/events", async (c) => {
-    const scope = scopeOr400(c, "read");
-    if (scope instanceof Response) return scope;
-    const route = c.req.param("route");
-    try {
-      if (!(await routeWorkspace.read(scope, route)))
-        return c.json({ error: `unknown route '${route}'` }, 404);
-    } catch (error) {
-      return c.json({ error: errorMessage(error) }, 403);
-    }
-    return streamRouteWorkspace(c, routeWorkspace, scope, route);
-  });
   const writes = [
     {
       suffix: "apply",
       schema: routeStateApplyBodySchema,
       hint: "expected { patches, expectedRevision }",
-      run: (scope: RouteWorkspaceScope, route: string, actor: "agent" | "human", data: unknown) => {
+      run: (scope: WorkKey, route: string, actor: "agent" | "human", data: unknown) => {
         const body = data as z.infer<typeof routeStateApplyBodySchema>;
         return routeWorkspace.apply(scope, route, actor, body.patches, body.expectedRevision);
       },
@@ -239,8 +221,8 @@ export async function buildAgentControllerApp(
     {
       suffix: "command",
       schema: routeStateCommandBodySchema,
-      hint: "expected { command, input?, expectedRevision, requestId? }",
-      run: (scope: RouteWorkspaceScope, route: string, actor: "agent" | "human", data: unknown) => {
+      hint: "expected { command, input?, expectedRevision }",
+      run: (scope: WorkKey, route: string, actor: "agent" | "human", data: unknown) => {
         const body = data as z.infer<typeof routeStateCommandBodySchema>;
         return routeWorkspace.command(
           scope,
@@ -249,7 +231,6 @@ export async function buildAgentControllerApp(
           body.command,
           body.input,
           body.expectedRevision,
-          body.requestId,
         );
       },
     },
@@ -285,64 +266,30 @@ export async function buildAgentControllerApp(
   return app;
 }
 
-function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | Response {
-  const workspaceId = c.req.query("workspace")?.trim();
-  const pin = c.req.query("pin")?.trim() || null;
-  const doc = c.req.query("doc")?.trim() || null;
+/**
+ * The WorkKey a request names: `?work=<id>` for a standalone workspace, `?target=<address>` for
+ * document-scoped Work, neither for the host-only Work. Work keys by Address (law 6), so an
+ * `open` request is resolved to its Address by the caller before it reaches here.
+ */
+function scopeOr400(c: Context, shape: "read" | "write"): WorkKey | Response {
+  const route = c.req.param("route") ?? "";
+  const work = c.req.query("work")?.trim();
+  const target = c.req.query("target")?.trim() || null;
   const invalid = (error: string) =>
     c.json(shape === "read" ? { error } : { ok: false, kind: "error", error, hint: error }, 400);
-  if (workspaceId) {
-    if (pin || doc || workspaceId.length > 200) return invalid("Provide exactly one route scope");
-    return { workspaceId };
+  if (work) {
+    if (target || work.length > 200) return invalid("Provide exactly one Work key");
+    return { route, target: null, work };
   }
-  if (pin && !doc) return invalid("invalid route scope: pin needs doc");
-  const parsed = scopeSchema.safeParse(
-    doc ? { kind: "document", document: doc, ...(pin ? { pin } : {}) } : emptyScope,
-  );
-  if (!parsed.success) return invalid("invalid route scope: doc or pin malformed");
-  return { scope: parsed.data };
+  if (!target) return { route, target: null };
+  const parsed = addressSchema.safeParse(target);
+  if (!parsed.success) return invalid("invalid Target: expected a document Address");
+  return { route, target: parsed.data };
 }
 
-function streamRouteWorkspace(
-  c: Context,
-  workspace: RouteWorkspace,
-  scope: RouteWorkspaceScope,
-  route: string,
-) {
-  return streamSSE(c, async (stream) => {
-    let aborted = false;
-    let dirty = true;
-    let wake: (() => void) | undefined;
-    const notify = () => {
-      dirty = true;
-      wake?.();
-      wake = undefined;
-    };
-    const unsubscribe = workspace.subscribe((event) => {
-      if (event.route === route && routeScopeKey(event.scope) === routeScopeKey(scope)) notify();
-    });
-    stream.onAbort(() => {
-      aborted = true;
-      notify();
-    });
-
-    try {
-      while (!aborted) {
-        if (!dirty) await new Promise<void>((resolve) => (wake = resolve));
-        if (aborted) break;
-        dirty = false;
-        const view = await workspace.read(scope, route);
-        if (view) await stream.writeSSE({ data: JSON.stringify(view) });
-      }
-    } finally {
-      unsubscribe();
-    }
-  });
-}
-
-function routeDocumentKey(scopeKey: string, route: string): string {
+function routeDocumentKey(targetKey: string, route: string): string {
   // ponytail: KV keyed by string on resourceId; use a document table only for enumeration or scope-delete.
-  return `${route}:${scopeKey}`;
+  return `${route}:${targetKey}`;
 }
 
 function errorMessage(error: unknown): string {

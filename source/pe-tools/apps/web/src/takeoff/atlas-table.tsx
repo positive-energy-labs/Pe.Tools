@@ -6,7 +6,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum } from "#/components/master-table/model";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
-import type { AtlasRow as Row } from "#/takeoff/store";
+import type { AtlasRow as Row } from "#/takeoff/controller";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 
 export function AtlasTable() {
@@ -17,6 +17,7 @@ export function AtlasTable() {
     actions,
     cursor,
     fieldsMode,
+    setFieldsMode,
     tableState,
     rows,
     visibleKeys,
@@ -87,11 +88,7 @@ export function AtlasTable() {
                   <span className="hairline-l shrink-0 pl-2">
                     <Press
                       type="button"
-                      onClick={() =>
-                        store.actions.setAtlasPage({
-                          fieldsMode: fieldsMode === "panel" ? "columns" : "panel",
-                        })
-                      }
+                      onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
                       title={
                         fieldsMode === "panel"
                           ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
@@ -120,7 +117,7 @@ export function AtlasTable() {
                 ) : (
                   <EmptyState
                     story="scope"
-                    exit="capture a level, then partition a zone — rooms are materialized by partition"
+                    exit="adopt a zoning region, then partition it — rooms are materialized by partition"
                   >
                     no rooms anywhere yet — zones before partitioned have no rooms
                   </EmptyState>

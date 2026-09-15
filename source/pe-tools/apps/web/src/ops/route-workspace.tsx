@@ -1,312 +1,228 @@
+/**
+ * The Ops body. The route declares itself in `ops/manifest.ts`; this file draws it. The fixture
+ * lane, the Product/Feeds/Slot binding machinery and the `?source=fixture` branch are deleted —
+ * the catalogue is one Reading and the one action is the manifest's `run`.
+ */
 import { useEffect, useMemo } from "react";
-import { Workspace } from "#/components/anatomy";
 import { useAtomValue } from "@effect/atom-react";
+
+import { ActionReceiptView } from "#/actions/receipt";
+import { Workspace } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
-import { RouteScope } from "#/workbench/route-scope";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/lang/verb-lane";
-import { Provenance } from "#/components/lang/section";
 import { Press } from "#/components/lang/press";
-import { useFleet } from "#/host/fleet";
-import { useHostOp } from "#/host/queries";
-import { scopeSession } from "#/host/target";
-import { syntheticOps } from "#/ops/glance";
-import { OPS_PRODUCT, opsRefusal, type OpsSlot } from "#/ops/product";
-import { createOpsStore, type OpsStore } from "#/ops/store";
-import { SyntheticRunner } from "#/ops/synthetic";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import { pageScope, type Scope } from "#/state/route-store";
-import { TargetingHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import type { Feeds } from "#/targeting/model";
-import { worldTrunk } from "#/targeting/world";
+import { Provenance } from "#/components/lang/section";
+import { previousOf, sessionKey, useFleet } from "#/readings";
+import { RouteShell, useRoute, appAtomRegistry, useRouteOwner } from "#/route";
 import { CapabilityCatalogSection } from "#/ops/capability-catalog";
+import { syntheticOps } from "#/ops/glance";
+import { opsManifest, type HostOperationCatalogEntry } from "#/ops/manifest";
 import { OperationPane, parseSchema } from "#/ops/operation-pane";
 import { buildFormRequest, readFormSeed } from "#/ops/schema-form";
-import {
-  createOpsFixtureSlice,
-  OPS_FIXTURE_ADDRESS,
-  OPS_FIXTURE_CAPABILITIES,
-  OPS_FIXTURE_CATALOG,
-  OPS_FIXTURE_REQUEST,
-  OPS_FIXTURE_SELECTED,
-  OPS_FIXTURE_SESSION,
-  OPS_FIXTURE_TARGET,
-  OPS_FIXTURE_WORLD_FACTS,
-} from "#/ops/fixture";
+import { createOpsStore, type OpsPageSeed, type OpsStore } from "#/ops/store";
+import { SyntheticRunner } from "#/ops/synthetic";
 
 export type HostOperationJsonSchema = Record<string, unknown>;
 
-export function OpsRoute({ source }: { source?: "fixture" }) {
-  return source === "fixture" ? (
-    <FixtureOpsStoreOwner />
-  ) : (
-    <RouteScope>{(scope) => <OpsStoreOwner key={scope.scope.document} scope={scope} />}</RouteScope>
-  );
+export function OpsRoute({
+  initial,
+  onSeed,
+}: {
+  initial?: Partial<OpsPageSeed>;
+  onSeed?: (seed: OpsPageSeed) => void;
+}) {
+  return <OpsStoreOwner initial={initial} onSeed={onSeed} />;
 }
 
-function FixtureOpsStoreOwner() {
-  const store = useRouteStore(() => {
-    const fixture = createOpsStore({
-      registry: appAtomRegistry,
-      scope: pageScope(OPS_FIXTURE_ADDRESS, OPS_FIXTURE_TARGET),
-      slice: createOpsFixtureSlice(),
-      apply: async () => ({ ok: true, revision: 1 }),
-      call: async () => {
-        throw new Error("fixture review refuses operation runs");
-      },
-      now: () => new Date("2026-08-30T18:42:00.000Z"),
-      initial: {
-        op: OPS_FIXTURE_SELECTED,
-        identity: { target: OPS_FIXTURE_TARGET },
-        request: {
-          args: JSON.stringify(OPS_FIXTURE_REQUEST),
-          mode: "form",
-          formValues: OPS_FIXTURE_REQUEST,
-        },
-      },
-    });
-    return fixture;
-  });
-  return <OpsPage store={store} fixture />;
-}
-
-export function OpsStoreOwner({ scope }: { scope: Scope }) {
-  const store = useRouteStore(() =>
-    createOpsStore({
-      registry: appAtomRegistry,
-      scope,
-    }),
-  );
+export function OpsStoreOwner({
+  initial,
+  onSeed,
+}: {
+  initial?: Partial<OpsPageSeed>;
+  onSeed?: (seed: OpsPageSeed) => void;
+}) {
+  const store = useRouteOwner(() => createOpsStore({ registry: appAtomRegistry, initial, onSeed }));
   return <OpsPage store={store} />;
 }
 
-export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?: boolean }) {
+export function OpsPage({ store }: { store: OpsStore }) {
+  const actionId = useAtomValue(store.atoms.actionId);
   const world = useAtomValue(store.atoms.world);
   const op = useAtomValue(store.atoms.op);
-  const liveFleet = useFleet({ enabled: !fixture });
-  const fleet = fixture
-    ? {
-        worlds: [OPS_FIXTURE_WORLD_FACTS],
-        sessions: [OPS_FIXTURE_SESSION],
-        isLoading: false,
-        stale: false,
-        error: null,
-        at: Date.UTC(2026, 7, 30, 18, 42, 0),
-        basis: ["fixture.ops.catalog", "fixture.route-scope"],
-      }
-    : liveFleet;
-  const session = scopeSession(store.scope.scope, fleet.sessions);
-  const catalog = useHostOp("host.ops.catalog", undefined, {
-    bridgeSessionId: session?.sessionId,
-    enabled: !fixture && session !== null,
-    staleTime: 60_000,
-  });
-  const operations = useMemo(
-    () => (fixture ? OPS_FIXTURE_CATALOG : (catalog.data?.operations ?? [])),
-    [catalog.data?.operations, fixture],
+  const fleet = useFleet();
+  const session = fleet.sessions.find(
+    (row) => row.sessionId === world || sessionKey(row) === world,
   );
-  const selected = operations.find((operation) => operation.key === op);
-  const requestSchema = selected ? parseSchema(selected.requestSchemaJson) : undefined;
+  const openDocumentId = useAtomValue(store.atoms.openDocumentId);
   const args = useAtomValue(store.atoms.args);
   const mode = useAtomValue(store.atoms.mode);
   const formValues = useAtomValue(store.atoms.formValues);
-  const picker = useAtomValue(store.atoms.picker);
   const selectedGlanceKey = useAtomValue(store.atoms.selectedGlance);
   const result = useAtomValue(store.atoms.result);
-  const busyState = useAtomValue(store.atoms.busy);
-  const hydrated = useAtomValue(store.atoms.hydrated);
   const selectedGlance = syntheticOps.find((glance) => glance.key === selectedGlanceKey);
-  const currentIdentity = session
-    ? {
-        target: session.sdkSessionId ?? `pid:${session.processId}`,
-      }
-    : null;
+
+  // The generated operation catalogue is one Reading. The route declares it; the body reads it.
+  const declared = useMemo(() => opsManifest(), []);
+  const catalogReading = useRoute(declared).readings.catalog;
+  const catalogValue = previousOf(catalogReading) as
+    | { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string }
+    | undefined;
+  const operations = useMemo(() => catalogValue?.operations ?? [], [catalogValue]);
+  const selected = operations.find((operation) => operation.key === op);
+  const selectedOpen = session?.openDocuments?.find(
+    (doc) =>
+      doc.openId === openDocumentId &&
+      (selected?.needs !== "family-document" || doc.isFamilyDocument) &&
+      (selected?.needs !== "project-document" || !doc.isFamilyDocument),
+  );
+  const requestSchema = selected?.requestSchemaJson
+    ? parseSchema(selected.requestSchemaJson)
+    : undefined;
+
+  const currentIdentity = useMemo(
+    () =>
+      session ? { target: session.sdkSessionId ?? `pid:${session.processId}` } : { target: "host" },
+    [session],
+  );
 
   useEffect(() => {
-    if (hydrated) void store.actions.syncBindings(world, op, currentIdentity);
-  }, [hydrated, world, op, currentIdentity?.target, store]);
+    void store.actions.syncBindings(world, op, currentIdentity);
+  }, [world, op, currentIdentity, store]);
   useEffect(() => {
-    const seed = selected?.requestExamples[0]?.json ?? selected?.safeDefaultRequestJson ?? "{}";
+    const seed = selected?.requestExamples?.[0]?.json ?? selected?.safeDefaultRequestJson ?? "{}";
     store.actions.select(selected, readFormSeed(seed, requestSchema));
   }, [requestSchema, selected, store]);
 
-  const feeds = useMemo<Feeds<OpsSlot>>(
-    () => ({
-      world: worldTrunk.feed(fleet),
-      op: {
-        options: operations.map((operation) => ({
-          id: operation.key,
-          label: operation.displayName ?? operation.key,
-          sub: `${operation.intent} · ${operation.costTier}`,
-        })),
-        state: fixture
-          ? "ready"
-          : catalog.isPending
-            ? "loading"
-            : catalog.isError
-              ? "error"
-              : "ready",
-        lane: fixture ? "fixture" : "live",
-        stale: fixture ? false : catalog.isPending,
-        at: fixture ? Date.UTC(2026, 7, 30, 18, 42, 0) : catalog.dataUpdatedAt || undefined,
-        basis: fixture ? ["fixture.ops.catalog"] : ["host.ops.catalog"],
-        note: fixture
-          ? "checked-in review catalog"
-          : catalog.error instanceof Error
-            ? catalog.error.message
-            : undefined,
-      },
-    }),
-    [
-      catalog.dataUpdatedAt,
-      catalog.error,
-      catalog.isError,
-      catalog.isFetching,
-      catalog.isPending,
-      fleet,
-      fixture,
-      operations,
-    ],
-  );
-  const state = useMemo<BindingState<OpsSlot>>(
-    () => ({
-      bound: { world: world || null, op: op || null },
-      multi: {},
-      stage: "explore",
-    }),
-    [world, op],
-  );
-  const product = useMemo(
+  const manifest = useMemo(
     () =>
-      OPS_PRODUCT(feeds, {
-        run: () => {
-          if (fixture) throw Error("fixture review refuses operation runs");
-          if (!selected || !session) throw Error("bind an operation and world first");
-          return store.actions.run({
-            opKey: selected.key,
-            request: () =>
-              mode === "form" && requestSchema
-                ? buildFormRequest(requestSchema, formValues, requestSchema)
-                : args.trim()
-                  ? JSON.parse(args)
-                  : undefined,
-            target: session.sdkSessionId ?? `pid:${session.processId}`,
-            bridgeSessionId: session.sessionId,
-          });
-        },
-        refuse: () =>
-          fixture
-            ? "fixture review refuses operation runs"
-            : opsRefusal(selected, session?.custody),
+      opsManifest({
+        ...(selected ? { selected } : {}),
+        ...(session?.custody === "controlled" || session?.custody === "observed"
+          ? { custody: session.custody }
+          : {}),
+        request: () =>
+          mode === "form" && requestSchema
+            ? buildFormRequest(requestSchema, formValues, requestSchema)
+            : args.trim()
+              ? JSON.parse(args)
+              : undefined,
+        run: ({ opKey, request }) =>
+          store.actions.run({
+            opKey,
+            request,
+            target: session ? sessionKey(session) : "host",
+            ...(session?.sessionId ? { bridgeSessionId: session.sessionId } : {}),
+            ...(openDocumentId ? { openDocumentId } : {}),
+          }),
       }),
-    [args, feeds, fixture, formValues, mode, requestSchema, selected, session, store],
+    [selected, session, openDocumentId, args, mode, formValues, requestSchema, store],
   );
-  const b = useBindings(
-    product,
-    state,
-    (patch) => {
-      // The world is the page Scope, never a binding (ops/store.ts persistBinding ignores it).
-      void store.actions.setBindings(
-        patch,
-        session ? { target: session.sdkSessionId ?? `pid:${session.processId}` } : null,
-      );
-    },
-    picker.open,
-    (open) => store.actions.setPicker((previous) => ({ ...previous, open })),
-    picker.level,
-    (level) => store.actions.setPicker((previous) => ({ ...previous, level })),
-    picker.query,
-    (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
-  );
-  const runner = useRunner(product, b, busyState?.id ?? null);
 
   return (
-    <Workspace
-      className="p-4"
-      headRail={
-        <div className="mx-auto w-full max-w-5xl">
-          <TargetingHead
-            product={product}
-            b={b}
-            runner={runner}
-            receipt={
-              result ? (
+    <>
+      {actionId && <ActionReceiptView id={actionId} />}
+      {catalogValue?.bridgeCatalogError && (
+        <div role="status">
+          Native catalogue unavailable: {catalogValue.bridgeCatalogError}. Host operations remain
+          available.
+        </div>
+      )}
+      {session && (
+        <label>
+          Open document{" "}
+          <select
+            aria-label="Open document"
+            value={openDocumentId}
+            onChange={(event) => store.actions.setOpenDocumentId(event.target.value)}
+          >
+            <option value="">Select an exact open document</option>
+            {session.openDocuments?.map((doc) => (
+              <option key={doc.openId} value={doc.openId}>
+                {doc.title ?? doc.address ?? doc.openId}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <Workspace
+        className="p-4"
+        headRail={
+          <div className="mx-auto w-full max-w-5xl">
+            <RouteShell manifest={manifest}>
+              {result ? (
                 <OutcomeLine
                   kind="receipt"
                   label={`${result.opKey} · ${result.elapsedMs}ms · target = ${result.target}`}
                 />
-              ) : undefined
-            }
-          />
-        </div>
-      }
-      table={
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-auto pt-4">
-          <CapabilityCatalogSection fixture={fixture ? OPS_FIXTURE_CAPABILITIES : undefined} />
-          <section className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1">Glance</span>
-            {syntheticOps.map((glance) => (
-              <Press
-                key={glance.key}
-                size="caption"
-                tone="neutral"
-                state="selected"
-                aria-pressed={selectedGlanceKey === glance.key}
-                disabled={fixture}
-                title={fixture ? "fixture review refuses synthetic Host runs" : undefined}
-                onClick={() => store.actions.setSelectedGlance(glance.key)}
-              >
-                {glance.displayName}
-              </Press>
-            ))}
-          </section>
-
-          {selectedGlance && session ? (
-            <section className="flex flex-col gap-3">
-              <header>
-                <div className="flex items-center gap-2">
-                  <h1 className="">{selectedGlance.displayName}</h1>
-                  <FactChip dashed title="composed client-side from checked-in typed operations">
-                    synthetic
-                  </FactChip>
-                </div>
-                <p className="">{selectedGlance.blurb}</p>
-              </header>
-              <SyntheticRunner op={selectedGlance} bridgeSessionId={session.sessionId} />
+              ) : null}
+            </RouteShell>
+          </div>
+        }
+        table={
+          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-auto pt-4">
+            <CapabilityCatalogSection />
+            <section className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1">Glance</span>
+              {syntheticOps.map((glance) => (
+                <Press
+                  key={glance.key}
+                  size="caption"
+                  tone="neutral"
+                  state="selected"
+                  aria-pressed={selectedGlanceKey === glance.key}
+                  onClick={() => store.actions.setSelectedGlance(glance.key)}
+                >
+                  {glance.displayName}
+                </Press>
+              ))}
             </section>
-          ) : selected ? (
-            <OperationPane
-              operation={selected}
-              schema={requestSchema}
-              bridgeSessionId={fixture ? undefined : session?.sessionId}
-              args={args}
-              mode={mode}
-              formValues={formValues}
-              result={result}
-              setArgs={store.actions.setArgs}
-              setMode={store.actions.setMode}
-              setFormValues={store.actions.setFormValues}
-            />
-          ) : (
-            <EmptyState story="scope" exit="bind a world, then pick an operation">
-              no operation selected
-            </EmptyState>
-          )}
-        </div>
-      }
-      readoutBand={
-        <div className="mx-auto w-full max-w-5xl pt-2">
-          <VerbLane atoms={store.atoms} />
-          <Provenance>
-            {fixture
-              ? "catalog = checked-in fixture · route document and receipt are local"
-              : "catalog = host.ops.catalog · selected live key is the route's one dynamic /call"}
-          </Provenance>
-        </div>
-      }
-    />
+
+            {selectedGlance && session ? (
+              <section className="flex flex-col gap-3">
+                <header>
+                  <div className="flex items-center gap-2">
+                    <h1 className="">{selectedGlance.displayName}</h1>
+                    <FactChip dashed title="composed client-side from checked-in typed operations">
+                      synthetic
+                    </FactChip>
+                  </div>
+                  <p className="">{selectedGlance.blurb}</p>
+                </header>
+                <SyntheticRunner op={selectedGlance} bridgeSessionId={session.sessionId} />
+              </section>
+            ) : selected ? (
+              <OperationPane
+                operation={selected}
+                schema={requestSchema}
+                bridgeSessionId={session?.sessionId}
+                openDocumentId={selectedOpen?.openId}
+                args={args}
+                mode={mode}
+                formValues={formValues}
+                result={result}
+                setArgs={store.actions.setArgs}
+                setMode={store.actions.setMode}
+                setFormValues={store.actions.setFormValues}
+              />
+            ) : (
+              <EmptyState
+                story="scope"
+                exit="pick an operation; select Revit only when it needs it"
+              >
+                no operation selected
+              </EmptyState>
+            )}
+          </div>
+        }
+        readoutBand={
+          <div className="mx-auto w-full max-w-5xl pt-2">
+            <Provenance>
+              catalog = host.ops.catalog · mutations use the host action journal
+            </Provenance>
+          </div>
+        }
+      />
+    </>
   );
 }

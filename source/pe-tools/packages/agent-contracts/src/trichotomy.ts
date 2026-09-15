@@ -13,7 +13,7 @@
  * the human's approval, validation is derived from the value rather than stored, and
  * pea's disagreement channels are chat or a counter-proposal on the staged cell.
  *
- * Domain provenance (e.g. family-types' markdown `source` ref) is a per-route
+ * Domain provenance (e.g. a route's markdown `source` ref) is a per-route
  * EXTENSION of the proposal, not part of the core.
  */
 import { z } from "zod";
@@ -33,7 +33,7 @@ export function trichotomyCellSchema<V extends z.ZodType>(value: V) {
   return trichotomyCellWithProposal(value, cellProposalSchema(value));
 }
 
-/** Trichotomy cell with a route-extended proposal (e.g. family-types' markdown source ref). */
+/** Trichotomy cell with a route-extended proposal (e.g. a markdown source ref). */
 export function trichotomyCellWithProposal<V extends z.ZodType, P extends z.ZodType>(
   value: V,
   proposal: P,

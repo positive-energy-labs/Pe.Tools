@@ -1,4 +1,5 @@
 using Pe.Revit.DocumentData.Families.Extraction;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Shared.RevitData.Families;
@@ -51,12 +52,12 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
 
         // Create lookup for family parameters by key for O(1) access
         var familyParamLookup = fm.GetParameters()
-            .ToDictionary(p => GetKey(p.Definition.Name, p.IsInstance), StringComparer.Ordinal);
+            .ToDictionary(p => ParameterIdentityFactory.FromFamilyParameter(p).Key, StringComparer.Ordinal);
 
         var updatedData = new List<ParameterSnapshot>();
 
         foreach (var existingSnap in snapshot.Parameters.Data) {
-            var key = GetKey(existingSnap.Name, existingSnap.IsInstance);
+            var key = existingSnap.Identity.Key;
 
             // O(1) lookup instead of O(n) FirstOrDefault
             if (familyParamLookup.TryGetValue(key, out var matchingParam)
@@ -82,6 +83,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.Project,
             IsPartial = record.IsPartial,
+            Issues = record.Issues.ToList(),
             Data = ToSnapshots(record)
         };
     }
@@ -94,6 +96,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.FamilyDoc,
             IsPartial = record.IsPartial,
+            Issues = record.Issues.ToList(),
             Data = ToSnapshots(record)
         };
     }
@@ -105,8 +108,6 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
     ];
 
     // ==================== Helpers ====================
-
-    private static string GetKey(string name, bool? isInstance) => $"{name}|{isInstance}";
 
     private static bool IsInternalHelperParameter(string? parameterName) =>
         !string.IsNullOrWhiteSpace(parameterName) &&

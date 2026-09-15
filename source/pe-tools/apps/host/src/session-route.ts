@@ -1,4 +1,7 @@
 import { Effect, Layer, Option } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { canonicalRouteInput, type SdkReading } from "@pe/agent-contracts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
@@ -248,7 +251,6 @@ export function docCurrentArgs(id?: string | null, doc?: string | null): string[
 // default is 420s; a dev-lane start also builds first) — the route budget must outlast the CLI's.
 const DEFAULT_ACTION_TIMEOUT_MS = 600_000;
 const STATUS_TIMEOUT_MS = 60_000;
-const DOC_OPEN_TIMEOUT_MS = 600_000;
 
 export function sessionActionTimeoutMs(request: SessionActionRequest): number {
   return request.timeoutSeconds != null
@@ -299,7 +301,7 @@ export function executeSessionCli<R>(
 // Real shell layer: the same launcher chain as hostUpdateRoute. An empty stdout means
 // the resolved CLI does not speak this verb (e.g. a pre-session installed shim) — fail loudly
 // instead of relaying a blank 200.
-const runPeRevitCli: SessionCliRunner<ChildProcessSpawner.ChildProcessSpawner> = (args) =>
+export const runPeRevitCli: SessionCliRunner<ChildProcessSpawner.ChildProcessSpawner> = (args) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const launch = peRevitLauncher();
@@ -311,6 +313,45 @@ const runPeRevitCli: SessionCliRunner<ChildProcessSpawner.ChildProcessSpawner> =
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     });
   });
+
+/** One SDK observation owner; the browser's former fleet timer lives here. */
+const sdkReads = new OwnerReads();
+export function observeSdkReading(
+  request: SdkReading,
+  accept: (value: OwnerValue<unknown>) => void,
+  subscribe: (notify: () => void) => () => void = () => () => {},
+) {
+  return sdkReads.observe(
+    canonicalRouteInput(request),
+    async () => {
+      const args =
+        request.read === "sessions"
+          ? sessionStatusArgs(request.id, request.all)
+          : request.read === "doctor"
+            ? doctorArgv({ timeoutSeconds: 20 })
+            : request.read === "recents"
+              ? docRecentsArgs(request.year)
+              : docCurrentArgs(request.id);
+      const result = await Effect.runPromise(
+        executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
+          action: request.read,
+          id: request.id,
+        }).pipe(Effect.provide(NodeServices.layer)),
+      );
+      if (result.status !== 200) throw Error(result.bodyJson);
+      return JSON.parse(result.bodyJson) as unknown;
+    },
+    (notify) => {
+      const release = subscribe(notify);
+      const timer = request.read === "sessions" ? setInterval(notify, 5_000) : undefined;
+      return () => {
+        release();
+        if (timer) clearInterval(timer);
+      };
+    },
+    accept,
+  );
+}
 
 function jsonResponse(outcome: SessionCliOutcome) {
   return Response.text(outcome.bodyJson, {
@@ -365,35 +406,19 @@ const sessionsMintRoute = HttpRouter.add("GET", "/sessions/mint", (req) =>
   }),
 );
 
-const sessionsActionRoute = HttpRouter.add("POST", "/sessions", (req) =>
-  Effect.gen(function* () {
-    const body = yield* Effect.result(req.json);
-    const parsed = parseSessionActionRequest(body._tag === "Success" ? body.success : null);
-    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
-    const request = parsed.request;
-    const project =
-      request.lane === "dev"
-        ? resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot)
-        : undefined;
-    if (request.lane === "dev" && project === undefined)
-      return Response.jsonUnsafe(
-        {
-          ok: false,
-          error: `lane "dev" needs a source-linked host; this host (lane ${hostOwnership.lane}) has no checkout to build Pe.App from — start with lane "installed" or run the host from a checkout`,
-        },
-        { status: 400 },
-      );
-    const args = sessionCliArgs(request, project);
-    const outcome = yield* executeSessionCli(args, runPeRevitCli, sessionActionTimeoutMs(request), {
-      action: request.action,
-      id: request.id,
-    });
-    return jsonResponse(outcome);
-  }),
+const sessionsActionRoute = HttpRouter.add("POST", "/sessions", () =>
+  Effect.succeed(
+    Response.jsonUnsafe(
+      {
+        ok: false,
+        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
+        notDispatched: true,
+      },
+      { status: 409 },
+    ),
+  ),
 );
 
-// Machine census: relays `pe-revit doctor` verbatim. Web reads `result.revitYears` (beta.145)
-// as the installed-Revit-years authority; a failing check elsewhere still carries the years.
 const doctorRoute = HttpRouter.add("GET", "/doctor", () =>
   Effect.gen(function* () {
     const outcome = yield* executeSessionCli(
@@ -406,7 +431,39 @@ const doctorRoute = HttpRouter.add("GET", "/doctor", () =>
   }),
 );
 
+const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings", (req) =>
+  Effect.tryPromise(async () => {
+    const { sdkReadingSchema } = await import("@pe/agent-contracts");
+    const query = new URL(req.url, "http://host").searchParams;
+    const request = sdkReadingSchema.parse({
+      kind: "sdk",
+      read: query.get("read"),
+      ...(query.has("id") ? { id: query.get("id") } : {}),
+      ...(query.has("year") ? { year: query.get("year") } : {}),
+      ...(query.has("all") ? { all: query.get("all") === "true" } : {}),
+    });
+    const value = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        release();
+        reject(Error("SDK reading timed out"));
+      }, STATUS_TIMEOUT_MS + 1000);
+      const release = observeSdkReading(request, (result) => {
+        clearTimeout(timer);
+        release();
+        if ("error" in result) reject(Error(result.error));
+        else resolve(result.value);
+      });
+    });
+    return Response.jsonUnsafe(value);
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 503 })),
+    ),
+  ),
+);
+
 export const sessionsRoute = Layer.mergeAll(
+  instancesReadingsRoute,
   sessionsStatusRoute,
   sessionsMintRoute,
   sessionsActionRoute,
@@ -426,34 +483,30 @@ const docsRecentsRoute = HttpRouter.add("GET", "/docs/recents", (req) =>
   }),
 );
 
-const docsOpenRoute = HttpRouter.add("POST", "/docs/open", (req) =>
-  Effect.gen(function* () {
-    const body = yield* Effect.result(req.json);
-    const parsed = parseDocOpenRequest(body._tag === "Success" ? body.success : null);
-    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
-    const outcome = yield* executeSessionCli(
-      docOpenArgs(parsed.request),
-      runPeRevitCli,
-      DOC_OPEN_TIMEOUT_MS,
-      { action: "doc open", id: parsed.request.id },
-    );
-    return jsonResponse(outcome);
-  }),
+const docsOpenRoute = HttpRouter.add("POST", "/docs/open", () =>
+  Effect.succeed(
+    Response.jsonUnsafe(
+      {
+        ok: false,
+        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
+        notDispatched: true,
+      },
+      { status: 409 },
+    ),
+  ),
 );
 
-const docsCloneRoute = HttpRouter.add("POST", "/docs/clone", (req) =>
-  Effect.gen(function* () {
-    const body = yield* Effect.result(req.json);
-    const parsed = parseDocCloneRequest(body._tag === "Success" ? body.success : null);
-    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
-    const outcome = yield* executeSessionCli(
-      docCloneArgs(parsed.request),
-      runPeRevitCli,
-      DOC_OPEN_TIMEOUT_MS,
-      { action: "doc clone", id: parsed.request.id },
-    );
-    return jsonResponse(outcome);
-  }),
+const docsCloneRoute = HttpRouter.add("POST", "/docs/clone", () =>
+  Effect.succeed(
+    Response.jsonUnsafe(
+      {
+        ok: false,
+        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
+        notDispatched: true,
+      },
+      { status: 409 },
+    ),
+  ),
 );
 
 const docsCurrentRoute = HttpRouter.add("GET", "/docs/current", (req) =>
@@ -470,19 +523,17 @@ const docsCurrentRoute = HttpRouter.add("GET", "/docs/current", (req) =>
   }),
 );
 
-const docsCloseRoute = HttpRouter.add("POST", "/docs/close", (req) =>
-  Effect.gen(function* () {
-    const body = yield* Effect.result(req.json);
-    const parsed = parseDocCloseRequest(body._tag === "Success" ? body.success : null);
-    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
-    const outcome = yield* executeSessionCli(
-      docCloseArgs(parsed.request),
-      runPeRevitCli,
-      DOC_OPEN_TIMEOUT_MS,
-      { action: "doc close", id: parsed.request.id },
-    );
-    return jsonResponse(outcome);
-  }),
+const docsCloseRoute = HttpRouter.add("POST", "/docs/close", () =>
+  Effect.succeed(
+    Response.jsonUnsafe(
+      {
+        ok: false,
+        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
+        notDispatched: true,
+      },
+      { status: 409 },
+    ),
+  ),
 );
 
 export const docsRoute = Layer.mergeAll(

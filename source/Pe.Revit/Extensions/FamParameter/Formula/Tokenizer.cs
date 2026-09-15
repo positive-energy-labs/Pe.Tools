@@ -91,13 +91,30 @@ internal static class FormulaUtils {
     ///     stripping string literals, and splitting on boundary chars.
     /// </summary>
     private static IEnumerable<string> ExtractUnknownTokens(string formula, IEnumerable<string> validParameterNames) {
+        var maskedFormula = new string(MaskKnownNames(formula, validParameterNames, out _));
+        return maskedFormula.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>
+    ///     Names from <paramref name="candidateNames" /> whose text a formula actually spends, matched longest-first
+    ///     so "Half Width" consumes its span before "Width" is tested and "Width" is not reported as referenced.
+    /// </summary>
+    internal static HashSet<string> ExtractReferencedNames(string formula, IEnumerable<string> candidateNames) {
+        if (string.IsNullOrEmpty(formula)) return [];
+        MaskKnownNames(formula, candidateNames, out var referenced);
+        return referenced;
+    }
+
+    /// <summary>Strips string literals, then masks every candidate name longest-first, reporting which names were consumed.</summary>
+    private static char[] MaskKnownNames(string formula, IEnumerable<string> candidateNames, out HashSet<string> masked) {
         // Strip string literals first
         var withoutStrings = Regex.Replace(formula, "\"[^\"]*\"", " ");
 
         // Sort parameters by length descending to handle overlapping names correctly
         // e.g., "Width Offset" should be checked before "Width"
-        var sortedParams = validParameterNames
+        var sortedParams = candidateNames
             .Where(p => !string.IsNullOrEmpty(p))
+            .Distinct(StringComparer.Ordinal)
             .OrderByDescending(p => p.Length)
             .ToList();
 
@@ -105,11 +122,10 @@ internal static class FormulaUtils {
         var chars = withoutStrings.ToCharArray();
 
         // Mask out valid parameters by replacing them with spaces
-        foreach (var paramName in sortedParams) MaskParameter(chars, paramName);
-
-        // Now tokenize the masked string
-        var maskedFormula = new string(chars);
-        return maskedFormula.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
+        masked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var paramName in sortedParams)
+            if (MaskParameter(chars, paramName)) masked.Add(paramName);
+        return chars;
     }
 
     /// <summary>
@@ -162,7 +178,9 @@ internal static class FormulaUtils {
     ///     Masks all boundary-valid occurrences of a parameter name in a character array.
     ///     Modifies the array in-place for efficiency.
     /// </summary>
-    private static void MaskParameter(char[] chars, string paramName) {
+    /// <returns>True when at least one occurrence was masked.</returns>
+    private static bool MaskParameter(char[] chars, string paramName) {
+        var maskedAny = false;
         var paramLen = paramName.Length;
         var maxStart = chars.Length - paramLen;
 
@@ -190,9 +208,12 @@ internal static class FormulaUtils {
             if (leftValid && rightValid) {
                 // Mask this occurrence with spaces
                 for (var j = 0; j < paramLen; j++) chars[i + j] = ' ';
+                maskedAny = true;
                 // Skip past this occurrence
                 i += paramLen - 1;
             }
         }
+
+        return maskedAny;
     }
 }

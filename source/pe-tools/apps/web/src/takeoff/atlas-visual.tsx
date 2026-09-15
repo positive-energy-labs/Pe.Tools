@@ -21,8 +21,6 @@ export function AtlasVisual() {
     statsOpen,
     level,
     setLevel,
-    setZoneKey,
-    setCursor,
     setPlanOpen,
     setStatsOpen,
     stateOf,
@@ -31,6 +29,8 @@ export function AtlasVisual() {
     levelZones,
     cursorRow,
     selectZone,
+    focusRoom,
+    clearScope,
     scopeShortcuts,
   } = useAtlasWorkspace();
   return (
@@ -109,15 +109,8 @@ export function AtlasVisual() {
           stateOf={stateOf}
           onSelectZone={selectZone}
           onHover={(id) => store.actions.hover(id)}
-          onCursor={(z, guid) => {
-            setZoneKey(z.zone.key);
-            setLevel(z.zone.lane.label);
-            setCursor(guid);
-          }}
-          onClear={() => {
-            setZoneKey(null);
-            setCursor(null);
-          }}
+          onCursor={focusRoom}
+          onClear={clearScope}
         />
         {statsOpen && (
           <LevelStats

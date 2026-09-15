@@ -6,7 +6,7 @@ import { token } from "#/lib/token";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { loopBounds, pathD } from "#/takeoff/model";
 import { ABSENT_INK, CURSOR_INK, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
-import type { WorldRoom, WorldZone } from "#/takeoff/world";
+import type { ModelRoom, ModelZone } from "#/takeoff/world";
 
 export function ZonePeek({
   zone,
@@ -14,10 +14,10 @@ export function ZonePeek({
   geoReady,
   stateOf,
 }: {
-  zone: WorldZone;
-  cursorRoom: WorldRoom | null;
+  zone: ModelZone;
+  cursorRoom: ModelRoom | null;
   geoReady: boolean;
-  stateOf: (room: WorldRoom) => RoomState;
+  stateOf: (room: ModelRoom) => RoomState;
 }) {
   const withGeometry = zone.rooms.filter((r) => r.outer !== null);
   const bounds = useMemo<Bounds2>(() => {

@@ -1,20 +1,24 @@
+import { observeResources, resourceResponse } from "../src/resource-stream.ts";
+import { ScopeStore } from "../src/scope-store.ts";
 import { mkdtemp, rm } from "node:fs/promises";
-import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
-import { serve } from "@hono/node-server";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { address, routeBindingsSchema } from "@pe/agent-contracts";
-import type { RouteScope, RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
+import type {
+  RouteActor,
+  RouteStateCommandHandlers,
+  RouteStatePatch,
+  RouteStateSpec,
+  WorkKey,
+} from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createPeaRuntime } from "../src/pea-runtime.ts";
 import type {
   RouteDocumentStore,
-  RouteWorkspaceActor,
   RouteWorkspaceEvent,
-  RouteWorkspacePatch,
   RouteWorkspaceRegistration,
 } from "../src/route-workspace.ts";
 
@@ -42,18 +46,6 @@ function registration(
         actor: "any",
         input: z.object({}),
       },
-      external: {
-        description: "Mutate an external system.",
-        actor: "human",
-        input: z.object({}),
-        mutatesExternal: true,
-      },
-      recover: {
-        description: "Recover external state.",
-        actor: "human",
-        input: z.object({}),
-        recoversExternal: true,
-      },
       fail: {
         description: "Fail for chronology proof.",
         actor: "human",
@@ -68,8 +60,6 @@ function registration(
       await context.setDoc(doc);
       return { count: doc.count };
     },
-    external: async () => ({ mutated: true }),
-    recover: async () => ({ recovered: true }),
     fail: async () => {
       throw new Error("deliberate failure");
     },
@@ -80,11 +70,11 @@ function registration(
 
 function memoryStore() {
   const state = new Map<string, unknown>();
-  const key = (scopeKey: string, route: string) => `${scopeKey}\0${route}`;
+  const key = (targetKey: string, route: string) => `${targetKey}\0${route}`;
   const store: RouteDocumentStore = {
-    getState: async ({ scopeKey, route }) => structuredClone(state.get(key(scopeKey, route))),
-    setState: async ({ scopeKey, route, value }) => {
-      state.set(key(scopeKey, route), structuredClone(value));
+    getState: async ({ targetKey, route }) => structuredClone(state.get(key(targetKey, route))),
+    setState: async ({ targetKey, route, value }) => {
+      state.set(key(targetKey, route), structuredClone(value));
     },
   };
   return { store, state };
@@ -102,26 +92,17 @@ function workspace(
   });
 }
 
-const documentA = {
-  scope: { kind: "document", document: address("C:\\Models\\A.rvt"), pin: "pe.app-25" },
-} as const;
-const documentB = {
-  scope: { kind: "document", document: address("C:\\Models\\B.rvt") },
-} as const;
-const queryA = `doc=${encodeURIComponent(documentA.scope.document)}&pin=pe.app-25`;
+const documentA: WorkKey = { route: "test-route", target: address("C:\\Models\\A.rvt") };
+const documentB: WorkKey = { route: "test-route", target: address("C:\\Models\\B.rvt") };
+const queryA = `target=${encodeURIComponent(documentA.target!)}`;
 
-function bind(module: RouteWorkspace, scope: RouteScope = documentA) {
+function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {
     read: () => module.read(scope, "test-route"),
-    apply: (actor: RouteWorkspaceActor, patches: RouteWorkspacePatch[], revision: number) =>
+    apply: (actor: RouteActor, patches: RouteStatePatch[], revision: number) =>
       module.apply(scope, "test-route", actor, patches, revision),
-    cmd: (
-      actor: RouteWorkspaceActor,
-      command: string,
-      input: unknown,
-      revision: number,
-      requestId?: string,
-    ) => module.command(scope, "test-route", actor, command, input, revision, requestId),
+    cmd: (actor: RouteActor, command: string, input: unknown, revision: number) =>
+      module.command(scope, "test-route", actor, command, input, revision),
   };
 }
 
@@ -133,7 +114,7 @@ test("document-scoped route documents are isolated and survive module recreation
     ok: true,
   });
 
-  expect((await bind(first, documentB).read())?.doc).toMatchObject({ values: {} });
+  expect(await bind(first, documentB).read()).toBeNull();
   const second = workspace(store);
   const secondA = bind(second);
   expect((await secondA.read())?.doc).toMatchObject({ values: { a: "A" } });
@@ -196,7 +177,8 @@ test("apply refuses a revision that moved", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
   const w = bind(module);
-  const revision = (await w.read())!.revision;
+  expect(await w.read()).toBeNull();
+  const revision = 0;
 
   expect(await w.apply("human", [{ path: ["count"], value: 1 }], revision)).toMatchObject({
     ok: true,
@@ -225,10 +207,7 @@ test("a handler throw discards its staged document write", async () => {
   expect(await w.cmd("human", "fail", {}, 0)).toMatchObject({
     ok: false,
   });
-  expect(await w.read()).toMatchObject({
-    revision: 0,
-    doc: { count: 0 },
-  });
+  expect(await w.read()).toBeNull();
 });
 
 test("registration rejects route delimiters and schemas that cannot become JSON Schema", () => {
@@ -246,36 +225,6 @@ test("registration rejects route delimiters and schemas that cannot become JSON 
   expect(() => workspace(store, { registration: badCommand })).toThrow();
 });
 
-test("an abandoned external mutation becomes outcomeUnknown and recovery clears it", async () => {
-  const { store, state } = memoryStore();
-  const started = deferred<void>();
-  const never = new Promise<never>(() => undefined);
-  const route = registration({
-    external: async () => {
-      started.resolve();
-      return never;
-    },
-  });
-  const crashed = workspace(store, { registration: route });
-  void bind(crashed).cmd("human", "external", {}, 0, "crash-1");
-  await started.promise;
-
-  const restarted = workspace(store, { registration: route });
-  const w = bind(restarted);
-  expect(await w.read()).toMatchObject({
-    status: "outcomeUnknown",
-    outcomeUnknown: { command: "external" },
-  });
-  expect(JSON.stringify([...state.values()])).not.toContain('"receipts"');
-  expect(await w.cmd("human", "external", {}, 0, "crash-1")).toMatchObject({
-    ok: false,
-    kind: "refused",
-    error: expect.stringContaining("blocked"),
-  });
-  expect(await w.cmd("human", "recover", {}, 0)).toMatchObject({ ok: true });
-  expect(await w.read()).toMatchObject({ status: "ready" });
-});
-
 test("mask, schema, and human command gate are enforced", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
@@ -289,7 +238,7 @@ test("mask, schema, and human command gate are enforced", async () => {
     error: "the patched document is invalid",
   });
   expect(await w.apply("human", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
-  expect(await w.cmd("agent", "external", {}, 1)).toMatchObject({
+  expect(await w.cmd("agent", "fail", {}, 1)).toMatchObject({
     ok: false,
     error: expect.stringContaining("human-only"),
   });
@@ -317,56 +266,7 @@ test("publishes all action outcomes", async () => {
   expect(published[1]?.scope).toEqual(documentB);
 });
 
-test("external replay precedes revision checks and rejects request-id collisions", async () => {
-  const { store } = memoryStore();
-  const external = vi.fn(async () => ({ mutated: true }));
-  const module = workspace(store, { registration: registration({ external }) });
-  const w = bind(module);
-  const input = { b: 2, nested: { y: 2, x: 1 }, a: 1 };
-
-  expect(await w.cmd("human", "external", input, 0, "request-1")).toMatchObject({
-    ok: true,
-    revision: 0,
-    result: { mutated: true },
-  });
-  expect(
-    await w.cmd("human", "external", { a: 1, nested: { x: 1, y: 2 }, b: 2 }, 99, "request-1"),
-  ).toMatchObject({ ok: true, revision: 0, result: { mutated: true } });
-  expect(external).toHaveBeenCalledOnce();
-
-  expect(await w.cmd("human", "increment", {}, 0, "request-1")).toMatchObject({
-    ok: false,
-    code: "request_id_conflict",
-  });
-  expect(
-    await w.cmd("human", "external", { a: 2, nested: { x: 1, y: 2 }, b: 2 }, 0, "request-1"),
-  ).toMatchObject({ ok: false, code: "request_id_conflict" });
-  expect(external).toHaveBeenCalledOnce();
-});
-
-test("recreated workspaces retain and replay external receipts", async () => {
-  const { store } = memoryStore();
-  const external = vi.fn(async () => ({ persisted: true }));
-  const route = registration({ external });
-  await bind(workspace(store, { registration: route })).cmd(
-    "human",
-    "external",
-    {},
-    0,
-    "request-reload",
-  );
-
-  expect(
-    await bind(workspace(store, { registration: route })).cmd(
-      "human",
-      "external",
-      {},
-      99,
-      "request-reload",
-    ),
-  ).toMatchObject({ ok: true, revision: 0, result: { persisted: true } });
-  expect(external).toHaveBeenCalledOnce();
-});
+// External replay/collision/reconstruction proof lives in host partition-operation.test.ts through /actions.
 
 test("stale commands never invoke and successful writes return landed revisions", async () => {
   const { store } = memoryStore();
@@ -391,43 +291,34 @@ test("stale commands never invoke and successful writes return landed revisions"
   expect(increment).toHaveBeenCalledOnce();
 });
 
-test("non-JSON and oversized results complete once but cannot replay", async () => {
-  const circular: { self?: unknown } = {};
-  circular.self = circular;
-  for (const completed of [circular, "x".repeat(8 * 1024 + 1)]) {
-    const { store } = memoryStore();
-    const external = vi.fn(async () => completed);
-    const module = workspace(store, { registration: registration({ external }) });
-    const w = bind(module);
+// Durable large-result / serialization-loss proof lives in host gateway.test.ts on ActionJournal.
 
-    const first = await w.cmd("human", "external", {}, 0, "request-large");
-    expect(first).toMatchObject({ ok: true, revision: 0 });
-    if (typeof completed === "string") expect(first).toMatchObject({ result: completed });
-    else expect(first).not.toHaveProperty("result");
-    expect(await w.cmd("human", "external", {}, 99, "request-large")).toMatchObject({
-      ok: false,
-      kind: "refused",
-      code: "replay_unavailable",
-    });
-    expect(external).toHaveBeenCalledOnce();
-  }
-});
-
-test("HTTP writes forward revision and request identity while refusing a missing doc", async () => {
+test("HTTP authored writes enforce short local revision checks", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-state-"));
   const runtime = await createPeaRuntime({ workspaceRoot });
   const external = vi.fn(async () => ({ mutated: true }));
+  const catalogRead = vi.fn(async () => ({
+    at: "2026-09-14T22:54:30.125Z",
+    sessions: [],
+    sources: {},
+    capabilities: [],
+  }));
   try {
     const app = await buildAgentControllerApp({
       runtime,
       label: "pea",
+      capabilityCatalog: { read: catalogRead },
       routeRegistrations: [registration({ external })],
     });
+    expect(
+      await app.fetch(new Request("http://local/pe/capabilities?session=session-exact")),
+    ).toMatchObject({ status: 200 });
+    expect(catalogRead).toHaveBeenCalledWith("session-exact");
     const response = await app.fetch(
-      new Request("http://local/pe/route-state/test-route?doc=not-an-address"),
+      new Request("http://local/pe/route-state/test-route?target=not-an-address"),
     );
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: /invalid route scope/ });
+    expect(await response.json()).toMatchObject({ error: /invalid Target/ });
 
     const post = (path: string, body: unknown) =>
       app.fetch(
@@ -446,81 +337,49 @@ test("HTTP writes forward revision and request identity while refusing a missing
       ).json(),
     ).toMatchObject({ ok: true, revision: 1 });
     const command = {
-      command: "external",
+      command: "increment",
       input: {},
       expectedRevision: 1,
-      requestId: "http-request-1",
     };
     expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
       ok: true,
-      revision: 1,
+      revision: 2,
     });
     expect(
       await (
-        await post("/pe/route-state/test-route/command", {
-          ...command,
-          expectedRevision: 99,
-        })
+        await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
       ).json(),
-    ).toMatchObject({ ok: true, revision: 1 });
-    expect(external).toHaveBeenCalledOnce();
+    ).toMatchObject({ ok: false, code: "stale_revision" });
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });
   }
 }, 30_000);
 
-test("route event stream publishes an applied revision and ends on abort", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-events-"));
-  const runtime = await createPeaRuntime({ workspaceRoot });
+test("resource stream publishes absent Work, an applied revision, and ends on abort", async () => {
+  const module = workspace(memoryStore().store);
+  const scopes = new ScopeStore(
+    async () => ({ getState: async () => null, setState: async () => {} }),
+    "test",
+  );
   const abort = new AbortController();
-  let server: ReturnType<typeof serve> | undefined;
-  try {
-    const app = await buildAgentControllerApp({
-      runtime,
-      label: "pea",
-      routeRegistrations: [registration()],
-    });
-    server = serve({ fetch: app.fetch, port: 0 });
-    await once(server, "listening");
-    const socket = server.address();
-    if (!socket || typeof socket === "string") throw new Error("Expected a TCP server.");
-    const base = `http://127.0.0.1:${socket.port}`;
-    const response = await fetch(`${base}/pe/route-state/test-route/events?${queryA}`, {
-      signal: abort.signal,
-    });
-    const reader = response.body!.getReader();
-    expect((await readSse(reader)).revision).toBe(0);
-
-    await fetch(`${base}/pe/route-state/test-route/apply?${queryA}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        patches: [{ path: ["values", "sse"], value: "landed" }],
-        expectedRevision: 0,
-      }),
-    });
-    expect(await readSse(reader)).toMatchObject({
-      revision: 1,
-      doc: { values: { sse: "landed" } },
-    });
-
-    abort.abort();
-    const ended = await reader.read().then(
-      ({ done }) => done,
-      (error: unknown) => error instanceof DOMException && error.name === "AbortError",
-    );
-    expect(ended).toBe(true);
-  } finally {
-    abort.abort();
-    if (server)
-      await new Promise<void>((resolve, reject) =>
-        server!.close((error) => (error ? reject(error) : resolve())),
-      );
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-}, 30_000);
+  const response = resourceResponse(
+    new Request(
+      `http://host/pe/resources?${new URLSearchParams({ keys: JSON.stringify([{ kind: "work", ...documentA }]) }).toString()}`,
+      { signal: abort.signal },
+    ),
+    observeResources(module, scopes),
+  );
+  const reader = response.body!.getReader();
+  expect(await readSse(reader)).toMatchObject({ kind: "snapshot", value: null });
+  await bind(module).apply("human", [{ path: ["values", "sse"], value: "landed" }], 0);
+  expect(await readSse(reader)).toMatchObject({
+    kind: "snapshot",
+    value: { revision: 1, doc: { values: { sse: "landed" } } },
+  });
+  abort.abort();
+  await expect(reader.read()).rejects.toThrow("closed");
+});
 
 async function readSse(
   reader: ReadableStreamDefaultReader<Uint8Array>,

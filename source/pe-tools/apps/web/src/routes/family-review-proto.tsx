@@ -1,3 +1,4 @@
+import { RouteShell, emptyManifest } from "#/route";
 import { token } from "#/lib/token";
 /**
  * /family-review-proto — THROWAWAY. find-the-product for the FAMILY REVIEW BOARD, round 2.
@@ -29,15 +30,26 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { RUN_SOURCE, loadBoard } from "#/family-review/proto/board";
-import { ReviewBoard, stages, useEdits, useVerdicts } from "#/family-review/proto/review-board";
+import { ReviewBoard, boardCases, useEdits, useVerdicts } from "#/family-review/proto/review-board";
+
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("family-review-proto", "Family Review Proto");
+
+function RouteShelledFamilyReviewProto() {
+  return (
+    <RouteShell manifest={manifest}>
+      <FamilyReviewProto />
+    </RouteShell>
+  );
+}
 
 export const Route = createFileRoute("/family-review-proto")({
-  component: FamilyReviewProto,
+  component: RouteShelledFamilyReviewProto,
 });
 
 function FamilyReviewProto() {
   const families = loadBoard();
-  const board = stages(families);
+  const board = boardCases(families);
   const verdicts = useVerdicts();
   const edits = useEdits();
   const staged = Object.keys(edits.book).length;

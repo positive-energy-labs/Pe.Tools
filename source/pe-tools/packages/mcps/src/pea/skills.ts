@@ -212,7 +212,7 @@ description: Lay out ductwork in Revit - rough in a supply, return, or exhaust t
 
 You do not hand-draw ducts. You DECLARE intent as JSON; the Pe.Revit.Placement library routes collision-aware paths on a lattice and DRAFTS native placeholder ducts (visible; the user can drag them); you read the report and a plan image, refine the intent, re-SOLVE and read the DIFF; when it is clean you COMMIT real connected ducts and fittings. Use these five words with the user and repeat them when reporting.
 
-Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via pe_do key=route:pods.execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
+Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via pe_do key=op:scripting.execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
 
     using Pe.Revit.Placement;
     var place = new DuctPlacer(doc, "L3");   // level name or id; plan and 3D views auto-resolve

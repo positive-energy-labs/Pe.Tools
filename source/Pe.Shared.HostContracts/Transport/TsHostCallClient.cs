@@ -7,13 +7,7 @@ using System.Text;
 
 namespace Pe.Shared.HostContracts.Transport;
 
-/// <summary>
-///     The Revit-side caller for the TS host's single wire: POST /call { key, request }.
-///     Success is the operation's response JSON; failure is problem-JSON
-///     ({ kind, message, status }) surfaced as <see cref="TsHostCallException" />.
-/// </summary>
 public static class TsHostCallClient {
-    // ponytail: one shared HttpClient, per-call timeout via cancellation token.
     private static readonly HttpClient HttpClient = new() {
         Timeout = System.Threading.Timeout.InfiniteTimeSpan
     };
@@ -55,7 +49,6 @@ public static class TsHostCallClient {
     }
 }
 
-/// <summary>A failed /call, carrying the problem-JSON status and kind.</summary>
 public sealed class TsHostCallException : InvalidOperationException {
     public TsHostCallException(string key, int status, string? kind, string detail)
         : base($"TS host call '{key}' failed ({status}{(kind is null ? "" : $" {kind}")}): {detail}") {

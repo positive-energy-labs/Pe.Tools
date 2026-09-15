@@ -1,8 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Failures;
-using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Shared.RevitData.Families;
 using Pe.Revit.Tasks;
-using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.SettingsRuntime.Json;
@@ -213,32 +212,23 @@ internal static class RevitFamilyFixtureHarness {
                ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }
 
-    public static FFManagerProfile LoadProfileFixture(string fixtureFileName) =>
-        LoadProfileFixtureContract(fixtureFileName).Value;
-
-    public static SettingsJsonRoundTripResult<FFManagerProfile> LoadProfileFixtureContract(string fixtureFileName) {
-        var fixturePath = GetProfileFixturePath(fixtureFileName);
-        var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fixturePath);
+    /// <summary>`Fixtures/FamilyModel/&lt;name&gt;.family.json`, parsed strictly and macro-expanded.</summary>
+    public static FamilyModel LoadFamilyModelFixture(string name) {
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(GetFamilyModelFixturePath($"{name}.family.json")));
+        return parsed.Value ?? throw new InvalidOperationException(string.Join(Environment.NewLine, parsed.Diagnostics.Select(d => $"{d.Path} {d.Code}: {d.Message}")));
     }
 
-    public static DesiredFamilyMigrationProfile LoadDesiredMigrationProfileFixture(string fixtureFileName) =>
-        LoadDesiredMigrationProfileFixtureContract(fixtureFileName).Value;
+    /// <summary>`Fixtures/FamilyModel/&lt;name&gt;.patch.json`.</summary>
+    public static FamilyPatch LoadPatchFixture(string name) =>
+        FamilyPatch.Parse(File.ReadAllText(GetFamilyModelFixturePath($"{name}.patch.json")));
 
-    public static SettingsJsonRoundTripResult<DesiredFamilyMigrationProfile> LoadDesiredMigrationProfileFixtureContract(
-        string fixtureFileName) {
-        var fixturePath = GetProfileFixturePath(fixtureFileName);
-        var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<DesiredFamilyMigrationProfile>(json, fixturePath);
-    }
-
-    public static FFMigratorProfile LoadMigratorProfileFixture(string fixtureFileName) =>
-        LoadMigratorProfileFixtureContract(fixtureFileName).Value;
-
-    public static SettingsJsonRoundTripResult<FFMigratorProfile> LoadMigratorProfileFixtureContract(string fixtureFileName) {
-        var fixturePath = GetProfileFixturePath(fixtureFileName);
-        var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<FFMigratorProfile>(json, fixturePath);
+    public static string GetFamilyModelFixturePath(string fileName) {
+        var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
+                                ?? throw new InvalidOperationException("Could not resolve the test assembly directory.");
+        var fixturePath = Path.Combine(assemblyDirectory, "Fixtures", "FamilyModel", fileName);
+        if (!File.Exists(fixturePath))
+            throw new FileNotFoundException($"family.json fixture not found at '{fixturePath}'.", fixturePath);
+        return fixturePath;
     }
 
     public static void AssertSavedFamilyFileIsOpenable(
@@ -266,7 +256,8 @@ internal static class RevitFamilyFixtureHarness {
         Application application,
         Document projectDocument,
         string familyPath,
-        IFamilyLoadOptions? loadOptions = null
+        IFamilyLoadOptions? loadOptions = null,
+        Action<Document>? inspectOpenedFamily = null
     ) {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
@@ -285,6 +276,7 @@ internal static class RevitFamilyFixtureHarness {
             familyDocument = application.OpenDocumentFile(familyPath);
             if (familyDocument == null || !familyDocument.IsFamilyDocument)
                 throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
+            inspectOpenedFamily?.Invoke(familyDocument);
 
             return PeToolsFailureHandling.ExecuteWithFailureHandling(
                 projectDocument,

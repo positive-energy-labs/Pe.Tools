@@ -3,21 +3,26 @@ using Autodesk.Revit.ApplicationServices;
 namespace Pe.Revit.Parameters;
 
 /// <summary>
-///     Wrapper for temporary shared parameter files that automatically cleans up on disposal.
-///     Use with 'using' statement for automatic file cleanup.
-///     Implicitly converts to DefinitionGroup for direct usage.
+///     Keeps the temporary shared parameter file active until disposal, including native add,
+///     replace and bind calls using its definitions. Dispose nested scopes in reverse order.
 /// </summary>
 public class TempSharedParamFile : IDisposable {
     public TempSharedParamFile(Document doc) {
         this.App = doc.Application;
         this.OriginalFileName = this.App.SharedParametersFilename;
 
-        var tempSharedParamFile = Path.GetTempFileName() + ".txt";
+        var tempSharedParamFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
         using (File.Create(tempSharedParamFile)) { } // Create empty file
 
-        this.App.SharedParametersFilename = tempSharedParamFile;
-
-        this.DefinitionFile = this.App.OpenSharedParameterFile();
+        try {
+            this.App.SharedParametersFilename = tempSharedParamFile;
+            this.DefinitionFile = this.App.OpenSharedParameterFile()
+                ?? throw new InvalidOperationException("Revit could not open the temporary shared parameter file.");
+        } catch {
+            this.App.SharedParametersFilename = this.OriginalFileName;
+            File.Delete(tempSharedParamFile);
+            throw;
+        }
     }
 
     public DefinitionFile DefinitionFile { get; }
@@ -30,13 +35,7 @@ public class TempSharedParamFile : IDisposable {
     private Application App { get; }
 
     public void Dispose() {
-        try {
-            // Restore original shared parameters file setting first
-            this.App.SharedParametersFilename = this.OriginalFileName;
-        } catch {
-            Console.WriteLine("Failed to restore original SharedParametersFilename.");
-        }
-
+        this.App.SharedParametersFilename = this.OriginalFileName;
         try {
             if (!string.IsNullOrWhiteSpace(this.TempFileName) && File.Exists(this.TempFileName))
                 File.Delete(this.TempFileName);

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename, join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Semaphore } from "effect";
 import {
   SettingsDirectiveScope,
   SettingsDocumentDependencyKind,
@@ -24,6 +24,7 @@ import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { LocalOpError } from "./local-error.ts";
 import { productSettingsRootPath } from "./product-paths.ts";
 import {
+  localOpFileError,
   makeDirectory,
   readDirectoryEntriesOrEmpty,
   readFileString,
@@ -37,7 +38,9 @@ type MutableSettingsDirectoryNode = Omit<SettingsDirectoryNode, "directories" | 
   files: SettingsFileNode[];
 };
 
-type SettingsRuntimeContext = {
+export type SettingsRuntimeContext = {
+  /** Storage authority survives file mode, which clears only native schema services. */
+  readonly storageRoot?: string;
   readonly bridgeSessionId?: string;
   readonly schemaJson?: string;
   readonly invokeBridge?: (
@@ -75,6 +78,8 @@ type CompositionDependency = {
 };
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
+// ponytail: one host-wide save lane; per-file locks only if unrelated saves contend.
+const saveLock = Semaphore.makeUnsafe(1);
 const schemaCache = new Map<string, { validate?: ValidateFunction; errorMessage?: string }>();
 
 export const discoverSettingsTree = Effect.fnUntraced(function* (
@@ -82,14 +87,32 @@ export const discoverSettingsTree = Effect.fnUntraced(function* (
   ctx: SettingsRuntimeContext = {},
 ) {
   const request = normalizeSettingsTreeRequest(input);
-  return yield* discoverSettingsTreeFromDisk(request, ctx);
+  return yield* discoverSettingsTreeFromDisk(
+    request,
+    input.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
+  );
+});
+
+export const settingsDocumentAddress = Effect.fnUntraced(function* (
+  documentId: SettingsDocumentId,
+  storageRoot?: string,
+) {
+  const { documentPath } = yield* resolveDocumentPath(
+    documentId,
+    "settings.document.save",
+    storageRoot,
+  );
+  return { path: documentPath, workspaceId: `settings:${sha256(documentPath.toLowerCase())}` };
 });
 
 export function openSettingsDocument(
   request: OpenSettingsDocumentRequest,
   ctx: SettingsRuntimeContext = {},
 ): Effect.Effect<SettingsDocumentSnapshot, LocalOpError | Error, FileSystem.FileSystem> {
-  return openSettingsDocumentFromDisk(request, ctx);
+  return openSettingsDocumentFromDisk(
+    request,
+    request.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
+  );
 }
 
 export function openSettingsDocumentWithModule(
@@ -108,6 +131,7 @@ export function validateSettingsDocument(
   LocalOpError | Error,
   FileSystem.FileSystem
 > {
+  if (request.mode === "file") ctx = { storageRoot: ctx.storageRoot };
   return Effect.gen(function* () {
     const module = yield* discoverModule(request.documentId, ctx);
     const materialized = yield* materializeDocument(
@@ -125,7 +149,12 @@ export function saveSettingsDocument(
   request: SaveSettingsDocumentRequest,
   ctx: SettingsRuntimeContext = {},
 ): Effect.Effect<SaveSettingsDocumentResult, LocalOpError | Error, FileSystem.FileSystem> {
-  return saveSettingsDocumentToDisk(request, ctx);
+  return saveLock.withPermit(
+    saveSettingsDocumentToDisk(
+      request,
+      request.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
+    ),
+  );
 }
 
 function defaultSettingsBasePath(): string {
@@ -134,6 +163,7 @@ function defaultSettingsBasePath(): string {
 
 function normalizeSettingsTreeRequest(input: SettingsTreeRequest): Required<SettingsTreeRequest> {
   return {
+    mode: input.mode ?? "module",
     moduleKey: input.moduleKey || "Global",
     rootKey: input.rootKey || "fragments",
     subDirectory: input.subDirectory ?? null,
@@ -159,7 +189,7 @@ const discoverSettingsTreeFromDisk = Effect.fnUntraced(function* (
     "settings.tree",
     () => {
       const rootDirectory = resolveSettingsRootDirectory(
-        defaultSettingsBasePath(),
+        ctx.storageRoot ?? defaultSettingsBasePath(),
         module.moduleKey,
         root.rootKey,
       );
@@ -203,66 +233,107 @@ const saveSettingsDocumentToDisk = Effect.fnUntraced(function* (
   ctx: SettingsRuntimeContext,
 ) {
   const module = yield* discoverModule(request.documentId, ctx);
-  const { documentPath, rootDirectory } = yield* resolveDocumentPath(
+  const { documentPath } = yield* resolveDocumentPath(
     request.documentId,
     "settings.document.save",
+    ctx.storageRoot,
   );
-  const materialized = yield* materializeDocument(
-    request.documentId,
-    request.rawContent,
-    module,
-    true,
-    ctx,
-  );
-  const currentVersionToken = yield* createSettingsVersionToken(
-    documentPath,
-    "settings.document.save",
-  );
-  const conflictDetected =
-    (request.createOnly === true && currentVersionToken != null) ||
-    (request.expectedVersionToken != null &&
-      currentVersionToken != null &&
-      request.expectedVersionToken.value !== currentVersionToken.value);
-
-  if (conflictDetected) {
-    return {
-      metadata: yield* buildSettingsDocumentMetadata(
-        request.documentId,
-        rootDirectory,
-        documentPath,
+  if (
+    request.workspaceId &&
+    request.workspaceId !== `settings:${sha256(documentPath.toLowerCase())}`
+  )
+    return yield* Effect.fail(
+      new LocalOpError(
         "settings.document.save",
+        "This file belongs to another Work. Select its file workspace.",
+        409,
       ),
-      writeApplied: false,
-      conflictDetected,
-      conflictMessage:
-        request.createOnly === true
-          ? `Settings document '${stableDocumentId(request.documentId)}' already exists.`
-          : `Settings document '${stableDocumentId(request.documentId)}' changed on disk.`,
-      validation: materialized.validation,
+    );
+  if (!request.expected)
+    return yield* Effect.fail(
+      new LocalOpError(
+        "settings.document.save",
+        "A present or missing precondition is required.",
+        400,
+      ),
+    );
+  const fs = yield* FileSystem.FileSystem;
+  const current = yield* readSettingsFile(documentPath, true);
+  if (
+    request.expected.kind === "missing"
+      ? current !== null
+      : current === null || current.version !== request.expected.version
+  ) {
+    return {
+      kind: "conflict",
+      current:
+        current === null
+          ? null
+          : yield* settingsSnapshot(request.documentId, documentPath, current, module, ctx, true),
     } satisfies SaveSettingsDocumentResult;
   }
-
-  yield* makeDirectory(win32.dirname(documentPath), "settings.document.save");
-  const contentToWrite = materialized.schemaJson
-    ? injectSchemaReference(request.rawContent, settingsSchemaUrl(request.documentId))
-    : request.rawContent;
-  yield* writeFileStringAtomic(
+  if (
+    new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+      new TextEncoder().encode(request.rawContent),
+    ) !== request.rawContent
+  )
+    return yield* Effect.fail(
+      new LocalOpError(
+        "settings.document.save",
+        "Raw content must round-trip as UTF-8; unpaired surrogates cannot be saved exactly.",
+        400,
+      ),
+    );
+  // Validation describes authoring; invalid JSON is still valid file content to preserve.
+  const written = { rawContent: request.rawContent, version: sha256(request.rawContent) };
+  const snapshot = yield* settingsSnapshot(
+    request.documentId,
     documentPath,
-    normalizeJsonTrailingNewline(contentToWrite),
-    "settings.document.save",
+    written,
+    module,
+    ctx,
+    true,
   );
-  return {
-    metadata: yield* buildSettingsDocumentMetadata(
-      request.documentId,
-      rootDirectory,
-      documentPath,
-      "settings.document.save",
-    ),
-    writeApplied: true,
-    conflictDetected: false,
-    conflictMessage: null,
-    validation: materialized.validation,
-  } satisfies SaveSettingsDocumentResult;
+  yield* makeDirectory(win32.dirname(documentPath), "settings.document.save");
+  if (request.expected.kind === "missing") {
+    const result = yield* Effect.result(
+      fs.writeFileString(documentPath, request.rawContent, { flag: "wx" }),
+    );
+    if (result._tag === "Failure") {
+      if (result.failure.reason._tag === "AlreadyExists") {
+        const observed = yield* readSettingsFile(documentPath, true);
+        return {
+          kind: "conflict",
+          current:
+            observed === null
+              ? null
+              : yield* settingsSnapshot(
+                  request.documentId,
+                  documentPath,
+                  observed,
+                  module,
+                  ctx,
+                  true,
+                ),
+        } satisfies SaveSettingsDocumentResult;
+      }
+      return yield* Effect.fail(localOpFileError("settings.document.save", result.failure));
+    }
+  } else {
+    // Optimistic against external writers: read/check + rename is not an atomic CAS.
+    const checked = yield* readSettingsFile(documentPath, true);
+    if (checked === null || checked.version !== request.expected.version)
+      return {
+        kind: "conflict",
+        current:
+          checked === null
+            ? null
+            : yield* settingsSnapshot(request.documentId, documentPath, checked, module, ctx, true),
+      } satisfies SaveSettingsDocumentResult;
+    yield* writeFileStringAtomic(documentPath, request.rawContent, "settings.document.save");
+  }
+  // This snapshot names our bytes, never a post-write reread of another writer's content.
+  return { kind: "written", snapshot } satisfies SaveSettingsDocumentResult;
 });
 
 const openSettingsDocumentFromDisk = Effect.fnUntraced(function* (
@@ -271,32 +342,80 @@ const openSettingsDocumentFromDisk = Effect.fnUntraced(function* (
   resolvedModule?: SettingsModuleDescriptor,
 ) {
   const module = resolvedModule ?? (yield* discoverModule(request.documentId, ctx));
-  const { documentPath, rootDirectory } = yield* resolveDocumentPath(
+  const { documentPath } = yield* resolveDocumentPath(
     request.documentId,
     "settings.document.open",
+    ctx.storageRoot,
   );
-  const rawContent = yield* readFileString(documentPath, "settings.document.open");
-  const materialized = yield* materializeDocument(
+  if (
+    request.workspaceId &&
+    request.workspaceId !== `settings:${sha256(documentPath.toLowerCase())}`
+  )
+    return yield* Effect.fail(
+      new LocalOpError(
+        "settings.document.open",
+        "This file belongs to another Work. Select its file workspace.",
+        409,
+      ),
+    );
+  const content = yield* readSettingsFile(documentPath, false);
+  if (!content)
+    return yield* Effect.fail(new LocalOpError("settings.document.open", "File not found", 404));
+  return yield* settingsSnapshot(
     request.documentId,
-    rawContent,
+    documentPath,
+    content,
     module,
+    ctx,
     request.includeComposedContent === true,
+  );
+});
+
+const readSettingsFile = Effect.fnUntraced(function* (path: string, missing: boolean) {
+  const fs = yield* FileSystem.FileSystem;
+  const result = yield* Effect.result(fs.readFile(path));
+  if (result._tag === "Failure") {
+    const error = localOpFileError("settings.document.read", result.failure);
+    if (missing && error.statusCode === 404) return null;
+    return yield* Effect.fail(error);
+  }
+  const bytes = result.success;
+  const rawContent = yield* Effect.try({
+    try: () => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
+    catch: () => new LocalOpError("settings.document.read", "The file is not valid UTF-8.", 400),
+  });
+  return { rawContent, version: createHash("sha256").update(bytes).digest("hex") };
+});
+
+const settingsSnapshot = Effect.fnUntraced(function* (
+  documentId: SettingsDocumentId,
+  documentPath: string,
+  content: { rawContent: string; version: string },
+  module: SettingsModuleDescriptor,
+  ctx: SettingsRuntimeContext,
+  includeComposedContent: boolean,
+) {
+  const materialized = yield* materializeDocument(
+    documentId,
+    content.rawContent,
+    module,
+    includeComposedContent,
     ctx,
   );
   return {
-    metadata: yield* buildSettingsDocumentMetadata(
-      request.documentId,
-      rootDirectory,
-      documentPath,
-      "settings.document.open",
-    ),
-    rawContent,
-    composedContent: request.includeComposedContent ? materialized.composedContent : null,
+    metadata: {
+      documentId: { ...documentId, stableId: documentPath },
+      workspaceId: `settings:${sha256(documentPath.toLowerCase())}`,
+      kind: SettingsFileKind.Profile,
+      versionToken: { value: content.version },
+    },
+    rawContent: content.rawContent,
+    composedContent: materialized.composedContent,
     dependencies: materialized.dependencies,
     validation: materialized.validation,
     capabilityHints: {
       backend: "ts-local-disk",
-      compositionPolicy: request.includeComposedContent ? "module-scoped" : "not-requested",
+      compositionPolicy: includeComposedContent ? "module-scoped" : "not-requested",
       schemaValidation: materialized.schemaValidation,
       semanticValidation: materialized.semanticValidation,
     },
@@ -321,7 +440,13 @@ const materializeDocument = Effect.fnUntraced(function* (
       validation: { isValid: false, issues: [parsed.issue] },
     };
 
-  const composition = yield* composeForRead(documentId, parsed.value, module, true);
+  const composition = yield* composeForRead(
+    documentId,
+    parsed.value,
+    module,
+    true,
+    ctx.storageRoot,
+  );
   const schemaValidation = yield* validateWithProviderSchema(
     documentId,
     composition.value ?? parsed.value,
@@ -359,6 +484,7 @@ const composeForRead = Effect.fnUntraced(function* (
   value: unknown,
   module: SettingsModuleDescriptor,
   includeComposedContent: boolean,
+  storageRoot?: string,
 ) {
   const options = module.storageOptions ?? {};
   if (!shouldRunComposition(value, options)) {
@@ -369,7 +495,11 @@ const composeForRead = Effect.fnUntraced(function* (
     };
   }
 
-  const { rootDirectory } = yield* resolveDocumentPath(documentId, "settings.document.compose");
+  const { rootDirectory } = yield* resolveDocumentPath(
+    documentId,
+    "settings.document.compose",
+    storageRoot,
+  );
   const dependencies: CompositionDependency[] = [];
   const result = yield* Effect.result(
     expandPresets(cloneJson(value), rootDirectory, options, dependencies, documentId).pipe(
@@ -396,7 +526,7 @@ const composeForRead = Effect.fnUntraced(function* (
         suggestion: "Fix the directive path or allowed root configuration.",
       },
     ] satisfies SettingsValidationIssue[],
-    value: includeComposedContent ? cloneJson(value) : null,
+    value: null,
   };
 });
 
@@ -643,7 +773,7 @@ export function settingsSchemaUrl(documentId: SettingsDocumentId): string {
 /** Set/repair the document's $schema URL; returns content unchanged when not applicable. */
 export function injectSchemaReference(rawContent: string, schemaUrl: string): string {
   try {
-    const parsed = JSON.parse(rawContent) as unknown;
+    const parsed = JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return rawContent;
     const record = parsed as Record<string, unknown>;
     if (record.$schema === schemaUrl) return rawContent;
@@ -657,10 +787,11 @@ export function injectSchemaReference(rawContent: string, schemaUrl: string): st
 const resolveDocumentPath = Effect.fnUntraced(function* (
   documentId: SettingsDocumentId,
   operationKey: string,
+  storageRoot?: string,
 ) {
   return yield* resolveLocalPath(operationKey, () => {
     const rootDirectory = resolveSettingsRootDirectory(
-      defaultSettingsBasePath(),
+      storageRoot ?? defaultSettingsBasePath(),
       documentId.moduleKey,
       documentId.rootKey,
     );
@@ -673,7 +804,7 @@ const resolveDocumentPath = Effect.fnUntraced(function* (
 
 function parseJson(rawContent: string): ParsedJson {
   try {
-    return { ok: true, value: JSON.parse(rawContent) as unknown };
+    return { ok: true, value: JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown };
   } catch (error) {
     return {
       ok: false,
@@ -690,7 +821,7 @@ function parseJson(rawContent: string): ParsedJson {
 
 function parseJsonValue(rawContent: string) {
   return Effect.try({
-    try: () => JSON.parse(rawContent) as unknown,
+    try: () => JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown,
     catch: (error) => new Error(errorMessage(error)),
   });
 }
@@ -729,33 +860,36 @@ const expandPresets: (
     sourceDocumentId: SettingsDocumentId,
     visited: Set<string> = new Set(),
   ) {
-    if (Array.isArray(value))
-      return yield* Effect.all(
-        value.map((item) =>
-          expandPresets(item, localRootDirectory, options, dependencies, sourceDocumentId, visited),
-        ),
-      );
+    if (Array.isArray(value)) {
+      const next: unknown[] = [];
+      for (const item of value)
+        next.push(
+          yield* expandPresets(
+            item,
+            localRootDirectory,
+            options,
+            dependencies,
+            sourceDocumentId,
+            visited,
+          ),
+        );
+      return next;
+    }
     if (!isRecord(value)) return value;
     if ("$preset" in value) {
-      const keys = Object.keys(value);
-      if (keys.some((key) => key !== "$preset"))
-        throw new Error(
-          "Invalid '$preset' usage. Preset composition does not support inline overrides.",
-        );
-      const directive = resolveDirective(
-        value.$preset,
-        localRootDirectory,
-        options.presetRoots ?? [],
-        false,
+      const directive = yield* Effect.try(() =>
+        resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? [], false),
       );
       const path = yield* resolveDirectiveFilePath(directive);
       if (visited.has(path.toLowerCase()))
-        throw new Error(`Circular preset reference detected: ${path}`);
+        return yield* Effect.fail(new Error(`Circular preset reference detected: ${path}`));
       visited.add(path.toLowerCase());
       const content = yield* readFileString(path, "settings.document.compose");
       const parsed = yield* parseJsonValue(content);
       if (!isRecord(parsed))
-        throw new Error(`Preset '${basename(path)}' has invalid format. Expected a JSON object.`);
+        return yield* Effect.fail(
+          new Error(`Preset '${basename(path)}' has invalid format. Expected a JSON object.`),
+        );
       dependencies.push(
         createDependency(sourceDocumentId, directive, path, SettingsDocumentDependencyKind.Preset),
       );
@@ -769,7 +903,33 @@ const expandPresets: (
       );
       visited.delete(path.toLowerCase());
       if (isRecord(expanded)) delete expanded.$schema;
-      return expanded;
+      const inline = Object.fromEntries(Object.entries(value).filter(([key]) => key !== "$preset"));
+      if (!Object.keys(inline).length) return expanded;
+      const overrides = yield* expandPresets(
+        inline,
+        localRootDirectory,
+        options,
+        dependencies,
+        sourceDocumentId,
+        visited,
+      );
+      // Resolve referenced fields before merging, so overrides can refine included objects too.
+      return mergeCompositionFields(
+        yield* expandIncludes(
+          expanded,
+          localRootDirectory,
+          options,
+          dependencies,
+          sourceDocumentId,
+        ),
+        yield* expandIncludes(
+          overrides,
+          localRootDirectory,
+          options,
+          dependencies,
+          sourceDocumentId,
+        ),
+      );
     }
     const next: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value))
@@ -784,6 +944,20 @@ const expandPresets: (
     return next;
   },
 );
+
+// Preset overrides and keyed includes share recursive fields; later arrays/scalars replace.
+function mergeCompositionFields(earlier: unknown, later: unknown): unknown {
+  if (!isRecord(earlier) || !isRecord(later)) return later;
+  return {
+    ...earlier,
+    ...Object.fromEntries(
+      Object.entries(later).map(([key, value]) => [
+        key,
+        mergeCompositionFields(Object.hasOwn(earlier, key) ? earlier[key] : undefined, value),
+      ]),
+    ),
+  };
+}
 
 const expandIncludes: (
   value: unknown,
@@ -808,16 +982,22 @@ const expandIncludes: (
           const next: unknown[] = [];
           for (const item of candidate) {
             if (isRecord(item) && "$include" in item) {
-              const directive = resolveDirective(
-                item.$include,
-                localRootDirectory,
-                options.includeRoots ?? [],
-                true,
+              const directive = yield* Effect.try(() =>
+                resolveDirective(
+                  item.$include,
+                  localRootDirectory,
+                  options.includeRoots ?? [],
+                  true,
+                ),
               );
               const path = yield* resolveDirectiveFilePath(directive);
               if (visited.has(path.toLowerCase()))
-                throw new Error(`Circular fragment include detected: ${path}`);
+                return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
               visited.add(path.toLowerCase());
+              if (Object.keys(item).some((key) => key !== "$include"))
+                return yield* Effect.fail(
+                  new Error("Invalid '$include' usage. Includes do not support inline overrides."),
+                );
               const fragment = yield* loadFragmentItems(path);
               dependencies.push(
                 createDependency(
@@ -827,7 +1007,16 @@ const expandIncludes: (
                   SettingsDocumentDependencyKind.Include,
                 ),
               );
-              for (const fragmentItem of fragment) next.push(yield* expand(fragmentItem, visited));
+              for (const fragmentItem of fragment) {
+                const expanded = yield* expandPresets(
+                  fragmentItem,
+                  localRootDirectory,
+                  options,
+                  dependencies,
+                  sourceDocumentId,
+                );
+                next.push(yield* expand(expanded, visited));
+              }
               visited.delete(path.toLowerCase());
               continue;
             }
@@ -836,6 +1025,54 @@ const expandIncludes: (
           return next;
         }
         if (!isRecord(candidate)) return candidate;
+        if ("$include" in candidate) {
+          if (Object.keys(candidate).some((key) => key !== "$include"))
+            return yield* Effect.fail(
+              new Error("Includes do not support inline overrides. Edit the shared fragment."),
+            );
+          const paths = Array.isArray(candidate.$include)
+            ? candidate.$include
+            : [candidate.$include];
+          let merged: unknown = {};
+          for (const includePath of paths) {
+            const directive = yield* Effect.try(() =>
+              resolveDirective(includePath, localRootDirectory, options.includeRoots ?? [], true),
+            );
+            const path = yield* resolveDirectiveFilePath(directive);
+            if (visited.has(path.toLowerCase()))
+              return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
+            visited.add(path.toLowerCase());
+            const fragment = yield* parseJsonValue(
+              yield* readFileString(path, "settings.document.compose"),
+            );
+            if (!isRecord(fragment))
+              return yield* Effect.fail(
+                new Error(`Keyed include '${path}' must contain a JSON object.`),
+              );
+            dependencies.push(
+              createDependency(
+                sourceDocumentId,
+                directive,
+                path,
+                SettingsDocumentDependencyKind.Include,
+              ),
+            );
+            const presets = yield* expandPresets(
+              fragment,
+              localRootDirectory,
+              options,
+              dependencies,
+              sourceDocumentId,
+            );
+            const expanded = yield* expand(presets, visited);
+            merged = mergeCompositionFields(merged, expanded);
+            visited.delete(path.toLowerCase());
+          }
+          if (!isRecord(merged))
+            return yield* Effect.fail(new Error("Keyed includes must compose to a JSON object."));
+          delete merged.$schema;
+          return merged;
+        }
         const next: Record<string, unknown> = {};
         for (const [key, child] of Object.entries(candidate))
           next[key] = yield* expand(child, visited);
@@ -913,16 +1150,7 @@ function createDependency(
   sourceFilePath: string,
   kind: SettingsDocumentDependencyKind,
 ): CompositionDependency {
-  const rootDirectory =
-    directive.scope === SettingsDirectiveScope.Global
-      ? tryResolveGlobalFragmentsDirectory(
-          resolveSettingsRootDirectory(
-            defaultSettingsBasePath(),
-            sourceDocumentId.moduleKey,
-            sourceDocumentId.rootKey,
-          ),
-        )
-      : directive.rootDirectory;
+  const rootDirectory = directive.rootDirectory;
   return {
     directivePath: directive.originalPath,
     documentId: {
@@ -1081,32 +1309,6 @@ function sortSettingsTree(node: MutableSettingsDirectoryNode): void {
   node.files.sort((left, right) => left.name.localeCompare(right.name));
   for (const directory of node.directories) sortSettingsTree(directory);
 }
-
-const buildSettingsDocumentMetadata = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  rootDirectory: string,
-  documentPath: string,
-  operationKey: string,
-) {
-  const entryResult = yield* Effect.result(
-    createSettingsFileEntry(documentPath, rootDirectory, operationKey),
-  );
-  const entry = entryResult._tag === "Success" ? entryResult.success : null;
-  return {
-    documentId: { ...documentId, stableId: documentPath },
-    kind: entry?.kind ?? SettingsFileKind.Profile,
-    modifiedUtc: entry?.modifiedUtc ?? null,
-    versionToken: yield* createSettingsVersionToken(documentPath, operationKey),
-  };
-});
-
-const createSettingsVersionToken = Effect.fnUntraced(function* (
-  documentPath: string,
-  operationKey: string,
-) {
-  const content = yield* Effect.result(readFileString(documentPath, operationKey));
-  return content._tag === "Success" ? { value: sha256(content.success) } : null;
-});
 
 const resolveLocalPath = Effect.fnUntraced(function* <A>(operationKey: string, resolve: () => A) {
   return yield* Effect.try({

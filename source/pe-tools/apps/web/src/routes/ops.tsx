@@ -1,11 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { opsPageSeedSchema } from "#/ops/store";
 import { OpsRoute } from "#/ops/route-workspace";
+import { opsManifest } from "#/ops/manifest";
+
+/** The route, declared once. `ops/route-workspace.tsx` re-derives it with the selection bound. */
+export const manifest = opsManifest();
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 
 export const opsSearch = (search: Record<string, unknown>) => ({
+  view: opsPageSeedSchema.partial().safeParse(search.view).data,
   thread: str(search.thread) || undefined,
-  source: search.source === "fixture" ? ("fixture" as const) : undefined,
 });
 
 export const Route = createFileRoute("/ops")({
@@ -14,6 +19,14 @@ export const Route = createFileRoute("/ops")({
 });
 
 function OpsFileRoute() {
-  const { source } = Route.useSearch();
-  return <OpsRoute source={source} />;
+  const { view } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  return (
+    <OpsRoute
+      initial={view}
+      onSeed={(seed) => {
+        void navigate({ search: (previous) => ({ ...previous, view: seed }), replace: true });
+      }}
+    />
+  );
 }

@@ -1,41 +1,37 @@
-// @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+/**
+ * The route module's own contract: one `manifest` export (the guard greps for exactly one), a
+ * search schema with no dead lanes in it, and a demo lane that is the manifest's seeds rather
+ * than a second store. The rendered surface is proved by `settings/manifest.test.ts` (actions and
+ * refusals) and `settings-panes/schema-form.test.tsx` (the seed document through the renderer).
+ */
+import { describe, expect, it } from "vite-plus/test";
 
-const callHostRpc = vi.hoisted(() => vi.fn());
-vi.mock("#/host/client", () => ({ callHostRpc }));
+import { manifest, settingsSearch } from "./settings";
 
-import { settingsSearch, SettingsRouteContent } from "./settings";
-
-afterEach(cleanup);
-
-describe("settings fixture route", () => {
-  it("mounts the populated production workspace without live host calls", async () => {
-    expect(settingsSearch({ source: "fixture", thread: " review " })).toEqual({
-      source: "fixture",
-      thread: "review",
-    });
-    expect(settingsSearch({ source: "live" })).toEqual({ source: undefined, thread: undefined });
-
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <SettingsRouteContent source="fixture" />
-      </QueryClientProvider>,
-    );
-
+describe("the settings route module", () => {
+  it("keeps thread in the search and carries no source lane", () => {
+    expect(settingsSearch({ thread: " review " })).toMatchObject({ thread: "review" });
+    // The old `?source=` branch is gone: an unknown search key is simply not part of the address.
+    expect(settingsSearch({ source: "anything" })).not.toHaveProperty("source");
     expect(
-      await screen.findByDisplayValue(
-        "DX Fan Coil Unit Performance Schedule",
-        {},
-        { timeout: 4000 },
-      ),
-    ).toBeTruthy();
-    expect(await screen.findByText("1 proposed")).toBeTruthy();
-    expect(await screen.findByText("2 staged")).toBeTruthy();
-    expect(await screen.findByText("1 invalid")).toBeTruthy();
-    expect(callHostRpc).not.toHaveBeenCalled();
+      settingsSearch({
+        mode: "file",
+        module: "CmdScheduleManager",
+        root: "schedules",
+        file: "a.json",
+      }),
+    ).toMatchObject({
+      mode: "file",
+      module: "CmdScheduleManager",
+      root: "schedules",
+      file: "a.json",
+    });
+  });
+
+  it("exports one manifest whose seeds cover its actions", () => {
+    expect(manifest.key).toBe("settings");
+    expect(Object.keys(manifest.seeds ?? {}).sort()).toEqual(
+      Object.keys(manifest.actions ?? {}).sort(),
+    );
   });
 });

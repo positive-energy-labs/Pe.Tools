@@ -4,10 +4,9 @@ using Pe.App.Commands.FamilyFoundry;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.DesiredState;
-using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Shared.RevitData.Families;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Shared.StorageRuntime;
@@ -21,7 +20,7 @@ namespace Pe.App.Benchmarks;
 internal static class PracticalBenchmarks {
     internal const int DefaultIterations = 3;
     private const BuiltInCategory TestFamilyCategory = BuiltInCategory.OST_GenericModel;
-    private const string WineGuardianIndoorProfileFixture = "wineguardian-ds050-indoor.json";
+    private const string BoxFamilyModelFixture = "a-box.family.json";
 
     private const string FamilyFoundryRoundtripBenchmarkName =
         "FF_manager_roundtrip_can_repeat_on_staged_generic_family_document";
@@ -109,7 +108,7 @@ internal static class PracticalBenchmarks {
             throw new ArgumentNullException(nameof(application));
 
         var benchmarkOutput = workingOutput ?? CreateTemporaryWorkingOutput(FamilyFoundryRoundtripBenchmarkName);
-        var profile = LoadProfileFixture(WineGuardianIndoorProfileFixture);
+        var model = LoadFamilyModelFixture(BoxFamilyModelFixture);
         var seedFamilyPath = StageGenericFamilyDocument(
             application,
             FamilyFoundryRoundtripBenchmarkName,
@@ -126,22 +125,25 @@ internal static class PracticalBenchmarks {
                     throw new InvalidOperationException("Expected a family document.");
 
                 var iterationOutput = benchmarkOutput.SubDir("iterations").SubDir($"iter-{iteration:00}");
-                var result = familyDocument.ApplyFamilyProfile(
-                    profile,
-                    $"{WineGuardianIndoorProfileFixture}-iter-{iteration:00}",
+                var op = new ReconcileFamily(model);
+                var writer = new ProcessingResultBuilder(OutputStorage.ExactDir(iterationOutput.DirectoryPath)).WithProfile(model, BoxFamilyModelFixture).WithReconcile(op);
+                using var processor = new OperationProcessor(familyDocument, new ExecutionOptions {
+                    SingleTransaction = false,
+                    OptimizeTypeOperations = false,
+                    EnableCollectors = true,
+                    SuppressWarnings = true
+                });
+                var (contexts, totalMs) = processor.WithArtifactWriter(writer).ProcessQueue(
+                    new OperationQueue().Add(op),
+                    new SnapshotCapturePipeline().Add(new ParameterSnapshotCollector()),
+                    iterationOutput.DirectoryPath,
                     new LoadAndSaveOptions {
                         OpenOutputFilesOnCommandFinish = false,
                         LoadFamily = false,
                         SaveFamilyToInternalPath = true,
                         SaveFamilyToOutputDir = true
-                    },
-                    OutputStorage.ExactDir(iterationOutput.DirectoryPath),
-                    new ExecutionOptions {
-                        SingleTransaction = false,
-                        OptimizeTypeOperations = false,
-                        EnableCollectors = true,
-                        SuppressWarnings = true
                     });
+                var result = new FamilyProfileApplyResult(contexts, totalMs, iterationOutput.DirectoryPath);
                 var context = ValidateSingleContextResult(result);
                 var savedFamilyPath = GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
                 EnsureSavedFamilyFileIsOpenable(application, savedFamilyPath);
@@ -216,11 +218,10 @@ internal static class PracticalBenchmarks {
         var benchmarkOutput = workingOutput ?? CreateTemporaryWorkingOutput(FamilyFoundryMigratorQueueBenchmarkName);
         var stagedProjectPath = StageGenericProjectDocument(application, FamilyFoundryMigratorQueueBenchmarkName,
             benchmarkOutput.SubDir("seed"));
-        var profile = CreateBenchmarkMigratorProfile();
-        var queue = FFMigratorQueueBuilder.Build(profile, []);
+        var patch = FamilyPatch.Parse("""{ "select": {}, "patch": {}, "run": { "sort": true } }""");
+        var queue = new OperationQueue().Add(new ReconcileFamily(patch));
         var collectorQueue = new SnapshotCapturePipeline()
-            .Add(new ParameterSnapshotCollector())
-            .Add(new ReferencePlaneSnapshotCollector());
+            .Add(new ParameterSnapshotCollector());
 
         return BenchmarkHarness.RunDocumentLoop(
             application,
@@ -246,7 +247,12 @@ internal static class PracticalBenchmarks {
                     .ToList();
 
                 var iterationOutput = benchmarkOutput.SubDir("iterations").SubDir($"iter-{iteration:00}");
-                using var processor = new OperationProcessor(projectDocument, profile.ExecutionOptions);
+                using var processor = new OperationProcessor(projectDocument, new ExecutionOptions {
+                    SingleTransaction = false,
+                    OptimizeTypeOperations = true,
+                    EnableCollectors = true,
+                    SuppressWarnings = true
+                });
                 var logs = processor
                     .SelectFamilies(() => targetFamilies)
                     .ProcessQueue(
@@ -581,15 +587,15 @@ internal static class PracticalBenchmarks {
         return Path.Combine(outputDirectory, safeFamilyName, $"{safeFamilyName}.rfa");
     }
 
-    private static FFManagerProfile LoadProfileFixture(string fixtureFileName) {
+    private static FamilyModel LoadFamilyModelFixture(string fixtureFileName) {
         var assemblyDirectory = Path.GetDirectoryName(typeof(PracticalBenchmarks).Assembly.Location)
                                 ?? throw new InvalidOperationException("Could not resolve the app assembly directory.");
-        var fixturePath = Path.Combine(assemblyDirectory, "Benchmarks", "Profiles", fixtureFileName);
+        var fixturePath = Path.Combine(assemblyDirectory, "Benchmarks", "FamilyModel", fixtureFileName);
         if (!File.Exists(fixturePath))
-            throw new FileNotFoundException($"Profile fixture not found at '{fixturePath}'.", fixturePath);
+            throw new FileNotFoundException($"family.json fixture not found at '{fixturePath}'.", fixturePath);
 
-        var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fixturePath).Value;
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
+        return parsed.Value ?? throw new InvalidOperationException(string.Join(Environment.NewLine, parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}")));
     }
 
     private static void EnsureSavedFamilyFileIsOpenable(
@@ -671,9 +677,11 @@ internal static class PracticalBenchmarks {
         return snapshots;
     }
 
+    private sealed record FamilyProfileApplyResult(List<FamilyProcessingContext> Contexts, double TotalMs, string? OutputFolderPath);
+
     private static FamilyProcessingContext ValidateSingleContextResult(FamilyProfileApplyResult result) {
-        if (!result.Success)
-            throw new InvalidOperationException(result.Error ?? "Family Foundry roundtrip failed.");
+        if (result.Contexts.FirstOrDefault()?.OperationLogs.AsTuple().error is { } error)
+            throw new InvalidOperationException(error.Message);
         if (result.Contexts.Count != 1)
             throw new InvalidOperationException($"Expected one context but received {result.Contexts.Count}.");
         if (string.IsNullOrWhiteSpace(result.OutputFolderPath))
@@ -767,31 +775,6 @@ internal static class PracticalBenchmarks {
             familyDoc.HasValue(parameter),
             iterationActionMs);
     }
-
-    private static FFMigratorProfile CreateBenchmarkMigratorProfile() =>
-        new() {
-            ExecutionOptions =
-                new ExecutionOptions {
-                    SingleTransaction = false,
-                    OptimizeTypeOperations = true,
-                    EnableCollectors = true,
-                    SuppressWarnings = true
-                },
-            FilterFamilies =
-                new BaseProfile.FilterFamiliesSettings {
-                    IncludeUnusedFamilies = true,
-                    IncludeNames = new IncludeFamilies { StartingWith = [""] },
-                    ExcludeNames = new ExcludeFamilies()
-                },
-            SharedParameterSelection = new SharedParameterSelectionSpec(),
-            CleanFamilyDocument = new CleanFamilyDocumentSettings { Enabled = false },
-            MappingData = [],
-            SharedParameters = [],
-            FamilyParameters = [],
-            PerTypeAssignmentsTable = [],
-            ParamDrivenSolids = new AuthoredParamDrivenSolidsSettings(),
-            SortParams = new SortParamsSettings { Enabled = true }
-        };
 
     private static string SanitizePathSegment(string value) {
         var invalidChars = Path.GetInvalidFileNameChars().ToHashSet();

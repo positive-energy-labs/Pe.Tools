@@ -6,7 +6,7 @@
  */
 import type { FamilyModel } from "#/family/family-model";
 import type { BoardFamily, Probe } from "#/family-review/model";
-import { RAW_BOARD } from "#/family-review/proto/fixtures";
+import { RAW_BOARD } from "#/family-review/proto/board-data";
 
 /**
  * WHAT THE BOARD READS FROM, as facts the chrome states out loud rather than implies.

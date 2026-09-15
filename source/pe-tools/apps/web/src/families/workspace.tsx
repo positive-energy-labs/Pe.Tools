@@ -1,6 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 
@@ -12,11 +10,11 @@ import { toHostIssue } from "#/host/issues";
 import {
   cellText,
   visibleParameters,
-  LoadedFamilyPlacementScope,
+  LoadedFamilyPlacement,
   type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
-import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
+import { useHostCall, HOST_QUERY_KEY, useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
 import { familyFlag } from "#/families/plan";
@@ -34,42 +32,51 @@ function useFamiliesWorkspaceModel(
   fixtureFamilies?: readonly FamilySnapshotRecord[],
 ) {
   const navigate = useNavigate();
-  const target = useAtomValue(store.atoms.target);
-  const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
-  const draft = useAtomValue(store.atoms.draft);
+  const target = store.target;
+  const scope = store.documentScope;
+  const draft = store.draft;
   const { placement, categories: draftCategories, families: pickedFamilies } = draft;
-  const setPlacement = (next: LoadedFamilyPlacementScope) =>
+  const setPlacement = (next: LoadedFamilyPlacement) =>
     store.actions.setDraft((previous) => ({ ...previous, placement: next }));
   const setDraftCategories = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, categories: next }));
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
-  const applied = useAtomValue(store.atoms.applied);
-  const profilePath = useAtomValue(store.atoms.profilePath);
-  const plan = useAtomValue(store.atoms.plan);
-  const excludedIds = new Set(useAtomValue(store.atoms.excludedIds));
-  const pickedIds = useAtomValue(store.atoms.pickedIds);
+  const applied = store.applied;
+  const profilePath = store.profilePath;
+  const plan = store.plan;
+  const excludedIds = new Set(store.excludedIds);
+  const pickedIds = store.pickedIds;
   const setPickedIds = store.actions.setPickedIds;
-  const applyData = useAtomValue(store.atoms.applyData);
-  const projection = useAtomValue(store.atoms.projection);
-  const showUncommon = useAtomValue(store.atoms.showUncommon);
+  const applyData = store.applyData;
+  const projection = store.projection;
+  const showUncommon = store.showUncommon;
   const setShowUncommon = store.actions.setShowUncommon;
-  const tableState = useAtomValue(store.atoms.table);
-  const busyState = useAtomValue(store.atoms.busy);
-  const busy = busyState?.id ?? null;
-  const categoryFeed = useAtomValue(store.feeds.category);
-  const familyFeed = useAtomValue(store.feeds.family);
-  const profileFeed = useAtomValue(store.feeds.profile);
+  const tableState = store.table;
+  const busyState = store.busy;
+  const busy = busyState?.key ?? null;
+  const categoryFeed = store.feeds.category;
+  const familyFeed = store.feeds.family;
+  const profileFeed = store.feeds.profile;
 
   const fixture = fixtureFamilies !== undefined;
-  const status = useHostStatusQuery({ ...scope, enabled: !fixture });
-  const connected = fixture || (status.data?.bridgeIsConnected ?? false);
+  // The resolved target came from this inventory subject. Requiring its current observation keeps
+  // retained stale inventory from counting as a connected bridge.
+  const connected =
+    fixture || (scope !== undefined && store.handle.readings.inventory.state === "ready");
 
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
-  const categories = categoryFeed.options?.map((option) => option.id) ?? [];
-  const draftFamilyNames = fixture
-    ? fixtureFamilies.map((family) => family.familyName)
-    : (familyFeed.options?.map((option) => option.id) ?? []);
+  const categories = useMemo(
+    () => categoryFeed.options?.map((option) => option.id) ?? [],
+    [categoryFeed.options],
+  );
+  const draftFamilyNames = useMemo(
+    () =>
+      fixture
+        ? fixtureFamilies.map((family) => family.familyName)
+        : (familyFeed.options?.map((option) => option.id) ?? []),
+    [fixture, fixtureFamilies, familyFeed.options],
+  );
 
   // Budget sized to the picked family list so nothing truncates silently, and samples lifted so
   // no type/cell is dropped from the master table.
@@ -89,7 +96,7 @@ function useFamiliesWorkspaceModel(
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: !fixture && connected && matrixRequest !== undefined,
+    enabled: !fixture && connected && scope !== undefined && matrixRequest !== undefined,
   });
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
@@ -105,20 +112,25 @@ function useFamiliesWorkspaceModel(
     () => allProfilePaths.slice(0, PROFILE_READ_LIMIT),
     [allProfilePaths],
   );
-  const profileDocs = useQueries({
-    queries: profilePaths.map((relativePath) => ({
-      queryKey: [...HOST_QUERY_KEY, target, "settings.document.open", relativePath],
-      queryFn: () =>
-        callHostRpc(
-          "settings.document.open",
-          { documentId: { ...FF_PROFILE_MODULE, relativePath } },
-          scope,
+  // The profile library is ONE Reading of many documents, not one query per path.
+  const profileLibrary = useHostCall(
+    () =>
+      Promise.all(
+        profilePaths.map((relativePath) =>
+          callHostRpc(
+            "settings.document.open",
+            { documentId: { ...FF_PROFILE_MODULE, relativePath } },
+            scope,
+          ).then(
+            (data) => ({ data, error: undefined as unknown }),
+            (error: unknown) => ({ data: undefined, error }),
+          ),
         ),
-      staleTime: 60_000,
-      retry: false,
-      enabled: !fixture,
-    })),
-  });
+      ),
+    [...HOST_QUERY_KEY, target, "settings.document.open", profilePaths.join("|")],
+    !fixture,
+  );
+  const profileDocs = profileLibrary.data ?? [];
 
   const selectedProfileIndex = profilePath ? profilePaths.indexOf(profilePath) : -1;
   const selectedProfileQuery = selectedProfileIndex >= 0 ? profileDocs[selectedProfileIndex] : null;
@@ -210,9 +222,9 @@ function useFamiliesWorkspaceModel(
         if (done) {
           return done.success
             ? {
-                word: "applied",
-                tone: "done",
-                note: `${done.parametersChanged} parameter(s) changed · +${done.diffSummary.added} −${done.diffSummary.removed} ~${done.diffSummary.modified}`,
+                word: done.converged ? "converged" : "residue",
+                tone: done.converged ? "done" : "alarm",
+                note: `${done.residue.length} change(s) remaining; ${done.errors.length} error(s)`,
               }
             : {
                 // A refused write is the one thing on this row asking for a person: the ONE alarm.
@@ -254,7 +266,7 @@ function useFamiliesWorkspaceModel(
                  and a state dot wearing it would spend the one filled blue on a readout. */
               word: "included",
               tone: "caution",
-              note: `${entry.plan.loweredActions.length} action(s) queued`,
+              note: `${entry.changes.length + entry.runEffects.length} action(s) queued`,
             };
       },
     [plan, planByFamilyId, receiptByFamilyId, excludedIds],
@@ -278,10 +290,10 @@ function useFamiliesWorkspaceModel(
           }
         : null,
     placement:
-      placement !== LoadedFamilyPlacementScope.AllLoaded
+      placement !== LoadedFamilyPlacement.AllLoaded
         ? {
             label: `placement · ${placement}`,
-            onClear: () => setPlacement(LoadedFamilyPlacementScope.AllLoaded),
+            onClear: () => setPlacement(LoadedFamilyPlacement.AllLoaded),
           }
         : null,
     uncommon:
@@ -308,7 +320,7 @@ function useFamiliesWorkspaceModel(
 
   const runProject = () => void store.actions.project();
 
-  const matrixIssue = matrix.isError
+  const matrixIssue = matrix.error
     ? toHostIssue(matrix.error, "Couldn't load the matrix")
     : undefined;
   const totalTypes = rows.length;

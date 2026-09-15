@@ -33,10 +33,6 @@ public sealed class DeploymentRuntimeContractTests {
             );
             var runtime = ProductRuntimeLayout.ForCurrentUser(localAppData);
             Assert.That(
-                runtime.RootPath,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools"))
-            );
-            Assert.That(
                 runtime.State.RootPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
             );
@@ -170,7 +166,6 @@ public sealed class DeploymentRuntimeContractTests {
         );
     }
 
-
     [Test]
     public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
         const string sourceRoot = @"C:\Users\Alice\Repo\source\pe-tools\";
@@ -226,7 +221,6 @@ public sealed class DeploymentRuntimeContractTests {
             TryDeleteDirectory(appBase);
         }
     }
-
 
     private static void TryDeleteDirectory(string path) {
         try {

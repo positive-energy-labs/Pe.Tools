@@ -20,6 +20,7 @@ internal static class PodScriptRunner {
 
         try {
             var result = RevitScriptExecutionService.CreateDefault(() => uiapp).Execute(
+                uiapp.ActiveUIDocument?.Document,
                 new ExecuteRevitScriptRequest(
                     SourcePath: item.Entrypoint.SourcePath,
                     WorkspaceKey: item.WorkspaceKey,

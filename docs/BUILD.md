@@ -211,7 +211,7 @@ targets may still use `--configuration` for a narrow artifact.
 `CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
 year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and
 owns the `.bundle`/`Contents` layout, `DBApplication` `.addin`, `PackageContents.xml`, zip, and hashed
-receipt. Keep APS authentication/submission in the interim `pe-dev automation` adapter; do not
+receipt. Keep APS authentication/submission in the interim `Pe.Dev.Cli` adapter; do not
 move Pe.Tools workflow semantics into the SDK or restore product-owned appbundle composition.
 
 ### Publish is a GitHub release workflow
@@ -328,8 +328,8 @@ The clean source-linked CLI model is:
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
 `pea` is the product/operator surface; SDK `pe-revit` owns source linking and Revit proof; ordinary
-package scripts own TypeScript development. The repo-local `pe-dev` CLI remains automation-only as
-an interim adapter over Pe.Tools-specific APS workflows. It is not a web or host supervisor.
+package scripts own TypeScript development. `Pe.Dev.Cli` remains an interim adapter over
+Pe.Tools-specific APS workflows. It is not a web or host supervisor.
 
 ### Source-linked web dev
 
@@ -340,9 +340,9 @@ Source-linked web dev is one command, one checkout, and one browser origin. The 
 - Vite owns document serving, its dependency optimizer, and HMR. Product APIs, SSE, and the Revit bridge proxy to the exact claimed backend. `/ops` document navigation stays in Vite; JSON catalog requests reach the host.
 - Each checkout retains `host-source-<hash-of-canonical-source-root>.json`. Revit, Pea, and MCPs discover that backend receipt exactly as before. Installed `host.json` remains separate. Browser navigation to the dev backend redirects to its frontend and preserves the path and query.
 - `dev` authorizes same-checkout takeover. `attach` starts the same pair without takeover or a source watcher, for supervisors. `dev:no-revit` retains its separate service identity and disables native capabilities. No command changes SDK session custody.
-- React edits and Vite configuration reloads leave the backend process intact. Host source edits restart the pair. Each listener remembers its own port preference; neither chooses another checkout as a fallback.
+- React edits and Vite configuration reloads leave the backend process intact. Host source and shared workspace-package source edits restart the pair. Each listener remembers its own port preference; neither chooses another checkout as a fallback.
 - Host scope shutdown closes its frontend child. An unexpected frontend exit fails the host rather than leaving a half-running pair. The child also closes on IPC disconnect, including an abrupt backend exit.
-- `scripts/dev-watch.ts` restarts Host only for source edits. Authorized Host shutdown retires the watcher before cleanup, then returns the command to the shell; later edits cannot resurrect the retired terminal. Node's built-in watch mode is unsuitable because it waits for edits after its child exits.
+- `scripts/dev-watch.ts` watches Host `src` and each workspace package's `src`; it excludes app frontends, build output, and `node_modules`. Authorized Host shutdown retires the watcher before cleanup, then returns the command to the shell; later edits cannot resurrect the retired terminal. Node's built-in watch mode is unsuitable because it waits for edits after its child exits.
 - Optimizer caches belong to individual frontend launches. This prevents concurrent or retiring launchers from deleting each other's bundles, at the cost of cold optimization after a backend restart. Normal frontend HMR and configuration reloads reuse the launch's cache.
 
 On a user computer, `TsHostLauncher.EnsureInstalled` asks the SDK to start or share the manifest's `Pe.Host.exe`. That executable bundles the runtime and serves `web/client` beside itself, including APIs and the Revit bridge on one backend port. No checkout, Vite server, source watcher, or package installation is needed. The Revit bridge supervisor can reconnect or ensure a replacement Host after a disconnect; that is product recovery, not a dev watcher resurrecting. The source dev entrypoint is not installed-lane proof.

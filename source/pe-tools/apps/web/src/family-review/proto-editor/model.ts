@@ -19,7 +19,7 @@
  * `face:body.Top`, `frame:supply-air`). No id table, no mapping layer, and a retarget writes the
  * id it was handed straight into the document.
  *
- * Data: the checked-in round-1 fixture (`family-review/proto/fixtures.ts`), read-only — a SIBLING
+ * Data: the checked-in round-1 fixture (`family-review/proto/board-data.ts`), read-only — a SIBLING
  * agent owns that directory this round. Nothing here is mocked; the showcase family is a real
  * `family.json` that a real Revit built.
  */
@@ -30,7 +30,7 @@ import {
   type FamilyModel,
   type SolidSpec,
 } from "#/family/family-model";
-import { RAW_BOARD } from "#/family-review/proto/fixtures";
+import { RAW_BOARD } from "#/family-review/proto/board-data";
 
 // ── vocabulary (the closed sets every picker is scoped to) ──────────────────────────────────────
 
@@ -214,7 +214,7 @@ export function familyGraph(model: FamilyModel): Graph {
         id: `param:${name}`,
         kind: "param",
         label: name,
-        detail: spec.formula != null ? `= ${spec.formula}` : (spec.value ?? "—"),
+        detail: spec.formula != null ? `= ${spec.formula}` : String(spec.value ?? "—"),
       });
 
   // a formula READS other parameters — the "where does this number come from" case
@@ -381,7 +381,7 @@ export function retarget(
 
 // ── scoped choice: what is LEGAL in this slot ───────────────────────────────────────────────────
 
-export type SlotKind =
+export type FieldKind =
   | "lengthParam"
   | "frame"
   | "plane"
@@ -395,11 +395,11 @@ export type SlotKind =
 
 /** The legal references for one slot, scoped to what the document actually carries. A picker that
  *  offers an illegal token is the generated-form failure mode wearing a nicer control. */
-export function legalRefs(model: FamilyModel, kind: SlotKind): string[] {
+export function legalRefs(model: FamilyModel, kind: FieldKind): string[] {
   switch (kind) {
     case "lengthParam":
       return Object.entries(model.familyParameters)
-        .filter(([, spec]) => spec.dataType.startsWith("Length"))
+        .filter(([, spec]) => spec.dataType?.startsWith("Length") ?? false)
         .map(([name]) => `param:${name}`);
     case "frame":
       return ["frame:family", ...Object.keys(model.frames ?? {}).map((slug) => `frame:${slug}`)];
@@ -434,7 +434,8 @@ export function legalRefs(model: FamilyModel, kind: SlotKind): string[] {
         ...new Set(
           Object.values(model.familyParameters)
             .concat(Object.values(model.sharedParameters ?? {}))
-            .map((spec) => spec.dataType),
+            .map((spec) => spec.dataType)
+            .filter((dataType) => dataType !== undefined),
         ),
       ];
   }

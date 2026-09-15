@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FixtureScheduleGrid } from "#/schedule-grid/fixture";
+
+import { routeSearch } from "#/route";
+import { scheduleGridManifest } from "#/schedule-grid/manifest";
 import { ScheduleGridRoute } from "#/schedule-grid/route";
+
+/** The route, declared once. `schedule-grid/live.tsx` re-derives it with the workspace bound. */
+export const manifest = scheduleGridManifest();
 
 export const scheduleGridSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
+): ReturnType<typeof routeSearch> & { thread?: string } => ({
+  ...routeSearch(search),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
 });
 
 export const Route = createFileRoute("/schedule-grid")({
@@ -16,9 +21,9 @@ export const Route = createFileRoute("/schedule-grid")({
 });
 
 function ScheduleGridFileRoute() {
-  return <ScheduleGridRouteContent source={Route.useSearch().source} />;
+  return <ScheduleGridRouteContent />;
 }
 
-export function ScheduleGridRouteContent({ source }: { source?: "fixture" }) {
-  return source === "fixture" ? <FixtureScheduleGrid /> : <ScheduleGridRoute />;
+export function ScheduleGridRouteContent() {
+  return <ScheduleGridRoute />;
 }

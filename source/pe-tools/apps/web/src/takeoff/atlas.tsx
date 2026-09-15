@@ -1,18 +1,20 @@
-import { useCallback, useMemo, type ReactNode } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
 import type { PaneShortcut } from "#/components/lang/pane";
-import { atlasRoomState, type AtlasRow as Row, type TakeoffStore } from "#/takeoff/store";
+import {
+  atlasRoomState,
+  visibleRowKeys,
+  type AtlasRow as Row,
+  type TakeoffsController,
+} from "#/takeoff/controller";
 import {
   STAGE_ORDER,
   type RoomEdit,
-  type Stage,
-  type WorldLane,
-  type WorldRoom,
-  type WorldZone,
+  type Phase,
+  type ModelRoom,
+  type ModelZone,
 } from "#/takeoff/world";
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
@@ -22,91 +24,77 @@ export type Verdict = "accept" | "dismiss";
 
 export interface AtlasActions {
   patch: (guid: string, patch: RoomEdit) => void;
-  decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  capture: (lane: WorldLane) => void;
-  partition: (zone: WorldZone) => void;
-  refresh: () => void;
+  decide: (room: ModelRoom, flag: string, verb: Verdict) => void;
+  partition: () => void;
 }
 
 export interface AtlasProps {
-  store: TakeoffStore;
+  store: TakeoffsController;
   headRail?: ReactNode;
   sidePanel?: ReactNode;
   readoutBand?: ReactNode;
 }
 
-const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
+const createAtlasActions = (store: TakeoffsController): AtlasActions => ({
   patch: (id, patch) => store.actions.patchRoom(id, patch),
   decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-  capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
-  partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
-  refresh: () => void store.actions.refresh().catch(() => undefined),
+  partition: () => void store.handle.actions.partition.run(),
 });
 
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 
-const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
-
 function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) {
-  const world = useAtomValue(store.atoms.world);
-  const views = useAtomValue(store.atoms.views);
+  const world = store.world;
+  const views = store.views;
   const live = store.source === "live";
-  const busyState = useAtomValue(store.atoms.busy);
-  const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
-  const snapshot = useAtomValue(store.atoms.snapshot);
-  const geoReady = AsyncResult.isSuccess(snapshot) && snapshot.value.bound;
+  const busyState = store.busy;
+  const busy = busyState ? `${busyState.key} · ${busyState.seconds}s queued/running` : null;
+  const snapshot = store.snapshot;
+  const geoReady = snapshot?.state === "ready";
   const actions = useMemo(() => createAtlasActions(store), [store]);
-  const stageFilter = useAtomValue(store.atoms.stageFilter);
-  const zoneKey = useAtomValue(store.atoms.zoneKey);
-  const pageLevel = useAtomValue(store.atoms.level);
-  const cursor = useAtomValue(store.atoms.cursor);
-  const fieldsMode = useAtomValue(store.atoms.fieldsMode);
-  const planOpen = useAtomValue(store.atoms.planOpen);
-  const statsOpen = useAtomValue(store.atoms.statsOpen);
-  const tableState = useAtomValue(store.atoms.atlasTableState);
-  const rows = useAtomValue(store.atoms.atlasRows);
-  const visibleKeys = useAtomValue(store.atoms.visibleRows);
-  const decided = useAtomValue(store.atoms.decisions);
+  const stageFilter = store.stageFilter;
+  const zoneKey = store.zoneKey;
+  const pageLevel = store.level;
+  const cursor = store.cursor;
+  // These are private widget mechanics. Remounting the Atlas intentionally resets them.
+  const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
+  const [planOpen, setPlanOpen] = useState(true);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [tableState, setTableState] = useState<MasterTableState>({
+    filters: {},
+    sorts: [],
+    query: "",
+  });
+  const rows = store.atlasRows;
+  const visibleKeys = useMemo(
+    () => visibleRowKeys(rows, tableState, fieldsMode),
+    [rows, tableState, fieldsMode],
+  );
+  const decided = store.decisions;
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
-  const setStageFilter = (value: Stage | null) =>
-    store.actions.setAtlasPage({ stageFilter: value });
-  const setLevel = useCallback(
-    (value: string) => store.actions.setAtlasPage({ level: value }),
-    [store],
-  );
-  const setZoneKey = (value: string | null) => store.actions.setAtlasPage({ zoneKey: value });
-  const setCursor = useCallback(
-    (value: string | null) => store.actions.setAtlasPage({ cursor: value }),
-    [store],
-  );
+  const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
+  const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
+  const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
 
-  const setPlanOpen = (open: boolean) => store.actions.setAtlasPage({ planOpen: open });
-  const setStatsOpen = (open: boolean) => store.actions.setAtlasPage({ statsOpen: open });
+  const openFlags = (room: ModelRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
 
-  const openFlags = (room: WorldRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
-
-  const stateOf = (room: WorldRoom) => atlasRoomState(room, openFlags(room).length);
-  const zoneStates = (z: WorldZone) => z.rooms.map((r) => stateOf(r));
-  const zoneCalls = (z: WorldZone) => zoneStates(z).filter((s) => s === "call").length;
+  const stateOf = (room: ModelRoom) => atlasRoomState(room, openFlags(room).length);
+  const zoneStates = (z: ModelZone) => z.rooms.map((r) => stateOf(r));
+  const zoneCalls = (z: ModelZone) => zoneStates(z).filter((s) => s === "call").length;
 
   const filteredZones = useMemo(
     () => world.zones.filter((z) => stageFilter === null || z.stage === stageFilter),
     [world, stageFilter],
   );
 
-  const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
-  const setTableState = useCallback(
-    (state: MasterTableState) => store.actions.setTableState(state),
-    [store],
-  );
+  const selected = zoneKey ? (world.zones.find((z) => z.zone.guid === zoneKey) ?? null) : null;
   const selectTableRow = useCallback(
     (row: Row) => {
-      setCursor(row.room.guid);
-      if (!selected) setLevel(row.zone.zone.lane.label);
+      store.actions.chooseRoom(row.room.guid, selected ? undefined : row.zone.zone.lane.label);
     },
-    [selected, setCursor, setLevel],
+    [selected, store],
   );
   const hoverTableRow = useCallback(
     (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
@@ -127,14 +115,11 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     return [...set].sort();
   }, [world]);
 
-  const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
+  const decide = (room: ModelRoom, flag: string, verb: Verdict) => {
     actions.decide(room, flag, verb);
   };
 
-  const clearScope = () => {
-    setZoneKey(null);
-    setCursor(null);
-  };
+  const clearScope = store.actions.clearRoomScope;
   const moveCursor = (delta: -1 | 1) => {
     if (visibleRows.length === 0) return;
     const current = visibleRows.findIndex((row) => row.room.guid === cursor);
@@ -186,11 +171,11 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     },
   ];
 
-  const selectZone = (z: WorldZone | null) => {
-    setZoneKey(z ? z.zone.key : null);
-    setCursor(null);
-    if (z) setLevel(z.zone.lane.label);
+  const selectZone = (z: ModelZone | null) => {
+    store.actions.chooseZone(z ? z.zone.guid : null, z?.zone.lane.label);
   };
+  const focusRoom = (z: ModelZone, room: string) =>
+    store.actions.focusRoom(z.zone.guid, room, z.zone.lane.label);
 
   const columns = useAtlasColumns({ actions, fieldsMode, flagVocabulary, store });
 
@@ -210,10 +195,11 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const scopeCalls = visibleRows.filter((r) => r.state === "call").length;
   const scopeSqft = visibleRows.reduce((s, r) => s + r.room.sqft, 0);
 
-  const proposedUrl =
-    `/takeoffs?level=${level}` +
-    (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
-    (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
+  const proposedUrl = new URL("/takeoffs", "https://pe.local");
+  if (store.target) proposedUrl.searchParams.set("target", store.target);
+  if (level) proposedUrl.searchParams.set("level", level);
+  if (selected) proposedUrl.searchParams.set("zone", selected.zone.guid);
+  if (cursorRow) proposedUrl.searchParams.set("room", cursorRow.room.guid);
 
   return {
     store,
@@ -224,11 +210,13 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     live,
     busy,
     geoReady,
+    geometry: snapshot,
     actions,
     stageFilter,
     zoneKey,
     cursor,
     fieldsMode,
+    setFieldsMode,
     planOpen,
     statsOpen,
     tableState,
@@ -237,8 +225,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     level,
     setStageFilter,
     setLevel,
-    setZoneKey,
-    setCursor,
     setPlanOpen,
     setStatsOpen,
     stateOf,
@@ -256,12 +242,14 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     scopeShortcuts,
     decide,
     selectZone,
+    focusRoom,
+    clearScope,
     columns,
     chips,
     stageCounts,
     scopeCalls,
     scopeSqft,
-    proposedUrl,
+    proposedUrl: `${proposedUrl.pathname}${proposedUrl.search}`,
   };
 }
 

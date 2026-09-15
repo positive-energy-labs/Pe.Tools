@@ -7,10 +7,6 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 ///     Electrical coercion strategy - converts numeric/string values to electrical parameters with unit conversion.
 /// </summary>
 public class CoerceElectrical : ICoercionStrategy {
-    // Pre-computed voltage ranges for performance
-    private static readonly HashSet<double> VoltRange240 = [.. Enumerable.Range(225, 21).Select(x => (double)x)];
-    private static readonly HashSet<double> VoltRange120 = [.. Enumerable.Range(107, 15).Select(x => (double)x)];
-
     public bool CanMap(CoercionContext context) {
         var isTargetElectrical = context.TargetDataType?.TypeId.Contains(".electrical:") == true;
         var canExtractDouble = Regexes.TryExtractDouble(context.SourceValue?.ToString() ?? string.Empty, out _);
@@ -27,8 +23,12 @@ public class CoerceElectrical : ICoercionStrategy {
             var t when t?.TypeId.Contains(".electrical:") == true => this.ExtractDouble(
                 context.SourceValueString ?? context.SourceValue?.ToString() ?? string.Empty,
                 context.TargetParam),
+            // Any other numeric storage (Old_Template VMB carries Voltage under a non-electrical spec) is taken at face value.
+            _ when context.SourceValue is double raw => raw,
+            _ when context.SourceValue is int rawInt => rawInt,
+            // ToLabel throws on ids without a label; report the raw id instead.
             _ => throw new ArgumentException(
-                $"Unsupported source type {context.SourceDataType?.ToLabel() ?? "null"} for electrical coercion")
+                $"Unsupported source type {context.SourceDataType?.TypeId ?? "null"} for electrical coercion")
         };
 
         var convertedVal = UnitUtils.ConvertToInternalUnits(currVal, context.TargetUnitType);
@@ -38,15 +38,16 @@ public class CoerceElectrical : ICoercionStrategy {
         return context.TargetParam;
     }
 
+    /// <summary>Parse the number first, then bucket it numerically: "1200" is twelve hundred volts, not a string containing "120".</summary>
     private double ExtractDouble(string sourceValue, FamilyParameter targetParam) {
-        if (!targetParam.Definition.Name.Contains("Voltage", StringComparison.OrdinalIgnoreCase))
-            return Regexes.ExtractDouble(sourceValue);
+        var value = Regexes.ExtractDouble(sourceValue);
+        if (!targetParam.Definition.Name.Contains("Voltage", StringComparison.OrdinalIgnoreCase)) return value;
 
         // somewhat arbitrary ranges. 240 must account for 230. 120 must account for 110 or 115.
-        if (sourceValue.Contains(208.ToString())) return 208;
-        if (VoltRange240.Any(x => sourceValue.Contains(x.ToString()))) return 240;
-        if (VoltRange120.Any(x => sourceValue.Contains(x.ToString()))) return 120;
+        if (value == 208) return 208;
+        if (value is >= 225 and <= 245) return 240;
+        if (value is >= 107 and <= 121) return 120;
 
-        return Regexes.ExtractDouble(sourceValue);
+        return value;
     }
 }

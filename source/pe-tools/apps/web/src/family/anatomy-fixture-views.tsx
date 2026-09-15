@@ -1,6 +1,6 @@
 import { token } from "#/lib/token";
 import { EmptyState } from "#/components/lang/empty";
-import type { Draft, Focus, PageWorld } from "#/family/model";
+import type { Draft, Focus, FamilyPageModel } from "#/family/model";
 import {
   BOX,
   M,
@@ -14,7 +14,7 @@ import {
 
 // ── the FIXTURE lane: the six known slugs, per-slug placement constants ─────────────────────────
 
-export function FixtureViews({
+export function AnatomyViews({
   world,
   draft,
   typeName,
@@ -22,7 +22,7 @@ export function FixtureViews({
   onFocus,
   onInspect,
 }: {
-  world: PageWorld;
+  world: FamilyPageModel;
   draft: Draft;
   typeName: string;
   focusedParts: Set<string>;

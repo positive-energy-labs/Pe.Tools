@@ -1,4 +1,3 @@
-using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
@@ -10,7 +9,8 @@ public sealed record FamilyModelCaptureData(
     string FamilyName,
     string ModelJson,
     int UnmodeledCount,
-    FamilyModelEvidence Evidence
+    IReadOnlyDictionary<string, string> Coverage,
+    IReadOnlyList<RevitDataIssue> Issues
 );
 
 public sealed record FamilyModelBuildRequest(
@@ -25,5 +25,6 @@ public sealed record FamilyModelBuildData(
     string FamilyName,
     string OutputPath,
     string TemplatePath,
-    FamilyModelEvidence Evidence
+    bool Converged,
+    int ResidueCount
 );

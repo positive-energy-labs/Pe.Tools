@@ -1,22 +1,37 @@
-import { instancesRouteState, type InstancesDocument } from "@pe/agent-contracts";
-import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
-import { useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  instancesActions,
+  type InstancesActionKey,
+  nativeProcessSchema,
+  sdkSessionSelectorOf,
+  sdkSessionTargetOf,
+} from "@pe/agent-contracts";
+import { type InstancesHandle } from "#/instances/manifest";
+import { useMemo, useState } from "react";
+import { peReadings, readReading, useHostCall } from "#/readings";
+import { ActionReceipts } from "#/actions/receipt";
+import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
-import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
-import { Verb as VerbButton } from "#/components/lang/verb";
+import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
-import type { WorldFacts } from "#/host/fleet";
-import { HOST_QUERY_KEY } from "#/host/queries";
+import type { Inventory } from "#/readings";
 import { timeAgo } from "#/lib/utils";
-import { docSelectorOf, worldTrunk } from "#/targeting/world";
 import type { InstancesFleet } from "#/instances/workspace";
-import { YEARS, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#/instances/route";
+import {
+  YEARS,
+  custodyVerdict,
+  docSelectorOf,
+  findSession,
+  parseUtc,
+  phaseVerdict,
+  sessionLabel,
+  sessionSub,
+  sessionTarget,
+} from "#/instances/route";
 
 /**
  * THE INSTANCES CLUSTER (promoted from proto variant F, kaitpw verdict 2026-09-01) — the whole
@@ -47,8 +62,14 @@ type DocFact = {
 };
 
 type Staged =
-  | { readonly kind: "open"; readonly doc: DocFact; readonly world: WorldFacts }
+  | { readonly kind: "open"; readonly doc: DocFact; readonly world: Inventory }
   | { readonly kind: "start"; readonly doc?: DocFact; readonly year: string };
+
+/** Deliberately unexported: a `*Scope` export is a dead word (route-primitive guard row 6). */
+type DocumentScope = { readonly kind: "document"; readonly document: string; readonly pin: string };
+
+const documentScope = (session: string, document: string): DocumentScope | null =>
+  session && document ? { kind: "document", document, pin: session } : null;
 
 /** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
 export const sessionIdOf = (name: string) =>
@@ -62,7 +83,7 @@ export const sessionIdOf = (name: string) =>
 /** Merge recents with what live worlds are actually showing; a shown document wins its identity. */
 function mergeDocFacts(
   buckets: readonly { year: string; recents: readonly RecentDocument[] }[],
-  liveWorlds: readonly WorldFacts[],
+  liveWorlds: readonly Inventory[],
 ): DocFact[] {
   const byId = new Map<string, DocFact>();
   for (const bucket of buckets)
@@ -79,113 +100,99 @@ function mergeDocFacts(
           openIn: [],
         });
     }
-  for (const world of liveWorlds) {
-    const title = world.session?.activeDocumentTitle;
-    if (!title) continue;
-    const path = world.session?.activeDocumentId ?? title;
-    const existing = [...byId.values()].find(
-      (candidate) => candidate.path === path || candidate.id === path,
-    );
-    if (existing) byId.set(existing.id, { ...existing, openIn: [...existing.openIn, world.id] });
-    else
-      byId.set(path, {
-        id: path,
-        title,
-        path,
-        selector: path,
-        year: world.row?.year != null ? String(world.row.year).slice(-2) : null,
-        cloud: false,
-        openIn: [world.id],
-      });
-  }
+  for (const world of liveWorlds)
+    for (const document of world.session?.openDocuments ?? []) {
+      const { title, address: path } = document;
+      if (!path) continue;
+      const existing = [...byId.values()].find(
+        (candidate) => candidate.path === path || candidate.id === path,
+      );
+      if (existing) byId.set(existing.id, { ...existing, openIn: [...existing.openIn, world.id] });
+      else
+        byId.set(path, {
+          id: path,
+          title,
+          path,
+          selector: path,
+          year: world.row?.year != null ? String(world.row.year).slice(-2) : null,
+          cloud: false,
+          openIn: [world.id],
+        });
+    }
   return [...byId.values()];
 }
 
 type ClusterProps = {
+  handle: InstancesHandle;
   fleet: InstancesFleet;
   target: string;
   setTarget: (target: string) => void;
-  source?: "fixture";
+  /** Settled lifecycle receipts, for a host page's ledger. */
   onEvent?: (event: ClusterEvent) => void;
+  /** Hands the selected document and its exact session pin to an embedding route. */
+  onDocument?: (scope: DocumentScope) => void;
+  requestedDocument?: string;
 };
 
-export function InstancesCluster(props: ClusterProps) {
-  const search = useSearch({ strict: false }) as { thread?: string };
-  return props.source === "fixture" ? (
-    <InstancesClusterView {...props} />
-  ) : (
-    <LiveInstancesCluster
-      key={search.thread ?? "instances"}
-      {...props}
-      workspaceId={search.thread ?? "instances"}
-    />
-  );
-}
-
-function LiveInstancesCluster({ workspaceId, ...props }: ClusterProps & { workspaceId: string }) {
-  const route = useRouteState(instancesRouteState, { workspaceId });
-  useEffect(() => {
-    if (route.hydrated && !route.slice?.observation) void route.command("refresh");
-  }, [route.hydrated]);
-  if (!route.hydrated)
-    return (
-      <OutcomeLine
-        kind={route.failure ? "error" : "busy"}
-        label={route.failure?.message ?? "reading instances workspace"}
-      />
-    );
-  return <InstancesClusterView {...props} route={route} />;
-}
-
-function InstancesClusterView({
+export function InstancesCluster({
+  handle,
   fleet,
   target,
   setTarget,
-  source,
   onEvent,
-  route,
-}: {
-  route?: RouteStateHandle<InstancesDocument>;
-  fleet: InstancesFleet;
-  target: string;
-  setTarget: (target: string) => void;
-  source?: "fixture";
-  /** Settled lifecycle receipts, for a host page's ledger. */
-  onEvent?: (event: ClusterEvent) => void;
-}) {
-  const queryClient = useQueryClient();
+  onDocument,
+  requestedDocument,
+}: ClusterProps) {
+  const route = handle;
+  const work = route.work;
+  const workspaceId = work.key.work!;
   const { worlds, isLoading } = fleet;
   // `session list --all` (useFleet({all:true})) includes the graveyard; the table shows only
   // worlds that still exist as processes or receipts — gone rows serve the census, not the picker.
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
-  const observation = route?.slice?.observation as {
-    years: string[];
-    recents: { year: string; recents: RecentDocument[] }[];
-  } | null;
-  const years = observation?.years.map((year) => year.slice(-2)) ?? YEARS;
-  const buckets =
-    observation?.recents.map((bucket) => ({
-      ...bucket,
-      recents: bucket.recents ?? [],
-      year: bucket.year.slice(-2),
-    })) ?? [];
-  const recentsLoading = route?.busy === "refresh";
+  const doctor = useHostCall(
+    async (signal) =>
+      (await readReading({ kind: "sdk", read: "doctor" }, signal, peReadings)) as {
+        result: { revitYears?: string[] };
+      },
+    ["instances", "doctor"],
+  );
+  const years = doctor.data?.result.revitYears?.map((year) => year.slice(-2)) ?? YEARS;
+  // One call per Revit year, but ONE Reading: the years are read together or not at all.
+  const recents = useHostCall(
+    async (signal) =>
+      await Promise.all(
+        years.map(async (year) => ({
+          year,
+          recents:
+            (
+              (await readReading({ kind: "sdk", read: "recents", year }, signal, peReadings)) as {
+                result: { recents?: RecentDocument[] };
+              }
+            ).result.recents ?? [],
+        })),
+      ),
+    ["instances", "recents", years.join(",")],
+  );
+  const buckets = recents.data ?? [];
+  const recentsLoading = doctor.isPending || recents.isPending;
   const documents = useMemo(() => mergeDocFacts(buckets, liveWorlds), [buckets, liveWorlds]);
+  const recovery: DocFact | undefined =
+    documents.find((document) => document.id === requestedDocument) ??
+    (requestedDocument && /[\\/]/.test(requestedDocument)
+      ? {
+          id: requestedDocument,
+          title: requestedDocument.split(/[\\/]/).at(-1)!,
+          path: requestedDocument,
+          selector: requestedDocument,
+          year: null,
+          cloud: false,
+          openIn: [],
+        }
+      : undefined);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
-  const [localStaged, setLocalStaged] = useState<Staged | null>(null);
-  const intent = route?.slice;
-  target = intent?.selectedSession ?? target;
-  const originalSetTarget = setTarget;
-  setTarget = (next) => {
-    if (route)
-      void route.apply([
-        { path: ["selectedSession"], value: next || null },
-        { path: ["staged"], value: null },
-      ]);
-    else originalSetTarget(next);
-  };
-  const stored = intent?.staged;
+  const stored = work.doc?.staged;
   const storedDoc = stored?.document
     ? (documents.find((d) => d.selector === stored.document) ?? {
         id: stored.document,
@@ -198,22 +205,18 @@ function InstancesClusterView({
       })
     : null;
   const storedWorld =
-    stored?.kind === "open" ? worldTrunk.resolve(liveWorlds, stored.session) : undefined;
-  const staged: Staged | null = route
-    ? stored
-      ? stored.kind === "start"
-        ? { kind: "start", doc: storedDoc ?? undefined, year: stored.year.slice(-2) }
-        : storedWorld && storedDoc
-          ? { kind: "open", doc: storedDoc, world: storedWorld }
-          : null
-      : null
-    : localStaged;
+    stored?.kind === "open"
+      ? findSession(liveWorlds, sdkSessionTargetOf(stored.session))
+      : undefined;
+  const staged: Staged | null = stored
+    ? stored.kind === "start"
+      ? { kind: "start", doc: storedDoc ?? undefined, year: stored.year.slice(-2) }
+      : storedWorld && storedDoc
+        ? { kind: "open", doc: storedDoc, world: storedWorld }
+        : null
+    : null;
   const setStaged = (next: Staged | null) => {
-    if (!route) {
-      setLocalStaged(next);
-      return;
-    }
-    void route.apply([
+    void work.write([
       {
         path: ["staged"],
         value:
@@ -222,7 +225,7 @@ function InstancesClusterView({
             : next.kind === "open"
               ? {
                   kind: "open",
-                  session: worldTrunk.option(next.world).id,
+                  session: sdkSessionSelectorOf(sessionTarget(next.world)),
                   document: next.doc.selector,
                 }
               : {
@@ -234,33 +237,16 @@ function InstancesClusterView({
       },
     ]);
   };
-  const [localSessionName, setLocalSessionName] = useState("");
-  const sessionName = stored?.kind === "start" ? stored.name : localSessionName;
-  const setSessionName = (name: string) => {
-    setLocalSessionName(sessionIdOf(name));
-    if (route && stored?.kind === "start")
-      void route.apply([{ path: ["staged", "name"], value: sessionIdOf(name) }]);
-  };
-  const busy = route?.busy ?? null;
-  const [localOutcome, setOutcome] = useState<{
-    kind: OutcomeKind;
-    text: string;
-    says?: string;
-  } | null>(null);
+  const [localSessionName, setLocalSessionName] = useState<string | null>(null);
+  const sessionName = localSessionName ?? (stored?.kind === "start" ? stored.name : "");
+  const setSessionName = (name: string) => setLocalSessionName(sessionIdOf(name));
+  const [busy, setBusy] = useState<string | null>(null);
+  const [lastId, setLastId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const outcome =
-    localOutcome ??
-    (intent?.outcome
-      ? {
-          kind: "receipt" as const,
-          text: `${intent.outcome.action} answered`,
-          says: undefined,
-        }
-      : null);
-
-  const pickedWorld = worldTrunk.resolve(liveWorlds, target);
+  const pickedWorld = findSession(liveWorlds, target);
   const pickedYear = pickedWorld?.row?.year != null ? String(pickedWorld.row.year).slice(-2) : null;
-  const worldYear = (world: WorldFacts) =>
+  const worldYear = (world: Inventory) =>
     world.row?.year != null
       ? String(world.row.year).slice(-2)
       : (world.session?.year?.slice(-2) ?? null);
@@ -272,41 +258,59 @@ function InstancesClusterView({
       pickedWorld ? document.openIn.includes(pickedWorld.id) || document.year === pickedYear : true,
     )
     .filter((document) => (yearPick ? document.year === yearPick : true));
+  const stagedScope =
+    staged?.kind === "open" && staged.doc.openIn.includes(staged.world.id)
+      ? documentScope(sessionTarget(staged.world), staged.doc.id)
+      : null;
 
-  const settle = (kind: OutcomeKind, text: string, says?: string) => {
-    setOutcome({ kind, text, says });
-    if (kind !== "error") onEvent?.({ atMs: Date.now(), label: text });
-  };
-  const finish = () => {
-    void queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
-  };
   const runCommand = async (command: "start" | "open" | "restart" | "stop") => {
-    if (!route) return;
-    const result = await route.command(
-      command,
-      command === "stop" ? { force: pickedWorld?.phase === "unresponsive" } : {},
-    );
-    if (!result.ok) settle("error", result.error, result.hint);
-    else {
-      const receipt = result.result as {
-        diagnostics?: { detail?: string; code?: string }[];
-        result?: { state?: string };
-      };
-      settle(
-        receipt.diagnostics?.length ? "advisory" : "receipt",
-        `${command} · ${receipt.result?.state ?? "answered"}`,
-        receipt.diagnostics?.map((d) => d.detail ?? d.code).join(" · "),
+    if (work.revision === null) return;
+    setBusy(command);
+    setError(null);
+    try {
+      let revision = work.revision;
+      if (command === "start" && stored?.kind === "start" && stored.name !== sessionName) {
+        const refusal = await work.write(
+          [{ path: ["staged"], value: { ...stored, name: sessionName } }],
+          revision,
+        );
+        if (refusal) throw Error(refusal.message);
+        revision += 1;
+      }
+      const key: InstancesActionKey = `instances.${command}`;
+      const world = command === "open" && staged?.kind === "open" ? staged.world : pickedWorld;
+      const process =
+        world?.row && "process" in world.row
+          ? nativeProcessSchema.parse(world.row.process)
+          : undefined;
+      const input = instancesActions[key].input.parse({
+        workspaceId,
+        ...(command !== "start" ? { session: { id: world?.id, process } } : {}),
+        ...(command === "stop" ? { force: world?.phase === "unresponsive" } : {}),
+      });
+      const row = await runSemanticAction(
+        key,
+        input,
+        undefined,
+        { work: { key: work.key, revision } },
+        "human",
+        "",
+        command === "start" || command === "open" ? crypto.randomUUID() : undefined,
+        30_000,
       );
+      setLastId(row.id);
+      onEvent?.({ atMs: Date.now(), label: `${command}: action ${row.id} (${row.state})` });
+    } catch (caught) {
+      setError(String(caught));
+    } finally {
+      setBusy(null);
     }
-    finish();
   };
-  const fixtureRefusal = source === "fixture" ? "fixture worlds are read-only" : null;
-
   // Staging: with a picked world the open targets THAT world; without one the document brings its
   // own — the world already showing it, else a ready controlled installed world of its year, else
   // a new session of its year.
   const stageDoc = (document: DocFact) => {
-    setOutcome(null);
+    setError(null);
     if (staged?.doc?.id === document.id) {
       setStaged(null);
       return;
@@ -315,49 +319,37 @@ function InstancesClusterView({
       setStaged({ kind: "open", doc: document, world: pickedWorld });
       return;
     }
-    const showing = document.openIn
-      .map((id) => liveWorlds.find((world) => world.id === id))
-      .find(Boolean);
-    const readyOfYear = liveWorlds.find(
-      (world) =>
-        world.lane === "installed" &&
-        world.custody === "controlled" &&
-        world.phase === "ready" &&
-        world.row?.year != null &&
-        String(world.row.year).slice(-2) === document.year,
-    );
-    const live = showing ?? readyOfYear;
-    setStaged(
-      live
-        ? { kind: "open", doc: document, world: live }
-        : { kind: "start", doc: document, year: document.year ?? "25" },
-    );
+    const year = document.year ?? yearPick;
+    if (!year) {
+      setError("Pick a session or Revit year before opening this document.");
+      return;
+    }
+    setStaged({ kind: "start", doc: document, year });
   };
 
   const openRefusal =
-    fixtureRefusal ??
-    (staged?.kind === "open" && staged.world.custody !== "controlled"
+    staged?.kind === "open" && staged.world.custody !== "controlled"
       ? "observed world — open the document in Revit yourself"
       : staged?.kind === "open" && !staged.world.session
         ? "this world has no connected session"
-        : null);
+        : null;
 
-  const fleetColumns = useMemo<Column<WorldFacts>[]>(
+  const fleetColumns = useMemo<Column<Inventory>[]>(
     () => [
       {
         key: "session",
         label: "session",
-        search: (world) => worldTrunk.label(world).toLowerCase(),
-        sort: (world) => worldTrunk.label(world),
-        cell: (world) => <StateCell scale="row" value={worldTrunk.label(world)} />,
+        search: (world) => sessionLabel(world).toLowerCase(),
+        sort: (world) => sessionLabel(world),
+        cell: (world) => <StateCell scale="row" value={sessionLabel(world)} />,
       },
       { key: "custody", label: "custody", width: "w-28", verdict: custodyVerdict },
       { key: "phase", label: "phase", width: "w-32", verdict: phaseVerdict },
       {
         key: "detail",
         label: "lane · year · pid",
-        search: (world) => worldSub(world).toLowerCase(),
-        cell: (world) => <StateCell scale="row" value={worldSub(world)} />,
+        search: (world) => sessionSub(world).toLowerCase(),
+        cell: (world) => <StateCell scale="row" value={sessionSub(world)} />,
       },
       {
         key: "docs",
@@ -423,7 +415,7 @@ function InstancesClusterView({
                 ? document.openIn
                     .map((id) => {
                       const world = liveWorlds.find((candidate) => candidate.id === id);
-                      return world ? worldTrunk.label(world) : id;
+                      return world ? sessionLabel(world) : id;
                     })
                     .join(" · ")
                 : "—"
@@ -446,31 +438,23 @@ function InstancesClusterView({
     [liveWorlds],
   );
 
+  if (!work.current)
+    return (
+      <OutcomeLine
+        kind={route.failure ? "error" : "busy"}
+        label={route.failure?.message ?? "reading instances workspace"}
+      />
+    );
+
   return (
     <div className="flex flex-col gap-5" data-testid="instances-cluster">
-      {route?.outcomeUnknown ? (
-        <div>
-          <OutcomeLine
-            kind="advisory"
-            label="Previous operation outcome is uncertain. Inspect Revit and its SDK receipts before continuing."
-          />
-          <VerbButton
-            tone="act"
-            label="I inspected the outcome"
-            reason="acknowledge the uncertain operation"
-            onClick={() => void route.command("recover", { inspected: true })}
-          />
-        </div>
-      ) : null}
-      {route ? (
-        <VerbButton
-          tone="act"
-          label="refresh"
-          reason="read sessions and recent documents"
-          disabled={busy !== null}
-          onClick={() => void route.command("refresh")}
+      {(doctor.error || recents.error) && (
+        <OutcomeLine
+          kind="error"
+          label="SDK document readings unavailable; staged intent is retained."
         />
-      ) : null}
+      )}
+      {recovery && <Press onClick={() => stageDoc(recovery)}>recover {recovery.title}</Press>}
       <div className="flex items-center gap-2">
         <span className="t-small face-mono text-ink-2">year</span>
         {years.map((candidate) => (
@@ -498,9 +482,8 @@ function InstancesClusterView({
           searchPlaceholder="search sessions"
           activeKey={pickedWorld?.id}
           onRowClick={(world) => {
-            const id = worldTrunk.option(world).id;
+            const id = sessionTarget(world);
             setTarget(target === id ? "" : id);
-            if (!route) setStaged(null);
           }}
           empty={
             isLoading ? (
@@ -520,8 +503,8 @@ function InstancesClusterView({
           rowKey={(document) => document.id}
           scopeLabel={
             pickedWorld
-              ? `documents openable in ${worldTrunk.label(pickedWorld)}`
-              : "documents — each brings its own session"
+              ? `documents openable in ${sessionLabel(pickedWorld)}`
+              : "documents — pick a session explicitly, or stage a new session"
           }
           searchPlaceholder="search documents"
           activeKey={staged?.doc?.id}
@@ -543,7 +526,7 @@ function InstancesClusterView({
             <span className="t-small face-mono text-ink-2">staged</span>
             <span className="t-prose text-ink">
               {staged.kind === "open"
-                ? `open ${staged.doc.title} in ${worldTrunk.label(staged.world)}`
+                ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
                 : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
             </span>
             {staged.kind === "start" ? (
@@ -551,28 +534,31 @@ function InstancesClusterView({
                 className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
                 aria-label="session name"
                 placeholder="name this session"
-                defaultValue={sessionName}
-                key={`${staged.doc?.selector ?? staged.year}:${sessionName}`}
-                onBlur={(event) => setSessionName(event.target.value)}
+                value={sessionName}
+                onChange={(event) => setSessionName(event.target.value)}
               />
             ) : null}
             {staged.kind === "open" ? (
               <VerbButton
                 tone="commit"
-                label="open"
-                reason={openRefusal ?? "open the staged document in its session"}
-                disabled={busy !== null || openRefusal !== null || route?.outcomeUnknown === true}
+                label={stagedScope && onDocument ? "use" : "open"}
+                reason={
+                  stagedScope && onDocument
+                    ? "use the staged document in this route"
+                    : (openRefusal ?? "open the staged document in its session")
+                }
+                disabled={busy !== null || (!stagedScope && openRefusal !== null)}
                 busy={busy === "open"}
-                onClick={() => void runCommand("open")}
+                onClick={() =>
+                  stagedScope && onDocument ? onDocument(stagedScope) : void runCommand("open")
+                }
               />
             ) : (
               <VerbButton
                 tone="commit"
                 label={sessionIdOf(sessionName) ? `start ${sessionIdOf(sessionName)}` : "start"}
-                reason={fixtureRefusal ?? "start the session and open the staged document"}
-                disabled={
-                  busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true
-                }
+                reason="start the session and open the staged document"
+                disabled={busy !== null}
                 busy={busy === "start"}
                 onClick={() => void runCommand("start")}
               />
@@ -582,20 +568,20 @@ function InstancesClusterView({
         ) : pickedWorld ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="t-small face-mono text-ink-2">session</span>
-            <span className="t-prose text-ink">{worldTrunk.label(pickedWorld)}</span>
+            <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
             <VerbButton
               tone="act"
               label="restart"
-              reason={fixtureRefusal ?? "cold-swap this session (session hr --restart)"}
-              disabled={busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true}
+              reason="cold-swap this session (session hr --restart)"
+              disabled={busy !== null}
               busy={busy === "restart"}
               onClick={() => void runCommand("restart")}
             />
             <VerbButton
               tone="act"
               label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
-              reason={fixtureRefusal ?? "stop this session"}
-              disabled={busy !== null || fixtureRefusal !== null || route?.outcomeUnknown === true}
+              reason="stop this session"
+              disabled={busy !== null}
               busy={busy === "stop"}
               onClick={() => void runCommand("stop")}
             />
@@ -606,7 +592,7 @@ function InstancesClusterView({
             nothing staged — pick a session above, or click a document row
           </span>
         )}
-        {route?.failure ? <OutcomeLine kind="error" label={route.failure.message} /> : null}
+        {route.failure ? <OutcomeLine kind="error" label={route.failure.message} /> : null}
         {stored?.kind === "open" && !storedWorld ? (
           <div>
             <OutcomeLine kind="error" label={`staged session unavailable: ${stored.session}`} />
@@ -618,11 +604,8 @@ function InstancesClusterView({
             />
           </div>
         ) : null}
-        {outcome ? (
-          <div className="mt-2">
-            <OutcomeLine kind={outcome.kind} label={outcome.text} says={outcome.says} />
-          </div>
-        ) : null}
+        {error && <OutcomeLine kind="error" label={error} />}
+        <ActionReceipts scope={{ kind: "instances", workspaceId }} lastId={lastId} />
       </div>
     </div>
   );

@@ -17,8 +17,6 @@ export function AtlasNavigation() {
     stageFilter,
     zoneKey,
     setStageFilter,
-    setZoneKey,
-    setCursor,
     zoneStates,
     filteredZones,
     selectZone,
@@ -62,8 +60,6 @@ export function AtlasNavigation() {
                   title={STAGE_BLURB[stage]}
                   onClick={() => {
                     setStageFilter(on ? null : stage);
-                    setZoneKey(null);
-                    setCursor(null);
                   }}
                   tone="quiet"
                   size="caption"
@@ -101,13 +97,13 @@ export function AtlasNavigation() {
                   {zs.map((z) => {
                     const states = zoneStates(z);
                     const calls = states.filter((s) => s === "call").length;
-                    const on = z.zone.key === zoneKey;
+                    const on = z.zone.guid === zoneKey;
                     const off = !onPlan(z);
                     return (
                       // A grid item stretches: an inline-block button in a block list item is
                       // only as wide as its text, which is why the zone bar never reached the
                       // right edge (annotation round, 2026-08-31).
-                      <li key={z.zone.key} className="grid">
+                      <li key={z.zone.guid} className="grid">
                         <Press
                           type="button"
                           onClick={() => selectZone(on ? null : z)}

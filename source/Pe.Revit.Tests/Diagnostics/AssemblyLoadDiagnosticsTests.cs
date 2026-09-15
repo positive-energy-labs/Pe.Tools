@@ -1,5 +1,4 @@
 using Pe.App.Commands.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Profiles;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -18,7 +17,14 @@ public sealed class AssemblyLoadDiagnosticsTests {
         TestContext.Progress.WriteLine($"RevitVersion={revitApplication.VersionNumber}");
         TestContext.Progress.WriteLine($"RevitSubVersion={revitApplication.SubVersionNumber}");
 
-        foreach (var assembly in GetRelevantAssemblies()) TestContext.Progress.WriteLine(FormatAssemblyLine(assembly));
+        var lines = GetRelevantAssemblies().Select(FormatAssemblyLine).ToArray();
+        foreach (var line in lines) TestContext.Progress.WriteLine(line);
+        if (Environment.GetEnvironmentVariable("PE_FF_PROOF_OUTPUT") is { Length: > 0 } output) {
+            Directory.CreateDirectory(output);
+            File.WriteAllLines(Path.Combine(output, "assembly-load.txt"),
+                new[] { $"ProcessId={process.Id}", $"RevitVersion={revitApplication.VersionNumber}",
+                    $"TestAssembly={typeof(AssemblyLoadDiagnosticsTests).Assembly.Location}" }.Concat(lines));
+        }
 
         Assert.That(process.ProcessName, Is.EqualTo("Revit"));
     }
@@ -34,7 +40,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
 
         var anchorAssemblies = new[] {
             typeof(AssemblyLoadDiagnosticsTests).Assembly, typeof(CmdFFManager).Assembly,
-            typeof(FFManagerProfile).Assembly
+            typeof(Pe.Revit.FamilyFoundry.OperationProcessor).Assembly
         };
 
         return currentDomainAssemblies

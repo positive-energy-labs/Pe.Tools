@@ -15,7 +15,7 @@ import { token } from "#/lib/token";
  * redeems every staged value into `current` and clears the staging, which is what a `written`
  * state was trying to say.
  *
- * FIXTURE, ANNOUNCED: the world is `design-system/fixtures.ts` — no host, no document, no element
+ * SPECIMEN DATA, ANNOUNCED: the world is `design-system/specimens-data.ts` — no host, no document, no element
  * behind any value. The dashed seam chip in the header is the reserved mark for exactly that.
  *
  * NO STAND-INS: the card is built from `lang/` primitives only. Where the card needs something
@@ -34,7 +34,7 @@ import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Gap } from "#/design-system/exhibit";
 import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -44,7 +44,7 @@ import {
   PROPOSAL_TARGET,
   PROPOSAL_THREAD,
   type ProposalItem,
-} from "#/design-system/fixtures";
+} from "#/design-system/specimens-data";
 
 export const Route = createFileRoute("/design-system_/proposal-flow")({
   component: ProposalFlow,
@@ -186,7 +186,7 @@ function ProposalFlow() {
               foot={
                 <>
                   <Tag>{staged} to write</Tag>
-                  <Verb
+                  <ActionButton
                     tone="commit"
                     label={`save ${staged} to profile`}
                     icon={Save}
@@ -221,14 +221,14 @@ function ProposalFlow() {
                     <span className="flex items-center gap-1">
                       {isOpen(item) ? (
                         <>
-                          <Verb
+                          <ActionButton
                             tone="agent"
                             label="accept"
                             icon={Check}
                             onClick={() => accept(item.key)}
                             reason="Stages pea's value — nothing is written until you commit"
                           />
-                          <Verb
+                          <ActionButton
                             label="deny"
                             icon={X}
                             onClick={() => deny(item.key)}
@@ -236,7 +236,7 @@ function ProposalFlow() {
                           />
                         </>
                       ) : (
-                        <Verb
+                        <ActionButton
                           label="undo"
                           icon={Undo2}
                           onClick={() => undo(item.key)}
@@ -265,7 +265,7 @@ function ProposalFlow() {
             ) : null}
 
             <div className="flex items-center gap-2 pt-2">
-              <Verb
+              <ActionButton
                 label="reset the world"
                 icon={Sparkles}
                 onClick={reset}

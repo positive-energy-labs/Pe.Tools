@@ -1,3 +1,4 @@
+import { RouteShell, emptyManifest } from "#/route";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/lang/theme-toggle";
@@ -7,7 +8,18 @@ import { DesignSystemLaws, LAW_POINTERS } from "#/design-system/laws";
 import { DesignSystemSpecimens } from "#/design-system/specimens/index";
 import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 
-export const Route = createFileRoute("/design-system")({ component: DesignSystem });
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("design-system", "Design System");
+
+function RouteShelledDesignSystem() {
+  return (
+    <RouteShell manifest={manifest}>
+      <DesignSystem />
+    </RouteShell>
+  );
+}
+
+export const Route = createFileRoute("/design-system")({ component: RouteShelledDesignSystem });
 
 function DesignSystem() {
   return (

@@ -3,7 +3,7 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Press } from "#/components/lang/press";
 import { fmtNum } from "#/components/master-table/model";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
-import type { WorldRoom, WorldZone } from "#/takeoff/world";
+import type { ModelRoom, ModelZone } from "#/takeoff/world";
 
 export function LevelStats({
   level,
@@ -12,8 +12,8 @@ export function LevelStats({
   onClose,
 }: {
   level: string;
-  zones: WorldZone[];
-  stateOf: (room: WorldRoom) => RoomState;
+  zones: ModelZone[];
+  stateOf: (room: ModelRoom) => RoomState;
   onClose: () => void;
 }) {
   const rooms = zones.flatMap((z) => z.rooms);

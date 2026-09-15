@@ -1,14 +1,15 @@
+import { paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { cellFromTrichotomy } from "#/components/lang/cell";
-import { bindingOf, isFormula, proposalCell, type PageWorld } from "#/family/model";
+import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
@@ -17,6 +18,7 @@ import { PressContent } from "#/components/anatomy/press-content";
 export function FamilyWorkspaceDocPane() {
   const {
     world,
+    lane,
     draft,
     saved,
     docMode,
@@ -127,6 +129,7 @@ export function FamilyWorkspaceDocPane() {
 
   const paramInspector = (name: string): React.ReactNode => {
     const row = rows.find((entry) => entry.name === name && entry.kind === "profile");
+    const native = lane.drawingModel?.parameters ? paramSpec(lane.drawingModel, name) : null;
     const authored = draft.authored[name] ?? "";
     const drives = consumers.get(name) ?? [];
     const blocks = world.grounding[name] ?? [];
@@ -138,6 +141,13 @@ export function FamilyWorkspaceDocPane() {
           {row?.group ? ` · ${row.group}` : ""}
           {world.missingInRevit.has(name) && <span className="ml-1">⊘ not in Revit</span>}
         </p>
+
+        {native && (
+          <details className="mb-2 t-small">
+            <summary>Native parameter declaration</summary>
+            <pre className="max-h-48 overflow-auto">{JSON.stringify(native, null, 2)}</pre>
+          </details>
+        )}
 
         <div className="hairline-t mb-2 pt-1.5">
           <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
@@ -183,7 +193,7 @@ export function FamilyWorkspaceDocPane() {
           </p>
           {drives.length === 0 ? (
             <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
-              drives nothing — fine for schedule data, suspicious for a Length
+              no direct form or connector dimension binding; other native declarations may use it
             </EmptyState>
           ) : (
             drives.map((entry) => (
@@ -245,7 +255,7 @@ export function FamilyWorkspaceDocPane() {
           <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
-          <Verb
+          <ActionButton
             label="esc"
             tone="nav"
             direction="back"
@@ -305,7 +315,7 @@ export function FamilyWorkspaceDocPane() {
               },
             ]}
           />
-          <Verb
+          <ActionButton
             label="parse"
             onClick={() =>
               say(
@@ -379,7 +389,7 @@ export function FamilyWorkspaceDocPane() {
   return docPane;
 }
 
-function partProseOnly(world: PageWorld, slug: string) {
+function partProseOnly(world: FamilyPageModel, slug: string) {
   const prose = world.constituents.find((entry) => entry.slug === slug)?.text ?? null;
   return (
     <EmptyState story="scope" exit="declare its geometry in the profile to make it editable here">

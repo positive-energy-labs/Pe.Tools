@@ -25,6 +25,10 @@ public sealed class SetLookupTables(SetLookupTablesSettings settings)
     public override string Description =>
         "Emit authored lookup tables as Revit CSV and import them into the family.";
 
+    /// <summary>family.json carries the Revit CSV verbatim; decode each into the operation's table definition.</summary>
+    public static SetLookupTables FromCsv(IEnumerable<(string Name, string Csv)> tables) =>
+        new(new SetLookupTablesSettings { Tables = tables.Select(t => LookupTableCsvCodec.Decode(t.Name, t.Csv)).ToList() });
+
     public override OperationLog Execute(
         FamilyDocument doc,
         FamilyProcessingContext processingContext,

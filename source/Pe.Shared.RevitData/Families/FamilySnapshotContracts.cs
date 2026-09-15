@@ -101,6 +101,17 @@ public sealed record FamilyEditorOpenData(
     string? SavedPath
 );
 
+/// <summary>Caller retains this UUID before submission; reuse it to recover, never open twice.</summary>
+public sealed record TemporaryFamilyAcquireRequest(string AcquisitionId, long FamilyId);
+
+/// <summary>Unchanged is the automatic cleanup policy. Discard requires an explicit decision.</summary>
+public sealed record TemporaryDocumentReleaseRequest(string AcquisitionId, string ReleaseId, string? ExpectedOpenId = null, bool Discard = false);
+
+public sealed record TemporaryDocumentStatusRequest(string AcquisitionId);
+public sealed record TemporaryDocumentRef(string Session, string OpenId);
+public sealed record TemporaryDocumentData(string AcquisitionId, string Status, TemporaryDocumentRef? Document,
+    string RecoveryId, string? Detail, string? RecordedOpenId, string? RecordedStatus);
+
 public sealed record FamilyEditorApplyRequest(
     IReadOnlyList<FamilyEditorApplyEdit> Edits,
     // Run the full edit sequence inside a transaction, then roll back — validate without persisting.

@@ -14,3 +14,5 @@ export * from "./memory/profiles.ts";
 export * from "./controller/create-runtime-controller.ts";
 export * from "./thread-lock.ts";
 export * from "./scope-store.ts";
+export * from "./owner-read.ts";
+export * from "./resource-stream.ts";

@@ -13,10 +13,10 @@ import {
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
-import {
-  projectTakeoffSnapshot,
-  projectTakeoffViews,
-} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import { projectTakeoffSnapshot } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ZonePeek } from "#/takeoff/zone-peek";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -72,6 +72,7 @@ const region = (elementId: number, blob: string, outer = square(0, 0, 10)): Live
   sqft: 100,
   blob,
   outer,
+  holes: [],
 });
 
 const provenance = (extra = "") =>
@@ -182,22 +183,120 @@ describe("decision queue", () => {
   it("does not bind a room to a region it is not inside", () => {
     expect(regionForRoom(room("R01", [], [500, 500]), [region(42, provenance())])).toBeUndefined();
   });
+
+  it("does not bind a room inside a current edited hole", () => {
+    const edited = { ...region(42, provenance()), holes: [square(4, 4, 2)] };
+    expect(regionForRoom(room("R01", [], [5, 5]), [edited])).toBeUndefined();
+    expect(regionForRoom(room("R01", [], [1, 1]), [edited])).toBe(edited);
+  });
 });
 
 describe("typed snapshot projection", () => {
-  it("rejects a total view elementId join miss", () => {
-    expect(() =>
-      projectTakeoffViews({ views: [{ elementId: 1, regions: 3 }] }, {
-        views: [
+  it("keeps edited geometry visible while invalidating old measurements and decisions across mixed runs", () => {
+    const native: LiveRegion & { roomType: string } = {
+      ...region(
+        43,
+        provenance(
+          ',"flags":["check"],"resolutions":[{"subject":"R01","flag":"check","verb":"accept","at":"then","runId":"old"}]',
+        ),
+      ),
+      roomType: "hall",
+      analysis: {
+        state: "stale",
+        runId: "old",
+        floorZ: null,
+        ceilingZ: null,
+        hold: "geometry-changed",
+      },
+    };
+    const input = {
+      reading: {
+        at: "11111111-1111-1111-1111-111111111111",
+        version: "v",
+        observedAt: "2026-09-08T00:00:00Z",
+      },
+      snapshot: {
+        status: {
+          systems: [],
+          carriers: { stage: "Adoption" as const, status: "ready", missingCarrierGuids: [] },
+        },
+        zoneFrs: [
           {
-            handle: { elementId: 2 },
-            name: "Mechanical Zoning Plan",
-            viewType: "FloorPlan",
-            levelName: "Main",
+            ...region(42, '{"view":"Plan","name":"Renamed zone"}'),
+            guid: "zone",
+            typeName: "Zone",
+            view: "Renamed plan",
+            color: "1,2,3",
+            loops: [square(0, 0, 30)],
           },
         ],
-      } as Parameters<typeof projectTakeoffViews>[1]),
-    ).toThrow("takeoffs.views did not match any project-index view elementId");
+        regionsByZone: {
+          zone: [
+            native,
+            { ...native, guid: "other-guid", blob: provenance().replace('"r"', '"other-run"') },
+          ],
+        },
+      },
+    };
+    const project = () =>
+      projectTakeoffSnapshot(input, "Document", [{ name: "Renamed plan", level: "Main" }]).world
+        .zones[0]!;
+    const stale = project();
+    expect(stale.zone.guid).toBe("zone");
+    expect(stale.zone.lane.view).toBe("Renamed plan");
+    expect(stale.rooms[0]).toMatchObject({
+      ceilingFt: 0,
+      decisions: [],
+      flags: ["geometry-changed", "check"],
+    });
+    expect(stale.savedReview!.shapes.map((shape) => shape.id)).toEqual([native.guid, "other-guid"]);
+    expect(stale.savedReview!.shapes[0]!.loops[0]).toEqual(native.outer);
+    expect(stale.savedReview!.shapes[0]!.disposition).toBeNull();
+    expect(stale.savedReview!.shapes[0]!.reason).toContain("measurements stale");
+    expect(stale.driftSqft).toBeNull();
+    expect(stale.savedReview!.source.runId).toBeNull();
+    expect(stale.savedReview!.shapes[1]!.original?.runId).toBe("other-run");
+    input.snapshot.regionsByZone.zone[0] = {
+      ...native,
+      analysis: { state: "current", runId: "new", floorZ: 0, ceilingZ: 9, hold: null },
+    };
+    expect(project().rooms[0]).toMatchObject({ ceilingFt: 9, decisions: [], flags: ["check"] });
+  });
+
+  it("rejects native review provenance with neither supported field spelling", () => {
+    expect(() =>
+      projectTakeoffSnapshot(
+        {
+          reading: {
+            at: "document",
+            version: "version",
+            observedAt: "2026-08-25T12:00:00.000Z",
+          },
+          snapshot: {
+            status: {
+              systems: [],
+              carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
+            },
+            zoneFrs: [
+              {
+                ...region(42, '{"view":"Plan","name":"Zone"}'),
+                typeName: "Zone",
+                view: "Plan",
+                color: "1,2,3",
+                loops: [square(0, 0, 10)],
+              },
+            ],
+            regionsByZone: {
+              "3a9956bd-d135-4290-b184-3cbe93d4d1ea": [
+                { ...region(43, "{}"), role: "held-residue" as const, roomType: "" },
+              ],
+            },
+          },
+        },
+        "Document",
+        [{ name: "Plan", level: "Level 1" }],
+      ),
+    ).toThrow("Native takeoff review provenance is missing runId or sourceRoomId");
   });
 
   it("passes through source identity and derives the world from the typed response", () => {
@@ -220,6 +319,7 @@ describe("typed snapshot projection", () => {
           zoneFrs: [
             {
               elementId: 42,
+              guid: "zone-guid",
               typeName: "Zone",
               view: "Mechanical Zoning Plan",
               color: "1,2,3",
@@ -232,7 +332,27 @@ describe("typed snapshot projection", () => {
               loops: [square(0, 0, 10)],
             },
           ],
-          regionsByZone: {},
+          regionsByZone: {
+            "zone-guid": [
+              {
+                ...region(
+                  43,
+                  provenance(
+                    ',"partition":{"floorZ":1413,"ceilingZ":1421,"holes":[[90,90,91,90,91,91]]}',
+                  ),
+                ),
+                roomType: "hall",
+                holes: [square(4.123456789012345, 4, 2)],
+              },
+              {
+                ...region(44, provenance()),
+                guid: "held-guid",
+                roomType: "",
+                role: "held-residue",
+                holes: [square(2, 2, 1)],
+              },
+            ],
+          },
         },
       },
       "project-a",
@@ -250,6 +370,31 @@ describe("typed snapshot projection", () => {
       missingCarrierGuids: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001"],
     });
     expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });
-    expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });
+    expect(snapshot.world.zones[0]).toMatchObject({
+      name: "Main#01",
+      tags: ["FC-8"],
+      stage: "partitioned",
+    });
+    expect(snapshot.regionsByZone["zone-guid"]![0]!.holes).toEqual([
+      square(4.123456789012345, 4, 2),
+    ]);
+    expect(snapshot.world.zones[0]!.rooms[0]!.holes).toEqual([square(4.123456789012345, 4, 2)]);
+    expect(snapshot.world.zones[0]!.rooms[0]!.ceilingFt).toBe(0);
+    expect(snapshot.world.zones[0]!.rooms[0]!.flags).toContain("remeasure-required");
+    expect(snapshot.world.zones[0]!.residues[0]!.holes).toEqual([square(2, 2, 1)]);
+    const markup = renderToStaticMarkup(
+      createElement(ZonePeek, {
+        zone: snapshot.world.zones[0]!,
+        cursorRoom: null,
+        geoReady: true,
+        stateOf: () => "unreviewed" as const,
+      }),
+    );
+    const paths = [...markup.matchAll(/<path\b[^>]*\bd="([^"]*)"[^>]*>/g)];
+    expect(paths).toHaveLength(3);
+    for (const path of paths.slice(1)) {
+      expect(path[1]!.match(/M/g)).toHaveLength(2);
+      expect(path[0]).toContain('fill-rule="evenodd"');
+    }
   });
 });

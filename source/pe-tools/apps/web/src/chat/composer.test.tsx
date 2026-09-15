@@ -9,6 +9,7 @@ const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
 vi.mock("#/chat/control-chips", () => ({ ControlChips: () => null }));
+vi.mock("#/components/master-table/cells", () => ({ StateDot: () => null }));
 
 import { Composer } from "./composer";
 import { createChatPageStore } from "#/workbench/store";
@@ -34,7 +35,16 @@ test("/fork dispatches the native provider verb", () => {
 
   render(
     <RegistryContext.Provider value={registry}>
-      <Composer setMode={vi.fn()} />
+      <Composer
+        setMode={vi.fn()}
+        handle={
+          {
+            actions: {
+              send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+            },
+          } as never
+        }
+      />
     </RegistryContext.Provider>,
   );
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });

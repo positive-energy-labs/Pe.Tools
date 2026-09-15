@@ -10,15 +10,15 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
-import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
+import { selectBreakdown } from "#/workbench/chat-state";
 import { Press } from "#/components/lang/press";
 import { SidePane } from "#/components/lang/side-pane";
 import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
-import { ScopeLine } from "#/chat/scope-line";
-import { RouteHead } from "#/targeting/head";
-import { WorldBadge } from "#/chat/world-badge";
+import { ComposerHead } from "#/chat/composer-head";
+import { RouteShell, keyMeta, useRoute } from "#/route";
+import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
 
 /** Routes hostable as in-realm chat workspace panes.
@@ -29,30 +29,20 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
-  live,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  live?: boolean;
 }) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} plugin={plugin} live={live} />
+        <Surface initialTurn={initialTurn} plugin={plugin} />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
 }
 
-function Surface({
-  initialTurn,
-  plugin,
-  live,
-}: {
-  initialTurn?: number;
-  plugin?: ChatPluginRoute;
-  live?: boolean;
-}) {
+function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
   const {
     store,
     chat,
@@ -60,14 +50,30 @@ function Surface({
     error,
     threads,
     currentThreadId,
-    world,
+    session,
     operationError,
+    sendPrompt,
     newThread,
     openThread,
     renameThread,
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
+  // The route, re-declared with this thread and this session bound. `routes/chat.tsx` exports the
+  // static one; the actions only become runnable once the provider has a session.
+  const manifest = useMemo(
+    () =>
+      chatManifest({
+        thread: currentThreadId ?? "",
+        display: chat.display,
+        session,
+        send: (input) => sendPrompt(input.text, input.attachments),
+      }),
+    [currentThreadId, chat.display, session, sendPrompt],
+  );
+  // The handle is owned here, not inside the shell: Chat has no route head, and its composer
+  // head is the Situation, which needs the same handle the shell's chords run through.
+  const handle = useRoute(manifest);
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
   const handleDeleteThread = (id: string) => void deleteThread(id);
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
@@ -78,24 +84,11 @@ function Surface({
   // opening either pane collapses the other to its 40px rail (nothing is unmounted).
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   useEffect(() => {
-    if (plugin) {
-      store.actions.setPluginOpen(true);
-      store.actions.setSideOpen(false);
-    }
+    if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
-  const openSide = (open: boolean) => {
-    store.actions.setSideOpen(open);
-    if (open) store.actions.setPluginOpen(false);
-  };
-  const openPlugin = (open: boolean) => {
-    store.actions.setPluginOpen(open);
-    if (open) store.actions.setSideOpen(false);
-  };
   // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
-  const status = selectRunStatus(chat);
-  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
   const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
@@ -121,10 +114,30 @@ function Surface({
   }, []);
 
   useHotkeys([
-    { hotkey: "Mod+K", callback: () => store.actions.setPaletteOpen((open) => !open) },
-    { hotkey: "Mod+1", callback: () => setMode(MODES[0]!) },
-    { hotkey: "Mod+2", callback: () => setMode(MODES[1]!) },
-    { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
+    // Surface chords, not manifest actions: they move Page state and never refuse. Tagged so the
+    // help page lists them beside the route's chords.
+    {
+      hotkey: "Mod+K",
+      callback: () => store.actions.setPaletteOpen((open) => !open),
+      options: {
+        meta: keyMeta({
+          name: "palette",
+          description: "open or close the Do palette",
+          tier: "route",
+        }),
+      },
+    },
+    ...(["Mod+1", "Mod+2", "Mod+3"] as const).map((hotkey, i) => ({
+      hotkey,
+      callback: () => setMode(MODES[i]!),
+      options: {
+        meta: keyMeta({
+          name: `${MODES[i]} mode`,
+          description: `switch the chat to ${MODES[i]}`,
+          tier: "route",
+        }),
+      },
+    })),
   ]);
 
   const statusLine = loading ? "Loading thread state" : (error ?? operationError);
@@ -138,115 +151,95 @@ function Surface({
       data-surface="page"
       className="fixed inset-0 font-sans text-ink"
     >
-      {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
-          dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
-      <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
-        <header className="hairline-b block h-auto px-5 py-0 pb-2">
-          <RouteHead
-            name={threadLabel}
-            instrumentLive={live}
-            aside={
-              <>
-                {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
-                    your call is owed (caution), error = a bridge/run error (caution — NOT the
-                    alarm), idle = muted. */}
-                <span
-                  title={status}
-                  className="size-2 shrink-0 rounded-full data-[s=idle]:bg-ink-mute"
-                  data-s={status}
-                  data-tone={
-                    status === "running" ? "pea" : status === "idle" ? undefined : "caution"
-                  }
-                  data-fill={status === "idle" ? undefined : "tone"}
-                />
-                <WorldBadge world={world} />
-              </>
-            }
-          />
-        </header>
+      {/* The route shell owns the chords and the remaining-height conversation column. Chat has
+          no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
+          none of its own. */}
+      <div className="h-full px-5">
+        <RouteShell manifest={manifest} handle={handle} situation={<></>}>
+          <div aria-live="polite" className="min-h-0">
+            {statusLine ? (
+              <div
+                data-tone={error || operationError ? "caution" : undefined}
+                className="hairline-b py-1.5 t-small t-upper"
+              >
+                {statusLine}
+              </div>
+            ) : null}
+          </div>
 
-        <div aria-live="polite" className="min-h-0 px-5">
-          {statusLine ? (
-            <div
-              data-tone={error || operationError ? "caution" : undefined}
-              className="hairline-b py-1.5 t-small t-upper"
-            >
-              {statusLine}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="relative flex min-h-0 min-w-0">
-          <div className="relative min-h-0 min-w-0 flex-1">
-            <Lens
-              state={chat}
-              mode={mode}
-              initialTurn={initialTurn}
-              scrollKey={currentThreadId}
-              onTurnChange={store.actions.setTurn}
-              sideOpen={sideOpen}
-              onSideOpenChange={openSide}
-              sideHead={<ModeDial mode={mode} setMode={setMode} />}
-              threadList={
-                <ThreadList
-                  threads={threads}
-                  currentThreadId={currentThreadId}
-                  onSelect={openThread}
-                  onNew={newThread}
-                  onRename={handleRenameThread}
-                  onDelete={handleDeleteThread}
-                  onSearch={() => store.actions.setPaletteOpen(true)}
-                />
-              }
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
-              <div className="pe-composer-lane">
-                <div ref={composerRef} className="pointer-events-auto">
-                  <Composer
-                    setMode={setMode}
-                    topBar={
-                      <>
-                        <ScopeLine live={live} />
-                        <ContextRibbon
-                          breakdown={breakdown}
-                          cache={cache}
-                          onOpenWorld={() => setMode("world")}
-                        />
-                      </>
-                    }
+          <div className="relative flex min-h-0 min-w-0 flex-1">
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <Lens
+                state={chat}
+                mode={mode}
+                initialTurn={initialTurn}
+                scrollKey={currentThreadId}
+                onTurnChange={store.actions.setTurn}
+                sideOpen={sideOpen}
+                onSideOpenChange={store.actions.setSideOpen}
+                sideHead={<ModeDial mode={mode} setMode={setMode} />}
+                threadList={
+                  <ThreadList
+                    threads={threads}
+                    currentThreadId={currentThreadId}
+                    onSelect={openThread}
+                    onNew={newThread}
+                    onRename={handleRenameThread}
+                    onDelete={handleDeleteThread}
+                    onSearch={() => store.actions.setPaletteOpen(true)}
                   />
+                }
+              />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
+                <div className="pe-composer-lane">
+                  <div ref={composerRef} className="pointer-events-auto">
+                    <Composer
+                      setMode={setMode}
+                      handle={handle}
+                      topBar={
+                        <>
+                          <ComposerHead handle={handle} />
+                          <ContextRibbon
+                            breakdown={breakdown}
+                            cache={cache}
+                            onOpenWorld={() => setMode("world")}
+                          />
+                        </>
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {plugin ? (
-            <SidePane
-              side="right"
-              storageKey="pe.pluginWidth"
-              open={pluginOpen}
-              onOpenChange={openPlugin}
-              minWidth={480}
-              defaultWidth={640}
-              header={
-                <div className="flex items-center justify-between">
-                  <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
-                  <Press
-                    tone="neutral"
-                    size="icon"
-                    title="Close workspace"
-                    onClick={() => store.actions.setPlugin(undefined)}
-                  >
-                    <X />
-                  </Press>
-                </div>
-              }
-            >
-              {/* The pane resolves its route document from the active rvt Address. */}
-              {PluginPane ? <PluginPane store={store} /> : null}
-            </SidePane>
-          ) : null}
-        </div>
+            {plugin ? (
+              <SidePane
+                side="right"
+                storageKey="pe.pluginWidth"
+                open={pluginOpen}
+                onOpenChange={store.actions.setPluginOpen}
+                minWidth={480}
+                defaultWidth={640}
+                header={
+                  <div className="flex items-center justify-between">
+                    <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
+                    <Press
+                      tone="neutral"
+                      size="icon"
+                      title="Close workspace"
+                      onClick={() => store.actions.setPlugin(undefined)}
+                    >
+                      <X />
+                    </Press>
+                  </div>
+                }
+              >
+                {/* The pane resolves its route document from the active rvt Address. */}
+                {PluginPane ? <PluginPane store={store} /> : null}
+              </SidePane>
+            ) : null}
+          </div>
+        </RouteShell>
       </div>
 
       <ThreadPalette

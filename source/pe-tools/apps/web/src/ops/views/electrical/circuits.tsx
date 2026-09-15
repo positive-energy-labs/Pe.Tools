@@ -204,13 +204,13 @@ export function LoadClassificationsView({ data }: OpViewProps) {
   );
 }
 
-export type BreakerSlot = { num: number; load?: string; trip?: string; poles?: string };
+export type BreakerCell = { num: number; load?: string; trip?: string; poles?: string };
 
 export const CKT_HEADER = /ckt|cct|circuit|^no\.?$|^#$/i;
 
-export function extractBreakerSlots(body: Rec): BreakerSlot[] | undefined {
+export function extractBreakerCells(body: Rec): BreakerCell[] | undefined {
   const rows = asRecords(body.rows).filter((row) => row.isCircuitTableRow === true);
-  const slots: BreakerSlot[] = [];
+  const slots: BreakerCell[] = [];
   const seen = new Set<number>();
   for (const row of rows) {
     const cells = asRecords(row.cells)

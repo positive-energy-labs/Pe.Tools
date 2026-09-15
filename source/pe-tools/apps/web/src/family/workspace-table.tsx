@@ -2,10 +2,10 @@ import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { Pane } from "#/components/lang/pane";
-import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
+import { BuildStrip, BUILD_ACTION, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { cn } from "#/lib/utils";
@@ -33,7 +33,6 @@ export function FamilyWorkspaceTable() {
     unsavedCount,
     openProposals,
     captureAll,
-    applyAll,
     capturing,
     armedBuild,
     building,
@@ -43,6 +42,8 @@ export function FamilyWorkspaceTable() {
     firstGhostKey,
     drillColumns,
   } = useFamilyWorkspace();
+  const captureRefusal = store.handle.actions.capture.refusal;
+  const prepareBuildRefusal = store.handle.actions["prepare-build"].refusal;
 
   const rowTint = (row: PRow) => {
     const focused =
@@ -230,14 +231,14 @@ export function FamilyWorkspaceTable() {
       actions={
         drillType ? (
           <>
-            <Verb
+            <ActionButton
               label="all types"
               tone="nav"
               direction="back"
               onClick={() => setDrillType(null)}
               reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
             />
-            <Verb
+            <ActionButton
               label={`capture ${drillType}`}
               disabled={driftCells.every((cell) => cell.typeName !== drillType)}
               onClick={() => captureAll([drillType])}
@@ -245,17 +246,6 @@ export function FamilyWorkspaceTable() {
                 driftCells.some((cell) => cell.typeName === drillType)
                   ? `Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`
                   : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
-              }
-            />
-            <Verb
-              label={`apply ${drillType}`}
-              tone="commit"
-              disabled={driftCells.every((cell) => cell.typeName !== drillType)}
-              onClick={() => applyAll([drillType])}
-              reason={
-                driftCells.some((cell) => cell.typeName === drillType)
-                  ? `Let the profile win at ${drillType}: the authored values are written into the family open in Revit. This MODIFIES the model, which is why it is the only verb here wearing the commit colour.`
-                  : `Nothing is drifting at ${drillType}, so an apply would write values Revit already has.`
               }
             />
           </>
@@ -274,9 +264,8 @@ export function FamilyWorkspaceTable() {
                 title: OVERLAY_TITLE[choice],
               }))}
             />
-            {/* A BULK VERB IS DISABLED UNLESS YOU CAN SEE ITS FAR SIDE (SURFACE-PHILOSOPHY §2).
-                Both crossings belong to the LIVE overlay and are refused everywhere else. */}
-            <Verb
+            {/* A BULK VERB IS DISABLED UNLESS YOU CAN SEE ITS FAR SIDE (SURFACE-PHILOSOPHY §2). */}
+            <ActionButton
               label="capture all"
               disabled={overlay !== "live" || driftCells.length === 0}
               onClick={() => captureAll(world.typeNames)}
@@ -288,43 +277,32 @@ export function FamilyWorkspaceTable() {
                     : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
               }
             />
-            <Verb
-              label="apply all"
-              tone="commit"
-              disabled={overlay !== "live" || driftCells.length === 0}
-              onClick={() => applyAll(world.typeNames)}
-              reason={
-                overlay !== "live"
-                  ? "Switch to the ⇄ live overlay first. Apply MODIFIES the family open in Revit; the overlay is where you can see exactly which numbers it would overwrite."
-                  : driftCells.length === 0
-                    ? "Revit already agrees with the profile everywhere the two can be compared."
-                    : `Let the profile win on all ${driftCells.length} drifting cells — every alarm cell on screen goes back to the draft's number. This is the direction that writes into the model, which is why it is the only verb here in the commit colour.`
-              }
-            />
             {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
-                changes what you are looking at, capture all / apply all move the draft, and these
-                two leave the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
-            <Verb
+                changes what you are looking at, capture all moves the draft, and these two leave
+                the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
+            <ActionButton
               label="capture live"
               busy={capturing}
-              disabled={lane.document == null || capturing}
+              disabled={lane.document == null || capturing || captureRefusal != null}
               onClick={() => void store.actions.capture().catch(() => undefined)}
               reason={
-                lane.document == null
+                captureRefusal ??
+                (lane.document == null
                   ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
-                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
+                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there.")
               }
             />
-            <Verb
-              label={BUILD_VERB}
+            <ActionButton
+              label={BUILD_ACTION}
               tone="commit"
               busy={building}
-              disabled={lane.document == null || building}
+              disabled={lane.document == null || building || prepareBuildRefusal != null}
               onClick={store.actions.armBuild}
               reason={
-                lane.document == null
+                prepareBuildRefusal ??
+                (lane.document == null
                   ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
-                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`
+                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`)
               }
             />
           </>
@@ -340,6 +318,7 @@ export function FamilyWorkspaceTable() {
         armed={armedBuild}
         building={building}
         said={buildOutcome}
+        refusal={store.handle.actions.build.refusal}
         facts={buildFacts}
         familyName={world.familyName}
         count={world.paramRows.length}

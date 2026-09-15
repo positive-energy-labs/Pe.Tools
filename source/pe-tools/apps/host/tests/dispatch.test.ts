@@ -15,6 +15,7 @@ import {
   getBridgeRegistrationRejection,
   reserveBridgePending,
   type RevitBridge,
+  type BridgeSessionView,
 } from "../src/bridge.ts";
 import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
 import {
@@ -57,7 +58,10 @@ test("dispatch threads bridgeSessionId through local snapshots and bridge invoke
   const bridge = {
     invoke: (key: string, _payload: unknown, bridgeSessionId?: string) => {
       seen.push(`invoke:${key}:${bridgeSessionId ?? ""}`);
-      return Effect.succeed({ schemaJson: "{}" });
+      return Effect.succeed({
+        value: { schemaJson: "{}" },
+        target: { session: "bridge-b", document: null },
+      });
     },
     snapshot: (bridgeSessionId?: string) => {
       seen.push(`snapshot:${bridgeSessionId ?? ""}`);
@@ -121,6 +125,7 @@ test("settings save uses content hash version tokens", async () => {
   try {
     const result = await runDispatch(
       saveSettingsDocument({
+        expected: { kind: "missing" },
         documentId: {
           moduleKey: "Global",
           rootKey: "fragments",
@@ -130,8 +135,9 @@ test("settings save uses content hash version tokens", async () => {
       }),
     );
 
-    expect(result.writeApplied).toBe(true);
-    expect(result.metadata.versionToken?.value).toBe(sha256('{"ok":true}\n'));
+    expect(result.kind).toBe("written");
+    if (result.kind !== "written") throw new Error("expected write");
+    expect(result.snapshot.metadata.versionToken?.value).toBe(sha256('{"ok":true}'));
   } finally {
     profile.dispose();
   }
@@ -143,6 +149,7 @@ test("settings save writes schema-invalid documents and returns validation issue
     const result = await runDispatch(
       saveSettingsDocument(
         {
+          expected: { kind: "missing" },
           documentId: {
             moduleKey: "CmdScheduleManager",
             rootKey: "schedules",
@@ -173,9 +180,10 @@ test("settings save writes schema-invalid documents and returns validation issue
       ),
     );
 
-    expect(result.writeApplied).toBe(true);
-    expect(result.validation.isValid).toBe(false);
-    expect(result.validation.issues.some((issue) => issue.code === "required")).toBe(true);
+    expect(result.kind).toBe("written");
+    if (result.kind !== "written") throw new Error("expected write");
+    expect(result.snapshot.validation.isValid).toBe(false);
+    expect(result.snapshot.validation.issues.some((issue) => issue.code === "required")).toBe(true);
   } finally {
     profile.dispose();
   }
@@ -234,6 +242,105 @@ test("settings open composes global includes from bridge-discovered module optio
       scope: "Global",
       kind: "Include",
     });
+  } finally {
+    profile.dispose();
+  }
+});
+
+test("composition preserves authored JSON, substitutes keyed presets, and fails closed", async () => {
+  const profile = withTempUserProfile();
+  try {
+    const root = join(profile.path, "Documents", "Pe.Tools", "settings", "FamilyFoundry", "models");
+    mkdirSync(join(root, "_fragments"), { recursive: true });
+    writeFileSync(
+      join(root, "_fragments", "parameters.json"),
+      '{"Width":{"dataType":"Length","value":"24in"}}',
+    );
+    writeFileSync(join(root, "_fragments", "item.json"), '{"name":"Width"}');
+    writeFileSync(join(root, "_fragments", "list.json"), '[{"$preset":"@local/_fragments/item"}]');
+    writeFileSync(
+      join(root, "_fragments", "cycle.json"),
+      '[{"$include":"@local/_fragments/cycle"}]',
+    );
+    const documentId = { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "main" };
+    const module = {
+      moduleKey: "FamilyFoundry",
+      defaultRootKey: "models",
+      roots: [{ rootKey: "models", displayName: "Models" }],
+      storageOptions: { includeRoots: ["_fragments"], presetRoots: ["_fragments"] },
+    };
+    const open = async (raw: string) => {
+      writeFileSync(join(root, "main.json"), raw);
+      return runDispatch(
+        openSettingsDocumentWithModule({ documentId, includeComposedContent: true }, module),
+      );
+    };
+    const raw =
+      '{"parameters":{"$preset":"@local/_fragments/parameters"},"items":[{"$include":"@local/_fragments/list"}]}';
+    const snapshot = await open(raw);
+    expect(snapshot.rawContent).toBe(raw);
+    expect(JSON.parse(snapshot.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "24in" } },
+      items: [{ name: "Width" }],
+    });
+    expect(snapshot.dependencies).toHaveLength(3);
+    writeFileSync(
+      join(root, "_fragments", "later.json"),
+      '{"Width":{"value":"42in"},"Enabled":{"value":true}}',
+    );
+    const keyedRaw =
+      '{"parameters":{"$include":["@local/_fragments/parameters","@local/_fragments/later"]}}';
+    const keyed = await open(keyedRaw);
+    expect(keyed.rawContent).toBe(keyedRaw);
+    expect(JSON.parse(keyed.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "42in" }, Enabled: { value: true } },
+    });
+    expect(keyed.dependencies).toHaveLength(2);
+    writeFileSync(
+      join(root, "_fragments", "defaults.json"),
+      JSON.stringify({
+        parameters: { $include: ["@local/_fragments/parameters", "@local/_fragments/later"] },
+        filter: {
+          IncludeNames: { Equaling: ["earlier"], Containing: ["preserved"] },
+          ExcludeNames: { Equaling: ["excluded"] },
+        },
+      }),
+    );
+    const overrideRaw = JSON.stringify({
+      $preset: "@local/_fragments/defaults",
+      parameters: { Width: { value: "48in" } },
+      filter: { IncludeNames: { Equaling: ["profile"] }, ExcludeNames: {} },
+    });
+    const overridden = await open(overrideRaw);
+    expect(overridden.validation.isValid).toBe(true);
+    expect(overridden.rawContent).toBe(overrideRaw);
+    expect(JSON.parse(overridden.composedContent!)).toEqual({
+      parameters: { Width: { dataType: "Length", value: "48in" }, Enabled: { value: true } },
+      filter: {
+        IncludeNames: { Equaling: ["profile"], Containing: ["preserved"] },
+        ExcludeNames: { Equaling: ["excluded"] },
+      },
+    });
+    expect(overridden.dependencies.map((d) => d.directivePath)).toEqual([
+      "@local/_fragments/defaults",
+      "@local/_fragments/parameters",
+      "@local/_fragments/later",
+    ]);
+    for (const invalid of [
+      '{"parameters":{"$include":"@local/_fragments/parameters","Width":{}}}',
+      '{"parameters":{"$include":"@local/_fragments/list"}}',
+      '{"items":[{"$include":"@local/_fragments/list","ignored":true}]}',
+      '{"items":[{"$include":"@local/_fragments/cycle"}]}',
+      '{"parameters":{"$preset":"@local/forbidden/parameters"}}',
+    ]) {
+      const result = await open(invalid);
+      expect(result.rawContent).toBe(invalid);
+      expect(result.validation.isValid).toBe(false);
+      expect(result.validation.issues.some((issue) => issue.code === "CompositionError")).toBe(
+        true,
+      );
+      expect(result.composedContent).toBeNull();
+    }
   } finally {
     profile.dispose();
   }
@@ -320,16 +427,14 @@ test("settings create-only save refuses to overwrite an existing document", asyn
         relativePath: "create-only",
       },
       rawContent: '{"version":1}',
-      createOnly: true,
+      expected: { kind: "missing" as const },
     };
-    expect((await runDispatch(saveSettingsDocument(request))).writeApplied).toBe(true);
+    expect((await runDispatch(saveSettingsDocument(request))).kind).toBe("written");
 
     const conflict = await runDispatch(
       saveSettingsDocument({ ...request, rawContent: '{"version":2}' }),
     );
-    expect(conflict.writeApplied).toBe(false);
-    expect(conflict.conflictDetected).toBe(true);
-    expect(conflict.conflictMessage).toContain("already exists");
+    expect(conflict.kind).toBe("conflict");
   } finally {
     profile.dispose();
   }
@@ -465,47 +570,71 @@ test("bridge pending mailbox ignores mismatched response ids", async () => {
 });
 
 test("bridge session summary maps Revit state snapshot fields", async () => {
-  const summary = await Effect.runPromise(
-    getBridgeSessionSummary({
-      connected: true,
-      processId: 123,
-      sessionId: "bridge-a",
-      state: {
-        activeDocumentCloudModelGuid: "model-guid",
-        activeDocumentCloudModelUrn: "model-urn",
-        activeDocumentCloudProjectGuid: "project-guid",
-        activeDocumentIsFamilyDocument: true,
-        activeDocumentIsModelInCloud: true,
-        activeDocumentIsWorkshared: true,
-        activeDocumentKey: "doc-key",
-        activeDocumentObservedAtUnixMs: 42,
-        activeDocumentPath: "C:/model.rvt",
-        activeDocumentTitle: "Model",
-        availableModules: [
-          {
-            activeDocumentKind: "Any",
-            defaultRootKey: "default",
-            moduleKey: "module-a",
-            scope: "Session",
-          },
-        ],
-        hasActiveDocument: true,
-        openDocumentCount: 2,
-        revitVersion: "2026",
-        runtimeAssemblies: [
-          {
-            informationalVersion: "1.2.3",
-            location: "C:/Pe.dll",
-            moduleVersionId: "mvid",
-            name: "Pe.Test",
-            version: "1.2.3.0",
-          },
-        ],
-        runtimeFramework: ".NET 8",
-        sharedParametersFilename: "C:/shared.txt",
-      },
-    }),
-  );
+  const bridge = {
+    connected: true,
+    processId: 123,
+    sessionId: "bridge-a",
+    state: {
+      activeDocumentCloudModelGuid: "model-guid",
+      activeDocumentCloudModelUrn: "model-urn",
+      activeDocumentCloudProjectGuid: "project-guid",
+      activeDocumentIsFamilyDocument: true,
+      activeDocumentIsModelInCloud: true,
+      activeDocumentIsWorkshared: true,
+      activeDocumentKey: "doc-key",
+      activeDocumentObservedAtUnixMs: 42,
+      activeDocumentPath: "C:/model.rvt",
+      activeDocumentTitle: "Model",
+      availableModules: [
+        {
+          activeDocumentKind: "Any",
+          defaultRootKey: "default",
+          moduleKey: "module-a",
+          scope: "Session",
+        },
+      ],
+      hasActiveDocument: true,
+      openDocuments: [
+        {
+          openId: "project",
+          title: "Model",
+          address: "C:/model.rvt",
+          isFamilyDocument: false,
+          isActive: true,
+        },
+        {
+          openId: "family",
+          title: "Unsaved family",
+          address: null,
+          isFamilyDocument: true,
+          isActive: false,
+        },
+        {
+          openId: "cloud",
+          title: "Cloud",
+          address: "f2933e8d-9e16-4bf4-b9ca-484f461e4563",
+          isFamilyDocument: false,
+          isActive: false,
+        },
+      ],
+      revitVersion: "2026",
+      runtimeAssemblies: [
+        {
+          informationalVersion: "1.2.3",
+          location: "C:/Pe.dll",
+          moduleVersionId: "mvid",
+          name: "Pe.Test",
+          version: "1.2.3.0",
+        },
+      ],
+      runtimeFramework: ".NET 8",
+      sharedParametersFilename: "C:/shared.txt",
+    },
+  } satisfies BridgeSessionView;
+  const summary = await Effect.runPromise(getBridgeSessionSummary(bridge));
+  const inventory = await Effect.runPromise(listBridgeSessions(Effect.succeed([bridge])));
+  expect(inventory.sessions[0]?.openDocuments).toEqual(bridge.state.openDocuments);
+  expect(inventory.sessions[0]?.openDocumentCount).toBe(3);
 
   expect(summary.activeDocument?.key).toBe("doc-key");
   expect(summary.availableModules).toHaveLength(1);
@@ -557,7 +686,7 @@ test("bridge registration rejects mismatched contract versions", () => {
       activeDocumentTitle: null,
       availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",
@@ -585,7 +714,7 @@ test("bridge registration accepts current contract version without session id", 
       activeDocumentTitle: null,
       availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",

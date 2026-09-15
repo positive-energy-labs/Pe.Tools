@@ -6,9 +6,24 @@ import type { SessionObservation } from "../vendor/generated/pe-revit-contract.t
 import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 37 as const;
-export const BRIDGE_CONTRACT_VERSION = 20 as const;
+export const BRIDGE_CONTRACT_VERSION = 22 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
+export const HOST_RPC_DOCUMENT_HEADER = "x-pe-open-document-id" as const;
+
+/** Same process incarnation across bridge reconnects and SDK census observations. */
+export async function computeBridgeSessionId(registration: {
+  readonly processId: number;
+  readonly processStartUtcUnixMs?: number | null;
+}): Promise<string | null> {
+  const start = registration.processStartUtcUnixMs;
+  if (typeof start !== "number" || !Number.isFinite(start) || start <= 0) return null;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${registration.processId}:${start}`),
+  );
+  return `session-${Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
 // Caller attribution (queue-provenance §1): `<lane>:<name>[#<id>]`, e.g. `web:/schedule-grid`,
 // `pea:chat#<threadId>`, `script:<runSlug>`. Lenient by design — missing reads as "unknown".
 export const HOST_RPC_ORIGIN_HEADER = "x-pe-origin" as const;
@@ -75,6 +90,14 @@ export const bridgeRegistrationAckSchema = Schema.Struct({
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
+export const bridgeDocumentSnapshotSchema = Schema.Struct({
+  openId: Schema.String,
+  title: Schema.String,
+  address: nullableString,
+  isFamilyDocument: Schema.Boolean,
+  isActive: Schema.Boolean,
+});
+
 export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentCloudModelGuid: nullableString,
   activeDocumentCloudModelUrn: nullableString,
@@ -88,7 +111,7 @@ export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentTitle: nullableString,
   availableModules: Schema.Array(hostModuleDescriptorSchema),
   hasActiveDocument: Schema.Boolean,
-  openDocumentCount: Schema.Number,
+  openDocuments: Schema.Array(bridgeDocumentSnapshotSchema),
   revitVersion: Schema.String,
   runtimeAssemblies: Schema.Array(hostRuntimeAssemblyDataSchema),
   runtimeFramework: Schema.String,
@@ -118,6 +141,7 @@ export const bridgeRegistrationRequestSchema = Schema.Struct({
 export type BridgeRegistrationRequest = Schema.Schema.Type<typeof bridgeRegistrationRequestSchema>;
 
 export const bridgeRequestSchema = Schema.Struct({
+  openDocumentId: nullableString,
   operationKey: Schema.String,
   payloadJson: Schema.String,
   requestId: Schema.String,
@@ -125,6 +149,7 @@ export const bridgeRequestSchema = Schema.Struct({
 export type BridgeRequest = Schema.Schema.Type<typeof bridgeRequestSchema>;
 
 export const bridgeResponseSchema = Schema.Struct({
+  openDocumentId: nullableString,
   errorMessage: nullableString,
   issues: Schema.optional(Schema.NullOr(Schema.Array(validationIssueSchema))),
   metrics: performanceMetricsSchema,

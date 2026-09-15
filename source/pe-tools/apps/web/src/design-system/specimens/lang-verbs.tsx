@@ -1,13 +1,13 @@
 import { RefreshCw, Save } from "lucide-react";
 
 import { Press, pressRecipe } from "#/components/lang/press";
-import { Verb, VerbGroup, verbRecipe } from "#/components/lang/verb";
+import { ActionButton, ActionGroup, actionRecipe } from "#/components/lang/action-button";
 
 import { RecipeGrid } from "./recipe-grid";
 
 const noop = () => {};
 
-export function LangVerbSpecimens() {
+export function LangPressSpecimens() {
   return (
     <>
       <RecipeGrid
@@ -26,14 +26,14 @@ export function LangVerbSpecimens() {
         )}
       />
       <RecipeGrid
-        name="Verb · VerbGroup"
-        importPath="#/components/lang/verb"
-        recipe={verbRecipe}
+        name="ActionButton · ActionGroup"
+        importPath="#/components/lang/action-button"
+        recipe={actionRecipe}
         render={(props) => {
           const tone = props.tone as "act" | "commit" | "nav" | "agent";
           const verb =
             tone === "nav" ? (
-              <Verb
+              <ActionButton
                 tone="nav"
                 direction="forward"
                 label="open"
@@ -41,7 +41,7 @@ export function LangVerbSpecimens() {
                 onClick={noop}
               />
             ) : (
-              <Verb
+              <ActionButton
                 tone={tone}
                 label={tone === "commit" ? "save profile" : tone}
                 icon={tone === "commit" ? Save : RefreshCw}
@@ -50,9 +50,9 @@ export function LangVerbSpecimens() {
               />
             );
           return (
-            <VerbGroup title="writes beyond the page" radius="document · model · external">
+            <ActionGroup title="writes beyond the page" radius="document · model · external">
               {verb}
-            </VerbGroup>
+            </ActionGroup>
           );
         }}
       />

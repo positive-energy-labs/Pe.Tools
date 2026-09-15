@@ -113,11 +113,11 @@ export function useLevelData(runId: string | null, level: string | null): LevelD
       try {
         const report = await source.loadRunReport(runId);
         const zones = report.Zones.filter((z) => z.Level === level);
-        const anchor = zones.find((z) => z.Ink);
+        const anchor = zones.find((z) => z.plan || z.Ink);
         const [plan, painted] = anchor
           ? await Promise.all([
-              source.loadPlan(runId, anchor.Ink),
-              loadLevelCanvas(runId, anchor, source).catch(() => null),
+              source.loadPlan(runId, anchor.Ink, anchor.plan),
+              anchor.Ink ? loadLevelCanvas(runId, anchor, source).catch(() => null) : null,
             ])
           : [null, null];
         const geomEntries = await Promise.all(

@@ -1,0 +1,384 @@
+[
+  {
+    "Id": "parameters.6cd2c1f1f48d41f4aa5f4b51e535595f:3655d934786644a6a50e276047d2c371-1.0.0",
+    "Name": "PE_E___Voltage",
+    "Description": "The “pressure” from an electrical circuit’s power source that pushes charged electrons (current) through a conducting loop (circuit), enabling them to do work such as illuminating a light. Measured in Volts (V).",
+    "SpecId": "autodesk.spec.aec.electrical:potential-2.0.0",
+    "ReadOnly": false,
+    "Metadata": [
+      {
+        "Id": "homeCollection",
+        "Value": {
+          "accountId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "groupId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "collectionId": "6cd2c1f1f48d41f4aa5f4b51e535595f"
+        }
+      },
+      {
+        "Id": "isHidden",
+        "Value": false
+      },
+      {
+        "Id": "isArchived",
+        "Value": false
+      },
+      {
+        "Id": "instanceTypeAssociation",
+        "Value": "TYPE"
+      },
+      {
+        "Id": "categories",
+        "Value": [
+          {
+            "bindingId": "ACFV-53206-CCXS-18832",
+            "id": "autodesk.revit.category.family:electricalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CHDA-75477",
+            "id": "autodesk.revit.category.family:electricalFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CETH-46352",
+            "id": "autodesk.revit.category.family:mechanicalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DGQA-05031",
+            "id": "autodesk.revit.category.family:ductAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DCQU-89834",
+            "id": "autodesk.revit.category.family:pipeAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53192-CKND-68870",
+            "id": "autodesk.revit.category.family:plumbingEquipment-1.0.0"
+          }
+        ]
+      },
+      {
+        "Id": "labelIds",
+        "Value": [
+          "ANKB-43224-BANK-65922"
+        ]
+      },
+      {
+        "Id": "group",
+        "Value": {
+          "bindingId": "ABYV-32458-BXMZ-08934",
+          "id": "autodesk.parameter:group-1.0.0"
+        }
+      },
+      {
+        "Id": "pimPropBehavior"
+      },
+      {
+        "Id": "pimPropDMBehavior"
+      },
+      {
+        "Id": "pimPropCategory"
+      },
+      {
+        "Id": "pimDisplayInSummary",
+        "Value": false
+      },
+      {
+        "Id": "pimIsSearchable",
+        "Value": false
+      }
+    ]
+  },
+  {
+    "Id": "parameters.6cd2c1f1f48d41f4aa5f4b51e535595f:d404bd54c15a4d3d8cbcf7d5c7cc513b-1.0.0",
+    "Name": "PE_G___Model",
+    "Description": "PE's parameter for an equipment model.",
+    "SpecId": "autodesk.spec:spec.string-2.0.0",
+    "ReadOnly": false,
+    "Metadata": [
+      {
+        "Id": "homeCollection",
+        "Value": {
+          "accountId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "groupId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "collectionId": "6cd2c1f1f48d41f4aa5f4b51e535595f"
+        }
+      },
+      {
+        "Id": "isHidden",
+        "Value": false
+      },
+      {
+        "Id": "isArchived",
+        "Value": false
+      },
+      {
+        "Id": "instanceTypeAssociation",
+        "Value": "TYPE"
+      },
+      {
+        "Id": "categories",
+        "Value": [
+          {
+            "bindingId": "ACFV-53208-HLYG-21839",
+            "id": "autodesk.revit.category.family:genericModel-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53206-CCXS-18832",
+            "id": "autodesk.revit.category.family:electricalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CHDA-75477",
+            "id": "autodesk.revit.category.family:electricalFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CFDL-17878",
+            "id": "autodesk.revit.category.family:lightingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CETH-46352",
+            "id": "autodesk.revit.category.family:mechanicalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CDZC-03311",
+            "id": "autodesk.revit.category.family:plumbingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DGQA-05031",
+            "id": "autodesk.revit.category.family:ductAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DCQU-89834",
+            "id": "autodesk.revit.category.family:pipeAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53192-CKND-68870",
+            "id": "autodesk.revit.category.family:plumbingEquipment-1.0.0"
+          }
+        ]
+      },
+      {
+        "Id": "labelIds",
+        "Value": []
+      },
+      {
+        "Id": "group",
+        "Value": {
+          "bindingId": "ABYV-32458-BXMZ-08934",
+          "id": "autodesk.parameter:group-1.0.0"
+        }
+      },
+      {
+        "Id": "pimPropBehavior"
+      },
+      {
+        "Id": "pimPropDMBehavior"
+      },
+      {
+        "Id": "pimPropCategory"
+      },
+      {
+        "Id": "pimDisplayInSummary",
+        "Value": false
+      },
+      {
+        "Id": "pimIsSearchable",
+        "Value": false
+      }
+    ]
+  },
+  {
+    "Id": "parameters.6cd2c1f1f48d41f4aa5f4b51e535595f:e9728bc1a63c437fa7eb0efbd275fa39-1.0.0",
+    "Name": "PE_G___Weight",
+    "Description": "Weight",
+    "SpecId": "autodesk.spec.aec:number-2.0.0",
+    "ReadOnly": false,
+    "Metadata": [
+      {
+        "Id": "homeCollection",
+        "Value": {
+          "accountId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "groupId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "collectionId": "6cd2c1f1f48d41f4aa5f4b51e535595f"
+        }
+      },
+      {
+        "Id": "isHidden",
+        "Value": false
+      },
+      {
+        "Id": "isArchived",
+        "Value": false
+      },
+      {
+        "Id": "instanceTypeAssociation",
+        "Value": "TYPE"
+      },
+      {
+        "Id": "categories",
+        "Value": [
+          {
+            "bindingId": "ACFV-53208-HLYG-21839",
+            "id": "autodesk.revit.category.family:genericModel-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53206-CCXS-18832",
+            "id": "autodesk.revit.category.family:electricalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CHDA-75477",
+            "id": "autodesk.revit.category.family:electricalFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CFDL-17878",
+            "id": "autodesk.revit.category.family:lightingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CETH-46352",
+            "id": "autodesk.revit.category.family:mechanicalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CDZC-03311",
+            "id": "autodesk.revit.category.family:plumbingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DGQA-05031",
+            "id": "autodesk.revit.category.family:ductAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DCQU-89834",
+            "id": "autodesk.revit.category.family:pipeAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53192-CKND-68870",
+            "id": "autodesk.revit.category.family:plumbingEquipment-1.0.0"
+          }
+        ]
+      },
+      {
+        "Id": "labelIds",
+        "Value": []
+      },
+      {
+        "Id": "group",
+        "Value": {
+          "bindingId": "ABYV-32458-BXMZ-08934",
+          "id": "autodesk.parameter:group-1.0.0"
+        }
+      },
+      {
+        "Id": "pimPropBehavior"
+      },
+      {
+        "Id": "pimPropDMBehavior"
+      },
+      {
+        "Id": "pimPropCategory"
+      },
+      {
+        "Id": "pimDisplayInSummary",
+        "Value": false
+      },
+      {
+        "Id": "pimIsSearchable",
+        "Value": false
+      }
+    ]
+  },
+  {
+    "Id": "parameters.6cd2c1f1f48d41f4aa5f4b51e535595f:692091cc1e3d47e6a7c59336c3149419-1.0.0",
+    "Name": "PE_G_Dim_Width1",
+    "Description": "PE's first parameter for width.",
+    "SpecId": "autodesk.spec.aec:length-2.0.1",
+    "ReadOnly": false,
+    "Metadata": [
+      {
+        "Id": "homeCollection",
+        "Value": {
+          "accountId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "groupId": "6cd2c1f1f48d41f4aa5f4b51e535595f",
+          "collectionId": "6cd2c1f1f48d41f4aa5f4b51e535595f"
+        }
+      },
+      {
+        "Id": "isHidden",
+        "Value": false
+      },
+      {
+        "Id": "isArchived",
+        "Value": false
+      },
+      {
+        "Id": "instanceTypeAssociation",
+        "Value": "TYPE"
+      },
+      {
+        "Id": "categories",
+        "Value": [
+          {
+            "bindingId": "ACFV-53208-HLYG-21839",
+            "id": "autodesk.revit.category.family:genericModel-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53206-CCXS-18832",
+            "id": "autodesk.revit.category.family:electricalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CHDA-75477",
+            "id": "autodesk.revit.category.family:electricalFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CFDL-17878",
+            "id": "autodesk.revit.category.family:lightingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CETH-46352",
+            "id": "autodesk.revit.category.family:mechanicalEquipment-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53204-CDZC-03311",
+            "id": "autodesk.revit.category.family:plumbingFixtures-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DGQA-05031",
+            "id": "autodesk.revit.category.family:ductAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53196-DCQU-89834",
+            "id": "autodesk.revit.category.family:pipeAccessory-1.0.0"
+          },
+          {
+            "bindingId": "ACFV-53192-CKND-68870",
+            "id": "autodesk.revit.category.family:plumbingEquipment-1.0.0"
+          }
+        ]
+      },
+      {
+        "Id": "labelIds",
+        "Value": []
+      },
+      {
+        "Id": "group",
+        "Value": {
+          "bindingId": "ABYV-32458-BXMZ-08934",
+          "id": "autodesk.parameter:group-1.0.0"
+        }
+      },
+      {
+        "Id": "pimPropBehavior"
+      },
+      {
+        "Id": "pimPropDMBehavior"
+      },
+      {
+        "Id": "pimPropCategory"
+      },
+      {
+        "Id": "pimDisplayInSummary",
+        "Value": false
+      },
+      {
+        "Id": "pimIsSearchable",
+        "Value": false
+      }
+    ]
+  }
+]

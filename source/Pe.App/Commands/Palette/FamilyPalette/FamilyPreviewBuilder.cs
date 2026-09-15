@@ -224,14 +224,9 @@ public static class FamilyPreviewBuilder {
         string typeName
     ) {
         Document? famDoc = null;
-        var shouldClose = false;
 
         try {
-            famDoc = RevitUiSession.CurrentUIApplication.FindOpenFamilyDocument(family);
-            if (famDoc == null) {
-                famDoc = hostDocument.EditFamily(family);
-                shouldClose = famDoc != null;
-            }
+            famDoc = hostDocument.EditFamily(family);
 
             if (famDoc == null || !famDoc.IsFamilyDocument)
                 return null;
@@ -269,7 +264,7 @@ public static class FamilyPreviewBuilder {
         } catch {
             return null;
         } finally {
-            if (famDoc != null && shouldClose)
+            if (famDoc != null)
                 _ = famDoc.Close(false);
         }
     }

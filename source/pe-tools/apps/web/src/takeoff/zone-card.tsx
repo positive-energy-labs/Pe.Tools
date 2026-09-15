@@ -1,15 +1,14 @@
-import { useAtomValue } from "@effect/atom-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import { Verb, VerbGroup } from "#/components/lang/verb";
+import { ActionButton, ActionGroup } from "#/components/lang/action-button";
 import { fmtNum } from "#/components/master-table/model";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
-import type { TakeoffStore } from "#/takeoff/store";
+import type { TakeoffsController } from "#/takeoff/controller";
 import { ZonePeek } from "#/takeoff/zone-peek";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
-import type { WorldRoom, WorldSystem, WorldZone } from "#/takeoff/world";
+import type { ModelRoom, ModelSystem, ModelZone } from "#/takeoff/world";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { hostReason } from "#/takeoff/room-actions";
 import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
@@ -26,24 +25,25 @@ export function ZoneCard({
   systems,
   onClose,
 }: {
-  store: TakeoffStore;
-  zone: WorldZone;
-  cursorRoom: WorldRoom | null;
+  store: TakeoffsController;
+  zone: ModelZone;
+  cursorRoom: ModelRoom | null;
   geoReady: boolean;
   live: boolean;
   busy: string | null;
   actions: AtlasActions;
-  stateOf: (room: WorldRoom) => RoomState;
-  systems: WorldSystem[];
+  stateOf: (room: ModelRoom) => RoomState;
+  systems: ModelSystem[];
   onClose: () => void;
 }) {
-  const entity = useAtomValue(store.atoms.entity(zone.zone.guid));
+  const entity = store.entity(zone.zone.guid);
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
   const closure = run
     ? run.declaredSqft - (run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft)
     : null;
   const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
+  const partitionRefusal = store.handle.actions.partition.refusal;
 
   return (
     <div
@@ -117,36 +117,29 @@ export function ZoneCard({
 
           {live && (
             <div className="pt-0.5">
-              <VerbGroup title="zone verbs" radius="document · model">
-                <Verb
+              <ActionGroup title="zone verbs" radius="document · model">
+                <ActionButton
                   tone="commit"
-                  label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
-                  disabled={busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    `Prepares cropped seed views on ${zone.zone.lane.label}, exports ink, and detects rooms — writes replay_<level>.bin and touches the document`,
-                    "fixture · nothing to capture",
-                  )}
-                  onClick={() => actions.capture(zone.zone.lane)}
-                />
-                <Verb
-                  tone="commit"
-                  label="partition zone"
-                  disabled={busy !== null || !zone.zone.lane.replayPath}
-                  reason={
-                    zone.zone.lane.replayPath == null
-                      ? "capture the level first — the partition replays that snapshot, it cannot invent one"
-                      : hostReason(
-                          live,
-                          busy,
-                          "Replays the capture masked to this zone and materializes Room Regions in the model (a rerun never overwrites)",
-                          "fixture · nothing to partition",
-                        )
+                  label={
+                    store.zones.length > 1
+                      ? `partition ${store.zones.length} selected zones`
+                      : zone.rooms.length + zone.residues.length > 0
+                        ? "remeasure / compare"
+                        : "partition zone"
                   }
-                  onClick={() => actions.partition(zone)}
+                  disabled={busy !== null || partitionRefusal !== null}
+                  reason={
+                    partitionRefusal ??
+                    hostReason(
+                      live,
+                      busy,
+                      "First run creates native regions. Reruns measure current native regions and show a temporary solver comparison; geometry and roles are preserved.",
+                      "fixture · nothing to partition",
+                    )
+                  }
+                  onClick={actions.partition}
                 />
-              </VerbGroup>
+              </ActionGroup>
             </div>
           )}
         </div>

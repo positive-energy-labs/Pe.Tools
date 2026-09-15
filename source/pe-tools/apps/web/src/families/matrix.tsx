@@ -1,11 +1,12 @@
 import { EmptyState } from "#/components/lang/empty";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
 export function FamiliesMatrix() {
   const {
     store,
+    fixture,
     navigate,
     rows,
     columns,
@@ -22,6 +23,13 @@ export function FamiliesMatrix() {
   } = useFamiliesWorkspace();
   return (
     <>
+      {fixture && (
+        <p className="px-4 py-1 t-small">
+          Fixture source (no Revit capture).{" "}
+          <a href="/families?source=fixture&fixture=native">native authored examples</a> /{" "}
+          <a href="/families?source=fixture">original review fixture</a>
+        </p>
+      )}
       <MasterTable
         rows={rows}
         columns={columns}
@@ -43,7 +51,7 @@ export function FamiliesMatrix() {
               {params.length} parameters
             </span>
             <span className="hairline-l pl-2">
-              <Verb
+              <ActionButton
                 label="project → profile"
                 onClick={() => runProject()}
                 busy={busy === "project"}
@@ -70,7 +78,7 @@ export function FamiliesMatrix() {
           ) : applied === null ? (
             <EmptyState
               story="scope"
-              exit="pick categories in the scope row above, then press “apply scope”"
+              exit="pick categories in the scope row above, then press “apply scope” in the verb row"
             >
               no scope applied yet — the matrix op is expensive, so it waits to be asked
             </EmptyState>
@@ -87,10 +95,16 @@ export function FamiliesMatrix() {
             </EmptyState>
           )
         }
-        /* Fleet → one family. The URL is the whole handoff: /family opens the requested
-           family in the bound session's family editor and lands in its live lane. No
-           cross-route store, nothing to keep in sync. */
-        onRowClick={() => void navigate({ to: "/family", search: {} })}
+        /* The existing editor operation activates a scratch family copy; capture that returned document. */
+        onRowClick={(row) => {
+          void store.actions
+            .openFamily(row.familyId)
+            .then((opened) => {
+              const path = (opened as { savedPath?: string | null }).savedPath;
+              if (path) void navigate({ to: "/family", search: { file: path } });
+            })
+            .catch(() => undefined);
+        }}
       />
     </>
   );

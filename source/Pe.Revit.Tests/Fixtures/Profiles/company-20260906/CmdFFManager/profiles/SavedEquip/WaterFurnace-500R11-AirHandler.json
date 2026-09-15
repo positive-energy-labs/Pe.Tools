@@ -1,0 +1,146 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {},
+    "ExcludeNames": {}
+  },
+  "MakeRefPlaneAndDims": {
+    "Enabled": false
+  },
+  "AddFamilyParams": {
+    "Parameters": [
+      {
+        "Name": "Manufacturer",
+        "IsInstance": false,
+        "PropertiesGroup": "Identity Data"
+      },
+      {
+        "Name": "Model"
+      },
+      {
+        "Name": "Mech Equip Height"
+      },
+      {
+        "Name": "Mech Equip Length"
+      },
+      {
+        "Name": "Mech Equip Width"
+      },
+      {
+        "Name": "Mech Equip Voltage"
+      },
+      {
+        "Name": "Minimum Circuit Ampacity"
+      },
+      {
+        "Name": "Maximum Overcurrent Protection"
+      },
+      {
+        "Name": "Heating Capacity"
+      },
+      {
+        "Name": "Cooling Capacity"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "Manufacturer",
+        "Kind": "Value",
+        "Value": "WaterFurnace"
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      {
+        "Parameter": "Model",
+        "W5BM024": "W5BM024",
+        "W5BM036": "W5BM036",
+        "W5BM048": "W5BM048",
+        "W5BM060": "W5BM060",
+        "W5BM066": "W5BM066"
+      },
+      {
+        "Parameter": "Mech Equip Height",
+        "W5BM024": "47\"",
+        "W5BM036": "52\"",
+        "W5BM048": "58\"",
+        "W5BM060": "58\"",
+        "W5BM066": "58\""
+      },
+      {
+        "Parameter": "Mech Equip Length",
+        "W5BM024": "21.2\"",
+        "W5BM036": "21.2\"",
+        "W5BM048": "21.2\"",
+        "W5BM060": "21.2\"",
+        "W5BM066": "21.2\""
+      },
+      {
+        "Parameter": "Mech Equip Width",
+        "W5BM024": "17.5\"",
+        "W5BM036": "21.6\"",
+        "W5BM048": "24.9\"",
+        "W5BM060": "24.9\"",
+        "W5BM066": "24.9\""
+      },
+      {
+        "Parameter": "Mech Equip Voltage",
+        "W5BM024": "208V",
+        "W5BM036": "208V",
+        "W5BM048": "208V",
+        "W5BM060": "208V",
+        "W5BM066": "208V"
+      },
+      {
+        "Parameter": "Minimum Circuit Ampacity",
+        "W5BM024": "5.00 A",
+        "W5BM036": "5.00 A",
+        "W5BM048": "8.80 A",
+        "W5BM060": "8.80 A",
+        "W5BM066": "8.80 A"
+      },
+      {
+        "Parameter": "Maximum Overcurrent Protection",
+        "W5BM024": "10.00 A",
+        "W5BM036": "10.00 A",
+        "W5BM048": "15.00 A",
+        "W5BM060": "15.00 A",
+        "W5BM066": "15.00 A"
+      },
+      {
+        "Parameter": "Heating Capacity",
+        "W5BM024": "22,700 btu/h",
+        "W5BM036": "35,000 btu/h",
+        "W5BM048": "47,300 btu/h",
+        "W5BM060": "55,700 btu/h",
+        "W5BM066": "66,100 btu/h"
+      },
+      {
+        "Parameter": "Cooling Capacity",
+        "W5BM024": "25,800 btu/h",
+        "W5BM036": "38,100 btu/h",
+        "W5BM048": "50,900 btu/h",
+        "W5BM060": "63,900 btu/h",
+        "W5BM066": "70,100 btu/h"
+      }
+    ]
+  },
+  "MakeConstrainedExtrusions": {
+    "Enabled": false
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+}

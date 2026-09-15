@@ -54,14 +54,17 @@ function manifestFor(items: StagedItem[], pool: string | null, verb: string) {
   const sideStats = (z: StagedItem["a"]) =>
     z
       ? {
+          capture: z.capture ?? null,
+          voidSqft: z.VoidSqft,
+          excludedSqft: z.ExcludedSqft,
           verdict: z.triage.verdict,
           reason: z.triage.reason,
           acceptedRooms: z.AcceptedRooms,
           oracleRooms: z.OracleRooms,
           heldRooms: z.HeldRooms,
-          acceptedSqft: Math.round(z.AcceptedSqft * 10) / 10,
-          heldSqft: Math.round(z.HeldSqft * 10) / 10,
-          inkBackedEdgeFraction: Math.round(z.InkBackedEdgeFraction * 1000) / 1000,
+          acceptedSqft: z.AcceptedSqft,
+          heldSqft: z.HeldSqft,
+          inkBackedEdgeFraction: z.InkBackedEdgeFraction,
         }
       : null;
   return {

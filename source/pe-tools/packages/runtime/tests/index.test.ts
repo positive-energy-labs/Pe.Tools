@@ -383,7 +383,7 @@ test(
       "pe_find",
       "pe_read",
       "pe_do",
-      "scope_set",
+      "target_set",
       "read_image",
       "request_access",
       "revit_api_docs_search",

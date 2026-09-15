@@ -11,10 +11,10 @@
 # - The calibration lives PER ANNOTATION in /Measure; pages also carry a /VP viewport measure but
 #   annots on one page can differ (seen: 1/4" and 3/32" on the same page), so trust the annot.
 # - /Measure/X[0]/C is the pt->ft factor (0.0555… = 1/18 for 1/4"=1'). Shoelace * C^2 reproduces
-#   Bluebeam's displayed sf to 1e-3, so vertices+scale are the ground truth, not the label.
+#   recorded area in the probed files; this checks arithmetic, not calibration or boundary accuracy.
 # - /Contents holds only the computed value ("349.07 sf", "15'-6 1/2\""); /Label and /Subj carry no
-#   room identity. Room names come from the PLAN TEXT LAYER (Revit room tags), matched by locating
-#   room-number tokens inside each polygon (pdfplumber word positions).
+#   room identity. Candidate room numbers come from the PLAN TEXT LAYER, by locating numeric
+#   tokens inside each polygon; dimensions can also match, so these are not certified identities.
 # - /Square annots authored by "AutoCAD SHX Text" are CAD-export artifacts, not takeoff counts.
 import argparse, json, math, os, re
 from collections import Counter
@@ -66,12 +66,27 @@ def extract_words(pdf_path, page_index):
     with pdfplumber.open(pdf_path) as pl:
         page = pl.pages[page_index]
         words = page.extract_words()
-        h = float(page.height)
-        # pdfplumber y is top-down; annots are bottom-up PDF coords.
-        return [
-            {"text": w["text"], "x": (w["x0"] + w["x1"]) / 2, "y": h - (w["top"] + w["bottom"]) / 2}
-            for w in words
-        ]
+        x0, y0, x1, y1 = map(float, page.page_obj.mediabox)
+        mb_x0, mb_top = map(float, page.mediabox[:2])
+        rotation = page.rotation % 360
+
+        def raw_point(word):
+            # Undo pdfplumber's MediaBox offset, then pdfminer's page-rotation CTM.
+            x = (word["x0"] + word["x1"]) / 2 - mb_x0
+            y = float(page.height) + mb_top - (word["top"] + word["bottom"]) / 2
+            if rotation == 90:
+                return x1 - y, y0 + x
+            if rotation == 180:
+                return x1 - x, y1 - y
+            if rotation == 270:
+                return x0 + y, y1 - x
+            return x0 + x, y0 + y
+
+        result = []
+        for word in words:
+            x, y = raw_point(word)
+            result.append({"text": word["text"], "x": x, "y": y})
+        return result
 
 
 def point_in_poly(x, y, pts):

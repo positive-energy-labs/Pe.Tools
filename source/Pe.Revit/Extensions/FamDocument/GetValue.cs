@@ -14,8 +14,10 @@ public static class FamilyManagerGetValue {
     /// <exception cref="T:Autodesk.Revit.Exceptions.ArgumentException">
     ///     Thrown if the input argument-"familyParameter"-is invalid,
     /// </exception>
-    public static object? GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) {
-        var famType = famDoc.FamilyManager.CurrentType;
+    public static object? GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) =>
+        famDoc.GetValue(famDoc.FamilyManager.CurrentType, familyParameter);
+
+    public static object? GetValue(this FamilyDocument famDoc, FamilyType famType, FamilyParameter familyParameter) {
         if (!famType.HasValue(familyParameter)) return null;
 
         return familyParameter.StorageType switch {
@@ -38,6 +40,13 @@ public static class FamilyManagerGetValue {
         var value = doc.GetValue(param);
         return value is not null;
     }
+
+    /// <summary>
+    ///     Per-type blankness (critic F14): a formula counts as a value; otherwise `FamilyType.HasValue` on the
+    ///     explicit type, which needs no `CurrentType` switch and no transaction.
+    /// </summary>
+    public static bool HasValue(this FamilyDocument doc, FamilyType famType, FamilyParameter param) =>
+        !string.IsNullOrWhiteSpace(param.Formula) || famType.HasValue(param);
 
     /// <summary>
     ///     Get the string value with a unit (ie. what you see in the family editor) of a parameter using the current family

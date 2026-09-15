@@ -1,3 +1,4 @@
+import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Cause, Context, Effect, Layer, Option, Stream } from "effect";
@@ -6,6 +7,7 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createCapabilityCatalogSource, createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp, type ServableRuntime } from "@pe/runtime";
+import { hostResourceObserver } from "./resource-adapters.ts";
 import {
   createPeaRuntime,
   type PeaRuntimeCapabilities,
@@ -130,6 +132,13 @@ export function makeMastraRuntimeLive(
       // With Revit present the op and pod rows describe the connected session, so a session
       // arriving or leaving drops the 30 s cache; without Revit there is no bridge to watch.
       yield* invalidateOnSessionChange(catalog);
+      const bridge = yield* Effect.serviceOption(RevitBridge);
+      const observeHostResource = hostResourceObserver(
+        Option.getOrUndefined(bridge),
+        undefined,
+        undefined,
+        hostBaseUrl,
+      );
 
       const handle = yield* Effect.acquireRelease(
         Effect.tryPromise(async () => {
@@ -137,6 +146,8 @@ export function makeMastraRuntimeLive(
           const app = await buildAgentControllerApp({
             runtime,
             label: "pea",
+            observeHostResource,
+            onRouteWorkspace: bindActionWorkspace,
             routeRegistrations: registrations,
             capabilityCatalog: catalog,
           });

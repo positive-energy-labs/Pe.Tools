@@ -21,12 +21,12 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { toolTitle } from "@pe/agent-contracts";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
 import { isRenderable, toThreadMessages } from "./aui-adapter";
-import { APPROVAL_OPTIONS, readRecord, readString, toolTarget } from "./chat-state";
+import { readRecord, readString, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
@@ -320,31 +320,13 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         toolCallId={toolCallId}
         toolName={toolName}
         args={args}
-        sessionState={{}}
+        sessionState={result}
         running={status?.type === "running"}
       />
+      {/* Allow/refuse lives in the composer head's proposals band (`chat/composer-head.tsx`);
+          a question still answers here, beside what it asks about. */}
       {question ? (
         <AskUserPrompt toolCallId={toolCallId} question={question} resolve={resolveApproval} />
-      ) : pending ? (
-        <div className="flex flex-wrap gap-[7px]">
-          {(approval.options ?? APPROVAL_OPTIONS).map((option) => {
-            const allow = option.kind.startsWith("allow");
-            return (
-              <Verb
-                key={option.id}
-                tone={allow ? "commit" : "act"}
-                icon={allow ? Check : X}
-                label={option.label ?? option.id}
-                reason={
-                  allow
-                    ? `Let pea run ${toolTitle(toolName)} — the call executes against the live target`
-                    : `Refuse this ${toolTitle(toolName)} call — pea continues without it`
-                }
-                onClick={() => void resolveApproval(approval.id, option.id)}
-              />
-            );
-          })}
-        </div>
       ) : null}
     </div>
   );
@@ -403,7 +385,7 @@ function AskUserPrompt({
             onChange={(event) => setAnswer(event.target.value)}
           />
           <div>
-            <Verb
+            <ActionButton
               tone="commit"
               icon={Check}
               label="Answer"
@@ -439,7 +421,7 @@ function AskUserPrompt({
             ))}
           </div>
           <div>
-            <Verb
+            <ActionButton
               tone="commit"
               icon={Check}
               label="Answer"
@@ -453,7 +435,7 @@ function AskUserPrompt({
         <div className="grid gap-1">
           {question.options.map((option) => (
             <div key={option.label} className="flex items-baseline gap-2">
-              <Verb
+              <ActionButton
                 tone="act"
                 label={option.label}
                 reason={option.description ?? `Answer ${option.label}`}

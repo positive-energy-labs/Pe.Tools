@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { watch } from "node:fs";
+import { existsSync, readdirSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 let child: ChildProcess | undefined;
@@ -15,16 +15,25 @@ const disconnect = () => {
     killTimeout = setTimeout(() => owned.kill(), 10_000).unref();
   }
 };
-const watcher = watch(new URL("../src/", import.meta.url), { recursive: true }, () => {
+const changed = () => {
   clearTimeout(debounce);
   debounce = setTimeout(() => {
     restart = true;
     disconnect();
   }, 150);
-});
+};
+const packages = new URL("../../../packages/", import.meta.url);
+const watchRoots = [
+  new URL("../src/", import.meta.url),
+  ...readdirSync(packages, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => new URL(`${entry.name}/src/`, packages))
+    .filter((root) => existsSync(root)),
+];
+const watchers = watchRoots.map((root) => watch(root, { recursive: true }, changed));
 const stop = () => {
   stopped = true;
-  watcher.close();
+  for (const watcher of watchers) watcher.close();
   clearTimeout(debounce);
 };
 const interrupt = () => {

@@ -11,20 +11,41 @@ const PLAN_DEFAULT_PX = 320;
 const PLAN_CHROME_PX = 34;
 
 export function AtlasWorkspace() {
-  const { geoReady, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
+  const { geometry, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
       className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t"
       headRail={headRail}
       readoutBand={
-        readoutBand ??
-        (!geoReady ? (
-          <OutcomeLine
-            kind="busy"
-            label="loading room geometry"
-            says="rooms draw as position dots until their boundaries land"
-          />
-        ) : null)
+        geometry?.state === "failed" ? (
+          <>
+            {readoutBand}
+            <OutcomeLine
+              kind="error"
+              label={
+                geometry.previous !== undefined
+                  ? "geometry refresh failed — showing last successful read"
+                  : "room geometry unavailable"
+              }
+              says={geometry.message}
+            />
+          </>
+        ) : (
+          (readoutBand ??
+          (geometry === undefined || geometry.state === "loading" ? (
+            <OutcomeLine
+              kind="busy"
+              label="loading room geometry"
+              says="rooms draw as position dots until their boundaries land"
+            />
+          ) : geometry.state === "absent" ? (
+            <OutcomeLine
+              kind="advisory"
+              label="no room geometry bound"
+              says="select a document and refresh its geometry"
+            />
+          ) : null))
+        )
       }
       navigation={<AtlasNavigation />}
       visual={<AtlasVisual />}

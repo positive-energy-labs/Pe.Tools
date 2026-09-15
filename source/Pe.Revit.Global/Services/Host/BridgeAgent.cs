@@ -7,15 +7,15 @@ using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.HostContracts;
-using Pe.Revit.Scripting.Transport;
 using Pe.Shared.HostContracts.Transport;
-using Pe.Shared.Product;
+using Pe.Revit.Scripting.Transport;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
 using Pe.Revit.Operations;
 using Pe.Revit.Tasks;
+using Pe.Revit.Global.Services.Document;
 using Serilog;
 using System.Net.WebSockets;
 using System.Reflection;
@@ -249,7 +249,7 @@ internal sealed class BridgeAgent : IDisposable {
                 var run = await this._revitTaskQueue.RunForResult(
                     context => op.ExecuteAsync(
                         request.PayloadJson,
-                        ResolveDocument(op, context.Cancellation),
+                        ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
                         context.Cancellation),
                     new RevitRunOptions { Label = op.Key },
                     cancellationToken
@@ -302,7 +302,8 @@ internal sealed class BridgeAgent : IDisposable {
                         serializationMs,
                         requestBytes,
                         responseBytes
-                    )
+                    ),
+                    op.Definition.Needs == OpNeeds.Nothing ? null : request.OpenDocumentId
                 )
             );
 
@@ -441,12 +442,14 @@ internal sealed class BridgeAgent : IDisposable {
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
     };
 
-    private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
+    private static object? ResolveDocument(Op op, string? openDocumentId, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         if (op.Definition.Needs == OpNeeds.Nothing)
             return null;
 
-        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        var tracked = openDocumentId == null ? null : DocumentTrackerAccessor.Current?.FindOpenId(openDocumentId);
+        var document = tracked?.Resolve()
+            ?? throw BridgeOperationExceptions.Conflict("The selected document is no longer open. Select a document and retry.");
         OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
         return op.Definition.Needs switch {
             OpNeeds.Document => new RevitDocument(document!),
@@ -515,7 +518,7 @@ internal sealed class BridgeAgent : IDisposable {
         }
     }
 
-    private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload) {
+    private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload, BridgeStateSnapshot snapshot) {
         // Cache eviction happens element-granularly in BridgeDocumentNotifier.OnDocumentChanged
         // (DocShadow.HandleChange); this path only notifies the TS host.
         if (!this.IsConnected)
@@ -529,8 +532,12 @@ internal sealed class BridgeAgent : IDisposable {
             BridgeFrameKind.Event,
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
         );
+        // Publish the API-thread snapshot before invalidation can trigger a host read.
+        await this.WriteFrameAsync(new BridgeFrame(
+            BridgeFrameKind.StateSync,
+            StateSync: new BridgeStateSync(snapshot)
+        ), this._shutdown.Token).ConfigureAwait(false);
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
-        await this.SendStateSyncAsync(this._shutdown.Token).ConfigureAwait(false);
     }
 
     private void SendRegistrationAndAwaitAck() {
@@ -587,6 +594,16 @@ internal sealed class BridgeAgent : IDisposable {
 
     private BridgeStateSnapshot BuildStateSnapshot() {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        var tracker = DocumentTrackerAccessor.Current
+            ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        var documents = tracker.Open.Where(document => !document.IsLinked)
+            .Select(document => new BridgeDocumentSnapshot(
+                document.OpenId(),
+                document.Title,
+                document.Resolve().GetCloudModelGuid() ?? document.Path,
+                document.IsFamilyDocument,
+                activeDocument != null && document.Matches(activeDocument)))
+            .ToList();
         var availableModules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
             .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
@@ -614,7 +631,7 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument == null ? null : activeDocument.GetCloudModelUrn(),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             RevitUiSession.CurrentUIApplication.Application.SharedParametersFilename,
-            RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
+            documents,
             runtimeAssemblies,
             availableModules
         );

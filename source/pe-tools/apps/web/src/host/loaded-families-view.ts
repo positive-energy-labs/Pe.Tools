@@ -13,13 +13,13 @@ export type FamilySnapshotRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotR
 export type FamilyParameterSnapshot = RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot;
 
 /** Wire enum for filter.placementScope, usable as `.Member` in route code. */
-export const LoadedFamilyPlacementScope = {
+export const LoadedFamilyPlacement = {
   AllLoaded: "AllLoaded",
   PlacedOnly: "PlacedOnly",
   UnplacedOnly: "UnplacedOnly",
 } as const;
-export type LoadedFamilyPlacementScope =
-  (typeof LoadedFamilyPlacementScope)[keyof typeof LoadedFamilyPlacementScope];
+export type LoadedFamilyPlacement =
+  (typeof LoadedFamilyPlacement)[keyof typeof LoadedFamilyPlacement];
 
 /** Parameters the matrix UI renders: excludedReason == null. */
 export function visibleParameters(family: FamilySnapshotRecord): FamilyParameterSnapshot[] {

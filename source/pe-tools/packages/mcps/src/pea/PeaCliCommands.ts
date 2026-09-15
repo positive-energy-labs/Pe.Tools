@@ -1,4 +1,8 @@
+import { actionBasesSchema, scheduleReads, type ScheduleReadKey } from "@pe/agent-contracts";
+import { readScheduleCapture } from "../shared/schedule-client.ts";
+import { runSemanticAction } from "../shared/takeoff-action-client.ts";
 import { define } from "gunshi";
+import { readFileSync } from "node:fs";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
@@ -83,6 +87,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
       },
       run: async (ctx) => {
         const client = this.createHostRpcCaller(ctx.values);
@@ -184,6 +191,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
         key: {
           type: "string",
           description: "Operation key, with or without the `op:` prefix `search` prints.",
@@ -192,16 +202,43 @@ export class PeaCliCommands {
           type: "string",
           description: "JSON request object. Omit for NoRequest operations.",
         },
+        requestFile: {
+          type: "string",
+          description: "Path to a JSON request object. Cannot be combined with --request.",
+        },
         verbosity: {
           type: "string",
           description: "Output size: compact, hints, or full.",
           default: "compact",
         },
       },
+      toKebab: true,
       run: async (ctx) => {
-        const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
+        const key = firstNonBlank(ctx.values.key)?.replace(/^(op|workflow):/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
-        const request = parseOptionalJson(ctx.values.request);
+        const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
+        if (key === "schedule-grid.apply" || Object.hasOwn(scheduleReads, key)) {
+          const target =
+            ctx.values.bridgeSessionId && ctx.values.openDocumentId
+              ? { session: ctx.values.bridgeSessionId, openId: ctx.values.openDocumentId }
+              : undefined;
+          const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
+          const base = this.resolveHostBaseUrl(ctx.values.host);
+          const result =
+            key === "schedule-grid.apply"
+              ? await runSemanticAction(
+                  key,
+                  input,
+                  target,
+                  actionBasesSchema.parse(bases ?? {}),
+                  ctx.values.actor === "human" ? "human" : "agent",
+                  base,
+                  ctx.values.actionId,
+                )
+              : await readScheduleCapture(key as ScheduleReadKey, input, target, base);
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
         const result = await this.createHostRpcCaller(ctx.values).callOperation(
           key,
           request,
@@ -283,6 +320,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
         executionId: {
           type: "string",
           description: "Optional execution id guard; omit to cancel the current execution.",
@@ -308,6 +348,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
       },
       toKebab: true,
       run: async (ctx) => {
@@ -343,6 +386,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         workspace: {
           type: "string",
@@ -399,6 +445,9 @@ export class PeaCliCommands {
     return new HostRpcCaller({
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
+      openDocumentId: asOptionalString(values.openDocumentId),
+      requestId: asOptionalString(values.actionId),
+      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       ...(scriptTimeoutSeconds != null
         ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
         : {}),
@@ -415,6 +464,19 @@ export class PeaCliCommands {
 }
 
 const commonArgs = {
+  actor: {
+    type: "string",
+    description:
+      "Initiating actor: human or agent. Required for mutation; never inferred from CLI transport.",
+  },
+  actionId: {
+    type: "string",
+    description: "Original action ID. Reuse for receipt replay, never replace an unknown attempt.",
+  },
+  openDocumentId: {
+    type: "string",
+    description: "Exact open document lifetime required by document operations.",
+  },
   host: {
     type: "string",
     description: "Host base URL (default: this worktree's live host service file).",
@@ -458,6 +520,7 @@ function writeLogs(logs: HostOpResponse<"logs.tail">) {
 }
 
 function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
+  if (result.status !== "Succeeded") process.exitCode = 1;
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);
@@ -536,8 +599,10 @@ function parseLogTarget(target: unknown): HostLogTarget {
   }
 }
 
-function parseOptionalJson(value: unknown): unknown {
+function parseOptionalJson(value: unknown, file: unknown): unknown {
   const text = firstNonBlank(value);
-  if (!text) return undefined;
-  return JSON.parse(text);
+  const path = firstNonBlank(file);
+  if (text && path) throw new Error("Use either --request or --request-file, not both.");
+  if (!text && !path) return undefined;
+  return JSON.parse(path ? readFileSync(path, "utf8") : text!);
 }

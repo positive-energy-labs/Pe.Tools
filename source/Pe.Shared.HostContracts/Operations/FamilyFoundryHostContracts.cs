@@ -1,158 +1,68 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData;
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public sealed record FamilyFoundryDiagnostic(
-    string Code,
-    string Path,
-    string Message,
-    string? Suggestion = null
-);
+/// <summary>Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.</summary>
+public sealed record FamilyFoundryDiagnostic(string Code, string Path, string Message, string? Suggestion = null);
 
-public sealed record FamilyFoundryPlanRequest(
-    string ProfileJson,
-    long? FamilyId = null
-);
+/// <summary>Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.</summary>
+public sealed record FamilyFoundryPlanRequest(string PatchJson, long? FamilyId = null, ExecutionOptions? ExecutionOptions = null);
 
-public sealed record FamilyFoundryPlanData(
-    Reading Reading,
-    string? PlanHash,
-    IReadOnlyList<FamilyFoundryFamilyPlanData> Families,
-    IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
-);
+/// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
+public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom);
 
 public sealed record FamilyFoundryFamilyPlanData(
     long FamilyId,
     string FamilyName,
-    FamilyFoundryReconciliationPlanData Plan
+    string PlanHash,
+    IReadOnlyList<FamilyFoundryChangeData> Changes,
+    IReadOnlyList<string> RunEffects,
+    IReadOnlyList<FamilyFoundryDiagnostic> Refusals,
+    IReadOnlyList<RevitDataIssue> Warnings
 );
 
-public sealed record FamilyFoundryReconciliationPlanData(
-    IReadOnlyList<FamilyFoundryResolvedParameterData> Parameters,
-    IReadOnlyList<string> RequiredApsParameterNames,
-    IReadOnlyList<string> FamilyParameterNames,
-    IReadOnlyList<FamilyFoundryLoweredActionData> LoweredActions
-);
-
-public sealed record FamilyFoundryResolvedParameterData(
-    FamilyFoundryResolvedParameterDefinitionData Definition,
-    bool IsShared,
-    FamilyFoundryAssignmentData? Assignment,
-    IReadOnlyDictionary<string, string?> ValuesByType,
-    FamilyFoundryMigrationData? Migration,
-    FamilyFoundryParameterProvenanceData Provenance
-);
-
-public sealed record FamilyFoundryResolvedParameterDefinitionData(
-    ParameterIdentity Identity,
-    string Name,
-    string DataTypeId,
-    string PropertiesGroupId,
-    bool IsInstance,
-    string? Tooltip
-);
-
-public sealed record FamilyFoundryAssignmentData(string Kind, string Value);
-
-public sealed record FamilyFoundryMigrationData(
-    IReadOnlyList<string> SourceNames,
-    bool OnlyAddIfSourceExists,
-    string MappingStrategy
-);
-
-public sealed record FamilyFoundryParameterProvenanceData(
-    string Identity,
-    string DataType,
-    string PropertiesGroup,
-    string IsInstance,
-    string Tooltip
-);
-
-public sealed record FamilyFoundryLoweredActionData(
-    string Operation,
-    string Target,
-    IReadOnlyList<string> Sources,
-    string Reason
-);
-
-public sealed record FamilyFoundryApplyRequest(
-    string ProfileJson,
-    IReadOnlyList<long> FamilyIds,
-    string ExpectedPlanHash
-);
-
-public sealed record FamilyFoundryApplyData(
-    string? PlanHash,
-    bool Refused,
-    IReadOnlyList<FamilyFoundryApplyReceipt> Receipts,
+public sealed record FamilyFoundryPlanData(
+    IReadOnlyList<FamilyFoundryFamilyPlanData> Families,
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
 );
 
+/// <summary>Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.</summary>
+public sealed record FamilyFoundryApplyRequest(string PatchJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, ExecutionOptions? ExecutionOptions = null);
+
+/// <summary>The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.</summary>
 public sealed record FamilyFoundryApplyReceipt(
     long FamilyId,
     string? FamilyName,
     bool Success,
+    bool Converged,
     string? Error,
-    IReadOnlyList<string> OperationsRun,
-    int ParametersChanged,
-    FamilyFoundryParameterDiffSummary DiffSummary,
-    string? ArtifactDirectoryPath
+    string? PlanHash,
+    IReadOnlyList<FamilyFoundryChangeData> Residue,
+    IReadOnlyList<string> Errors,
+    string? ArtifactDirectory
 );
 
-public sealed record FamilyFoundryParameterDiffSummary(
-    int Added,
-    int Removed,
-    int Modified
-);
-
-public sealed record FamilyFoundryProjectRequest(IReadOnlyList<long> FamilyIds);
-
-public sealed record FamilyFoundryProjectData(
-    IReadOnlyList<FamilyFoundryProfileProjectionData> Projections,
+public sealed record FamilyFoundryApplyData(
+    IReadOnlyList<FamilyFoundryApplyReceipt> Receipts,
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
 );
 
-public sealed record FamilyFoundryProfileProjectionData(
+/// <summary>Capture loaded families read-only as family.json.</summary>
+public sealed record FamilyFoundryProjectRequest(IReadOnlyList<long> FamilyIds);
+
+public sealed record FamilyFoundryFamilyModelData(
     long FamilyId,
     string? FamilyName,
     bool Success,
-    string? ProfileJson,
+    string? ModelJson,
+    IReadOnlyDictionary<string, string> Coverage,
+    int UnmodeledCount,
+    IReadOnlyList<RevitDataIssue> Issues,
     string? Error
 );
 
-public static class FamilyFoundryPlanHasher {
-    private static readonly JsonSerializerSettings StableSettings = new() {
-        ContractResolver = new DefaultContractResolver {
-            NamingStrategy = new CamelCaseNamingStrategy()
-        },
-        Converters = [new StringEnumConverter()],
-        Culture = CultureInfo.InvariantCulture,
-        Formatting = Formatting.None,
-        NullValueHandling = NullValueHandling.Include
-    };
-
-    public static string Compute(FamilyFoundryReconciliationPlanData plan) {
-        if (plan == null)
-            throw new ArgumentNullException(nameof(plan));
-        var token = JToken.FromObject(plan, JsonSerializer.Create(StableSettings));
-        var json = Canonicalize(token).ToString(Formatting.None);
-        using var sha256 = SHA256.Create();
-        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(json));
-        return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private static JToken Canonicalize(JToken token) => token switch {
-        JObject jsonObject => new JObject(jsonObject.Properties()
-            .OrderBy(property => property.Name, StringComparer.Ordinal)
-            .Select(property => new JProperty(property.Name, Canonicalize(property.Value)))),
-        JArray jsonArray => new JArray(jsonArray.Select(Canonicalize)),
-        _ => token.DeepClone()
-    };
-}
+public sealed record FamilyFoundryProjectData(
+    IReadOnlyList<FamilyFoundryFamilyModelData> Families,
+    IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
+);

@@ -6,6 +6,53 @@ using UIFrameworkServices;
 namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentProcessFamily {
+    /// <summary>
+    ///     Opens an independent family copy for a read, handles only failures raised by EditFamily on the
+    ///     source document, and always closes the copy. Only the known non-destructive family-constraint warning
+    ///     is acknowledged; every other warning or error rolls back and refuses the read.
+    /// </summary>
+    public static T ReadFamilyCopy<T>(this Document source, Family family, Func<FamilyDocument, T> read,
+        ICollection<(bool IsError, string Message)> diagnostics) {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (family == null) throw new ArgumentNullException(nameof(family));
+        if (read == null) throw new ArgumentNullException(nameof(read));
+        if (diagnostics == null) throw new ArgumentNullException(nameof(diagnostics));
+        if (source.IsFamilyDocument && source.OwnerFamily?.Id == family.Id)
+            return read(new FamilyDocument(source));
+
+        Document? copy = null;
+        try {
+            source.HandleFamilyCopyFailures(family, () => copy = source.EditFamily(family), diagnostics);
+            return read(new FamilyDocument(copy!));
+        } finally {
+            if (copy != null) _ = copy.Close(false);
+        }
+    }
+
+    /// <summary>Shared EditFamily failure policy. The caller captures ownership inside open;
+    /// diagnostics can reject the operation after native creation has returned.</summary>
+    public static T HandleFamilyCopyFailures<T>(this Document source, Family family, Func<T> open,
+        ICollection<(bool IsError, string Message)> diagnostics) {
+        var firstDiagnostic = diagnostics.Count;
+        T result;
+        try {
+            result = RevitFailureScope.Execute(source,
+                accessor => PeToolsFailureHandling.RejectUnsafeFamilyCopyFailures(accessor, diagnostics), open,
+                failureDocument => failureDocument.IsFamilyDocument &&
+                                   string.IsNullOrEmpty(failureDocument.PathName) &&
+                                   string.Equals(failureDocument.Title, $"{family.Name}.rfa",
+                                       StringComparison.OrdinalIgnoreCase));
+        } catch (Exception exception) when (diagnostics.Skip(firstDiagnostic).Any(diagnostic => diagnostic.IsError)) {
+            throw new InvalidOperationException(
+                $"EditFamily refused '{family.Name}': {string.Join("; ", diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).Select(error => error.Message))}", exception);
+        }
+        var errors = diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).ToList();
+        if (errors.Count > 0)
+            throw new InvalidOperationException(
+                $"EditFamily refused '{family.Name}': {string.Join("; ", errors.Select(error => error.Message))}");
+        return result;
+    }
+
     public static FamilyDocument GetFamilyDocument(this Document doc) {
         if (doc.IsFamilyDocument) return new FamilyDocument(doc);
         throw new InvalidOperationException("Document is not a family document");

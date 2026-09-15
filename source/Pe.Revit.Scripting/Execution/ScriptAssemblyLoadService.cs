@@ -293,10 +293,11 @@ public sealed class ScriptAssemblyLoadService {
         || assemblyName.StartsWith("PresentationFramework", StringComparison.OrdinalIgnoreCase);
 
     private sealed class ResolverSubscription : IScriptRuntimeScope {
+#if !NET5_0_OR_GREATER
         private readonly ResolveEventHandler _appDomainHandler;
+#endif
         private readonly IReadOnlyDictionary<string, string> _assemblyMap;
 #if NET5_0_OR_GREATER
-        private readonly Func<AssemblyLoadContext, AssemblyName, Assembly?> _loadContextHandler;
         // The script and its hot-reloaded dependencies live in this per-run context. Its Load()
         // override is consulted BEFORE the default context, which is the only way a fresh disk
         // build can beat a copy the host already loaded (the default context resolves already-
@@ -313,12 +314,11 @@ public sealed class ScriptAssemblyLoadService {
         ) {
             this._assemblyMap = assemblyMap;
             this._probeDirectories = probeDirectories;
+#if NET5_0_OR_GREATER
+            this._scriptLoadContext = new ScriptLoadContext(this);
+#else
             this._appDomainHandler = this.OnAssemblyResolve;
             AppDomain.CurrentDomain.AssemblyResolve += this._appDomainHandler;
-#if NET5_0_OR_GREATER
-            this._loadContextHandler = this.OnAssemblyResolve;
-            AssemblyLoadContext.Default.Resolving += this._loadContextHandler;
-            this._scriptLoadContext = new ScriptLoadContext(this);
 #endif
         }
 
@@ -346,19 +346,16 @@ public sealed class ScriptAssemblyLoadService {
                 return;
 
             this._disposed = true;
-            AppDomain.CurrentDomain.AssemblyResolve -= this._appDomainHandler;
 #if NET5_0_OR_GREATER
-            AssemblyLoadContext.Default.Resolving -= this._loadContextHandler;
             this._scriptLoadContext.Unload();
+#else
+            AppDomain.CurrentDomain.AssemblyResolve -= this._appDomainHandler;
 #endif
         }
 
+#if !NET5_0_OR_GREATER
         private Assembly? OnAssemblyResolve(object? sender, ResolveEventArgs args) =>
             this.Resolve(new AssemblyName(args.Name));
-
-#if NET5_0_OR_GREATER
-        private Assembly? OnAssemblyResolve(AssemblyLoadContext context, AssemblyName assemblyName) =>
-            this.Resolve(assemblyName);
 #endif
 
         private Assembly? Resolve(AssemblyName assemblyName) {

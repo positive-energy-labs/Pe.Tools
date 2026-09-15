@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/host/queries";
+import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/readings";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import { normalizeFieldOptionMode, readPathValue } from "@pe/schema-core";
 import type {
@@ -183,7 +183,7 @@ export function useFieldOptions({
     });
   }
 
-  if (usesRemoteResolver && remoteSource && (remoteQuery.isPending || remoteQuery.isFetching)) {
+  if (usesRemoteResolver && remoteSource && (remoteQuery.isPending || remoteQuery.pending)) {
     return createState({
       items: [] as FieldOptionItem[],
       mode: remoteSource.mode,
@@ -200,7 +200,7 @@ export function useFieldOptions({
   if (
     usesParameterCatalogDataset &&
     remoteSource &&
-    (parameterCatalogQuery.isPending || parameterCatalogQuery.isFetching)
+    (parameterCatalogQuery.isPending || parameterCatalogQuery.pending)
   ) {
     return createState({
       items: [] as FieldOptionItem[],
