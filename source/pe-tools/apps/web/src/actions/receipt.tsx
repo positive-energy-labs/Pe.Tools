@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
 import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
-import { peReadings, dirty, useHostCall, useAction, type Readings } from "#/readings";
+import {
+  peReadings,
+  dirty,
+  previousOf,
+  useHostCall,
+  useAction,
+  useReading,
+  type Readings,
+} from "#/readings";
 import { actionControls, type ActionListFilter, type ActionControlKey } from "@pe/agent-contracts";
 import {
   controlAction,
@@ -15,46 +22,34 @@ import { ActionButton } from "#/components/lang/action-button";
  */
 export function ActionReceiptView({
   id,
-  watch = false,
   base = "",
   resources = peReadings,
 }: {
   id: string;
-  watch?: boolean;
   base?: string;
   resources?: Readings;
 }) {
-  // The receipt reads its own id through the owner it was given: one call, no cache, no poll.
-  const receipt = useHostCall(
-    () => controlAction("action.read", { id }, base) as Promise<ActionReceipt>,
-    ["actions", base, id],
-  );
+  const receipt = useReading<ActionReceipt[]>({ kind: "receipts", id }, resources);
   const control = useAction(
     (key: ActionControlKey) => controlAction(key, { id }, base, "human"),
-    // A control changes the receipt, so the receipt is reacquired rather than patched in place.
-    () => {
-      receipt.refresh();
-      dirty({ kind: "receipts", id });
-    },
+    () => dirty({ kind: "receipts", id }, resources),
   );
-  // `watch` puts this receipt on the one stream; without it nothing is opened for it.
-  const [watched, setWatched] = useState<ActionReceipt | undefined>(undefined);
-  useEffect(() => {
-    if (!watch) return;
-    return resources.subscribe({ kind: "receipts", id }, (update) => {
-      if (update.kind !== "snapshot") return;
-      const rows = actionReceiptSchema.array().safeParse(update.value);
-      if (rows.success) setWatched(rows.data.find((row) => row.id === id));
-    });
-  }, [id, watch, resources]);
-  const row = watched ?? receipt.data;
+  const observed = previousOf(receipt);
+  const rows = actionReceiptSchema.array().safeParse(observed);
+  const row = rows.success ? rows.data.find((candidate) => candidate.id === id) : undefined;
+  const receiptError =
+    receipt.state === "failed"
+      ? Error(receipt.message)
+      : observed !== undefined && !rows.success
+        ? Error(rows.error.message)
+        : undefined;
   return (
     <div className="space-y-1 p-2">
       <div>
         Action {id} /{" "}
         {row?.kind === "operation" && row.state === "succeeded"
           ? "reply received"
-          : (row?.state ?? (receipt.error ? "receipt read failed" : "reading receipt"))}
+          : (row?.state ?? (receiptError ? "receipt read failed" : "reading receipt"))}
       </div>
       {row && (
         <>
@@ -97,8 +92,8 @@ export function ActionReceiptView({
           )}
         </>
       )}
-      {(receipt.error || control.error) && (
-        <div role="alert">{String(receipt.error ?? control.error)}</div>
+      {(receiptError || control.error) && (
+        <div role="alert">{String(receiptError ?? control.error)}</div>
       )}
       <div className="flex gap-2">
         {(Object.keys(actionControls) as ActionControlKey[]).map((key) => (
@@ -126,7 +121,7 @@ export function ActionReceiptView({
   );
 }
 
-/** The host list is authoritative; mount never resumes or recovers an action. */
+/** The one-shot list preserves `lastId`, which the shared Reading request cannot express. */
 export function ActionReceipts({
   scope,
   lastId,
@@ -145,10 +140,6 @@ export function ActionReceipts({
     ["actions", "subject", ...scopeDeps, lastId],
     scope !== null,
   );
-  // A state change in the list is the subject changing, so each receipt reacquires its own.
-  useEffect(() => {
-    for (const status of query.data ?? []) dirty({ kind: "receipts", id: status.id });
-  }, [query.data]);
   if (!scope) return null;
   const ids = (query.data ?? []).map((row) => row.id);
   return (
@@ -164,7 +155,7 @@ export function ActionReceipts({
         <div>No unresolved actions for this selection</div>
       ) : null}
       {(query.data ?? []).map((row) => (
-        <ActionReceiptView key={row.id} id={row.id} watch={row.state === "running"} />
+        <ActionReceiptView key={row.id} id={row.id} />
       ))}
     </section>
   );

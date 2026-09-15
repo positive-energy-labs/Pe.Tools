@@ -121,7 +121,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
 
   return (
     <>
-      {actionId && <ActionReceiptView id={actionId} watch />}
+      {actionId && <ActionReceiptView id={actionId} />}
       {catalogValue?.bridgeCatalogError && (
         <div role="status">
           Native catalogue unavailable: {catalogValue.bridgeCatalogError}. Host operations remain

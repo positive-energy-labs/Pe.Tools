@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { render, cleanup, screen, within } from "@testing-library/react";
+import { render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,6 +12,7 @@ import { TakeoffCaptures } from "../../../host/src/takeoff-captures";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { ActionReceipts, ActionReceiptView } from "./receipt";
 import { readScopedActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { peReadings } from "#/readings";
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 // This host harness has no browser SSE transport; Chrome verifies streamed progress.
 beforeEach(() => {
@@ -26,8 +27,22 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+const connectReceiptReadings = (owner: ActionJournal) =>
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind !== "receipts" || !request.id) throw Error("Expected one receipt subject");
+    return owner.observe(undefined, request.id, (result) =>
+      accept(
+        "error" in result
+          ? { kind: "failure", key: request.id!, error: result.error }
+          : { kind: "snapshot", key: request.id!, value: result.value },
+      ),
+    );
+  });
+
 test("real host receipt list remounts original controls without dispatch and isolates file/lifetime subjects", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-action-surface-"));
   const path = join(dir, "actions.json");
@@ -76,6 +91,7 @@ test("real host receipt list remounts original controls without dispatch and iso
   );
   const requests: { method: string; path: string }[] = [];
   let unavailable = false;
+  connectReceiptReadings(owner);
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input, "http://direct-host");
     requests.push({ method: init?.method ?? "GET", path: url.pathname });
@@ -157,10 +173,6 @@ test("real host receipt list remounts original controls without dispatch and iso
     expect(requests.every((r) => r.method === "GET")).toBe(true);
     release();
     await owner.wait("running-original");
-    // A mounted list holds what it read: only `watch` puts a receipt on the stream, and nothing
-    // here opens one. The subject changing is a remount, which is what this test is about.
-    cleanup();
-    render(view({ kind: "file", workspaceId: "settings:c" }, "running-original"));
     await screen.findByText(/Action running-original \/ unknown/, {}, { timeout: 4000 });
     expect(
       (screen.getByRole("button", { name: "recover native receipt" }) as HTMLButtonElement)
@@ -216,6 +228,8 @@ test("raw operation receipt labels a received reply and preserves its failed ite
   vi.stubGlobal("fetch", (input: string, init?: RequestInit) =>
     web.handler(new Request(new URL(input, "http://host"), init), Context.empty() as never),
   );
+  connectReceiptReadings(owner);
+  const dirty = vi.spyOn(peReadings, "dirty");
   try {
     render(<ActionReceiptView id="reply" />);
     await screen.findByText("Action reply / reply received");
@@ -225,9 +239,42 @@ test("raw operation receipt labels a received reply and preserves its failed ite
     expect(screen.getByLabelText("Returned operation payload").textContent).toContain(
       "parameter refused",
     );
+    fireEvent.click(screen.getByRole("button", { name: "read status" }));
+    await waitFor(() => expect(dirty).toHaveBeenCalledWith({ kind: "receipts", id: "reply" }));
   } finally {
     cleanup();
     await web.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("changing receipt id drops the prior subject before the new stream snapshot arrives", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "receipt-id-change-"));
+  const owner = new ActionJournal(join(dir, "actions.json"));
+  for (const id of ["first", "second"]) {
+    await owner.admit(
+      {
+        id,
+        kind: "operation",
+        key: "revit.apply.parameter-values",
+        actor: "human",
+        destination: { kind: "document", ref: { session: "B", openId: "original" } },
+        input: { edits: [] },
+        bases: {},
+      },
+      async () => ({}),
+      async () => ({ id }),
+    );
+    await owner.wait(id);
+  }
+  connectReceiptReadings(owner);
+  const mounted = render(<ActionReceiptView id="first" />);
+  try {
+    await screen.findByText("Action first / reply received");
+    mounted.rerender(<ActionReceiptView id="second" />);
+    expect(screen.queryByText(/Action first/)).toBeNull();
+    await screen.findByText("Action second / reply received");
+  } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });

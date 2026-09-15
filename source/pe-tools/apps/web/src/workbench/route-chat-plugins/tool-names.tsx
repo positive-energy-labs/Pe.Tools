@@ -182,7 +182,7 @@ export function RouteChatPluginView(props: RouteChatPluginViewProps) {
   )
     return (
       <InlineRoutePlugin title="Operation" action="original operation receipt">
-        <ActionReceiptView id={id} watch />
+        <ActionReceiptView id={id} />
         <Link to="/ops" search={{ thread: undefined, view: { actionId: id } }}>
           Open operation receipt
         </Link>
