@@ -1,66 +1,80 @@
-/**
- * The Schedule Grid route, declared once. Its three subjects are the one `schedule-grid-reading`
- * kind narrowed by `subject`: the schedule catalogue, the workspace's staged Work, and the saved
- * capture the staged cells are bound to. The three actions are the three the workspace already
- * had (`schedule-grid/workspace.tsx`'s `execute`), and the surface binds them to the live
- * workspace by re-deriving the manifest with `deps`. No seeds: this route reads Revit or nothing.
- */
 import { z } from "zod";
-import { scheduleGridRouteState, type ScheduleGridDocument } from "@pe/agent-contracts";
+import {
+  scheduleGridRouteState,
+  scheduleReadingSchema,
+  scheduleReads,
+  documentRefSchema,
+  type ActionStatus,
+  type ScheduleGridDocument,
+  type WorkKey,
+} from "@pe/agent-contracts";
 
-import { defineRoute, semanticActionFacts, type RouteManifest } from "#/route";
+import {
+  defineRoute,
+  semanticActionFacts,
+  semanticActionInputSchema,
+  type Ctx as RouteCtx,
+} from "#/route";
+import { previousOf } from "#/readings";
+import { readScheduleCapture } from "../../../../packages/mcps/src/shared/schedule-client";
+import {
+  actionResult,
+  runSemanticAction,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export type ScheduleGridReading = "catalog" | "work" | "saved";
+export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
+export type ScheduleGridAction = "catalog" | "refresh" | "push";
 
-/** What the Page holds: which workspace is open and which capture it last read. */
+/** Route-owned identity discovered by a schedule read. */
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
+  target: z.infer<typeof documentRefSchema> | null;
 }
 
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
+  target: documentRefSchema.nullable().default(null),
 });
 
-/** What the route needs from the live surface to run its actions. */
-export interface ScheduleGridRouteDeps {
-  workspaceId?: string;
-  captureId?: string;
-  /** Why a push is refused right now, as the workspace already computes it. */
-  blockedBecause?: string | null;
-  execute?: (
-    kind: "catalog" | "refresh" | "push",
-    input?: Record<string, unknown>,
-  ) => Promise<unknown>;
-}
+type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
 
-export type ScheduleGridAction = "catalog" | "refresh" | "push";
+const targetOf = (ctx: Ctx) => {
+  if (ctx.target.kind !== "document") throw Error("Select an exact available document lifetime");
+  return ctx.target.ref;
+};
 
-export const scheduleGridManifest = (
-  deps: ScheduleGridRouteDeps = {},
-): RouteManifest<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage, ScheduleGridAction> =>
+const statuses = (ctx: Ctx): ActionStatus[] =>
+  (previousOf(ctx.readings.receipts) as ActionStatus[] | undefined) ?? [];
+
+export const scheduleGridManifest = () =>
   defineRoute<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage, ScheduleGridAction>({
     key: "schedule-grid",
     name: "Schedule Grid",
     work: scheduleGridRouteState,
-    // One open project document at a time: a schedule address only exists under a bound document.
     needs: "project",
     readings: {
-      /** Every schedule the bound document offers. */
-      catalog: { kind: "schedule-grid-reading", subject: "catalog" },
-      /** The staged edits for the open workspace. */
-      work: {
+      catalog: {
         kind: "schedule-grid-reading",
-        subject: "work",
-        ...(deps.workspaceId ? { id: deps.workspaceId } : {}),
+        subject: "catalog",
+        target: { session: "", openId: "" },
       },
-      /** The immutable capture the staged cells were read from. */
-      saved: {
-        kind: "schedule-grid-reading",
-        subject: "saved",
-        ...(deps.captureId ? { id: deps.captureId } : {}),
-      },
+      work: (page: ScheduleGridPage) =>
+        page.workspaceId
+          ? { kind: "schedule-grid-reading", subject: "work", id: page.workspaceId }
+          : null,
+      saved: (page: ScheduleGridPage) =>
+        page.captureId
+          ? { kind: "schedule-grid-reading", subject: "saved", id: page.captureId }
+          : null,
+      receipts: (page: ScheduleGridPage) =>
+        page.workspaceId
+          ? {
+              kind: "receipts",
+              scope: { kind: "schedule-grid", workspaceId: page.workspaceId },
+            }
+          : null,
     },
     page: scheduleGridPage,
     actions: {
@@ -69,34 +83,69 @@ export const scheduleGridManifest = (
         says: "reads the bound document's schedule catalogue again",
         needs: "document",
         actor: "any",
-        input: z.void() as unknown as z.ZodType<never>,
+        input: scheduleReads["schedule-grid.catalog"].input as unknown as z.ZodType<never>,
         dirties: ["catalog"],
-        ready: () => (deps.execute ? null : "the schedule grid is not mounted"),
-        run: async () => {
-          await deps.execute?.("catalog", {});
-        },
+        ready: () => null,
+        run: async () => {},
       },
       refresh: {
         label: "read schedule",
         says: "reads the selected schedule from Revit into a fresh capture",
         needs: "document",
         actor: "any",
-        input: z.void() as unknown as z.ZodType<never>,
+        input: scheduleReads["schedule-grid.snapshot"].input as unknown as z.ZodType<never>,
         dirties: ["work", "saved"],
-        ready: () => (deps.execute ? null : "the schedule grid is not mounted"),
-        run: async () => {
-          await deps.execute?.("refresh", {});
+        ready: () => null,
+        run: async (ctx: Ctx, input: Record<string, unknown>) => {
+          const reading = scheduleReadingSchema.parse(
+            await readScheduleCapture("schedule-grid.snapshot", input, targetOf(ctx)),
+          );
+          ctx.setPage({
+            workspaceId: reading.workspaceId,
+            captureId: reading.id,
+            target: reading.target,
+          });
         },
       },
       push: {
         label: "push",
         ...semanticActionFacts("schedule-grid.apply"),
-        input: z.void() as unknown as z.ZodType<never>,
-        dirties: ["work", "saved"],
-        ready: () =>
-          deps.execute ? (deps.blockedBecause ?? null) : "the schedule grid is not mounted",
-        run: async () => {
-          await deps.execute?.("push", {});
+        input: semanticActionInputSchema("schedule-grid.apply") as never,
+        dirties: ["work", "saved", "receipts"],
+        requires: { work: true, readings: ["saved", "receipts"] },
+        ready: (ctx: Ctx) =>
+          statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
+            ? "Recover or resume the original receipt before a new apply"
+            : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
+              ? "Review the exact schedule binding first"
+              : null,
+        run: async (ctx: Ctx) => {
+          const result = actionResult(
+            await runSemanticAction("schedule-grid.apply", {}, targetOf(ctx), {
+              work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
+            }),
+          ) as {
+            readback?: unknown;
+            failures?: { key: string; error: string }[];
+            readbackError?: string;
+          };
+          if (result.readback) {
+            const reading = scheduleReadingSchema.parse(result.readback);
+            ctx.setPage({
+              workspaceId: reading.workspaceId,
+              captureId: reading.id,
+              target: reading.target,
+            });
+          }
+          if (result.failures?.length || result.readbackError)
+            throw Error(
+              [
+                ...(result.failures ?? []).map((failure) => `${failure.key}: ${failure.error}`),
+                result.readbackError,
+              ]
+                .filter(Boolean)
+                .join("; "),
+            );
         },
       },
     },

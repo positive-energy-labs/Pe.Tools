@@ -521,8 +521,8 @@ export function parseTarget(
 export function useRoute<W, R extends string, P, A extends string>(
   manifest: RouteManifest<W, R, P, A>,
   options: {
-    target?: string | null;
-    work?: string;
+    target?: string | null | ((page: P) => string | null);
+    work?: string | ((page: P, target: Address | null) => string | undefined);
     page?: Partial<P>;
     provided?: Partial<Record<R, Reading<unknown>>>;
   } = {},
@@ -550,7 +550,8 @@ export function useRoute<W, R extends string, P, A extends string>(
   const busy = useOwned(owner.registry, owner.busy) as { key: A; seconds: number } | null;
   const failure = useOwned(owner.registry, owner.failure);
   const log = useOwned(owner.registry, owner.log) ?? [];
-  const { target = null, work, provided } = options;
+  const { target: requestedTarget = null, work: requestedWork, provided } = options;
+  const target = typeof requestedTarget === "function" ? requestedTarget(page) : requestedTarget;
   const spec = manifest.work;
   const inventory = useMemo(
     () => (seed ? null : readingAtom({ kind: "inventory" }, peReadings)),
@@ -654,6 +655,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       ? (found.values.find((doc) => doc.openId === ref.openId)?.address ?? null)
       : null;
   }, [resolution, inventoryResult]);
+  const work =
+    typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
   const key: WorkKey = useMemo(
     () => ({
       route: manifest.key,
@@ -806,6 +809,10 @@ export function useRoute<W, R extends string, P, A extends string>(
     (next: Partial<P>) => setPageState((current) => ({ ...current, ...next })),
     [],
   );
+  const scopeKey = JSON.stringify([boundKey, key]);
+  const actionScope = useMemo(() => ({}), [scopeKey]);
+  const currentActionScope = useRef(actionScope);
+  currentActionScope.current = actionScope;
 
   // Page-log rows for the three events that are not verbs (Situation, 2026-09-13): the target
   // binding, the stage word and the Work revision. Each notes only when its value changes.
@@ -877,7 +884,9 @@ export function useRoute<W, R extends string, P, A extends string>(
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
-      setPage,
+      setPage: (next: Partial<P>) => {
+        if (currentActionScope.current === actionScope) setPage(next);
+      },
     };
     return Object.fromEntries(
       Object.entries(manifest.actions ?? {}).map((entry) => {
@@ -939,6 +948,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     owner,
     seed,
     key,
+    actionScope,
   ]);
 
   const workHandle = useMemo(
