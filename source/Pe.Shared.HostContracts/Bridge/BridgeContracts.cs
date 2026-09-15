@@ -6,7 +6,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    public const int ContractVersion = 20;
+    public const int ContractVersion = 22;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -19,6 +19,14 @@ public enum BridgeFrameKind {
     Event,
     Disconnect
 }
+
+public sealed record BridgeDocumentSnapshot(
+    string OpenId,
+    string Title,
+    string? Address,
+    bool IsFamilyDocument,
+    bool IsActive
+);
 
 public sealed record BridgeStateSnapshot(
     string RevitVersion,
@@ -35,7 +43,7 @@ public sealed record BridgeStateSnapshot(
     string? ActiveDocumentCloudModelUrn,
     long ActiveDocumentObservedAtUnixMs,
     string? SharedParametersFilename,
-    int OpenDocumentCount,
+    List<BridgeDocumentSnapshot> OpenDocuments,
     List<HostRuntimeAssemblyData> RuntimeAssemblies,
     List<HostModuleDescriptor> AvailableModules
 );
@@ -73,7 +81,8 @@ public sealed record BridgeStateSync(
 public sealed record BridgeRequest(
     string RequestId,
     string OperationKey,
-    string PayloadJson
+    string PayloadJson,
+    string? OpenDocumentId = null
 );
 
 public sealed record BridgeResponse(
@@ -83,7 +92,8 @@ public sealed record BridgeResponse(
     string? ErrorMessage,
     int? StatusCode,
     List<ValidationIssue>? Issues,
-    PerformanceMetrics Metrics
+    PerformanceMetrics Metrics,
+    string? OpenDocumentId = null
 );
 
 public sealed record BridgeEvent(

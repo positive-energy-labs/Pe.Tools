@@ -79,7 +79,9 @@ test("exports generic operation request and response typing", () => {
 
 test("exports TS-owned bridge session list schema", () => {
   const decoded = Schema.decodeUnknownSync(bridgeSessionsListSchema)({
-    sessions: [{ connected: true, openDocumentCount: 1, sessionId: "bridge-a" }],
+    sessions: [
+      { connected: true, openDocumentCount: 1, openDocuments: null, sessionId: "bridge-a" },
+    ],
   });
   expect(decoded.sessions[0]?.sessionId).toBe("bridge-a");
 });
@@ -134,7 +136,7 @@ test("keeps bridge session ids host-owned", () => {
       activeDocumentTitle: null,
       availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",

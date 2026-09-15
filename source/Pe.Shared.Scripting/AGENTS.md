@@ -29,6 +29,7 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 | ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | **policy rule**              | One syntax/analysis check that returns `ScriptDiagnostic` values                   | Prefer additive rules over hardcoded checks in the Revit adapter |
 | **host-owned transaction**   | The Revit transaction opened by the scripting host for `WriteTransaction` requests | Scripts must not create their own Revit transactions             |
+| **script-owned transaction** | A transaction opened by a script or called library in explicit `NoTransaction` mode | The script owns commit, rollback, and failure handling            |
 | **read-only script**         | Default permission mode; the Revit host rolls back and discards document changes   | Prefer this for host RPC joins, inspection, and artifacts        |
 | **write-transaction script** | Explicit opt-in mode where the host opens one transaction                          | Use only for intentional document mutations                      |
 
@@ -37,6 +38,6 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 - Keep this package Revit-neutral. Do not reference `Autodesk.Revit.*`, WPF, bridge transport, `UIApplication`, or Revit document/session helpers here.
 - Static policy is minimum viable safety, not a security proof. Return diagnostics instead of throwing so callers can surface actionable rejection messages.
 - Add future Revit-type-aware rules behind `IScriptPolicyRule`; do not couple those rules into `RevitScriptExecutionService` unless they need live Revit state.
-- `ReadOnly` is the default public contract. `WriteTransaction` is explicit and still rejects script-created `Transaction`, `SubTransaction`, and `TransactionGroup` instances.
+- `ReadOnly` is the default public contract. `WriteTransaction` is explicit and rejects script-created `Transaction`, `SubTransaction`, and `TransactionGroup` instances. `NoTransaction` explicitly permits script/library-owned transaction boundaries.
 - `pod.json` validation belongs here because it is Revit-neutral. Keep the v1 manifest strict: known fields only, slug ids, non-empty entrypoints, and safe `src/**/*.cs` paths.
 - Pod manifests describe shareable source entrypoints; they do not choose sandbox, transaction, or model-mutation permission. Execution requests still own `ScriptPermissionMode`.

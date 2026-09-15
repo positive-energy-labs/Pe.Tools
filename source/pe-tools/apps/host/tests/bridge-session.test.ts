@@ -1,6 +1,6 @@
+import { computeBridgeSessionId } from "@pe/host-contracts/contracts";
 import { expect, test } from "vite-plus/test";
 import {
-  computeBridgeSessionId,
   inferCustody,
   normalizeSessionLane,
   resolveSessionTarget,
@@ -39,20 +39,20 @@ const controlled = candidate({
   sdkSessionId: "scratch-a",
 });
 
-test("session id is a stable hash of pid + processStartUtc", () => {
-  const first = computeBridgeSessionId({
+test("session id is a stable hash of pid + processStartUtc", async () => {
+  const first = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
-  const again = computeBridgeSessionId({
+  const again = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
-  const otherStart = computeBridgeSessionId({
+  const otherStart = await computeBridgeSessionId({
     processId: 4242,
     processStartUtcUnixMs: 1_752_000_000_001,
   });
-  const otherPid = computeBridgeSessionId({
+  const otherPid = await computeBridgeSessionId({
     processId: 4243,
     processStartUtcUnixMs: 1_752_000_000_000,
   });
@@ -63,10 +63,10 @@ test("session id is a stable hash of pid + processStartUtc", () => {
   expect(otherPid).not.toBe(first);
 });
 
-test("session id is absent without process identity (uuid fallback stays)", () => {
-  expect(computeBridgeSessionId({ processId: 4242 })).toBeNull();
-  expect(computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: null })).toBeNull();
-  expect(computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: 0 })).toBeNull();
+test("session id is absent without process identity (uuid fallback stays)", async () => {
+  expect(await computeBridgeSessionId({ processId: 4242 })).toBeNull();
+  expect(await computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: null })).toBeNull();
+  expect(await computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: 0 })).toBeNull();
 });
 
 test("lane is the SDK union or nothing; a retired value is refused, not carried", () => {
@@ -192,7 +192,7 @@ test("doc:<Address> resolves the one holder, refuses none, and refuses two by na
   expect(two.message).not.toContain("session-solo");
 });
 
-test("pin:<id>|doc:<Address> wins while the pin holds the document, else the doc: rules run", () => {
+test("a missing document pin refuses even when another sole holder exists", () => {
   const a = candidate({
     sessionId: "s-a",
     processId: 1,
@@ -203,33 +203,16 @@ test("pin:<id>|doc:<Address> wins while the pin holds the document, else the doc
     sessionId: "s-b",
     processId: 2,
     sdkSessionId: "pe-b",
-    documents: ["C:A.rvt"],
-  });
-  const c = candidate({
-    sessionId: "s-c",
-    processId: 3,
-    sdkSessionId: "pe-c",
     documents: ["C:B.rvt"],
   });
-  // Two holders and the pin is one of them: the pin wins.
-  expect(resolveSessionTarget([a, b, c], "pin:pe-b|doc:C:A.rvt")).toEqual({
-    _tag: "found",
-    session: b,
-  });
-  // The pin moved on (c holds B, not A) and one other holds A: the holder wins, the pin is ignored.
-  expect(resolveSessionTarget([a, c], "pin:pe-c|doc:C:A.rvt")).toEqual({
+  expect(resolveSessionTarget([a, b], "pin:pe-a|doc:C:A.rvt")).toEqual({
     _tag: "found",
     session: a,
   });
-  // The pin moved on and two others hold A: ambiguous, naming the holders and not the pin.
-  const two = resolveSessionTarget([a, b, c], "pin:pe-c|doc:C:A.rvt");
-  expect(two).toMatchObject({ _tag: "error", statusCode: 409 });
-  if (two._tag !== "error") throw new Error("expected refusal");
-  expect(two.message).toContain("s-a");
-  expect(two.message).not.toContain("s-c");
-  // Nobody holds it: unheld, 404, whatever the pin says.
-  expect(resolveSessionTarget([c], "pin:pe-c|doc:C:A.rvt")).toMatchObject({
-    _tag: "error",
-    statusCode: 404,
-  });
+  for (const sessions of [[a, b], [a], [b], []])
+    expect(resolveSessionTarget(sessions, "pin:pe-b|doc:C:A.rvt")).toMatchObject({
+      _tag: "error",
+      statusCode: 409,
+    });
+  expect(resolveSessionTarget([a, b], "doc:C:A.rvt")).toEqual({ _tag: "found", session: a });
 });
