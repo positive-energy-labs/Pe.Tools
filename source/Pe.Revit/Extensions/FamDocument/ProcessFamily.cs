@@ -37,7 +37,11 @@ public static class FamilyDocumentProcessFamily {
         T result;
         try {
             result = RevitFailureScope.Execute(source,
-                accessor => PeToolsFailureHandling.RejectUnsafeFamilyCopyFailures(accessor, diagnostics), open);
+                accessor => PeToolsFailureHandling.RejectUnsafeFamilyCopyFailures(accessor, diagnostics), open,
+                failureDocument => failureDocument.IsFamilyDocument &&
+                                   string.IsNullOrEmpty(failureDocument.PathName) &&
+                                   string.Equals(failureDocument.Title, $"{family.Name}.rfa",
+                                       StringComparison.OrdinalIgnoreCase));
         } catch (Exception exception) when (diagnostics.Skip(firstDiagnostic).Any(diagnostic => diagnostic.IsError)) {
             throw new InvalidOperationException(
                 $"EditFamily refused '{family.Name}': {string.Join("; ", diagnostics.Skip(firstDiagnostic).Where(diagnostic => diagnostic.IsError).Select(error => error.Message))}", exception);

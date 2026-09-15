@@ -28,6 +28,8 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 
 ## Owed
 
+- At Family engine acceptance, port focused parameter plan capture with `DecisionFingerprint` (`7cc0706`) and exact electrical-connector plan identity that refuses approximate references (`881d393`, `a6ce060`) onto the `ba200ee` model. The behavior is preserved at local ref `refs/archive/wt-sweep-20260915/branch/family/electrical-connector-plan-capture`; compile passed there, but its prepared native tests never ran.
+- Prove natively that an `EditFamily` copy has an empty `PathName` and a `Title` equal to `{family.Name}.rfa`; the `HandleFamilyCopyFailures` document predicate depends on this identity.
 - Browser build reached durable action `f5b9f390-70aa-44c6-8ca6-2ff868e55ab1`; its exact SDK receipt proves a terminal 400 placement-parse failure, but beta.160 did not type that failure as pre-dispatch, so recovery conservatively retains `unknown`. Do not submit another build ID until a human explicitly retires that recovered uncertainty. Native build/open/rebind/plan/apply/re-plan acceptance therefore remains open.
 - Browser acceptance for Family delayed edits, pane remount, save and conflict recovery remains open. Shared-head summaries must use authored Settings Work, not the empty Family Work document.
 
