@@ -43,7 +43,7 @@ import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
 import { boundParam } from "#/family/world";
 import { Press } from "#/components/lang/press";
-import { FixtureViews } from "#/family/anatomy-fixture-views";
+import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
 
 export function AnatomyDrawing({
@@ -74,7 +74,7 @@ export function AnatomyDrawing({
 }) {
   const views =
     model == null ? (
-      <FixtureViews
+      <AnatomyViews
         world={world}
         draft={draft}
         typeName={typeName}

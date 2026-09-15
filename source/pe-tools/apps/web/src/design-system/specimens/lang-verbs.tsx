@@ -1,7 +1,7 @@
 import { RefreshCw, Save } from "lucide-react";
 
 import { Press, pressRecipe } from "#/components/lang/press";
-import { ActionButton, ActionGroup, verbRecipe } from "#/components/lang/action-button";
+import { ActionButton, ActionGroup, actionRecipe } from "#/components/lang/action-button";
 
 import { RecipeGrid } from "./recipe-grid";
 
@@ -28,7 +28,7 @@ export function LangPressSpecimens() {
       <RecipeGrid
         name="ActionButton · ActionGroup"
         importPath="#/components/lang/action-button"
-        recipe={verbRecipe}
+        recipe={actionRecipe}
         render={(props) => {
           const tone = props.tone as "act" | "commit" | "nav" | "agent";
           const verb =

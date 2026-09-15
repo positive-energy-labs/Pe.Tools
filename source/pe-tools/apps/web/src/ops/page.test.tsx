@@ -2,6 +2,12 @@
 import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { render, cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { expect, test, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -67,11 +73,19 @@ test("mounted host-only Ops runs raw input and observes same-ID completion over 
       request: { args: JSON.stringify({ path: dir }), mode: "raw", formValues: {} },
     },
   });
-  const mounted = render(
-    <RegistryContext.Provider value={registry}>
-      <OpsPage store={store} />
-    </RegistryContext.Provider>,
-  );
+  // The shell reads `?target=` through the router, so the page mounts inside a memory router.
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () => (
+        <RegistryContext.Provider value={registry}>
+          <OpsPage store={store} />
+        </RegistryContext.Provider>
+      ),
+    }),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  await router.load();
+  const mounted = render(<RouterProvider router={router} />);
   try {
     const input = await screen.findByRole("textbox", { name: "Operation request JSON" });
     expect((input as HTMLTextAreaElement).value).toBe(JSON.stringify({ path: dir }));
@@ -83,7 +97,9 @@ test("mounted host-only Ops runs raw input and observes same-ID completion over 
     await screen.findByText(`Action ${id} / running`);
     release();
     await screen.findByText(`Action ${id} / reply received`);
-    expect(screen.getByLabelText("Returned operation payload").textContent).toContain('"opened": true');
+    expect(screen.getByLabelText("Returned operation payload").textContent).toContain(
+      '"opened": true',
+    );
     expect(posts.filter((path) => path === "/actions")).toHaveLength(1);
     expect(posts.some((path) => path.includes("route-state"))).toBe(false);
     expect(

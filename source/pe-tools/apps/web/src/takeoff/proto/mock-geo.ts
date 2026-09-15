@@ -186,5 +186,5 @@ function joinGeometry(world: MockModel, takeoff: RhvacTakeoffData): GeoWorld {
   return { ...world, zones };
 }
 
-export const loadMockWorldGeo = async (): Promise<GeoWorld> =>
+export const loadMockGeo = async (): Promise<GeoWorld> =>
   joinGeometry(mockModel(), await loadFixtureTakeoff());

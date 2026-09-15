@@ -12,7 +12,7 @@ import { address } from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  BUILD_VERB,
+  BUILD_ACTION,
   type BuildFacts,
   buildOutputPath,
   buildPlanHash,
@@ -68,8 +68,8 @@ const buildManifest = (current = true) => {
   };
 };
 
-describe("build ActionHandles — prepare, review, commit", () => {
-  it("binds review identity, retains a refused review, and clears after seeded success", async () => {
+describe("build ActionHandles — declaration, and the seeded lane's read-only floor", () => {
+  it("declares document-needing actions and refuses every one of them under a frozen seed", async () => {
     const declared = buildManifest();
     expect(declared.needs).toBe("document");
     expect(declared.actions?.["prepare-build"].needs).toBe("document");
@@ -87,66 +87,24 @@ describe("build ActionHandles — prepare, review, commit", () => {
       work: { route: "family", target: null, work: "demo" },
     });
 
+    // `?demo=build` selects the manifest's build seed, and a seed is FROZEN: use-route refuses
+    // every action and every Work write before an action's own predicates are consulted. That
+    // read-only floor is the ruling (see takeoff/ownership.test.tsx), so the build ceremony's
+    // refusal ladder cannot be driven here — `buildRefusals` below owns it as pure functions.
     history.replaceState(null, "", "/family?demo=build");
-    const { result, rerender } = renderHook(
-      ({ current }: { current: boolean }) => useRoute(buildManifest(current), { work: "demo" }),
-      { initialProps: { current: true } },
-    );
+    const { result } = renderHook(() => useRoute(buildManifest(true), { work: "demo" }));
 
-    expect(result.current.actions.build.refusal).toBe("Review build first");
+    expect(result.current.demo).toBe(true);
+    expect(result.current.actions.build.refusal).toBe("frozen seed is read-only");
+    expect(result.current.actions["prepare-build"].refusal).toBe("frozen seed is read-only");
     await act(async () => {
-      expect(
-        await result.current.actions["prepare-build"].run({ reason: "release candidate" }),
-      ).toBeNull();
+      expect(await result.current.actions["prepare-build"].run({ reason: "rc" })).toMatchObject({
+        code: "not-ready",
+      });
     });
-    expect(result.current.page[0].buildReview).toMatchObject({
-      target: { session: "revit-a", openId: "family-a" },
-      workspaceId: "demo",
-      fileVersion: "fixture-native-v1",
-      reason: "release candidate",
-    });
-    expect(result.current.actions.build.refusal).toBeNull();
-
-    act(() =>
-      result.current.page[1]({
-        buildReview: {
-          ...result.current.page[0].buildReview!,
-          target: { session: "revit-a", openId: "family-b" },
-        },
-      }),
-    );
-    expect(result.current.actions.build.refusal).toBe("Review the current saved family profile");
-    await act(async () => {
-      expect(await result.current.actions.build.run()).toMatchObject({ code: "not-ready" });
-    });
-    expect(result.current.page[0].buildReview).not.toBeNull();
-
-    act(() =>
-      result.current.page[1]({
-        buildReview: {
-          ...result.current.page[0].buildReview!,
-          target: { session: "revit-a", openId: "family-a" },
-          documentId: {
-            ...result.current.page[0].buildReview!.documentId,
-            relativePath: "other.family.json",
-          },
-        },
-      }),
-    );
-    expect(result.current.actions.build.refusal).toBe("Review the current saved family profile");
-
-    rerender({ current: false });
-    expect(result.current.actions.build.refusal).toBe("Wait for current authored edits");
-    rerender({ current: true });
-    await act(async () => {
-      await result.current.actions["prepare-build"].run({ reason: "release candidate" });
-    });
-    expect(result.current.actions.build.refusal).toBeNull();
-    await act(async () => {
-      expect(await result.current.actions.build.run()).toBeNull();
-    });
-    expect(result.current.page[0].buildReview).toBeNull();
+    expect(result.current.page[0].buildReview ?? null).toBeNull();
     cleanup();
+    history.replaceState(null, "", "/");
   });
 });
 
@@ -357,7 +315,7 @@ describe("the arming preview — which family, from which document, to which .rf
   });
 
   it("the verb label is one constant, so the arming verb and the commit cannot drift apart", () => {
-    expect(BUILD_VERB).toBe("build .rfa");
+    expect(BUILD_ACTION).toBe("build .rfa");
   });
 });
 

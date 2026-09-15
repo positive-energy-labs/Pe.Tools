@@ -77,7 +77,8 @@ export function SettingsRouteContent(initial: Partial<ReturnType<typeof fileSear
 /** A file Reading's observation is its raw text. */
 function readingText(reading: Reading<unknown> | undefined): string | undefined {
   if (!reading) return undefined;
-  if (reading.state === "ready") return typeof reading.observation === "string" ? reading.observation : undefined;
+  if (reading.state === "ready")
+    return typeof reading.observation === "string" ? reading.observation : undefined;
   const previous = "previous" in reading ? reading.previous : undefined;
   return typeof previous === "string" ? previous : undefined;
 }
@@ -89,10 +90,7 @@ function SettingsWorkspace({
   scope: WorkKey;
   selectFile: (id: SettingsDocumentId) => Promise<void>;
 }) {
-  const routeManifest = useMemo(
-    () => settingsManifest({ scope, selectFile }),
-    [scope, selectFile],
-  );
+  const routeManifest = useMemo(() => settingsManifest({ scope, selectFile }), [scope, selectFile]);
   const handle = useRoute(routeManifest);
   const doc = handle.work.doc;
   const snapshot = useMemo(() => (doc ? settingsWorkSnapshot(doc) : null), [doc]);
@@ -265,8 +263,7 @@ function formObject(raw: string): Record<string, unknown> {
 const stage = (handle: Handle, path: string, value: unknown) =>
   handle.actions.stage.run({ path, value });
 
-const patchField = (handle: Handle, patches: RouteStatePatch[]) =>
-  void handle.work.write(patches);
+const patchField = (handle: Handle, patches: RouteStatePatch[]) => void handle.work.write(patches);
 
 interface FieldRowModel {
   path: string;
@@ -294,15 +291,7 @@ function buildFieldRows(
   }));
 }
 
-function FieldRow({
-  row,
-  busy,
-  handle,
-}: {
-  row: FieldRowModel;
-  busy: boolean;
-  handle: Handle;
-}) {
+function FieldRow({ row, busy, handle }: { row: FieldRowModel; busy: boolean; handle: Handle }) {
   const staged = row.field?.staged != null;
   const proposal = staged ? null : row.field?.proposal;
   const shown = staged ? row.field?.staged?.value : proposal ? proposal.value : row.current;

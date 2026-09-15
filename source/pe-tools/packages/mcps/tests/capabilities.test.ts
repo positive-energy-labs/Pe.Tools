@@ -152,6 +152,9 @@ const run = (tool: ExecutableTool, input: unknown, admitted = turn) =>
   );
 
 test("pe_find reads native capabilities under an exact-open turn Target", async () => {
+  // Name the host explicitly: without it `base()` discovers no running dev host for this
+  // worktree and throws before any fetch, so the URL under test is never built.
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
   const calls: URL[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
     calls.push(new URL(input instanceof Request ? input.url : String(input)));

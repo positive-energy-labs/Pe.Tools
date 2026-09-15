@@ -68,7 +68,6 @@ const draftFrom = (table: TableHandle): Draft => ({
   rows: table.rows.map((row) => ({ key: row.key, values: [...row.values] })),
 });
 
-
 function DataTablesFileRoute() {
   return <DataTablesRoute />;
 }
@@ -84,7 +83,7 @@ function LiveDataTablesRoute() {
       tables={detail.data?.tables ?? []}
       isLoading={detail.isLoading}
       isFetching={detail.pending}
-      onRefetch={async () => void detail.refresh()}
+      onRefetch={async () => detail.refresh()}
       onApply={async (draft) => {
         const result = await callHostRpc("revit.apply.schedule", {
           table: {

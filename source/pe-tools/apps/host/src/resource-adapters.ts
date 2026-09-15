@@ -6,7 +6,6 @@ import type { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
-import { actionWorkspace } from "./takeoff-actions.ts";
 import { observeSdkReading } from "./session-route.ts";
 
 /**
@@ -49,7 +48,6 @@ export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
   journal: () => ActionJournal = hostActionJournal,
   captures: () => TakeoffCaptures = hostTakeoffCaptures,
-  workspace = actionWorkspace,
   origin = "http://127.0.0.1",
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();

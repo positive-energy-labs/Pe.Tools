@@ -14,7 +14,7 @@ import {
 
 // ── the FIXTURE lane: the six known slugs, per-slug placement constants ─────────────────────────
 
-export function FixtureViews({
+export function AnatomyViews({
   world,
   draft,
   typeName,

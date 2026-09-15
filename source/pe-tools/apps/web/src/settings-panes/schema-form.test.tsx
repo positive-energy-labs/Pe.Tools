@@ -70,9 +70,7 @@ describe("SchemaToFieldRender over the seed model", () => {
       import("#/lib/schema-to-field-render/array-field"),
     ]);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no host in seed mode")));
-    render(
-      <Harness />,
-    );
+    render(<Harness />);
 
     // Labels come from the SCHEMA (x-ui hint ▸ title ▸ the property key), not from any
     // hand-rolled field list — so finding them IS the proof that the schema drove the render.
@@ -89,9 +87,7 @@ describe("SchemaToFieldRender over the seed model", () => {
 
   it("shows changed values against the raw document baseline", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no host in seed mode")));
-    render(
-      <Harness changed />,
-    );
+    render(<Harness changed />);
 
     expect(await screen.findByDisplayValue("changed")).toBeTruthy();
     expect(await screen.findByText("Changed")).toBeTruthy();

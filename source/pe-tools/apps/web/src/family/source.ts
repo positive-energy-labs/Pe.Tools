@@ -13,19 +13,19 @@ interface OpenFamilyDocument {
   relativePath: string;
   versionToken: string | null;
 }
-interface FamilyLane {
+interface FamilySource {
   world: FamilyPageModel;
   document: OpenFamilyDocument | null;
   drawingModel: FamilyModel | null;
   parseError: string | null;
   seedKey: string;
 }
-export function familyLane(
+export function familySource(
   snapshot: FamilySnapshot | null,
   evidence: EvidenceSlice | null,
   fields: Record<string, SettingsFieldState> = {},
   spec?: FamilyDocument["doc"],
-): FamilyLane {
+): FamilySource {
   const relativePath = snapshot?.documentId.relativePath ?? "";
   let projected: FamilyPageModel | null = null;
   let model: FamilyModel | null = null;

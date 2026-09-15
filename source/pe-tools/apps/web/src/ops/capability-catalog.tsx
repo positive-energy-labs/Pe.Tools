@@ -20,12 +20,16 @@ export function CapabilityCatalogSection({
   document?: Address | null;
 }) {
   const [query, setQuery] = useState("");
-  const live = useHostCall(async () => {
+  const live = useHostCall(
+    async () => {
       const search = document ? `?doc=${encodeURIComponent(document)}` : "";
       const response = await fetch(`/pe/capabilities${search}`);
       if (!response.ok) throw new Error(`GET /pe/capabilities ${response.status}`);
       return capabilityCatalogSchema.parse(await response.json());
-    }, ["pe", "capabilities", document ?? ""], !fixture);
+    },
+    ["pe", "capabilities", document ?? ""],
+    !fixture,
+  );
   const catalog = fixture ?? live.data;
   if (!catalog)
     return (

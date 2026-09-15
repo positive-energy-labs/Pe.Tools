@@ -32,7 +32,7 @@ import {
 } from "#/route";
 import { previousOf } from "#/readings";
 
-import { familyFixtures, type FamilyFixtureName } from "./authored-families";
+import { familyFixtures, type AuthoredFamilyName } from "./authored-families";
 import { FAMILY_MODULE } from "./host";
 import {
   actionResult,
@@ -248,7 +248,7 @@ const emptyInventory = { sessions: [] } satisfies {
 
 /** One seed per named fixture family; the raw authored JSON is the seed's `profile` Reading. */
 const familySeed = (
-  name: FamilyFixtureName,
+  name: AuthoredFamilyName,
   view: FamilyPage["view"],
 ): Seed<FamilyRouteDocument, FamilyReadingKey, FamilyPage> => ({
   title: `${name} — authored family fixture`,

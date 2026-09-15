@@ -21,7 +21,6 @@ import {
   type RouteDocOf,
   type RouteStatePatch,
   type RouteStateSpec,
-  type RouteStateWriteResult,
   type TargetResolution,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -52,6 +51,7 @@ import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import type { RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
+import { postRouteWrite } from "./host";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
 const targetHeaders = (target: ExecutionTarget) =>
@@ -129,6 +129,10 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
   const runtime = keep(Atom.runtime(Layer.empty));
   Reflect.set(runtime.layer, "keepAlive", false);
   const invalidate = keep(runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys)));
+
+  // One request id per unlanded gesture, held by the route owner: the writer is rebuilt on every
+  // remount and Work-key change, and a retry must reuse the id it already sent (route-doc replay).
+  const pendingRequestIds = new Map<string, string>();
 
   const busy = owned("action/busy", Atom.make<{ key: string; seconds: number } | null>(null));
   const failure = owned("action/failure", Atom.make<Refusal | null>(null));
@@ -254,6 +258,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     busy,
     failure,
     conflict,
+    pendingRequestIds,
     log,
     note,
     dispose() {
@@ -376,12 +381,14 @@ function docAtom<S extends RouteStateSpec<any>>(
 
 const notHydrated = refuse("not-ready", "route document is not hydrated");
 
-function docWriter<S extends RouteStateSpec<any>>(
+/** Exported for `use-route.test.ts`: the request-id map must outlive the writer. */
+export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   key: WorkKey,
   registry: AtomRegistry.AtomRegistry,
   slice: Atom.Atom<Reading<Slice<RouteDocOf<S>>>>,
-  conflict?: Atom.Writable<boolean>,
+  conflict: Atom.Writable<boolean> | undefined,
+  pendingRequestIds: Map<string, string>,
 ) {
   const send = async (
     operation: "apply" | "command",
@@ -389,13 +396,8 @@ function docWriter<S extends RouteStateSpec<any>>(
     onAccepted?: (revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
-      const response = await fetch(routeUrl(spec.route, operation, key), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
-      if (!result) return refuse("failed", `${operation} failed (${response.status})`);
+      const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
+      if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
       if (result.ok) onAccepted?.(result.revision);
       return writeRefusal(result);
@@ -403,7 +405,6 @@ function docWriter<S extends RouteStateSpec<any>>(
       return causeRefusal(cause);
     }
   };
-  const pendingRequestIds = new Map<string, string>();
   const writeRevision = (explicit?: number): number | null => {
     // An explicit revision is the caller's own declaration and the server arbitrates it: a queued
     // apply carries the revision its predecessor just landed, which the owner has not observed yet.
@@ -793,7 +794,10 @@ export function useRoute<W, R extends string, P, A extends string>(
   );
 
   const writer = useMemo(
-    () => (spec && slice ? docWriter(spec, key, owner.registry, slice, owner.conflict) : null),
+    () =>
+      spec && slice
+        ? docWriter(spec, key, owner.registry, slice, owner.conflict, owner.pendingRequestIds)
+        : null,
     [spec, slice, key, owner],
   );
   // Authored patches queue so two same-tick edits carry the first accepted revision into the

@@ -59,7 +59,7 @@ function readingWord(reading: Reading<unknown>, now: number): string {
 function Gap({ says }: { says: string }) {
   return (
     <span
-      className="border-b border-dashed border-line text-ink-mute"
+      className="hairline-b seam-border text-ink-mute"
       title={`the RouteHandle does not carry this — ${says}`}
     >
       not carried
@@ -268,7 +268,7 @@ function InspectorBody<W, R extends string, P, A extends string>({
             const subject =
               typeof request === "function"
                 ? "a page-dependent subject"
-                : request?.kind ?? "an undeclared subject";
+                : (request?.kind ?? "an undeclared subject");
             const word = readingWord(reading, now);
             return (
               <Row key={key} name={key} raw={{ request, reading }}>

@@ -25,12 +25,12 @@ import {
   YEARS,
   custodyVerdict,
   docSelectorOf,
-  findWorld,
+  findSession,
   parseUtc,
   phaseVerdict,
-  worldLabel,
-  worldSub,
-  worldTarget,
+  sessionLabel,
+  sessionSub,
+  sessionTarget,
 } from "#/instances/route";
 
 /**
@@ -205,7 +205,9 @@ export function InstancesCluster({
       })
     : null;
   const storedWorld =
-    stored?.kind === "open" ? findWorld(liveWorlds, sdkSessionTargetOf(stored.session)) : undefined;
+    stored?.kind === "open"
+      ? findSession(liveWorlds, sdkSessionTargetOf(stored.session))
+      : undefined;
   const staged: Staged | null = stored
     ? stored.kind === "start"
       ? { kind: "start", doc: storedDoc ?? undefined, year: stored.year.slice(-2) }
@@ -223,7 +225,7 @@ export function InstancesCluster({
             : next.kind === "open"
               ? {
                   kind: "open",
-                  session: sdkSessionSelectorOf(worldTarget(next.world)),
+                  session: sdkSessionSelectorOf(sessionTarget(next.world)),
                   document: next.doc.selector,
                 }
               : {
@@ -242,7 +244,7 @@ export function InstancesCluster({
   const [lastId, setLastId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const pickedWorld = findWorld(liveWorlds, target);
+  const pickedWorld = findSession(liveWorlds, target);
   const pickedYear = pickedWorld?.row?.year != null ? String(pickedWorld.row.year).slice(-2) : null;
   const worldYear = (world: Inventory) =>
     world.row?.year != null
@@ -258,7 +260,7 @@ export function InstancesCluster({
     .filter((document) => (yearPick ? document.year === yearPick : true));
   const stagedScope =
     staged?.kind === "open" && staged.doc.openIn.includes(staged.world.id)
-      ? documentScope(worldTarget(staged.world), staged.doc.id)
+      ? documentScope(sessionTarget(staged.world), staged.doc.id)
       : null;
 
   const runCommand = async (command: "start" | "open" | "restart" | "stop") => {
@@ -337,17 +339,17 @@ export function InstancesCluster({
       {
         key: "session",
         label: "session",
-        search: (world) => worldLabel(world).toLowerCase(),
-        sort: (world) => worldLabel(world),
-        cell: (world) => <StateCell scale="row" value={worldLabel(world)} />,
+        search: (world) => sessionLabel(world).toLowerCase(),
+        sort: (world) => sessionLabel(world),
+        cell: (world) => <StateCell scale="row" value={sessionLabel(world)} />,
       },
       { key: "custody", label: "custody", width: "w-28", verdict: custodyVerdict },
       { key: "phase", label: "phase", width: "w-32", verdict: phaseVerdict },
       {
         key: "detail",
         label: "lane · year · pid",
-        search: (world) => worldSub(world).toLowerCase(),
-        cell: (world) => <StateCell scale="row" value={worldSub(world)} />,
+        search: (world) => sessionSub(world).toLowerCase(),
+        cell: (world) => <StateCell scale="row" value={sessionSub(world)} />,
       },
       {
         key: "docs",
@@ -413,7 +415,7 @@ export function InstancesCluster({
                 ? document.openIn
                     .map((id) => {
                       const world = liveWorlds.find((candidate) => candidate.id === id);
-                      return world ? worldLabel(world) : id;
+                      return world ? sessionLabel(world) : id;
                     })
                     .join(" · ")
                 : "—"
@@ -486,7 +488,7 @@ export function InstancesCluster({
           searchPlaceholder="search sessions"
           activeKey={pickedWorld?.id}
           onRowClick={(world) => {
-            const id = worldTarget(world);
+            const id = sessionTarget(world);
             setTarget(target === id ? "" : id);
           }}
           empty={
@@ -507,7 +509,7 @@ export function InstancesCluster({
           rowKey={(document) => document.id}
           scopeLabel={
             pickedWorld
-              ? `documents openable in ${worldLabel(pickedWorld)}`
+              ? `documents openable in ${sessionLabel(pickedWorld)}`
               : "documents — pick a session explicitly, or stage a new session"
           }
           searchPlaceholder="search documents"
@@ -530,7 +532,7 @@ export function InstancesCluster({
             <span className="t-small face-mono text-ink-2">staged</span>
             <span className="t-prose text-ink">
               {staged.kind === "open"
-                ? `open ${staged.doc.title} in ${worldLabel(staged.world)}`
+                ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
                 : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
             </span>
             {staged.kind === "start" ? (
@@ -572,7 +574,7 @@ export function InstancesCluster({
         ) : pickedWorld ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="t-small face-mono text-ink-2">session</span>
-            <span className="t-prose text-ink">{worldLabel(pickedWorld)}</span>
+            <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
             <VerbButton
               tone="act"
               label="restart"

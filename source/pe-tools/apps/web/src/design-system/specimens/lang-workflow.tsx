@@ -29,7 +29,12 @@ export function LangWorkflowSpecimens() {
               </FactChip>
             }
             verb={
-              <ActionButton tone="commit" label="save profile" reason="Writes the profile" onClick={noop} />
+              <ActionButton
+                tone="commit"
+                label="save profile"
+                reason="Writes the profile"
+                onClick={noop}
+              />
             }
             seam={
               <FactChip dashed title="Fixture data; no document is connected.">

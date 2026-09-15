@@ -9,16 +9,16 @@ import { instancesManifest } from "#/instances/manifest";
 export const YEARS = ["24", "25", "26"];
 
 /** What a world is CALLED: the SDK session id when pe-revit knows it, else its own identity. */
-export const worldLabel = (world: Pick<Inventory, "custody" | "id" | "pid" | "session">) =>
+export const sessionLabel = (world: Pick<Inventory, "custody" | "id" | "pid" | "session">) =>
   world.session?.sdkSessionId ??
   (world.custody === "observed" ? `Revit ${world.pid ?? world.id}` : world.id);
 
 /** A world's `?target`: the session key the host matches a pin against, else its label. */
-export const worldTarget = (world: Inventory): string =>
-  world.session ? sessionKey(world.session) : worldLabel(world);
+export const sessionTarget = (world: Inventory): string =>
+  world.session ? sessionKey(world.session) : sessionLabel(world);
 
-export const findWorld = (worlds: readonly Inventory[], target: string) =>
-  worlds.find((world) => worldTarget(world) === target);
+export const findSession = (worlds: readonly Inventory[], target: string) =>
+  worlds.find((world) => sessionTarget(world) === target);
 
 /**
  * The SDK's `--doc` grammar for one MRU row: the local path, or the exact `cld://` identity when
@@ -38,7 +38,7 @@ export function parseUtc(iso: string | null | undefined): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-export function worldSub(world: Inventory): string {
+export function sessionSub(world: Inventory): string {
   return [world.lane, world.row?.year, world.pid ? `pid ${world.pid}` : undefined]
     .filter(Boolean)
     .join(" · ");

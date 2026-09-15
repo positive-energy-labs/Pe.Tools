@@ -14,8 +14,18 @@ describe("the settings route module", () => {
     // The old `?source=` branch is gone: an unknown search key is simply not part of the address.
     expect(settingsSearch({ source: "anything" })).not.toHaveProperty("source");
     expect(
-      settingsSearch({ mode: "file", module: "CmdScheduleManager", root: "schedules", file: "a.json" }),
-    ).toMatchObject({ mode: "file", module: "CmdScheduleManager", root: "schedules", file: "a.json" });
+      settingsSearch({
+        mode: "file",
+        module: "CmdScheduleManager",
+        root: "schedules",
+        file: "a.json",
+      }),
+    ).toMatchObject({
+      mode: "file",
+      module: "CmdScheduleManager",
+      root: "schedules",
+      file: "a.json",
+    });
   });
 
   it("exports one manifest whose seeds cover its actions", () => {

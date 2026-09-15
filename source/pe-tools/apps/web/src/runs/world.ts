@@ -758,7 +758,10 @@ export function comparableRuns(
 ): boolean {
   if (!a.documentKey && !b.documentKey) return true;
   return (
-    !!a.documentKey && a.documentKey === b.documentKey && !!a.targetKey && a.targetKey === b.targetKey
+    !!a.documentKey &&
+    a.documentKey === b.documentKey &&
+    !!a.targetKey &&
+    a.targetKey === b.targetKey
   );
 }
 

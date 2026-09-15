@@ -59,7 +59,12 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
           />
         </div>
         <CounterExample why="opening another surface is navigation, not a write">
-          <ActionButton tone="commit" label="open in RHVAC" onClick={noop} reason="Leaves Pe.Tools" />
+          <ActionButton
+            tone="commit"
+            label="open in RHVAC"
+            onClick={noop}
+            reason="Leaves Pe.Tools"
+          />
         </CounterExample>
       </Law>
 

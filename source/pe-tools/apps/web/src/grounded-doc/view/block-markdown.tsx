@@ -197,7 +197,7 @@ export function MarkdownPane({
     >
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
-          <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
+          <div key={page.page} ref={anchorRef(refs, pageKey(page.page))}>
             <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1">Page {page.page}</p>
             <div className="flex flex-col gap-1">
               {engine.blocksForPage(page.page).map((block) => (
@@ -211,7 +211,7 @@ export function MarkdownPane({
   );
 }
 
-export function laneAnchorRef(refs: React.RefObject<Map<string, HTMLElement>>, key: string) {
+export function anchorRef(refs: React.RefObject<Map<string, HTMLElement>>, key: string) {
   return (el: HTMLElement | null) => {
     if (el) refs.current.set(key, el);
     else refs.current.delete(key);

@@ -32,7 +32,7 @@ import {
   type EvidenceSlice,
   type FieldState,
 } from "#/family/host";
-import { familyLane } from "#/family/lane";
+import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { familyEditBuffer } from "./edit-buffer";
 import { draftToPatches } from "#/family/project";
@@ -159,7 +159,7 @@ export function useFamilyStore(options: {
   );
   const fields = (settingsDoc?.fields ?? {}) as Record<string, FieldState>;
   const authoredLane = useMemo(
-    () => familyLane(snapshot, null, fields),
+    () => familySource(snapshot, null, fields),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [snapshot, settingsDoc?.fields],
   );
@@ -283,7 +283,7 @@ export function useFamilyStore(options: {
     return address ? ((here(value, address) as EvidenceSlice | null) ?? null) : null;
   }, [familyDoc.evidence, sessions, target?.session]);
   const lane = useMemo(
-    () => familyLane(snapshot, evidence, fields, familyDoc.doc),
+    () => familySource(snapshot, evidence, fields, familyDoc.doc),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [snapshot, evidence, settingsDoc?.fields, familyDoc.doc],
   );
@@ -291,7 +291,7 @@ export function useFamilyStore(options: {
   const draft = useMemo(() => {
     if (editState.draft) return editState.draft;
     const projected = settingsDoc ? settingsWorkSnapshot(settingsDoc, true) : null;
-    return initialDraft(familyLane(projected, evidence).world);
+    return initialDraft(familySource(projected, evidence).world);
   }, [editState.draft, settingsDoc, evidence]);
   const reconciliation = { plan: familyDoc.plan, apply: familyDoc.apply };
   const profile = settingsDoc?.basis?.documentId?.relativePath ?? "";

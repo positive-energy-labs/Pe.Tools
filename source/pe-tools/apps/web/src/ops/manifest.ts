@@ -104,4 +104,3 @@ export const opsManifest = (
       { key: "result", label: "result", draws: () => null },
     ],
   });
-

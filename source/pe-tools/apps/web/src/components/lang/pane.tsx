@@ -115,7 +115,6 @@ export function Pane({
   }));
   useHotkeys(bound, { target: rootRef });
 
-
   useEffect(
     () => () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -268,8 +267,11 @@ export function Pane({
                         >
                           {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
                         </kbd>
-                        <span className="whitespace-nowrap">{shortcut.label}
-                          {shortcut.refusal ? <span className="text-ink-mute"> — {shortcut.refusal}</span> : null}
+                        <span className="whitespace-nowrap">
+                          {shortcut.label}
+                          {shortcut.refusal ? (
+                            <span className="text-ink-mute"> — {shortcut.refusal}</span>
+                          ) : null}
                         </span>
                       </div>
                     );

@@ -249,7 +249,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     // approve it when it does, and stop when the turn's final text is on the page.
     const driveTurn = async (prompt: string, finalText: string) => {
       await composer.fill(prompt);
-      await page.getByRole("button", { name: "Send message" }).click();
+      await page.getByRole("button", { name: "send", exact: true }).click();
       const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
         if ((await rows.allTextContents()).some((row: string) => row.includes(finalText))) {
@@ -271,7 +271,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     };
 
     await composer.fill("APPROVAL_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     const approvalRow = page.getByRole("region", { name: "Assistant message" }).last();
     const approve = approvalRow.getByRole("button", { name: "Approve" });
     await approve.waitFor({ timeout: 15_000 });
@@ -293,7 +293,7 @@ test("the browser walks one durable chat lifecycle", async () => {
       .toContain(`APPROVED:${approvalToolValue}`);
 
     await composer.fill("QUESTION_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
     await questionRow.getByRole("button", { name: "Approve" }).click();
     await waitForRowText(questionText);
@@ -387,7 +387,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     ).toBe(404);
 
     await composer.fill("ABORT_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     await waitForRowText(abortedText);
     await page.getByRole("button", { name: "Stop" }).click();
     await expect

@@ -4,7 +4,7 @@ import { ArmingStrip, type ArmingState } from "#/components/lang/arming-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 
 /** The commit label, shared by the verb that arms and the strip that commits. */
-export const BUILD_VERB = "build .rfa";
+export const BUILD_ACTION = "build .rfa";
 
 type BuildRefusalCode =
   | "no-document"
@@ -211,7 +211,7 @@ export function BuildStrip({
     return (
       <OutcomeLine
         kind="busy"
-        label={BUILD_VERB}
+        label={BUILD_ACTION}
         says={`opening ${facts.relativePath ?? "the document"} inside Revit and writing the .rfa — this write leaves the page, so nothing here can be undone by cancelling`}
       />
     );
@@ -229,7 +229,7 @@ export function BuildStrip({
 
   return (
     <ArmingStrip
-      verb={BUILD_VERB}
+      verb={BUILD_ACTION}
       target={buildTarget(facts, familyName)}
       count={count}
       planHash={buildPlanHash(armed.token)}

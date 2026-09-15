@@ -87,20 +87,22 @@ export function OperationPane({
         <div className="flex items-center justify-between">
           <h2 className="">Request</h2>
           <span className="flex gap-1">
-            {(operation.requestExamples ?? []).map((example: { json: string; name: string; description?: string }) => (
-              <Press
-                key={example.name}
-                size="caption"
-                tone="neutral"
-                title={example.description}
-                onClick={() => {
-                  setArgs(example.json);
-                  setFormValues(readFormSeed(example.json, schema));
-                }}
-              >
-                {example.name}
-              </Press>
-            ))}
+            {(operation.requestExamples ?? []).map(
+              (example: { json: string; name: string; description?: string }) => (
+                <Press
+                  key={example.name}
+                  size="caption"
+                  tone="neutral"
+                  title={example.description}
+                  onClick={() => {
+                    setArgs(example.json);
+                    setFormValues(readFormSeed(example.json, schema));
+                  }}
+                >
+                  {example.name}
+                </Press>
+              ),
+            )}
             {schema ? (
               <Press
                 size="caption"

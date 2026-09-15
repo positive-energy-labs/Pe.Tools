@@ -34,7 +34,7 @@ vi.mock("#/host/client", async (importOriginal) => {
 });
 vi.mock("#/lib/token", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/lib/token")>()),
-  token: () => "#000",
+  token: () => "currentColor",
 }));
 
 import { FamiliesRouteContent } from "#/routes/families";

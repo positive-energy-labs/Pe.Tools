@@ -108,5 +108,4 @@ export const manifest = defineRoute<
       },
     },
   } as never,
-  seeds: {} as never,
 });

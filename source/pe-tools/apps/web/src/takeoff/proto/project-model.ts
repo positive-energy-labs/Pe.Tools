@@ -60,7 +60,7 @@ const zone = (z: GeoZone | MockZone): ModelZone => ({
   driftSqft: z.driftSqft,
 });
 
-export const projectFixtureModel = (fixture: MockModel): TakeoffModel => ({
+export const projectMockModel = (fixture: MockModel): TakeoffModel => ({
   docName: fixture.docName,
   r10Path: fixture.r10Path,
   lanes: [...new Map(fixture.zones.map((z) => [z.zone.lane.view, z.zone.lane])).values()].map(

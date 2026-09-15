@@ -62,9 +62,9 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   const view = (review = false) => (
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
-          workspaceId={f.scope.work}
-          render={review ? (state) => <ScheduleGridReview state={state} /> : undefined}
-        />
+        workspaceId={f.scope.work}
+        render={review ? (state) => <ScheduleGridReview state={state} /> : undefined}
+      />
     </RegistryContext.Provider>
   );
   const mounted = render(view());

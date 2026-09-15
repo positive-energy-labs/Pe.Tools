@@ -39,7 +39,12 @@ export function CatalogueActions() {
       >
         <div className="flex flex-wrap gap-x-10 gap-y-5">
           <ActionGroup title="stays here" radius="page · document">
-            <ActionButton label="refresh" icon={RefreshCw} onClick={noop} reason="Re-reads the model" />
+            <ActionButton
+              label="refresh"
+              icon={RefreshCw}
+              onClick={noop}
+              reason="Re-reads the model"
+            />
             <ActionButton
               tone="agent"
               label="ask pea"
@@ -92,8 +97,8 @@ export function CatalogueActions() {
           <Press disabled>sync to .r10</Press>
         </CounterExample>
         <Gap>
-          ActionButton composes busy and disabled props, but both render as one inert state. A world action
-          cannot say that it is busy and independently refused.
+          ActionButton composes busy and disabled props, but both render as one inert state. A world
+          action cannot say that it is busy and independently refused.
         </Gap>
       </Demo>
     </>

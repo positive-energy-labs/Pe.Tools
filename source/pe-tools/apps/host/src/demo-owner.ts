@@ -584,7 +584,6 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       bridge,
       () => journal,
       () => captures,
-      () => work,
     );
     // A work reading key is the flattened WorkKey plus `kind`, so compare the Work key's own
     // fields, never the whole request object.

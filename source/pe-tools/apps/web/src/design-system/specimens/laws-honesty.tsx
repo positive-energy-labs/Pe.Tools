@@ -70,7 +70,12 @@ function CeremonyLaw({ owner }: { owner: string }) {
         />
       </div>
       <CounterExample why="the write has no visible target, reason, or plan identity">
-        <ActionButton tone="commit" label="apply to Revit" onClick={noop} reason="Writes to the model" />
+        <ActionButton
+          tone="commit"
+          label="apply to Revit"
+          onClick={noop}
+          reason="Writes to the model"
+        />
       </CounterExample>
       <Gap>
         ArmingStrip cannot show who armed it or how old the plan is because that identity does not

@@ -8,7 +8,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { firstRefusal, refuse, writeRefusal, REFUSAL_ORDER } from "./refusal";
-import { createRouteOwner, parseTarget } from "./use-route";
+import { createRouteOwner, docWriter, parseTarget } from "./use-route";
 
 test("a refusal set says the first reason in order, not the last one raised", () => {
   const chosen = firstRefusal([
@@ -83,4 +83,62 @@ test("a picker target preserves its exact session and open document; malformed i
   expect(parseTarget(JSON.stringify(request))).toEqual({ kind: "request", request });
   expect(parseTarget("ux-revival")).toEqual({ kind: "session", session: "ux-revival" });
   expect(parseTarget("{broken")).toEqual({ kind: "session", session: "{broken" });
+});
+
+test("a retry after a remount reuses the request id — the map lives on the owner, not the writer", async () => {
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  const key = { route: "test", target: null, work: "w" } as const;
+  const spec = {
+    route: "test",
+    commands: { push: { mutatesExternal: true } },
+  } as unknown as Parameters<typeof docWriter>[0];
+  const slice = Atom.make({
+    state: "ready",
+    observation: { revision: 2 },
+  }) as unknown as Parameters<typeof docWriter>[3];
+  const sent: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+    sent.push(JSON.parse(init.body).requestId);
+    // A lost response: the command never lands, so its id stays pending.
+    return { status: 503, json: async () => ({ ok: false, kind: "error", error: "no host" }) };
+  }) as never;
+  try {
+    await docWriter(spec, key, registry, slice, owner.conflict, owner.pendingRequestIds).command(
+      "push",
+      { n: 1 },
+    );
+    // The writer is rebuilt (remount or Work-key change); the owner is the same.
+    await docWriter(spec, key, registry, slice, owner.conflict, owner.pendingRequestIds).command(
+      "push",
+      { n: 1 },
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+  expect(sent).toHaveLength(2);
+  expect(sent[0]).toBe(sent[1]);
+  owner.dispose();
+});
+
+test("a duplicate request id is its own refusal, not a generic failure", () => {
+  expect(
+    writeRefusal({
+      ok: false,
+      kind: "error",
+      error: "id already used",
+      hint: "",
+      code: "request_id_conflict",
+    }),
+  ).toEqual({ code: "duplicate", message: "id already used" });
+  expect(
+    writeRefusal({
+      ok: false,
+      kind: "error",
+      error: "receipt gone",
+      hint: "",
+      code: "replay_unavailable",
+    })?.code,
+  ).toBe("unknown");
 });

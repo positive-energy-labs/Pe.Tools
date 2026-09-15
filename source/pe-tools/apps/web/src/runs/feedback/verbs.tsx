@@ -8,7 +8,7 @@ import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
 
-export function ExportVerbs(props: {
+export function ExportActions(props: {
   items: StagedItem[];
   pool: string | null;
   compact?: boolean;

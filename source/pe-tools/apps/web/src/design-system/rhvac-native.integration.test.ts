@@ -26,8 +26,12 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       const before = await readRhvacFixture(path);
       // The Takeoffs seeds are plain manifest data now; the demo map they used to live in is deleted.
       const seed = structuredClone(
-        (takeoffManifest.seeds as unknown as Record<string, { page: { zones: unknown[] }; readings: { snapshot: any } }>)
-          .sync!,
+        (
+          takeoffManifest.seeds as unknown as Record<
+            string,
+            { page: { zones: unknown[] }; readings: { snapshot: any } }
+          >
+        ).sync!,
       );
       seed.readings.snapshot.world.zones[0]!.tags = [before.systems[0]!.name];
       owner = await createDemoOwner(join(root, "owner"), seed);

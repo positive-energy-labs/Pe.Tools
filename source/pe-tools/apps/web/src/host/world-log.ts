@@ -71,7 +71,7 @@ function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEv
 /**
  * Broker-fed world history. Timestamps are host publish time, not tab observation time.
  */
-export function useWorldLog(sessions: SessionInventory[]): SessionEvent[] {
+export function useSessionLog(sessions: SessionInventory[]): SessionEvent[] {
   const revit = previousOf(useHostStatus())?.capabilities.revit === true;
   // Label enrichment only — the stream must not reopen on session-list churn.
   const sessionsRef = useRef(sessions);

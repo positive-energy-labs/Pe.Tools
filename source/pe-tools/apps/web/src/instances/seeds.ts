@@ -38,9 +38,7 @@ const controlledRow = (
   year,
   process: process(pid, year),
   bridge:
-    bridge === "ready"
-      ? { bridge, sessionDescriptor: `C:\\Demo\\${id}.session.json` }
-      : { bridge },
+    bridge === "ready" ? { bridge, sessionDescriptor: `C:\\Demo\\${id}.session.json` } : { bridge },
   detail: "demo review fact",
   observedAtUtc: observedAt,
   origin: "demo",
@@ -145,24 +143,26 @@ const emptyWork: InstancesDocument = { staged: null };
  * One seed per action key, total over them: `refresh` is the only route-level action, so the
  * whole demo lane is the moment just before the census is reacquired.
  */
-export const INSTANCES_SEEDS: Record<"refresh", Seed<InstancesDocument, InstancesReading, object>> =
-  {
-    refresh: {
-      title: "four Revits, two connected, nothing staged",
-      work: emptyWork,
-      readings: {
-        sessions: {
-          result: {
-            sessions: censusRows,
-            unreadableReceipts: [],
-            processReadErrors: [],
-            registryRoot: "C:\\Demo\\sessions",
-          },
+export const INSTANCES_SEEDS: Record<
+  "refresh",
+  Seed<InstancesDocument, InstancesReading, object>
+> = {
+  refresh: {
+    title: "four Revits, two connected, nothing staged",
+    work: emptyWork,
+    readings: {
+      sessions: {
+        result: {
+          sessions: censusRows,
+          unreadableReceipts: [],
+          processReadErrors: [],
+          registryRoot: "C:\\Demo\\sessions",
         },
-        inventory: { sessions: bridgeEntries },
-        doctor: { result: { revitYears: ["2024", "2025", "2026"] } },
-        recents: { result: { recents: recentRows } },
       },
-      page: {},
+      inventory: { sessions: bridgeEntries },
+      doctor: { result: { revitYears: ["2024", "2025", "2026"] } },
+      recents: { result: { recents: recentRows } },
     },
-  };
+    page: {},
+  },
+};

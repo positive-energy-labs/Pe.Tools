@@ -12,3 +12,18 @@ if (typeof document !== "undefined") {
     document.documentElement.style.setProperty(m[1], m[2].trim());
   }
 }
+
+/* Web suites import apps/host modules (resource-adapters, host-ownership) whose lane resolution
+ * refuses to guess: PE_LANE is the SDK-owned signal and an unset one is a launch-configuration
+ * bug. Tests are a source-lane run, so name the lane here rather than weakening the throw. */
+process.env.PE_LANE ??= "dev";
+
+/* jsdom has no EventSource. The route handle subscribes readings over SSE on mount, so a suite
+ * that never opens a stream still needs the constructor to exist. A suite that wants frames
+ * installs its own fake before import; `??=` lets it win. */
+class DeadSource {
+  close() {}
+  addEventListener() {}
+  removeEventListener() {}
+}
+(globalThis as { EventSource?: unknown }).EventSource ??= DeadSource;

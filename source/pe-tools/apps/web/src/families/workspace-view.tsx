@@ -58,7 +58,7 @@ function FamiliesHead() {
     <SituationCell io={store.page.stage === "review" ? "w" : "r"} empty={!applied}>
       {/* Read, not operable: no dotted mark. Dashed only while nothing is applied. */}
       <span
-        className={applied ? undefined : "border-b border-dashed border-current text-ink-2"}
+        className={applied ? undefined : "border-b seam-border border-current text-ink-2"}
         title={
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft below changes it`

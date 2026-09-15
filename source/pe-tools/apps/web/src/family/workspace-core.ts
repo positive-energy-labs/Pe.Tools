@@ -18,7 +18,7 @@ import type { ProtoProposal } from "#/family/world";
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;
   const stage = store.routeStage;
-  /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
+  /** WHICH SOURCE — the one question that separates them, asked once (see `#/family/source`). */
   const lane = store.lane;
   const world = lane.world;
   /**

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import type { FamilySnapshot } from "#/family/host";
-import { familyLane } from "#/family/lane";
+import { familySource } from "#/family/source";
 import { buildSheet, inches, type FamilyModel } from "#/family/family-model";
 import { initialDraft, rowAgreement } from "#/family/model";
 import { draftToPatches } from "#/family/project";
@@ -27,7 +27,7 @@ test("native fixtures project parameters without inventing fixture content and a
       "utf8",
     );
     const input = snapshot(raw);
-    const lane = familyLane(input, null);
+    const lane = familySource(input, null);
     expect(lane.parseError).toBeNull();
     expect(lane.world.params.length).toBe(Object.keys(JSON.parse(raw).parameters).length);
     expect(input.rawContent).toBe(raw);
@@ -46,7 +46,7 @@ test("native fixtures project parameters without inventing fixture content and a
 
 test("lane reads composition and uses fixtures only on explicit request", () => {
   const raw = '{"family":{"name":"Composed"},"parameters":{"$preset":"@local/_params/width"}}';
-  const lane = familyLane(
+  const lane = familySource(
     snapshot(
       raw,
       '{"family":{"name":"Composed"},"parameters":{"Width":{"dataType":"Length","value":24},"Enabled":{"dataType":"YesNo","value":false}}}',
@@ -65,8 +65,8 @@ test("lane reads composition and uses fixtures only on explicit request", () => 
       isInstance: false,
     }),
   ).toBe("unread");
-  expect(familyLane(null, null).world.params).toEqual([]);
-  expect(familyLane(snapshot("bad json"), null).world.params).toEqual([]);
+  expect(familySource(null, null).world.params).toEqual([]);
+  expect(familySource(snapshot("bad json"), null).world.params).toEqual([]);
 });
 
 test("native capture projects only read values and gates missing claims on coverage", () => {
@@ -87,12 +87,12 @@ test("native capture projects only read values and gates missing claims on cover
     modelJson:
       '{"parameters":{"Width":{},"Derived":{"formula":"Width * 2"}},"types":{"Standard":{"Width":12,"Derived":24}}}',
   };
-  const partial = familyLane(input, evidence).world.live!;
+  const partial = familySource(input, evidence).world.live!;
   expect(partial.values).toEqual({ Width: { Standard: { value: "12" } } });
   const parameterOnly = snapshot(
     '{"family":{"name":"Box"},"parameters":{"Width":{"value":"42in"}}}',
   );
-  const lane = familyLane(parameterOnly, {
+  const lane = familySource(parameterOnly, {
     ...evidence,
     modelJson: '{"parameters":{"Width":{}},"types":{"Standard":{"Width":"24in"},"Empty":{}}}',
   });
@@ -105,7 +105,8 @@ test("native capture projects only read values and gates missing claims on cover
   expect(JSON.parse(parameterOnly.rawContent).types).toBeUndefined();
   expect(partial.missingParams).toEqual([]);
   expect(
-    familyLane(input, { ...evidence, coverage: { parameters: "Read" } }).world.live?.missingParams,
+    familySource(input, { ...evidence, coverage: { parameters: "Read" } }).world.live
+      ?.missingParams,
   ).toEqual(["Missing"]);
 });
 
@@ -125,7 +126,7 @@ test("native capture without an authored file renders a read-only family lane", 
       observedAt: "2026-09-07T00:00:00Z",
     },
   };
-  const lane = familyLane(null, evidence);
+  const lane = familySource(null, evidence);
   expect(lane.document).toBeNull();
   expect(lane.world.params[0]?.name).toBe("Width");
   expect(lane.parseError).toBeNull();
@@ -152,7 +153,7 @@ test("native source geometry resolves macros and authored seeds without solving 
   expect(buildSheet(box, "Standard").solids[0]).toMatchObject({ slug: "body", w: 24, d: 8, h: 36 });
   expect(buildSheet(box, "Standard").conns[0]?.pos).toEqual({ x: 0, y: 0, z: 36 });
   expect(buildSheet(box, "Wide").solids[0]?.w).toBe(36);
-  const lane = familyLane(snapshot(JSON.stringify(box)), null);
+  const lane = familySource(snapshot(JSON.stringify(box)), null);
   const baseline = initialDraft(lane.world);
   const edit = structuredClone(baseline);
   edit.geom.body!.dims.width = "48in";
@@ -196,7 +197,7 @@ test("offline shared declarations survive native projection and unrelated value 
     parameters: patch.patch.parameters,
     types: { Standard: {} },
   });
-  const lane = familyLane(snapshot(raw), null);
+  const lane = familySource(snapshot(raw), null);
   const shared = lane.world.params.find((p) => p.name === "FF_Route_Proof_Count")!;
   expect(shared.dataType).toBe("autodesk.spec.aec:number-2.0.0");
   expect(shared.value).toBe("7");

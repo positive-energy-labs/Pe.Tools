@@ -6,4 +6,4 @@ import bath from "../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/c-bath-show
 import refline from "../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/d-bath-shower-refline.family.json?raw";
 
 export const familyFixtures = { box, grd, bath, refline };
-export type FamilyFixtureName = keyof typeof familyFixtures;
+export type AuthoredFamilyName = keyof typeof familyFixtures;

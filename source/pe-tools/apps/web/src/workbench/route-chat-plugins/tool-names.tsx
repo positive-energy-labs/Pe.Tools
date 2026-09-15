@@ -47,10 +47,11 @@ export interface RouteChatPluginProps {
   sessionState: unknown;
   running: boolean;
   active: boolean;
-  /** The thread's requested target; route-specific renderers resolve it through their manifest. */
+  /** The Target this call recorded, or null when the recorded result names none. Never the live
+   * thread target: a transcript card is an audit record of the turn that produced it. */
   target: string | null;
-  /** The thread head's revision; a command button pressed here runs under it. */
-  revision: number;
+  /** The revision the recorded result ran under; null when the result records none. */
+  revision: number | null;
 }
 
 export type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active" | "revision" | "target">;
@@ -58,6 +59,40 @@ export type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active" | "re
 export interface RouteChatPluginRegistration {
   spec: RouteStateSpec<z.ZodType>;
   Renderer: ComponentType<RouteChatPluginProps>;
+  /** The live workspace strip for the dock, where reading current Work is the point. Cards never
+   * use it. */
+  Live?: ComponentType<RouteChatPluginProps>;
+}
+
+/** What the turn recorded about where it ran: `{ target: { session, document }, revision }` as
+ * written by the pea tools (`packages/mcps/src/pea/capability-tools.ts`). A card reads only this. */
+export function recordedTarget(sessionState: unknown): {
+  target: string | null;
+  revision: number | null;
+} {
+  const outer =
+    isRecord(sessionState) && isRecord(sessionState.structuredContent)
+      ? sessionState.structuredContent
+      : sessionState;
+  const record = isRecord(outer) ? outer : undefined;
+  const target = isRecord(record?.target) ? record.target : undefined;
+  return {
+    target: typeof target?.document === "string" ? target.document : null,
+    revision: typeof record?.revision === "number" ? record.revision : null,
+  };
+}
+
+/** The route document the call recorded (route-state outcome: `{ ok, revision, doc }`). */
+function recordedRouteDoc<TSchema extends z.ZodType>(
+  sessionState: unknown,
+  spec: RouteStateSpec<TSchema>,
+): z.infer<TSchema> | null {
+  const outer =
+    isRecord(sessionState) && isRecord(sessionState.structuredContent)
+      ? sessionState.structuredContent
+      : sessionState;
+  const inner = isRecord(outer) && isRecord(outer.result) ? outer.result : outer;
+  return parseRouteDoc(isRecord(inner) ? inner.doc : null, spec);
 }
 
 export const routeChatPluginList: RouteChatPluginRegistration[] = [
@@ -66,6 +101,7 @@ export const routeChatPluginList: RouteChatPluginRegistration[] = [
   {
     spec: parameterLinksRouteState,
     Renderer: ParameterLinksChatPlugin,
+    Live: ParameterLinksLivePlugin,
   },
   {
     spec: settingsRouteState,
@@ -176,7 +212,7 @@ export function RouteChatPluginDock() {
   return (
     <div className="mt-3 space-y-2">
       {registrations.map((registration) => (
-        <ConnectedRouteChatPlugin
+        <LiveRouteChatPlugin
           key={registration.spec.route}
           registration={registration}
           toolCallId={`${registration.spec.route}-review-dock`}
@@ -191,14 +227,26 @@ export function RouteChatPluginDock() {
   );
 }
 
+/** A transcript card. Its Target and revision are the ones the call recorded; the live thread
+ * scope is deliberately not read here, because a receipt that moves is not a receipt. */
 export function ConnectedRouteChatPlugin({
+  registration,
+  ...props
+}: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
+  const Renderer = registration.Renderer;
+  const recorded = recordedTarget(props.sessionState);
+  return <Renderer {...props} target={recorded.target} revision={recorded.revision} />;
+}
+
+/** The dock's live workspace strip: here the current thread scope *is* the subject. */
+function LiveRouteChatPlugin({
   registration,
   ...props
 }: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
   const { currentThreadId } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId);
   if (!threadScope.hydrated) return null;
-  const Renderer = registration.Renderer;
+  const Renderer = registration.Live ?? registration.Renderer;
   return (
     <Renderer
       {...props}
@@ -210,7 +258,51 @@ export function ConnectedRouteChatPlugin({
   );
 }
 
+/** The Parameter Links card: authored draft as recorded, and nothing the turn did not record.
+ * Evaluation (projected writes, issues) lives in host readings, which the result does not carry. */
 export function ParameterLinksChatPlugin({
+  toolName,
+  args,
+  running,
+  sessionState,
+  target,
+  revision,
+}: RouteChatPluginProps) {
+  const document = recordedRouteDoc(sessionState, parameterLinksRouteState);
+  const profile = document?.draft ?? null;
+  return (
+    <InlineRoutePlugin
+      title={parameterLinksRouteState.title}
+      action={actionLabel(toolName, args, running)}
+      revision={revision ?? undefined}
+    >
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+        {document ? (
+          <>
+            <Metric value={profile?.definitions.length ?? 0} label="definitions" />
+            <Metric value={profile?.assignments.length ?? 0} label="assignments" />
+          </>
+        ) : (
+          <span className="t-small text-ink-2">draft not recorded</span>
+        )}
+        <span className="t-small face-mono text-ink-2 truncate" data-testid="plugin-target">
+          {target ?? "target not recorded"}
+        </span>
+
+        <Link
+          from="/chat"
+          className="ml-auto"
+          to="/chat"
+          search={(previous) => ({ ...previous, plugin: "parameter-links" })}
+        >
+          Open workspace
+        </Link>
+      </div>
+    </InlineRoutePlugin>
+  );
+}
+
+function ParameterLinksLivePlugin({
   toolName,
   args,
   running,
@@ -288,7 +380,7 @@ function InstancesChatPlugin({
     <InlineRoutePlugin
       title="Instances"
       action={actionLabel(toolName, args, running)}
-      revision={revision}
+      revision={revision ?? undefined}
     >
       <span>
         {staged

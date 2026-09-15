@@ -118,7 +118,6 @@ export function OpsPage({ store }: { store: OpsStore }) {
       }),
     [selected, session, openDocumentId, args, mode, formValues, requestSchema, store],
   );
-  const run = useRoute(manifest).actions.run;
 
   return (
     <>
@@ -150,21 +149,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
         className="p-4"
         headRail={
           <div className="mx-auto w-full max-w-5xl">
-            <RouteShell
-              manifest={manifest}
-              aside={
-                <Press
-                  type="button"
-                  tone="quiet"
-                  size="label"
-                  disabled={run.refusal !== null}
-                  title={run.refusal ?? run.says}
-                  onClick={() => void run.run()}
-                >
-                  Run
-                </Press>
-              }
-            >
+            <RouteShell manifest={manifest}>
               {result ? (
                 <OutcomeLine
                   kind="receipt"
@@ -221,7 +206,10 @@ export function OpsPage({ store }: { store: OpsStore }) {
                 setFormValues={store.actions.setFormValues}
               />
             ) : (
-              <EmptyState story="scope" exit="pick an operation; select Revit only when it needs it">
+              <EmptyState
+                story="scope"
+                exit="pick an operation; select Revit only when it needs it"
+              >
                 no operation selected
               </EmptyState>
             )}

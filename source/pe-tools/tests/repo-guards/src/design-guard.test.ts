@@ -1057,7 +1057,7 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/press",
   "#/components/lang/section",
   "#/components/lang/switcher",
-  "#/components/lang/verb",
+  "#/components/lang/action-button",
   "#/components/lang/card",
   "#/components/lang/combobox",
   "#/components/lang/command",

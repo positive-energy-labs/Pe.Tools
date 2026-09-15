@@ -342,7 +342,11 @@ test("same HTTP router separates production Work and two demo resource owners; r
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ seed: exportSeed(family()) }),
       })
-    ).json() as Promise<{ id: string; base: string; scope: { route: string; target: null; work: string } }>;
+    ).json() as Promise<{
+      id: string;
+      base: string;
+      scope: { route: string; target: null; work: string };
+    }>;
   const a = await create(),
     b = await create();
   const reading = async (base: string, requested: typeof scope) => {

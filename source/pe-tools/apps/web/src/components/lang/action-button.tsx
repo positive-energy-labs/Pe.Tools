@@ -43,7 +43,7 @@ import { tv } from "#/lib/tv";
 
 import "./lang.css";
 
-export const verbRecipe = tv({
+export const actionRecipe = tv({
   slots: {
     base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
     reason: "max-w-[36ch] self-center t-small face-mono text-ink-2 italic",
@@ -127,7 +127,7 @@ export function ActionButton(props: ActionButtonProps) {
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
   const chrome = useContext(VerbChromeContext);
-  const slots = verbRecipe({ tone });
+  const slots = actionRecipe({ tone });
 
   return (
     <>
@@ -173,7 +173,7 @@ export interface ActionGroupProps {
  * an `ArtifactFrame`. The group head is all the grouping it is allowed to buy.
  */
 export function ActionGroup({ title, radius, children }: ActionGroupProps) {
-  const slots = verbRecipe();
+  const slots = actionRecipe();
   return (
     <div className={slots.group()}>
       <div className={slots.groupHead()}>

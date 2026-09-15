@@ -1,29 +1,25 @@
 /**
- * THE SHELL — the one route chrome. Head (name + host lamp), Door (one control: resolution
- * recovery, keys, views, docs, dev inspector). It replaces `targeting/head.tsx`,
- * `targeting/cluster.tsx`, `workbench/route-workspace-shell.tsx` and `workbench/route-scope.tsx`.
+ * THE SHELL — the one route chrome: the chord bindings, and a head for a route that has not been
+ * cut over to a Situation yet (name, host lamp, verb row). The Situation (`situation.tsx`) is the
+ * one head; the shell draws none of its own when a route hands one in.
  *
  * The lamp is one `host-status` Reading at 5s (ruling Q5) and the route gate reads the same value.
  * Installer/update UI is NOT here — it moved to `routes/__root.tsx` (ruling Q3).
  */
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-
-import { InstancesPage } from "#/instances/route";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { StateDot } from "#/components/master-table/cells";
 import { useHostStatus } from "#/readings";
 
-import { RouteInspector } from "./inspector";
 import { RouteHelpButton } from "./help";
 import { RouteKeys } from "./keys";
 import type { RouteManifest } from "./manifest";
+import { SituationAction } from "./situation";
 import { useRoute, type RouteHandle } from "./use-route";
-import type { Refusal } from "./refusal";
 
 /* ── The lamp ──────────────────────────────────────────────────────────────── */
 
@@ -118,95 +114,25 @@ export function HostLamp({ live = true }: { live?: boolean }) {
   );
 }
 
-/* ── The door ──────────────────────────────────────────────────────────────── */
+/* ── The verb row ─────────────────────────────────────────────────────────── */
 
-const resolutionSentence = (handle: RouteHandle<any, any, any, any>): string | null => {
-  const { resolution } = handle;
-  if (resolution.kind === "resolved") return null;
-  if (resolution.kind === "checking") return "checking the target…";
-  if (resolution.kind === "failed") return resolution.message;
-  return `pick a target — ${resolution.reason.replaceAll("-", " ")}`;
-};
-
-/** One control. It opens the views, the chords, the route's docs and the dev inspector. */
-function Door<W, R extends string, P, A extends string>({
+/**
+ * The verbs of a route that has no Situation yet. Same buttons the Situation's verb row draws
+ * (`SituationAction`), so a refusal, a flag and an outcome paint identically in both heads — and
+ * so there is exactly one action surface in the app, not a shell copy of it.
+ */
+function ShellVerbs<W, R extends string, P, A extends string>({
   handle,
-  refusal,
 }: {
   handle: RouteHandle<W, R, P, A>;
-  refusal: Refusal | null;
 }) {
-  const [open, setOpen] = useState(false);
-  const sentence = resolutionSentence(handle);
-  const failure = refusal ?? handle.failure;
-  const outcome = handle.outcome;
+  const verbs = Object.entries(handle.actions) as [string, RouteHandle<W, R, P, A>["actions"][A]][];
+  if (!verbs.length) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <Press
-          type="button"
-          tone="quiet"
-          size="label"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-          title="what this route can do: its views, its chords, and what it is bound to"
-        >
-          <span className="face-mono">{open ? "▴" : "▾"}</span> {handle.manifest.name}
-        </Press>
-        {sentence ? <span className="t-small text-ink-2">{sentence}</span> : null}
-        {handle.busy ? (
-          <span className="t-small face-mono text-ink-mute">
-            {handle.busy.key} · {handle.busy.seconds}s
-          </span>
-        ) : null}
-        {/* ONE outcome line for both lanes. A refused chord and a refused click reach it by the
-            same path — `useRoute` keeps the refusal on the owner, not in a per-surface copy. */}
-        <span className="t-small text-ink-2" role="status" aria-label="Action outcome">
-          {failure
-            ? `${failure.code}: ${failure.message}`
-            : outcome
-              ? outcome.refusal
-                ? `${outcome.label} · ${outcome.refusal.message}`
-                : `${outcome.label} · ran`
-              : ""}
-        </span>
-      </div>
-      {open ? (
-        <div className="flex flex-col gap-2 border border-line p-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {Object.entries(handle.actions).map(([key, action]) => {
-              const value = action as RouteHandle<W, R, P, A>["actions"][A];
-              // A refused or busy action is `aria-disabled`, never `disabled`: the click must
-              // still reach `run`, because `run` is where the refusal sentence comes from, and
-              // that is the SAME path the chord takes. A `disabled` button would make the two
-              // surfaces disagree — the chord would speak and the button would be mute.
-              const stopped = value.refusal !== null || handle.busy !== null;
-              return (
-                <Press
-                  key={key}
-                  type="button"
-                  tone="quiet"
-                  size="label"
-                  state={stopped ? "disabled" : "rest"}
-                  aria-disabled={stopped}
-                  title={
-                    value.refusal ?? (handle.busy ? `${handle.busy.key} is running` : value.says)
-                  }
-                  onClick={() => void value.run()}
-                >
-                  {value.label}
-                  {value.chord ? <span className="face-mono"> {value.chord}</span> : null}
-                </Press>
-              );
-            })}
-          </div>
-          {(handle.manifest.views ?? []).map((view) => (
-            <div key={view.key}>{view.draws({ readings: handle.readings })}</div>
-          ))}
-          {handle.manifest.docs}
-          <RouteInspector handle={handle} />
-        </div>
-      ) : null}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {verbs.map(([name, action]) => (
+        <SituationAction key={name} handle={handle} name={name} action={action} />
+      ))}
     </div>
   );
 }
@@ -245,22 +171,6 @@ export function useChooseTarget(): [string | null, (target: string | null) => vo
   return [search.target ?? null, choose];
 }
 
-/** Explicit session management disclosure; unresolved targets keep their route head and body. */
-export function useEmptyBody<W, R extends string, P, A extends string>(
-  handle: RouteHandle<W, R, P, A>,
-): ReactNode | null {
-  const [target, choose] = useChooseTarget();
-  const [open, setOpen] = useState(false);
-  if (!handle.manifest.needs || handle.resolution.kind === "resolved") return null;
-  if (handle.manifest.key === "instances") return null;
-  return (
-    <details className="my-2 text-sm" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="cursor-pointer">Open a document or manage sessions</summary>
-      {open ? <InstancesPage shell={false} target={target ?? ""} setTarget={choose} /> : null}
-    </details>
-  );
-}
-
 export function RouteShell<W, R extends string, P, A extends string>(
   props: Omit<ShellProps<W, R, P, A>, "handle"> & { handle?: RouteHandle<W, R, P, A> },
 ) {
@@ -293,8 +203,6 @@ function BaselineShell<W, R extends string, P, A extends string>({
   live,
   children,
 }: ShellProps<W, R, P, A>) {
-  const [refusal, setRefusal] = useState<Refusal | null>(null);
-  const empty = useEmptyBody(handle);
   return (
     // The one landmark of the primitive. A route may override the printed head with its own word
     // (chat prints the thread's label), so the shell names itself with the MANIFEST's name: that
@@ -304,7 +212,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
       aria-label={`${manifest.name} route`}
       className={`flex ${children ? "h-full" : ""} min-h-0 min-w-0 flex-col gap-2`}
     >
-      <RouteKeys handle={handle} onRefusal={setRefusal} />
+      <RouteKeys handle={handle} />
       {situation ?? (
         <>
           <div className="flex min-w-0 items-center justify-between gap-4">
@@ -315,13 +223,10 @@ function BaselineShell<W, R extends string, P, A extends string>({
               <HostLamp live={live} />
             </span>
           </div>
-          {head ?? <Door handle={handle} refusal={refusal} />}
+          {head ?? <ShellVerbs handle={handle} />}
         </>
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {empty}
-        {children}
-      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
     </div>
   );
 }

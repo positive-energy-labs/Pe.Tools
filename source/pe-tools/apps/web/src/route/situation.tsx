@@ -1,25 +1,20 @@
 /**
  * THE SITUATION — the one route head (design-system ledger, 2026-09-13). The name line carries the
- * route's name and, on its right, the CLUSTER: the chain lamp, the state gauge, help and theme,
- * always together. Under it the board splits long-ways: the sentence and the verb row on the left,
- * the page log on the right; on a narrow screen it drops below. The ledger lives behind the gauge.
+ * route's name and, on its right, the CLUSTER: chain lamp, state gauge, help, theme. Under it the
+ * board splits long-ways: one sentence (the stage word, then the route's slots joined by the
+ * route's own words) and the verb row on the left, the page log on the right, dropping below on a
+ * narrow screen. The ledger lives behind the gauge. The verb row projects into a vertical view on
+ * its toggle, where each button says why it is refused (or what it does) and what it dispatches.
+ * Every verb's outcome grows out of its button as a flag; nothing else in the head moves. Under
+ * it: the staged Work band (count and noun, revision, read freshness, commit, discard; the route
+ * fills its body) and the unresolved band (lost write, conflicting writer, last refusal).
  *
- * One sentence: the stage word first, then the route's slots joined by the route's own words.
- * The verb row projects into a vertical view on its toggle, where each button says why it is
- * refused (or what it does) and what it dispatches and where. Every verb's outcome grows out of
- * its button as a flag; nothing else in the head moves. Staged Work is a band under the verb row:
- * this file owns its frame (count and noun, revision, read freshness, commit, discard, conflict
- * with reload) and the route fills its body.
- *
- * The head is an ARTIFACT: a machine-operated object that carries state, so it wears the kit's
- * one enclosure — the name line is the recessed head band, the board sits on artifact ground.
- * Four kinds of information, four marks: prose (what a verb does) in secondary ink; nouns the
- * machine knows (targets, Readings, actors) as fact chips; measured values (times, counts,
- * revisions) in mono; state words in their tone. Colour is spent only where meaning changes.
- *
- * The route declares verbs once (its manifest); this file only draws them. Geometry lives here,
- * marks come from the kit: dotted = operable, dashed = empty slot, caution = the world disagrees,
- * bold = unsaved, mono = measured.
+ * The head is an ARTIFACT — a machine-operated object that carries state — so it wears the kit's
+ * one enclosure: the name line is the recessed head band, the board sits on artifact ground. Four
+ * kinds of information, four marks: prose in secondary ink, nouns the machine knows as fact chips,
+ * measured values in mono, state words in their tone; colour is spent only where meaning changes.
+ * The route declares its verbs once (its manifest) and this file only draws them: dotted =
+ * operable, dashed = empty slot, caution = the world disagrees, bold = unsaved, mono = measured.
  */
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
@@ -63,8 +58,9 @@ export function SituationCell({
   );
 }
 
-const slotTrigger =
-  "cursor-pointer border-b border-dotted border-current data-[empty]:border-dashed data-[empty]:text-ink-2";
+const slotTrigger = "cursor-pointer border-b border-dotted border-current";
+/** An empty slot has nothing real behind it: the named seam role, never a raw dash. */
+const slotTriggerEmpty = `${slotTrigger} seam-border text-ink-2`;
 
 /** One slot picker: the trigger is the value, the popup is what the route puts inside. */
 export function SituationChoice({
@@ -78,7 +74,10 @@ export function SituationChoice({
 }) {
   return (
     <Popover.Root>
-      <Popover.Trigger className={slotTrigger} data-empty={empty || undefined}>
+      <Popover.Trigger
+        className={empty ? slotTriggerEmpty : slotTrigger}
+        data-empty={empty || undefined}
+      >
         {label}
       </Popover.Trigger>
       <Popover.Portal>
@@ -244,8 +243,8 @@ export function useDocumentLadder(
     : handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const [pending, setPending] = useState<string | null>(null);
-  const sessionId = pending ?? bound?.session ?? null;
+  const [chosenSession, chooseSession] = useState<string | null>(null);
+  const sessionId = chosenSession ?? bound?.session ?? null;
   const session = sessions.find((item) => item.sessionId === sessionId) ?? null;
   const doc = session?.openDocuments?.find((item) => item.openId === bound?.openId) ?? null;
   const note =
@@ -257,7 +256,7 @@ export function useDocumentLadder(
   const pick = (openId: string) => {
     if (!sessionId) return;
     onTarget?.();
-    setPending(null);
+    chooseSession(null);
     const ref = { session: sessionId, openId };
     if (binding) binding.bind(ref);
     else choose(JSON.stringify({ kind: "open", ref }));
@@ -278,7 +277,7 @@ export function useDocumentLadder(
         })),
         note: note ?? "no Revit answers the host",
         picked: (id: string) => id === sessionId,
-        pick: setPending,
+        pick: chooseSession,
       },
       {
         key: "document",
@@ -329,14 +328,10 @@ export function SituationAction({
     (outcome !== null &&
       dismissed !== outcome.at &&
       (outcome.refusal !== null || faded !== outcome.at));
-  const refusedNow =
-    outcome?.refusal !== null && outcome?.refusal !== undefined && dismissed !== outcome.at;
+  const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   return (
-    <Popover.Root
-      open={shown}
-      onOpenChange={(next) => !next && outcome && setDismissed(outcome.at)}
-    >
+    <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
       <Popover.Trigger
         render={
           <Press
@@ -348,11 +343,7 @@ export function SituationAction({
             data-tone={refusedNow ? "caution" : undefined}
             title={action.refusal ?? action.says}
             onClick={() => void action.run()}
-            style={{
-              fontWeight: commit ? 600 : undefined,
-              borderStyle: stopped ? "dashed" : undefined,
-              borderColor: refusedNow ? "var(--pe-caution)" : undefined,
-            }}
+            style={{ fontWeight: commit ? 600 : undefined }}
           >
             {action.label}
             {action.count !== null ? (
@@ -367,7 +358,6 @@ export function SituationAction({
             data-surface="artifact"
             data-tone={outcome?.refusal ? "caution" : undefined}
             className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
-            style={outcome?.refusal ? { borderColor: "var(--pe-caution)" } : undefined}
           >
             {busy ? (
               <span className="flex items-baseline gap-3">
@@ -638,6 +628,15 @@ export function Situation({
   const workWord = `${handle.work.revision === null ? "unwritten" : `r${handle.work.revision}`}${
     staged ? ` · ${nounOf(staged.count, staged.noun)} staged` : ""
   }${handle.work.conflict ? " · changed elsewhere" : ""}`;
+  // The band's own state, beside the verbs: a lost write (no further external effect until it is
+  // recovered), a conflicting writer, and the runner's last refusal when no verb flag says it (a
+  // Work write and a late result after a stop have no button to grow a flag from).
+  const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
+  const unresolved = [
+    handle.work.outcomeUnknown ? "last write unresolved, reload before acting" : null,
+    handle.work.conflict ? "another writer changed this Work; your last write did not land" : null,
+    late ? `${late.code}: ${late.message}` : null,
+  ].filter(Boolean);
   return (
     <section aria-label="Situation" className="flex min-w-0 flex-col">
       <ArtifactFrame
@@ -686,62 +685,62 @@ export function Situation({
             </p>
             <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
             {staged ? (
-              <div
-                className="hairline-t flex flex-col gap-1 py-1.5 t-prose"
-                data-tone={handle.work.conflict ? "caution" : undefined}
-              >
+              <div className="hairline-t flex flex-col gap-1 py-1.5 t-prose">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="w-[9rem]">
                     <Label>staged</Label>
                   </span>
                   <span>
                     <b className="font-semibold text-ink">{nounOf(staged.count, staged.noun)}</b>
-                    <span className="face-mono text-ink-mute">
-                      {handle.work.revision !== null ? ` r${handle.work.revision}` : " unwritten"}
-                      {staged.read ? ` · read ${staged.read}` : ""}
-                    </span>
+                    {staged.read ? (
+                      <span className="face-mono text-ink-mute"> · read {staged.read}</span>
+                    ) : null}
                   </span>
                   <span className="ml-auto flex items-baseline gap-2">
-                    {handle.work.conflict ? (
-                      <>
-                        <span>another writer changed this Work; your last write did not land</span>
-                        <Press frame="line" tone="quiet" size="value" onClick={handle.work.reload}>
-                          reload
-                        </Press>
-                      </>
-                    ) : (
-                      <>
-                        <Press
-                          frame="line"
-                          tone="quiet"
-                          size="value"
-                          state={handle.busy ? "disabled" : "rest"}
-                          disabled={handle.busy !== null}
-                          onClick={() => void staged.discard()}
-                        >
-                          discard
-                        </Press>
-                        {commitAction ? (
-                          // The same verb as the row's; its flag grows from the row button, not here.
-                          <Press
-                            frame="line"
-                            tone="neutral"
-                            size="value"
-                            state={
-                              commitAction.refusal !== null || handle.busy ? "disabled" : "rest"
-                            }
-                            disabled={commitAction.refusal !== null || handle.busy !== null}
-                            title={commitAction.refusal ?? commitAction.says}
-                            onClick={() => void commitAction.run()}
-                          >
-                            {commitAction.label}
-                          </Press>
-                        ) : null}
-                      </>
-                    )}
+                    <Press
+                      frame="line"
+                      tone="quiet"
+                      size="value"
+                      state={handle.busy ? "disabled" : "rest"}
+                      disabled={handle.busy !== null}
+                      onClick={() => void staged.discard()}
+                    >
+                      discard
+                    </Press>
+                    {commitAction ? (
+                      // The same verb as the row's; its flag grows from the row button, not here.
+                      <Press
+                        frame="line"
+                        tone="neutral"
+                        size="value"
+                        state={commitAction.refusal !== null || handle.busy ? "disabled" : "rest"}
+                        disabled={commitAction.refusal !== null || handle.busy !== null}
+                        title={commitAction.refusal ?? commitAction.says}
+                        onClick={() => void commitAction.run()}
+                      >
+                        {commitAction.label}
+                      </Press>
+                    ) : null}
                   </span>
                 </div>
                 {staged.body}
+              </div>
+            ) : null}
+            {unresolved.length ? (
+              <div
+                className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"
+                data-tone="caution"
+                role="status"
+              >
+                <span className="w-[9rem]">
+                  <Label>unresolved</Label>
+                </span>
+                <span>{unresolved.join(" · ")}</span>
+                {handle.work.conflict || handle.work.outcomeUnknown ? (
+                  <Press frame="line" tone="quiet" size="value" onClick={handle.work.reload}>
+                    reload
+                  </Press>
+                ) : null}
               </div>
             ) : null}
             {band}

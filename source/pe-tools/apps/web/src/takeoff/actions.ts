@@ -31,7 +31,7 @@ import { applyEdit, readZoneMeta } from "./world";
 type Ctx = RouteCtx<TakeoffsRouteDocument, TakeoffReadingKey, TakeoffPage>;
 import type { Seed } from "@pe/agent-contracts";
 
-import { projectFixtureModel } from "./proto/project-model";
+import { projectMockModel } from "./proto/project-model";
 import { mockModel } from "./proto/mock";
 
 const syncReviewSchema = z.object({
@@ -101,7 +101,7 @@ const DEMO_INVENTORY = {
     },
   ],
 } as const;
-const model: TakeoffModel = projectFixtureModel(mockModel());
+const model: TakeoffModel = projectMockModel(mockModel());
 
 const snapshotOf = (world: TakeoffModel, observedAt: string): TakeoffSnapshot => ({
   reading: { at: FIXTURE_AT, version: null, observedAt },

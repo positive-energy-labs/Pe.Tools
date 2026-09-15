@@ -44,7 +44,9 @@ describe("the settings manifest", () => {
       );
     // `open` is the one action that runs with no Work: it is what creates the basis.
     expect(actions.open.ready(ctx(empty), undefined as never)).toBe("pick a settings file first");
-    expect(actions.open.ready(ctx(empty, { filePath: "MechEquip/TEST.json" }), undefined as never)).toBeNull();
+    expect(
+      actions.open.ready(ctx(empty, { filePath: "MechEquip/TEST.json" }), undefined as never),
+    ).toBeNull();
   });
 
   it("lets each seed run its own action, and names the human ones", () => {

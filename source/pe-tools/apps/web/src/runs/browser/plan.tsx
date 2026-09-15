@@ -63,7 +63,14 @@ export function PlanPane(props: {
       {
         hotkey: "Escape",
         callback: () => setSelection(null),
-        options: { meta: keyMeta({ name: "clear selection", description: "drop the selected element", tier: "widget", region: "plan" }) },
+        options: {
+          meta: keyMeta({
+            name: "clear selection",
+            description: "drop the selected element",
+            tier: "widget",
+            region: "plan",
+          }),
+        },
       },
     ],
     { target: hostRef },

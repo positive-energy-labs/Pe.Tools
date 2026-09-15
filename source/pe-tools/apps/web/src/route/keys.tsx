@@ -8,7 +8,6 @@ import { useMemo, useRef } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 
 import type { RouteHandle } from "./use-route";
-import type { Refusal } from "./refusal";
 
 /** What `options.meta` carries on every registration. `region` is a pane id, absent on a manifest chord. */
 export interface KeyMeta {
@@ -26,23 +25,20 @@ export const keyMeta = (meta: KeyMeta): KeyMeta => meta;
 export const readKeyMeta = (meta: unknown): KeyMeta | null =>
   meta && typeof meta === "object" && "tier" in meta ? (meta as KeyMeta) : null;
 
-/** Binds every declared chord; a refused chord still fires and the refusal is surfaced. */
+/** Binds every declared chord; a refused chord still fires and the handle records the refusal. */
 export function RouteKeys<W, R extends string, P, A extends string>({
   handle,
-  onRefusal,
 }: {
   handle: RouteHandle<W, R, P, A>;
-  onRefusal?: (refusal: Refusal) => void;
 }) {
   // `useHotkeys` re-registers whenever the definition array changes identity, and registering
   // notifies the hotkey store, which re-renders — a fresh array per render is an infinite loop.
   // The definitions are therefore memoised on a string of (name, chord, refusal) and read the live
-  // handle and the live `onRefusal` through refs, so a callback is stable but never stale. The
-  // refusal is in the key so the registration's meta — what help shows — tracks `ready()`.
+  // handle through a ref, so a callback is stable but never stale. The refusal is in the key so
+  // the registration's meta — what help shows — tracks `ready()`. A refused chord lands in the
+  // handle's `outcome` exactly like a refused button; nothing here reports it a second time.
   const latest = useRef(handle);
   latest.current = handle;
-  const refusalRef = useRef(onRefusal);
-  refusalRef.current = onRefusal;
   const names = (Object.keys(handle.actions) as A[]).filter(
     (name) => handle.actions[name].chord !== undefined,
   );
@@ -56,9 +52,7 @@ export function RouteKeys<W, R extends string, P, A extends string>({
         return {
           hotkey: hotkey as UseHotkeyDefinition["hotkey"],
           callback: () => {
-            void latest.current.actions[name].run().then((refused) => {
-              if (refused) refusalRef.current?.(refused);
-            });
+            void latest.current.actions[name].run();
           },
           options: {
             ignoreInputs: true,

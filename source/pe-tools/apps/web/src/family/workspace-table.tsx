@@ -5,7 +5,7 @@ import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { Pane } from "#/components/lang/pane";
-import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
+import { BuildStrip, BUILD_ACTION, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { cn } from "#/lib/utils";
@@ -293,7 +293,7 @@ export function FamilyWorkspaceTable() {
               }
             />
             <ActionButton
-              label={BUILD_VERB}
+              label={BUILD_ACTION}
               tone="commit"
               busy={building}
               disabled={lane.document == null || building || prepareBuildRefusal != null}

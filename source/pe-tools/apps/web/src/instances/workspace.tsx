@@ -4,7 +4,7 @@ import { StateCell } from "#/components/lang/cell";
 import { Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import type { useFleet } from "#/readings";
-import { useWorldLog } from "#/host/world-log";
+import { useSessionLog } from "#/host/world-log";
 import { timeAgo } from "#/lib/utils";
 import { RouteShell } from "#/route";
 import { Press } from "#/components/lang/press";
@@ -33,7 +33,7 @@ export function InstancesWorkspace({
   fleet: InstancesFleet;
   shell?: boolean;
 }) {
-  const worldLog = useWorldLog(fleet.sessions);
+  const worldLog = useSessionLog(fleet.sessions);
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const ledger = [

@@ -89,7 +89,12 @@ function ArmingCatalogue() {
         />
       </div>
       <CounterExample why="a commit ActionButton alone hides the reason, target, plan identity, and refusal path">
-        <ActionButton tone="commit" label="apply to Revit" onClick={noop} reason="Writes 42 parameters" />
+        <ActionButton
+          tone="commit"
+          label="apply to Revit"
+          onClick={noop}
+          reason="Writes 42 parameters"
+        />
       </CounterExample>
       <Gap>
         the component has no armed-at or armed-by identity. It must say that the plan age is unknown

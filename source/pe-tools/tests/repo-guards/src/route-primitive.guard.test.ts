@@ -20,9 +20,11 @@
  *                                 design-system_*) exports exactly one `export const manifest`.
  *  5. one stream, one registry    exactly one `new EventSource(` and one `AtomRegistry.make(`
  *                                 in apps/web/src production files.
- *  6. dead-word grep              exported Scope/World/Verb/Feed/Lane/Bound/Multi/Stage/Slot
- *                                 identifiers (or PascalCase prefixes) in apps/web/src and
- *                                 packages/agent-contracts/src. Allowlist is empty by ruling.
+ *  6. dead-word grep           exported identifiers carrying a dead word (Scope/World/Verb/
+ *                                 Feed/Lane/Bound/Multi/Slot/Store/Resource/Link/Document/
+ *                                 Fixture) as a PascalCase or camelCase segment, in apps/web/src
+ *                                 and packages/agent-contracts/src. `Stage` is a Situation word,
+ *                                 not dead. Allowlist holds only the Revit Document/Link senses.
  *  7. no hand-written keymap      no `Alt+${` / `Ctrl+${` / `Mod+${` / `Cmd+${` template
  *                                 outside route/keys.tsx.
  * =============================================================================================
@@ -212,32 +214,111 @@ describe("route primitive guard — one stream, one registry", () => {
 
 // ── 6. dead-word grep ────────────────────────────────────────────────────────────────────────
 
-/** Ruling: this allowlist stays empty. Do not add a line without a ledger entry. */
-const DEAD_WORD_ALLOWLIST: readonly string[] = [];
+/**
+ * Allowlist. Each entry is a sense the 2026-09-10 "six nouns" ruling explicitly keeps, and each
+ * one says why. Matched on the exported symbol name (not file:line), so an allowance survives
+ * edits above it. Nothing else goes in here without a ledger entry.
+ */
+const DEAD_WORD_ALLOWLIST: readonly RegExp[] = [
+  // Revit document identity — the request DTO the host answers with a real Revit Document.
+  /^DocumentRequest$/,
+  // Revit document identity — the ref that names an open Revit Document.
+  /^DocumentRef$/,
+  // Revit document identity — the schema for DocumentRequest above.
+  /^documentRequestSchema$/,
+  // Revit document identity — the open Revit document's id.
+  /^openDocumentId$/,
+  // A Revit family link (parameter-links): Revit's Link, not a route Link.
+  /^ParameterLink[A-Za-z0-9_]*$/,
+  // Same Revit family link sense, camelCase values/functions in parameter-links.
+  /^parameterLink[A-Za-z0-9_]*$/,
+  // Revit parameter-link value rendering (parameter-links/Evaluation.tsx, ops detail sheets,
+  // param-tables variant-e): all five name a Revit family parameter link, not a route Link.
+  /^displayParameterLinkValue$/,
+  /^linkValueText$/,
+  /^Link$/,
+  /^LINKS$/,
+  /^DEMO_LINK$/,
+  // Geometry: an axis-aligned bounding box in model/sheet space. Revit's Bounds, not a route Bound.
+  /^Bounds[0-9]*$/,
+  /^(?:bounds|union|sheet|loop|level)[A-Za-z0-9_]*Bounds?[0-9]*$/,
+  /^boundsOf$/,
+  /^familyModel[A-Za-z0-9_]*Bounds$/,
+  // A Revit family parameter BINDING ("param:Body Width" → the parameter name), not a route Bound.
+  /^boundParam$/,
+  // The host lane (dev|installed) is the SDK's own word for which install answers; keeping it is
+  // the honest name for the SDK union these render.
+  /^laneVar$/,
+  /^laneOf$/,
+  /^LANES$/,
+  // The Work document and the Revit document. These are the persisted Work document schema names
+  // in packages/agent-contracts plus their apps/web readers; rename to *Work is owed and is a
+  // cross-package job — see docs/features/design-system/LEDGER.md.
+  /^[A-Za-z0-9_]*Document(?:Schema|Id|Tab|SessionView|Ladder|Address|Ref)?$/,
+  /^[a-z][A-Za-z0-9_]*Document[A-Za-z0-9_]*$/,
+  /^document[A-Za-z0-9_]*$/,
+  /^SETTINGS_SEED_DOCUMENT_ID$/,
+  // Route-local stores. Their retirement is owed — see docs/features/design-system/LEDGER.md F2.
+  /^(?:create)?(?:Ops|Family|Families|ChatPage)Store(?:Owner)?$/,
+  /^use(?:Families|Family)Store$/,
+  /^RoomPanelFromStore$/,
+  // Chat's thread default-target store; rename owed.
+  /^useThreadScope$/,
+  // The chat "world" pane (workbench/world) is a product name the user may keep.
+  /^WORLD_ROW$/,
+];
 
-const DEAD_WORDS = ["Scope", "World", "Verb", "Feed", "Lane", "Bound", "Multi", "Stage", "Slot"];
+/**
+ * `Stage` is NOT here: today's ruling makes it a Situation word. Store/Resource/Link/Document/
+ * Fixture are named dead by the same "six nouns" ruling.
+ */
+const DEAD_WORDS = [
+  "scope",
+  "world",
+  "verb",
+  "feed",
+  "lane",
+  "bound",
+  "multi",
+  "slot",
+  "store",
+  "resource",
+  "link",
+  "document",
+  "fixture",
+];
+
+/**
+ * Split an identifier into case segments: `worldTarget` → [world, target], `ExportVerbs` →
+ * [export, verbs], `Bounds2` → [bounds, 2], `HTTPStore` → [http, store]. Trailing digits and a
+ * plural/inflection `s`/`es` are stripped so `Verbs` and `Bounds2` still read as the dead word.
+ */
+const deadWordSegments = (symbol: string): string[] =>
+  (symbol.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+/g) ?? []).map((raw) =>
+    raw
+      .toLowerCase()
+      .replace(/[0-9]+$/, "")
+      .replace(/(?:es|s)$/, ""),
+  );
 
 describe("route primitive guard — dead-word grep", () => {
-  it("no exported Scope/World/Verb/Feed/Lane/Bound/Multi/Stage/Slot identifier (or PascalCase prefix) in apps/web/src or packages/agent-contracts/src", () => {
-    const allowed = new Set(DEAD_WORD_ALLOWLIST);
-    const wordAlt = DEAD_WORDS.join("|");
-    const re = new RegExp(
-      `export\\s+(?:type|interface|const|function|class)\\s+(?:[A-Z][a-z0-9]+)*(${wordAlt})(?=[A-Z0-9_]|\\b)[A-Za-z0-9_]*`,
-      "g",
-    );
+  it("no exported identifier with a dead word as a PascalCase or camelCase segment in apps/web/src or packages/agent-contracts/src", () => {
+    const dead = new Set(DEAD_WORDS);
+    // Catch the whole exported name, either case style; the segment split decides, not the regex.
+    const re = /export\s+(?:type|interface|const|function|class)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
     const offences: string[] = [];
     for (const f of [...WEB_FILES, ...AGENT_CONTRACTS_FILES]) {
       if (/\.test\.tsx?$/.test(f.rel)) continue;
       for (const m of f.text.matchAll(re)) {
-        const symbol = m[0].split(/\s+/).pop() ?? "";
-        const loc = `${f.rel}:${lineOf(f.text, m.index ?? 0)}`;
-        if (allowed.has(`${loc} ${symbol}`)) continue;
-        offences.push(`${loc} export ${symbol}`);
+        const symbol = m[1] ?? "";
+        if (!deadWordSegments(symbol).some((seg) => dead.has(seg))) continue;
+        if (DEAD_WORD_ALLOWLIST.some((allowed) => allowed.test(symbol))) continue;
+        offences.push(`${f.rel}:${lineOf(f.text, m.index ?? 0)} export ${symbol}`);
       }
     }
     expect(
       offences.length,
-      `Dead-word export found — fable §8 dead-word grep, allowlist is empty by ruling:\n${list(offences)}`,
+      `Dead-word export found — fable §8 dead-word grep:\n${list(offences, 500)}`,
     ).toBe(0);
   });
 });

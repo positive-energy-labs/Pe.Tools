@@ -15,8 +15,7 @@ export const scheduleReadingSchema = z.object({
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
 export const scheduleActions = {
   "schedule-grid.apply": {
-    says:
-      "Apply reviewed staged Schedule Grid cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
+    says: "Apply reviewed staged Schedule Grid cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
     needs: "project-document",
     actor: "human",
     dirties: ["schedule-grid"],
@@ -36,8 +35,7 @@ export const scheduleReads = {
     input: z.object({}),
   },
   "schedule-grid.snapshot": {
-    says:
-      "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedule-grid with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
+    says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedule-grid with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
     dirties: [], // TODO(fold-1): name the Readings this action invalidates
     needs: "project-document",
     actor: "any",
@@ -50,8 +48,7 @@ export const scheduleReads = {
     }),
   },
   "schedule-grid.work": {
-    says:
-      "Read the latest retained schedule reading for a subject Work address. This is dated evidence, not a fresh native read.",
+    says: "Read the latest retained schedule reading for a subject Work address. This is dated evidence, not a fresh native read.",
     dirties: [], // TODO(fold-1): name the Readings this action invalidates
     needs: "nothing",
     actor: "any",

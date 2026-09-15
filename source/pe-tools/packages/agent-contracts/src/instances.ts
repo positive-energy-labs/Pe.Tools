@@ -51,8 +51,7 @@ const workInput = z.object({ workspaceId: z.string().min(1) });
 const sessionInput = workInput.extend({ session: instancesSessionSchema });
 export const instancesActions = {
   "instances.start": {
-    says:
-      "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
+    says: "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "any",
@@ -61,8 +60,7 @@ export const instancesActions = {
       "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
   },
   "instances.open": {
-    says:
-      "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
+    says: "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "any",
@@ -87,8 +85,7 @@ export const instancesActions = {
     description: "Stop the explicitly supplied session incarnation. Human-only.",
   },
   "instances.close": {
-    says:
-      "Close the explicitly supplied document lifetime by its published openId. Human-only.",
+    says: "Close the explicitly supplied document lifetime by its published openId. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
@@ -100,8 +97,7 @@ export const instancesActions = {
 export type InstancesActionKey = keyof typeof instancesActions;
 
 export const instancesReading = {
-  says:
-    "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
+  says: "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
   dirties: [],
   needs: "nothing",
   actor: "any",

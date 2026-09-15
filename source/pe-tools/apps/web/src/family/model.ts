@@ -5,7 +5,7 @@
  * `FamilyPageModel` plus the page's `Draft`, so a verb that changes the draft visibly changes every
  * reading in the same beat — SURFACE-PHILOSOPHY §1, "compute agreement; do not remember it".
  *
- * THE WORLD IS A FACTORY ARGUMENT, NOT A MODULE CONSTANT (phase B, 2026-08-17). This layer used
+ * THE SPEC IS A FACTORY ARGUMENT, NOT A MODULE CONSTANT (phase B, 2026-08-17). This layer used
  * to read `world.ts` at module scope, which made the fixture the only thing the page could ever
  * render. `buildFamilyPageModel` now takes any `FamilySpecModel` and returns everything those constants
  * carried, so the surface has exactly two lanes and one derivation:
@@ -18,7 +18,7 @@
  */
 import type { MasterTableState, VerdictTone } from "#/components/master-table/model";
 import {
-  WORLD,
+  FAMILY_SPEC,
   boundParam,
   type GeomConstituent,
   type ProtoLive,
@@ -135,7 +135,7 @@ export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
 
 /** THE DECLARED FIXTURE LANE. Built once, because `world.ts` never changes at runtime — the page
  * renders this when no family document is open, and says so with its dashed seam chip. */
-export const EMPTY_FAMILY_MODEL: FamilyPageModel = buildFamilyPageModel(WORLD);
+export const EMPTY_FAMILY_MODEL: FamilyPageModel = buildFamilyPageModel(FAMILY_SPEC);
 
 /** "core-bore" + "stub.depth" → "Core Bore Stub Depth". The name a new parameter INHERITS from the
  * property it was lifted out of — a promoted literal should arrive already saying where it came

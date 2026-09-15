@@ -201,12 +201,10 @@ for (const { path, manifest } of ROUTES)
             timeout: 30_000,
           })
           .toBeGreaterThan(0);
-        // The door is the one control; the actions live behind it.
-        await page
-          .getByRole("button", { name: new RegExp(`${manifest.name}$`) })
-          .first()
-          .click();
-        const outcome = page.getByLabel("Action outcome").first();
+        // The verbs stand in the head itself — the Door that used to hide them is gone, and so is
+        // the single "Action outcome" status line: an outcome now paints as the verb's own
+        // popover, portalled to the body, which is why the receipt is read from the body text.
+        const outcome = page.locator("body");
         const button = page.getByRole("button", { name: new RegExp(`^${declared.label}`) }).first();
         await button.waitFor({ timeout: 15_000 });
 

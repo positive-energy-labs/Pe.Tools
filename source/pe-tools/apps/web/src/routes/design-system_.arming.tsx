@@ -133,7 +133,11 @@ function ArmingRoute() {
                 {replanned ? " (re-planned)" : ""}
               </Tag>
               {reason.trim().length === 0 ? null : (
-                <ActionButton label="reset" onClick={reset} reason="Back to unarmed on the original plan" />
+                <ActionButton
+                  label="reset"
+                  onClick={reset}
+                  reason="Back to unarmed on the original plan"
+                />
               )}
             </div>
 

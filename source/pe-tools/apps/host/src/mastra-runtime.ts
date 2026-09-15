@@ -137,7 +137,6 @@ export function makeMastraRuntimeLive(
         Option.getOrUndefined(bridge),
         undefined,
         undefined,
-        undefined,
         hostBaseUrl,
       );
 
