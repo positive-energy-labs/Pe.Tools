@@ -23,15 +23,16 @@ function findPool(): string {
   const override = process.env.PE_TAKEOFF_RUNS_DIR;
   if (override) return override;
   let dir = process.cwd();
+  let root = dir;
   for (let i = 0; i < 8; i++) {
-    if (existsSync(path.join(dir, ".git")) || existsSync(path.join(dir, ".artifacts"))) {
-      return path.join(dir, ".artifacts", "takeoff-runs");
+    if (existsSync(path.join(dir, ".git"))) {
+      root = dir; // Prefer the outer checkout over the nested pe-tools repository.
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return path.join(process.cwd(), ".artifacts", "takeoff-runs");
+  return path.join(root, ".artifacts", "takeoff-runs");
 }
 
 type ExportPayload = {

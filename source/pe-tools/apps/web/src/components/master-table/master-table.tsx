@@ -146,7 +146,14 @@ export function MasterTable<Row extends RowData>({
       const headerRows = Array.from(thead.rows);
       if (headerRows.length === 0) return;
       const base = headerRows[0]!.getBoundingClientRect().top;
-      setRowTops(headerRows.map((row) => row.getBoundingClientRect().top - base));
+      const next = headerRows.map((row) => row.getBoundingClientRect().top - base);
+      // FOOTGUN: a caller that rebuilds `columns` every render re-runs this effect every render;
+      // setting a fresh array each time is "Maximum update depth exceeded". Set only on change.
+      setRowTops((previous) =>
+        previous.length === next.length && previous.every((top, i) => top === next[i])
+          ? previous
+          : next,
+      );
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;

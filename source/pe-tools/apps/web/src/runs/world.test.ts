@@ -5,6 +5,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   classesPathForSeals,
+  boardSummary,
+  comparableRuns,
+  difference,
   modalZoneCount,
   pairZones,
   parseReplaySeedInk,
@@ -120,6 +123,46 @@ function zone(over: Partial<ZoneRecord>): ZoneRecord {
 function report(zones: ZoneRecord[]): RunReport {
   return { Zones: zones } as RunReport;
 }
+
+it("keeps a failed capture unknown, preserves zero, and refuses cross-document pairing", () => {
+  const failed = zone({
+    Zone: "Main#09",
+    zoneKey: "same-zone",
+    AcceptedRooms: null,
+    AcceptedSqft: null,
+    HeldSqft: null,
+    triage: { verdict: "error", reason: "overlap" },
+  });
+  const current = {
+    ...report([failed]),
+    documentKey: "project-a",
+    targetKey: "scope",
+    RejectionHistogram: {},
+  };
+  const board = boardSummary(current);
+  expect(board).toMatchObject({
+    errors: 1,
+    solved: 0,
+    acceptedRooms: null,
+    acceptedSqft: null,
+    heldSqft: null,
+  });
+  expect(difference(null, 0)).toBeNull();
+  expect(difference(0, 0)).toBe(0);
+  const other = { ...current, documentKey: "project-c" };
+  expect(comparableRuns(current, other)).toBe(false);
+  expect(pairZones(current, other)[0]?.a).toBeNull();
+  expect(comparableRuns(current, { ...current })).toBe(true);
+  expect(comparableRuns(current, { ...current, targetKey: "another-loop" })).toBe(false);
+  expect(parseZoneTsv("ROOM\tR01\t0\t0\t1\t1\t\theld").rooms[0]).toMatchObject({
+    sqft: 0,
+    ceil: null,
+    disposition: "held",
+  });
+  expect(
+    scoreBoards({ metricSchemaVersion: 4, board: { axes: {} } } as unknown as RunScores),
+  ).toEqual({ v11: null, v1: null });
+});
 
 describe("pairZones", () => {
   it("pairs on the stable key when both packages carry it — reorderings and renames survive", () => {

@@ -7,8 +7,8 @@ import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
-import { Verb } from "#/components/lang/verb";
-import { FC_UNITS } from "#/param-tables/variants/fixture";
+import { ActionButton } from "#/components/lang/action-button";
+import { FC_UNITS } from "#/param-tables/variants/data";
 import type {
   FactKey,
   Facts,
@@ -273,7 +273,7 @@ export function VariantE() {
           </>
         }
         verb={
-          <Verb
+          <ActionButton
             tone="commit"
             label="Apply staged writes"
             onClick={apply}

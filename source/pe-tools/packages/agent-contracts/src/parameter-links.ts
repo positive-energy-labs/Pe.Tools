@@ -1,7 +1,16 @@
 import { z } from "zod";
 
-import { parameterIdentitySchema } from "./family-types.ts";
+export const parameterIdentitySchema = z.object({
+  key: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  builtInParameterId: z.number().nullish(),
+  sharedGuid: z.string().nullish(),
+  parameterElementId: z.number().nullish(),
+});
+export type ParameterIdentity = z.infer<typeof parameterIdentitySchema>;
 import type { RouteStateSpec } from "./route-state.ts";
+import { canonicalRouteInput } from "./route-doc.ts";
 
 const parameterLinkParameterIdentitySchema = parameterIdentitySchema.extend({
   kind: z.enum(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]),
@@ -110,44 +119,37 @@ export const parameterLinksDataSchema = z.object({
 });
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
+/** The Parameter Links document is the authored draft and nothing else. */
 export const parameterLinksDocumentSchema = z.object({
-  profile: parameterLinkProfileSchema.nullish().default(null),
-  draftProfile: parameterLinkProfileSchema.nullish().default(null),
-  evaluation: parameterLinkEvaluationSchema.nullish().default(null),
-  status: parameterLinksRuntimeStatusSchema.nullish().default(null),
-  profileChanged: z.boolean().default(false),
-  appliedWriteCount: z.number().int().default(0),
+  draft: parameterLinkProfileSchema.nullish().default(null),
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
+
+/** The exact draft an observation was taken against. Identical on the client and the server. */
+export const parameterLinksBasis = (work: ParameterLinksDocument): string =>
+  canonicalRouteInput(work.draft ?? null);
+
+/** A host reading, stored by the capture owner: what Revit holds and what the draft would do. */
+export const parameterLinksReadingSchema = z.object({
+  basis: z.string().min(1),
+  workRevision: z.number().int().nonnegative(),
+  /** `stored` observes Revit; `evaluation` observes the authored draft named by `basis`. */
+  evaluated: z.boolean(),
+  stored: parameterLinkProfileSchema.nullish().default(null),
+  status: parameterLinksRuntimeStatusSchema,
+  evaluation: parameterLinkEvaluationSchema.nullish().default(null),
+  profileChanged: z.boolean(),
+  appliedWriteCount: z.number().int(),
+});
+export type ParameterLinksReading = z.infer<typeof parameterLinksReadingSchema>;
 
 export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
-  description: "Review, preview, and reconcile a model-owned parameter linkage profile.",
+  description: "Author a model-owned parameter linkage profile, evaluate it, and reconcile it.",
   schema: parameterLinksDocumentSchema,
-  agentWriteMask: [["draftProfile"]],
-  commands: {
-    refresh: {
-      description:
-        "Refresh the stored profile, evaluation, issues, and runtime status from Revit. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
-      input: z.object({ target: z.string().optional() }),
-      actor: "any",
-      recoversExternal: true,
-    },
-    preview: {
-      description:
-        "Evaluate the draft profile without storing it or writing target parameters. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
-      input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
-      actor: "any",
-    },
-    apply: {
-      description:
-        "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
-      // The dispatcher hands the handler safeParse(...).data; zod strips undeclared keys, so the
-      // reviewed profile MUST be declared here or apply always fails its draft-freshness check.
-      input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
-      actor: "human",
-      mutatesExternal: true,
-    },
-  },
+  agentWriteMask: [["draft"]],
+  // Reading and applying are host ports, not route commands: an observation of Revit can
+  // never be written into the draft a human is editing.
+  commands: {},
 } satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

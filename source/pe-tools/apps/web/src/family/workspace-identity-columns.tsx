@@ -119,7 +119,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         drives.length > 0
           ? ` Drives ${drives.map((entry) => `${entry.slug}.${entry.property}`).join(", ")} — this row IS those dimensions, which is why they have no rows of their own.`
           : row.kind === "profile"
-            ? " Drives no geometry the profile declares — it is schedule data, or it is dead."
+            ? " No direct form or connector dimension binding. Other declarations and formulas may still use this parameter."
             : ""
       }`;
       // TODO(core-reader): a FAMILY-LEVEL proposal has no value cell of its own — the family-value

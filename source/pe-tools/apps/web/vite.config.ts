@@ -1,9 +1,10 @@
+import { fileURLToPath } from "node:url";
 import { devHostProxy } from "./dev-proxy.ts";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import type { Plugin } from "vite-plus";
-import { defineConfig, loadEnv } from "vite-plus";
+import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
@@ -50,6 +51,12 @@ const config = defineConfig(({ mode }) => {
       }) as never,
     ],
     server: {
+      fs: {
+        allow: [
+          searchForWorkspaceRoot(import.meta.dirname),
+          fileURLToPath(new URL("../../../Pe.Revit.Tests/Fixtures/FamilyModel", import.meta.url)),
+        ],
+      },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL
         ? devHostProxy(process.env.PE_TOOLS_HOST_BASE_URL)
         : undefined,
@@ -60,6 +67,10 @@ const config = defineConfig(({ mode }) => {
     // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
     // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
     optimizeDeps: {
+      // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
+      // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
+      // committed). Serve the bundle as soon as it exists; a hanging import then shows up as one
+      // pending request instead of a blank page.
       include: [
         "react",
         "react-dom",
@@ -81,10 +92,20 @@ const config = defineConfig(({ mode }) => {
 
 export default config;
 
-// TanStack Start rejects Vite+'s SSR environment and skips its document handler.
-// Removing this adapter still gives GET / -> 404 with /@vite/client -> 200 under
-// standalone Vite+ 0.2.1 (verified 2026-09-12). Delete when upstream handles it.
-// Keep runner.import bound; it reads its own module cache through `this`.
+// SHIM: TanStack Start's dev-server plugin silently skips registering its SSR document middleware
+// under Vite 8 / Vite+ (its `isRunnableDevEnvironment` guard rejects the Vite+ ssr environment), so
+// document routes fall through and `GET /` 404s while `GET /@vite/client` still returns 200.
+// Forcing `tanstackStart({ vite: { installDevServerMiddleware: true } })` hits the same guard, so
+// instead this dev-only plugin feature-checks `server.environments.ssr.runner.import`, imports
+// `virtual:tanstack-start-server-entry`, and forwards document requests to its `fetch` handler.
+// `runner.import` must stay bound to `runner` (it needs itself as `this`, else "Cannot read
+// properties of undefined (reading 'cachedModule')"). Upstream: TanStack/router#7614.
+// Related: do NOT set `ssr.noExternal: true` here — it forces React's CJS entry through the Vite+
+// SSR evaluator and SSR dies with "module is not defined" at react/index.js; `resolve.dedupe` above
+// is the correct monorepo guard.
+// Removal condition: upstream TanStack Start registers its dev SSR middleware under Vite+ (or this
+// app stops running Start through Vite+). Then delete this plugin and verify `GET /`, `GET /about`,
+// `GET /@vite/client` all return 200 under `vp dev`, plus `vp check` and `vp build`.
 function tanstackStartVite8DevMiddleware(): Plugin {
   return {
     name: "pe:tanstack-start-vite8-dev-middleware",

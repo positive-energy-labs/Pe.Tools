@@ -1,9 +1,10 @@
+import { RouteShell, emptyManifest } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { SAMPLE_DOC } from "#/grounded-doc/sample";
@@ -14,16 +15,23 @@ import { SAMPLE_DOC } from "#/grounded-doc/sample";
  * to highlight (and scroll) the other. The engine + view are standalone —
  * this route is just a harness around them.
  */
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("doc-lab", "Doc Lab");
+
+function RouteShelledDocLabRoute() {
+  return (
+    <RouteShell manifest={manifest}>
+      <DocLabRoute />
+    </RouteShell>
+  );
+}
+
 export const Route = createFileRoute("/doc-lab")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    source: search.source === "fixture" ? ("fixture" as const) : undefined,
-  }),
-  component: DocLabRoute,
+  component: RouteShelledDocLabRoute,
 });
 
 function DocLabRoute() {
-  const { source } = Route.useSearch();
-  const engine = useGroundedDoc({ initialDoc: source === "fixture" ? SAMPLE_DOC : undefined });
+  const engine = useGroundedDoc({});
   const focusedBlock = engine.blockById(engine.focus?.blockId);
   const focusedImage = engine.imageById(engine.focus?.blockId);
   const focused = focusedBlock
@@ -61,7 +69,7 @@ function DocLabRoute() {
                   fixture · sample
                 </FactChip>
               )}
-              <Verb
+              <ActionButton
                 label="remove"
                 icon={X}
                 onClick={engine.clear}
@@ -80,7 +88,7 @@ function DocLabRoute() {
               {focused.id}
             </span>
             {engine.pinned && (
-              <Verb
+              <ActionButton
                 label="unpin"
                 onClick={engine.clearPin}
                 reason="Release the pin so hover drives the focus again"
@@ -98,7 +106,7 @@ function DocLabRoute() {
         engine={engine}
         className="min-h-0 flex-1"
         emptyExtra={
-          <Verb
+          <ActionButton
             label="load the sample document"
             icon={FlaskConical}
             onClick={() => engine.setDoc(SAMPLE_DOC)}

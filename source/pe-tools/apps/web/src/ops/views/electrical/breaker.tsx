@@ -12,15 +12,15 @@ import {
   UnrecognizedShape,
 } from "#/ops/registry";
 import type { Rec } from "./record";
-import type { BreakerSlot } from "./circuits";
+import type { BreakerCell } from "./circuits";
 import { IssuesNote, MonoAside, PanelsView, joinNonEmpty } from "./record";
-import { CircuitsView, LoadClassificationsView, extractBreakerSlots } from "./circuits";
+import { CircuitsView, LoadClassificationsView, extractBreakerCells } from "./circuits";
 
 export function BreakerHalf({
   slot,
   side,
 }: {
-  slot: BreakerSlot | undefined;
+  slot: BreakerCell | undefined;
   side: "left" | "right";
 }) {
   const gutter = (
@@ -60,7 +60,7 @@ export function BreakerHalf({
   return <div className={`flex min-w-0 items-center ${side === "left" ? "" : ""}`}>{inner}</div>;
 }
 
-export function Panelboard({ slots }: { slots: BreakerSlot[] }) {
+export function Panelboard({ slots }: { slots: BreakerCell[] }) {
   const odds = slots.filter((s) => s.num % 2 === 1).sort((a, b) => a.num - b.num);
   const evens = slots.filter((s) => s.num % 2 === 0).sort((a, b) => a.num - b.num);
   const rowCount = Math.max(odds.length, evens.length);
@@ -137,7 +137,7 @@ export function PanelScheduleCard({ entry }: { entry: Rec }) {
   const body = sections.find((s) => asString(s.sectionType) === "Body");
   const summary = sections.find((s) => asString(s.sectionType) === "Summary");
   const footer = sections.find((s) => asString(s.sectionType) === "Footer");
-  const slots = body ? extractBreakerSlots(body) : undefined;
+  const slots = body ? extractBreakerCells(body) : undefined;
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
     <article className="min-w-0">

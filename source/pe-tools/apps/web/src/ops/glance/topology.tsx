@@ -4,8 +4,8 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance } from "#/components/lang/section";
 import { callHostRpc } from "#/host/client";
-import type { Lane } from "#/host/target";
-import { LaneBadge, LiveDot } from "#/host/target-ui";
+import type { Lane } from "#/readings";
+import { DeployBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
@@ -85,7 +85,7 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
         <span className="">host</span>
-        {lane ? <LaneBadge lane={lane} /> : null}
+        {lane ? <DeployBadge lane={lane} /> : null}
       </div>
       <div className="" title={exePath}>
         {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
@@ -150,7 +150,7 @@ function SessionNode({
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
         <span className="min-w-0 truncate">{text(session.sessionId)}</span>
-        {lane ? <LaneBadge lane={lane} /> : null}
+        {lane ? <DeployBadge lane={lane} /> : null}
         {custody && (
           <FactChip
             title={

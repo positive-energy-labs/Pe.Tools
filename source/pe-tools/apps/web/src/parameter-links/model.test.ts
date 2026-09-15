@@ -1,16 +1,21 @@
 import { expect, test } from "vite-plus/test";
-import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-contracts";
+import {
+  parameterLinksBasis,
+  type ParameterLinkProfile,
+  type ParameterLinksDocument,
+  type ParameterLinksReading,
+} from "@pe/agent-contracts";
 
 import {
   addAssignment,
   addDefinition,
+  applyRefusal,
   blankProfile,
-  canApply,
   editingProfile,
   errorIssueCount,
+  evaluationIsCurrent,
   isDraftDirty,
   parseUniqueIds,
-  retainDraftBasis,
   removeDefinition,
   sameProfile,
   updateAssignment,
@@ -34,45 +39,87 @@ function profile(defId = "d1"): ParameterLinkProfile {
   };
 }
 
-function doc(overrides: Partial<ParameterLinksDocument>): ParameterLinksDocument {
-  return {
-    profile: null,
-    draftProfile: null,
-    evaluation: null,
-    status: null,
-    profileChanged: false,
-    appliedWriteCount: 0,
-    ...overrides,
-  };
+function doc(draft: ParameterLinkProfile | null): ParameterLinksDocument {
+  return { draft };
 }
 
-test("editingProfile prefers the draft over the stored profile", () => {
-  const stored = profile("stored");
-  const draft = profile("draft");
-  expect(editingProfile(doc({ profile: stored, draftProfile: draft }))?.definitions[0].id).toBe(
-    "draft",
-  );
-  expect(editingProfile(doc({ profile: stored }))?.definitions[0].id).toBe("stored");
+/** A capture-owner reading. It is a separate value, never a field of the document above. */
+function reading(input: {
+  basis: string;
+  evaluated?: boolean;
+  stored?: ParameterLinkProfile | null;
+  errors?: number;
+}): ParameterLinksReading {
+  return {
+    basis: input.basis,
+    workRevision: 0,
+    evaluated: input.evaluated ?? true,
+    stored: input.stored ?? null,
+    status: {
+      hasStoredProfile: input.stored != null,
+      updaterRegistered: true,
+      activeDefinitionCount: 0,
+      activeAssignmentCount: 0,
+    },
+    evaluation:
+      (input.evaluated ?? true)
+        ? {
+            writes: [],
+            issues: Array.from({ length: input.errors ?? 0 }, (_, index) => ({
+              code: "E" + index,
+              severity: "error" as const,
+              message: "blocked",
+            })),
+            sourceElementCount: 0,
+            targetElementCount: 0,
+            changedWriteCount: 0,
+          }
+        : null,
+    profileChanged: false,
+    appliedWriteCount: 0,
+  };
+}
+const stampOf = (draft: ParameterLinkProfile | null) => parameterLinksBasis({ draft });
+
+test("editingProfile is the authored draft and nothing else", () => {
+  expect(editingProfile(doc(profile("draft")))?.definitions[0].id).toBe("draft");
+  // A stored profile is external truth; it never silently becomes something the human is editing.
+  expect(editingProfile(doc(null))).toBeNull();
   expect(editingProfile(null)).toBeNull();
 });
 
-test("isDraftDirty is true only when a draft diverges from the stored profile", () => {
+test("isDraftDirty compares the authored draft against the observed stored profile", () => {
   const stored = profile();
-  expect(isDraftDirty(doc({ profile: stored, draftProfile: stored }))).toBe(false);
-  expect(isDraftDirty(doc({ profile: stored, draftProfile: null }))).toBe(false);
-  const edited = addDefinition(stored);
-  expect(isDraftDirty(doc({ profile: stored, draftProfile: edited }))).toBe(true);
+  const observed = reading({ basis: stampOf(stored), stored });
+  expect(isDraftDirty(doc(stored), observed)).toBe(false);
+  expect(isDraftDirty(doc(null), observed)).toBe(false);
+  expect(isDraftDirty(doc(addDefinition(stored)), observed)).toBe(true);
 });
 
-test("canApply gates on a matching preview and no blocking errors", () => {
-  const editing = profile();
-  const previewedSame = structuredClone(editing);
-  expect(canApply({ editing, previewed: previewedSame, errorCount: 0 })).toBe(true);
-  expect(
-    canApply({ editing: addDefinition(editing), previewed: previewedSame, errorCount: 0 }),
-  ).toBe(false);
-  expect(canApply({ editing, previewed: null, errorCount: 0 })).toBe(false);
-  expect(canApply({ editing, previewed: previewedSame, errorCount: 1 })).toBe(false);
+test("apply is armed by the reading basis, which survives a reload", () => {
+  const draft = profile();
+  const current = doc(draft);
+  const evaluated = reading({ basis: stampOf(draft) });
+  expect(evaluationIsCurrent(current, evaluated)).toBe(true);
+  expect(applyRefusal(current, evaluated)).toBeNull();
+  // The same document and the same reading, freshly loaded, are all Apply ever needed.
+  expect(applyRefusal(structuredClone(current), structuredClone(evaluated))).toBeNull();
+
+  const edited = doc(addDefinition(draft));
+  expect(evaluationIsCurrent(edited, evaluated)).toBe(false);
+  expect(applyRefusal(edited, evaluated)).toMatch(/Preview/);
+  expect(applyRefusal(current, null)).toMatch(/Preview/);
+  expect(applyRefusal(doc(null), evaluated)).toMatch(/draft/);
+  expect(applyRefusal(current, reading({ basis: stampOf(draft), errors: 1 }))).toMatch(/errors/);
+});
+
+test("a stored-profile read can never arm an apply of a draft it did not evaluate", () => {
+  const draft = profile("draft");
+  const stored = profile("stored");
+  // refresh observes Revit and stamps its own basis; the authored draft is a different value.
+  const observed = reading({ basis: stampOf(stored), evaluated: false, stored });
+  expect(evaluationIsCurrent(doc(draft), observed)).toBe(false);
+  expect(applyRefusal(doc(draft), observed)).toMatch(/Preview/);
 });
 
 test("errorIssueCount counts only error-severity issues", () => {
@@ -121,9 +168,4 @@ test("sameProfile is null-safe structural equality", () => {
   expect(sameProfile(null, null)).toBe(true);
   expect(sameProfile(profile(), structuredClone(profile()))).toBe(true);
   expect(sameProfile(profile(), addDefinition(profile()))).toBe(false);
-});
-
-test("an unsaved draft keeps the revision it was based on", () => {
-  expect(retainDraftBasis(4, true, 5)).toBe(4);
-  expect(retainDraftBasis(4, false, 5)).toBe(5);
 });

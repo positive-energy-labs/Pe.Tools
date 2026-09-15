@@ -14,7 +14,7 @@ import { Switch } from "#/components/lang/switch";
 import { Textarea } from "#/components/lang/textarea";
 import { useFieldOptions } from "#/host/field-options";
 import { opViews } from "#/ops/op-views";
-import { type HostOperationCatalogEntry } from "#/ops/product";
+import { type HostOperationCatalogEntry } from "#/ops/manifest";
 import { type OpsStore } from "#/ops/store";
 import type { HostOperationJsonSchema } from "#/ops/route-workspace";
 import {
@@ -32,6 +32,7 @@ export function OperationPane({
   operation,
   schema,
   bridgeSessionId,
+  openDocumentId,
   args,
   mode,
   formValues,
@@ -43,6 +44,7 @@ export function OperationPane({
   operation: HostOperationCatalogEntry;
   schema?: HostOperationJsonSchema;
   bridgeSessionId?: string;
+  openDocumentId?: string;
   args: string;
   mode: "form" | "raw";
   formValues: Record<string, unknown>;
@@ -58,13 +60,18 @@ export function OperationPane({
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="">{operation.displayName ?? operation.key}</h1>
           <FactChip
-            tone={operation.intent.toLowerCase() === "mutate" ? "caution" : "meta"}
-            title={operation.intent.toLowerCase() === "mutate" ? "writes to Revit" : "read-only"}
+            tone={operation.intent?.toLowerCase() === "mutate" ? "caution" : "meta"}
+            title={
+              operation.intent?.toLowerCase() === "mutate" ? "changes external state" : "read-only"
+            }
           >
-            {operation.intent}
+            {operation.intent ?? "unknown intent"}
           </FactChip>
-          <FactChip tone={costTone(operation.costTier)} title="host-declared cost tier">
-            {operation.costTier}
+          <FactChip
+            tone={costTone(operation.costTier ?? "unknown")}
+            title="host-declared cost tier"
+          >
+            {operation.costTier ?? "unknown cost"}
           </FactChip>
           {operation.needs !== "nothing" ? (
             <FactChip tone="caution" title="host-declared document requirement">
@@ -80,7 +87,7 @@ export function OperationPane({
         <div className="flex items-center justify-between">
           <h2 className="">Request</h2>
           <span className="flex gap-1">
-            {operation.requestExamples.map((example) => (
+            {(operation.requestExamples ?? []).map((example: { json: string; name: string; description?: string }) => (
               <Press
                 key={example.name}
                 size="caption"
@@ -112,10 +119,12 @@ export function OperationPane({
             value={formValues}
             onChange={setFormValues}
             bridgeSessionId={bridgeSessionId}
+            openDocumentId={openDocumentId}
           />
         ) : (
           <Textarea
             size="tall"
+            aria-label="Operation request JSON"
             value={args}
             onChange={(event) => setArgs(event.currentTarget.value)}
             spellCheck={false}
@@ -149,12 +158,14 @@ export function JsonSchemaForm({
   value,
   onChange,
   bridgeSessionId,
+  openDocumentId,
 }: {
   schema: HostOperationJsonSchema;
   root: HostOperationJsonSchema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   bridgeSessionId?: string;
+  openDocumentId?: string;
 }) {
   const fields = schemaProperties(schema);
   if (!fields.length) return <p className="">This operation has no request fields.</p>;
@@ -170,6 +181,7 @@ export function JsonSchemaForm({
             value={value[name]}
             onChange={(next) => onChange({ ...value, [name]: next })}
             bridgeSessionId={bridgeSessionId}
+            openDocumentId={openDocumentId}
           />
         </div>
       ))}
@@ -184,6 +196,7 @@ export function SchemaInput({
   value,
   onChange,
   bridgeSessionId,
+  openDocumentId,
 }: {
   id: string;
   schema: HostOperationJsonSchema;
@@ -191,12 +204,19 @@ export function SchemaInput({
   value: unknown;
   onChange: (next: unknown) => void;
   bridgeSessionId?: string;
+  openDocumentId?: string;
 }) {
   const resolved = resolveSchema(schema, root);
   const options = Array.isArray(resolved.enum) ? resolved.enum : [];
   const type = schemaType(resolved);
   const sourceKey = fieldOptionsKey(resolved);
-  const fieldOptions = useFieldOptions(sourceKey ?? "", {}, bridgeSessionId, Boolean(sourceKey));
+  const fieldOptions = useFieldOptions(
+    sourceKey ?? "",
+    {},
+    bridgeSessionId,
+    Boolean(sourceKey && bridgeSessionId && openDocumentId),
+    openDocumentId,
+  );
   if (sourceKey && type !== "array" && type !== "object") {
     return (
       <>
@@ -242,6 +262,7 @@ export function SchemaInput({
         value={isRecord(value) ? value : {}}
         onChange={onChange}
         bridgeSessionId={bridgeSessionId}
+        openDocumentId={openDocumentId}
       />
     );
   if (type === "array" || type === "object")

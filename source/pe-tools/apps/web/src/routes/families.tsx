@@ -1,20 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamiliesStore, fixtureFamilyRows } from "#/families/fixture";
-import { createLiveFamiliesHost } from "#/families/host";
-import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
-import { RouteScope } from "#/workbench/route-scope";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import type { Scope } from "#/state/route-store";
+import { useFamiliesStore } from "#/families/store";
+import { routeSearch } from "#/route";
 
+import { manifest as familiesManifest } from "#/families/manifest";
+export const manifest = familiesManifest;
+
+const str = (value: unknown) => (typeof value === "string" ? value : "");
+
+/**
+ * `?source=fixture&fixture=native` is gone. `?demo=<action>` mounts one seed of `manifest.seeds`.
+ */
 export const familiesSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
+): ReturnType<typeof routeSearch> & { thread?: string; demo?: string } => ({
+  ...routeSearch(search),
+  thread: str(search.thread) || undefined,
+  demo: str(search.demo) || undefined,
 });
 
 export const Route = createFileRoute("/families")({
@@ -23,30 +26,17 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  return <FamiliesRouteContent source={Route.useSearch().source} />;
+  const { target, thread } = Route.useSearch();
+  return <FamiliesRouteContent target={target} thread={thread} />;
 }
 
-export function FamiliesRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <FamiliesFixtureRoute />;
-  return (
-    <RouteScope>
-      {(scope) => <FamiliesStoreOwner key={scope.scope.document} scope={scope} />}
-    </RouteScope>
-  );
-}
-
-export function FamiliesFixtureRoute() {
-  const store = useRouteStore(() => createFixtureFamiliesStore(appAtomRegistry));
-  return <FamiliesWorkspace store={store} fixtureFamilies={fixtureFamilyRows} />;
-}
-
-function FamiliesStoreOwner({ scope }: { scope: Scope }) {
-  const store = useRouteStore(() => {
-    return createFamiliesStore({
-      registry: appAtomRegistry,
-      scope,
-      host: createLiveFamiliesHost(),
-    });
-  });
+export function FamiliesRouteContent({
+  target = "",
+  thread,
+}: {
+  target?: string;
+  thread?: string;
+}) {
+  const store = useFamiliesStore({ target, thread });
   return <FamiliesWorkspace store={store} />;
 }

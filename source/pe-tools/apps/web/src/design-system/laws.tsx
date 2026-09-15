@@ -12,7 +12,7 @@ export const LAW_POINTERS = [
   ["cell state, not columns", "StateCellProps"],
   ["sort by domain order", "CELL_STATE_ORDER"],
   ["a filter's vocabulary is stable", "specimens/integration-table.tsx · RealTable"],
-  ["refuse per option", "VerbProps.reason"],
+  ["refuse per option", "ActionButtonProps.reason"],
   ["orientation hides behind a mark", "lens.house law 3"],
   ["a stand-in announces itself", "lens.house law 8"],
   ["small type takes opt-in marks", "lens.house law 6"],

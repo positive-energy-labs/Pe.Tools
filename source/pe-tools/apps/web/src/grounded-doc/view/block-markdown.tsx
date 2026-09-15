@@ -4,7 +4,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import { PROSE_CLASS } from "#/workbench/prose";
@@ -163,7 +163,7 @@ export function UploadSurface({
               placeholder="…or paste a public PDF URL"
             />
           </div>
-          <Verb
+          <ActionButton
             label="parse"
             onClick={submitUrl}
             disabled={!url.trim()}

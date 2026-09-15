@@ -1,7 +1,7 @@
 import { cn } from "#/lib/utils";
 import { FactChip } from "#/components/lang/chip";
 import { StateDot } from "#/components/master-table/cells";
-import type { WorldZone } from "#/takeoff/world";
+import type { ModelZone } from "#/takeoff/world";
 import { ROOM_STATES, STATE_META, stateMeta, type RoomState } from "#/takeoff/room-state";
 
 export function ZoneStateBar({
@@ -9,19 +9,25 @@ export function ZoneStateBar({
   states,
   className,
 }: {
-  zone: WorldZone;
+  zone: ModelZone;
   states: RoomState[];
   className?: string;
 }) {
-  if (states.length === 0)
+  if (states.length === 0) {
+    const held = zone.stage === "partitioned" && zone.residues.length > 0;
     return (
       <FactChip
         dashed
-        title={`${zone.zone.key} — not partitioned: no rooms have been materialized yet`}
+        title={
+          held
+            ? `${zone.zone.key} — partitioned: ${zone.residues.length} native shapes held for review`
+            : `${zone.zone.key} — not partitioned: no rooms have been materialized yet`
+        }
       >
-        not partitioned
+        {held ? `${zone.residues.length} held` : "not partitioned"}
       </FactChip>
     );
+  }
   const census = ROOM_STATES.map((s) => ({ s, n: states.filter((x) => x === s).length })).filter(
     (x) => x.n > 0,
   );

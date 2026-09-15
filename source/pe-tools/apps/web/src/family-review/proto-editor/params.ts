@@ -50,6 +50,7 @@ export function paramRows(model: FamilyModel): ParamRow[] {
     Object.entries(specs).map(([name, spec]) => {
       const associations = paramAssociations(model, name);
       const formulaDriven = spec.formula != null;
+      const dataType = spec.dataType ?? "";
       const base: ParamCell = formulaDriven
         ? {
             text: `= ${spec.formula ?? ""}`,
@@ -58,7 +59,7 @@ export function paramRows(model: FamilyModel): ParamRow[] {
             pointer: `/${section}/${name}/formula`,
           }
         : {
-            text: spec.value ?? "—",
+            text: String(spec.value ?? "—"),
             source: spec.value == null ? "missing" : "value",
             lock: null,
             pointer: `/${section}/${name}/value`,
@@ -68,7 +69,7 @@ export function paramRows(model: FamilyModel): ParamRow[] {
         const override = model.types[typeName]?.[name];
         const resolved = resolveParam(model, typeName, name);
         byType[typeName] = {
-          text: override ?? resolved.text,
+          text: String(override ?? resolved.text),
           source: override != null ? "override" : resolved.source,
           lock: formulaDriven ? "a formula computes this — a type cannot override it" : null,
           pointer: `/types/${typeName}/${name}`,
@@ -77,7 +78,7 @@ export function paramRows(model: FamilyModel): ParamRow[] {
       return {
         name,
         section,
-        dataType: spec.dataType,
+        dataType,
         base,
         byType,
         reads:

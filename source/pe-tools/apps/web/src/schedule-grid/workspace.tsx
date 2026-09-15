@@ -1,41 +1,66 @@
-import type { Scope } from "#/state/route-store";
 import { useState } from "react";
-import { scheduleCellKey, scheduleGridRouteState, splitScheduleCellKey } from "@pe/agent-contracts";
+import {
+  scheduleCellKey,
+  splitScheduleCellKey,
+  type RouteStatePatch,
+  type ScheduleCatalog,
+  type ScheduleGridDocument,
+  type ScheduleGridSnapshot,
+} from "@pe/agent-contracts";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
 import { Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { PickList } from "#/components/lang/pick-list";
 import { SidePane } from "#/components/lang/side-pane";
-import { VerbLane } from "#/components/lang/verb-lane";
+import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
-import { useRouteState } from "#/workbench/route-state";
 import { PendingStrip } from "#/schedule-grid/pending-strip";
 import { useScheduleGridColumns } from "#/schedule-grid/columns";
-import type { RouteStateHandle } from "#/workbench/route-state";
+import type { Refusal } from "#/route";
 
-export type ScheduleGridState = Pick<
-  RouteStateHandle<import("@pe/agent-contracts").ScheduleGridDocument>,
-  "slice" | "hydrated" | "apply" | "command" | "peaActive" | "connected" | "busy" | "atoms"
->;
-
-export function LiveScheduleGridWorkspace({ scope }: { scope: Scope }) {
-  const state = useRouteState(scheduleGridRouteState, scope);
-  return <ScheduleGridWorkspace state={state} />;
+export interface ScheduleGridState {
+  slice: ScheduleGridDocument | null;
+  hydrated: boolean;
+  refreshing: boolean;
+  apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
+  peaActive: boolean;
+  connected: boolean | null;
+  busy: "catalog" | "refresh" | "push" | null;
+  failure: Refusal | null;
+  snapshot: ScheduleGridSnapshot | null;
+  catalog: ScheduleCatalog | null;
+  execute: (
+    kind: "catalog" | "refresh" | "push",
+    input?: Record<string, unknown>,
+  ) => Promise<Refusal | null>;
+  /** Why Push is disabled, in the operator's words. `null` means nothing blocks it. */
+  blockedBecause?: string | null;
 }
 
 export function ScheduleGridWorkspace({
-  state: { slice, hydrated, apply, command, peaActive, connected, busy, atoms },
+  state: {
+    slice,
+    hydrated,
+    refreshing,
+    apply,
+    execute,
+    peaActive,
+    connected,
+    busy,
+    failure,
+    snapshot,
+    catalog,
+    blockedBecause,
+  },
 }: {
   state: ScheduleGridState;
 }) {
   const document = slice;
-  const snapshot = document?.snapshot ?? null;
-  const catalog = document?.catalog ?? null;
   const cells = document?.cells ?? {};
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
@@ -49,13 +74,10 @@ export function ScheduleGridWorkspace({
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
   // Staging IS the approval (ruled 2026-08-31): no review gate stands before push.
-  const pushable = stagedCount > 0;
+  const pushable = stagedCount > 0 && !blockedBecause;
 
-  const runCommand = (
-    kind: "catalog" | "refresh" | "push",
-    input: Record<string, unknown> = {},
-    receipt?: string,
-  ) => void command(kind, input, receipt);
+  const runCommand = (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) =>
+    void execute(kind, input);
 
   const stageValue = (key: string, value: string) =>
     void apply([{ path: ["cells", key, "staged"], value: { value } }]);
@@ -85,8 +107,9 @@ export function ScheduleGridWorkspace({
 
   const gridColumns = useScheduleGridColumns(snapshot, cells, stageEdit);
 
-  const pushReason =
-    stagedCount === 0
+  const pushReason = blockedBecause
+    ? blockedBecause
+    : stagedCount === 0
       ? "Nothing is staged yet — approve a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
@@ -104,14 +127,26 @@ export function ScheduleGridWorkspace({
         facts={
           <>
             <FactChip
-              tone={connected ? "meta" : "caution"}
+              tone={connected === true ? "meta" : "caution"}
               title={
-                connected
+                connected === true
                   ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
-                  : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
+                  : refreshing
+                    ? "The route-state stream is re-establishing over the slice already held. Writes are refused until it settles — this is a reconnect, not a lost session."
+                    : connected === null
+                      ? "No Work slice has arrived yet. Read a schedule to open one."
+                      : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
               }
             >
-              bridge {connected ? "connected" : "disconnected"}
+              {/* A re-establishing stream is NOT a dead bridge, and must not be worded as one. */}
+              bridge{" "}
+              {connected === true
+                ? "connected"
+                : refreshing
+                  ? "refreshing"
+                  : connected === null
+                    ? "connecting"
+                    : "disconnected"}
             </FactChip>
             {snapshot ? (
               <>
@@ -136,19 +171,13 @@ export function ScheduleGridWorkspace({
           </>
         }
         verb={
-          <Verb
+          <ActionButton
             tone="commit"
             label={`push ${stagedCount} to Revit`}
             busy={busy === "push"}
             disabled={!pushable || busy != null}
             reason={pushReason}
-            onClick={() =>
-              runCommand(
-                "push",
-                {},
-                `pushed ${stagedCount} cell${stagedCount === 1 ? "" : "s"} to Revit`,
-              )
-            }
+            onClick={() => runCommand("push")}
           />
         }
         advisory={peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
@@ -171,7 +200,7 @@ export function ScheduleGridWorkspace({
                   </FactChip>
                 ) : null}
               </span>
-              <Verb
+              <ActionButton
                 label="re-list"
                 busy={busy === "catalog"}
                 disabled={busy != null}
@@ -189,7 +218,7 @@ export function ScheduleGridWorkspace({
               >
                 no schedule list yet
               </EmptyState>
-              <Verb
+              <ActionButton
                 label="list schedules"
                 busy={busy === "catalog"}
                 disabled={busy != null}
@@ -218,7 +247,7 @@ export function ScheduleGridWorkspace({
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-1">
-            <Verb
+            <ActionButton
               label="re-read"
               busy={busy === "refresh"}
               disabled={!snapshot || busy != null}
@@ -229,7 +258,7 @@ export function ScheduleGridWorkspace({
               }
               onClick={() => runCommand("refresh", { scheduleId: snapshot?.scheduleId })}
             />
-            <VerbLane atoms={atoms} />
+            <OutcomeStrip busy={busy} failure={failure} />
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">

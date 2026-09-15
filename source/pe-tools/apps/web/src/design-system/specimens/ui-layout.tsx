@@ -1,5 +1,4 @@
 import { useState } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
 
 import { Pane, PaneSplit, PaneWorkspace, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
@@ -8,16 +7,11 @@ import { PickList, pickListRecipe } from "#/components/lang/pick-list";
 import { SidePane, sidePaneRecipe } from "#/components/lang/side-pane";
 import { Switch, switchRecipe } from "#/components/lang/switch";
 import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
-import { VerbLane, type VerbAtoms } from "#/components/lang/verb-lane";
-import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
+import { OutcomeStrip } from "#/components/lang/outcome-strip";
+import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 const ITEMS = CATEGORY_OPTIONS.slice(0, 4).map((x) => ({ id: x.value, label: x.label }));
-const EMPTY_ATOMS = {
-  busy: Atom.make(null as { id: string; seconds: number } | null),
-  failure: Atom.make(null as import("#/state/route-store").VerbFailure | null),
-  receipt: Atom.make(null as import("#/state/route-store").VerbReceipt | null),
-} satisfies VerbAtoms;
 
 export function UiLayoutSpecimens() {
   const [active, setActive] = useState<string | null>(ITEMS[0]?.id ?? null);
@@ -137,8 +131,8 @@ export function UiLayoutSpecimens() {
           </UiTooltipProvider>
         )}
       />
-      <SpecimenFrame name="VerbLane" importPath="#/components/lang/verb-lane">
-        <VerbLane atoms={EMPTY_ATOMS} standing={<span>standing</span>} />
+      <SpecimenFrame name="OutcomeStrip" importPath="#/components/lang/outcome-strip">
+        <OutcomeStrip standing={<span>standing</span>} />
       </SpecimenFrame>
     </>
   );

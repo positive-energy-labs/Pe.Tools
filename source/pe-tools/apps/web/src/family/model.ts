@@ -2,16 +2,16 @@
  * /family — the pure layer: what a family profile IS, and every reading of it.
  *
  * Nothing here renders and nothing here talks to a host. Everything is derived from ONE
- * `PageWorld` plus the page's `Draft`, so a verb that changes the draft visibly changes every
+ * `FamilyPageModel` plus the page's `Draft`, so a verb that changes the draft visibly changes every
  * reading in the same beat — SURFACE-PHILOSOPHY §1, "compute agreement; do not remember it".
  *
  * THE WORLD IS A FACTORY ARGUMENT, NOT A MODULE CONSTANT (phase B, 2026-08-17). This layer used
  * to read `world.ts` at module scope, which made the fixture the only thing the page could ever
- * render. `buildPageWorld` now takes any `ProtoWorld` and returns everything those constants
+ * render. `buildFamilyPageModel` now takes any `FamilySpecModel` and returns everything those constants
  * carried, so the surface has exactly two lanes and one derivation:
  *
  *   LIVE     — a real `family.json` open through `route:settings`, projected by `project.ts`.
- *   FIXTURE  — `FIXTURE_WORLD`, the DECLARED no-host lane, wearing its dashed seam chip.
+ *   FIXTURE  — `EMPTY_FAMILY_MODEL`, the DECLARED no-host lane, wearing its dashed seam chip.
  *
  * Every helper below takes the world as its FIRST argument for the same reason: a helper that
  * closed over a module constant would silently keep answering about the fixture.
@@ -26,7 +26,7 @@ import {
   type ProtoParam,
   type ProtoProposal,
   type ProtoSpec,
-  type ProtoWorld,
+  type FamilySpecModel,
 } from "#/family/world";
 
 // ── the ONE world factory ───────────────────────────────────────────────────────────────────────
@@ -45,9 +45,9 @@ export interface ProseConstituent {
  * It carries exactly what the module constants used to carry, which is why threading it changed no
  * reading: `world.typeNames` was `TYPE_NAMES`, `world.geomBySlug` was `GEOM_BY_SLUG`, and so on.
  */
-export interface PageWorld {
+export interface FamilyPageModel {
   /** The projection this world was built from — the page's only route back to raw fixture facts. */
-  source: ProtoWorld;
+  source: FamilySpecModel;
   path: string;
   familyName: string;
   typeNames: string[];
@@ -71,7 +71,7 @@ export interface PageWorld {
   profileDirty: boolean;
 }
 
-export function buildPageWorld(source: ProtoWorld): PageWorld {
+export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
   const params = source.profile.params;
   const geom = source.profile.geometry ?? [];
   const live = source.live;
@@ -79,7 +79,12 @@ export function buildPageWorld(source: ProtoWorld): PageWorld {
    * the link is the document's claim rather than a hand-authored map. */
   const paramsOf = (description: string) =>
     params.map((param) => param.name).filter((name) => description.includes(name));
-  const typeNames = Object.keys(source.profile.types);
+  const typeNames = [
+    ...new Set([
+      ...Object.keys(source.profile.types),
+      ...(live?.typeNames ?? Object.values(live?.values ?? {}).flatMap(Object.keys)),
+    ]),
+  ];
   return {
     source,
     path: source.profile.path,
@@ -130,7 +135,7 @@ export function buildPageWorld(source: ProtoWorld): PageWorld {
 
 /** THE DECLARED FIXTURE LANE. Built once, because `world.ts` never changes at runtime — the page
  * renders this when no family document is open, and says so with its dashed seam chip. */
-export const FIXTURE_WORLD: PageWorld = buildPageWorld(WORLD);
+export const EMPTY_FAMILY_MODEL: FamilyPageModel = buildFamilyPageModel(WORLD);
 
 /** "core-bore" + "stub.depth" → "Core Bore Stub Depth". The name a new parameter INHERITS from the
  * property it was lifted out of — a promoted literal should arrive already saying where it came
@@ -284,7 +289,7 @@ export interface Draft {
   dirty: boolean;
 }
 
-export function initialDraft(world: PageWorld): Draft {
+export function initialDraft(world: FamilyPageModel): Draft {
   return {
     authored: Object.fromEntries(world.params.map((param) => [param.name, param.value])),
     types: structuredClone(world.source.profile.types),
@@ -351,7 +356,12 @@ export function savedFrom(draft: Draft): SavedProfile {
 }
 
 /** The binding a dim carries right now — drafted if the page has touched it, document otherwise. */
-export function bindingOf(world: PageWorld, draft: Draft, slug: string, property: string): string {
+export function bindingOf(
+  world: FamilyPageModel,
+  draft: Draft,
+  slug: string,
+  property: string,
+): string {
   return (
     draft.geom[slug]?.dims[property] ??
     world.geomBySlug.get(slug)?.dims.find((dim) => dim.property === property)?.binding ??
@@ -362,7 +372,7 @@ export function bindingOf(world: PageWorld, draft: Draft, slug: string, property
 /** paramName → every constituent.property it drives. Several dims may join on one parameter, and
  * that JOIN is the fact worth surfacing: editing the row moves all of them at once. */
 export function consumersOf(
-  world: PageWorld,
+  world: FamilyPageModel,
   draft: Draft,
 ): Map<string, { slug: string; property: string }[]> {
   const map = new Map<string, { slug: string; property: string }[]>();
@@ -413,7 +423,7 @@ export interface PRow {
  * which is the whole visible payoff of the verb. The bottom of the table is therefore always
  * exactly "the numbers in this family that nothing can reach", and it empties as you work.
  */
-export function ghostRows(world: PageWorld, draft: Draft): PRow[] {
+export function ghostRows(world: FamilyPageModel, draft: Draft): PRow[] {
   const rows: PRow[] = [];
   for (const part of world.geom) {
     for (const dim of part.dims) {
@@ -436,7 +446,7 @@ export function ghostRows(world: PageWorld, draft: Draft): PRow[] {
 /** Every verdict is COMPUTED from the two substrates, never remembered — so an edit visibly
  * creates the same drift that Revit moving underneath would. */
 export function agreementOf(
-  world: PageWorld,
+  world: FamilyPageModel,
   draft: Draft,
   row: PRow,
   typeName: string,
@@ -453,9 +463,9 @@ export function agreementOf(
   return entry.value === effective(draft, row.name, typeName) ? "agree" : "drift";
 }
 
-export function rowAgreement(world: PageWorld, draft: Draft, row: PRow): Agreement {
+export function rowAgreement(world: FamilyPageModel, draft: Draft, row: PRow): Agreement {
   const seen = new Set(world.typeNames.map((typeName) => agreementOf(world, draft, row, typeName)));
-  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "agree";
+  return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "unread";
 }
 
 // ── the three readings of one cell ──────────────────────────────────────────────────────────────
@@ -466,7 +476,7 @@ export function rowAgreement(world: PageWorld, draft: Draft, row: PRow): Agreeme
 
 /** What the staged document resolves to here — a ghost's literal, or the type's effective value. */
 export function draftValueAt(
-  world: PageWorld,
+  world: FamilyPageModel,
   draft: Draft,
   row: PRow,
   typeName: string,
@@ -488,7 +498,7 @@ export function savedValueAt(saved: SavedProfile, row: PRow, typeName: string): 
 
 /** true when saving would write something into this cell — including "the row is new". */
 export function isUnsavedAt(
-  world: PageWorld,
+  world: FamilyPageModel,
   draft: Draft,
   saved: SavedProfile,
   row: PRow,
@@ -543,7 +553,7 @@ export type Focus = { kind: "param"; id: string } | { kind: "part"; id: string }
  * moves. A dim that you rebind lights differently on the very next render, which is what makes
  * "bind" feel like it did something to the model rather than to a list.
  */
-export function paramsInFocus(world: PageWorld, focus: Focus, draft: Draft): Set<string> {
+export function paramsInFocus(world: FamilyPageModel, focus: Focus, draft: Draft): Set<string> {
   if (!focus) return new Set();
   if (focus.kind === "param") return new Set([focus.id]);
   const part = world.geomBySlug.get(focus.id);

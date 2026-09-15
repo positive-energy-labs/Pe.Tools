@@ -1,8 +1,8 @@
 import { token } from "#/lib/token";
 import { VERDICT_INK } from "#/components/master-table/cells";
 import type { Verdict as RowVerdict, VerdictTone } from "#/components/master-table/model";
-import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/store";
-import type { Stage } from "#/takeoff/world";
+import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/controller";
+import type { Phase } from "#/takeoff/world";
 
 export const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
   call: {
@@ -36,7 +36,7 @@ export const stateMeta = (state: RoomState): RowVerdict => ({
   dim: state === "unreviewed",
 });
 
-export const STAGE_BLURB: Record<Stage, string> = {
+export const STAGE_BLURB: Record<Phase, string> = {
   declared: "adopted, no system tag typed",
   registered: "tag resolved against the registry",
   partitioned: "rooms materialized, decisions open",
@@ -53,4 +53,4 @@ export const ABSENT_INK = token("ink-mute");
 export {
   ATLAS_ROOM_STATES as ROOM_STATES,
   type AtlasRoomState as RoomState,
-} from "#/takeoff/store";
+} from "#/takeoff/controller";

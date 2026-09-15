@@ -16,8 +16,11 @@ import {
   Terminal,
 } from "lucide-react";
 
-import { RouteHead } from "#/targeting/head";
+import { RouteShell, emptyManifest } from "#/route";
 import { Card } from "#/components/lang/card";
+
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("index", "Positive Energy");
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -162,7 +165,7 @@ function App() {
   return (
     <div className="min-h-screen px-6">
       <header className="py-4">
-        <RouteHead name="Positive Energy" />
+        <RouteShell manifest={manifest} name="Positive Energy" />
       </header>
 
       <main className="py-16">

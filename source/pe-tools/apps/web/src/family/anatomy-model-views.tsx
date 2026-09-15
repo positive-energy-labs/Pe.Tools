@@ -8,7 +8,7 @@ import {
   type FamilyModel,
   type SolidGeo,
 } from "#/family/family-model";
-import type { Draft, Focus, PageWorld } from "#/family/model";
+import type { Draft, Focus, FamilyPageModel } from "#/family/model";
 import { draftedModel } from "#/family/project";
 import { AXES, BOX, M, VIEWS, type Axis, hoverProps } from "#/family/anatomy-model";
 import { ConnectorMark } from "#/family/anatomy-connector-mark";
@@ -26,7 +26,7 @@ export function ModelViews({
   onInspect,
 }: {
   model: FamilyModel;
-  world: PageWorld;
+  world: FamilyPageModel;
   draft: Draft;
   typeName: string;
   focusedParts: Set<string>;
@@ -40,7 +40,10 @@ export function ModelViews({
   const sheet = useMemo(() => buildSheet(drafted, typeName), [drafted, typeName]);
   const bounds = useMemo(() => sheetBounds(sheet), [sheet]);
 
-  const drawable = sheet.solids.some((geo) => geo.h != null && (geo.w != null || geo.d != null));
+  const drawable =
+    sheet.solids.some((geo) => geo.h != null && (geo.w != null || geo.d != null)) ||
+    sheet.planes.some((p) => p.axis && p.offset != null) ||
+    sheet.conns.some((c) => Object.values(c.pos).every((v) => v != null));
   if (!drawable)
     return (
       <div className="p-3">
@@ -74,6 +77,12 @@ export function ModelViews({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
+      {model.parameters && (
+        <p className="px-2 py-1 t-small text-ink-2">
+          Authored geometry: macro dimensions and reference-plane seeds. Constraints, nested
+          geometry and formulas require Revit.
+        </p>
+      )}
       <div className="flex min-h-0 flex-1">
         {VIEWS.map((view) => {
           const [uMin, uMax] = bounds[view.u];
@@ -246,7 +255,7 @@ export function ModelViews({
                     <title>
                       {param
                         ? `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum, driven by ${param}. It is a dim the processor will create; hovering lights that parameter's row in the table.`
-                        : `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum. No parameter drives it.`}
+                        : `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum. This is the authored position; dimension constraints may change it in Revit.`}
                     </title>
                     <line {...line} stroke="transparent" strokeWidth={7} />
                     <line {...line} stroke={stroke} strokeWidth={lit ? 1.2 : 0.6} />

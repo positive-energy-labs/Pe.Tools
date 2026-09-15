@@ -1,29 +1,27 @@
 import { Fragment } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import { StatLine } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { NumberCell, StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import type { PaneShortcut } from "#/components/lang/pane";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
-import { MANUAL_J, decideReason } from "#/takeoff/room-actions";
+import { MANUAL_J, decideReason, decisionRefusal } from "#/takeoff/room-actions";
 import { STATE_META, stateMeta } from "#/takeoff/room-state";
-import type { AtlasRow as Row, TakeoffStore } from "#/takeoff/store";
-import type { RoomEdit, WorldRoom } from "#/takeoff/world";
+import type { AtlasRow as Row, TakeoffsController } from "#/takeoff/controller";
+import type { RoomEdit, ModelRoom } from "#/takeoff/world";
 
 export function RoomPanelFromStore({
   store,
   row,
   ...props
 }: Omit<Parameters<typeof RoomPanel>[0], "decided"> & {
-  store: TakeoffStore;
+  store: TakeoffsController;
 }) {
-  const entity = useAtomValue(store.atoms.entity(row.room.guid));
-  return <RoomPanel {...props} row={row} decided={entity.decided} />;
+  return <RoomPanel {...props} row={row} decided={store.decisions} />;
 }
 
 function RoomPanel({
@@ -41,7 +39,7 @@ function RoomPanel({
   live: boolean;
   fieldsMode: "columns" | "panel";
   shortcuts: readonly PaneShortcut[];
-  onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
+  onDecide: (room: ModelRoom, flag: string, verb: Verdict) => void;
   onPatch: (patch: RoomEdit) => void;
   url: string;
 }) {
@@ -109,18 +107,18 @@ function RoomPanel({
                   <p className="face-mono text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">
-                    <Verb
+                    <ActionButton
                       tone={live ? "commit" : "act"}
                       label="accept · a"
-                      disabled={live && room.elementId === null}
-                      reason={decideReason(live, room, "accept")}
+                      disabled={live && decisionRefusal(room, flag) !== null}
+                      reason={decideReason(live, room, "accept", flag)}
                       onClick={() => onDecide(room, flag, "accept")}
                     />
-                    <Verb
+                    <ActionButton
                       tone={live ? "commit" : "act"}
                       label="dismiss · d"
-                      disabled={live && room.elementId === null}
-                      reason={decideReason(live, room, "dismiss")}
+                      disabled={live && decisionRefusal(room, flag) !== null}
+                      reason={decideReason(live, room, "dismiss", flag)}
                       onClick={() => onDecide(room, flag, "dismiss")}
                     />
                   </span>

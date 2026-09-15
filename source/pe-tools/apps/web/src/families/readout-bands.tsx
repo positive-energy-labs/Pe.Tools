@@ -1,9 +1,9 @@
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Press } from "#/components/lang/press";
-import { diagnosticLine } from "#/host/familyfoundry";
+import { diagnosticLine, warningLine } from "#/host/familyfoundry";
 import { familyFlag, provenanceSummary } from "#/families/plan";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -21,16 +21,8 @@ const QUEUE_ROW = "h-(--item-h)";
 const QUEUE_CELL = "hairline-b px-(--item-pad-x) align-middle";
 
 export function FamiliesReadoutBands() {
-  const {
-    fixture,
-    store,
-    plan,
-    includedPlanned,
-    outsideProfile,
-    excludedIds,
-    applyData,
-    projection,
-  } = useFamiliesWorkspace();
+  const { fixture, store, plan, outsideProfile, excludedIds, applyData, projection } =
+    useFamiliesWorkspace();
   return (
     <>
       {plan && (
@@ -44,15 +36,17 @@ export function FamiliesReadoutBands() {
                 decision queue
               </span>
             </SectionLabel>
-            <FactChip title="Included = ticked here AND carrying at least one lowered action.">
-              {includedPlanned.length} / {plan.entries.length} included
-            </FactChip>
-            {outsideProfile.length > 0 && (
-              <FactChip title="These families are in scope, but the profile made no claim about them, so apply will not touch them.">
-                {outsideProfile.length} unclaimed
-              </FactChip>
-            )}
           </div>
+          {plan.entries.flatMap((entry) =>
+            entry.warnings.map((warning) => (
+              <OutcomeLine
+                key={`${entry.familyId}:${warning.code}:${warning.message}`}
+                kind="advisory"
+                label={`${entry.familyName} · ${warning.code}`}
+                says={warningLine(warning)}
+              />
+            )),
+          )}
           {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
               `--item-h`, tier type. This queue was the last table in the app drawn the old way —
               `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
@@ -88,8 +82,8 @@ export function FamiliesReadoutBands() {
                           flag
                             ? `${flag}. There is nothing to include, so this row cannot be ticked.`
                             : excluded
-                              ? `${entry.familyName} is held back — apply will skip it. Click to put its ${entry.plan.loweredActions.length} action(s) back in.`
-                              : `${entry.familyName} is in: apply will run its ${entry.plan.loweredActions.length} action(s) against the model. Click to hold it back without re-planning.`
+                              ? `${entry.familyName} is held back — apply will skip it. Click to put its ${entry.changes.length + entry.runEffects.length} action(s) back in.`
+                              : `${entry.familyName} is in: apply will run its ${entry.changes.length + entry.runEffects.length} action(s) against the model. Click to hold it back without re-planning.`
                         }
                         onClick={() => void store.actions.exclude(entry.familyId)}
                         tone="quiet"
@@ -106,14 +100,14 @@ export function FamiliesReadoutBands() {
                       className={cn(QUEUE_CELL, "face-mono w-20 truncate")}
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
-                      {entry.plan.loweredActions.length} action
-                      {entry.plan.loweredActions.length === 1 ? "" : "s"}
+                      {entry.changes.length + entry.runEffects.length} action
+                      {entry.changes.length + entry.runEffects.length === 1 ? "" : "s"}
                     </td>
                     <td
                       className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
-                      {provenanceSummary(entry.plan)}
+                      {provenanceSummary(entry)}
                     </td>
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
@@ -173,15 +167,15 @@ export function FamiliesReadoutBands() {
               </span>
             </SectionLabel>
             <Seam op="host.shell.open link" />
-            {applyData.planHash && (
-              <FactChip
-                tone={plan?.planHash && applyData.planHash !== plan.planHash ? "alarm" : "meta"}
-                title={`The hash the project compiled to at apply time (${applyData.planHash}). If it differs from the plan hash in the sentence row, apply refused rather than running a stale plan.`}
-              >
-                recompiled {applyData.planHash.slice(0, 12)}
-              </FactChip>
-            )}
           </div>
+          {applyData.diagnostics.map((issue) => (
+            <OutcomeLine
+              key={`${issue.code}:${issue.path}`}
+              kind="error"
+              label={issue.code}
+              says={issue.message}
+            />
+          ))}
           <table className="mt-1 w-full border-separate border-spacing-0 t-small">
             <tbody>
               {applyData.receipts.map((entry) => (
@@ -191,46 +185,43 @@ export function FamiliesReadoutBands() {
                   </td>
                   <td className={cn(QUEUE_CELL, "w-20")}>
                     <FactChip
-                      tone={entry.success ? "done" : "alarm"}
+                      tone={entry.converged ? "done" : "alarm"}
                       title={
                         entry.success
-                          ? `The op reported this family written: ${entry.parametersChanged} parameter(s) changed. This is the receipt, not the plan's promise.`
+                          ? `The op reported this family written: ${entry.residue.length} change(s) remaining. This is the receipt, not the plan's promise.`
                           : (entry.error ??
                             "The op reported this family as failed and gave no reason. Re-plan and read the decision queue before retrying.")
                       }
                     >
-                      {entry.success ? "applied" : "failed"}
+                      {entry.converged ? "converged" : entry.success ? "residue" : "failed"}
                     </FactChip>
                   </td>
                   <td
                     className={cn(QUEUE_CELL, "t-small face-mono w-40 text-ink-2")}
-                    title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
+                    title="Changes still present after apply and recapture. Zero residue plus no errors means converged."
                   >
-                    {entry.parametersChanged} changed · +{entry.diffSummary.added} −
-                    {entry.diffSummary.removed} ~{entry.diffSummary.modified}
+                    {entry.residue.length} remaining
                   </td>
                   <td
                     className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
                     title={
-                      entry.operationsRun.length > 0
-                        ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
-                        : (entry.error ?? "No operations ran and no reason was reported.")
+                      entry.errors.length > 0
+                        ? `Errors reported by this family: ${entry.errors.join(", ")}.`
+                        : (entry.error ?? "No errors reported.")
                     }
                   >
-                    {entry.operationsRun.join(" · ") || (entry.error ?? "")}
+                    {entry.errors.join(" · ") || (entry.error ?? "")}
                   </td>
                   <td className={cn(QUEUE_CELL, "w-24 text-right")}>
-                    {entry.artifactDirectoryPath && (
+                    {entry.artifactDirectory && (
                       /* Leaving the app entirely — nav:out, which is the direction browsers
                          already taught. It writes nothing, so it is not blue-filled. */
-                      <Verb
+                      <ActionButton
                         label="artifacts"
                         tone="nav"
                         direction="out"
-                        onClick={() =>
-                          void store.actions.openPath(entry.artifactDirectoryPath ?? "")
-                        }
-                        reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectoryPath}). The bundle stays on disk — this route never copies it.`}
+                        onClick={() => void store.actions.openPath(entry.artifactDirectory ?? "")}
+                        reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectory}). The bundle stays on disk — this route never copies it.`}
                       />
                     )}
                   </td>
@@ -266,12 +257,12 @@ export function FamiliesReadoutBands() {
             </SectionLabel>
             <span className="ml-2">
               <FactChip title="How many picked families the projection read back out of the model.">
-                {projection.projections.length} famil
-                {projection.projections.length === 1 ? "y" : "ies"}
+                {projection.families.length} famil
+                {projection.families.length === 1 ? "y" : "ies"}
               </FactChip>
             </span>
           </summary>
-          {projection.projections.length === 0 && projection.diagnostics.length === 0 && (
+          {projection.families.length === 0 && projection.diagnostics.length === 0 && (
             <div className="mt-1">
               <EmptyState
                 story="scope"
@@ -292,14 +283,21 @@ export function FamiliesReadoutBands() {
               />
             </div>
           ))}
-          {projection.projections.map((entry) => (
+          {projection.families.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
                 <span className="t-small t-upper">{entry.familyName ?? entry.familyId}</span>
-                {entry.profileJson && (
-                  <Verb
+                <span className="t-small text-ink-2">
+                  {Object.keys(entry.coverage).length
+                    ? `coverage ${Object.entries(entry.coverage)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(" / ")} / ${entry.unmodeledCount} unmodeled`
+                    : "coverage not captured / unmodeled not captured"}
+                </span>
+                {entry.modelJson && (
+                  <ActionButton
                     label="copy"
-                    onClick={() => void navigator.clipboard.writeText(entry.profileJson ?? "")}
+                    onClick={() => void navigator.clipboard.writeText(entry.modelJson ?? "")}
                     reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."
                   />
                 )}
@@ -311,12 +309,12 @@ export function FamiliesReadoutBands() {
                   />
                 )}
               </div>
-              {entry.profileJson && (
+              {entry.modelJson && (
                 <pre
                   className="t-small face-mono mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
                   data-surface="recess"
                 >
-                  {entry.profileJson}
+                  {entry.modelJson}
                 </pre>
               )}
             </div>

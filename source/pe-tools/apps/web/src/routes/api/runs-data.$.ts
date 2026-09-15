@@ -11,17 +11,18 @@ import path from "node:path";
 function findPool(): string {
   const override = process.env.PE_TAKEOFF_RUNS_DIR;
   if (override) return override;
-  // Walk up from the dev server cwd to the repo root (the dir that owns .git or .artifacts).
+  // .git may be a directory or a worktree file. Package-local .artifacts is not a root.
   let dir = process.cwd();
+  let root = dir;
   for (let i = 0; i < 8; i++) {
-    if (existsSync(path.join(dir, ".git")) || existsSync(path.join(dir, ".artifacts"))) {
-      return path.join(dir, ".artifacts", "takeoff-runs");
+    if (existsSync(path.join(dir, ".git"))) {
+      root = dir; // Prefer the outer checkout over the nested pe-tools repository.
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return path.join(process.cwd(), ".artifacts", "takeoff-runs");
+  return path.join(root, ".artifacts", "takeoff-runs");
 }
 
 const CONTENT_TYPES: Record<string, string> = {

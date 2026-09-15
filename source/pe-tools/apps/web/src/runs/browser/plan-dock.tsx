@@ -44,17 +44,18 @@ export function PlanDock(props: {
 
   const frame = useMemo(() => {
     if (!level) return null;
-    if (dataCur?.plan) return levelFrame(level, planFrame(dataCur.plan.registration));
+    const frameKey = `${curId}/${level}`;
+    if (dataCur?.plan) return levelFrame(frameKey, planFrame(dataCur.plan.registration));
     if (dataCur?.zones.length) {
-      return levelFrame(level, {
+      return levelFrame(frameKey, {
         minX: Math.min(...dataCur.zones.map((zone) => zone.MinX)) - 4,
         minY: Math.min(...dataCur.zones.map((zone) => zone.MinY)) - 4,
         maxX: Math.max(...dataCur.zones.map((zone) => zone.MaxX)) + 4,
         maxY: Math.max(...dataCur.zones.map((zone) => zone.MaxY)) + 4,
       });
     }
-    return frameCache.get(level) ?? null;
-  }, [level, dataCur]);
+    return frameCache.get(frameKey) ?? null;
+  }, [curId, level, dataCur]);
 
   useEffect(() => {
     if (!frame) return;
@@ -192,7 +193,13 @@ export function PlanDock(props: {
         ) : (
           <div className="flex flex-1 items-center justify-center">loading {level ?? "level"}…</div>
         )}
-        {showKey && <LegendFloater underlay={underlay} onClose={() => setShowKey(false)} />}
+        {showKey && (
+          <LegendFloater
+            underlay={underlay}
+            sliceEvidence={dataCur?.zones.some((zone) => !!zone.capture)}
+            onClose={() => setShowKey(false)}
+          />
+        )}
         {showStats && level && (
           <LevelStatsFloater
             level={level}
@@ -234,7 +241,7 @@ export type RunRow = {
   board: Board;
   scores: RowScores | null;
   scoreDelta: number | null;
-  delta: { solved: number; rooms: number; sqft: number; held: number } | null;
+  delta: { solved: number; rooms: number | null; sqft: number | null; held: number | null } | null;
   partiality: Partiality;
 };
 

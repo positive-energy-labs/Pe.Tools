@@ -39,7 +39,7 @@ import { tv } from "#/lib/tv";
 
 import { ArtifactFrame } from "./artifact-frame";
 import { FactChip } from "./chip";
-import { Verb } from "./verb";
+import { ActionButton } from "./action-button";
 
 import "./lang.css";
 
@@ -120,7 +120,7 @@ export function ArmingStrip({
           </div>
           <p className={slots.refusal()}>{state.refusal}</p>
           <div className={slots.controls()}>
-            <Verb
+            <ActionButton
               label="re-plan"
               icon={RefreshCw}
               onClick={state.onReplan}
@@ -158,7 +158,7 @@ export function ArmingStrip({
         />
 
         <div className={slots.controls()}>
-          <Verb
+          <ActionButton
             tone="commit"
             label={verb}
             icon={Upload}
@@ -171,7 +171,7 @@ export function ArmingStrip({
             }
           />
           {armed ? (
-            <Verb label="cancel" onClick={onCancel} reason="Disarms — nothing is written" />
+            <ActionButton label="cancel" onClick={onCancel} reason="Disarms — nothing is written" />
           ) : null}
           {armed ? (
             <span className={slots.caveat()}>armed against a plan of unknown age</span>

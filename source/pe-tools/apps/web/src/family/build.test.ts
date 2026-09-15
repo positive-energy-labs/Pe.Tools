@@ -6,6 +6,9 @@
  * build would read is a way for the surface to lie, and a refusal nobody tested is a refusal that
  * will one day not fire. These are pure functions for exactly that reason.
  */
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { address } from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -13,11 +16,19 @@ import {
   type BuildFacts,
   buildOutputPath,
   buildPlanHash,
+  buildReceiptSummary,
   buildRefusals,
   buildTarget,
   issueText,
-  readBuildReceipt,
+  projectBuildReceipt,
 } from "./build.tsx";
+import {
+  familyManifest,
+  latestBuildStatus,
+  type FamilyAuthoringFacts,
+  type FamilyBuildReview,
+} from "./manifest.ts";
+import { useRoute } from "#/route";
 
 /** A live lane with a saved, valid, bound, unarmed document — the one state that may arm. */
 const CLEAN: BuildFacts = {
@@ -32,6 +43,190 @@ const CLEAN: BuildFacts = {
 
 const codes = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refusal.code);
 const says = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refusal.says);
+
+const authoring = (current = true): FamilyAuthoringFacts => ({
+  relativePath: "refline.family.json",
+  versionToken: "fixture-native-v1",
+  validation: { isValid: true, issues: [] },
+  unsavedCount: 0,
+  stagedCount: 0,
+  current,
+});
+
+const buildManifest = (current = true) => {
+  const declared = familyManifest(authoring(current));
+  const seed = declared.seeds?.build;
+  if (!seed) throw Error("The Family build seed is required");
+  return {
+    ...declared,
+    seeds: {
+      build: {
+        ...seed,
+        target: { kind: "document" as const, ref: { session: "revit-a", openId: "family-a" } },
+      },
+    },
+  };
+};
+
+describe("build ActionHandles — prepare, review, commit", () => {
+  it("binds review identity, retains a refused review, and clears after seeded success", async () => {
+    const declared = buildManifest();
+    expect(declared.needs).toBe("document");
+    expect(declared.actions?.["prepare-build"].needs).toBe("document");
+    expect(declared.actions?.build.needs).toBe("document");
+    const familyReading = declared.readings?.family;
+    if (typeof familyReading !== "function") throw Error("Family Reading must follow its Work");
+    expect(
+      familyReading(declared.page!.parse({}), {
+        route: "family",
+        target: address("C:\\Models\\Example.rfa"),
+        work: "demo",
+      }),
+    ).toEqual({
+      kind: "family-readings",
+      work: { route: "family", target: null, work: "demo" },
+    });
+
+    history.replaceState(null, "", "/family?demo=build");
+    const { result, rerender } = renderHook(
+      ({ current }: { current: boolean }) => useRoute(buildManifest(current), { work: "demo" }),
+      { initialProps: { current: true } },
+    );
+
+    expect(result.current.actions.build.refusal).toBe("Review build first");
+    await act(async () => {
+      expect(
+        await result.current.actions["prepare-build"].run({ reason: "release candidate" }),
+      ).toBeNull();
+    });
+    expect(result.current.page[0].buildReview).toMatchObject({
+      target: { session: "revit-a", openId: "family-a" },
+      workspaceId: "demo",
+      fileVersion: "fixture-native-v1",
+      reason: "release candidate",
+    });
+    expect(result.current.actions.build.refusal).toBeNull();
+
+    act(() =>
+      result.current.page[1]({
+        buildReview: {
+          ...result.current.page[0].buildReview!,
+          target: { session: "revit-a", openId: "family-b" },
+        },
+      }),
+    );
+    expect(result.current.actions.build.refusal).toBe("Review the current saved family profile");
+    await act(async () => {
+      expect(await result.current.actions.build.run()).toMatchObject({ code: "not-ready" });
+    });
+    expect(result.current.page[0].buildReview).not.toBeNull();
+
+    act(() =>
+      result.current.page[1]({
+        buildReview: {
+          ...result.current.page[0].buildReview!,
+          target: { session: "revit-a", openId: "family-a" },
+          documentId: {
+            ...result.current.page[0].buildReview!.documentId,
+            relativePath: "other.family.json",
+          },
+        },
+      }),
+    );
+    expect(result.current.actions.build.refusal).toBe("Review the current saved family profile");
+
+    rerender({ current: false });
+    expect(result.current.actions.build.refusal).toBe("Wait for current authored edits");
+    rerender({ current: true });
+    await act(async () => {
+      await result.current.actions["prepare-build"].run({ reason: "release candidate" });
+    });
+    expect(result.current.actions.build.refusal).toBeNull();
+    await act(async () => {
+      expect(await result.current.actions.build.run()).toBeNull();
+    });
+    expect(result.current.page[0].buildReview).toBeNull();
+    cleanup();
+  });
+});
+
+describe("build receipt projection", () => {
+  const target = { session: "revit-a", openId: "family-a" };
+  const review: FamilyBuildReview = {
+    target,
+    documentId: {
+      moduleKey: "FamilyFoundry",
+      rootKey: "models",
+      relativePath: "refline.family.json",
+    },
+    workspaceId: "demo",
+    fileVersion: "v7",
+    reason: "release candidate",
+  };
+  const status = (id: string, startedAt: string, request = review) => ({
+    kind: "workflow" as const,
+    id,
+    key: "family.build",
+    actor: "human" as const,
+    destination: { kind: "document" as const, ref: target },
+    request,
+    bases: {},
+    startedAt,
+    publication: { state: "unrequested" as const },
+    state: "succeeded" as const,
+  });
+
+  it("selects the newest success for the exact saved profile and renders its owned result", () => {
+    expect(
+      latestBuildStatus(
+        [
+          status("older", "2026-09-14T01:00:00.000Z"),
+          status("other-version", "2026-09-14T03:00:00.000Z", {
+            ...review,
+            fileVersion: "v8",
+          }),
+          status("current", "2026-09-14T02:00:00.000Z"),
+        ],
+        target,
+        review,
+      )?.id,
+    ).toBe("current");
+
+    const projected = projectBuildReceipt(
+      [
+        {
+          ...status("current", "2026-09-14T02:00:00.000Z"),
+          steps: [],
+          preparation: { state: "unprepared" },
+          recovery: [],
+          result: {
+            outputPath: "C:/build/refline.rfa",
+            native: {
+              reading: {
+                at: address("C:/build/refline.rfa"),
+                version: "native-v1",
+                observedAt: "2026-09-14T02:00:01.000Z",
+              },
+              familyName: "Reference Line",
+              outputPath: "C:/build/refline.rfa",
+              templatePath: "C:/templates/Generic Model.rft",
+              converged: true,
+              residueCount: 0,
+            },
+          },
+        },
+      ],
+      "current",
+    );
+    expect(projected).toEqual({
+      id: "current",
+      outputPath: "C:/build/refline.rfa",
+      converged: true,
+      residueCount: 0,
+    });
+    expect(buildReceiptSummary(projected!)).toBe("C:/build/refline.rfa · converged · 0 residues");
+  });
+});
 
 describe("buildRefusals — the ceremony's whole safety model", () => {
   it("a saved, valid, bound document at the armed revision arms", () => {
@@ -141,14 +336,12 @@ describe("buildRefusals — the ceremony's whole safety model", () => {
 });
 
 describe("the arming preview — which family, from which document, to which .rfa", () => {
-  it("names all three, and mirrors build_evidence's own default output path", () => {
-    // The `.json` really does stay in the middle: the host builds the name from the relative path
-    // verbatim. A prettier name here would be a path that does not exist.
+  it("names the source and the admitted action output pattern", () => {
     expect(buildOutputPath("models/fcu.family.json")).toBe(
-      ".artifacts/tmp/family/models-fcu.family.json-<timestamp>.rfa",
+      ".artifacts/tmp/family/<action-id-sha256>.rfa",
     );
     expect(buildTarget(CLEAN, "Fan Coil Unit")).toBe(
-      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/models-fcu.family.json-<timestamp>.rfa",
+      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
     );
   });
 
@@ -173,41 +366,5 @@ describe("issueText — host issues are `unknown` on the wire", () => {
     expect(issueText({ message: "boom" })).toBe("boom");
     expect(issueText("boom")).toBe("boom");
     expect(issueText({ code: 4 })).toBe('{"code":4}');
-  });
-});
-
-describe("readBuildReceipt — a build with no receipt is not a success", () => {
-  it("reads the full receipt build_evidence returns", () => {
-    expect(
-      readBuildReceipt({
-        familyName: "Fan Coil Unit",
-        rfaPath: "C:/x/.artifacts/tmp/family/fcu-20260817-141500.rfa",
-        typeNames: ["Compact"],
-        parameterCount: 12,
-        documentVersionToken: "7",
-      }),
-    ).toEqual({
-      familyName: "Fan Coil Unit",
-      rfaPath: "C:/x/.artifacts/tmp/family/fcu-20260817-141500.rfa",
-      documentVersionToken: "7",
-      parameterCount: 12,
-    });
-  });
-
-  it("the PATH is what makes it a receipt — without one the outcome is unknown", () => {
-    expect(readBuildReceipt(null)).toBeNull();
-    expect(readBuildReceipt("ok")).toBeNull();
-    expect(readBuildReceipt({})).toBeNull();
-    expect(readBuildReceipt({ familyName: "Fan Coil Unit" })).toBeNull();
-    expect(readBuildReceipt({ rfaPath: "" })).toBeNull();
-  });
-
-  it("names the family generically rather than inventing one, and tolerates a missing count", () => {
-    expect(readBuildReceipt({ rfaPath: "out.rfa" })).toEqual({
-      familyName: "the family",
-      rfaPath: "out.rfa",
-      documentVersionToken: null,
-      parameterCount: null,
-    });
   });
 });

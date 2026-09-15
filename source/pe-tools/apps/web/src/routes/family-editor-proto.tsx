@@ -1,3 +1,4 @@
+import { RouteShell, emptyManifest } from "#/route";
 import { token } from "#/lib/token";
 /**
  * The round-3 composed winner. The family ledger holds the prototype verdict.
@@ -6,12 +7,23 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { ParadigmD } from "#/family-review/proto-editor/composed";
-import { TypeStage, useEditor } from "#/family-review/proto-editor/shell";
+import { TypeBand, useEditor } from "#/family-review/proto-editor/shell";
+
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("family-editor-proto", "Family Editor Proto");
+
+function RouteShelledFamilyEditorProto() {
+  return (
+    <RouteShell manifest={manifest}>
+      <FamilyEditorProto />
+    </RouteShell>
+  );
+}
 
 export const Route = createFileRoute("/family-editor-proto")({
-  component: FamilyEditorProto,
+  component: RouteShelledFamilyEditorProto,
 });
 
 function FamilyEditorProto() {
@@ -25,7 +37,7 @@ function FamilyEditorProto() {
       >
         <span>family editor</span>
         <span>{editor.model.family.name}</span>
-        <TypeStage editor={editor} />
+        <TypeBand editor={editor} />
         {/* The chip states the fact; the HelpTip beside it carries the provenance sentence. */}
         <FactChip
           tone="caution"
@@ -40,7 +52,7 @@ function FamilyEditorProto() {
           nowhere — a shipping editor states which document it reads from and which it would send
           to.
         </HelpTip>
-        <Verb
+        <ActionButton
           label="reset"
           reason="Throw away every staged edit and re-read the checked-in fixture"
           onClick={editor.reset}
