@@ -1,69 +1,24 @@
 using NetTopologySuite.Geometries;
-using NetTopologySuite.Operation.Polygonize;
-using NetTopologySuite.Operation.Union;
+
+
 
 namespace Pe.Revit.Takeoff;
 
 // A designer-declared partition domain: the closed loops of one Zoning Region, model feet.
-// Scope law: the detector never claims geometry outside this mask — roofs, other levels, site,
-// and linked-model noise are excluded by declaration, not inference.
+// Scope law: nothing outside this loop can be claimed. The per-cell raster mask (CellMask) went with
+// the heightfield in ADR 0011; the partition clips faces to the loop exactly instead.
 public sealed class ZoneScope
 {
-    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 0);
+
 
     public string Name = "";
     public List<List<double[]>> Loops = new();   // outer + holes, even-odd, model ft
 
-    // Per-cell mask on a snapshot grid: even-odd containment of each cell center.
-    public bool[] CellMask(Heightfield hf)
-    {
-        this.Validate();
-        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-        foreach (var loop in this.Loops)
-        foreach (var p in loop)
-        {
-            if (p[0] < minX) minX = p[0];
-            if (p[0] > maxX) maxX = p[0];
-            if (p[1] < minY) minY = p[1];
-            if (p[1] > maxY) maxY = p[1];
-        }
-        int W = hf.W, H = hf.H;
-        var mask = new bool[W * H];
-        int x0 = Math.Max(0, (int)Math.Floor((minX - hf.MinX) / hf.CellFt));
-        int x1 = Math.Min(W - 1, (int)Math.Ceiling((maxX - hf.MinX) / hf.CellFt));
-        int y0 = Math.Max(0, (int)Math.Floor((minY - hf.MinY) / hf.CellFt));
-        int y1 = Math.Min(H - 1, (int)Math.Ceiling((maxY - hf.MinY) / hf.CellFt));
-        for (int y = y0; y <= y1; y++)
-        {
-            double cy = hf.MinY + (y + 0.5) * hf.CellFt;
-            for (int x = x0; x <= x1; x++)
-            {
-                double cx = hf.MinX + (x + 0.5) * hf.CellFt;
-                if (ContainsEvenOdd(this.Loops, cx, cy)) mask[y * W + x] = true;
-            }
-        }
-        return mask;
-    }
 
     internal Geometry ExactGeometry()
     {
         this.Validate();
-        var linework = this.Loops.Select(loop => {
-            var coordinates = loop.Select(point => new Coordinate(point[0], point[1])).ToList();
-            if (!coordinates[0].Equals2D(coordinates[^1])) coordinates.Add(coordinates[0].Copy());
-            return (Geometry)GeometryFactory.CreateLineString(coordinates.ToArray());
-        }).ToList();
-        var polygonizer = new Polygonizer();
-        polygonizer.Add(UnaryUnionOp.Union(linework));
-        var faces = polygonizer.GetPolygons().Cast<Polygon>()
-            .Where(face => ContainsEvenOdd(this.Loops, face.InteriorPoint.X, face.InteriorPoint.Y))
-            .Cast<Geometry>().ToList();
-        if (faces.Count == 0)
-            throw new InvalidOperationException($"zone '{this.Name}' has no polygonal area");
-        var geometry = UnaryUnionOp.Union(faces);
-        if (!geometry.IsValid || geometry.Area <= 0)
-            throw new InvalidOperationException($"zone '{this.Name}' has invalid polygonal area");
-        return geometry;
+        return Pe.Revit.Partition.Solve.GeometryOf(this.Loops.Select(loop => loop.SelectMany(point => point.Take(2)).ToArray()).ToArray());
     }
 
     // Even-odd over ALL loops together: holes flip parity without needing orientation metadata.

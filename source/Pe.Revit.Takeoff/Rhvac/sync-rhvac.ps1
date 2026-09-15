@@ -52,6 +52,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Sync')][string]$SyncJson,
     [Parameter(ParameterSetName = 'Sync')][string]$ResultJson,
     [string]$BackupDir,
+    [string]$ExpectedVersion,
     [switch]$WhatIf
 )
 
@@ -62,6 +63,13 @@ $exportScript = Join-Path $PSScriptRoot 'export-rhvac.ps1'
 $targetPath = [IO.Path]::GetFullPath($Target)
 if (![IO.File]::Exists($targetPath)) { throw "Target .r10 not found: $targetPath" }
 if (![IO.File]::Exists($exportScript)) { throw "Export lane not found: $exportScript" }
+
+function Assert-ExpectedVersion {
+    if ($ExpectedVersion -and (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash -ne $ExpectedVersion) {
+        throw 'RHVAC file changed since the reviewed base; no replacement was performed.'
+    }
+}
+Assert-ExpectedVersion
 
 # --- 1. Refuse while RHVAC (or anything else) holds the file ---------------------------------
 # Jet drops a sibling .ldb while a database is open; an exclusive handle is the direct check.
@@ -218,6 +226,7 @@ $backupRoot = if ($BackupDir) { [IO.Path]::GetFullPath($BackupDir) } else { [IO.
 if (![IO.Directory]::Exists($backupRoot)) { [void][IO.Directory]::CreateDirectory($backupRoot) }
 $backupPath = Join-Path $backupRoot ("{0}.{1}.bak{2}" -f
     [IO.Path]::GetFileNameWithoutExtension($targetPath), $stamp, [IO.Path]::GetExtension($targetPath))
+Assert-ExpectedVersion
 [IO.File]::Replace($workingPath, $targetPath, $backupPath, $true)
 "SWAPPED -> $targetPath   backup: $backupPath"
 Write-SyncResult $backupPath

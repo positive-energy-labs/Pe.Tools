@@ -78,6 +78,9 @@ public static class TakeoffCarriers
             document,
             next.Definition,
             [next.Category]);
+        // ADR 0011 / ledger ruling 3: a document that has been initialized answers with its declared
+        // enclosure rather than the default. Idempotent, and the caller already owns the transaction.
+        Pe.Revit.Partition.EnclosureDeclaration.EnsureBound(document);
         var remaining = Preflight(document, stage).MissingCarrierGuids;
         return new TakeoffCarrierInitializationData(
             remaining.Count == 0 ? "ready" : "needs-initialization",

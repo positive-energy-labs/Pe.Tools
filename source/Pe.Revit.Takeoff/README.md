@@ -20,6 +20,7 @@ Each step has one owner and writes to one home. "Op" means a `takeoff.*`/`rhvac.
 
 | Datum | Home | Notes |
 |-------|------|-------|
+| Native measurements | Room Region provenance `measurement` | Explicit rerun; geometry basis includes zone, siblings, current region and level. Original `partition` evidence and prior decisions are retained. Freshness describes that geometry basis, not every external model change. |
 | Zone geometry, name, System tags | Zoning Region FR + Pe params | designer-authored |
 | System identity (GUID ↔ tag) | System registry: versioned JSON-blob param on Project Information | rename = registry edit through explicit reconciliation |
 | Room geometry | Room Region FR | reshaped only in Revit |

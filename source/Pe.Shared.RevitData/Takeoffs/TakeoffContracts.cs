@@ -1,7 +1,5 @@
 namespace Pe.Shared.RevitData.Takeoffs;
 
-public sealed record TakeoffViewFacts(long ElementId, int Regions);
-public sealed record TakeoffViewsData(IReadOnlyList<TakeoffViewFacts> Views);
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
 {
@@ -37,7 +35,12 @@ public sealed record TakeoffLiveRegion(
     double Sqft,
     string RoomType,
     string Blob,
-    List<double[]> Outer);
+    List<double[]> Outer,
+    List<List<double[]>> Holes,
+    TakeoffRegionAnalysis? Analysis = null);
+/// <summary>Freshness against native region and zone geometry, not a claim about all model evidence.</summary>
+public sealed record TakeoffRegionAnalysis(
+    string State, string? RunId, double? FloorZ, double? CeilingZ, string? Hold);
 public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,
@@ -52,23 +55,15 @@ public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Ite
 public sealed record TakeoffAdopted(long ElementId, Guid Guid);
 public sealed record TakeoffAdoptResult(IReadOnlyList<TakeoffAdopted> Adopted);
 
-public sealed record TakeoffPrepareCaptureRequest(string View);
-public sealed record TakeoffCapturePrepared(string Level);
-public sealed record TakeoffDetectCaptureRequest(string Level);
-public sealed record TakeoffCaptureResult(
-    string Level,
-    string ReplayPath,
-    int Rooms,
-    double TotalSqft);
 
+// The partition runs on Pe.Revit.Space, not on rendered pixels (ADR 0011). The zone region element
+// carries its own loop and level, so the replay path, the level fragment and the loops are gone.
 public sealed record TakeoffPartitionRequest(
-    string ReplayPath,
+    long ZoneRegion,
     string View,
-    string LevelFragment,
     string ZoneName,
     Guid ZoneGuid,
-    string RunId,
-    List<List<double[]>> Loops);
+    string RunId);
 public sealed record TakeoffDetectedRoom(
     string Id,
     double RawSqft,
@@ -100,7 +95,18 @@ public sealed record TakeoffPartitionResult(
     IReadOnlyList<string> Failures,
     IReadOnlyList<TakeoffDetectedRoom> Rooms,
     IReadOnlyList<TakeoffDetectedResidue> Residues,
-    IReadOnlyList<TakeoffLiveRegion> Regions);
+    IReadOnlyList<TakeoffLiveRegion> Regions,
+    TakeoffPartitionReview? Review = null);
+
+public sealed record TakeoffPartitionReview(
+    TakeoffReviewSource Source,
+    TakeoffReviewZone Zone,
+    IReadOnlyList<TakeoffReviewShape> Shapes);
+public sealed record TakeoffReviewSource(string RunId, string DocumentKey, string ScopeKey);
+public sealed record TakeoffReviewZone(string Key, string Name, IReadOnlyList<IReadOnlyList<double[]>> Loops);
+public sealed record TakeoffReviewShape(
+    string Id, string Kind, string? Disposition, string? Reason, double? Sqft,
+    double[]? Label, IReadOnlyList<IReadOnlyList<double[]>> Loops);
 
 public sealed record TakeoffResolution(
     string Subject,
@@ -108,7 +114,6 @@ public sealed record TakeoffResolution(
     string Verb,
     string At,
     string RunId);
-public sealed record TakeoffDecisionsRequest(long ElementId, List<TakeoffResolution> Resolutions);
 public sealed record TakeoffWriteResult(long ElementId, Guid ZoneGuid, int Bytes, string Blob);
 
 public sealed record TakeoffRhvacLink(
@@ -119,6 +124,3 @@ public sealed record TakeoffRhvacLink(
 public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link);
 public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
-
-public sealed record TakeoffRoomTypeRequest(long ElementId, string RoomType);
-public sealed record TakeoffRoomTypeData(string RoomType);
