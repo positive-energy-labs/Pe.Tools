@@ -13,7 +13,7 @@ import {
   useState,
 } from "react";
 import { LABEL, LABEL_SIZE, PLAN_LAW, ZONE_STROKE, ZONE_WIDTH } from "../palette";
-import { paintPlan, ringPath, toPx } from "../world";
+import { paintPlan, ringPath, toPx, type RegisteredPlan } from "../world";
 import type { Frame, LevelData, View } from "./frame";
 import { PX_PER_FT } from "./unknown";
 import { ReviewShapes, ReviewList, reviewShapes } from "../review";
@@ -24,6 +24,7 @@ export function PlanPane(props: {
   runId: string;
   tag: string | null;
   data: LevelData | null;
+  plan: RegisteredPlan | null;
   frame: Frame;
   view: View;
   setView: Dispatch<SetStateAction<View>>;
@@ -104,14 +105,14 @@ export function PlanPane(props: {
 
   useEffect(() => {
     const canvas = planCanvasRef.current;
-    if (!canvas || !data?.plan) return;
+    if (!canvas || !data || !props.plan) return;
     canvas.width = vp.widthPx;
     canvas.height = vp.heightPx;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     paintPlan(
       ctx,
-      data.plan,
+      props.plan,
       vp,
       data.zones.map((zone) => zone.ZoneLoops as [number, number][][]),
       PLAN_LAW.blackPoint,
@@ -119,7 +120,7 @@ export function PlanPane(props: {
       PLAN_LAW.insideZoneOpacity,
       PLAN_LAW.outsideZoneOpacity,
     );
-  }, [data, vp]);
+  }, [data, props.plan, vp]);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -237,7 +238,7 @@ export function PlanPane(props: {
       }}
     >
       <div style={worldStyle}>
-        {data?.plan ? (
+        {props.plan ? (
           <canvas
             ref={planCanvasRef}
             style={{ position: "absolute", inset: 0, width: vp.widthPx, height: vp.heightPx }}
@@ -300,7 +301,7 @@ export function PlanPane(props: {
           loading {props.runId}…
         </div>
       )}
-      {data && !data.plan ? (
+      {data && !props.plan ? (
         <div className="absolute bottom-2 left-2 px-1.5 py-0.5">
           plan unavailable in this package
         </div>

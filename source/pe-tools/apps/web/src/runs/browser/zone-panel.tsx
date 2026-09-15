@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fb, itemKey, useFb } from "../feedback/staging";
 import { CLOSE_M, INK_M, PLAN_LAW, SEAL_DOOR, SEAL_RUN, ZONE_STROKE, ZONE_WIDTH } from "../palette";
 import {
+  comparisonPlan,
   paintPlan,
   paintClassRaster,
   paintRaster,
@@ -22,6 +23,8 @@ export function ZonePanel(props: {
   maxW: number;
   maxH: number;
   underlay: boolean;
+  registrationRunId?: string;
+  registrationZone?: ZoneRecord;
   fbKey?: string;
   onStage?: () => void;
 }) {
@@ -65,14 +68,22 @@ export function ZonePanel(props: {
   useEffect(() => {
     let live = true;
     setPlan(undefined);
-    source
-      .loadPlan(runId, zone.Ink, zone.plan)
-      .then((value) => live && setPlan(value))
+    Promise.all([
+      source.loadPlan(runId, zone.Ink, zone.plan),
+      props.registrationRunId && props.registrationZone
+        ? source.loadPlan(
+            props.registrationRunId,
+            props.registrationZone.Ink,
+            props.registrationZone.plan,
+          )
+        : Promise.resolve(null),
+    ])
+      .then(([value, reference]) => live && setPlan(comparisonPlan(value, reference)))
       .catch(() => live && setPlan(null));
     return () => {
       live = false;
     };
-  }, [runId, zone.Ink, zone.plan, source]);
+  }, [runId, zone.Ink, zone.plan, props.registrationRunId, props.registrationZone, source]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

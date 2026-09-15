@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "#/lib/utils";
 import {
   boardSummary,
+  comparisonPlan,
   matchZone,
   type Partiality,
   type RunScores,
@@ -161,6 +162,7 @@ export function PlanDock(props: {
                 runId={prevId}
                 tag="A · baseline"
                 data={dataPrev}
+                plan={dataPrev?.plan ?? null}
                 frame={frame}
                 view={view}
                 setView={setView}
@@ -179,6 +181,7 @@ export function PlanDock(props: {
                 runId={curId}
                 tag={comparing ? "B · current" : null}
                 data={dataCur}
+                plan={comparisonPlan(dataCur?.plan ?? null, dataPrev?.plan ?? null)}
                 frame={frame}
                 view={view}
                 setView={setView}

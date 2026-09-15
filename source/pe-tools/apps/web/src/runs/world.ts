@@ -95,6 +95,7 @@ export type Raster = {
 export type ClassRaster = Omit<Raster, "bits"> & { classes: Uint8Array };
 
 export type PlanRegistration = {
+  imageSha256?: string;
   width: number;
   height: number;
   topLeft: [number, number];
@@ -106,6 +107,21 @@ export type RegisteredPlan = {
   image: ImageBitmap;
   registration: PlanRegistration;
 };
+
+export function comparisonPlan(
+  plan: RegisteredPlan | null,
+  reference: RegisteredPlan | null,
+): RegisteredPlan | null {
+  if (
+    !plan ||
+    !reference ||
+    !plan.registration.imageSha256 ||
+    plan.registration.imageSha256 !== reference.registration.imageSha256
+  ) {
+    return plan;
+  }
+  return { ...plan, registration: reference.registration };
+}
 
 export type Ring = { kind: string; points: [number, number][] };
 /** disposition: persisted 8th ROOM column (SHIMS.md #3 close). `null` = the package predates the

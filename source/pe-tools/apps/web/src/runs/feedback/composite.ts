@@ -4,6 +4,7 @@ import { ReviewShapes, reviewShapes, reviewLabel } from "../review";
 import { CLOSE_M, INK_M, PLAN_LAW, SEAL_DOOR, SEAL_RUN, ZONE_STROKE, ZONE_WIDTH } from "../palette";
 import { dash, token as designToken } from "../../lib/token";
 import {
+  comparisonPlan,
   loadPlan,
   loadRaster,
   loadReplaySeedInk,
@@ -13,6 +14,7 @@ import {
   paintPlan,
   paintRaster,
   ringPath,
+  type RegisteredPlan,
   type ZoneGeometry,
   type ZoneRecord,
   type ZoneViewport,
@@ -86,6 +88,7 @@ async function paintPanelTile(
   runId: string,
   zone: ZoneRecord,
   flags: Set<string>,
+  referencePlan: RegisteredPlan | null = null,
 ): Promise<HTMLCanvasElement> {
   const pad = 4;
   const wFt = zone.MaxX - zone.MinX + pad * 2;
@@ -113,10 +116,11 @@ async function paintPanelTile(
     loadZoneGeometry(runId, zone.Tsv),
     loadPlan(runId, zone.Ink, zone.plan).catch(() => null),
   ]);
-  if (plan) {
+  const renderPlan = comparisonPlan(plan, referencePlan);
+  if (renderPlan) {
     paintPlan(
       ctx,
-      plan,
+      renderPlan,
       vp,
       [zone.ZoneLoops as [number, number][][]],
       PLAN_LAW.blackPoint,
@@ -202,16 +206,22 @@ function captionLines(item: StagedItem): { text: string; tone: "text" | "muted" 
 export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement> {
   const flags = new Set(item.flags);
   const comparing = item.runA !== null;
+  const baselinePlan =
+    item.a && item.runA
+      ? await loadPlan(item.runA, item.a.Ink, item.a.plan).catch(() => null)
+      : null;
   const tiles: HTMLCanvasElement[] = [];
   if (comparing) {
     tiles.push(
       item.a && item.runA
-        ? await paintPanelTile(item.runA, item.a, new Set())
+        ? await paintPanelTile(item.runA, item.a, new Set(), baselinePlan)
         : missingTile("not in baseline"),
     );
   }
   tiles.push(
-    item.b ? await paintPanelTile(item.runB, item.b, flags) : missingTile("not in current"),
+    item.b
+      ? await paintPanelTile(item.runB, item.b, flags, baselinePlan)
+      : missingTile("not in current"),
   );
 
   const lines = captionLines(item);

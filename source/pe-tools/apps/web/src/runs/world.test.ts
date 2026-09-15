@@ -6,6 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   classesPathForSeals,
   boardSummary,
+  comparisonPlan,
   comparableRuns,
   difference,
   modalZoneCount,
@@ -17,6 +18,7 @@ import {
   planSidecarPaths,
   reportKeyed,
   replayPathForInk,
+  type RegisteredPlan,
   type RunReport,
   type RunScores,
   scoreBoards,
@@ -44,6 +46,57 @@ describe("registered plan substrate", () => {
         { minX: 0, minY: 0, maxX: 50, maxY: 50, pxPerFt: 2, widthPx: 100, heightPx: 100 },
       ),
     ).toEqual([0.4, -0, 0, 0.4, 20, 20]);
+  });
+
+  it("uses one registration when identical plan bytes appear in both comparison panes", () => {
+    const image = {} as ImageBitmap;
+    const baseline = {
+      image,
+      registration: {
+        imageSha256: "same",
+        width: 100,
+        height: 200,
+        topLeft: [10, 40],
+        topRight: [30, 40],
+        bottomLeft: [10, 0],
+      },
+    } as RegisteredPlan;
+    const current = {
+      image,
+      registration: {
+        ...baseline.registration,
+        topLeft: [8, 40],
+        topRight: [32, 40],
+        bottomLeft: [8, 0],
+      },
+    } as RegisteredPlan;
+
+    expect(comparisonPlan(current, baseline)?.registration).toBe(baseline.registration);
+  });
+
+  it("keeps the current registration when legacy plans have no image hash", () => {
+    const image = {} as ImageBitmap;
+    const baseline = {
+      image,
+      registration: {
+        width: 100,
+        height: 200,
+        topLeft: [10, 40],
+        topRight: [30, 40],
+        bottomLeft: [10, 0],
+      },
+    } as RegisteredPlan;
+    const current = {
+      image,
+      registration: {
+        ...baseline.registration,
+        topLeft: [8, 40],
+        topRight: [32, 40],
+        bottomLeft: [8, 0],
+      },
+    } as RegisteredPlan;
+
+    expect(comparisonPlan(current, baseline)?.registration).toBe(current.registration);
   });
 });
 

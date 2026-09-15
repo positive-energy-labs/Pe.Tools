@@ -165,6 +165,8 @@ export function ZoneCard(props: {
                 underlay={underlay}
                 fbKey={fbKey}
                 onStage={stage}
+                registrationRunId={a && runA ? runA : undefined}
+                registrationZone={a ?? undefined}
               />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
