@@ -1,32 +1,27 @@
 import { Link } from "@tanstack/react-router";
-
-import { familyRouteState, parseRouteDoc } from "@pe/agent-contracts";
-
-import {
-  InlineRoutePlugin,
-  Metric,
-  type RouteChatPluginProps,
-  actionLabel,
-} from "../route-chat-plugins";
-
-export function FamilyChatPlugin({ toolName, args, sessionState, running }: RouteChatPluginProps) {
-  const document = parseRouteDoc(sessionState, familyRouteState);
-  const evidence = document?.evidence ?? null;
-
+import { familyCaptureSchema } from "@pe/agent-contracts";
+import { InlineRoutePlugin, actionLabel } from "../route-chat-plugins";
+export function FamilyChatPlugin({
+  toolName,
+  args,
+  sessionState,
+  running,
+}: Pick<
+  import("../route-chat-plugins").RouteChatPluginProps,
+  "toolName" | "args" | "sessionState" | "running"
+>) {
+  const raw = sessionState as { structuredContent?: unknown; result?: unknown } | undefined;
+  const outer = (raw?.structuredContent ?? raw) as { result?: unknown } | undefined;
+  const capture = familyCaptureSchema.safeParse(outer?.result ?? outer).data;
   return (
-    <InlineRoutePlugin title={familyRouteState.title} action={actionLabel(toolName, args, running)}>
-      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-        <Metric value={document?.doc?.blocks.length ?? 0} label="doc blocks" />
-        <Metric value={document?.doc?.images?.length ?? 0} label="doc images" />
-        {evidence ? (
-          <span
-            className=""
-            title={`Evidence from ${evidence.origin} of ${evidence.familyName} at ${evidence.reading.observedAt}`}
-          >
-            evidence · {evidence.origin}
-          </span>
+    <InlineRoutePlugin title="Family" action={actionLabel(toolName, args, running)}>
+      <div>
+        {capture ? (
+          <a href={`/family/readings?id=${capture.id}`}>
+            {capture.reading.kind} captured {capture.capturedAt}
+          </a>
         ) : (
-          <span className="">no evidence yet</span>
+          "Saved Family readings"
         )}
         <Link className="ml-auto" to="/family">
           Open workspace

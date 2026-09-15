@@ -1,3 +1,7 @@
+import { useMemo, type ComponentProps } from "react";
+import { ActionReceipts } from "#/actions/receipt";
+import { useRoute } from "#/route/use-route";
+import { settingsManifest } from "#/settings/manifest";
 import { Link } from "@tanstack/react-router";
 
 import { cellSummary, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
@@ -10,17 +14,63 @@ import {
 } from "../route-chat-plugins";
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
 
-export function SettingsChatPlugin({
+export function SettingsChatPlugin(props: RouteChatPluginProps) {
+  const args =
+    props.args && typeof props.args === "object" ? (props.args as Record<string, unknown>) : {};
+  const workspaceId = typeof args.workspaceId === "string" ? args.workspaceId : null;
+  return workspaceId ? (
+    <FileSettingsChatPlugin key={workspaceId} {...props} workspaceId={workspaceId} />
+  ) : (
+    <Link to="/settings" search={{ mode: "file" }}>
+      Open file Work
+    </Link>
+  );
+}
+
+function FileSettingsChatPlugin(props: RouteChatPluginProps & { workspaceId: string }) {
+  const scope = useMemo(
+    () => ({ route: settingsRouteState.route, target: null, work: props.workspaceId }),
+    [props.workspaceId],
+  );
+  const manifest = useMemo(() => settingsManifest({ scope }), [scope]);
+  const route = useRoute(manifest, { work: props.workspaceId });
+  if (!route.work.current || !route.work.doc) return null;
+  return (
+    <>
+      <SettingsReview
+        {...props}
+        sessionState={route.work.doc}
+        state={{
+          apply: route.work.write,
+          busy: route.busy?.key ?? null,
+          failure: route.failure,
+        }}
+        onCommit={() => route.actions.save.run()}
+      />
+      <ActionReceipts
+        key={`${props.workspaceId}:${route.outcome?.at ?? 0}`}
+        scope={{ kind: "file", workspaceId: props.workspaceId }}
+      />
+    </>
+  );
+}
+
+function SettingsReview({
   toolName,
   args,
   sessionState,
   running,
   active,
-  routeState,
-}: RouteChatPluginProps) {
+  state,
+  onCommit,
+}: RouteChatPluginProps & {
+  state: ComponentProps<typeof CellTrichotomyReviewer>["state"];
+  onCommit: () => Promise<unknown>;
+}) {
   const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
-    document?.documentId?.moduleKey === "FamilyFoundry" && document.documentId.rootKey === "models";
+    document?.basis?.documentId.moduleKey === "FamilyFoundry" &&
+    document.basis?.documentId.rootKey === "models";
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -42,8 +92,13 @@ export function SettingsChatPlugin({
         <Metric value={summary.staged} label="staged" />
         <Link
           className="ml-auto"
-          to={isFamilyModel ? "/family" : "/chat"}
-          search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
+          to={isFamilyModel ? "/family" : "/settings"}
+          search={{
+            mode: "file",
+            module: document?.basis?.documentId.moduleKey,
+            root: document?.basis?.documentId.rootKey,
+            file: document?.basis?.documentId.relativePath,
+          }}
         >
           Open workspace
         </Link>
@@ -51,10 +106,10 @@ export function SettingsChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          state={routeState}
+          state={state}
           segment="fields"
           cells={fields}
-          commitCommand="save"
+          onCommit={onCommit}
           commitLabel={(staged) => `Save ${staged}`}
           reviewHint="Pea can propose; only you can save."
           renderLabel={(path) => <span className="">{path}</span>}

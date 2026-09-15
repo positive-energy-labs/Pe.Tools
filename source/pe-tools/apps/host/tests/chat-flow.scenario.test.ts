@@ -86,7 +86,9 @@ function scenarioRuntime(
           },
         },
         { text: proposeFinalText },
-        { toolCall: { name: "pe_do", input: { key: "route:instances.stop" } } },
+        // Instances lifecycle is a semantic action now, not a route command
+        // (`instancesRouteState.commands` is `{}`); the human-only gate moved with it.
+        { toolCall: { name: "pe_do", input: { key: "workflow:instances.stop" } } },
         { text: stopFinalText },
         { text: abortedText, finishDelayMs: 10_000 },
       ],
@@ -222,11 +224,9 @@ test("the browser walks one durable chat lifecycle", async () => {
         (text: string) => preseeded.find((message) => text.includes(message.text))?.text,
       ),
     ).toEqual(preseeded.map((message) => message.text));
-    // R5: first transcript paint requires only host status, then the thread open/read.
-    expect(bootRequests, "R5 first transcript paint request chain").toEqual([
-      "GET /host/status",
-      `GET ${threadPath}`,
-    ]);
+    // R5: first transcript paint requires only the thread open/read. `GET /host/status` left the
+    // chain when host status became a reading on the one resources stream, not a boot request.
+    expect(bootRequests, "R5 first transcript paint request chain").toEqual([`GET ${threadPath}`]);
 
     const readThread = async () => {
       const response = await fetch(`${baseUrl}${threadPath}`);
@@ -304,18 +304,15 @@ test("the browser walks one durable chat lifecycle", async () => {
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(`User answered: ${questionAnswer}`);
 
-    // Scope: the head sets it (PUT), the turn is admitted under that revision, the tool sees it,
-    // and a route document lands under the same Scope key.
+    // Target: the head sets it (PUT), the turn is admitted under that revision, the tool sees it,
+    // and a route document lands under the same Work key.
     const scopeUrl = `${baseUrl}/pe/scope/${encodeURIComponent(threadId)}`;
-    expect(await (await fetch(scopeUrl)).json()).toEqual({
-      scope: { kind: "none" },
-      revision: 0,
-    });
+    expect(await (await fetch(scopeUrl)).json()).toEqual({ defaultTarget: null, revision: 0 });
     const setScope = await fetch(scopeUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
+        defaultTarget: { kind: "named", session: scopeSession, address: scopeDocument },
         expectedRevision: 0,
       }),
     });
@@ -323,21 +320,21 @@ test("the browser walks one durable chat lifecycle", async () => {
       ok: true,
       why: "set",
       head: {
-        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
+        defaultTarget: { kind: "named", session: scopeSession, address: scopeDocument },
         revision: 1,
       },
     });
     await expect
       .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })
       .toBe("r1");
-    // pe_find under that Scope: the map, the connected sessions (none), and the silent sources.
+    // pe_find under that Target: the map, the connected sessions (none), and the silent sources.
     await driveTurn("FIND_TURN", findFinalText);
     const findBody = JSON.stringify((await readThread()).messages);
-    expect(findBody).toContain(`"pin":"${scopeSession}"`);
+    expect(findBody).toContain(`"session":"${scopeSession}"`);
     expect(findBody).toContain('"revision":1');
     expect(findBody).toContain('"map":{');
     expect(findBody).toContain("route-command");
-    // pe_read route:instances under that Scope: the document lands under the Scope key.
+    // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
     // pe_do route:instances.propose stages a start; the card shows r1 and the resolved target.
@@ -345,49 +342,49 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
       .toBe("r1");
-    // A route write touches no Revit: the card names the Scope's document and no session.
-    expect(await page.getByTestId("tool-target").last().innerText()).toContain(scopeDocument);
+    // A workspace write touches no Target at all: Instances Work is `?work=instances` (spec §7),
+    // the same key `instances/cluster.tsx` reads, so the card names neither session nor document.
+    expect(await page.locator("[data-tool-id]").last().getByTestId("tool-target").count()).toBe(0);
     await expect
       .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
       .toContain("start scenario in Revit 2026");
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
-    const routeQuery = `doc=${encodeURIComponent(scopeDocument)}&pin=${scopeSession}`;
+    const routeQuery = `target=${encodeURIComponent(scopeDocument)}`;
     expect(
-      await (await fetch(`${baseUrl}/pe/route-state/instances?${routeQuery}`)).json(),
+      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
     ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
-    const applied = await fetch(`${baseUrl}/pe/route-state/ops/apply?${routeQuery}`, {
+    // `ops` is no longer a route document; `takeoffs` is the Address-keyed one that is left.
+    const applied = await fetch(`${baseUrl}/pe/route-state/takeoffs/apply?${routeQuery}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        patches: [{ path: ["bindings", "op"], value: { id: "revit.context.summary", label: "s" } }],
+        patches: [{ path: ["staged"], value: [] }],
         expectedRevision: 0,
       }),
     });
     expect(await applied.json()).toMatchObject({ ok: true, revision: 1 });
-    expect(await (await fetch(`${baseUrl}/pe/route-state/ops?${routeQuery}`)).json()).toMatchObject(
-      {
-        revision: 1,
-        doc: { bindings: { op: { id: "revit.context.summary" } } },
-      },
-    );
-    // The pin is a tiebreak, never identity: another pin reads the same document, another
-    // document starts fresh.
+    expect(
+      await (await fetch(`${baseUrl}/pe/route-state/takeoffs?${routeQuery}`)).json(),
+    ).toMatchObject({ revision: 1, doc: { staged: [] } });
+    // The Work key is the Address alone: the same Address reads the same document, another
+    // Address starts fresh.
     expect(
       await (
         await fetch(
-          `${baseUrl}/pe/route-state/ops?pin=other&doc=${encodeURIComponent(scopeDocument)}`,
+          `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent(scopeDocument)}`,
         )
       ).json(),
     ).toMatchObject({ revision: 1 });
+    // Another Address has no envelope at all yet: the read is a 404, not a shared document.
     expect(
-      await (
+      (
         await fetch(
-          `${baseUrl}/pe/route-state/ops?doc=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
+          `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
         )
-      ).json(),
-    ).toMatchObject({ revision: 0 });
+      ).status,
+    ).toBe(404);
 
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "Send message" }).click();

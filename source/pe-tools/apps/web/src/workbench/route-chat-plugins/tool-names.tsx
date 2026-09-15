@@ -1,14 +1,24 @@
+import { actionReceiptId } from "./receipt-id";
+export { actionReceiptId };
+import {
+  takeoffsRouteState,
+  semanticActions,
+  familyReads,
+  actionControls,
+} from "@pe/agent-contracts";
+import { ActionReceiptView } from "#/actions/receipt";
+import { previousOf } from "#/readings";
 import { instancesRouteState } from "@pe/agent-contracts";
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import {
   actionLabel,
+  familyCaptureSchema,
+  parameterLinksReadingSchema,
   routeCallOf,
-  familyRouteState,
-  podsRouteState,
-  familyTypesRouteState,
   parameterLinksRouteState,
   parseRouteDoc,
+  scheduleReads,
   scheduleGridRouteState,
   settingsRouteState,
   type RouteStateSpec,
@@ -16,19 +26,18 @@ import {
 import { Link } from "@tanstack/react-router";
 import { useWorkbench } from "../provider";
 import { selectToolCalls } from "../chat-state";
-import { useRouteState, type RouteStateHandle } from "../route-state";
+import { useRoute } from "#/route/use-route";
+import { manifest as parameterLinksManifest } from "#/parameter-links/manifest";
 import { FamilyChatPlugin } from "../plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "../plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "../plugins/settings-chat-plugin";
-import { PodsChatPlugin } from "./pods-chat-plugin";
 import { useThreadScope } from "#/chat/scope";
+import { evaluationIsCurrent } from "#/parameter-links/model";
 import {
-  FamilyTypesChatPlugin,
   InlineRoutePlugin,
   Metric,
   ParameterLinksReview,
   isRecord,
-  sameParameterLinkProfile,
 } from "./parameter-links-review";
 
 export interface RouteChatPluginProps {
@@ -38,15 +47,13 @@ export interface RouteChatPluginProps {
   sessionState: unknown;
   running: boolean;
   active: boolean;
-  routeState: RouteStateHandle<unknown>;
-  /** The thread's current Scope revision; a command button pressed here runs under it. */
+  /** The thread's requested target; route-specific renderers resolve it through their manifest. */
+  target: string | null;
+  /** The thread head's revision; a command button pressed here runs under it. */
   revision: number;
 }
 
-export type RouteChatPluginViewProps = Omit<
-  RouteChatPluginProps,
-  "active" | "routeState" | "revision"
->;
+export type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active" | "revision" | "target">;
 
 export interface RouteChatPluginRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -54,23 +61,15 @@ export interface RouteChatPluginRegistration {
 }
 
 export const routeChatPluginList: RouteChatPluginRegistration[] = [
+  { spec: takeoffsRouteState, Renderer: TakeoffsChatPlugin },
   { spec: instancesRouteState, Renderer: InstancesChatPlugin },
-  { spec: podsRouteState, Renderer: PodsChatPlugin },
   {
     spec: parameterLinksRouteState,
     Renderer: ParameterLinksChatPlugin,
   },
   {
-    spec: familyTypesRouteState,
-    Renderer: FamilyTypesChatPlugin,
-  },
-  {
     spec: settingsRouteState,
     Renderer: SettingsChatPlugin,
-  },
-  {
-    spec: familyRouteState,
-    Renderer: FamilyChatPlugin,
   },
   {
     spec: scheduleGridRouteState,
@@ -84,7 +83,7 @@ export const routeChatPlugins = Object.fromEntries(
 
 export const CHAT_PLUGIN_ROUTES = [
   "instances",
-  "pods",
+  "takeoffs",
   "family",
   "families",
   "settings",
@@ -95,19 +94,65 @@ export const CHAT_PLUGIN_ROUTES = [
 export type ChatPluginRoute = (typeof CHAT_PLUGIN_ROUTES)[number];
 
 export function chatPluginTitle(route: string): string {
-  return routeChatPlugins[route]?.spec.title ?? (route === "families" ? "Families" : route);
+  return (
+    routeChatPlugins[route]?.spec.title ??
+    (route === "family" ? "Family" : route === "families" ? "Families" : route)
+  );
 }
 
 export function selectRouteChatPlugin(
   toolName: string,
   args: unknown,
 ): RouteChatPluginRegistration | null {
+  if (
+    (toolName === "pe_do" || toolName === "pe_read") &&
+    isRecord(args) &&
+    typeof args.key === "string" &&
+    /^(op|workflow):/.test(args.key) &&
+    (Object.hasOwn(semanticActions, args.key.replace(/^(op|workflow):/, "")) ||
+      Object.hasOwn(familyReads, args.key.replace(/^(op|workflow):/, "")) ||
+      Object.hasOwn(scheduleReads, args.key.replace(/^(op|workflow):/, "")) ||
+      Object.hasOwn(actionControls, args.key.replace(/^(op|workflow):/, "")))
+  )
+    return (
+      routeChatPlugins[args.key.replace(/^(op|workflow):/, "").split(".")[0]] ??
+      routeChatPlugins.takeoffs
+    );
   const call = routeCallOf(toolName, args);
   return call ? (routeChatPlugins[call.route] ?? null) : null;
 }
 
 export function RouteChatPluginView(props: RouteChatPluginViewProps) {
   const registration = selectRouteChatPlugin(props.toolName, props.args);
+  const key =
+    isRecord(props.args) && typeof props.args.key === "string"
+      ? props.args.key.replace(/^(op|workflow):/, "")
+      : "";
+
+  if (Object.hasOwn(familyReads, key)) return <FamilyChatPlugin {...props} />;
+
+  if (
+    Object.hasOwn(semanticActions, key) ||
+    Object.hasOwn(actionControls, key) ||
+    registration?.spec.route === "takeoffs"
+  )
+    return <TakeoffsReceiptPlugin {...props} />;
+  const id = actionReceiptId(props.args, props.sessionState);
+  if (
+    id &&
+    isRecord(props.args) &&
+    typeof props.args.key === "string" &&
+    /^(op|pod):/.test(props.args.key)
+  )
+    return (
+      <InlineRoutePlugin title="Operation" action="original operation receipt">
+        <ActionReceiptView id={id} watch />
+        <Link to="/ops" search={{ thread: undefined, view: { actionId: id } }}>
+          Open operation receipt
+        </Link>
+      </InlineRoutePlugin>
+    );
+
   return registration ? (
     <ConnectedRouteChatPlugin registration={registration} {...props} active={false} />
   ) : null;
@@ -118,8 +163,10 @@ export function RouteChatPluginDock() {
   const registrations = Array.from(
     new Set(
       selectToolCalls(chat).flatMap((call) => {
-        const route = routeCallOf(call.title, call.args)?.route;
-        return route && routeChatPlugins[route] ? [route] : [];
+        const route = selectRouteChatPlugin(call.title, call.args)?.spec.route;
+        return route && route !== "takeoffs" && route !== "family" && routeChatPlugins[route]
+          ? [route]
+          : [];
       }),
     ),
   ).map((route) => routeChatPlugins[route]);
@@ -151,52 +198,46 @@ export function ConnectedRouteChatPlugin({
   const { currentThreadId } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId);
   if (!threadScope.hydrated) return null;
+  const Renderer = registration.Renderer;
   return (
-    <ScopedRouteChatPlugin
-      registration={registration}
+    <Renderer
       {...props}
-      scope={threadScope.scope}
+      target={
+        threadScope.defaultTarget?.kind === "named" ? threadScope.defaultTarget.address : null
+      }
       revision={threadScope.revision}
     />
   );
 }
 
-export function ScopedRouteChatPlugin({
-  registration,
-  scope,
-  ...props
-}: RouteChatPluginViewProps & {
-  active: boolean;
-  revision: number;
-  registration: RouteChatPluginRegistration;
-  scope: import("@pe/agent-contracts").Scope;
-}) {
-  const route = useRouteState(registration.spec, { scope });
-  if (!route.hydrated || route.slice == null) return null;
-  const Renderer = registration.Renderer;
-  return <Renderer {...props} sessionState={route.slice} routeState={route} />;
-}
-
 export function ParameterLinksChatPlugin({
   toolName,
   args,
-  sessionState,
   running,
   active,
-  routeState,
+  target,
 }: RouteChatPluginProps) {
-  const document = parseRouteDoc(sessionState, parameterLinksRouteState);
-  const profile = document?.draftProfile ?? document?.profile;
-  const evaluation = document?.evaluation;
-  const previewed =
-    routeState.lastCommand?.command === "preview" && isRecord(routeState.lastCommand.input)
-      ? routeState.lastCommand.input.profile
+  const route = useRoute(parameterLinksManifest, { target });
+  if (!route.work.current || !route.work.doc) return null;
+  const document = route.work.doc;
+  const profile = document?.draft ?? null;
+  // Observations arrive from the capture owner, the same place the route surface reads them.
+  const rows = previousOf(route.readings.links);
+  const row = rows
+    ? familyCaptureSchema
+        .array()
+        .parse(rows)
+        .find((capture) => capture.reading.kind === "parameter-links")
+    : undefined;
+  const reading =
+    row && row.reading.kind === "parameter-links"
+      ? parameterLinksReadingSchema.parse(row.reading.value)
       : null;
+  const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
+  // Freshness is the reading basis, so chat and the route agree without a second flag.
+  const reviewed = evaluationIsCurrent(document, reading);
 
   const errors = evaluation?.issues.filter((issue) => issue.severity === "error") ?? [];
-
-  const command = (name: "refresh" | "preview" | "apply") =>
-    routeState.command(name, name === "refresh" ? undefined : { profile });
 
   return (
     <InlineRoutePlugin
@@ -210,6 +251,7 @@ export function ParameterLinksChatPlugin({
         <Metric value={evaluation?.issues.length ?? 0} label="issues" issue />
 
         <Link
+          from="/chat"
           className="ml-auto"
           to="/chat"
           search={(previous) => ({ ...previous, plugin: "parameter-links" })}
@@ -221,11 +263,12 @@ export function ParameterLinksChatPlugin({
       {active ? (
         <ParameterLinksReview
           document={document}
-          busy={routeState.busy}
-          error={routeState.failure?.message ?? null}
+          busy={route.busy?.key ?? null}
+          error={route.failure?.message ?? null}
           errors={errors.length}
-          reviewed={sameParameterLinkProfile(profile, previewed)}
-          onCommand={(name) => void command(name).catch(() => undefined)}
+          reviewed={reviewed}
+          reading={reading}
+          onCommand={(name) => void route.actions[name].run()}
         />
       ) : null}
     </InlineRoutePlugin>
@@ -252,11 +295,50 @@ function InstancesChatPlugin({
           ? staged.kind === "start"
             ? `start ${staged.name || "unnamed session"} in Revit ${staged.year}`
             : `open ${staged.document} in ${staged.session}`
-          : (doc?.selectedSession ?? "no session selected")}
+          : "no start or open staged"}
       </span>
-      <Link to="/chat" search={(previous) => ({ ...previous, plugin: "instances" })}>
+      <Link from="/chat" to="/chat" search={(previous) => ({ ...previous, plugin: "instances" })}>
         Open workspace
       </Link>
     </InlineRoutePlugin>
   );
+}
+
+function TakeoffsReceiptPlugin(props: RouteChatPluginViewProps) {
+  const id = actionReceiptId(props.args, props.sessionState);
+  const registration = selectRouteChatPlugin(props.toolName, props.args);
+  return (
+    <InlineRoutePlugin
+      title={registration?.spec.title ?? "Action"}
+      action="original action receipt"
+    >
+      <div>
+        {id ? (
+          <ActionReceiptView id={id} />
+        ) : props.running ? (
+          "Awaiting action acceptance"
+        ) : (
+          "This call has no admitted action receipt"
+        )}
+        <Link
+          from="/chat"
+          to="/chat"
+          search={(previous) => ({
+            ...previous,
+            plugin:
+              registration?.spec.route === "family"
+                ? "family"
+                : registration?.spec.route === "settings"
+                  ? "settings"
+                  : "takeoffs",
+          })}
+        >
+          Open active workspace
+        </Link>
+      </div>
+    </InlineRoutePlugin>
+  );
+}
+function TakeoffsChatPlugin(props: RouteChatPluginProps) {
+  return <TakeoffsReceiptPlugin {...props} />;
 }

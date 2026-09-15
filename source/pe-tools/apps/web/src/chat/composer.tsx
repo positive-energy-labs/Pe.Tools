@@ -8,15 +8,17 @@ import {
   type ReactNode,
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { ArrowUp, Paperclip, Square, X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
-import { selectSkillCommands } from "#/workbench/chat-state";
+import { selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import { cn } from "#/lib/utils";
+import { useSend, type ChatHandle } from "#/chat/composer-head";
+import { SituationAction } from "#/route/situation";
 
 interface SlashCommand {
   name: string;
@@ -34,24 +36,33 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
 
 export function Composer({
   setMode,
+  handle,
   topBar,
 }: {
   setMode: (mode: Mode) => void;
-  /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
+  /** The route handle; Enter runs its Send verb scoped to this draft, the head draws the same. */
+  handle: ChatHandle;
+  /** Rendered flush at the top edge of the box — the composer head and the budget bar. */
   topBar?: ReactNode;
 }) {
-  const { store, chat, sendPrompt, cancel, isRunning, operationError, newThread, forkThread } =
-    useWorkbench();
-  const { text, attachments } = useAtomValue(store.atoms.draft);
-  const setText = (value: string) =>
+  const { store, chat, newThread, forkThread } = useWorkbench();
+  const isRunning = selectRunStatus(chat) !== "idle";
+  const liveDraft = useAtomValue(store.atoms.draft);
+  const draft = liveDraft;
+  const { text, attachments } = draft;
+  const send = useSend(handle, draft);
+  const setText = (value: string) => {
     store.actions.setDraft((previous) => ({ ...previous, text: value }));
+  };
   const setAttachments = (
     value: WorkbenchAttachment[] | ((previous: WorkbenchAttachment[]) => WorkbenchAttachment[]),
-  ) =>
-    store.actions.setDraft((previous) => ({
+  ) => {
+    const update = (previous: { text: string; attachments: WorkbenchAttachment[] }) => ({
       ...previous,
       attachments: typeof value === "function" ? value(previous.attachments) : value,
-    }));
+    });
+    store.actions.setDraft(update);
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const menuId = useId();
   const [activeCommand, setActiveCommand] = useState(0);
@@ -76,7 +87,6 @@ export function Composer({
   const selectedCommand = visibleMatches[activeIndex];
   const showMenu =
     !menuDismissed && slash !== undefined && !text.includes(" ") && visibleMatches.length > 0;
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !isRunning;
 
   const runBuiltin = (name: string): boolean => {
     switch (name) {
@@ -114,11 +124,10 @@ export function Composer({
         return;
       }
     }
-    if (!canSend) return;
-    const payload = attachments;
-    setText("");
-    setAttachments([]);
-    void sendPrompt(trimmed, payload.length ? payload : undefined);
+    // Enter is the same verb as the head's Send; a refused verb stays quiet here, as it always
+    // has, and the head's button is where the refusal speaks.
+    if (send.refusal) return;
+    void send.run();
   };
 
   const submit = (event: FormEvent) => {
@@ -252,7 +261,9 @@ export function Composer({
             }}
             onKeyDown={onKeyDown}
           />
-          {/* Control row: attachments + session controls (model/access) left, send right. */}
+          {/* Control row: attachments + session controls (model/access), then Send — the same
+              manifest verb Enter runs, with the Situation's flag (moved here from the head,
+              2026-09-14: a composer's send belongs beside its text). */}
           <div className="flex items-center gap-1.5 pt-1">
             <Press
               tone="quiet"
@@ -270,32 +281,14 @@ export function Composer({
               onChange={(event) => void onFiles(event.currentTarget.files)}
             />
             <ControlChips />
-            <span className="flex-1" />
-            {isRunning ? (
-              <Press tone="neutral" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
-                <Square className="size-3.5" />
-              </Press>
-            ) : (
-              <Press
-                tone="neutral"
-                size="icon"
-                state="disabled"
-                title="Send"
-                aria-label="Send message"
-                disabled={!canSend}
-                onClick={sendCurrent}
-              >
-                <ArrowUp className="size-4" />
-              </Press>
-            )}
+            <span className="ml-auto flex items-center gap-1.5">
+              {isRunning ? (
+                <SituationAction handle={handle} name="cancel" action={handle.actions.cancel} />
+              ) : null}
+              <SituationAction handle={handle} name="send" action={send} commit />
+            </span>
           </div>
         </div>
-        {/* a failed operation is an ERROR (caution) — the alarm is reserved for disagreement */}
-        {operationError ? (
-          <span className="block px-3 pb-2 t-small t-upper" data-tone="caution">
-            {operationError}
-          </span>
-        ) : null}
       </div>
     </form>
   );

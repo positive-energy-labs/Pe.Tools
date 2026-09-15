@@ -22,6 +22,7 @@ import { stateSchema } from "@mastra/code-sdk/schema";
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
+  ownedTurnDocuments,
   materializeBundledPeaSkills,
   peaProductToolMetadata,
   peaProductTools,
@@ -29,7 +30,12 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import { threadAccess, threadAccessPolicies, type PeaWorldDescriptor } from "@pe/agent-contracts";
+import {
+  threadAccess,
+  threadAccessPolicies,
+  turnOf,
+  type PeaSessionDescriptor,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
@@ -99,7 +105,7 @@ export type PeaRuntimeHandle = RuntimeHandle<
   resourceId: string;
   scopes: ScopeStore;
   capabilities: Readonly<PeaRuntimeCapabilities>;
-  world: PeaWorldDescriptor;
+  world: PeaSessionDescriptor;
   isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
 };
 
@@ -124,7 +130,7 @@ export function resolvePeaWorld(workspaceRoot = resolvePeaProductHomePath()) {
     root,
     storage: { kind: "local-unversioned" },
     isolation: "none",
-  } as const satisfies PeaWorldDescriptor;
+  } as const satisfies PeaSessionDescriptor;
 }
 
 export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise<PeaRuntimeHandle> {
@@ -296,7 +302,6 @@ function installPeaControllerPolicy(
       let admission = admissions.get(session);
       if (!admission) {
         admission = createPeaSessionAdmission(
-          controller,
           session,
           options.accessLevel,
           options.scopedWeb ? session.thread.requireId() : undefined,
@@ -358,7 +363,6 @@ function installPeaControllerPolicy(
 }
 
 function createPeaSessionAdmission(
-  controller: AgentController<PeaRuntimeState>,
   session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   scopedThreadId: string | undefined,
@@ -369,6 +373,22 @@ function createPeaSessionAdmission(
   let permissionQueue = Promise.resolve();
   let permissionHydration = permissionQueue;
   let unsubscribePermissions: (() => void) | undefined;
+  const documentOwnerId = session.identity.getId();
+  const finishOwnedDocuments = async (includeQueued = false) => {
+    const cleanup = await ownedTurnDocuments.finishOwner(documentOwnerId, includeQueued);
+    for (const receipt of cleanup)
+      if (receipt.reportingError)
+        session.emit({
+          type: "error",
+          errorType: "temporary-document-cleanup",
+          error: new Error(
+            `Cleanup ${receipt.acquisitionId} could not be persisted: ${receipt.reportingError}`,
+          ),
+        });
+  };
+  const unsubscribeDocumentCleanup = session.onBeforeAgentEnd(async (event) => {
+    if (event.reason !== "suspended") await finishOwnedDocuments();
+  });
   let restoreScopedThreadLifecycle: (() => void) | undefined;
   let admitted = false;
   let closed = false;
@@ -466,6 +486,24 @@ function createPeaSessionAdmission(
 
   const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
   session.sendSignal = ((input, options) => {
+    const turn = turnOf(options);
+    if (turn)
+      ownedTurnDocuments.bind(turn.id, documentOwnerId, async (receipt) => {
+        await session.thread.setSettingOn({
+          threadId: turn.thread,
+          key: `temporaryDocument:${receipt.acquisitionId}`,
+          value: { turnId: turn.id, ...receipt },
+        });
+        const result = receipt.result as { status?: string; detail?: string };
+        if (result.status === "recovery-required")
+          session.emit({
+            type: "error",
+            errorType: "temporary-document-cleanup",
+            error: new Error(
+              `Temporary document ${receipt.acquisitionId} requires recovery: ${result.detail ?? "native outcome unknown"}`,
+            ),
+          });
+      });
     const admission = [session.thread.requireId(), permissionGeneration] as const;
     const contentOptions = "content" in input ? input : undefined;
     const signal = createSignal(
@@ -574,9 +612,11 @@ function createPeaSessionAdmission(
         admitted = false;
         permissionGeneration++;
         unsubscribePermissions?.();
+        unsubscribeDocumentCleanup();
         restoreScopedThreadLifecycle?.();
       }
       await permissionQueue;
+      await finishOwnedDocuments(true);
     },
   };
 }

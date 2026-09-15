@@ -19,7 +19,11 @@ export async function runRuntimeAcpAgent(options: RunRuntimeAcpAgentOptions): Pr
   };
 
   try {
-    const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
+    const stream = ndJsonStream(
+      Writable.toWeb(process.stdout),
+      // Node's ReadableStream<any> vs the DOM lib's ReadableStream<Uint8Array>; same bytes either way.
+      Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>,
+    );
     const connection = new AgentSideConnection((conn) => {
       agent = new MastraCodeAcpAgent(conn, options.controller, options.session, options.modes);
       return agent;

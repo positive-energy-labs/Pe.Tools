@@ -1,12 +1,12 @@
-import { useState, type ReactNode } from "react";
+/**
+ * Chat seed data — plain values, no provider, no behaviour. `?demo=<action>` mounts one of these
+ * through `useRoute`'s demo owner; nothing here renders or holds state.
+ */
 import type { MastraDBMessage } from "@mastra/client-js";
+import { address, type Seed } from "@pe/agent-contracts";
+import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
 import { emptyChatState, type ChatState } from "#/workbench/chat-state";
-import { WorkbenchContext, type WorkbenchContextValue } from "#/workbench/provider/thread-summary";
-import { withoutGate } from "#/workbench/provider/use-workbench";
-import { createChatPageStore, type WorkbenchAttachment } from "#/workbench/store";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
 const message = (
@@ -33,7 +33,7 @@ const tool = (
     },
   }) as MastraDBMessage["content"]["parts"][number];
 
-export const CHAT_FIXTURE: ChatState = {
+export const CHAT_SEED_STATE: ChatState = {
   ...emptyChatState(),
   display: {
     isRunning: true,
@@ -107,7 +107,7 @@ export const CHAT_FIXTURE: ChatState = {
           ok: true,
           key: "op:revit.context.visible-summary",
           revision: 3,
-          target: { session: "pe.app-26", document: "C:\\Review\\Operations Fixture.rvt" },
+          target: { session: "pe.app-26", document: "C:\\Review\\Operations Demo.rvt" },
           receipt: "op-20260830-1842",
           activeView: "Level 2 HVAC Plan",
           visibleElements: 47,
@@ -137,7 +137,7 @@ export const CHAT_FIXTURE: ChatState = {
   inspect: {
     contextWindow: 32_000,
     systemPrompt: {
-      source: "fixture review",
+      source: "demo review",
       updatedAt: "2026-08-30T19:29:00.000Z",
       content: "You are Pea. Inspect evidence before writes and retain operation receipts.",
     },
@@ -168,68 +168,57 @@ export const CHAT_FIXTURE: ChatState = {
   access: "ask",
 };
 
-export function FixtureWorkbenchProvider({ children }: { children: ReactNode }) {
-  const store = useRouteStore(() =>
-    createChatPageStore({
-      registry: appAtomRegistry,
-      search: { mode: "threads", patch: async () => {} },
-    }),
-  );
-  const [chat, setChat] = useState(CHAT_FIXTURE);
-  const [threads, setThreads] = useState([
+/** Threads the seed pretends exist, as the thread list reads them. */
+export const CHAT_SEED_THREADS = [
+  { id: "demo-review", title: "Level 2 coordination review", updatedAt: at(37).toISOString() },
+  { id: "demo-followup", title: "Air terminal follow-up", updatedAt: at(12).toISOString() },
+];
+
+const DEMO_ADDRESS = address("C:\\Review\\Operations Demo.rvt");
+
+const HEAD = {
+  defaultTarget: {
+    kind: "named",
+    session: "pe.app-26",
+    address: DEMO_ADDRESS,
+  },
+  revision: 3,
+};
+
+const INVENTORY = {
+  sessions: [
     {
-      id: "fixture-review",
-      title: "Level 2 coordination review",
-      updatedAt: at(37).toISOString(),
+      sessionId: "pe.app-26",
+      connected: true,
+      openDocumentCount: 1,
+      openDocuments: [
+        {
+          openId: "open-1",
+          title: "Operations Demo.rvt",
+          address: DEMO_ADDRESS,
+          isFamilyDocument: false,
+          isActive: true,
+        },
+      ],
     },
-    { id: "fixture-followup", title: "Air terminal follow-up", updatedAt: at(12).toISOString() },
-  ]);
-  const sendPrompt = async (text: string, _attachments?: WorkbenchAttachment[]) => {
-    const value = text.trim();
-    if (value)
-      setChat((previous) => ({
-        ...previous,
-        messages: [
-          ...previous.messages,
-          message(`fixture-user-${previous.messages.length}`, "user", 40, [
-            { type: "text", text: value },
-          ]),
-        ],
-      }));
-  };
-  const context: WorkbenchContextValue = {
-    store,
-    config: { origin: "" },
-    chat,
-    loading: false,
-    threads,
-    currentThreadId: "fixture-review",
-    revit: false,
-    isRunning: true,
-    sendPrompt,
-    cancel: () =>
-      setChat((previous) => ({ ...previous, display: { ...previous.display, isRunning: false } })),
-    newThread: () => {},
-    forkThread: async () => {},
-    openThread: () => {},
-    renameThread: (threadId, title) => {
-      setThreads((items) =>
-        items.map((thread) => (thread.id === threadId ? { ...thread, title } : thread)),
-      );
-    },
-    deleteThread: async () => {},
-    resolveApproval: async (toolCallId) =>
-      setChat((previous) => ({
-        ...previous,
-        display: withoutGate(previous.display, toolCallId),
-      })),
-    addApiKey: async () => {},
-    setModel: async (modelId) =>
-      setChat((previous) => ({
-        ...previous,
-        models: { ...previous.models, currentId: modelId },
-      })),
-    setAccessLevel: async (access) => setChat((previous) => ({ ...previous, access })),
-  };
-  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
-}
+  ],
+} satisfies { sessions: readonly BridgeSessionListEntry[] };
+
+/** One seed per action. The map is total: every action key has a moment. */
+export const CHAT_SEEDS = {
+  send: {
+    title: "an idle thread ready for a prompt",
+    work: CHAT_SEED_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  cancel: {
+    title: "pea mid-turn, with an approval owed",
+    work: CHAT_SEED_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+} satisfies Record<string, Seed<ChatState, "head" | "inventory" | "receipts", ChatPage>>;
+
+/** Chat's draft belongs to `createChatPageStore`; the route manifest owns no Page fields. */
+export type ChatPage = Record<string, never>;

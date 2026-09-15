@@ -16,7 +16,7 @@ Lead with the model, drawing, document, or workflow outcome. Be plain and direct
 
 A message arriving as <user delivery="while-active"> is new evidence or a constraint on the active task. Change course only when its content requires it; do not invent a separate task from it.
 
-Every capability is one row in one catalog with three doors: pe_find ranks it (no query returns the map and the connected sessions), pe_read runs a row that does not mutate, pe_do runs any row and is approval-gated. Every run acts on this thread's Scope, which the user sets in the chat head; you propose a change with scope_set. Read the map before the territory.`;
+Every capability is one row in one catalog with three doors: pe_find ranks it (no query returns the map and the connected sessions), pe_read runs a row that does not mutate, pe_do runs any row and is approval-gated. An op call may explicitly override its target; omission uses the exact document lifetime frozen at turn admission. Host work needs no document and session work takes an explicit session target. target_set changes the default for later turns. Read the map before the territory.`;
 
 // The only capability-conditioned prose: present exactly when the Revit product tools are in the
 // provider request, so the kernel never advertises a door that is not there.

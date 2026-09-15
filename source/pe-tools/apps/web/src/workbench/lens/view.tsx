@@ -1,10 +1,9 @@
-import { scopeDocument, scopePin } from "@pe/agent-contracts";
 import { annotation } from "#/components/anatomy";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
 import { Moments } from "../aui";
 import { RouteChatPluginDock } from "../route-chat-plugins";
-import { WorldLane } from "../world";
+import { SessionStrip } from "../world";
 import { SidePane } from "#/components/lang/side-pane";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
@@ -71,7 +70,7 @@ export function Lens({
           <div {...annotation("dial")} onPointerDown={onPointerDown} aria-label="Timeline">
             <div
               aria-hidden="true"
-              title={`scope: ${scopeDocument(threadScope.scope) ?? "none"}${scopePin(threadScope.scope) ? ` pin ${scopePin(threadScope.scope)}` : ""} r${threadScope.revision}`}
+              title={`to: ${threadScope.defaultTarget === null ? "none" : threadScope.defaultTarget.kind === "named" ? threadScope.defaultTarget.address : threadScope.defaultTarget.ref.openId} r${threadScope.revision}`}
               style={{
                 position: "absolute",
                 left: 0,
@@ -180,7 +179,7 @@ export function Lens({
                   })()}
                 </div>
               ) : mode === "world" ? (
-                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
               ) : (
                 threadList
               )}

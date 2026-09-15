@@ -51,8 +51,8 @@ export function useLensModel({
 
   const { currentThreadId, revit } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId, revit === true);
-  // The rail is the thread Scope: set (session named) reads as meta, absent as muted.
-  const targetTone = threadScope.scope.kind === "none" ? "muted" : "meta";
+  // The rail is the thread head: a chosen document reads as meta, none as muted.
+  const targetTone = threadScope.defaultTarget === null ? "muted" : "meta";
 
   const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? token("ink-mute");
 
