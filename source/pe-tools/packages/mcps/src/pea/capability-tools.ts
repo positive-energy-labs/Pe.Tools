@@ -589,7 +589,6 @@ async function dispatch(
         {
           command: parsed.member,
           input: payload,
-          requestId,
         },
         parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId,
       );

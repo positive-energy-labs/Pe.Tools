@@ -2,11 +2,10 @@
  * Route state — the declarative contract for a collaborative route workspace.
  *
  * A route that wants pea + human co-editing declares a zod document schema,
- * a declarative agent write mask (which paths
- * pea may propose to — everything else is human-only), and a set of named commands
- * (the side-effectful work the mask forbids doing by hand). No per-route server code
- * beyond the schema + mask + command handlers: RouteWorkspace (packages/runtime)
- * owns document persistence, ordering, recovery, validation, and commands; the
+ * a declarative agent write mask (which paths pea may propose to — everything else is human-only),
+ * and named commands that read or change that Work document. External effects use semantic actions
+ * and ActionJournal instead. No per-route server code beyond the schema, mask, and Work command
+ * handlers: RouteWorkspace (packages/runtime) owns document persistence, ordering, validation, and commands; the
  * pea doors (`pe_read route:<name>`, `pe_do route:<name>.propose|<command>`) are thin
  * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
  * (unmasked) and receives document snapshots through its route-specific event stream.
@@ -14,15 +13,11 @@
 import { z } from "zod";
 import { addressSchema, type Address } from "./target.ts";
 
-/** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
+/** A named Work command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
   description: string;
   input: z.ZodType;
   actor: "any" | "human";
-  /** The command may mutate an external system after route state is persisted. */
-  mutatesExternal?: boolean;
-  /** A successful command proves external state fresh after an uncertain mutation. */
-  recoversExternal?: boolean;
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {

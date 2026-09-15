@@ -448,12 +448,6 @@ export function InstancesCluster({
 
   return (
     <div className="flex flex-col gap-5" data-testid="instances-cluster">
-      {work.outcomeUnknown && (
-        <OutcomeLine
-          kind="advisory"
-          label="An earlier action outcome remains unknown. Its original record is retained."
-        />
-      )}
       {(doctor.error || recents.error) && (
         <OutcomeLine
           kind="error"
@@ -579,7 +573,7 @@ export function InstancesCluster({
               tone="act"
               label="restart"
               reason="cold-swap this session (session hr --restart)"
-              disabled={busy !== null || work.outcomeUnknown}
+              disabled={busy !== null}
               busy={busy === "restart"}
               onClick={() => void runCommand("restart")}
             />
@@ -587,7 +581,7 @@ export function InstancesCluster({
               tone="act"
               label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
               reason="stop this session"
-              disabled={busy !== null || work.outcomeUnknown}
+              disabled={busy !== null}
               busy={busy === "stop"}
               onClick={() => void runCommand("stop")}
             />

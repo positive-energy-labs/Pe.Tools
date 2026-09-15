@@ -6,10 +6,8 @@ import {
   checkRevision,
   commitDoc,
   guardCommand,
-  isRecord,
   message,
   refuse,
-  type CommandReceipt,
   type RouteActor,
   type RouteEnvelope,
   type RouteStatePatch,
@@ -86,8 +84,6 @@ export class RouteWorkspace {
       description: spec.description,
       doc: structuredClone(envelope.doc),
       revision: envelope.revision,
-      status: envelope.outcomeUnknown ? "outcomeUnknown" : "ready",
-      outcomeUnknown: envelope.outcomeUnknown,
       schema: toJsonSchema(spec.schema),
       agentWriteMask: spec.agentWriteMask,
       commands: describeCommands(spec),
@@ -144,17 +140,10 @@ export class RouteWorkspace {
     command: string,
     input: unknown,
     expectedRevision: number,
-    _requestId?: string,
   ): Promise<RouteStateWriteResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
-    if (spec.commands[command]?.mutatesExternal)
-      return refuse(
-        "refused",
-        `External route command '${route}.${command}' is retired; its semantic admission port is required`,
-        "No external effect was dispatched. Read the current action or Work uncertainty before choosing a new action.",
-      );
     return this.#serialized(scope, route, async () => {
       const envelope = await this.#load(scope, spec);
       const reject = async (result: RouteStateWriteResult) => {
@@ -267,9 +256,7 @@ export class RouteWorkspace {
             doc: spec.schema.parse({}),
           }
         : null;
-    const envelope = parseEnvelope(raw, spec);
-    if (envelope.inFlight) envelope.outcomeUnknown ??= envelope.inFlight;
-    return envelope;
+    return parseEnvelope(raw, spec);
   }
 
   async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
@@ -299,24 +286,10 @@ export class RouteWorkspace {
   }
 }
 
-const externalOperationSchema = z.object({ command: z.string(), startedAt: z.string() });
-const commandReceiptSchema = z
-  .object({
-    command: z.string(),
-    inputDigest: z.string(),
-    completedAt: z.string(),
-    revision: z.number().int(),
-    replayable: z.boolean(),
-    result: z.unknown().optional(),
-  })
-  .refine((receipt) => !receipt.replayable || "result" in receipt);
 const envelopeSchema = z.object({
   version: z.literal(ENVELOPE_VERSION),
   revision: z.number().int(),
   doc: z.unknown(),
-  inFlight: z.unknown().optional(),
-  outcomeUnknown: z.unknown().optional(),
-  receipts: z.unknown().optional(),
 });
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
@@ -328,25 +301,7 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
     version: ENVELOPE_VERSION,
     revision: parsed.data.revision,
     doc: doc.data,
-    inFlight: externalOperationSchema.safeParse(parsed.data.inFlight).data,
-    outcomeUnknown: externalOperationSchema.safeParse(parsed.data.outcomeUnknown).data,
-    receipts: parseReceipts(parsed.data.receipts, spec.route),
   };
-}
-
-function parseReceipts(value: unknown, route: string): Record<string, CommandReceipt> | undefined {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) throw new Error(`invalid persisted receipts for route '${route}'`);
-  const receipts: Record<string, CommandReceipt> = {};
-  for (const [requestId, raw] of Object.entries(value)) {
-    const parsed = commandReceiptSchema.safeParse(raw);
-    if (!parsed.success)
-      throw new Error(`invalid persisted receipt '${requestId}' for route '${route}'`);
-    receipts[requestId] = parsed.data.replayable
-      ? { ...parsed.data, result: structuredClone(parsed.data.result) }
-      : parsed.data;
-  }
-  return receipts;
 }
 
 function describeCommands(spec: RouteStateSpec<z.ZodType>) {
@@ -354,8 +309,6 @@ function describeCommands(spec: RouteStateSpec<z.ZodType>) {
     name,
     description: command.description,
     actor: command.actor,
-    mutatesExternal: command.mutatesExternal === true,
-    recoversExternal: command.recoversExternal === true,
     input: toJsonSchema(command.input),
   }));
 }

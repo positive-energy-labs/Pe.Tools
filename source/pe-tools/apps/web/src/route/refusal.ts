@@ -12,7 +12,6 @@ export type RefusalCode =
   | "busy"
   | "stale-revision"
   | "conflict"
-  | "duplicate"
   | "partial"
   | "unknown"
   | "failed";
@@ -31,7 +30,6 @@ export const REFUSAL_ORDER: readonly RefusalCode[] = [
   "stale-revision",
   "busy",
   "conflict",
-  "duplicate",
   "partial",
   "failed",
   "unknown",
@@ -62,10 +60,6 @@ export function writeRefusal(result: RouteStateWriteResult): Refusal | null {
   if (result.ok) return null;
   const message = [result.error, result.hint].filter(Boolean).join(": ");
   if (result.code === "stale_revision") return refuse("stale-revision", message);
-  // The host saw this request id on a different gesture: the retry is not the write it replays.
-  if (result.code === "request_id_conflict") return refuse("duplicate", message);
-  // The receipt is gone, so the original outcome cannot be recovered either way.
-  if (result.code === "replay_unavailable") return refuse("unknown", message);
   if (result.kind === "refused") return refuse("not-ready", message);
   if (result.kind === "partial") return refuse("partial", message);
   return refuse("failed", message);

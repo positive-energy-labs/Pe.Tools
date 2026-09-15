@@ -670,12 +670,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           name: string;
           input: unknown;
           revision: number;
-          id: string;
         };
-        if (!body.id.startsWith(`${id}:`))
-          return json({ error: "New local demo command ID required" }, 409);
         return json(
-          await work.command(scope, route, "human", body.name, body.input, body.revision, body.id),
+          await work.command(scope, route, "human", body.name, body.input, body.revision),
         );
       }
       if (url.pathname === "/snapshot" && snapshot) {

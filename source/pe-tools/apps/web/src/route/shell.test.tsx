@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 /**
- * The shell's obligations: an EMPTY manifest renders (name + lamp, nothing else), an action that
- * refuses says why rather than running, and the Situation's unresolved band draws the lost-write
- * barrier (`work.outcomeUnknown`) — the one state that must stop another external effect.
+ * The shell's obligations: an EMPTY manifest renders (name + lamp, nothing else), and an action
+ * that refuses says why rather than running.
  */
 import { type ReactNode } from "react";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -17,7 +16,6 @@ import {
 
 import { defineRoute, emptyManifest } from "./manifest";
 import { RouteShell } from "./shell";
-import { Situation } from "./situation";
 import { useRoute } from "./use-route";
 
 afterEach(cleanup);
@@ -94,47 +92,4 @@ test("the shell runs the supplied workspace handle and shares its outcome and Pa
   fireEvent.click(screen.getByRole("button", { name: "review" }));
   expect(await screen.findByText("Workspace review open")).toBeTruthy();
   expect(await screen.findByText("review", { selector: "div" })).toBeTruthy();
-});
-
-/** A handle is a plain projection, so the band can be drawn from a literal one. */
-const bandHandle = (outcomeUnknown: boolean) =>
-  ({
-    manifest: emptyManifest("band", "Band"),
-    resolution: { kind: "resolved", target: { kind: "host" } },
-    chosen: null,
-    work: {
-      key: "none",
-      doc: null,
-      revision: 3,
-      current: true,
-      outcomeUnknown,
-      conflict: false,
-      write: async () => null,
-      reload: () => {},
-    },
-    readings: {},
-    page: [{}, () => {}],
-    actions: {},
-    busy: null,
-    stop: () => {},
-    failure: null,
-    outcome: null,
-    log: [],
-    demo: false,
-  }) as never;
-
-test("the band says so when the last write lost its outcome, and is silent when it did not", async () => {
-  const barrier = /last write unresolved/;
-  const draw = (unknown: boolean) => (
-    <Situation
-      handle={bandHandle(unknown)}
-      sentence="nothing to say"
-      target={{ session: null, document: null }}
-    />
-  );
-  render(await wrap(draw(true)));
-  expect(screen.getByText(barrier)).toBeTruthy();
-  cleanup();
-  render(await wrap(draw(false)));
-  expect(screen.queryByText(barrier)).toBeNull();
 });

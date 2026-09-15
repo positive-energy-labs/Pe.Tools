@@ -179,7 +179,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       title: `${spec.title}: ${name}`,
       description: `${command.description} ${scopeHint}`,
       needs: "nothing",
-      mutates: Boolean(command.mutatesExternal),
+      mutates: false,
       actor: command.actor,
       input: z.toJSONSchema(command.input) as Record<string, unknown>,
       source: "route registry",

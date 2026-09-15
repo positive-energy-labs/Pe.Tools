@@ -46,18 +46,6 @@ function registration(
         actor: "any",
         input: z.object({}),
       },
-      external: {
-        description: "Mutate an external system.",
-        actor: "human",
-        input: z.object({}),
-        mutatesExternal: true,
-      },
-      recover: {
-        description: "Recover external state.",
-        actor: "human",
-        input: z.object({}),
-        recoversExternal: true,
-      },
       fail: {
         description: "Fail for chronology proof.",
         actor: "human",
@@ -72,8 +60,6 @@ function registration(
       await context.setDoc(doc);
       return { count: doc.count };
     },
-    external: async () => ({ mutated: true }),
-    recover: async () => ({ recovered: true }),
     fail: async () => {
       throw new Error("deliberate failure");
     },
@@ -115,13 +101,8 @@ function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
     read: () => module.read(scope, "test-route"),
     apply: (actor: RouteActor, patches: RouteStatePatch[], revision: number) =>
       module.apply(scope, "test-route", actor, patches, revision),
-    cmd: (
-      actor: RouteActor,
-      command: string,
-      input: unknown,
-      revision: number,
-      requestId?: string,
-    ) => module.command(scope, "test-route", actor, command, input, revision, requestId),
+    cmd: (actor: RouteActor, command: string, input: unknown, revision: number) =>
+      module.command(scope, "test-route", actor, command, input, revision),
   };
 }
 
@@ -244,36 +225,6 @@ test("registration rejects route delimiters and schemas that cannot become JSON 
   expect(() => workspace(store, { registration: badCommand })).toThrow();
 });
 
-test("retired external commands never execute and reads cannot clear a legacy unknown", async () => {
-  const { store } = memoryStore();
-  const external = vi.fn();
-  const route = registration({ external });
-  const module = workspace(store, { registration: route });
-  const w = bind(module);
-  await w.apply("human", [{ path: ["count"], value: 1 }], 0);
-  const originalSet = store.setState.bind(store);
-  let envelope: any;
-  store.setState = async (value) => {
-    envelope = value.value;
-    await originalSet(value);
-  };
-  await w.apply("human", [{ path: ["count"], value: 2 }], 1);
-  const originalGet = store.getState.bind(store);
-  store.getState = async (key) => ({
-    ...((await originalGet(key)) as object),
-    outcomeUnknown: { command: "external", startedAt: "then" },
-  });
-  expect(await w.cmd("human", "external", {}, 2, "old-id")).toMatchObject({
-    ok: false,
-    kind: "refused",
-    error: expect.stringContaining("retired"),
-  });
-  expect(await w.cmd("human", "recover", {}, 2)).toMatchObject({ ok: true, revision: 2 });
-  expect(await w.read()).toMatchObject({ status: "outcomeUnknown" });
-  expect(external).not.toHaveBeenCalled();
-  expect(envelope.revision).toBe(2);
-});
-
 test("mask, schema, and human command gate are enforced", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
@@ -342,7 +293,7 @@ test("stale commands never invoke and successful writes return landed revisions"
 
 // Durable large-result / serialization-loss proof lives in host gateway.test.ts on ActionJournal.
 
-test("HTTP authored writes enforce short local revision checks and refuse retired external commands", async () => {
+test("HTTP authored writes enforce short local revision checks", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-state-"));
   const runtime = await createPeaRuntime({ workspaceRoot });
   const external = vi.fn(async () => ({ mutated: true }));
@@ -389,7 +340,6 @@ test("HTTP authored writes enforce short local revision checks and refuse retire
       command: "increment",
       input: {},
       expectedRevision: 1,
-      requestId: "http-request-1",
     };
     expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
       ok: true,
@@ -400,16 +350,6 @@ test("HTTP authored writes enforce short local revision checks and refuse retire
         await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
       ).json(),
     ).toMatchObject({ ok: false, code: "stale_revision" });
-    expect(
-      await (
-        await post("/pe/route-state/test-route/command", {
-          ...command,
-          command: "external",
-          expectedRevision: 2,
-        })
-      ).json(),
-    ).toMatchObject({ ok: false, error: expect.stringContaining("retired") });
-    expect(external).not.toHaveBeenCalled();
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });

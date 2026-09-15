@@ -265,8 +265,7 @@ export async function admitScheduleAction(
     admission,
     async () => {
       const view = await work.read(base.key, "schedule-grid");
-      if (!view || view.revision !== base.revision || view.outcomeUnknown)
-        throw refused("Work changed or has an unknown outcome");
+      if (!view || view.revision !== base.revision) throw refused("Work changed");
       const document = scheduleGridDocumentSchema.parse(view.doc);
       if (!document.basis) throw refused("Select a binding reading before staging edits");
       const reading = await captures.schedule(document.basis.captureId);

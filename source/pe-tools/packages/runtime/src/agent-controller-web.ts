@@ -21,7 +21,6 @@ const routeStateCommandBodySchema = z.object({
   command: z.string(),
   input: z.unknown().optional(),
   expectedRevision: z.number().int().nonnegative(),
-  requestId: z.string().trim().min(1).optional(),
 });
 
 export interface ServableRuntime {
@@ -222,7 +221,7 @@ export async function buildAgentControllerApp(
     {
       suffix: "command",
       schema: routeStateCommandBodySchema,
-      hint: "expected { command, input?, expectedRevision, requestId? }",
+      hint: "expected { command, input?, expectedRevision }",
       run: (scope: WorkKey, route: string, actor: "agent" | "human", data: unknown) => {
         const body = data as z.infer<typeof routeStateCommandBodySchema>;
         return routeWorkspace.command(
@@ -232,7 +231,6 @@ export async function buildAgentControllerApp(
           body.command,
           body.input,
           body.expectedRevision,
-          body.requestId,
         );
       },
     },

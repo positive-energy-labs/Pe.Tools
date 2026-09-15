@@ -80,9 +80,7 @@ function useOwned<A>(registry: AtomRegistry.AtomRegistry, atom: Atom.Atom<A> | n
   return useSyncExternalStore(subscribe, () => (atom ? registry.get(atom) : null));
 }
 
-export type Slice<D> = ({ doc: D; revision: number } | { doc: null; revision: null }) & {
-  outcomeUnknown?: boolean;
-};
+export type Slice<D> = { doc: D; revision: number } | { doc: null; revision: null };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -129,10 +127,6 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
   const runtime = keep(Atom.runtime(Layer.empty));
   Reflect.set(runtime.layer, "keepAlive", false);
   const invalidate = keep(runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys)));
-
-  // One request id per unlanded gesture, held by the route owner: the writer is rebuilt on every
-  // remount and Work-key change, and a retry must reuse the id it already sent (route-doc replay).
-  const pendingRequestIds = new Map<string, string>();
 
   const busy = owned("action/busy", Atom.make<{ key: string; seconds: number } | null>(null));
   const failure = owned("action/failure", Atom.make<Refusal | null>(null));
@@ -258,7 +252,6 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     busy,
     failure,
     conflict,
-    pendingRequestIds,
     log,
     note,
     dispose() {
@@ -355,7 +348,6 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
         return {
           doc: parseRouteDoc(raw.doc, spec),
           revision: raw.revision as number,
-          outcomeUnknown: Boolean(raw.outcomeUnknown),
         };
       });
     } catch (error) {
@@ -381,14 +373,12 @@ function docAtom<S extends RouteStateSpec<any>>(
 
 const notHydrated = refuse("not-ready", "route document is not hydrated");
 
-/** Exported for `use-route.test.ts`: the request-id map must outlive the writer. */
 export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   key: WorkKey,
   registry: AtomRegistry.AtomRegistry,
   slice: Atom.Atom<Reading<Slice<RouteDocOf<S>>>>,
   conflict: Atom.Writable<boolean> | undefined,
-  pendingRequestIds: Map<string, string>,
 ) {
   const send = async (
     operation: "apply" | "command",
@@ -424,34 +414,20 @@ export function docWriter<S extends RouteStateSpec<any>>(
       if (revision === null) return Promise.resolve(notHydrated);
       return send("apply", { patches, expectedRevision: revision }, onAccepted);
     },
-    command: async (
+    command: (
       name: keyof S["commands"] & string,
       input?: unknown,
       expectedRevision?: number,
       onAccepted?: (revision: number) => void,
     ) => {
       const revision = writeRevision(expectedRevision);
-      if (revision === null) return notHydrated;
-      // One request id per (command, input) until it lands: a re-click after a lost response
-      // replays the receipt instead of mutating Revit twice.
-      const gesture = JSON.stringify([name, input ?? {}]);
-      const requestId =
-        spec.commands[name]?.mutatesExternal === true
-          ? (pendingRequestIds.get(gesture) ?? crypto.randomUUID())
-          : undefined;
-      if (requestId) pendingRequestIds.set(gesture, requestId);
-      const refusal = await send(
-        "command",
-        {
-          command: name,
-          input: input ?? {},
-          expectedRevision: revision,
-          ...(requestId ? { requestId } : {}),
-        },
-        onAccepted,
-      );
-      if (!refusal) pendingRequestIds.delete(gesture);
-      return refusal;
+      return revision === null
+        ? Promise.resolve(notHydrated)
+        : send(
+            "command",
+            { command: name, input: input ?? {}, expectedRevision: revision },
+            onAccepted,
+          );
     },
   };
 }
@@ -492,8 +468,6 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
-    /** A prior write lost its response; recover that outcome before another external effect. */
-    readonly outcomeUnknown: boolean;
     readonly write: (
       patches: RouteStatePatch[],
       expectedRevision?: number,
@@ -794,10 +768,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   );
 
   const writer = useMemo(
-    () =>
-      spec && slice
-        ? docWriter(spec, key, owner.registry, slice, owner.conflict, owner.pendingRequestIds)
-        : null,
+    () => (spec && slice ? docWriter(spec, key, owner.registry, slice, owner.conflict) : null),
     [spec, slice, key, owner],
   );
   // Authored patches queue so two same-tick edits carry the first accepted revision into the
@@ -976,7 +947,6 @@ export function useRoute<W, R extends string, P, A extends string>(
       doc: (doc?.doc ?? null) as W | null,
       revision: doc?.revision ?? null,
       current: workCurrent,
-      outcomeUnknown: Boolean(doc?.outcomeUnknown),
       write: writeWork,
       conflict: conflictNow,
       reload: () => {

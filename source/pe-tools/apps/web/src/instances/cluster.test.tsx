@@ -37,7 +37,6 @@ function ClusterHarness({ ...props }: Omit<ComponentProps<typeof InstancesCluste
       doc: work.doc,
       revision: work.revision,
       current: true,
-      outcomeUnknown: false,
       write: async (patches: { path: (string | number)[]; value?: unknown }[]) => {
         written(patches);
         setWork((current) => {

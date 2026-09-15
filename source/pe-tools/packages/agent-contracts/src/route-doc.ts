@@ -8,29 +8,12 @@ import {
   type RouteWriteKind,
 } from "./route-state.ts";
 
-export interface ExternalOperation {
-  command: string;
-  startedAt: string;
-}
-
-export type RouteRefusalCode = "stale_revision" | "request_id_conflict" | "replay_unavailable";
-
-export interface CommandReceipt {
-  command: string;
-  inputDigest: string;
-  completedAt: string;
-  revision: number;
-  replayable: boolean;
-  result?: unknown;
-}
+export type RouteRefusalCode = "stale_revision";
 
 export interface RouteEnvelope<D> {
   version: 1;
   revision: number;
   doc: D;
-  inFlight?: ExternalOperation;
-  outcomeUnknown?: ExternalOperation;
-  receipts?: Record<string, CommandReceipt>;
 }
 
 export type RouteActor = "agent" | "human";
@@ -123,12 +106,6 @@ export function guardCommand<S extends z.ZodType>(
   const parsed = command.input.safeParse(input ?? {});
   if (!parsed.success)
     return refuse("error", `invalid input for command '${name}'`, formatZodError(parsed.error));
-  if (envelope.outcomeUnknown && command.mutatesExternal && !command.recoversExternal)
-    return refuse(
-      "refused",
-      `command '${name}' is blocked because a prior external outcome is unknown`,
-      "run a recovery command successfully before another external mutation.",
-    );
   return { ok: true, input: parsed.data, command };
 }
 

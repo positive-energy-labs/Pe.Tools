@@ -628,12 +628,10 @@ export function Situation({
   const workWord = `${handle.work.revision === null ? "unwritten" : `r${handle.work.revision}`}${
     staged ? ` · ${nounOf(staged.count, staged.noun)} staged` : ""
   }${handle.work.conflict ? " · changed elsewhere" : ""}`;
-  // The band's own state, beside the verbs: a lost write (no further external effect until it is
-  // recovered), a conflicting writer, and the runner's last refusal when no verb flag says it (a
-  // Work write and a late result after a stop have no button to grow a flag from).
+  // The band's own state, beside the verbs: a conflicting writer and the runner's last refusal
+  // when no verb flag says it (a Work write and a late result after a stop have no button to grow a flag from).
   const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
   const unresolved = [
-    handle.work.outcomeUnknown ? "last write unresolved, reload before acting" : null,
     handle.work.conflict ? "another writer changed this Work; your last write did not land" : null,
     late ? `${late.code}: ${late.message}` : null,
   ].filter(Boolean);
@@ -736,7 +734,7 @@ export function Situation({
                   <Label>unresolved</Label>
                 </span>
                 <span>{unresolved.join(" · ")}</span>
-                {handle.work.conflict || handle.work.outcomeUnknown ? (
+                {handle.work.conflict ? (
                   <Press frame="line" tone="quiet" size="value" onClick={handle.work.reload}>
                     reload
                   </Press>
