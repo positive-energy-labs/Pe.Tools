@@ -1,106 +1,83 @@
 /**
- * The Ops route, declared once. Ops reads two subjects — the generated operation catalogue and
- * the capability catalogue — and has exactly one action: run the selected operation. The old
- * `ops/product.ts` (Slots, Feeds, Stages, Verbs, Panes) is deleted; its only surviving judgement
- * is `opsRefusal`, which now answers `run.ready`.
+ * The Ops route, declared once. It is the host op runner: the situation ladder picks the target,
+ * the catalogue picks the op, the schema draws the form, `run` is the one verb. Every gate the
+ * runner needs is either the harness's target refusal (from `needs`) or `opsRefusal` below.
  */
 import { z } from "zod";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 
-import { defineRoute, type RouteManifest } from "#/route";
+import { defineRoute, type Ctx, type RouteManifest } from "#/route";
 
 export type HostOperationCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
 
-export type OpsReading = "catalog" | "capabilities";
+export type Custody = "controlled" | "observed";
+export type OpsReading = "inventory";
+export type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
 
-/** What the Page holds: which operation is selected and what its request pane has drafted. */
-export interface OpsPage {
-  op: string;
-  session: string;
-  openId: string;
-}
+const NEEDS = {
+  nothing: "session",
+  document: "document",
+  "project-document": "project",
+  "family-document": "family",
+} as const;
 
-const opsPage = z.object({
-  op: z.string().default(""),
-  session: z.string().default(""),
-  openId: z.string().default(""),
-});
+/** What the harness must resolve before this op may run. A host-local op needs no Revit. */
+export const opNeeds = (op?: HostOperationCatalogEntry) =>
+  !op || isTsOnlyOperationKey(op.key) ? "host" : NEEDS[op.needs];
+
+export const isMutation = (op?: HostOperationCatalogEntry) =>
+  op?.intent?.toLowerCase() === "mutate";
 
 /**
- * Why an operation cannot run yet. Metadata is untrusted: an operation with no intent or no
- * `needs` is refused rather than guessed at, and a mutation never runs on an observed session.
+ * Why the selected op cannot run, beyond the target the harness resolves. Intent is judged
+ * before origin: a mutation on a Revit session runs only under controlled custody. A host-local
+ * mutation has no custody to judge and is audited by the action journal instead (`run.ts`).
  */
-export const opsRefusal = (
-  operation: HostOperationCatalogEntry | undefined,
-  custody: "controlled" | "observed" | undefined,
-  selected?: { session?: string; openId?: string },
-): string | null =>
-  !operation
+export const opsRefusal = (op: HostOperationCatalogEntry | undefined, custody?: Custody) =>
+  !op
     ? "pick an operation"
-    : !operation.intent || !operation.needs
+    : !op.intent
       ? "Operation readiness metadata is unavailable"
-      : isTsOnlyOperationKey(operation.key)
-        ? null
-        : selected && !selected.session
-          ? "select the exact Revit session for this operation"
-          : selected && operation.needs !== "nothing" && !selected.openId
-            ? "select the exact open document for this operation"
-            : custody === "observed" && operation.intent.toLowerCase() === "mutate"
-              ? "mutating operations require a controlled world"
-              : null;
+      : isMutation(op) && opNeeds(op) !== "host" && custody !== "controlled"
+        ? "mutating operations require a controlled world"
+        : null;
 
-/** What the route needs from the live surface to run its one action. */
 export interface OpsRouteDeps {
-  /** The catalogue entry the page has selected, and the custody of the session it would run on. */
   selected?: HostOperationCatalogEntry;
-  custody?: "controlled" | "observed";
-  request?: () => unknown;
-  run?: (input: { opKey: string; request: () => unknown }) => Promise<unknown>;
+  custody?: Custody;
+  run?: (ctx: OpsCtx) => Promise<void>;
 }
 
 export const opsManifest = (
   deps: OpsRouteDeps = {},
-): RouteManifest<never, OpsReading, OpsPage, "run"> =>
-  defineRoute<never, OpsReading, OpsPage, "run">({
+): RouteManifest<never, OpsReading, Record<string, never>, "run"> => {
+  const needs = opNeeds(deps.selected);
+  return defineRoute<never, OpsReading, Record<string, never>, "run">({
     key: "ops",
-    name: "Operations",
-    readings: {
-      /** The generated operation catalogue, narrowed to the page's bridge session when it has one. */
-      catalog: { kind: "ops-catalog" },
-      /** The one capability catalogue; the catalogue section below reads the same subject. */
-      capabilities: { kind: "capabilities" },
-    },
-    page: opsPage,
+    name: "Ops",
+    // A session is always asked for so the catalogue can list that session's ops; a host-local
+    // op still runs without one because its verb needs only the host.
+    needs: needs === "host" ? "session" : needs,
+    readings: { inventory: { kind: "inventory" } },
     actions: {
       run: {
         label: "Run",
-        says: "runs the selected operation against the exact session and open document the page names",
-        needs: "host",
+        says: "runs the selected operation on the target the sentence names",
+        needs,
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
-        dirties: ["catalog"],
-        ready: (ctx) =>
-          opsRefusal(deps.selected, deps.custody, {
-            session: ctx.page?.session,
-            openId: ctx.page?.openId,
-          }),
+        dirties: [],
+        chord: "Mod+Enter",
+        ready: () => opsRefusal(deps.selected, deps.custody),
         run: async (ctx) => {
-          const operation = deps.selected;
-          if (!operation) throw Error("pick an operation first");
-          if (deps.run) {
-            await deps.run({ opKey: operation.key, request: deps.request ?? (() => undefined) });
-            return;
-          }
-          await ctx.call(operation.key, deps.request?.());
+          if (!deps.run) throw Error("pick an operation first");
+          await deps.run(ctx);
         },
       },
     },
-    views: [
-      { key: "request", label: "request", draws: () => null },
-      { key: "result", label: "result", draws: () => null },
-    ],
   });
+};

@@ -6,7 +6,7 @@ import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
-import { SheetCanvas } from "#/ops/views-detail";
+import { SheetCanvas } from "#/ops/views/detail/schedules";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 

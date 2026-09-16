@@ -8,6 +8,7 @@ import type {
   FieldOptionsRequest,
   FieldRendererProps,
   ParameterCatalogEntry,
+  RemoteOptionsHook,
 } from "./field-option";
 import {
   buildContextValues,
@@ -66,6 +67,9 @@ export function projectParameterCatalogItems(
   return toLocalItems(dedupedValues);
 }
 
+const useSettingsRemoteOptions: RemoteOptionsHook = (request, enabled) =>
+  useFieldOptionsQuery(request, { enabled });
+
 export function useFieldOptions({
   node,
   providerNode,
@@ -75,8 +79,8 @@ export function useFieldOptions({
   providerNode?: SchemaNodeRef;
   fieldPath: string;
 }) {
-  const { moduleKey, values: allValues } = useSchemaRenderContext();
-  const { rootKey } = useSchemaRenderContext();
+  const { moduleKey, rootKey, values: allValues, useRemoteOptions } = useSchemaRenderContext();
+  const useRemote = useRemoteOptions ?? useSettingsRemoteOptions;
   const effectiveProviderNode = providerNode ?? node;
   const requestPath = effectiveProviderNode.providerPath();
   const remoteSource = useMemo(() => effectiveProviderNode.optionSource(), [effectiveProviderNode]);
@@ -102,9 +106,7 @@ export function useFieldOptions({
   const dataset = remoteSource?.dataset;
   const usesRemoteResolver = resolver === "remote";
   const usesParameterCatalogDataset = resolver === "dataset" && dataset === "parametercatalog";
-  const remoteQuery = useFieldOptionsQuery(request, {
-    enabled: usesRemoteResolver,
-  });
+  const remoteQuery = useRemote(request, usesRemoteResolver);
   const parameterCatalogQuery = useParameterCatalogQuery(
     { moduleKey, contextValues },
     { enabled: usesParameterCatalogDataset },

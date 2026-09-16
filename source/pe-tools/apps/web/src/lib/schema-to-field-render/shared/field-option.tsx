@@ -17,6 +17,20 @@ export type ParameterCatalogEntry = SettingsParameterCatalog.Res.ParameterCatalo
 
 export type SettingsValues = Record<string, unknown>;
 
+/**
+ * How a field with `x-options` (resolver "remote") asks for its value domain. Settings answers
+ * through `settings.field-options`; a route may inject another answerer (ops asks Revit).
+ */
+export type RemoteOptionsHook = (
+  request: FieldOptionsRequest,
+  enabled: boolean,
+) => {
+  data?: { items: readonly FieldOptionItem[]; mode?: string; allowsCustomValue?: boolean };
+  pending?: boolean;
+  isPending?: boolean;
+  error?: unknown;
+};
+
 export interface SchemaToFieldRenderProps {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
@@ -25,6 +39,7 @@ export interface SchemaToFieldRenderProps {
   rootKey?: string;
   baselineValues: SettingsValues;
   validationResult?: SettingsValidationResult;
+  useRemoteOptions?: RemoteOptionsHook;
 }
 
 export interface FieldRendererProps {
@@ -68,6 +83,7 @@ export interface SchemaRenderContextValue {
   rootKey?: string;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
+  useRemoteOptions?: RemoteOptionsHook;
 }
 
 export const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
@@ -80,6 +96,7 @@ export function SchemaRenderProvider({
   moduleKey,
   rootKey,
   fieldChanges,
+  useRemoteOptions,
   children,
 }: {
   values: SettingsValues;
@@ -89,6 +106,7 @@ export function SchemaRenderProvider({
   moduleKey: string;
   rootKey?: string;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
+  useRemoteOptions?: RemoteOptionsHook;
   children: ReactNode;
 }) {
   const contextValue = useMemo(
@@ -100,8 +118,9 @@ export function SchemaRenderProvider({
       rootKey,
       schemaDocument,
       fieldChanges,
+      useRemoteOptions,
     }),
-    [errors, fieldChanges, moduleKey, onChange, rootKey, schemaDocument, values],
+    [errors, fieldChanges, moduleKey, onChange, rootKey, schemaDocument, values, useRemoteOptions],
   );
 
   return (

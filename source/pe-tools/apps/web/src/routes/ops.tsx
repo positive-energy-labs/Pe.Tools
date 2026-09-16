@@ -1,17 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { opsPageSeedSchema } from "#/ops/store";
-import { OpsRoute } from "#/ops/route-workspace";
+
+import { OpsRoute } from "#/ops/workspace";
 import { opsManifest } from "#/ops/manifest";
 
-/** The route, declared once. `ops/route-workspace.tsx` re-derives it with the selection bound. */
+/** The route, declared once. `ops/workspace.tsx` re-derives it with the selection bound. */
 export const manifest = opsManifest();
 
-const str = (value: unknown) => (typeof value === "string" ? value : "");
+const str = (value: unknown) => (typeof value === "string" && value ? value : undefined);
 
-export const opsSearch = (search: Record<string, unknown>) => ({
-  view: opsPageSeedSchema.partial().safeParse(search.view).data,
-  thread: str(search.thread) || undefined,
-});
+export type OpsSearch = { op?: string; target?: string; actionId?: string; thread?: string };
+
+export const opsSearch = (search: Record<string, unknown>): OpsSearch =>
+  Object.fromEntries(
+    (["op", "target", "actionId", "thread"] as const).flatMap((key) => {
+      const value = str(search[key]);
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
 
 export const Route = createFileRoute("/ops")({
   validateSearch: opsSearch,
@@ -19,13 +24,14 @@ export const Route = createFileRoute("/ops")({
 });
 
 function OpsFileRoute() {
-  const { view } = Route.useSearch();
+  const search = Route.useSearch();
   const navigate = Route.useNavigate();
   return (
     <OpsRoute
-      initial={view}
-      onSeed={(seed) => {
-        void navigate({ search: (previous) => ({ ...previous, view: seed }), replace: true });
+      op={search.op ?? ""}
+      actionId={search.actionId ?? null}
+      set={(patch) => {
+        void navigate({ search: (previous) => ({ ...previous, ...patch }), replace: true });
       }}
     />
   );

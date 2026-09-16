@@ -8,13 +8,12 @@ import {
   asRecords,
   asString,
   type OpViewProps,
-  type OpViewRegistry,
   UnrecognizedShape,
 } from "#/ops/registry";
 import type { Rec } from "./record";
 import type { BreakerCell } from "./circuits";
-import { IssuesNote, MonoAside, PanelsView, joinNonEmpty } from "./record";
-import { CircuitsView, LoadClassificationsView, extractBreakerCells } from "./circuits";
+import { IssuesNote, MonoAside, joinNonEmpty } from "./record";
+import { extractBreakerCells } from "./circuits";
 
 export function BreakerHalf({
   slot,
@@ -225,10 +224,3 @@ export function PanelSchedulesView({ data }: OpViewProps) {
     </Section>
   );
 }
-
-export const views: OpViewRegistry = {
-  "revit.catalog.electrical-panels": PanelsView,
-  "revit.catalog.electrical-circuits": CircuitsView,
-  "revit.catalog.electrical-load-classifications": LoadClassificationsView,
-  "revit.detail.electrical-panel-schedules": PanelSchedulesView,
-};

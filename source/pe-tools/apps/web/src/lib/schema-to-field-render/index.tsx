@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import { FieldRenderer } from "./field-renderer";
-import { SchemaRenderProvider, type SchemaToFieldRenderProps, type SettingsValues } from "./shared";
+import {
+  SchemaRenderProvider,
+  type RemoteOptionsHook,
+  type SchemaToFieldRenderProps,
+  type SettingsValues,
+} from "./shared";
 import { SchemaDocument, type SchemaNodeRef } from "@pe/schema-core";
 import { buildFieldChangeMap, projectHostValidationState } from "./field-state";
 
@@ -12,6 +17,7 @@ export function SchemaToFieldRender({
   validationResult,
   values,
   onChange,
+  useRemoteOptions,
 }: SchemaToFieldRenderProps) {
   const schemaDocument = useMemo(() => SchemaDocument.from(schema), [schema]);
   const rootEntries = useMemo(
@@ -38,6 +44,7 @@ export function SchemaToFieldRender({
       baselineValues={baselineValues}
       onChange={onChange}
       errors={projectedValidationState.fieldIssuesByPath}
+      useRemoteOptions={useRemoteOptions}
     />
   );
 }
@@ -51,6 +58,7 @@ function SchemaToFieldRenderContent({
   baselineValues,
   onChange,
   errors,
+  useRemoteOptions,
 }: {
   moduleKey: string;
   rootKey?: string;
@@ -60,6 +68,7 @@ function SchemaToFieldRenderContent({
   baselineValues: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, string[]>;
+  useRemoteOptions?: RemoteOptionsHook;
 }) {
   const fieldChanges = useMemo(
     () => buildFieldChangeMap(baselineValues, values ?? {}),
@@ -75,6 +84,7 @@ function SchemaToFieldRenderContent({
       moduleKey={moduleKey}
       rootKey={rootKey}
       fieldChanges={fieldChanges}
+      useRemoteOptions={useRemoteOptions}
     >
       <div className="hairline-rows">
         {rootEntries.map(([key, nodeRef]) => (
@@ -86,3 +96,5 @@ function SchemaToFieldRenderContent({
     </SchemaRenderProvider>
   );
 }
+
+export type { RemoteOptionsHook } from "./shared";

@@ -5,7 +5,6 @@ import { Provenance, Section } from "#/components/lang/section";
 import { KVGrid, type KVTone } from "#/ops/primitives";
 import {
   type OpViewProps,
-  type OpViewRegistry,
   UnrecognizedShape,
   asNumber,
   asRecord,
@@ -14,7 +13,6 @@ import {
   text,
 } from "#/ops/registry";
 import {
-  ContextSummaryView,
   HandleChip,
   IssueLines,
   formatBytes,
@@ -22,8 +20,7 @@ import {
   handleLabel,
   truncateMiddle,
 } from "./kind-viz";
-import { DocumentSessionView, VisibleSummaryView } from "./document-tab";
-import { ScoreBar, ViewRenderingStateView } from "./observed-view-card";
+import { ScoreBar } from "./observed-view-card";
 
 export function ResolveReferencesView({ data }: OpViewProps) {
   const res = asRecord(data);
@@ -182,12 +179,3 @@ export function ViewImageView({ data }: OpViewProps) {
     </div>
   );
 }
-
-export const views: OpViewRegistry = {
-  "revit.context.summary": ContextSummaryView,
-  "revit.context.document-session": DocumentSessionView,
-  "revit.context.visible-summary": VisibleSummaryView,
-  "revit.context.view-rendering-state": ViewRenderingStateView,
-  "revit.resolve.references": ResolveReferencesView,
-  "revit.context.view-image": ViewImageView,
-};

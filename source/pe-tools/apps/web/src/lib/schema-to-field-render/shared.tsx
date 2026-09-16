@@ -5,6 +5,7 @@ export type {
   FieldOptionDependencyState,
   FieldOptionState,
   ResolvedFieldRendererProps,
+  RemoteOptionsHook,
 } from "./shared/field-option";
 export {
   SchemaRenderProvider,
