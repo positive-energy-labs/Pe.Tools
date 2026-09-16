@@ -4,6 +4,9 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using System.IO;
 using WpfColor = System.Windows.Media.Color;
+using Pe.App.Pods;
+using Pe.Revit.SettingsRuntime.Modules;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.App.Commands.Schedules.Ui;
 
@@ -21,6 +24,27 @@ public class ScheduleListItem : IPaletteListItem {
         this._relativePath = relativePath;
         this.CategoryName = ExtractCategoryName(filePath);
         this.FieldCount = ExtractFieldCount(filePath);
+    }
+
+    internal ScheduleListItem(PreparedPodSetting prepared) {
+        this.FilePath = prepared.FullSourcePath;
+        this._fileInfo = new FileInfo(this.FilePath);
+        this._relativePath = prepared.SourcePath;
+        this.Prepared = prepared;
+        this.CategoryName = ExtractCategoryNameFromContent(prepared.ComposedContent);
+        this.FieldCount = ExtractFieldCountFromContent(prepared.ComposedContent);
+    }
+
+    internal PreparedPodSetting? Prepared { get; private set; }
+
+    internal ScheduleProfile Load(ModuleSettingsStorage<ScheduleProfile> legacy) {
+        if (this.Prepared is null)
+            return legacy.ReadRequired(this.TextPrimary);
+        this.Prepared = this.Prepared.Refresh();
+        return ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(
+            this.Prepared.RawContent,
+            this.Prepared.ComposedContent,
+            $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
     }
 
     /// <summary> Full path to the schedule profile JSON file </summary>
@@ -58,14 +82,15 @@ public class ScheduleListItem : IPaletteListItem {
     /// </summary>
     private static string ExtractCategoryName(string filePath) {
         try {
-            var content = File.ReadAllText(filePath);
-            var jObject = JObject.Parse(content);
-            return (jObject.TryGetValue("CategoryName", out var token)
-                ? token.Value<string>()
-                : null) ?? string.Empty;
+            return ExtractCategoryNameFromContent(File.ReadAllText(filePath));
         } catch {
             return string.Empty;
         }
+    }
+
+    private static string ExtractCategoryNameFromContent(string content) {
+        var jObject = JObject.Parse(content);
+        return (jObject.TryGetValue("CategoryName", out var token) ? token.Value<string>() : null) ?? string.Empty;
     }
 
     /// <summary>
@@ -73,14 +98,15 @@ public class ScheduleListItem : IPaletteListItem {
     /// </summary>
     private static int ExtractFieldCount(string filePath) {
         try {
-            var content = File.ReadAllText(filePath);
-            var jObject = JObject.Parse(content);
-            if (jObject.TryGetValue("Fields", out var fieldsToken) && fieldsToken is JArray fieldsArray)
-                return fieldsArray.Count;
-            return 0;
+            return ExtractFieldCountFromContent(File.ReadAllText(filePath));
         } catch {
             return 0;
         }
+    }
+
+    private static int ExtractFieldCountFromContent(string content) {
+        var jObject = JObject.Parse(content);
+        return jObject.TryGetValue("Fields", out var fieldsToken) && fieldsToken is JArray fieldsArray ? fieldsArray.Count : 0;
     }
 
     /// <summary>

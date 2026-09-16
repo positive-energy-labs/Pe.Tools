@@ -10,6 +10,8 @@ internal sealed class ScriptOutputSink {
     private readonly object _sync = new();
     private bool _truncated;
 
+    public Pe.Shared.HostContracts.Scripting.PodExecutionAttributionData? Attribution { get; set; }
+
     public string GetBufferedOutput() {
         lock (this._sync)
             return this._output.ToString();

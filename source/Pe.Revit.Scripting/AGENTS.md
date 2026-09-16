@@ -11,6 +11,8 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 ## Critical Entry Points
 
 - `Execution/RevitScriptExecutionService.cs` - normalize -> policy -> resolve -> compile -> load -> instantiate -> execute -> complete.
+- `Pods/ScriptPodPreparationService.cs` - capture -> dependency verification -> settings composition -> integrity/identity gates.
+- `Pods/ScriptPodArchiveService.cs` - immutable release export/import and archive integrity verification.
 - `Transport/ScriptingBridgeMessageHandler.cs` - `ExternalEvent` handoff to the Revit thread.
 - `Bootstrap/ScriptWorkspaceBootstrapService.cs` and `Bootstrap/ScriptFileTemplates.cs` - generated workspace shape and guidance.
 - `References/ScriptReferenceResolver.cs` - script project reference/package resolution.
@@ -38,7 +40,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 
 ## Living Memory
 
-- Workspace execution is Pod-only: `pod.json` is validated, the requested source must be a declared entrypoint, and the whole `src/` tree compiles together. A workspace without `pod.json` is rejected with guidance to run `scripting.workspace.bootstrap`.
+- Workspace execution is Pod-only: one captured snapshot is prepared before admission, the requested source must be a declared entrypoint, and the whole captured `src/` tree compiles together. Never re-read mutable workspace inputs after preparation.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`.
 - `ReadOnly` execution runs inside a document rollback guard: in-guard document changes are rolled back, discarded, and surfaced as a `readonly`-stage warning; only mutations that persist outside the guard fail the run at the `mutation-monitor` stage. `WriteTransaction` requires a writable active document and opens one host-owned transaction. Pod manifests never grant write permission; permission is request-owned.
 - Static policy always rejects process/shell and unmanaged interop. It rejects script-owned transactions in `ReadOnly` and `WriteTransaction`; `NoTransaction` permits script/library-owned transaction boundaries. There is no ReadOnly semantic mutation blacklist. The rollback guard and document-bound mutation monitor are the ReadOnly guardrails.

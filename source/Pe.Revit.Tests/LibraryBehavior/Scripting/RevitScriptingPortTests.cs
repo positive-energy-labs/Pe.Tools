@@ -1358,7 +1358,7 @@ public sealed class RevitScriptingPortTests {
                 RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
                 $$"""
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "id": "{{workspaceKey}}",
                   "name": "{{workspaceKey}}",
                   "version": "1.0.0",
@@ -1454,7 +1454,7 @@ public sealed class RevitScriptingPortTests {
 
         return $$"""
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "{{workspaceKey}}",
               "name": "{{workspaceKey}}",
               "version": "1.0.0",

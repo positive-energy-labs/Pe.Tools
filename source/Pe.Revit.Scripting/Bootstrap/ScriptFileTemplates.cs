@@ -220,7 +220,7 @@ internal static class ScriptFileTemplates {
     public static string CreatePodManifest(string workspaceKey) =>
         $$"""
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "id": "{{workspaceKey}}",
           "name": "{{workspaceKey}}",
           "version": "0.1.0",

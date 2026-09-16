@@ -7,6 +7,7 @@ using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData.Families;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
+using Pe.App.Pods;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -26,7 +27,13 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
     public EphemeralWindow Build() {
         var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
         var documents = RuntimeStorageClient.Default.Root(FamilyModelSettingsRegistration.Root).Documents();
-        var files = ProfileListItem.Discover(documents);
+        var files = ProfileListItem.Discover(documents)
+            .Concat(PreparedPodSettingsCatalog.List(".family.json", ".patch.json").Select(setting =>
+                new ProfileListItem(setting, setting.SourcePath.EndsWith(".patch.json", StringComparison.OrdinalIgnoreCase)
+                    ? FoundryFileKind.Patch
+                    : FoundryFileKind.FamilyModel)))
+            .OrderByDescending(item => item.LastModified)
+            .ToList();
         if (files.Count == 0)
             throw new InvalidOperationException($"No *.family.json or *.patch.json under {documents.ResolveRootDirectory()}.");
 
@@ -57,19 +64,21 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
     }
 
     private static async Task<PreviewData> BuildPreview(ProfileListItem item, FoundryContext context, CancellationToken ct) {
-        var json = File.ReadAllText(item.FilePath);
+        var json = item.Prepared?.RawContent ?? File.ReadAllText(item.FilePath);
         var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
             if (item.Kind == FoundryFileKind.Patch) {
-                var patch = new ModuleSettingsStorage<FamilyPatch>(context.Documents)
-                    .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
+                var patch = item.Prepared is null
+                    ? new ModuleSettingsStorage<FamilyPatch>(context.Documents).ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.PatchRootKey)
+                    : ModuleSettingsStorage<FamilyPatch>.ReadPrepared(item.Prepared.RawContent, item.Prepared.ComposedContent, $"{item.Prepared.PodId}:{item.Prepared.SourcePath}");
                 var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
                     ? []
                     : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
                 return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-            var composed = new ModuleSettingsStorage<FamilyModel>(context.Documents)
-                .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.RootKey);
+            var composed = item.Prepared is null
+                ? new ModuleSettingsStorage<FamilyModel>(context.Documents).ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.RootKey)
+                : ModuleSettingsStorage<FamilyModel>.ReadPrepared(item.Prepared.RawContent, item.Prepared.ComposedContent, $"{item.Prepared.PodId}:{item.Prepared.SourcePath}");
             var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };

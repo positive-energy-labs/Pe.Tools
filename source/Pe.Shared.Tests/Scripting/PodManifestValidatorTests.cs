@@ -10,7 +10,7 @@ public sealed class PodManifestValidatorTests {
         var result = PodManifestValidator.ValidateJson(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "connector-audit",
               "name": "Connector Audit",
               "version": "1.0.0",
@@ -35,25 +35,27 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Origin_field_is_no_longer_accepted() {
+    public void Origin_and_parent_are_distinct_from_content_identity() {
         var result = PodManifestValidator.ValidateJson(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "connector-audit",
               "name": "Connector Audit",
+              "version": "1.0.0",
               "entrypoints": [
                 { "id": "main", "sourcePath": "src/Main.cs" }
               ],
-              "origin": { "path": "C:/pods/connector-audit" }
+              "origin": { "locator": "archive:connector-audit.pepod" },
+              "parent": { "id": "connector-audit", "releaseHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "0.9.0" }
             }
             """,
             "connector-audit"
         );
 
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("missing required field 'version'"));
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'origin'"));
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Manifest!.Origin!.Locator, Is.EqualTo("archive:connector-audit.pepod"));
+        Assert.That(result.Manifest.Parent!.Version, Is.EqualTo("0.9.0"));
     }
 
     [Test]
@@ -61,7 +63,7 @@ public sealed class PodManifestValidatorTests {
         var result = PodManifestValidator.ValidateJson(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "connector-audit",
               "name": "Connector Audit",
               "version": "1.0.0",
@@ -98,7 +100,7 @@ public sealed class PodManifestValidatorTests {
         var result = PodManifestValidator.ValidateJson(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "connector-audit",
               "name": "Connector Audit",
               "version": "1.0.0",
@@ -147,11 +149,11 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Entrypoints_are_required() {
+    public void Settings_only_pod_is_valid() {
         var result = PodManifestValidator.ValidateJson(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "connector-audit",
               "name": "Connector Audit",
               "version": "1.0.0",
@@ -161,13 +163,13 @@ public sealed class PodManifestValidatorTests {
             "connector-audit"
         );
 
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("must contain at least one entrypoint"));
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Manifest!.Entrypoints, Is.Empty);
     }
 
     private static string MinimalManifest(string id, string sourcePath) => $$"""
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "id": "{{id}}",
           "name": "Connector Audit",
           "version": "1.0.0",

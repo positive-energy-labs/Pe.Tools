@@ -5,38 +5,26 @@ using Pe.Shared.Product;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
 using Pe.Bcl.Compat;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.IO.Compression;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Pods;
 
 public sealed class ScriptPodArchiveService(
     ScriptWorkspaceBootstrapService bootstrapService,
-    ScriptProjectGenerator projectGenerator
+    ScriptProjectGenerator projectGenerator,
+    Func<string, string>? workspaceRootResolver = null
 ) {
     private const int MaxArchiveEntryCount = 1000;
     private const long MaxArchiveEntryBytes = 10 * 1024 * 1024;
     private const long MaxArchiveTotalBytes = 50 * 1024 * 1024;
 
-    private static readonly HashSet<string> ExcludedRootNames = new(StringComparer.OrdinalIgnoreCase) {
-        ".git",
-        ".vscode",
-        ".zed",
-        ".editorconfig",
-        "bin",
-        "obj",
-        ProductPathNames.OutputDirectoryName,
-        ProductPathNames.InlineScriptsDirectoryName,
-        ProductPathNames.StateDirectoryName
-    };
-
-    private static readonly HashSet<string> ExcludedExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".dll",
-        ".exe",
-        ".pdb"
-    };
-
     private readonly ScriptWorkspaceBootstrapService _bootstrapService = bootstrapService;
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
+    private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
+    private readonly ScriptPodPreparationService _preparationService = new(workspaceRootResolver);
 
     public ScriptPodImportData Import(
         ScriptPodImportRequest request,
@@ -64,10 +52,13 @@ public sealed class ScriptPodArchiveService(
             using var archive = ZipFile.OpenRead(archivePath);
             var entries = ValidateArchiveEntries(archive, requireManifest: true);
             archiveEntryPaths = entries.Select(entry => entry.RelativePath).ToList();
+            var release = VerifyRelease(entries);
             var manifestEntry = entries.Single(entry => string.Equals(entry.RelativePath, ProductPathNames.PodManifestFileName, StringComparison.Ordinal));
             var initialManifest = PodManifestValidator.ValidateJson(ReadArchiveEntryText(manifestEntry.Entry));
             if (HasManifestErrors(initialManifest.Diagnostics))
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, initialManifest.Diagnostics);
+            if (release.PodId != initialManifest.Manifest!.Id || release.Version != initialManifest.Manifest.Version)
+                throw new InvalidDataException("release.json identity does not match pod.json.");
 
             workspaceKey = string.IsNullOrWhiteSpace(request.WorkspaceKey)
                 ? initialManifest.Manifest!.Id
@@ -77,13 +68,14 @@ public sealed class ScriptPodArchiveService(
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
 
-            var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+            var workspaceRoot = this._workspaceRootResolver(workspaceKey);
             if (Directory.Exists(workspaceRoot))
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Workspace '{workspaceKey}' already exists: {workspaceRoot}");
 
             tempRoot = CreateTempDirectory();
             ExtractEntries(entries, tempRoot);
             ValidateEntrypointFiles(tempRoot, manifest);
+            WriteParentAncestry(Path.Combine(tempRoot, ProductPathNames.PodManifestFileName), release);
 
             _ = Directory.CreateDirectory(Path.GetDirectoryName(workspaceRoot)!);
             MoveDirectory(tempRoot, workspaceRoot);
@@ -106,7 +98,8 @@ public sealed class ScriptPodArchiveService(
                 ToSummary(manifest),
                 archiveEntryPaths,
                 bootstrapResult.GeneratedFiles,
-                diagnostics
+                diagnostics,
+                release
             );
         } catch (Exception ex) when (IsExpectedTransferFailure(ex)) {
             return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, ex.Message);
@@ -132,11 +125,11 @@ public sealed class ScriptPodArchiveService(
             if (string.IsNullOrWhiteSpace(request.ArchivePath))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, "ArchivePath is required.");
 
-            workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+            workspaceRoot = this._workspaceRootResolver(workspaceKey);
             if (!Directory.Exists(workspaceRoot))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Workspace does not exist: {workspaceRoot}");
 
-            var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
+            var manifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
             if (!File.Exists(manifestPath))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Pod export requires {ProductPathNames.PodManifestFileName}: {manifestPath}");
 
@@ -146,6 +139,16 @@ public sealed class ScriptPodArchiveService(
             var manifest = manifestResult.Manifest!;
             ValidateEntrypointFiles(workspaceRoot, manifest);
 
+            var prepared = this._preparationService.Prepare(workspaceKey);
+            if (!prepared.Success)
+                return CreateRejectedExport(
+                    archivePath,
+                    workspaceKey,
+                    workspaceRoot,
+                    archiveEntryPaths,
+                    prepared.Outcomes.Select(ToDiagnostic).ToList()
+                );
+
             archivePath = Path.GetFullPath(request.ArchivePath);
             if (!archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Pod export archive path must end in .zip: {archivePath}");
@@ -153,7 +156,7 @@ public sealed class ScriptPodArchiveService(
             if (!string.IsNullOrWhiteSpace(archiveDirectory))
                 _ = Directory.CreateDirectory(archiveDirectory);
 
-            var entries = CollectExportEntries(workspaceRoot);
+            var entries = BuildReleaseEntries(prepared, workspaceRoot, targetFramework);
             ValidateExportEntryLimits(entries);
             archiveEntryPaths = entries.Select(entry => entry.RelativePath).ToList();
             tempArchivePath = CreateTempArchivePath(archivePath);
@@ -161,18 +164,7 @@ public sealed class ScriptPodArchiveService(
                 foreach (var entry in entries) {
                     var archiveEntry = archive.CreateEntry(entry.RelativePath, CompressionLevel.Optimal);
                     using var output = archiveEntry.Open();
-                    if (string.Equals(entry.RelativePath, ScriptingWorkspaceLayout.ProjectFileName, StringComparison.Ordinal)) {
-                        var portableProject = this._projectGenerator.GeneratePortableProjectContent(
-                            File.ReadAllText(entry.FullPath),
-                            workspaceRoot,
-                            targetFramework
-                        );
-                        using var writer = new StreamWriter(output);
-                        writer.Write(portableProject);
-                    } else {
-                        using var input = File.OpenRead(entry.FullPath);
-                        input.CopyTo(output);
-                    }
+                    output.Write(entry.Bytes, 0, entry.Bytes.Length);
                 }
             }
 
@@ -187,7 +179,8 @@ public sealed class ScriptPodArchiveService(
                 archivePath,
                 ToSummary(manifest),
                 archiveEntryPaths,
-                diagnostics
+                diagnostics,
+                BuildReleaseData(prepared, entries)
             );
         } catch (Exception ex) when (IsExpectedTransferFailure(ex)) {
             return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, ex.Message);
@@ -239,17 +232,54 @@ public sealed class ScriptPodArchiveService(
         }
     }
 
-    private static IReadOnlyList<FileEntry> CollectExportEntries(string workspaceRoot) {
-        var workspaceFullPath = Path.GetFullPath(workspaceRoot);
-        return Directory
-            .EnumerateFiles(workspaceRoot, "*", SearchOption.AllDirectories)
-            .Select(path => new FileEntry(path, BclCompat.GetRelativePath(workspaceFullPath, path).Replace('\\', '/')))
-            .Where(entry => !IsExcludedPath(entry.RelativePath))
-            .Select(entry => {
-                ValidatePortableRelativePath(entry.RelativePath);
-                return entry;
-            })
-            .OrderBy(entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase)
+    private IReadOnlyList<FileEntry> BuildReleaseEntries(PreparedPod prepared, string workspaceRoot, string targetFramework) {
+        var entries = prepared.Files.Values.ToDictionary(
+            file => file.Path,
+            file => file.Bytes,
+            StringComparer.OrdinalIgnoreCase
+        );
+        if (entries.TryGetValue(ScriptingWorkspaceLayout.ProjectFileName, out var projectBytes))
+            entries[ScriptingWorkspaceLayout.ProjectFileName] = Encoding.UTF8.GetBytes(this._projectGenerator.GeneratePortableProjectContent(
+                Encoding.UTF8.GetString(projectBytes),
+                workspaceRoot,
+                targetFramework
+            ));
+        foreach (var document in prepared.ComposedSettings)
+            entries[document.Key] = Encoding.UTF8.GetBytes(document.Value.Content);
+
+        var inspectionRows = new JArray();
+        foreach (var dependency in prepared.InspectionDependencies.OrderBy(item => item.PodId, StringComparer.Ordinal).ThenBy(item => item.SourcePath, StringComparer.Ordinal)) {
+            var inspectionPath = $"inspection/{dependency.PodId}/{dependency.SourcePath}";
+            entries[inspectionPath] = Encoding.UTF8.GetBytes(dependency.Content);
+            inspectionRows.Add(new JObject {
+                ["podId"] = dependency.PodId,
+                ["releaseHash"] = dependency.ReleaseHash,
+                ["sourcePath"] = dependency.SourcePath,
+                ["inspectionPath"] = inspectionPath
+            });
+        }
+        if (inspectionRows.Count > 0)
+            entries["inspection/index.json"] = Encoding.UTF8.GetBytes(inspectionRows.ToString(Formatting.Indented) + Environment.NewLine);
+
+        var releaseHash = ComputeReleaseHash(prepared.Manifest, entries);
+        var releaseJson = new JObject {
+            ["schemaVersion"] = 1,
+            ["podId"] = prepared.Manifest.Id,
+            ["version"] = prepared.Manifest.Version,
+            ["contentHash"] = releaseHash,
+            ["parent"] = prepared.Manifest.Parent is null ? null : JObject.FromObject(new {
+                podId = prepared.Manifest.Parent.Id,
+                contentHash = prepared.Manifest.Parent.ReleaseHash,
+                prepared.Manifest.Parent.Version
+            }),
+            ["files"] = new JArray(entries.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new JObject {
+                ["path"] = pair.Key,
+                ["sha256"] = ScriptPodPreparationService.Sha256(pair.Value)
+            }))
+        };
+        entries["release.json"] = Encoding.UTF8.GetBytes(releaseJson.ToString(Formatting.Indented) + Environment.NewLine);
+        return entries.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => new FileEntry(pair.Key, pair.Value))
             .ToList();
     }
 
@@ -259,7 +289,7 @@ public sealed class ScriptPodArchiveService(
 
         var totalBytes = 0L;
         foreach (var entry in entries) {
-            var length = new FileInfo(entry.FullPath).Length;
+            var length = entry.Bytes.LongLength;
             if (length > MaxArchiveEntryBytes)
                 throw new InvalidDataException($"Pod export entry exceeds the {MaxArchiveEntryBytes} byte limit: {entry.RelativePath}");
             totalBytes += length;
@@ -282,18 +312,17 @@ public sealed class ScriptPodArchiveService(
         var segments = relativePath.Split('/');
         if (segments.Any(segment => string.IsNullOrWhiteSpace(segment) || segment == "." || segment == ".." || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
             throw new InvalidDataException($"Pod archive entry contains an unsafe path segment: {relativePath}");
-        if (IsExcludedPath(relativePath))
-            throw new InvalidDataException($"Pod archive entry is not portable and is excluded from Pods v1: {relativePath}");
+        if (!IsAllowedArchivePath(relativePath))
+            throw new InvalidDataException($"Pod archive entry is outside the portable pod release selection: {relativePath}");
     }
 
-    private static bool IsExcludedPath(string relativePath) {
-        var segments = relativePath.Split('/');
-        if (segments.Length == 0)
-            return true;
-        if (ExcludedRootNames.Contains(segments[0]))
-            return true;
-        return ExcludedExtensions.Contains(Path.GetExtension(segments[^1]));
-    }
+    private static bool IsAllowedArchivePath(string relativePath) =>
+        relativePath is "pod.json" or "release.json" or "PeScripts.csproj"
+        || relativePath.StartsWith("src/", StringComparison.OrdinalIgnoreCase)
+        || relativePath.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
+        || relativePath.StartsWith("composed/", StringComparison.OrdinalIgnoreCase)
+        || relativePath.StartsWith("assets/", StringComparison.OrdinalIgnoreCase)
+        || relativePath.StartsWith("inspection/", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateEntrypointFiles(string workspaceRoot, PodManifest manifest) {
         foreach (var entrypoint in manifest.Entrypoints) {
@@ -322,6 +351,101 @@ public sealed class ScriptPodArchiveService(
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
+
+    private static byte[] ReadArchiveEntryBytes(ZipArchiveEntry entry) {
+        using var input = entry.Open();
+        using var output = new MemoryStream();
+        input.CopyTo(output);
+        return output.ToArray();
+    }
+
+    private static ScriptPodReleaseData VerifyRelease(IReadOnlyList<ArchiveEntry> entries) {
+        var releaseEntry = entries.SingleOrDefault(entry => string.Equals(entry.RelativePath, "release.json", StringComparison.Ordinal));
+        if (releaseEntry is null)
+            throw new InvalidDataException("Portable pod archive is missing release.json.");
+        var release = JObject.Parse(ReadArchiveEntryText(releaseEntry.Entry));
+        if (release["schemaVersion"]?.Value<int>() != 1)
+            throw new InvalidDataException("release.json has an unsupported schemaVersion.");
+        var podId = release["podId"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing podId.");
+        var version = release["version"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing version.");
+        var expectedHash = release["contentHash"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing contentHash.");
+        var fileRows = release["files"] as JArray ?? throw new InvalidDataException("release.json is missing files.");
+        var entryBytes = entries.Where(entry => entry.RelativePath != "release.json")
+            .ToDictionary(entry => entry.RelativePath, entry => ReadArchiveEntryBytes(entry.Entry), StringComparer.Ordinal);
+        var releasedPaths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in fileRows.OfType<JObject>()) {
+            var path = row["path"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without path.");
+            var expectedFileHash = row["sha256"]?.Value<string>() ?? throw new InvalidDataException($"release.json file '{path}' has no sha256.");
+            if (!releasedPaths.Add(path))
+                throw new InvalidDataException($"release.json contains duplicate file row '{path}'.");
+            if (!entryBytes.TryGetValue(path, out var bytes))
+                throw new InvalidDataException($"Portable pod archive is missing hashed file '{path}'.");
+            var actualFileHash = ScriptPodPreparationService.Sha256(bytes);
+            if (!string.Equals(actualFileHash, expectedFileHash, StringComparison.Ordinal))
+                throw new InvalidDataException($"Portable pod archive file '{path}' hash mismatch.");
+        }
+        if (entryBytes.Count != fileRows.Count)
+            throw new InvalidDataException("Portable pod archive contains an unhashed file or duplicate release row.");
+
+        var manifestJson = Encoding.UTF8.GetString(entryBytes["pod.json"]);
+        var manifestResult = PodManifestValidator.ValidateJson(manifestJson);
+        if (!manifestResult.Success)
+            throw new InvalidDataException("Portable pod release contains an invalid pod.json.");
+        var actualHash = ComputeReleaseHash(manifestResult.Manifest!, entryBytes);
+        if (!string.Equals(actualHash, expectedHash, StringComparison.Ordinal))
+            throw new InvalidDataException($"Portable pod release content hash mismatch: expected '{expectedHash}', computed '{actualHash}'.");
+
+        var parent = release["parent"] is JObject parentObject
+            ? new ScriptPodReleaseReferenceData(
+                parentObject["podId"]?.Value<string>() ?? string.Empty,
+                parentObject["contentHash"]?.Value<string>() ?? string.Empty,
+                parentObject["version"]?.Value<string>())
+            : null;
+        return new ScriptPodReleaseData(
+            podId,
+            version,
+            actualHash,
+            parent,
+            fileRows.OfType<JObject>().Select(row => new ScriptPodFileHashData(row["path"]!.Value<string>()!, row["sha256"]!.Value<string>()!)).ToList(),
+            []
+        );
+    }
+
+    private static void WriteParentAncestry(string manifestPath, ScriptPodReleaseData release) {
+        var manifest = JObject.Parse(File.ReadAllText(manifestPath));
+        manifest["parent"] = new JObject {
+            ["id"] = release.PodId,
+            ["releaseHash"] = release.ContentHash,
+            ["version"] = release.Version
+        };
+        File.WriteAllText(manifestPath, manifest.ToString(Formatting.Indented) + Environment.NewLine);
+    }
+
+    private static string ComputeReleaseHash(PodManifest manifest, IReadOnlyDictionary<string, byte[]> entries) {
+        var hashed = new Dictionary<string, byte[]>(StringComparer.Ordinal) {
+            ["pod.semantic.json"] = Encoding.UTF8.GetBytes(ScriptPodPreparationService.ManifestSemantics(manifest))
+        };
+        foreach (var entry in entries.Where(pair => pair.Key != "pod.json"
+            && pair.Key != "release.json"
+            && !pair.Key.StartsWith("inspection/", StringComparison.OrdinalIgnoreCase)))
+            hashed[entry.Key] = entry.Value;
+        return ScriptPodPreparationService.ComputeContentHash(hashed);
+    }
+
+    private static ScriptPodReleaseData BuildReleaseData(PreparedPod prepared, IReadOnlyList<FileEntry> entries) {
+        var release = JObject.Parse(Encoding.UTF8.GetString(entries.Single(entry => entry.RelativePath == "release.json").Bytes));
+        return new ScriptPodReleaseData(
+            prepared.Manifest.Id,
+            prepared.Manifest.Version,
+            release["contentHash"]!.Value<string>()!,
+            prepared.Manifest.Parent is null ? null : new ScriptPodReleaseReferenceData(prepared.Manifest.Parent.Id, prepared.Manifest.Parent.ReleaseHash, prepared.Manifest.Parent.Version),
+            ((JArray)release["files"]!).OfType<JObject>().Select(row => new ScriptPodFileHashData(row["path"]!.Value<string>()!, row["sha256"]!.Value<string>()!)).ToList(),
+            prepared.Outcomes.Select(outcome => new ScriptPodGateOutcomeData(outcome.Code, outcome.Location, outcome.Reason, outcome.Remedy, outcome.Severity)).ToList()
+        );
+    }
+
+    private static ScriptDiagnostic ToDiagnostic(PodGateOutcome outcome) =>
+        new(outcome.Code, outcome.Severity, outcome.Remedy is null ? outcome.Reason : $"{outcome.Reason} Remedy: {outcome.Remedy}", outcome.Location);
 
     private static void MoveDirectory(string source, string destination) {
         try {
@@ -444,5 +568,5 @@ public sealed class ScriptPodArchiveService(
     );
 
     private sealed record ArchiveEntry(ZipArchiveEntry Entry, string RelativePath);
-    private sealed record FileEntry(string FullPath, string RelativePath);
+    private sealed record FileEntry(string RelativePath, byte[] Bytes);
 }

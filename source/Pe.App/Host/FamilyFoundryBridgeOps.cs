@@ -95,7 +95,8 @@ internal static class FamilyFoundryBridgeOps {
                 {
                     var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
                     receipts.Add(new FamilyFoundryApplyReceipt(context.LoadedFamilyId ?? familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
-                        receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null));
+                        receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
+                        receipt?.ObservedParametersDigest));
                 }
             } catch (Exception exception) {
                 receipts.Add(Failed(familyId, familyName, exception.Message));
@@ -148,5 +149,5 @@ internal static class FamilyFoundryBridgeOps {
 
     private static FamilyFoundryChangeData ToChange(FamilyChange c) => new(c.Section, c.Key, c.Kind.ToString(), c.MappedFrom);
     private static FamilyFoundryDiagnostic ToDiagnostic(FamilyModelDiagnostic d) => new(d.Code, d.Path, d.Message);
-    private static FamilyFoundryApplyReceipt Failed(long id, string? name, string error) => new(id, name, false, false, error, null, [], [error], null);
+    private static FamilyFoundryApplyReceipt Failed(long id, string? name, string error) => new(id, name, false, false, error, null, [], [error], null, null);
 }

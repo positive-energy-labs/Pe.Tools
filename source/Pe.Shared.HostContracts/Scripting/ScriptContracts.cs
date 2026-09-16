@@ -36,15 +36,15 @@ public record ExecuteRevitScriptRequest(
 
 public record ScriptPodSourceFile(string Path, string BytesBase64);
 
-public record ScriptPodProjectSeed(
-    [property: JsonProperty(Required = Required.Always)] bool Present,
-    string? BytesBase64
+public record ScriptPodSourceBundle(
+    List<ScriptPodSourceFile> Files,
+    List<ScriptPodDependencyBundle> Dependencies
 );
 
-public record ScriptPodSourceBundle(
-    string ManifestBase64,
-    ScriptPodProjectSeed Project,
-    List<ScriptPodSourceFile> Sources
+public record ScriptPodDependencyBundle(
+    string Id,
+    string ReleaseHash,
+    List<ScriptPodSourceFile> Files
 );
 
 public record ScriptArtifactData(
@@ -64,8 +64,26 @@ public record ExecuteRevitScriptData(
     string? ContainerTypeName,
     string ExecutionId,
     List<ScriptArtifactData>? Artifacts = null,
-    object? Data = null
+    object? Data = null,
+    PodExecutionAttributionData? Attribution = null
 );
+
+public record PodExecutionAttributionData(
+    string PodId,
+    string Version,
+    string SnapshotHash,
+    string? ReleaseHash,
+    string Member,
+    string Operation,
+    string RunId,
+    string Outcome,
+    List<ScriptOutputReferenceData> Outputs,
+    List<ObservedExternalRevisionData> ObservedExternalRevisions
+);
+
+public record ScriptOutputReferenceData(string Kind, string Reference);
+
+public record ObservedExternalRevisionData(string Code, string ResourceId, string RevisionOrDigest);
 
 public record ScriptCancelRequest(
     string? ExecutionId = null
@@ -126,7 +144,8 @@ public record ScriptPodImportData(
     ScriptPodManifestSummaryData? Manifest,
     List<string> ArchiveEntries,
     List<string> GeneratedFiles,
-    List<ScriptDiagnostic> Diagnostics
+    List<ScriptDiagnostic> Diagnostics,
+    ScriptPodReleaseData? Release = null
 );
 
 public record ScriptPodExportData(
@@ -136,7 +155,29 @@ public record ScriptPodExportData(
     string ArchivePath,
     ScriptPodManifestSummaryData? Manifest,
     List<string> ArchiveEntries,
-    List<ScriptDiagnostic> Diagnostics
+    List<ScriptDiagnostic> Diagnostics,
+    ScriptPodReleaseData? Release = null
+);
+
+public record ScriptPodReleaseData(
+    string PodId,
+    string Version,
+    string ContentHash,
+    ScriptPodReleaseReferenceData? Parent,
+    List<ScriptPodFileHashData> Files,
+    List<ScriptPodGateOutcomeData> Outcomes
+);
+
+public record ScriptPodReleaseReferenceData(string PodId, string ContentHash, string? Version);
+
+public record ScriptPodFileHashData(string Path, string Sha256);
+
+public record ScriptPodGateOutcomeData(
+    string Code,
+    string Location,
+    string Reason,
+    string? Remedy,
+    ScriptDiagnosticSeverity Severity
 );
 
 [JsonConverter(typeof(StringEnumConverter))]

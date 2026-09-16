@@ -12,6 +12,7 @@ using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
+using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.App.Commands.FamilyFoundry;
 
@@ -46,7 +47,7 @@ public class CmdFFMigrator : IExternalCommand {
 
     /// <summary>The families come from the palette selection when any are selected, else from the patch's `select`.</summary>
     private static void Process(FoundryContext ctx, bool dryRun) {
-        var patch = ctx.Patch!;
+        var patch = ctx.SelectedProfile!.LoadPatch(ctx.Documents);
         var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
         var families = picked is { Count: > 0 } ? picked : ctx.Doc.FamiliesMatching(patch.Select);
         if (families.Count == 0) {
@@ -54,7 +55,7 @@ public class CmdFFMigrator : IExternalCommand {
             return;
         }
 
-        var op = new ReconcileFamily(patch, dryRun);
+        var op = new ReconcileFamily(patch, dryRun, sharedSource: ctx.SelectedProfile.SharedParameterSource());
         var runOutput = ctx.Storage.Output().TimestampedSubDir();
         var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, ctx.SelectedProfile!.TextPrimary).WithReconcile(op);
         using var processor = new OperationProcessor(ctx.Doc);
@@ -63,6 +64,14 @@ public class CmdFFMigrator : IExternalCommand {
         writer.WriteMultiFamilySummary(ms, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish);
 
         var failed = contexts.Count(c => c.OperationLogs.AsTuple().error is not null);
+        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+            dryRun ? "familyfoundry.plan" : "familyfoundry.migrate",
+            failed == 0 ? "Succeeded" : "Failed",
+            [new ScriptOutputReferenceData("artifact-directory", runOutput.DirectoryPath)],
+            op.ObservedParametersDigest is { } digest
+                ? ctx.SelectedProfile.Prepared!.ExternalRequirements.Where(requirement => requirement.Code == "aps.parameters")
+                    .Select(requirement => new ObservedExternalRevisionData(requirement.Code, requirement.ResourceId, digest))
+                : []);
         new Ballogger().Add(failed == 0 ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
             $"{(dryRun ? "Planned" : "Processed")} {contexts.Count} families in {ms:F0}ms, {failed} failed.\nOutput: {runOutput.DirectoryPath}").Show();
         if (!dryRun && !ctx.Doc.IsFamilyDocument)

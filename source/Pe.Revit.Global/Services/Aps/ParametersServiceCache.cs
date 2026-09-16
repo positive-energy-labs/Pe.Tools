@@ -8,6 +8,7 @@ using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using Serilog;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using Toon;
 
@@ -39,6 +40,30 @@ public static class ParametersServiceCache {
             parameters?.Results?.Count ?? 0,
             cacheFilePath,
             additionalFormatPaths
+        );
+    }
+
+    public static async Task<CurrentParametersResolution> ResolveCurrentAsync(string? collectionId = null) {
+        var configured = new CacheParametersServiceSettings();
+        var provider = new ExplicitParametersServiceSettings(
+            configured.GetAccountId(),
+            configured.GetGroupId(),
+            collectionId ?? configured.GetCollectionId()
+        );
+        var current = await CreateParametersClient(AcquireParameterServiceAccessToken(), provider)
+            .GetParameters(null!, false)
+            .ConfigureAwait(false);
+        var rows = current.Results?.Where(parameter => !parameter.IsArchived).ToList() ?? [];
+        var canonical = JsonConvert.SerializeObject(rows.OrderBy(parameter => parameter.Id, StringComparer.Ordinal));
+        using var sha = SHA256.Create();
+        var digest = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(canonical)))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+        return new CurrentParametersResolution(
+            provider.GetCollectionId(),
+            digest,
+            rows.Select(parameter => parameter.Id).OfType<string>().Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet(StringComparer.Ordinal),
+            rows
         );
     }
 
@@ -236,6 +261,19 @@ public static class ParametersServiceCache {
         if (string.IsNullOrEmpty(name)) return string.Empty;
         return length > name.Length ? name : name.Substring(0, length);
     }
+}
+
+public sealed record CurrentParametersResolution(
+    string CollectionId,
+    string Digest,
+    IReadOnlySet<string> ResourceIds,
+    IReadOnlyList<ParametersApi.Parameters.ParametersResult> Definitions
+);
+
+internal sealed record ExplicitParametersServiceSettings(string AccountId, string GroupId, string CollectionId) : IParametersTokenProvider {
+    public string GetAccountId() => this.AccountId;
+    public string GetGroupId() => this.GroupId;
+    public string GetCollectionId() => this.CollectionId;
 }
 
 public static class ApsAuthActions {

@@ -4,9 +4,13 @@ using Pe.Shared.HostContracts.Scripting;
 namespace Pe.Revit.Scripting.Bootstrap;
 
 public sealed class ScriptWorkspaceBootstrapService(
-    ScriptProjectGenerator projectGenerator
+    ScriptProjectGenerator projectGenerator,
+    Func<string, string>? workspaceRootResolver = null,
+    string? productHomePath = null
 ) {
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
+    private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
+    private readonly string _productHomePath = productHomePath ?? RevitScriptingStorageLocations.ResolveProductHomePath();
 
     public ScriptWorkspaceBootstrapData Bootstrap(
         string workspaceKey,
@@ -16,19 +20,19 @@ public sealed class ScriptWorkspaceBootstrapService(
         string runtimeAssemblyPath
     ) {
         var generatedFiles = new List<string>();
-        var productHomePath = RevitScriptingStorageLocations.ResolveProductHomePath();
-        var productAgentsPath = RevitScriptingStorageLocations.ResolveProductAgentsPath();
-        var productReadmePath = RevitScriptingStorageLocations.ResolveProductReadmePath();
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var projectFilePath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
-        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
-        var vscodeDirectory = RevitScriptingStorageLocations.ResolveGeneratedDirectory(workspaceKey);
-        var sampleScriptPath = RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey);
-        var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
-        var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
-        var joinGuidePath = RevitScriptingStorageLocations.ResolveJoinGuidePath(workspaceKey);
-        var vscodeSettingsPath = RevitScriptingStorageLocations.ResolveVscodeSettingsPath(workspaceKey);
+        var productHomePath = this._productHomePath;
+        var productAgentsPath = Path.Combine(productHomePath, RevitScriptingStorageLocations.AgentsFileName);
+        var productReadmePath = Path.Combine(productHomePath, RevitScriptingStorageLocations.ReadmeFileName);
+        var workspaceRoot = this._workspaceRootResolver(workspaceKey);
+        var projectFilePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ProjectFileName);
+        var sourceDirectory = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.SourceDirectoryName);
+        var vscodeDirectory = Path.Combine(workspaceRoot, ".vscode");
+        var sampleScriptPath = Path.Combine(sourceDirectory, RevitScriptingStorageLocations.SampleFileName);
+        var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
+        var agentsPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.AgentsFileName);
+        var readmePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ReadmeFileName);
+        var joinGuidePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.JoinGuideFileName);
+        var vscodeSettingsPath = Path.Combine(vscodeDirectory, "settings.json");
 
         _ = Directory.CreateDirectory(productHomePath);
         _ = Directory.CreateDirectory(workspaceRoot);

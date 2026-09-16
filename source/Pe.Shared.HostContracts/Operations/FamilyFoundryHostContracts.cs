@@ -40,7 +40,8 @@ public sealed record FamilyFoundryApplyReceipt(
     string? PlanHash,
     IReadOnlyList<FamilyFoundryChangeData> Residue,
     IReadOnlyList<string> Errors,
-    string? ArtifactDirectory
+    string? ArtifactDirectory,
+    string? ObservedParametersDigest = null
 );
 
 public sealed record FamilyFoundryApplyData(

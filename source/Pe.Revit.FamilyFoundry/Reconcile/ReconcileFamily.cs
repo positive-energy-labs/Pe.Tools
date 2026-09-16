@@ -25,11 +25,13 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     private readonly Func<Document, FamilySharedParameterSource>? _sharedSource;
 
     /// <summary>Apply specified state; unmentioned family contents remain unchanged.</summary>
-    public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null, ExecutionOptions? executionOptions = null) : base(new DefaultOperationSettings()) {
+    public ReconcileFamily(FamilyModel desired, bool dryRun = false, Func<Document, FamilyModel>? capture = null,
+        Func<Document, FamilySharedParameterSource>? sharedSource = null, ExecutionOptions? executionOptions = null) : base(new DefaultOperationSettings()) {
         this._desired = desired;
         this._dryRun = dryRun;
         this._executionOptions = executionOptions ?? new ExecutionOptions();
         this._capture = capture ?? FamilyModelCaptureExtensions.CaptureFamilyModel;
+        this._sharedSource = sharedSource;
     }
 
     /// <summary>Patch mode: omission = unchanged, null = delete, {} = ensure; `run` rules ride along.</summary>
@@ -54,6 +56,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     /// <summary>Set per family by Execute; the processor's context.Tag is internal, so the receipt rides here.</summary>
     public FamilyPlan? LastPlan { get; private set; }
     public FamilyReceipt? LastReceipt { get; private set; }
+    public string? ObservedParametersDigest { get; private set; }
 
     internal void Complete(bool committed, IReadOnlyList<(string Edit, bool IsError, string Message)>? diagnostics = null) {
         // Resolutions Revit took under run.failures are geometry the patch never named; they ride the receipt as RunEffects.
@@ -70,6 +73,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         this.LastPlan = null;
         this.LastReceipt = null;
         this._candidateReceipt = null;
+        this.ObservedParametersDigest = null;
     }
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
@@ -104,6 +108,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         if (unitDiagnostics.Count > 0)
             return new OperationLog(this.Name, unitDiagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
         var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions, this._executionOptions);
+        this.ObservedParametersDigest = source.ObservedParametersDigest;
         this.LastPlan = plan;
         if (this._expectedPlanHash is { } expected && !string.Equals(expected, plan.PlanHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Plan hash drifted: expected {expected}, recomputed {plan.PlanHash}. Plan again.");
@@ -160,7 +165,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
         this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, applyPlan.PlanHash, outcomes, plan.RunEffects, residue, observed.Unmodeled,
-            residue.Count == 0 && logs.All(l => l.PendingCount == 0));
+            residue.Count == 0 && logs.All(l => l.PendingCount == 0), this.ObservedParametersDigest);
         if (!this._candidateReceipt.Converged)
             throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries ({string.Join(", ", logs.SelectMany(l => l.Entries).Where(e => e.HasPendingWork).Select(e => e.Name))}): {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
 

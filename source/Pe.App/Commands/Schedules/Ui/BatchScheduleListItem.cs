@@ -6,6 +6,7 @@ using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime;
 using System.IO;
 using WpfColor = System.Windows.Media.Color;
+using Pe.App.Pods;
 
 namespace Pe.App.Commands.Schedules.Ui;
 
@@ -30,6 +31,18 @@ public class BatchScheduleListItem : IPaletteListItem {
         this._documents = settings.Documents();
         this.ScheduleCount = ExtractScheduleCount(filePath);
     }
+
+    internal BatchScheduleListItem(PreparedPodSetting prepared, ModuleSettingsStorage<BatchScheduleSettings> settings) {
+        this.FilePath = prepared.FullSourcePath;
+        this._fileInfo = new FileInfo(this.FilePath);
+        this._relativePath = prepared.SourcePath;
+        this._settings = settings;
+        this._documents = settings.Documents();
+        this.Prepared = prepared;
+        this.ScheduleCount = ExtractScheduleCountFromContent(prepared.ComposedContent);
+    }
+
+    internal PreparedPodSetting? Prepared { get; private set; }
 
     /// <summary> Full path to the batch configuration JSON file </summary>
     public string FilePath { get; }
@@ -62,8 +75,15 @@ public class BatchScheduleListItem : IPaletteListItem {
     /// <summary>
     ///     Loads the batch settings from the file.
     /// </summary>
-    public BatchScheduleSettings LoadBatchSettings() =>
-        this._settings.ReadRequired(this._relativePath);
+    public BatchScheduleSettings LoadBatchSettings() {
+        if (this.Prepared is null)
+            return this._settings.ReadRequired(this._relativePath);
+        this.Prepared = this.Prepared.Refresh();
+        return ModuleSettingsStorage<BatchScheduleSettings>.ReadPrepared(
+            this.Prepared.RawContent,
+            this.Prepared.ComposedContent,
+            $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
+    }
 
     /// <summary>
     ///     Discovers all batch configuration JSON files in a directory.
@@ -95,13 +115,14 @@ public class BatchScheduleListItem : IPaletteListItem {
     /// </summary>
     private static int ExtractScheduleCount(string filePath) {
         try {
-            var content = File.ReadAllText(filePath);
-            var jObject = JObject.Parse(content);
-            if (jObject.TryGetValue("ScheduleFiles", out var filesToken) && filesToken is JArray filesArray)
-                return filesArray.Count;
-            return 0;
+            return ExtractScheduleCountFromContent(File.ReadAllText(filePath));
         } catch {
             return 0;
         }
+    }
+
+    private static int ExtractScheduleCountFromContent(string content) {
+        var jObject = JObject.Parse(content);
+        return jObject.TryGetValue("ScheduleFiles", out var filesToken) && filesToken is JArray filesArray ? filesArray.Count : 0;
     }
 }

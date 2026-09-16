@@ -40,13 +40,18 @@ public static class ScriptPodCatalogService {
                 continue;
             }
 
-            var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), workspaceKey);
+            var prepared = new ScriptPodPreparationService().Prepare(workspaceKey);
             pods.Add(new ScriptPodListItemData(
                 workspaceKey,
                 workspaceRoot,
-                manifestResult.Success,
-                manifestResult.Manifest is null ? null : ScriptPodArchiveService.ToSummary(manifestResult.Manifest),
-                manifestResult.Diagnostics.ToList()
+                prepared.Success,
+                string.IsNullOrEmpty(prepared.ContentHash) ? null : ScriptPodArchiveService.ToSummary(prepared.Manifest),
+                prepared.Outcomes.Select(outcome => new ScriptDiagnostic(
+                    "prepare",
+                    outcome.Severity,
+                    $"{outcome.Code}: {outcome.Reason}" + (outcome.Remedy is null ? string.Empty : $" Remedy: {outcome.Remedy}"),
+                    outcome.Location
+                )).ToList()
             ));
         }
 

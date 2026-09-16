@@ -734,3 +734,66 @@ test("crash before source seal retains unprepared identity and refuses recapture
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("source seal captures the positive pod set and exact dependency bytes once", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "script-portable-"));
+  const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
+  const workspaces = join(productUserContentRootPath(), "workspaces");
+  const root = join(workspaces, "sample");
+  const dependency = join(workspaces, "library");
+  const hash = "a".repeat(64);
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await mkdir(join(root, "settings"), { recursive: true });
+    await mkdir(join(dependency, "settings"), { recursive: true });
+    await writeFile(
+      join(root, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "sample",
+        name: "Sample",
+        version: "1.0.0",
+        entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
+        requires: [{ id: "library", releaseHash: hash }],
+      }),
+    );
+    await writeFile(join(root, "src/Main.cs"), "first");
+    await writeFile(join(root, "settings/main.settings.json"), '{"value":1}');
+    await writeFile(
+      join(dependency, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "library",
+        name: "Library",
+        version: "1.0.0",
+        entrypoints: [],
+      }),
+    );
+    await writeFile(join(dependency, "settings/base.settings.json"), '{"base":1}');
+
+    const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
+    await writeFile(join(root, "src/Main.cs"), "changed after seal");
+
+    expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
+      "pod.json",
+      "settings/main.settings.json",
+      "src/Main.cs",
+    ]);
+    expect(sealed?.sourceBundle.dependencies).toHaveLength(1);
+    expect(sealed?.sourceBundle.dependencies[0]).toMatchObject({
+      id: "library",
+      releaseHash: hash,
+    });
+    expect(
+      Buffer.from(
+        sealed!.sourceBundle.files.find((file) => file.path === "src/Main.cs")!.bytesBase64,
+        "base64",
+      ).toString("utf8"),
+    ).toBe("first");
+  } finally {
+    if (oldRoot === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
+    else process.env.PE_TOOLS_DOCUMENTS_ROOT = oldRoot;
+    await rm(directory, { recursive: true, force: true });
+  }
+});

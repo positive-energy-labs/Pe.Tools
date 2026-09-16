@@ -6,8 +6,8 @@ import { productUserContentRootPath } from "./product-paths.ts";
 
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
 
-// Sequential capture seals the exact returned set, not an atomic directory snapshot.
-// Native normalization owns Pod semantics; no captured inputs are materialized or relocated.
+// Capture is the only mutable-filesystem read for one admitted execution. Native preparation owns
+// manifest rules, composition, integrity, and identity over these captured bytes.
 export async function freezeScript(
   input: Record<string, unknown>,
 ): Promise<FrozenScript | undefined> {
@@ -25,53 +25,81 @@ export async function freezeScript(
     throw Error("Invalid Pod workspace identity");
   const workspace = (input.workspaceKey as string | undefined)?.trim() || "default";
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(workspace)) throw Error("Invalid Pod workspace identity");
-  const directory = join(
-    productUserContentRootPath(),
-    productPathNames.workspacesDirectoryName,
-    workspace,
-  );
-  let total = 0;
-  let directories = 0;
-  const sources: ScriptingExecute.Req.ScriptPodSourceFile[] = [];
-  const read = async (path: string, source = false) => {
-    const location = join(directory, path);
-    const info = await lstat(location);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024)
-      throw Error("Pod input must be a bounded regular file");
-    const bytes = await readFile(location);
-    if (bytes.length > 512 * 1024) throw Error("Pod file exceeds 512 KiB");
-    if (source && (total += bytes.length) > 2 * 1024 * 1024)
-      throw Error("Pod source exceeds 2 MiB");
-    return bytes.toString("base64");
-  };
-  const walk = async (path: string): Promise<void> => {
-    if (++directories > 256) throw Error("Pod source directory limit exceeded");
-    if ((await lstat(join(directory, path))).isSymbolicLink())
-      throw Error("Pod input cannot follow links");
-    const entries = await readdir(join(directory, path), { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.isSymbolicLink()) throw Error("Pod input cannot follow links");
-      const name = `${path}/${entry.name}`;
-      if (name.length > 1024) throw Error("Pod source path exceeds 1024 characters");
-      if (entry.isDirectory()) await walk(name);
-      else if (entry.name.toLowerCase().endsWith(".cs")) {
-        if (sources.length >= 200) throw Error("Too many Pod source files");
-        sources.push({ path: name, bytesBase64: await read(name, true) });
+
+  const captured = new Map<string, ScriptingExecute.Req.ScriptPodDependencyBundle>();
+  const active = new Set<string>();
+  const rootFiles = await capture(workspace);
+  return { sourceBundle: { files: rootFiles, dependencies: [...captured.values()] } };
+
+  async function capture(id: string): Promise<ScriptingExecute.Req.ScriptPodSourceFile[]> {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id))
+      throw Error(`Invalid required Pod identity '${id}'`);
+    if (active.has(id)) throw Error(`Pod dependency cycle through '${id}'`);
+    active.add(id);
+    try {
+      const directory = join(
+        productUserContentRootPath(),
+        productPathNames.workspacesDirectoryName,
+        id,
+      );
+      if ((await lstat(directory)).isSymbolicLink())
+        throw Error("Pod workspace cannot follow links");
+      const files: ScriptingExecute.Req.ScriptPodSourceFile[] = [];
+      let directories = 0;
+      let bytes = 0;
+      const walk = async (relative: string): Promise<void> => {
+        if (++directories > 256) throw Error("Pod directory limit exceeded");
+        const absolute = relative ? join(directory, relative) : directory;
+        if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod input cannot follow links");
+        for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
+          a.name.localeCompare(b.name),
+        )) {
+          if (entry.isSymbolicLink()) throw Error("Pod input cannot follow links");
+          const path = relative ? `${relative}/${entry.name}` : entry.name;
+          if (path.length > 1024) throw Error("Pod path exceeds 1024 characters");
+          if (entry.isDirectory()) {
+            if (
+              ["src", "settings", "assets"].some(
+                (root) => path === root || path.startsWith(`${root}/`),
+              )
+            )
+              await walk(path);
+            continue;
+          }
+          if (
+            !["pod.json", "PeScripts.csproj"].includes(path) &&
+            !["src/", "settings/", "assets/"].some((root) => path.startsWith(root))
+          )
+            continue;
+          const info = await lstat(join(directory, path));
+          if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024)
+            throw Error(`Pod input must be a bounded regular file: ${path}`);
+          const content = await readFile(join(directory, path));
+          if ((bytes += content.length) > 4 * 1024 * 1024) throw Error("Pod capture exceeds 4 MiB");
+          files.push({ path, bytesBase64: content.toString("base64") });
+        }
+      };
+      await walk("");
+      const manifestFile = files.find((file) => file.path === "pod.json");
+      if (!manifestFile) throw Error(`Pod '${id}' has no pod.json`);
+      const manifest = JSON.parse(
+        Buffer.from(manifestFile.bytesBase64, "base64").toString("utf8"),
+      ) as {
+        requires?: { id?: unknown; releaseHash?: unknown }[];
+      };
+      for (const requirement of manifest.requires ?? []) {
+        if (typeof requirement.id !== "string" || typeof requirement.releaseHash !== "string")
+          throw Error(`Pod '${id}' has an invalid requires entry`);
+        if (requirement.id === workspace || captured.has(requirement.id)) continue;
+        captured.set(requirement.id, {
+          id: requirement.id,
+          releaseHash: requirement.releaseHash,
+          files: await capture(requirement.id),
+        });
       }
+      return files;
+    } finally {
+      active.delete(id);
     }
-  };
-  if ((await lstat(directory)).isSymbolicLink()) throw Error("Pod workspace cannot follow links");
-  const manifestBase64 = await read("pod.json");
-  await walk("src");
-  const projectBytes = await read("PeScripts.csproj").catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") throw error;
-    return null;
-  });
-  return {
-    sourceBundle: {
-      manifestBase64,
-      project: { present: projectBytes !== null, bytesBase64: projectBytes },
-      sources,
-    },
-  };
+  }
 }

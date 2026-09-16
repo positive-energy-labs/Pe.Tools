@@ -231,10 +231,12 @@ async function runCapability(
         const preparation =
           original.preparation.state === "ready"
             ? (original.preparation.value as {
-                script?: { sourceBundle?: { manifestBase64: string } };
+                script?: { sourceBundle?: { files?: { path: string; bytesBase64: string }[] } };
               })
             : undefined;
-        const encoded = preparation?.script?.sourceBundle?.manifestBase64;
+        const encoded = preparation?.script?.sourceBundle?.files?.find(
+          (file) => file.path === "pod.json",
+        )?.bytesBase64;
         if (
           !pod ||
           !encoded ||

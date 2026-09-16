@@ -105,6 +105,7 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
+            outputSink.Attribution = plan.Attribution;
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
@@ -431,6 +432,7 @@ public sealed class RevitScriptExecutionService(
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
             PodManifest? podManifest = null;
+            PodExecutionAttributionData? preparedAttribution = null;
             string? projectSeed = null;
             if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
@@ -441,11 +443,34 @@ public sealed class RevitScriptExecutionService(
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
                 var bundle = request.SourceBundle ?? CaptureWorkspaceSource(workspaceKey, request.SourcePath!);
+                var prepared = new ScriptPodPreparationService().Prepare(workspaceKey, bundle);
+                if (!prepared.Success)
+                    throw new ArgumentException(string.Join("; ", prepared.Outcomes
+                        .Where(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error)
+                        .Select(outcome => $"{outcome.Code} at {outcome.Location}: {outcome.Reason} {outcome.Remedy}")), PodManifestValidator.DiagnosticStage);
                 var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
                 projectSeed = captured.ProjectSeed;
+                var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
+                var releaseHash = podManifest.Parent is not null && string.Equals(podManifest.Parent.ReleaseHash, prepared.ContentHash, StringComparison.Ordinal)
+                    ? prepared.ContentHash
+                    : null;
+                diagnostics.Add(ScriptDiagnosticFactory.Info("pod.prepare", $"Prepared pod snapshot {prepared.ContentHash} for entrypoint '{entrypoint.Id}'.", request.SourcePath));
+                // Outcome and output references are filled when CreateResult observes the final result.
+                preparedAttribution = new PodExecutionAttributionData(
+                    podManifest.Id,
+                    podManifest.Version,
+                    prepared.ContentHash,
+                    releaseHash,
+                    entrypoint.SourcePath,
+                    "scripting.execute",
+                    executionId,
+                    string.Empty,
+                    [],
+                    []
+                );
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
@@ -470,6 +495,7 @@ public sealed class RevitScriptExecutionService(
                     sourceSet,
                     executionMode,
                     podManifest,
+                    preparedAttribution,
                     canonicalProjectContent,
                     hasInlineContent
                 ),
@@ -606,31 +632,53 @@ public sealed class RevitScriptExecutionService(
         var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(workspaceKey,
             ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath));
         if (!File.Exists(selectedPath)) throw new IOException($"Workspace source file does not exist: {selectedPath}");
-        var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        if (!File.Exists(manifestPath))
-            throw new ArgumentException($"Workspace '{workspaceKey}' has no pod.json. Run scripting.workspace.bootstrap to create it and declare '{sourcePath}' under entrypoints.", PodManifestValidator.DiagnosticStage);
-        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
-        var paths = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
-        if (paths.Count > ScriptPodSourceNormalizer.MaxFiles)
-            throw new IOException("Pod source may contain at most 200 C# files.");
-        var total = 0;
-        string Read(string path, bool source = false) {
+        var dependencies = new List<ScriptPodDependencyBundle>();
+        var capturedDependencies = new HashSet<string>(StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal) { workspaceKey };
+        var files = Capture(workspaceKey, includeDependencies: true);
+        return new ScriptPodSourceBundle(files, dependencies);
+
+        List<ScriptPodSourceFile> Capture(string id, bool includeDependencies) {
+            var podRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(id);
+            var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(id);
+            if (!File.Exists(manifestPath))
+                throw new ArgumentException($"Workspace '{id}' has no pod.json.", PodManifestValidator.DiagnosticStage);
+            var paths = Directory.EnumerateFiles(podRoot, "*", SearchOption.AllDirectories)
+                .Where(path => IsCaptured(GetRelativePath(podRoot, path).Replace('\\', '/')))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var captured = paths.Select(path => new ScriptPodSourceFile(
+                GetRelativePath(podRoot, path).Replace('\\', '/'), Read(path))).ToList();
+            if (!includeDependencies)
+                return captured;
+            var manifest = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), id);
+            if (!manifest.Success || manifest.Manifest is null)
+                throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(diagnostic => diagnostic.Message)), PodManifestValidator.DiagnosticStage);
+            foreach (var requirement in manifest.Manifest.Requires) {
+                if (visiting.Contains(requirement.Id))
+                    throw new ArgumentException($"Pod dependency cycle through '{requirement.Id}'.", PodManifestValidator.DiagnosticStage);
+                if (!capturedDependencies.Add(requirement.Id))
+                    continue;
+                _ = visiting.Add(requirement.Id);
+                dependencies.Add(new ScriptPodDependencyBundle(requirement.Id, requirement.ReleaseHash, Capture(requirement.Id, true)));
+                _ = visiting.Remove(requirement.Id);
+            }
+            return captured;
+        }
+
+        string Read(string path) {
             if (new FileInfo(path).Length > ScriptPodSourceNormalizer.MaxFileBytes)
                 throw new IOException("Pod file exceeds 512 KiB.");
             var bytes = File.ReadAllBytes(path);
             if (bytes.Length > ScriptPodSourceNormalizer.MaxFileBytes)
                 throw new IOException("Pod file exceeds 512 KiB.");
-            if (source && (total += bytes.Length) > ScriptPodSourceNormalizer.MaxSourceBytes)
-                throw new IOException("Pod source exceeds 2 MiB.");
             return Convert.ToBase64String(bytes);
         }
-        var manifest = Read(manifestPath);
-        var files = paths.Select(path => new ScriptPodSourceFile(
-            GetRelativePath(root, path).Replace('\\', '/'), Read(path, true))).ToList();
-        var projectPath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
-        var project = File.Exists(projectPath) ? Read(projectPath) : null;
-        return new ScriptPodSourceBundle(manifest, new ScriptPodProjectSeed(project is not null, project), files);
+
+        static bool IsCaptured(string path) => path is "pod.json" or "PeScripts.csproj"
+            || path.StartsWith("src/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("assets/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {
@@ -1069,7 +1117,15 @@ public sealed class RevitScriptExecutionService(
         containerTypeName,
         executionId,
         artifacts?.ToList() ?? [],
-        data
+        data,
+        outputSink.Attribution is null ? null : outputSink.Attribution with {
+            Outcome = status.ToString(),
+            Outputs = [
+                .. (artifacts ?? []).Select(artifact => new ScriptOutputReferenceData("artifact", artifact.RelativePath)),
+                .. (data is null ? [] : new[] { new ScriptOutputReferenceData("operation-result", "data") }),
+                .. (string.IsNullOrWhiteSpace(outputSink.GetBufferedOutput()) ? [] : new[] { new ScriptOutputReferenceData("output", "buffer") })
+            ]
+        }
     );
 
     private static void AppendDiagnostic(

@@ -9,6 +9,7 @@ using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
+using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.App.Commands.FamilyFoundry;
 
@@ -41,13 +42,19 @@ public class CmdFFManager : IExternalCommand {
     private static void HandleDryRun(FoundryContext ctx) => Report(ctx, dryRun: true);
 
     private static void Report(FoundryContext ctx, bool dryRun) {
-        var op = new ReconcileFamily(ctx.Model!, dryRun);
+        var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
+        var op = new ReconcileFamily(model, dryRun, sharedSource: ctx.SelectedProfile.SharedParameterSource());
         var runOutput = ctx.Storage.Output().TimestampedSubDir();
-        var writer = new ProcessingResultBuilder(runOutput).WithProfile(ctx.Model!, ctx.SelectedProfile!.TextPrimary).WithReconcile(op);
+        var writer = new ProcessingResultBuilder(runOutput).WithProfile(model, ctx.SelectedProfile.TextPrimary).WithReconcile(op);
         using var processor = new OperationProcessor(ctx.Doc);
         var (contexts, ms) = processor.WithArtifactWriter(writer, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish)
             .ProcessQueue(new OperationQueue().Add(op), null, runOutput.DirectoryPath, ctx.OnFinishSettings);
         var (logs, error) = contexts.Single().OperationLogs;
+        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+            dryRun ? "familyfoundry.plan" : "familyfoundry.reconcile",
+            error is null && (logs?.Sum(log => log.ErrorCount) ?? 0) == 0 ? "Succeeded" : "Failed",
+            [new ScriptOutputReferenceData("artifact-directory", runOutput.DirectoryPath)],
+            Observed(ctx.SelectedProfile, op.ObservedParametersDigest));
         var balloon = new Ballogger();
         if (error is not null) _ = balloon.Add(LogEventLevel.Error, new StackFrame(), error.Message);
         else {
@@ -59,10 +66,20 @@ public class CmdFFManager : IExternalCommand {
     }
 
     private static void HandleBuild(FoundryContext ctx) {
-        var model = ctx.Model!;
-        var outputPath = Path.Combine(ctx.Storage.Output().TimestampedSubDir("build").DirectoryPath, $"{model.Family.Name}.rfa");
-        var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, outputPath, overwrite: true);
+        var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
+        var runOutput = ctx.Storage.Output().TimestampedSubDir("build");
+        var outputPath = Path.Combine(runOutput.DirectoryPath, $"{model.Family.Name}.rfa");
+        var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, outputPath,
+            overwrite: true, sharedSource: ctx.SelectedProfile.SharedParameterSource());
+        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+            "familyfoundry.build", receipt.Converged ? "Succeeded" : "Failed",
+            [new ScriptOutputReferenceData("file", outputPath)], Observed(ctx.SelectedProfile, receipt.ObservedParametersDigest));
         new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
             $"Built {model.Family.Name} from {Path.GetFileName(templatePath)} → {outputPath}. Converged: {receipt?.Converged}, residue {receipt?.Residue.Count}.").Show();
     }
+
+    private static IEnumerable<ObservedExternalRevisionData> Observed(ProfileListItem item, string? digest) =>
+        digest is null || item.Prepared is null ? [] : item.Prepared.ExternalRequirements
+            .Where(requirement => requirement.Code == "aps.parameters")
+            .Select(requirement => new ObservedExternalRevisionData(requirement.Code, requirement.ResourceId, digest));
 }

@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
+using Pe.Revit.SettingsRuntime.Validation;
 
 namespace Pe.Revit.SettingsRuntime.Modules;
 
@@ -40,6 +41,21 @@ public sealed class ModuleSettingsStorage<TSettings>(
 
         var content = snapshot.ComposedContent ?? snapshot.RawContent;
         return JsonConvert.DeserializeObject<TSettings>(content, DeserializerSettings) ?? CreateDefaultValue();
+    }
+
+    public static TSettings ReadPrepared(string rawContent, string composedContent, string location) {
+        var schema = new SchemaBackedSettingsDocumentValidator(typeof(TSettings));
+        var schemaResult = schema.Validate(new Pe.Shared.StorageRuntime.Documents.SettingsDocumentId("Pod", "settings", location), rawContent, composedContent);
+        var issues = schemaResult.Issues.ToList();
+        if (SettingsDocumentValidatorRegistry.Shared.TryValidate(
+                typeof(TSettings),
+                new SettingsDocumentValidationContext(rawContent, composedContent),
+                out var featureIssues))
+            issues.AddRange(featureIssues.Select(issue => new Pe.Shared.StorageRuntime.Documents.SettingsValidationIssue(
+                issue.Path, issue.Code, issue.Severity, issue.Message, issue.Suggestion)));
+        if (issues.Any(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)))
+            throw new JsonValidationException(location, issues.Select(issue => $"{issue.Path}: {issue.Message}"));
+        return JsonConvert.DeserializeObject<TSettings>(composedContent, DeserializerSettings) ?? CreateDefaultValue();
     }
 
     public TSettings ReadOrDefault(string relativePath, string? rootKey = null) {

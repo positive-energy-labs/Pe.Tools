@@ -253,6 +253,7 @@ export namespace FamilyfoundryApply {
       residue: FamilyFoundryChangeData[];
       errors: string[];
       artifactDirectory?: null | string;
+      observedParametersDigest?: null | string;
     }
     /**
      * One change the reconciler would make: section + key is the address, kind is the verb.
@@ -4678,17 +4679,17 @@ export namespace ScriptingExecute {
       sourceBundle?: null | ScriptPodSourceBundle;
     }
     export interface ScriptPodSourceBundle {
-      manifestBase64: string;
-      project: ScriptPodProjectSeed;
-      sources: ScriptPodSourceFile[];
-    }
-    export interface ScriptPodProjectSeed {
-      present: boolean;
-      bytesBase64?: null | string;
+      files: ScriptPodSourceFile[];
+      dependencies: ScriptPodDependencyBundle[];
     }
     export interface ScriptPodSourceFile {
       path: string;
       bytesBase64: string;
+    }
+    export interface ScriptPodDependencyBundle {
+      id: string;
+      releaseHash: string;
+      files: ScriptPodSourceFile[];
     }
   }
   export namespace Res {
@@ -4713,6 +4714,7 @@ export namespace ScriptingExecute {
       executionId: string;
       artifacts?: ScriptArtifactData[] | null;
       data?: unknown;
+      attribution?: null | PodExecutionAttributionData;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -4726,6 +4728,27 @@ export namespace ScriptingExecute {
       fullPath: string;
       contentType: string;
       sizeBytes: number;
+    }
+    export interface PodExecutionAttributionData {
+      podId: string;
+      version: string;
+      snapshotHash: string;
+      releaseHash?: null | string;
+      member: string;
+      operation: string;
+      runId: string;
+      outcome: string;
+      outputs: ScriptOutputReferenceData[];
+      observedExternalRevisions: ObservedExternalRevisionData[];
+    }
+    export interface ScriptOutputReferenceData {
+      kind: string;
+      reference: string;
+    }
+    export interface ObservedExternalRevisionData {
+      code: string;
+      resourceId: string;
+      revisionOrDigest: string;
     }
   }
 }
@@ -4750,6 +4773,7 @@ export namespace ScriptingPodExport {
       manifest?: null | ScriptPodManifestSummaryData;
       archiveEntries: string[];
       diagnostics: ScriptDiagnostic[];
+      release?: null | ScriptPodReleaseData;
     }
     export interface ScriptPodManifestSummaryData {
       schemaVersion: number;
@@ -4770,6 +4794,30 @@ export namespace ScriptingPodExport {
       severity: ScriptDiagnosticSeverity;
       message: string;
       source?: null | string;
+    }
+    export interface ScriptPodReleaseData {
+      podId: string;
+      version: string;
+      contentHash: string;
+      parent?: null | ScriptPodReleaseReferenceData;
+      files: ScriptPodFileHashData[];
+      outcomes: ScriptPodGateOutcomeData[];
+    }
+    export interface ScriptPodReleaseReferenceData {
+      podId: string;
+      contentHash: string;
+      version?: null | string;
+    }
+    export interface ScriptPodFileHashData {
+      path: string;
+      sha256: string;
+    }
+    export interface ScriptPodGateOutcomeData {
+      code: string;
+      location: string;
+      reason: string;
+      remedy?: null | string;
+      severity: ScriptDiagnosticSeverity;
     }
   }
 }
@@ -4795,6 +4843,7 @@ export namespace ScriptingPodImport {
       archiveEntries: string[];
       generatedFiles: string[];
       diagnostics: ScriptDiagnostic[];
+      release?: null | ScriptPodReleaseData;
     }
     export interface ScriptPodManifestSummaryData {
       schemaVersion: number;
@@ -4815,6 +4864,30 @@ export namespace ScriptingPodImport {
       severity: ScriptDiagnosticSeverity;
       message: string;
       source?: null | string;
+    }
+    export interface ScriptPodReleaseData {
+      podId: string;
+      version: string;
+      contentHash: string;
+      parent?: null | ScriptPodReleaseReferenceData;
+      files: ScriptPodFileHashData[];
+      outcomes: ScriptPodGateOutcomeData[];
+    }
+    export interface ScriptPodReleaseReferenceData {
+      podId: string;
+      contentHash: string;
+      version?: null | string;
+    }
+    export interface ScriptPodFileHashData {
+      path: string;
+      sha256: string;
+    }
+    export interface ScriptPodGateOutcomeData {
+      code: string;
+      location: string;
+      reason: string;
+      remedy?: null | string;
+      severity: ScriptDiagnosticSeverity;
     }
   }
 }

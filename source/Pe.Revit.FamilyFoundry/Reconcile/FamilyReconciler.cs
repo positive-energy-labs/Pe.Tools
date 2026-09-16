@@ -43,7 +43,8 @@ public sealed record FamilyReceipt(
     IReadOnlyList<string> RunEffects,
     IReadOnlyList<FamilyChange> Residue,
     IReadOnlyList<FamilyModelUnmodeledFact> Unmodeled,
-    bool Converged
+    bool Converged,
+    string? ObservedParametersDigest = null
 );
 
 /// <summary>

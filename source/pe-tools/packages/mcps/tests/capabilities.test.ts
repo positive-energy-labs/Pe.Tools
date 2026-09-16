@@ -43,7 +43,7 @@ const pods = {
       workspaceRootPath: "C:/pods/sheets",
       isValid: true,
       manifest: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: "sheets",
         name: "Sheet tools",
         version: "1.0.0",
