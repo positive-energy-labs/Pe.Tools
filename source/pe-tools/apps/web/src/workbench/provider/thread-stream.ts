@@ -1,7 +1,7 @@
 import { useHostCall } from "#/readings";
-import type { AgentControllerEvent, MastraClient } from "@mastra/client-js";
+import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { emptyChatState, type ChatDisplay, type ChatState } from "../chat-state";
+import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
@@ -39,10 +39,16 @@ export function useThreadStream(options: {
   // frame, so no fetch ever competes with it and no clock is needed.
   const [frame, setFrame] = useState<ChatDisplay | null>(null);
   const [streamFault, setStreamFault] = useState<Error | null>(null);
+  // A user turn the stream announced but the fetched body does not hold yet. The display frame
+  // carries it only until the assistant's first delta replaces `currentMessage`, and the host
+  // persists the row later than the `message_end` refetch, so without this the sent message
+  // vanished until the assistant block ended. The wire id is the persisted row id.
+  const [sent, setSent] = useState<MastraDBMessage[]>([]);
 
   useEffect(() => {
     setFrame(null);
     setStreamFault(null);
+    setSent([]);
   }, [threadId]);
 
   // The one refetch path: cancel kills a fetch that left before the change, so an older body
@@ -60,6 +66,12 @@ export function useThreadStream(options: {
     let stopped = false;
     const accept = (event: AgentControllerEvent) => {
       if (stopped) return;
+      const started = event.type === "message_start" ? (event.message as MastraDBMessage) : null;
+      if (started && isUserTurn(started)) {
+        setSent((previous) =>
+          previous.some((item) => item.id === started.id) ? previous : [...previous, started],
+        );
+      }
       if (event.type === "display_state_changed") {
         setFrame(event.displayState as ChatDisplay);
         if ((event.displayState as ChatDisplay).isRunning) setStreamFault(null);
@@ -100,10 +112,13 @@ export function useThreadStream(options: {
     };
   }, [invalidate, hydrated, session, threadId]);
 
-  const chat = useMemo<ChatState>(
-    () => (query.data ? { ...query.data, display: frame ?? {} } : EMPTY),
-    [query.data, frame],
-  );
+  const chat = useMemo<ChatState>(() => {
+    if (!query.data) return EMPTY;
+    const stored = new Set(query.data.messages.map((message) => message.id));
+    const unstored = sent.filter((message) => !stored.has(message.id));
+    const messages = unstored.length ? [...query.data.messages, ...unstored] : query.data.messages;
+    return { ...query.data, messages, display: frame ?? {} };
+  }, [query.data, frame, sent]);
 
   return {
     chat,
