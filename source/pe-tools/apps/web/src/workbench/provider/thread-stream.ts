@@ -1,4 +1,5 @@
-import { useHostCall } from "#/readings";
+import { previousOf, useHostCall } from "#/readings";
+import type { Reading } from "@pe/agent-contracts";
 import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
@@ -15,6 +16,17 @@ const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
   "model_changed",
   "mode_changed",
 ]);
+
+/**
+ * Whether the chat is still waiting for its thread body. Decided by what has arrived, not by
+ * request states: the host status Reading starts `absent` (never `loading`) until its first frame,
+ * and until it lands there is no session, so no thread fetch either. A failed host status ends the
+ * wait. Read as "loaded and empty" too early, the lens dropped a `?turn` it could not yet find.
+ */
+export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean): boolean {
+  const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
+  return !hostKnown || threadPending;
+}
 
 export const threadQueryKey = (origin: string, threadId: string | null) =>
   ["pe-thread", origin, threadId] as const;
@@ -122,11 +134,10 @@ export function useThreadStream(options: {
 
   return {
     chat,
-    // Pending ONLY while there is nothing to show. `useHostCall` raises `pending` on every
-    // refetch — and message_end, agent_end and each SSE reconnect refetch — so reporting raw
-    // pending flashed "Loading thread state" after every completed turn over a thread that was
-    // already on screen.
-    pending: threadId !== null && query.isPending && !hydrated,
+    // Pending exactly while a named thread has no body and no failure. Not `query.isPending`:
+    // that is false on the first render after the thread appears (the fetch starts in an
+    // effect), and true again on every refetch over a thread already on screen.
+    pending: threadId !== null && !hydrated && query.error === undefined,
     error: query.error ?? streamFault,
     invalidate,
   };

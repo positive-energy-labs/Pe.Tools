@@ -19,6 +19,9 @@ vi.mock("#/chat/scope", () => ({
 }));
 
 import { useLensModel } from "./model";
+import { chatLoading } from "../provider/thread-stream";
+
+const READY = { state: "ready", observation: {} } as const;
 import { FOCAL } from "./scale";
 
 // Geometry the browser would give: every moment is `H` tall unless `heights` says otherwise,
@@ -172,11 +175,18 @@ async function flush() {
 }
 
 test("open with ?turn lands on that turn once the thread has loaded", async () => {
-  const lane = setup({ turn: 2, loading: true });
+  // `loading` comes from the provider's own rule over the real Reading states, not a hand-set
+  // flag: the host status starts `absent`, the body lands later. An earlier version of this test
+  // set `loading: true` by hand, so it never saw the first commit the app really renders.
+  const lane = setup({ turn: 2, loading: chatLoading({ state: "absent" }, false) });
   const { rerender } = render(lane.view(emptyChatState()));
   lane.scroller();
   await flush();
-  lane.bench.loading = false;
+  // Host status arrives; the thread fetch is in flight, the body is not here yet.
+  lane.bench.loading = chatLoading(READY, true);
+  rerender(lane.view(emptyChatState()));
+  await flush();
+  lane.bench.loading = chatLoading(READY, false);
   rerender(lane.view(thread(3)));
   await flush();
   // turn 2's user row is the third moment: top 600, centered on the focal axis.

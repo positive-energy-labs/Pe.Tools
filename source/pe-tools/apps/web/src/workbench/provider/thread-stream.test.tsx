@@ -69,3 +69,27 @@ test("a sent message stays listed while the first assistant block streams", asyn
   const listed = selectMessages(result.current.chat).map((message) => message.id);
   expect(listed).toEqual(["u1", "a1"]);
 });
+
+test("the thread reports pending on every render until its body is here", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(emptyChatState()))),
+  );
+  const session = { subscribe: async () => ({ unsubscribe: () => {} }) };
+  let noBody: unknown;
+  const renders: { pending: boolean; body: boolean }[] = [];
+  const { rerender } = renderHook(
+    ({ thread }: { thread: { id: string; session: never } | null }) => {
+      const stream = useThreadStream({ origin: "http://host", thread });
+      noBody ??= stream.chat; // the shared empty state, before any body exists
+      if (thread) renders.push({ pending: stream.pending, body: stream.chat !== noBody });
+      return stream;
+    },
+    { initialProps: { thread: null } as { thread: { id: string; session: never } | null } },
+  );
+  // The session appears (host status landed): from this render on, a thread is named whose body
+  // has not arrived, and the lens must not read that as "loaded, and empty".
+  rerender({ thread: { id: "t1", session: session as never } });
+  await waitFor(() => expect(renders.at(-1)?.body).toBe(true));
+  expect(renders.filter((render) => !render.body && !render.pending)).toEqual([]);
+});

@@ -16,7 +16,7 @@ import { useRouteOwner } from "#/route";
 import { createChatPageStore, type WorkbenchAttachment } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
-import { useThreadStream } from "./thread-stream";
+import { chatLoading, useThreadStream } from "./thread-stream";
 import {
   errorMessage,
   forkSessionThread,
@@ -84,7 +84,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     origin: config.origin,
     thread: session ? { id: currentThreadId, session } : null,
   });
-  const loading = hostStatus.state === "loading" || threadPending;
+  const loading = chatLoading(hostStatus, threadPending);
 
   const status = selectRunStatus(chat);
   const isRunning = status !== "idle";
