@@ -143,6 +143,8 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+- Pea chart tool: pea emits a small Vega-Lite subset whose data is a reference to an earlier tool result, never inline rows. The host validates it (Zod, then the Vega-Lite schema), forbids URLs, expressions, signals, and model-set config, and caps or aggregates rows. The web renders it under the tool call with lazy-loaded `vega` and a config built from `--pe-*` tokens. `@tanstack/charts` 0.18 is rejected as the contract: its charts are TypeScript code, and its JSON spec is only a design note (`.artifacts/handoffs/render-blocks-20260916/chart.md`). Grill the tool contract before building.
+- Pea network view for duct and pipe systems (kaitpw: "graph or some duct/pipe representation especially"). Mermaid layout does not scale to hundreds of connected elements. Candidates: a separate `graph` tool with a force layout (`@tanstack/charts` `forceLayout`), or a purpose-built system view. Decide after the chart tool ships and a real network is on hand.
 
 - Host zero-holder 404 lists every connected session with no year filter, and Pea reads that text, not `resolveScope`; carry the file year to the host or filter `eligible` there (review F8).
 - `heldDocuments` is the active document only (`ponytail:` at `apps/host/src/bridge.ts`), so a Revit tab switch flips the Scope to `unheld` while the file is open two feet away (F11).
