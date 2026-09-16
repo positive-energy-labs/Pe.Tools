@@ -308,7 +308,7 @@ export function ItemRow({
           </span>
         </PressContent>
       </Press>
-      {open && item.body ? <Code code={item.body} lang="plaintext" /> : null}
+      {open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : null}
     </li>
   );
 }

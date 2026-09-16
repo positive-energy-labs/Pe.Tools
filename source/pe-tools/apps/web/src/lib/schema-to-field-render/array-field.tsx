@@ -159,12 +159,16 @@ export function ArrayField({
 /**
  * The array as raw JSON, for the shapes the field renderer has no widget for.
  *
- * Parse-on-change, unchanged from the `Textarea` this replaced: a parse that succeeds commits
- * to the field, and a parse that fails leaves the field alone. What changed is that the failure
- * is no longer silent — the head says `invalid JSON`, and `bad` holds the text the field cannot
- * accept so it stays on screen instead of being overwritten by the last good value.
+ * Parse-on-change: a parse that succeeds commits to the field, a parse that fails leaves the
+ * field alone and the head says `invalid JSON`.
+ *
+ * The editor holds the TEXT, not a re-serialization of the field. `from` remembers the
+ * serialized value this editor last committed, so a field change that came from outside (a
+ * reset, another pane, a defaulting pass) still replaces the text, while the caller echoing our
+ * own commit back does not. Re-serializing on every valid keystroke moved the caret to the end
+ * of the line — the `Textarea` this replaced did exactly that, and it was a bug, not a contract.
  */
-function JsonArray({
+export function JsonArray({
   label,
   value,
   onChange,
@@ -173,30 +177,32 @@ function JsonArray({
   value: unknown;
   onChange: (next: unknown) => void;
 }) {
-  const [bad, setBad] = useState<string | null>(null);
+  const serialized = stringify(value);
+  const [held, setHeld] = useState({ text: serialized, from: serialized, bad: false });
+  // The field moved under us: adopt its text. React's own "adjust state when a prop changes"
+  // pattern — a render-phase set, no effect, no extra paint.
+  if (held.from !== serialized) setHeld({ text: serialized, from: serialized, bad: false });
   return (
     <ArtifactFrame
       head={
         <>
           <span className="t-small t-upper text-ink-2">{label}</span>
-          <span
-            className="ml-auto t-small face-mono"
-            data-tone={bad === null ? undefined : "alarm"}
-          >
-            {bad === null ? "valid" : "invalid JSON"}
+          <span className="ml-auto t-small face-mono" data-tone={held.bad ? "alarm" : undefined}>
+            {held.bad ? "invalid JSON" : "valid"}
           </span>
         </>
       }
     >
       <JsonEditor
         aria-label={`${label} as JSON`}
-        value={bad ?? stringify(value)}
+        value={held.text}
         onChange={(next) => {
           try {
-            onChange(JSON.parse(next));
-            setBad(null);
+            const parsed: unknown = JSON.parse(next);
+            onChange(parsed);
+            setHeld({ text: next, from: stringify(parsed), bad: false });
           } catch {
-            setBad(next);
+            setHeld((current) => ({ ...current, text: next, bad: true }));
           }
         }}
       />

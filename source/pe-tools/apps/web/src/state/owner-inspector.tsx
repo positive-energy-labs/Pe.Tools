@@ -54,7 +54,7 @@ export function OwnerInspector({
                     </dt>
                     <dd>Readiness: {value.state}</dd>
                     <dd>
-                      <Code code={value.value ?? "unknown (not read)"} lang="plaintext" />
+                      <Code code={value.value ?? "unknown (not read)"} lang="plaintext" wrap />
                     </dd>
                     <dd>Known cause: {cause}</dd>
                   </div>

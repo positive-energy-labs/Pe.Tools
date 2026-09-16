@@ -60,7 +60,7 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
             </span>
           }
         >
-          {open ? <Code code={systemPrompt.content} lang="plaintext" /> : null}
+          {open ? <Code code={systemPrompt.content} lang="plaintext" wrap /> : null}
         </ArtifactFrame>
       ) : null}
     </div>
@@ -113,7 +113,7 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       ) : output !== undefined ? (
         <Code code={stringify(output)} lang="json" title="out" />
       ) : null}
-      {error ? <Code code={error} title="error" tone="error" /> : null}
+      {error ? <Code code={error} lang="plaintext" title="error" tone="error" wrap /> : null}
     </>
   );
 }

@@ -19,6 +19,12 @@
   white-space: pre;
 }
 
+/* `wrap`: machine prose with no line structure to protect — error text, a system prompt. */
+[data-code-pane][data-code-wrap] pre.th-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* json token roles — property keys lead; strings/numbers get quiet distinction. */
 [data-code-pane] .th-property {
   color: var(--pe-ink);

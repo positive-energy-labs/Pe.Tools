@@ -138,7 +138,7 @@ export function ZoneCard(props: {
         </div>
       )}
       {b?.triage.verdict === "error" && (
-        <Code code={b.triage.reason} lang="plaintext" tone="error" />
+        <Code code={b.triage.reason} lang="plaintext" tone="error" wrap />
       )}
 
       <div className="flex gap-2">

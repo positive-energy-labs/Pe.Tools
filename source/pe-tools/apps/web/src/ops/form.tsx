@@ -124,7 +124,7 @@ function RawRequest({
     <ArtifactFrame
       head={
         <>
-          <span className="t-small t-upper text-ink-2">operation request</span>
+          <span className="t-small t-upper text-ink-2">request</span>
           <span className="ml-auto t-small face-mono" data-tone={parses(raw) ? undefined : "alarm"}>
             {parses(raw) ? "valid" : "invalid JSON"}
           </span>

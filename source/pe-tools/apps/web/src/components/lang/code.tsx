@@ -87,6 +87,13 @@ export interface CodeProps {
   lineNumbers?: boolean;
   /** Default true: cap at 32rem and scroll. `false` lets the block run its full height. */
   clamp?: boolean;
+  /**
+   * Break long lines instead of scrolling them. Code is `white-space: pre` because a wrapped
+   * line lies about where the line ends; prose that happens to be machine output — a stack
+   * trace, an error string, a system prompt — has no such structure to protect and reads worse
+   * running off the right edge.
+   */
+  wrap?: boolean;
   tone?: "error";
 }
 
@@ -97,6 +104,7 @@ export function Code({
   decorations,
   lineNumbers,
   clamp = true,
+  wrap,
   tone,
 }: CodeProps) {
   const [copied, setCopied] = useState(false);
@@ -113,6 +121,7 @@ export function Code({
   const { base, head } = artifactFrameRecipe();
   const body = {
     "data-code-pane": "",
+    "data-code-wrap": wrap ? "" : undefined,
     "data-tone": tone === "error" ? "alarm" : undefined,
     className: clamp ? "max-h-[32rem] overflow-auto" : undefined,
   };

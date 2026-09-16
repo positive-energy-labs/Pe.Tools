@@ -30,6 +30,13 @@ test("a block past the tokenize gate renders plain and offers show all", () => {
   expect(screen.getByRole("button", { name: "show all" })).toBeTruthy();
 });
 
+test("wrap is opt-in, so code keeps its line structure by default", () => {
+  const { container, rerender } = render(<Code code="x" lang="plaintext" />);
+  expect(container.querySelector("[data-code-wrap]")).toBe(null);
+  rerender(<Code code="x" lang="plaintext" wrap />);
+  expect(container.querySelector("[data-code-wrap]")).toBeTruthy();
+});
+
 test("stringify survives a value JSON refuses", () => {
   const circular: Record<string, unknown> = {};
   circular.self = circular;
