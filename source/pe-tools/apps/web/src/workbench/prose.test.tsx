@@ -24,6 +24,8 @@ test("a chat fence keeps its tag all the way to the highlighter", () => {
   const block = container.querySelector(".th-code--csharp");
   expect(block, container.innerHTML).toBeTruthy();
   expect(block?.querySelector(".th-keyword")).toBeTruthy();
+  // Typography must not reach inside: `prose-code:*` boxed the block's own `<code>` in chat.
+  expect(block?.closest("[role='group']")?.classList.contains("not-prose")).toBe(true);
 });
 
 // The head says the fence's own tag, never a language nobody asked for.
@@ -47,7 +49,7 @@ test("a tag the highlighter has no grammar for names itself and says so", () => 
 
 test("an untagged fence says nothing about language", () => {
   const { container } = chat(`${FENCE}\nno tag here\n${FENCE}\n`);
-  expect(head(container)).toMatch(/^1 lines/);
+  expect(head(container)).toMatch(/^1 line(?!s)/);
   expect(head(container)).not.toContain("no grammar");
   expect(head(container)).not.toContain("unknown");
   expect(head(container)).not.toContain("plaintext");

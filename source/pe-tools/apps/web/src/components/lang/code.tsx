@@ -146,7 +146,10 @@ export function Code({
   return (
     // A named group: the head's controls and the payload are one object, and the name is what a
     // caller's old `aria-label` said. `title` stays the visible word too — no second label.
-    <div className={base()} role="group" aria-label={title ?? lang ?? "code"}>
+    // `not-prose`: a block is often dropped into rendered markdown, and typography's rules —
+    // `prose-code:*` above all — would otherwise box the `<code>` inside our `<pre>` as if it
+    // were inline code. The frame and `code.css` own every value inside; prose owns none.
+    <div className={base({ class: "not-prose" })} role="group" aria-label={title ?? lang ?? "code"}>
       <div className={head()}>
         {(title ?? lang) ? (
           <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
@@ -157,7 +160,9 @@ export function Code({
           </span>
         ) : null}
         <span className="ml-auto flex items-baseline gap-2">
-          <span className="t-small face-mono tabular-nums text-ink-mute">{lines} lines</span>
+          <span className="t-small face-mono tabular-nums text-ink-mute">
+            {lines} {lines === 1 ? "line" : "lines"}
+          </span>
           {gated && !showAll ? (
             <Press tone="quiet" size="label" onClick={() => setShowAll(true)}>
               show all
