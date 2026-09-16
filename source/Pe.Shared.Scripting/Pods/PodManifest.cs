@@ -73,20 +73,11 @@ public static class PodManifestValidator {
     private static readonly HashSet<string> OriginFields = new(StringComparer.Ordinal) { "locator" };
     private static readonly HashSet<string> ExternalRequirementFields = new(StringComparer.Ordinal) { "code", "resourceId", "collectionId" };
 
-    public static PodManifestValidationResult ValidateJson(string json) =>
-        ValidateJson(json, null, false);
-
-    public static PodManifestValidationResult ValidateJson(string json, string workspaceKey) =>
-        ValidateJson(json, workspaceKey, true);
-
-    private static PodManifestValidationResult ValidateJson(string json, string? workspaceKey, bool requireWorkspaceMatch) {
+    public static PodManifestValidationResult ValidateJson(string json) {
         if (json is null)
             throw new ArgumentNullException(nameof(json));
 
         var diagnostics = new List<ScriptDiagnostic>();
-        var normalizedWorkspaceKey = requireWorkspaceMatch
-            ? NormalizeWorkspaceKey(workspaceKey, diagnostics)
-            : null;
 
         JObject root;
         try {
@@ -105,9 +96,6 @@ public static class PodManifestValidator {
         var id = ReadRequiredString(root, "id", diagnostics);
         if (id is not null && !ScriptingWorkspaceLayout.IsWorkspaceSlug(id))
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json id must be a lowercase workspace slug."));
-
-        if (id is not null && normalizedWorkspaceKey is not null && !string.Equals(id, normalizedWorkspaceKey, StringComparison.Ordinal))
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json id '{id}' must match workspace key '{normalizedWorkspaceKey}'."));
 
         var name = ReadRequiredString(root, "name", diagnostics);
         var version = ReadRequiredString(root, "version", diagnostics);
@@ -136,15 +124,6 @@ public static class PodManifestValidator {
             ),
             diagnostics
         );
-    }
-
-    private static string? NormalizeWorkspaceKey(string? workspaceKey, List<ScriptDiagnostic> diagnostics) {
-        try {
-            return ScriptingWorkspaceLayout.NormalizeWorkspaceKey(workspaceKey);
-        } catch (ArgumentException ex) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, ex.Message));
-            return null;
-        }
     }
 
     private static void AddUnknownFieldDiagnostics(JObject obj, HashSet<string> knownFields, List<ScriptDiagnostic> diagnostics, string owner) {

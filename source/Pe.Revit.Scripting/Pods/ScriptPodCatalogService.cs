@@ -20,9 +20,6 @@ public static class ScriptPodCatalogService {
 
         foreach (var workspaceRoot in Directory.EnumerateDirectories(workspacesRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
             var workspaceKey = Path.GetFileName(workspaceRoot);
-            if (!ScriptingWorkspaceLayout.IsWorkspaceSlug(workspaceKey))
-                continue;
-
             var manifestPath = Path.Combine(workspaceRoot, ScriptingWorkspaceLayout.PodManifestFileName);
             if (!File.Exists(manifestPath)) {
                 pods.Add(new ScriptPodListItemData(

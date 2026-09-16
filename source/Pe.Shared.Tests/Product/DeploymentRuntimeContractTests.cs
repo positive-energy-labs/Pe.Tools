@@ -54,7 +54,7 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
-    public void Scripting_workspace_layout_accepts_only_single_slug_workspace_keys() {
+    public void Scripting_workspace_layout_accepts_local_names_and_refuses_path_escape() {
         var rootPath = Path.Combine(Path.GetTempPath(), $"pe-workspaces-{Guid.NewGuid():N}");
         var layout = new ScriptingWorkspaceLayout(rootPath);
 
@@ -64,16 +64,11 @@ public sealed class DeploymentRuntimeContractTests {
         Assert.That(layout.ResolveWorkspaceRoot("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25")));
         Assert.That(layout.ResolvePodManifestPath("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25", "pod.json")));
 
+        Assert.That(layout.ResolveWorkspaceRoot("Office Standards"), Is.EqualTo(Path.Combine(rootPath, "Office Standards")));
+
         foreach (var invalidWorkspaceKey in new[] {
-            "ConnectorAudit",
-            "connector_audit",
-            "connector audit",
-            "connector.audit",
             "connector/audit",
             "connector\\audit",
-            "connector--audit",
-            "-connector",
-            "connector-",
             "..",
             Path.Combine(rootPath, "connector")
         }) {

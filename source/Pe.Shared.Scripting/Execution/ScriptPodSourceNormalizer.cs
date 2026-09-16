@@ -18,7 +18,7 @@ public static class ScriptPodSourceNormalizer {
         var captured = bundle.Files.ToDictionary(file => file.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
         if (!captured.TryGetValue("pod.json", out var manifestFile))
             throw new ArgumentException("Captured Pod lacks pod.json.", PodManifestValidator.DiagnosticStage);
-        var manifest = PodManifestValidator.ValidateJson(Decode(manifestFile.BytesBase64, out _), workspaceKey);
+        var manifest = PodManifestValidator.ValidateJson(Decode(manifestFile.BytesBase64, out _));
         if (!manifest.Success || manifest.Manifest is null)
             throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(d => d.Message)), PodManifestValidator.DiagnosticStage);
         if (!manifest.Manifest.Entrypoints.Any(e => string.Equals(e.SourcePath, selected, StringComparison.OrdinalIgnoreCase)))

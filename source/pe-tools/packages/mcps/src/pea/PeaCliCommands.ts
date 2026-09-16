@@ -392,7 +392,11 @@ export class PeaCliCommands {
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         workspace: {
           type: "string",
-          description: "Optional target workspace slug. Omit to use the pod.json id.",
+          description: "Optional local folder name. Omit to use the pod.json id.",
+        },
+        independent: {
+          type: "boolean",
+          description: "Make editable independent settings from the released composed JSON.",
         },
       },
       toKebab: true,
@@ -402,6 +406,7 @@ export class PeaCliCommands {
         const result = await this.createScriptingTools(ctx.values).importPod({
           archivePath,
           workspaceKey: firstNonBlank(ctx.values.workspace),
+          independent: ctx.values.independent,
         });
         writeScriptPodImport(result);
       },

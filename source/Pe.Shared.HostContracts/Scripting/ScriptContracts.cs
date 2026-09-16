@@ -98,7 +98,8 @@ public record ScriptCancelData(
 
 public record ScriptPodImportRequest(
     string ArchivePath,
-    string? WorkspaceKey = null
+    string? WorkspaceKey = null,
+    bool Independent = false
 );
 
 public record ScriptPodExportRequest(

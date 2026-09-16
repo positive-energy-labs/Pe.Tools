@@ -286,7 +286,7 @@ public class CmdScheduleManager : IExternalCommand {
         IReadOnlyList<ObservedExternalRevisionData> observedExternalRevisions;
         try {
             scheduleProfile = ctx.SelectedProfile.Load(ctx.ProfilesStorage);
-            observedExternalRevisions = ctx.SelectedProfile.Prepared?.ResolveExternalRequirements() ?? [];
+            observedExternalRevisions = []; // Schedules consume document fields, not APS definitions.
         } catch (Exception ex) {
             _ = profileItem.AttemptSnapshot?.WriteReceipt(runOutput,
                 "schedule.create", "Failed", reason: ex.Message);
@@ -469,7 +469,7 @@ public class CmdScheduleManager : IExternalCommand {
 
         try {
             var batchSettings = batchItem.LoadBatchSettings();
-            var observedExternalRevisions = batchItem.Prepared?.ResolveExternalRequirements().ToList() ?? [];
+            var observedExternalRevisions = new List<ObservedExternalRevisionData>();
             var results = new List<(string profileName, bool success, string errorMessage)>();
             var createdSchedules = new List<string>();
 

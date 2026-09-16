@@ -1,6 +1,5 @@
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.Storage;
-using Pe.Revit.Global.Services.Aps;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Pods;
 using Pe.Shared.StorageRuntime;
@@ -23,7 +22,7 @@ internal sealed record PreparedPodSetting(
     PreparedPod Snapshot,
     string WorkspaceRoot
 ) {
-    public PreparedPodSetting Refresh() => PreparedPodSettingsCatalog.Get(this.PodId, this.SourcePath);
+    public PreparedPodSetting Refresh() => PreparedPodSettingsCatalog.Get(Path.GetFileName(this.WorkspaceRoot), this.SourcePath);
 
     public OutputStorage Output() => OutputStorage.ExactDir(Path.Combine(this.WorkspaceRoot, "output"));
 
@@ -50,8 +49,6 @@ internal sealed record PreparedPodSetting(
             observedExternalRevisions?.ToList() ?? [], reason));
     }
 
-    public IReadOnlyList<ObservedExternalRevisionData> ResolveExternalRequirements() =>
-        PreparedPodSettingsCatalog.ResolveExternalRequirements(this.ExternalRequirements);
 }
 
 internal static class PreparedPodSettingsCatalog {
@@ -112,23 +109,4 @@ internal static class PreparedPodSettingsCatalog {
         }
     }
 
-    internal static IReadOnlyList<ObservedExternalRevisionData> ResolveExternalRequirements(
-        IReadOnlyList<PodExternalRequirement> requirements
-    ) {
-        var observed = new List<ObservedExternalRevisionData>();
-        foreach (var collection in requirements.GroupBy(requirement => requirement.CollectionId, StringComparer.Ordinal)) {
-            if (collection.Any(requirement => requirement.Code != "aps.parameters"))
-                throw new InvalidDataException($"Unsupported external authority '{collection.First(requirement => requirement.Code != "aps.parameters").Code}'.");
-            var current = ParametersServiceCache.ResolveCurrentAsync(collection.Key).GetAwaiter().GetResult();
-            foreach (var requirement in collection) {
-                if (!current.ResourceIds.Contains(requirement.ResourceId))
-                    throw new InvalidDataException($"Current Parameters Service collection '{current.CollectionId}' has no resource '{requirement.ResourceId}'.");
-                observed.Add(new ObservedExternalRevisionData(requirement.Code, requirement.ResourceId, current.Digest));
-                Log.Information(
-                    "Portable pod external authority resolved: Code={Code}, ResourceId={ResourceId}, CollectionId={CollectionId}, Digest={Digest}",
-                    requirement.Code, requirement.ResourceId, current.CollectionId, current.Digest);
-            }
-        }
-        return observed;
-    }
 }

@@ -90,7 +90,7 @@ public sealed class ScriptPodSourceTests {
     }
 
     [Test]
-    public void Duplicates_limits_missing_entrypoint_and_wrong_workspace_are_refused() {
+    public void Duplicates_limits_and_missing_entrypoint_are_refused() {
         void Reject(ScriptPodSourceBundle bundle) => Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
         var bundle = Bundle();
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1], bundle.Files[1] with { Path = "src/main.cs" }] });
@@ -99,7 +99,7 @@ public sealed class ScriptPodSourceTests {
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1] with { BytesBase64 = Convert.ToBase64String(new byte[512 * 1024 + 1]) }] });
         Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 5).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
         Reject(bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] });
-        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "other", "src/Main.cs"));
+        Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "Other Local Copy", "src/Main.cs").Manifest.Id, Is.EqualTo("sample"));
         Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs"));
     }
 }

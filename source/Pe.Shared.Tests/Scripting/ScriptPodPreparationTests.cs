@@ -53,6 +53,7 @@ public sealed class ScriptPodPreparationTests {
                 ["settings/unused.settings.json"] = "{\"unused\":true}"
             });
         var releaseHash = this._service.Prepare("library").ContentHash;
+        Directory.Move(Path.Combine(this._root, "library"), Path.Combine(this._root, "Office Library"));
         WritePod("consumer", $$"""
             {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[],"requires":[{"id":"library","releaseHash":"{{releaseHash}}"}]}
             """, new Dictionary<string, string> {
@@ -66,7 +67,7 @@ public sealed class ScriptPodPreparationTests {
             Assert.That(prepared.InspectionDependencies.Select(item => item.SourcePath), Is.EqualTo(new[] { "settings/base.settings.json" }));
         });
 
-        File.WriteAllText(Path.Combine(this._root, "library", "settings", "base.settings.json"), "{\"base\":3}");
+        File.WriteAllText(Path.Combine(this._root, "Office Library", "settings", "base.settings.json"), "{\"base\":3}");
         var mismatch = this._service.Prepare("consumer");
         Assert.That(mismatch.Success, Is.False);
         Assert.That(mismatch.Outcomes.Select(outcome => outcome.Code), Does.Contain("pod.dependency.hash-mismatch"));

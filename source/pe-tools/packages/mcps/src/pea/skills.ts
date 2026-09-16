@@ -154,7 +154,29 @@ The user supplies intent and ideas; you handle the code. Nothing that does not c
 
 ## What a Pod is
 
-A Pod is a scripting workspace the user runs from Pea and shares as source: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that declares the Pod id and its entrypoints. A workspace without pod.json is loose and runs only the selected file. A Pod validates its manifest, compiles every src/**/*.cs, and runs only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
+A Pod is one portable folder for editable source, reusable typed JSON settings, and assets. It may contain scripts, standards, or both. pod.json supplies identity and optional script entrypoints. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A workspace without pod.json cannot execute as a Pod.
+
+## Identity: five separate facts
+
+- Local folder / workspaceKey locates this copy. Renaming or moving it does not change manifest identity. Use the discovered local folder when executing; never derive it from the manifest id.
+- pod.json id names the lineage. Different local copies and versions can share it.
+- Content hash identifies exact execution content. The human version is a label, not an update policy or compatibility promise.
+- Parent records the exact ancestor release. A derivative keeps ancestry; it never pretends to be the unchanged ancestor.
+- Origin is a transport locator, such as a Git or registry address. It is not proof of authorship or content identity.
+
+Do not auto-adopt upstream updates. Resolve declared source dependencies by identity and exact hash; report conflicting local paths when selection is ambiguous.
+
+## Prepare, share, and adapt
+
+Execution prepares one snapshot. Publication composes source-level $preset/$include references ahead of time and ships composed JSON plus authored source and consumed dependency source for inspection. There is no runtime standards stack. A verified release runs without installed authoring dependencies, even if an unrelated local copy is broken. Inspection source never executes as a fallback.
+
+For an independent editable copy, import with independent=true (CLI: pea script import --archive <file.zip> --workspace <local-folder> --independent). Composed settings become editable source; original settings remain under inspection/ancestor and the exact release becomes the parent. APS and code package dependencies are not flattened. Normal import preserves source composition; editing it requires its declared source dependencies again. Never edit composed files to bypass preparation.
+
+The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<local-folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
+
+APS Parameters Service is the sole authority for shared parameter definitions. Retrieve current definitions only when the selected library operation consumes them. The library validates compatibility; storage validates portable structure. An unrelated member's unavailable service must not block this operation. No bundled or cached authority fallback.
+
+Each useful run produces files under its pod's output directory, with a receipt identifying the snapshot, selected member, actual operation, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
 
 ## Every entrypoint is a button
 

@@ -659,7 +659,8 @@ public sealed class RevitScriptExecutionService(
                 return captured;
             if (!includeDependencies)
                 return captured;
-            var manifest = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), id);
+            var manifest = PodManifestValidator.ValidateJson(System.Text.Encoding.UTF8.GetString(
+                Convert.FromBase64String(captured.Single(file => file.Path == "pod.json").BytesBase64)));
             if (!manifest.Success || manifest.Manifest is null)
                 throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(diagnostic => diagnostic.Message)), PodManifestValidator.DiagnosticStage);
             foreach (var requirement in manifest.Manifest.Requires) {
@@ -669,10 +670,9 @@ public sealed class RevitScriptExecutionService(
                     throw new ArgumentException($"Pod dependency cycle through '{requirement.Id}'.", PodManifestValidator.DiagnosticStage);
                 if (!capturedDependencies.Add(requirement.Id))
                     continue;
-                if (!Directory.Exists(resolveWorkspaceRoot(requirement.Id)) && captured.Any(file => file.Path == "release.json"))
-                    continue;
+                var dependencyKey = ScriptPodPreparationService.ResolveDependencyWorkspaceKey(podRoot, requirement);
                 _ = visiting.Add(requirement.Id);
-                dependencies.Add(new ScriptPodDependencyBundle(requirement.Id, requirement.ReleaseHash, Capture(requirement.Id, true)));
+                dependencies.Add(new ScriptPodDependencyBundle(requirement.Id, requirement.ReleaseHash, Capture(dependencyKey, true)));
                 _ = visiting.Remove(requirement.Id);
             }
             return captured;

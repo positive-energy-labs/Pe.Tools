@@ -63,7 +63,7 @@ public sealed class ScriptPodArchiveService(
             workspaceKey = string.IsNullOrWhiteSpace(request.WorkspaceKey)
                 ? initialManifest.Manifest!.Id
                 : ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
-            var manifestResult = PodManifestValidator.ValidateJson(ReadArchiveEntryText(manifestEntry.Entry), workspaceKey);
+            var manifestResult = PodManifestValidator.ValidateJson(ReadArchiveEntryText(manifestEntry.Entry));
             if (HasManifestErrors(manifestResult.Diagnostics))
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
@@ -74,6 +74,25 @@ public sealed class ScriptPodArchiveService(
 
             tempRoot = CreateTempDirectory();
             ExtractEntries(entries, tempRoot);
+            if (request.Independent) {
+                foreach (var entry in entries.Where(entry => entry.RelativePath.StartsWith("settings/", StringComparison.Ordinal))) {
+                    var original = Path.Combine(tempRoot, entry.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                    var inspection = Path.Combine(tempRoot, "inspection", "ancestor", entry.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(inspection)!);
+                    File.Copy(original, inspection, overwrite: false);
+                    var composed = Path.Combine(tempRoot, "composed", entry.RelativePath["settings/".Length..].Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(composed)) throw new InvalidDataException($"Release has no composed value for '{entry.RelativePath}'.");
+                    File.Copy(composed, original, overwrite: true);
+                }
+                var json = JObject.Parse(ReadArchiveEntryText(manifestEntry.Entry));
+                json["requires"] = new JArray();
+                json["parent"] = new JObject { ["id"] = release.PodId, ["releaseHash"] = release.ContentHash, ["version"] = release.Version };
+                File.WriteAllText(Path.Combine(tempRoot, "pod.json"), json.ToString(Formatting.Indented));
+                File.Delete(Path.Combine(tempRoot, "release.json"));
+                var composedRoot = Path.Combine(tempRoot, "composed");
+                if (Directory.Exists(composedRoot)) Directory.Delete(composedRoot, true);
+                manifest = PodManifestValidator.ValidateJson(json.ToString()).Manifest!;
+            }
             ValidateEntrypointFiles(tempRoot, manifest);
             _ = Directory.CreateDirectory(Path.GetDirectoryName(workspaceRoot)!);
             MoveDirectory(tempRoot, workspaceRoot);
@@ -132,7 +151,7 @@ public sealed class ScriptPodArchiveService(
             if (!File.Exists(manifestPath))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Pod export requires {ProductPathNames.PodManifestFileName}: {manifestPath}");
 
-            var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), workspaceKey);
+            var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath));
             if (HasManifestErrors(manifestResult.Diagnostics))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
@@ -232,7 +251,7 @@ public sealed class ScriptPodArchiveService(
     }
 
     private IReadOnlyList<FileEntry> BuildReleaseEntries(PreparedPod prepared, string workspaceRoot, string targetFramework) {
-        var entries = prepared.Files.Values.ToDictionary(
+        var entries = prepared.Files.Values.Where(file => file.Path != "release.json").ToDictionary(
             file => file.Path,
             file => file.Bytes,
             StringComparer.OrdinalIgnoreCase

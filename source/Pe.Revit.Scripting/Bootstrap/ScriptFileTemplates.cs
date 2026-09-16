@@ -147,6 +147,16 @@ internal static class ScriptFileTemplates {
         - `README.md` - human-facing bootstrap notes.
         - `JOIN_GUIDE.md` - Revit script orientation.
 
+        ## Pod identity and ownership
+
+        - Local folder / workspaceKey locates this copy; it may be renamed independently of pod.json id.
+        - Manifest id names the lineage. Content hash identifies exact execution content. Human version is a label.
+        - Parent identifies the exact ancestor release. Origin locates a transport and does not authenticate identity.
+        - Pods may contain typed JSON settings and assets without scripts. Libraries own operations and semantic validation; JSON files do not declare executable actions.
+        - Published releases ship composed settings and inspection source. Use independent import for editable composed settings without authoring dependencies; preserve parent ancestry and never run inspection files as a fallback.
+        - Adopt updates explicitly. APS remains authoritative and is fetched only by operations using its resources.
+        - Write useful output files with Artifacts. Share the run folder with its receipt; output is excluded from publication.
+
         ## Contract
 
         - Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable.
@@ -207,12 +217,14 @@ internal static class ScriptFileTemplates {
                 ThrowIfCancelled();
 
                 // Result(...) returns structured JSON to the caller; Artifacts writes durable files.
-                Result(new
+                var report = new
                 {
                     document = doc.Title,
                     revitVersion,
                     selectedElementCount = selection.Count
-                });
+                };
+                Artifacts.WriteJson("result.json", report);
+                Result(report);
             }
         }
         """;
@@ -221,7 +233,7 @@ internal static class ScriptFileTemplates {
         $$"""
         {
           "schemaVersion": 2,
-          "id": "{{workspaceKey}}",
+          "id": "{{(ScriptingWorkspaceLayout.IsWorkspaceSlug(workspaceKey) ? workspaceKey : "pod-" + Guid.NewGuid().ToString("N"))}}",
           "name": "{{workspaceKey}}",
           "version": "0.1.0",
           "entrypoints": [

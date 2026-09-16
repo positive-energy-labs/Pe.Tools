@@ -71,8 +71,7 @@ public sealed class ScriptPodPreparationService(
         }
 
         void WriteCapture(string id, IReadOnlyList<ScriptPodSourceFile> files) {
-            if (!Pe.Shared.Product.ScriptingWorkspaceLayout.IsWorkspaceSlug(id))
-                throw new InvalidDataException($"Captured pod id is not a slug: {id}");
+            _ = Pe.Shared.Product.ScriptingWorkspaceLayout.NormalizeWorkspaceKey(id);
             var root = Path.Combine(captureRoot, id);
             _ = Directory.CreateDirectory(root);
             var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -110,12 +109,14 @@ public sealed class ScriptPodPreparationService(
 
         try {
             var workspaceRoot = this._workspaceRootResolver(workspaceKey);
+            if (Directory.Exists(workspaceRoot) && (File.GetAttributes(workspaceRoot) & FileAttributes.ReparsePoint) != 0)
+                return Failed(workspaceKey, "pod.directory.link", workspaceRoot, "Pod roots cannot be linked directories.", "Use a regular local pod folder.");
             var manifestPath = Path.Combine(workspaceRoot, "pod.json");
             if (!File.Exists(manifestPath))
                 return Failed(workspaceKey, "pod.manifest.missing", "pod.json", $"Pod '{workspaceKey}' has no pod.json.", "Create pod.json before preparing or executing the pod.");
 
             var manifestBytes = ReadBoundedFile(manifestPath);
-            var manifestResult = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(manifestBytes), workspaceKey);
+            var manifestResult = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(manifestBytes));
             if (!manifestResult.Success)
                 return new PreparedPod(
                     manifestResult.Manifest ?? EmptyManifest(workspaceKey),
@@ -133,8 +134,12 @@ public sealed class ScriptPodPreparationService(
                 );
 
             var manifest = manifestResult.Manifest!;
-            var outcomes = new List<PodGateOutcome>();
+            var outcomes = new List<PodGateOutcome> {
+                new("pod.manifest.valid", "pod.json", "Manifest structure and lineage identity are valid; the local folder is only an address.", null, ScriptDiagnosticSeverity.Info)
+            };
             var files = CaptureFiles(workspaceRoot, outcomes);
+            if (!outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error))
+                outcomes.Add(new("pod.capture.valid", workspaceRoot, $"Captured {files.Count} bounded regular files from the portable input roots.", null, ScriptDiagnosticSeverity.Info));
             var released = TryUseVerifiedRelease(manifest, files, outcomes, out var originRelease);
             if (released is not null) {
                 prepared[workspaceKey] = released;
@@ -148,7 +153,15 @@ public sealed class ScriptPodPreparationService(
             }
             var dependencies = new Dictionary<string, PreparedPod>(StringComparer.Ordinal);
             foreach (var requirement in manifest.Requires) {
-                var dependency = this.Prepare(requirement.Id, prepared, visiting);
+                PreparedPod dependency;
+                try {
+                    var dependencyKey = ResolveDependencyWorkspaceKey(workspaceRoot, requirement);
+                    dependency = this.Prepare(dependencyKey, prepared, visiting);
+                } catch (InvalidDataException exception) {
+                    outcomes.Add(new PodGateOutcome(editedRelease ? "pod.dependency.missing-after-release-edit" : "pod.dependency.resolve", $"pod.json#requires/{requirement.Id}", exception.Message,
+                        "Install the exact required release or select an unambiguous local copy."));
+                    continue;
+                }
                 dependencies[requirement.Id] = dependency;
                 if (!dependency.Success) {
                     outcomes.Add(new PodGateOutcome(
@@ -235,7 +248,7 @@ public sealed class ScriptPodPreparationService(
                 outcomes.Add(new PodGateOutcome(
                     "pod.external.runtime-required",
                     $"pod.json#externalRequirements/{requirement.Code}/{requirement.ResourceId}",
-                    $"Execution must resolve current '{requirement.Code}' resource '{requirement.ResourceId}' from its authority.",
+                    $"An operation consuming '{requirement.Code}' resource '{requirement.ResourceId}' must resolve its current authority.",
                     "Connect the owning service. Cached definitions are not a fallback.",
                     ScriptDiagnosticSeverity.Info
                 ));
@@ -243,11 +256,14 @@ public sealed class ScriptPodPreparationService(
             var hashFiles = new Dictionary<string, byte[]>(StringComparer.Ordinal) {
                 ["pod.semantic.json"] = Encoding.UTF8.GetBytes(ManifestSemantics(manifest))
             };
-            foreach (var file in files.Values.Where(file => file.Path != "pod.json"))
+            foreach (var file in files.Values.Where(file => file.Path != "pod.json" && IsAuthoredPath(file.Path)))
                 hashFiles[file.Path] = file.Bytes;
             foreach (var document in composed)
                 hashFiles[document.Key] = Encoding.UTF8.GetBytes(document.Value.Content);
             var contentHash = ComputeContentHash(hashFiles);
+
+            if (!outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error))
+                outcomes.Add(new("pod.prepared", "pod.json", $"Source composition and entrypoint checks passed for snapshot '{contentHash}'.", null, ScriptDiagnosticSeverity.Info));
 
             var resultPod = new PreparedPod(manifest, contentHash, files, composed, inspection.Values.ToList(), outcomes);
             prepared[workspaceKey] = resultPod;
@@ -359,10 +375,11 @@ public sealed class ScriptPodPreparationService(
                 outcomes.Add(new PodGateOutcome(
                     "pod.external.runtime-required",
                     $"pod.json#externalRequirements/{requirement.Code}/{requirement.ResourceId}",
-                    $"Execution must resolve current '{requirement.Code}' resource '{requirement.ResourceId}' from its authority.",
+                    $"An operation consuming '{requirement.Code}' resource '{requirement.ResourceId}' must resolve its current authority.",
                     "Connect the owning service. Cached definitions are not a fallback.",
                     ScriptDiagnosticSeverity.Info
                 ));
+            outcomes.Add(new("pod.release.verified", "release.json", $"Released file integrity and content identity match '{contentHash}'; authoring dependencies are not needed.", null, ScriptDiagnosticSeverity.Info));
             return new PreparedPod(manifest, contentHash, files, composed, inspection, outcomes.ToList()) { ReleaseHash = contentHash };
         } catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException) {
             outcomes.Add(new PodGateOutcome("pod.release.integrity", "release.json", exception.Message, "Restore or re-import the exact release before execution."));
@@ -510,6 +527,32 @@ public sealed class ScriptPodPreparationService(
         if (bytes.LongLength > MaxFileBytes)
             throw new InvalidDataException($"Pod file exceeds {MaxFileBytes} bytes: {path}");
         return bytes;
+    }
+
+    internal static string ResolveDependencyWorkspaceKey(string ownerRoot, PodRequirement requirement) {
+        var parent = Path.GetDirectoryName(ownerRoot)!;
+        var candidates = new List<(string Key, bool ExactRelease)>();
+        foreach (var directory in Directory.EnumerateDirectories(parent).OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
+            var path = Path.Combine(directory, "pod.json");
+            if (!File.Exists(path) || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) continue;
+            try {
+                var manifest = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(ReadBoundedFile(path)));
+                if (!manifest.Success || manifest.Manifest!.Id != requirement.Id) continue;
+                var releasePath = Path.Combine(directory, "release.json");
+                var exact = File.Exists(releasePath) && (File.GetAttributes(releasePath) & FileAttributes.ReparsePoint) == 0
+                    && JObject.Parse(Encoding.UTF8.GetString(ReadBoundedFile(releasePath)))["contentHash"]?.Value<string>() == requirement.ReleaseHash;
+                candidates.Add((Path.GetFileName(directory), exact));
+            } catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException) {
+                // Unreadable unrelated pods cannot block resolution; the selected pod is validated in full.
+            }
+        }
+        var exactCandidates = candidates.Where(candidate => candidate.ExactRelease).ToList();
+        var selected = exactCandidates.Count > 0 ? exactCandidates : candidates;
+        if (selected.Count == 1) return selected[0].Key;
+        throw new InvalidDataException(selected.Count == 0
+            ? $"No local pod has identity '{requirement.Id}' for release '{requirement.ReleaseHash}'."
+            : $"Pod '{requirement.Id}' is ambiguous between local folders: {string.Join(", ", selected.Select(candidate => candidate.Key))}.");
     }
 
     private static PreparedPod Failed(string id, string code, string location, string reason, string remedy) =>

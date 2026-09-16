@@ -4829,6 +4829,7 @@ export namespace ScriptingPodImport {
     export interface Request {
       archivePath: string;
       workspaceKey?: null | string;
+      independent?: boolean;
     }
   }
   export namespace Res {

@@ -12,6 +12,30 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class RevitScriptingPortTests {
     [Test]
+    public void Captured_pod_script_writes_readable_output_and_a_matching_receipt(UIApplication uiApplication) {
+        var workspaceKey = "pod-output-proof-" + Guid.NewGuid().ToString("N");
+        var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Assert.That(Directory.Exists(root), Is.False);
+        ScriptPodSourceFile FileBytes(string path, string text) => new(path, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)));
+        var bundle = new ScriptPodSourceBundle([
+            FileBytes("pod.json", """{"schemaVersion":2,"id":"output-proof-lineage","name":"Output proof","version":"1","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}"""),
+            FileBytes("src/Main.cs", """using Pe.Revit.Scripting.Context; public sealed class Main : PeScriptContainer { public override void Execute() { Artifacts.WriteJson("result.json", new { check = "pod-output" }); } }""")
+        ], []);
+        try {
+            var result = CreateExecutionService(uiApplication).Execute(null,
+                new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey, SourceBundle: bundle), workspaceKey);
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+            var output = result.Artifacts.Single(artifact => artifact.Name == "result.json");
+            var receipt = result.Artifacts.Single(artifact => artifact.Name == "pod-receipt.json");
+            Assert.That(File.ReadAllText(output.FullPath), Does.Contain("pod-output"));
+            Assert.That(Path.GetDirectoryName(output.FullPath), Is.EqualTo(Path.GetDirectoryName(receipt.FullPath)));
+            Assert.That(File.ReadAllText(receipt.FullPath), Does.Contain("output-proof-lineage").And.Contain("src/Main.cs").And.Contain("scripting.execute"));
+        } finally {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
     public void Project_generation_preserves_user_references_and_packages() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();

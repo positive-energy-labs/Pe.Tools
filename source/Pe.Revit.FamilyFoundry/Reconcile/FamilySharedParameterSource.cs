@@ -7,13 +7,16 @@ using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
+public sealed record SharedParameterAuthority(string ResourceId, string? CollectionId);
+
 /// <summary>Pod execution resolves declared current APS definitions. Non-pod capture replay can supply embedded definitions.</summary>
 public sealed class FamilySharedParameterSource(Document document,
     IReadOnlyList<ParametersApi.Parameters.ParametersResult>? definitions = null,
     string? collectionId = null,
     IReadOnlyCollection<string>? requiredResourceIds = null,
     bool requireDeclaration = false,
-    string? observedParametersDigest = null) : IDisposable {
+    string? observedParametersDigest = null,
+    IReadOnlyList<SharedParameterAuthority>? declaredRequirements = null) : IDisposable {
     private IReadOnlyList<ParametersApi.Parameters.ParametersResult>? _definitions = definitions;
     private TempSharedParamFile? _file;
     private readonly Dictionary<string, SharedDefinitionSpec> _resolved = new(StringComparer.Ordinal);
@@ -22,13 +25,17 @@ public sealed class FamilySharedParameterSource(Document document,
 
     private ParametersApi.Parameters.ParametersResult Find(string name) {
         if (this._definitions is null) {
+            if (declaredRequirements is not null) {
+                var parameters = declaredRequirements;
+                var collections = parameters.Select(requirement => requirement.CollectionId).Distinct(StringComparer.Ordinal).ToList();
+                if (collections.Count > 1)
+                    throw new InvalidOperationException("Family Foundry shared parameter lookup requires one APS collection per pod.");
+                collectionId = collections.SingleOrDefault();
+                requiredResourceIds = parameters.Select(requirement => requirement.ResourceId).ToList();
+            }
             if (requireDeclaration && requiredResourceIds is not { Count: > 0 })
                 throw new InvalidOperationException("Pod-authored shared parameters require an aps.parameters declaration; embedded definitions are not an authority.");
             var current = ParametersServiceCache.ResolveCurrentAsync(collectionId).GetAwaiter().GetResult();
-            var missing = (requiredResourceIds ?? []).Where(id => !current.ResourceIds.Contains(id)).ToList();
-            if (missing.Count > 0)
-                throw new InvalidOperationException(
-                    $"Current Parameters Service collection '{current.CollectionId}' has no required resource: {string.Join(", ", missing)}.");
             this._definitions = current.Definitions;
             this.ObservedParametersDigest = current.Digest;
         }

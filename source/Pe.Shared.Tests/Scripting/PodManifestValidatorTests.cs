@@ -31,8 +31,7 @@ public sealed class PodManifestValidatorTests {
                 }
               ]
             }
-            """,
-            "connector-audit"
+            """
         );
 
         Assert.That(result.Success, Is.True);
@@ -57,8 +56,7 @@ public sealed class PodManifestValidatorTests {
               "origin": { "locator": "archive:connector-audit.pepod" },
               "parent": { "id": "connector-audit", "releaseHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "0.9.0" }
             }
-            """,
-            "connector-audit"
+            """
         );
 
         Assert.That(result.Success, Is.True);
@@ -85,8 +83,7 @@ public sealed class PodManifestValidatorTests {
                 }
               ]
             }
-            """,
-            "connector-audit"
+            """
         );
 
         Assert.That(result.Success, Is.False);
@@ -96,11 +93,11 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Manifest_id_must_match_workspace_slug() {
-        var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "src/Main.cs"), "panel-audit");
+    public void Manifest_identity_is_independent_of_its_local_folder() {
+        var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "src/Main.cs"));
 
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("must match workspace key 'panel-audit'"));
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Manifest!.Id, Is.EqualTo("connector-audit"));
     }
 
     [Test]
@@ -117,8 +114,7 @@ public sealed class PodManifestValidatorTests {
                 { "id": "main", "sourcePath": "src/main.cs" }
               ]
             }
-            """,
-            "connector-audit"
+            """
         );
 
         Assert.That(result.Success, Is.False);
@@ -134,7 +130,7 @@ public sealed class PodManifestValidatorTests {
             "src/Main.txt",
             "C:/temp/Main.cs"
         }) {
-            var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", sourcePath), "connector-audit");
+            var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", sourcePath));
 
             Assert.That(result.Success, Is.False, sourcePath);
         }
@@ -167,8 +163,7 @@ public sealed class PodManifestValidatorTests {
               "version": "1.0.0",
               "entrypoints": []
             }
-            """,
-            "connector-audit"
+            """
         );
 
         Assert.That(result.Success, Is.True);

@@ -24,8 +24,8 @@ export async function freezeScript(
   }
   if (input.workspaceKey != null && typeof input.workspaceKey !== "string")
     throw Error("Invalid Pod workspace identity");
-  const workspace = (input.workspaceKey as string | undefined)?.trim() || "default";
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(workspace)) throw Error("Invalid Pod workspace identity");
+  const workspace = (input.workspaceKey as string | undefined) || "default";
+  validateFolder(workspace);
 
   const captured = new Map<string, ScriptingExecute.Req.ScriptPodDependencyBundle>();
   const active = new Set<string>();
@@ -33,8 +33,7 @@ export async function freezeScript(
   return { sourceBundle: { files: rootFiles, dependencies: [...captured.values()] } };
 
   async function capture(id: string): Promise<ScriptingExecute.Req.ScriptPodSourceFile[]> {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id))
-      throw Error(`Invalid required Pod identity '${id}'`);
+    validateFolder(id);
     if (active.has(id)) throw Error(`Pod dependency cycle through '${id}'`);
     active.add(id);
     try {
@@ -98,25 +97,14 @@ export async function freezeScript(
         if (requirement.id === workspace)
           throw Error(`Pod dependency '${requirement.id}' cannot overwrite the root pod capture`);
         if (captured.has(requirement.id)) continue;
-        const dependencyDirectory = join(
-          productUserContentRootPath(),
-          productPathNames.workspacesDirectoryName,
+        const dependencyFolder = await resolveDependencyFolder(
           requirement.id,
+          requirement.releaseHash,
         );
-        try {
-          await lstat(dependencyDirectory);
-        } catch (error) {
-          if (
-            files.some((file) => file.path === "release.json") &&
-            (error as NodeJS.ErrnoException).code === "ENOENT"
-          )
-            continue;
-          throw error;
-        }
         captured.set(requirement.id, {
           id: requirement.id,
           releaseHash: requirement.releaseHash,
-          files: await capture(requirement.id),
+          files: await capture(dependencyFolder),
         });
       }
       return files;
@@ -124,6 +112,54 @@ export async function freezeScript(
       active.delete(id);
     }
   }
+}
+
+function validateFolder(folder: string): void {
+  for (const character of folder) {
+    if (character.charCodeAt(0) < 32) throw Error(`Invalid local Pod folder '${folder}'`);
+  }
+  if (!folder || folder !== folder.trim() || /[<>:"/\\|?*]/.test(folder) || /[. ]$/.test(folder))
+    throw Error(`Invalid local Pod folder '${folder}'`);
+}
+
+async function resolveDependencyFolder(id: string, releaseHash: string): Promise<string> {
+  const root = join(productUserContentRootPath(), productPathNames.workspacesDirectoryName);
+  const candidates: { folder: string; exactRelease: boolean }[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    try {
+      const manifestPath = join(root, entry.name, "pod.json");
+      const info = await lstat(manifestPath);
+      if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024) continue;
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { id?: unknown };
+      if (manifest.id !== id) continue;
+      let exactRelease = false;
+      try {
+        const releasePath = join(root, entry.name, "release.json");
+        const releaseInfo = await lstat(releasePath);
+        if (releaseInfo.isFile() && !releaseInfo.isSymbolicLink() && releaseInfo.size <= 512 * 1024)
+          exactRelease =
+            (JSON.parse(await readFile(releasePath, "utf8")) as { contentHash?: unknown })
+              .contentHash === releaseHash;
+      } catch {
+        /* An authored copy may have no release metadata. */
+      }
+      candidates.push({ folder: entry.name, exactRelease });
+    } catch {
+      /* Unreadable unrelated pods cannot block a selected operation. */
+    }
+  }
+  const exact = candidates.filter((candidate) => candidate.exactRelease);
+  const selected = exact.length ? exact : candidates;
+  if (selected.length === 1) return selected[0]!.folder;
+  throw Error(
+    selected.length === 0
+      ? `No local Pod has identity '${id}' for release '${releaseHash}'`
+      : `Pod '${id}' is ambiguous between local folders: ${selected
+          .map((candidate) => candidate.folder)
+          .sort()
+          .join(", ")}`,
+  );
 }
 
 function hasExactReleasedFileSet(files: ScriptingExecute.Req.ScriptPodSourceFile[]): boolean {

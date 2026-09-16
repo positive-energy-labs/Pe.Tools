@@ -73,24 +73,9 @@ public class ProfileListItem : IPaletteListItem {
     internal Func<Document, FamilySharedParameterSource>? SharedParameterSource() {
         if (this.Prepared is null)
             return null;
-        var requirements = this.Prepared.ExternalRequirements;
-        var unsupported = requirements.FirstOrDefault(requirement => requirement.Code != "aps.parameters");
-        if (unsupported is not null)
-            throw new InvalidDataException($"Family Foundry does not support external authority '{unsupported.Code}'.");
-        var collections = requirements.Select(requirement => requirement.CollectionId).Distinct(StringComparer.Ordinal).ToList();
-        if (collections.Count > 1)
-            throw new InvalidDataException("Family Foundry requires all aps.parameters resources to use one collection.");
-        var collectionId = collections.SingleOrDefault();
-        var resourceIds = requirements.Select(requirement => requirement.ResourceId).ToList();
-        if (resourceIds.Count == 0)
-            return document => new FamilySharedParameterSource(document, requireDeclaration: true);
-        var current = ParametersServiceCache.ResolveCurrentAsync(collectionId).GetAwaiter().GetResult();
-        var missing = resourceIds.Where(id => !current.ResourceIds.Contains(id)).ToList();
-        if (missing.Count > 0)
-            throw new InvalidDataException(
-                $"Current Parameters Service collection '{current.CollectionId}' has no required resource: {string.Join(", ", missing)}.");
-        return document => new FamilySharedParameterSource(document, current.Definitions,
-            requiredResourceIds: resourceIds, requireDeclaration: true, observedParametersDigest: current.Digest);
+        var requirements = this.Prepared.ExternalRequirements.Where(requirement => requirement.Code == "aps.parameters")
+            .Select(requirement => new SharedParameterAuthority(requirement.ResourceId, requirement.CollectionId)).ToList();
+        return document => new FamilySharedParameterSource(document, requireDeclaration: true, declaredRequirements: requirements);
     }
 
     public static List<ProfileListItem> Discover(ModuleDocumentStorage storage) {

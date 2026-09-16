@@ -32,6 +32,31 @@ public sealed class PortablePodArchiveTests {
     public void TearDown() => Directory.Delete(this._root, true);
 
     [Test]
+    public void Independent_import_flattens_settings_and_keeps_identity_when_folder_changes() {
+        var workspace = this._resolve("author");
+        Write(workspace, "pod.json", """{"schemaVersion":2,"id":"lineage","name":"Example","version":"1"}""");
+        Write(workspace, "settings/base.settings.json", "{\"value\":1}");
+        Write(workspace, "settings/main.settings.json", "{\"$preset\":\"@local/base.settings.json\",\"other\":2}");
+        var archivePath = Path.Combine(this._root, "independent.zip");
+        var exported = this._service.Export(new ScriptPodExportRequest("author", archivePath), "net8.0-windows");
+        Assert.That(exported.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+        var imported = this._service.Import(new ScriptPodImportRequest(archivePath, "My Office Copy", Independent: true),
+            "2025", "net8.0-windows", typeof(PeScriptContainer).Assembly.Location);
+        Assert.That(imported.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded), string.Join("; ", imported.Diagnostics.Select(d => d.Message)));
+        var copy = this._resolve("My Office Copy");
+        Assert.That(File.ReadAllText(Path.Combine(copy, "settings/main.settings.json")), Does.Not.Contain("$preset"));
+        Assert.That(File.ReadAllText(Path.Combine(copy, "inspection/ancestor/settings/main.settings.json")), Does.Contain("$preset"));
+        Directory.Move(copy, this._resolve("Renamed Again"));
+        Write(this._resolve("Renamed Again"), "settings/main.settings.json", "{\"value\":99}");
+        var prepared = this._preparation.Prepare("Renamed Again");
+        Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(o => o.Reason)));
+        Assert.That(prepared.Manifest.Id, Is.EqualTo("lineage"));
+        Assert.That(prepared.Manifest.Parent!.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+        Assert.That(prepared.ReleaseHash, Is.Null);
+        Assert.That(prepared.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("99"));
+    }
+
+    [Test]
     public void Export_import_verifies_content_excludes_outputs_and_preserves_release_identity() {
         var workspace = Path.Combine(this._root, "workspaces", "portable");
         Write(workspace, "pod.json", """
@@ -66,6 +91,11 @@ public sealed class PortablePodArchiveTests {
             Assert.That(prepared.ContentHash, Is.EqualTo(exported.Release!.ContentHash));
             Assert.That(prepared.Manifest.Parent, Is.Null);
         });
+        var republishedPath = Path.Combine(this._root, "republished.zip");
+        var republished = this._service.Export(new ScriptPodExportRequest("portable", republishedPath), "net8.0-windows");
+        Assert.That(republished.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+        var secondCopy = this._service.Import(new ScriptPodImportRequest(republishedPath, "Another Copy"), "2025", "net8.0-windows", typeof(PeScriptContainer).Assembly.Location);
+        Assert.That(secondCopy.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded), string.Join("; ", secondCopy.Diagnostics.Select(d => d.Message)));
     }
 
     [Test]

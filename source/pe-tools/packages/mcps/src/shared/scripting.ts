@@ -66,7 +66,15 @@ export const scriptPodImportInputSchema = z.object({
   workspaceKey: z
     .string()
     .optional()
-    .describe("Optional target workspace slug. Omit to use the pod.json id."),
+    .describe(
+      "Optional local folder name, independent of pod identity. Omit to use the pod.json id.",
+    ),
+  independent: z
+    .boolean()
+    .optional()
+    .describe(
+      "Make editable independent settings from the release's composed JSON, retaining ancestry and original source for inspection.",
+    ),
 });
 
 export const scriptPodExportInputSchema = z.object({
@@ -136,6 +144,7 @@ export class ScriptingTools {
   importPod(input: ScriptPodImportInput) {
     return this.client.call("scripting.pod.import", {
       archivePath: input.archivePath,
+      independent: input.independent ?? false,
       ...(input.workspaceKey != null ? { workspaceKey: input.workspaceKey } : {}),
     });
   }

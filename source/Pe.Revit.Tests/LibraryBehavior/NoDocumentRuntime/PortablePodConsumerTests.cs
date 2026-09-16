@@ -11,6 +11,15 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PortablePodConsumerTests {
     [Test]
+    public void Family_without_shared_parameters_does_not_resolve_unrelated_authorities() {
+        using var source = new FamilySharedParameterSource(null!, requireDeclaration: true,
+            declaredRequirements: [new("unrelated-a", "offline-a"), new("unrelated-b", "offline-b")]);
+        var model = new FamilyModel { Parameters = [] };
+        Assert.DoesNotThrow(() => source.Resolve(model, JObject.Parse("{\"parameters\":{}}")));
+        Assert.That(source.ObservedParametersDigest, Is.Null);
+    }
+
+    [Test]
     public void Batch_members_come_from_the_same_snapshot_and_missing_members_do_not_fall_back() {
         var manifest = PodManifestValidator.ValidateJson("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1"}""").Manifest!;
         var files = new Dictionary<string, PreparedPodFile> {
