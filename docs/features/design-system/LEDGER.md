@@ -571,7 +571,6 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 - Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
-- Chat and grounded-doc run two markdown pipelines (`workbench/aui.tsx` via `@assistant-ui/react-markdown`, `grounded-doc/view/block-markdown.tsx` via `react-markdown`). Fold to one when either is next touched; both must render fenced code through `Code`.
 - Large tool outputs (element lists in the MB range) are rendered whole. `Code`'s 64 KB gate is the interim; the real fix is a bounded output contract on the tool result itself.
 - Product follow-up after RP merge: extend the Situation motif to low-priority routes, finish file-picker ergonomics, and improve incomplete frozen seed slots. These do not authorize a competing Work, Reading or Action owner.
 - Review the design class allowlist increases recorded by Fable for five route files. They are explicit visual debt, not evidence that the layout has been validated.

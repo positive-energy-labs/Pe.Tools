@@ -58,10 +58,12 @@ export function emptyChatState(): ChatState {
   };
 }
 
-export type ToolOutcome =
+/** `result` is whatever the call has produced so far: partial while running, raw on failure. */
+export type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
-  | { status: "completed"; result?: unknown }
-  | { status: "failed"; error: string };
+  | { status: "completed" }
+  | { status: "failed"; error: string }
+);
 
 export type ToolCall = {
   id: string;
@@ -71,20 +73,39 @@ export type ToolCall = {
   parentMessageId?: string;
 } & ToolOutcome;
 
+/**
+ * The thread's user turns and assistant rows, with the message the run is streaming merged in by
+ * id. Every chat projection reads this list, so the transcript and the trace lane agree.
+ */
+function threadRows(state: ChatState): MastraDBMessage[] {
+  const stored = state.messages.filter(
+    (message) => isUserTurn(message) || message.role === "assistant",
+  );
+  const wire = state.display.isRunning ? state.display.currentMessage : undefined;
+  if (!wire) return stored;
+  const current: MastraDBMessage = { ...wire, createdAt: new Date(wire.createdAt) };
+  return stored.some((message) => message.id === current.id)
+    ? stored.map((message) => (message.id === current.id ? current : message))
+    : [...stored, current];
+}
+
+/** The one tool-call merge: stored invocations first (first sighting wins), then live-only tools,
+ * which belong to the last assistant row. */
 export function selectToolCalls(state: ChatState): ToolCall[] {
+  const rows = threadRows(state);
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
-  for (const [messageAt, message] of state.messages.entries()) {
+  for (const [messageAt, message] of rows.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
       const call = part.toolInvocation;
+      if (seen.has(call.toolCallId)) continue;
+      seen.add(call.toolCallId);
       const active = state.display.activeTools?.[call.toolCallId];
       const terminal =
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
       const interrupted =
-        !terminal &&
-        !active &&
-        (messageAt < state.messages.length - 1 || state.display.isRunning !== true);
+        !terminal && !active && (messageAt < rows.length - 1 || state.display.isRunning !== true);
       const failed =
         call.isError === true ||
         (terminal && call.state !== "result") ||
@@ -92,18 +113,14 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
         interrupted;
       const completed = terminal || active?.status === "completed";
       const args = call.rawInput ?? call.args;
-      seen.add(call.toolCallId);
+      const result = call.result ?? active?.result;
       const outcome: ToolOutcome = failed
         ? {
             status: "failed",
-            error:
-              call.errorText ||
-              text(call.result ?? active?.result) ||
-              "Tool call ended without a terminal result.",
+            error: call.errorText || text(result) || "Tool call ended without a terminal result.",
+            result,
           }
-        : completed
-          ? { status: "completed", result: call.result ?? active?.result }
-          : { status: "in_progress" };
+        : { status: completed ? "completed" : "in_progress", result };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
@@ -114,16 +131,14 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       });
     }
   }
-  const lastAssistantId = [...state.messages].reverse().find((m) => m.role === "assistant")?.id;
+  const lastAssistantId = rows.filter((m) => m.role === "assistant").at(-1)?.id;
   for (const [id, tool] of Object.entries(state.display.activeTools ?? {})) {
     if (seen.has(id)) continue;
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
     const outcome: ToolOutcome =
       tool.status === "error" || tool.isError
-        ? { status: "failed", error: text(tool.result) || "Tool call failed." }
-        : tool.status === "completed"
-          ? { status: "completed", result }
-          : { status: "in_progress" };
+        ? { status: "failed", error: text(tool.result) || "Tool call failed.", result }
+        : { status: tool.status === "completed" ? "completed" : "in_progress", result };
     calls.push({
       id,
       title: tool.name,
@@ -134,6 +149,100 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
     });
   }
   return calls;
+}
+
+export type ChatPart =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "image"; image: string }
+  | { type: "tool-call"; call: ToolCall; approval?: Approval };
+
+/** One row of the chat transcript. */
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  parts: ChatPart[];
+  createdAt?: Date;
+  /** The assistant row the run is producing now; its last part is the one still moving. */
+  running: boolean;
+}
+
+/**
+ * The list the chat draws, in the same render as the lens. While the run has not started an
+ * assistant row yet, a running placeholder stands in so the caret shows at once.
+ */
+export function selectMessages(state: ChatState): ChatMessage[] {
+  const rows = threadRows(state);
+  const calls = selectToolCalls(state);
+  const callsById = new Map(calls.map((call) => [call.id, call]));
+  const approvals = selectApprovals(state.display);
+  const streamingId = state.display.isRunning ? state.display.currentMessage?.id : undefined;
+  const toolPart = (call: ToolCall): ChatPart => ({
+    type: "tool-call",
+    call,
+    approval: approvals.find((approval) => approval.toolCallId === call.id),
+  });
+  const emitted = new Set<string>();
+  const messages = rows.map((message): ChatMessage => {
+    const user = isUserTurn(message);
+    const parts: ChatPart[] = [];
+    for (const part of message.content.parts) {
+      if (part.type === "text") {
+        if (part.text.trim()) parts.push({ type: "text", text: part.text });
+      } else if (part.type === "reasoning") {
+        if (part.reasoning.trim()) parts.push({ type: "reasoning", text: part.reasoning });
+      } else if (part.type === "file") {
+        const url = imageSource(undefined, part.data, part.mimeType);
+        if (url && (!part.mimeType || part.mimeType.startsWith("image/")))
+          parts.push({ type: "image", image: url });
+      } else if (part.type === "tool-invocation") {
+        const call = callsById.get(part.toolInvocation.toolCallId);
+        if (!call || emitted.has(call.id)) continue;
+        emitted.add(call.id);
+        parts.push(toolPart(call));
+      } else if (part.type === "data-signal" || part.type === "data-user-message") {
+        const data = readRecord(part.data);
+        const said = signalText(data?.contents);
+        if (said.trim() && (user || data?.tagName === "route-workspace"))
+          parts.push({ type: "text", text: said });
+      }
+    }
+    if (!user)
+      for (const call of calls)
+        if (call.parentMessageId === message.id && !emitted.has(call.id)) {
+          emitted.add(call.id);
+          parts.push(toolPart(call));
+        }
+    return {
+      id: message.id,
+      role: user ? "user" : "assistant",
+      parts,
+      ...createdAt(message),
+      running: !user && message.id === streamingId,
+    };
+  });
+  if (selectRunStatus(state) !== "idle" && messages.at(-1)?.role !== "assistant")
+    messages.push({ id: "pea-pending", role: "assistant", parts: [], running: true });
+  // The one renderable rule: speech, an image, a call, or the row still being produced.
+  return messages.filter(
+    (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
+  );
+}
+
+function signalText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => readString(readRecord(part)?.text) ?? "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function createdAt(message: MastraDBMessage): { createdAt?: Date } {
+  const at = message.createdAt;
+  if (!at) return {};
+  const date = at instanceof Date ? at : new Date(at);
+  return Number.isNaN(date.getTime()) ? {} : { createdAt: date };
 }
 
 /** A permission gate answers yes/no; a suspension answers with a resume payload. */

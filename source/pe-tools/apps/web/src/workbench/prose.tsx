@@ -1,26 +1,22 @@
 /**
- * Chat and doc prose: the typography of rendered markdown, and the two fenced-block overrides.
+ * Chat and doc prose: the one markdown path. Both the chat and the grounded doc render through
+ * `Markdown`: `react-markdown` + GFM + the typography below + two block overrides.
  *
  * A fenced block is a code payload, not prose, so it leaves the typography plugin entirely and
- * becomes `Code` — frame, language, line count, copy, 64 KB gate (ledger, 2026-09-15). That is
+ * becomes `Code`: frame, language, line count, copy, 64 KB gate (ledger, 2026-09-15). That is
  * why `prose-pre:*` is gone from the class list while inline `code` keeps its hairline box.
- *
- * TWO RENDERERS, TWO SEAMS. `react-markdown` (the grounded doc) hands a `pre` override the real
- * `code` element, `language-*` class and all, so the doc path overrides `pre`. assistant-ui's
- * `MarkdownTextPrimitive` (chat) does not: its `CodeOverride` reads the language itself and then
- * renders `SyntaxHighlighter` with a rebuilt `code` whose props carry no className, so a `pre`
- * override there always saw an untagged block and every chat fence rendered as plaintext
- * (found in the browser, 2026-09-16). Chat therefore overrides `SyntaxHighlighter`, which is
- * handed the language directly. Neither path uses the rehype plugin: the head band is a React
- * component with state (copy flips to "copied", "show all" unlatches the gate).
+ * `react-markdown` hands the `pre` override the real `code` element, `language-*` class and all.
+ * No rehype plugin: the head band is a React component with state (copy flips to "copied",
+ * "show all" unlatches the gate).
  */
-import type { MarkdownTextPrimitiveProps } from "@assistant-ui/react-markdown";
-import type { Components } from "react-markdown";
-import { isValidElement, type ComponentProps, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { isValidElement, type ReactNode } from "react";
 
 import { Code } from "#/components/lang/code";
+import { cn } from "#/lib/utils";
 
-export const PROSE_CLASS = [
+const PROSE_CLASS = [
   "prose max-w-none text-ink",
   "prose-pe",
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
@@ -51,8 +47,7 @@ function codeText(node: ReactNode): string {
   return "";
 }
 
-/** `react-markdown` only — see the header for why chat cannot use this. */
-export const REACT_MARKDOWN_COMPONENTS: Components = {
+const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children }) => {
     const code = isValidElement<{ className?: string; children?: ReactNode }>(children)
       ? children
@@ -61,19 +56,25 @@ export const REACT_MARKDOWN_COMPONENTS: Components = {
     // The trailing newline every fence carries is the fence's, not the payload's.
     return <Code code={codeText(children).replace(/\n$/, "")} lang={lang} />;
   },
-};
-
-/** assistant-ui only. It says `"unknown"` for an untagged fence; `Code` wants no tag at all. */
-export const CHAT_MARKDOWN_COMPONENTS: MarkdownTextPrimitiveProps["components"] = {
   // A table is the one block that can be wider than the lane. It gets its own scroll box so it
   // scrolls inside the message instead of widening the chat column.
-  table: ({ node: _node, ...props }: ComponentProps<"table"> & { node?: unknown }) => (
+  table: ({ node: _node, ...props }) => (
     <div className="my-2 max-w-full overflow-x-auto">
       <table {...props} />
     </div>
   ),
-  SyntaxHighlighter: ({ language, code }) => (
-    // The trailing newline every fence carries is the fence's, not the payload's.
-    <Code code={code.replace(/\n$/, "")} lang={language === "unknown" ? undefined : language} />
-  ),
 };
+
+// GFM, or pea's tables arrive as a paragraph of pipes. It also buys strikethrough, task lists,
+// and bare autolinks.
+const REMARK_PLUGINS = [remarkGfm];
+
+export function Markdown({ text, className }: { text: string; className?: string }) {
+  return (
+    <div className={cn(PROSE_CLASS, className)}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}

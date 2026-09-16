@@ -17,8 +17,6 @@
     "check": "vp check"
   },
   "dependencies": {
-    "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-markdown": "catalog:",
     "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.0-beta.92",
     "@llamaindex/llama-cloud": "^2.10.0",

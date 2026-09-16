@@ -2,11 +2,16 @@ import { token } from "#/lib/token";
 import { annotation } from "#/components/anatomy";
 import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
-import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
-import { imageSource, selectToolCalls, type ChatState, type ToolCall } from "../chat-state";
+import {
+  imageSource,
+  selectToolCalls,
+  type ChatMessage,
+  type ChatState,
+  type ToolCall,
+} from "../chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
@@ -133,12 +138,12 @@ export function toolImages(output: unknown): string[] {
   });
 }
 
-export function toMoments(messages: ThreadMessageLike[]): Moment[] {
+export function toMoments(messages: ChatMessage[]): Moment[] {
   let turn = 0;
-  return messages.map((message, index) => {
+  return messages.map((message) => {
     if (message.role === "user") turn += 1;
     return {
-      id: message.id ?? `m:${index}`,
+      id: message.id,
       turn: Math.max(1, turn),
       role: message.role,
       createdAt: message.createdAt,

@@ -7,7 +7,6 @@ import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
-import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { selectBreakdown } from "#/workbench/chat-state";
@@ -35,9 +34,7 @@ export function ChatShell({
 }) {
   return (
     <HotkeysProvider>
-      <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} plugin={plugin} />
-      </WorkbenchRuntimeProvider>
+      <Surface initialTurn={initialTurn} plugin={plugin} />
     </HotkeysProvider>
   );
 }

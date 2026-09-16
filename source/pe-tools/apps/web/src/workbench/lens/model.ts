@@ -1,11 +1,10 @@
 import { token } from "#/lib/token";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { useThreadMessages } from "../aui";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
 import { useThreadScope } from "#/chat/scope";
-import { selectBreakdown } from "../chat-state";
+import { selectBreakdown, selectMessages } from "../chat-state";
 import {
   lensScrollIntent,
   nextTailFollowState,
@@ -34,7 +33,7 @@ export function useLensModel({
   onTurnChange?: (turn: number | undefined) => void;
   sideOpen?: boolean;
 }) {
-  const messages = useThreadMessages();
+  const messages = useMemo(() => selectMessages(state), [state]);
 
   const moments = toMoments(messages);
 
@@ -134,7 +133,7 @@ export function useLensModel({
     return () => observer.disconnect();
   }, []);
 
-  // Register each assistant-ui-rendered moment's DOM node so the scroll controller can
+  // Register each rendered moment's DOM node so the scroll controller can
   // measure it (bands, fisheye). Keyed by message id — aligned with `moments`. Each
   // register/unregister schedules a re-measure so geometry tracks the async mount.
   const registerMoment = useCallback((id: string, el: HTMLElement | null) => {
@@ -396,7 +395,7 @@ export function useLensModel({
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
-    // Transcript turn-number tags dispatch this (aui.tsx TurnTag): center that turn on the focal
+    // Transcript turn-number tags dispatch this (moments.tsx MomentHead): center that turn on the focal
     // axis — same gesture as tapping its mapdial band.
     const onFocusTurn = (event: Event) => {
       const turn = (event as CustomEvent<number>).detail;
@@ -448,6 +447,7 @@ export function useLensModel({
     // hoverKeyRef.
   }, [moments, traceCells, mode, onTurnChange, sideOpen]);
   return {
+    messages,
     moments,
     traceCells,
     breakdown,

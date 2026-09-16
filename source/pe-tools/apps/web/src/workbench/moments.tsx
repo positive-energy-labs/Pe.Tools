@@ -1,97 +1,64 @@
-import {
-  Component,
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ErrorInfo,
-  type ReactNode,
-} from "react";
-import {
-  AssistantRuntimeProvider,
-  MessagePrimitive,
-  ThreadPrimitive,
-  useExternalStoreRuntime,
-  useMessage,
-  type ReasoningMessagePartComponent,
-  type TextMessagePartComponent,
-  type ThreadMessageLike,
-  type ToolCallMessagePartComponent,
-} from "@assistant-ui/react";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import remarkGfm from "remark-gfm";
+import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
 import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
-import { isRenderable, toThreadMessages } from "./aui-adapter";
-import { readRecord, readString, toolTarget } from "./chat-state";
-import { CHAT_MARKDOWN_COMPONENTS, PROSE_CLASS } from "./prose";
+import {
+  readRecord,
+  readString,
+  type Approval,
+  type ChatMessage,
+  type ChatPart,
+  type ToolCall,
+} from "./chat-state";
+import { Markdown } from "./prose";
 import { Code, stringify } from "#/components/lang/code";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
 
-const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);
-
-export function useThreadMessages(): ThreadMessageLike[] {
-  return useContext(ThreadMessagesContext);
-}
-
-export function WorkbenchRuntimeProvider({ children }: { children: ReactNode }) {
-  const { chat, isRunning, sendPrompt, cancel } = useWorkbench();
-  const messages = useMemo(() => toThreadMessages(chat), [chat]);
-  const visible = useMemo(() => messages.filter(isRenderable), [messages]);
-
-  const runtime = useExternalStoreRuntime<ThreadMessageLike>({
-    messages,
-    convertMessage: (message) => message,
-    isRunning,
-    onNew: async (message) => {
-      const text = message.content
-        .filter((part): part is { type: "text"; text: string } => part.type === "text")
-        .map((part) => part.text)
-        .join("")
-        .trim();
-      if (text) await sendPrompt(text);
-    },
-    onCancel: async () => cancel(),
-  });
-
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadMessagesContext.Provider value={visible}>{children}</ThreadMessagesContext.Provider>
-    </AssistantRuntimeProvider>
-  );
-}
-
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
-const MomentRegistry = createContext<RegisterMoment>(() => {});
 
-export function Moments({ register }: { register: RegisterMoment }) {
-  return (
-    <MomentRegistry.Provider value={register}>
-      <ThreadPrimitive.Messages
-        components={{ UserMessage: UserMoment, AssistantMessage: AssistantMoment }}
-      />
-    </MomentRegistry.Provider>
-  );
+/** The transcript: one section per message, drawn from the same array the lens measures. */
+export function Moments({
+  messages,
+  register,
+}: {
+  messages: ChatMessage[];
+  register: RegisterMoment;
+}) {
+  let turn = 0;
+  return messages.map((message, index) => {
+    if (message.role === "user") turn += 1;
+    // A moment directly under one of the same role draws no role line: a run of pea turns reads
+    // as one block, not N banners.
+    const continues = messages[index - 1]?.role === message.role;
+    const head = continues ? null : <MomentHead message={message} turn={Math.max(1, turn)} />;
+    return (
+      <MomentSection key={message.id} message={message} register={register}>
+        {message.role === "user" ? (
+          <UserMoment message={message} head={head} />
+        ) : (
+          <AssistantMoment message={message} head={head} />
+        )}
+      </MomentSection>
+    );
+  });
 }
 
 function MomentSection({
-  id,
-  role,
+  message,
+  register,
   children,
 }: {
-  id: string;
-  role: "user" | "assistant";
+  message: ChatMessage;
+  register: RegisterMoment;
   children: ReactNode;
 }) {
-  const register = useContext(MomentRegistry);
+  const { id, role } = message;
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
   return (
     <section
@@ -106,88 +73,52 @@ function MomentSection({
   );
 }
 
-function TurnTag({ id }: { id: string }) {
-  const messages = useThreadMessages();
-  let turn = 0;
-  let found = false;
-  for (const message of messages) {
-    if (message.role === "user") turn += 1;
-    if (message.id === id) {
-      found = true;
-      break;
-    }
-  }
-  if (!found) return null;
-  turn = Math.max(1, turn);
+function MomentHead({ message, turn }: { message: ChatMessage; turn: number }) {
+  const at = message.createdAt;
   return (
-    <Press
-      type="button"
-      tone="nav"
-      size="label"
-      title={`Center turn ${turn} on the focal axis`}
-      onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
-    >
-      #{turn}
-    </Press>
-  );
-}
-
-/** True when the moment directly above carries the same role — its role line already said who
- * is speaking, so this one draws none (a run of pea turns reads as one block, not N banners). */
-function useContinues(id: string, role: "user" | "assistant"): boolean {
-  const messages = useThreadMessages();
-  const index = messages.findIndex((message) => message.id === id);
-  return index > 0 && messages[index - 1]?.role === role;
-}
-
-function MomentTime() {
-  const at = useMessage((message) =>
-    message.createdAt instanceof Date ? message.createdAt.getTime() : undefined,
-  );
-  if (!at) return null;
-  return (
-    <span className="ml-auto t-small face-mono tracking-[0.02em] text-ink-2">
-      {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-    </span>
-  );
-}
-
-function UserMoment() {
-  const id = useMessage((message) => message.id);
-  const text = useMessage((message) =>
-    message.content
-      .map((part) => (part.type === "text" ? part.text : ""))
-      .join("")
-      .trim(),
-  );
-  const imageBlob = useMessage((message) =>
-    message.content
-      .flatMap((part) =>
-        part.type === "image" && typeof part.image === "string" ? [part.image] : [],
-      )
-      .join("|"),
-  );
-  const images = imageBlob ? imageBlob.split("|") : [];
-  const continues = useContinues(id, "user");
-  if (!text && images.length === 0) return null;
-  return (
-    <MomentSection id={id} role="user">
-      {continues ? null : (
-        <div className="mb-1 flex items-center gap-2">
-          <TurnTag id={id} />
-          <span className="t-small t-upper text-ink-2">you</span>
-          <MomentTime />
-        </div>
+    <div className="mb-1 flex items-center gap-2">
+      <Press
+        type="button"
+        tone="nav"
+        size="label"
+        title={`Center turn ${turn} on the focal axis`}
+        onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
+      >
+        #{turn}
+      </Press>
+      {message.role === "user" ? (
+        <span className="t-small t-upper text-ink-2">you</span>
+      ) : (
+        <span className="t-small t-upper text-ink">pea</span>
       )}
+      {at ? (
+        <span className="ml-auto t-small face-mono tracking-[0.02em] text-ink-2">
+          {at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function UserMoment({ message, head }: { message: ChatMessage; head: ReactNode }) {
+  const text = message.parts
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("")
+    .trim();
+  return (
+    <>
+      {head}
       <div className="ml-auto flex w-fit max-w-[76%] flex-col items-end gap-1.5">
-        {images.map((src) => (
-          <img
-            key={src}
-            src={src}
-            alt="attachment"
-            className="hairline-x-faint hairline-y-faint max-h-64 rounded-sm object-contain"
-          />
-        ))}
+        {message.parts.map((part, index) =>
+          part.type === "image" ? (
+            <img
+              key={index}
+              src={part.image}
+              alt="attachment"
+              className="hairline-x-faint hairline-y-faint max-h-64 rounded-sm object-contain"
+            />
+          ) : null,
+        )}
 
         {text ? (
           <div className="boundary-l px-3 py-1.5 t-prose text-ink" data-surface="recess">
@@ -195,79 +126,58 @@ function UserMoment() {
           </div>
         ) : null}
       </div>
-    </MomentSection>
+    </>
   );
 }
 
-function AssistantMoment() {
-  const id = useMessage((message) => message.id);
-  const running = useMessage((message) => message.status?.type === "running");
-  const hasContent = useMessage((message) =>
-    message.content.some(
-      (part) =>
-        (part.type === "text" && part.text.trim().length > 0) ||
-        part.type === "image" ||
-        part.type === "tool-call",
-    ),
-  );
+function AssistantMoment({ message, head }: { message: ChatMessage; head: ReactNode }) {
+  const { parts, running } = message;
   // A turn that is nothing but tool calls is machinery, not speech: it folds behind one summary
   // row so an uninterrupted run of calls costs one line of the transcript instead of N.
-  const tools = useMessage((message) =>
-    message.content
-      .flatMap((part) => (part.type === "tool-call" ? [toolTitle(part.toolName)] : []))
-      .join("|"),
+  const titles = parts.flatMap((part) =>
+    part.type === "tool-call" ? [toolTitle(part.call.title)] : [],
   );
-  const toolOnly = useMessage((message) =>
-    message.content.every(
-      (part) => part.type === "tool-call" || (part.type === "text" && !part.text.trim()),
-    ),
-  );
-  const continues = useContinues(id, "assistant");
-  const titles = tools ? tools.split("|") : [];
-  if (!hasContent && !running) return null;
-  const parts = (
+  const toolOnly = titles.length === parts.length;
+  const body = (
     <div className="grid gap-[3px]">
-      <AssistantParts />
+      <PartsBoundary>
+        {parts.map((part, index) => (
+          <Part key={part.type === "tool-call" ? part.call.id : index} part={part} />
+        ))}
+      </PartsBoundary>
 
       {running ? <span {...annotation("streaming-caret")} aria-hidden="true" /> : null}
     </div>
   );
   return (
-    <MomentSection id={id} role="assistant">
-      {continues ? null : (
-        <div className="mb-1 flex items-center gap-2">
-          <TurnTag id={id} />
-          <span className="t-small t-upper text-ink">pea</span>
-          <MomentTime />
-        </div>
-      )}
+    <>
+      {head}
       {toolOnly && titles.length > 1 && !running ? (
         <details {...annotation("tool-run")}>
           <summary>
             <span className="face-mono">⌗ {titles.length} calls</span>
             <span className="truncate text-ink-2">{titles.join(" · ")}</span>
           </summary>
-          {parts}
+          {body}
         </details>
       ) : (
-        parts
+        body
       )}
-    </MomentSection>
+    </>
   );
 }
 
-function AssistantParts(): ReactNode {
-  return (
-    <PartsBoundary>
-      <MessagePrimitive.Parts
-        components={{
-          Text: MarkdownText,
-          Reasoning: ReasoningPart,
-          tools: { Fallback: ToolCallPart },
-        }}
-      />
-    </PartsBoundary>
-  );
+function Part({ part }: { part: ChatPart }): ReactNode {
+  switch (part.type) {
+    case "text":
+      return <Markdown text={part.text} />;
+    case "reasoning":
+      return <ReasoningPart text={part.text} />;
+    case "image":
+      return <img src={part.image} alt="" className="max-h-64 object-contain" />;
+    case "tool-call":
+      return <ToolCallPart call={part.call} approval={part.approval} />;
+  }
 }
 
 class PartsBoundary extends Component<{ children: ReactNode }, { error?: string }> {
@@ -289,22 +199,8 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
   }
 }
 
-// GFM, or pea's tables arrive as a paragraph of pipes. `remark-gfm` is already the repo's
-// markdown extension (see grounded-doc/view/block-markdown.tsx) — the chat renderer simply never
-// passed it. It also buys strikethrough, task lists, and bare autolinks.
-const REMARK_PLUGINS = [remarkGfm];
-
-const MarkdownText: TextMessagePartComponent = () => (
-  <MarkdownTextPrimitive
-    className={PROSE_CLASS}
-    remarkPlugins={REMARK_PLUGINS}
-    components={CHAT_MARKDOWN_COMPONENTS}
-  />
-);
-
-const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
+function ReasoningPart({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  if (!text.trim()) return null;
   return (
     <div className="hairline-l-faint pl-2">
       <Press
@@ -324,34 +220,30 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
       ) : null}
     </div>
   );
-};
+}
 
-const ToolCallPart: ToolCallMessagePartComponent = ({
-  toolCallId,
-  toolName,
-  args,
-  result,
-  isError,
-  status,
-  approval,
-}) => {
+function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval }) {
   const { resolveApproval, store } = useWorkbench();
   const pinKey = useAtomValue(store.atoms.lensPinKey);
   // One gesture, two lanes: clicking a marker opens its I/O here AND pins it in the trace lane's
   // inspect window, so the inspection survives the pointer leaving and the transcript scrolling.
-  const key = `tool:${toolCallId}`;
+  const key = `tool:${call.id}`;
   const open = pinKey === key;
-  const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
-  const target = toolTarget(args);
+  const running = call.status === "in_progress";
+  const failed = call.status === "failed";
+  const tone = failed ? "failed" : running ? "active" : "";
+  const result = failed ? (call.result ?? call.error) : call.result;
   // What the run actually touched: the Scope revision it was admitted under and the session and
   // document the host resolved to. Read from the result, so it is evidence, not intent.
   const ran = readRecord(result);
   const ranTarget = readRecord(ran?.target);
   const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
-  const pending = approval && approval.approved === undefined && !approval.resolution;
-  const question = pending && toolName === "ask_user" ? readQuestion(args) : undefined;
+  const question =
+    approval?.kind === "suspension" && call.title === "ask_user"
+      ? readQuestion(approval.payload)
+      : undefined;
   return (
-    <div className="grid gap-0.5" data-tool-id={toolCallId}>
+    <div className="grid gap-0.5" data-tool-id={call.id}>
       <div
         {...annotation("tool-marker")}
         data-kind="tool"
@@ -372,8 +264,8 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         }}
         className={tone}
       >
-        <span>⌗ {toolTitle(toolName)}</span>
-        {target ? <code>{target}</code> : null}
+        <span>⌗ {toolTitle(call.title)}</span>
+        {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
           <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
             r{revision}
@@ -386,16 +278,16 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         ) : null}
 
         <span
-          className={`ml-auto t-small face-mono tracking-[0.02em] ${status?.type === "running" ? "text-ink-2" : ""}`}
-          data-tone={isError ? "caution" : status?.type === "running" ? undefined : "done"}
+          className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
+          data-tone={failed ? "caution" : running ? undefined : "done"}
         >
-          {isError ? "err" : status?.type === "running" ? "run" : "ok"}
+          {failed ? "err" : running ? "run" : "ok"}
         </span>
       </div>
       {open ? (
         <div {...annotation("tool-body")}>
-          <Code code={stringify(args)} lang="json" title="in" />
-          {result === undefined ? null : isError ? (
+          <Code code={stringify(call.args)} lang="json" title="in" />
+          {result === undefined ? null : failed ? (
             <Code code={stringify(result)} lang="json" title="out" tone="error" wrap />
           ) : (
             <Code code={stringify(result)} lang="json" title="out" />
@@ -403,20 +295,20 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         </div>
       ) : null}
       <RouteChatPluginView
-        toolCallId={toolCallId}
-        toolName={toolName}
-        args={args}
+        toolCallId={call.id}
+        toolName={call.title}
+        args={call.args}
         sessionState={result}
-        running={status?.type === "running"}
+        running={running}
       />
       {/* Allow/refuse lives in the composer head's proposals band (`chat/composer-head.tsx`);
           a question still answers here, beside what it asks about. */}
       {question ? (
-        <AskUserPrompt toolCallId={toolCallId} question={question} resolve={resolveApproval} />
+        <AskUserPrompt toolCallId={call.id} question={question} resolve={resolveApproval} />
       ) : null}
     </div>
   );
-};
+}
 
 type Question = {
   text: string;
@@ -424,9 +316,8 @@ type Question = {
   multiple: boolean;
 };
 
-function readQuestion(args: unknown): Question | undefined {
-  const value = readRecord(args);
-  if (value?.__peaApprovalKind !== "suspension") return undefined;
+function readQuestion(payload: unknown): Question | undefined {
+  const value = readRecord(payload);
   const text = readString(value?.question);
   if (!text) return undefined;
   const options = Array.isArray(value?.options)

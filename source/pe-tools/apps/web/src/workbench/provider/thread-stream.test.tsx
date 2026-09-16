@@ -2,8 +2,7 @@
 import type { AgentControllerEvent, MastraDBMessage } from "@mastra/client-js";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { toThreadMessages } from "../aui-adapter";
-import { emptyChatState } from "../chat-state";
+import { emptyChatState, selectMessages } from "../chat-state";
 import { useThreadStream } from "./thread-stream";
 
 afterEach(() => {
@@ -67,6 +66,6 @@ test("a sent message stays listed while the first assistant block streams", asyn
     emit(frame(assistant));
   });
 
-  const listed = toThreadMessages(result.current.chat).map((message) => message.id);
+  const listed = selectMessages(result.current.chat).map((message) => message.id);
   expect(listed).toEqual(["u1", "a1"]);
 });
