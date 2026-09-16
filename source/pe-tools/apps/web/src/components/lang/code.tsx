@@ -138,6 +138,8 @@ export function Code({
   const mermaid = lang?.trim().toLowerCase() === "mermaid";
   const drawable = mermaid && !gated && diagramKind(code) === "supported";
   const [view, setView] = useState<"diagram" | "source">("diagram");
+  // An invalid diagram's source is hard to read, so it starts collapsed behind `show source`.
+  const [sourceOpen, setSourceOpen] = useState(false);
   const diagram = useDiagram(code, drawable && complete);
   const failed = diagram && "error" in diagram ? diagram.error : undefined;
   const svg = view === "diagram" && diagram && "svg" in diagram ? diagram.svg : undefined;
@@ -189,9 +191,14 @@ export function Code({
             </Press>
           ) : null}
           {failed ? (
-            <Press tone="quiet" size="label" title={failed} data-tone="caution" aria-disabled>
-              diagram failed
-            </Press>
+            <>
+              <span className="t-small face-mono" data-tone="caution" title={failed}>
+                invalid diagram
+              </span>
+              <Press tone="quiet" size="label" onClick={() => setSourceOpen(!sourceOpen)}>
+                {sourceOpen ? "hide source" : "show source"}
+              </Press>
+            </>
           ) : drawable && complete ? (
             <Press
               tone="quiet"
@@ -206,7 +213,7 @@ export function Code({
           </Press>
         </span>
       </div>
-      {svg !== undefined ? (
+      {failed && !sourceOpen ? null : svg !== undefined ? (
         // eslint-disable-next-line react/no-danger -- sanitized in `diagram.tsx`
         <div {...body} data-diagram="" dangerouslySetInnerHTML={{ __html: svg }} />
       ) : html === null ? (

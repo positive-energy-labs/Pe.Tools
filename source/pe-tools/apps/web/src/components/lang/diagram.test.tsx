@@ -98,11 +98,18 @@ test("a block past the 64 KB gate is source only", () => {
   expect(screen.getByText("source only")).toBeTruthy();
 });
 
-test("a render error falls back to source and names the error on the button", async () => {
+test("an invalid closed fence collapses to its head until show source is pressed", async () => {
   const { container } = render(<Code code={"flowchart TD\n  BOOM --> A"} lang="mermaid" />);
-  const failed = await screen.findByRole("button", { name: "diagram failed" });
-  expect(failed.getAttribute("title")).toBe("Parse error on line 2");
-  expect(failed.getAttribute("data-tone")).toBe("caution");
+  const invalid = await screen.findByText("invalid diagram");
+  expect(invalid.getAttribute("title")).toBe("Parse error on line 2");
+  expect(invalid.getAttribute("data-tone")).toBe("caution");
+  expect(screen.getByText("2 lines")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "copy" })).toBeTruthy();
+  expect(container.querySelector("[data-code-pane]")).toBe(null);
+
+  fireEvent.click(screen.getByRole("button", { name: "show source" }));
   expect(container.querySelector("[data-diagram]")).toBe(null);
   expect(container.querySelector("pre")?.textContent).toContain("BOOM");
+  fireEvent.click(screen.getByRole("button", { name: "hide source" }));
+  expect(container.querySelector("[data-code-pane]")).toBe(null);
 });
