@@ -78,7 +78,8 @@ public record PodExecutionAttributionData(
     string RunId,
     string Outcome,
     List<ScriptOutputReferenceData> Outputs,
-    List<ObservedExternalRevisionData> ObservedExternalRevisions
+    List<ObservedExternalRevisionData> ObservedExternalRevisions,
+    string? Reason = null
 );
 
 public record ScriptOutputReferenceData(string Kind, string Reference);

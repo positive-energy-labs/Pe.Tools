@@ -51,8 +51,7 @@ public class CmdScheduleManager : IExternalCommand {
                 UiDoc = uiDoc,
                 Storage = storage,
                 ProfilesStorage = profilesStorage.Settings(),
-                ProfilesDocuments = profilesStorage.Documents(),
-                PodSettings = podSettings
+                ProfilesDocuments = profilesStorage.Documents()
             };
 
             // Collect items for both tabs
@@ -263,11 +262,14 @@ public class CmdScheduleManager : IExternalCommand {
         var profileItem = item.GetCreateItem();
         if (profileItem == null) return;
 
+        var runOutput = (profileItem.Prepared?.Output() ?? ctx.Storage.Output()).TimestampedSubDir(Guid.NewGuid().ToString("N"));
+        ctx.RunOutput = runOutput;
+
         // Preview selection already performs schema sync + validation before this action is enabled.
         var hasCurrentValidPreview = ctx.PreviewData?.IsValid == true &&
                                      string.Equals(
-                                         ctx.SelectedProfile?.TextPrimary,
-                                         profileItem.TextPrimary,
+                                         ctx.SelectedProfile?.FilePath,
+                                         profileItem.FilePath,
                                          StringComparison.OrdinalIgnoreCase);
         if (!hasCurrentValidPreview)
             this.BuildPreviewData(profileItem, ctx);
@@ -286,8 +288,8 @@ public class CmdScheduleManager : IExternalCommand {
             scheduleProfile = ctx.SelectedProfile.Load(ctx.ProfilesStorage);
             observedExternalRevisions = ctx.SelectedProfile.Prepared?.ResolveExternalRequirements() ?? [];
         } catch (Exception ex) {
-            _ = profileItem.Prepared?.WriteReceipt(ctx.Storage.Output().SubDir("create"),
-                "schedule.create", "Failed");
+            _ = profileItem.AttemptSnapshot?.WriteReceipt(runOutput,
+                "schedule.create", "Failed", reason: ex.Message);
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
                 .Show();
@@ -301,8 +303,8 @@ public class CmdScheduleManager : IExternalCommand {
             result = ctx.Doc.ApplyScheduleProfile(scheduleProfile);
             _ = trans.Commit();
         } catch (Exception ex) {
-            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(ctx.Storage.Output().SubDir("create"),
-                "schedule.create", "Failed", observedExternalRevisions: observedExternalRevisions);
+            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+                "schedule.create", "Failed", observedExternalRevisions: observedExternalRevisions, reason: ex.Message);
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
                 .Show();
@@ -312,7 +314,7 @@ public class CmdScheduleManager : IExternalCommand {
         // Write output to storage
         var outputPath = this.WriteCreationOutput(ctx, result);
         if (string.IsNullOrEmpty(outputPath)) {
-            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(ctx.Storage.Output().SubDir("create"),
+            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
                 "schedule.create", "Succeeded",
                 [new ScriptOutputReferenceData("operation-result", "schedule-created-without-output-file")],
                 observedExternalRevisions);
@@ -321,7 +323,7 @@ public class CmdScheduleManager : IExternalCommand {
                 .Show();
             return;
         }
-        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(ctx.Storage.Output().SubDir("create"),
+        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
             "schedule.create", "Succeeded", [new ScriptOutputReferenceData("file", outputPath)], observedExternalRevisions);
 
         // Build comprehensive balloon message
@@ -462,6 +464,9 @@ public class CmdScheduleManager : IExternalCommand {
         var batchItem = item.GetBatchItem();
         if (batchItem == null) return;
 
+        var runOutput = (batchItem.Prepared?.Output() ?? context.Storage.Output()).TimestampedSubDir(Guid.NewGuid().ToString("N"));
+        context.RunOutput = runOutput;
+
         try {
             var batchSettings = batchItem.LoadBatchSettings();
             var observedExternalRevisions = batchItem.Prepared?.ResolveExternalRequirements().ToList() ?? [];
@@ -471,9 +476,7 @@ public class CmdScheduleManager : IExternalCommand {
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule profile
-                    var podSetting = batchItem.Prepared is null ? null : context.PodSettings.FirstOrDefault(setting =>
-                        setting.PodId == batchItem.Prepared.PodId
-                        && string.Equals(setting.SourcePath, "settings/" + scheduleFile.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                    var podSetting = batchItem.Prepared?.Member("settings/" + scheduleFile.Replace('\\', '/'));
                     var scheduleFilePath = podSetting?.FullSourcePath ?? context.ProfilesDocuments.ResolveDocumentPath(scheduleFile);
                     if (podSetting is null && !File.Exists(scheduleFilePath)) {
                         results.Add((scheduleFile, false, "File not found"));
@@ -481,15 +484,12 @@ public class CmdScheduleManager : IExternalCommand {
                         continue;
                     }
 
-                    var currentPodSetting = podSetting?.Refresh();
-                    if (currentPodSetting is not null)
-                        observedExternalRevisions.AddRange(currentPodSetting.ResolveExternalRequirements());
-                    var scheduleProfile = currentPodSetting is null
+                    var scheduleProfile = podSetting is null
                         ? context.ProfilesStorage.ReadRequired(scheduleFile)
                         : ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
-                            currentPodSetting.RawContent,
-                            currentPodSetting.ComposedContent,
-                            $"{currentPodSetting.PodId}:{currentPodSetting.SourcePath}");
+                            podSetting.RawContent,
+                            podSetting.ComposedContent,
+                            $"{podSetting.PodId}:{podSetting.SourcePath}");
 
                     // Create the schedule
                     using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleProfile.Name}");
@@ -527,13 +527,15 @@ public class CmdScheduleManager : IExternalCommand {
                     $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  â€¢ {f.profileName}: {f.errorMessage}"))}");
             }
 
-            var outputPath = context.Storage.Output().SubDir("batch").DirectoryPath;
-            _ = batchItem.Prepared?.WriteReceipt(context.Storage.Output().SubDir("batch"),
+            var outputPath = runOutput.DirectoryPath;
+            _ = batchItem.Prepared?.WriteReceipt(runOutput,
                 "schedule.batch", failCount == 0 ? "Succeeded" : "Failed",
                 [new ScriptOutputReferenceData("artifact-directory", outputPath)],
                 observedExternalRevisions.Distinct().ToList());
             balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output Folder");
         } catch (Exception ex) {
+            _ = batchItem.AttemptSnapshot?.WriteReceipt(runOutput,
+                "schedule.batch", "Failed", reason: ex.Message);
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
         }
     }
@@ -543,7 +545,7 @@ public class CmdScheduleManager : IExternalCommand {
         string? profileName = null,
         string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
+            var createOutputDir = ctx.RunOutput ?? ctx.Storage.Output().SubDir(outputSubDirectory);
 
             var outputData = new {
                 result.ScheduleName,
@@ -614,7 +616,7 @@ public class CmdScheduleManager : IExternalCommand {
         Exception? ex = null,
         string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
+            var createOutputDir = ctx.RunOutput ?? ctx.Storage.Output().SubDir(outputSubDirectory);
 
             var outputData = new {
                 ProfileName = profileName,
@@ -643,7 +645,7 @@ public class ScheduleManagerContext {
     public required ModuleStorage Storage { get; init; }
     public required ModuleSettingsStorage<SharedScheduleProfile> ProfilesStorage { get; init; }
     public required ModuleDocumentStorage ProfilesDocuments { get; init; }
-    internal IReadOnlyList<PreparedPodSetting> PodSettings { get; init; } = [];
+    internal OutputStorage? RunOutput { get; set; }
 
     // UI state: what's currently selected and displayed
     public ScheduleListItem? SelectedProfile { get; set; }

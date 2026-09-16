@@ -4740,6 +4740,7 @@ export namespace ScriptingExecute {
       outcome: string;
       outputs: ScriptOutputReferenceData[];
       observedExternalRevisions: ObservedExternalRevisionData[];
+      reason?: null | string;
     }
     export interface ScriptOutputReferenceData {
       kind: string;

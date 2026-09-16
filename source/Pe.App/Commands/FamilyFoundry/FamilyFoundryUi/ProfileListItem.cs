@@ -38,6 +38,8 @@ public class ProfileListItem : IPaletteListItem {
     public string RelativePath { get; }
     public FoundryFileKind Kind { get; }
     internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting? AttemptSnapshot { get; private set; }
+    internal void BeginAttempt() => this.AttemptSnapshot = null;
     public int LineCount { get; }
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
@@ -54,6 +56,7 @@ public class ProfileListItem : IPaletteListItem {
         if (this.Prepared is null)
             return new ModuleSettingsStorage<FamilyModel>(documents).ReadRequired(this.RelativePath, FamilyModelSettingsRegistration.RootKey);
         this.Prepared = this.Prepared.Refresh();
+        this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<FamilyModel>.ReadPrepared(
             this.Prepared.RawContent, this.Prepared.ComposedContent, $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
     }
@@ -62,6 +65,7 @@ public class ProfileListItem : IPaletteListItem {
         if (this.Prepared is null)
             return new ModuleSettingsStorage<FamilyPatch>(documents).ReadRequired(this.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
         this.Prepared = this.Prepared.Refresh();
+        this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<FamilyPatch>.ReadPrepared(
             this.Prepared.RawContent, this.Prepared.ComposedContent, $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
     }

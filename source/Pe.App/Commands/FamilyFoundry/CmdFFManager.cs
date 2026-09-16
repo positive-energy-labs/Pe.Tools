@@ -37,14 +37,25 @@ public class CmdFFManager : IExternalCommand {
         }
     }
 
-    private static void HandleReconcile(FoundryContext ctx) => Report(ctx, dryRun: false);
+    private static void HandleReconcile(FoundryContext ctx) => RunAttempt(ctx, "familyfoundry.reconcile", output => Report(ctx, false, output));
 
-    private static void HandleDryRun(FoundryContext ctx) => Report(ctx, dryRun: true);
+    private static void HandleDryRun(FoundryContext ctx) => RunAttempt(ctx, "familyfoundry.plan", output => Report(ctx, true, output));
 
-    private static void Report(FoundryContext ctx, bool dryRun) {
+    internal static void RunAttempt(FoundryContext ctx, string operation, Action<OutputStorage> action) {
+        ctx.SelectedProfile!.BeginAttempt();
+        var output = (ctx.SelectedProfile.Prepared?.Output() ?? ctx.Storage.Output()).TimestampedSubDir(Guid.NewGuid().ToString("N"));
+        try { action(output); }
+        catch (Exception ex) {
+            // A failed preparation has no validated snapshot to attribute. Its gate error is still shown.
+            _ = ctx.SelectedProfile.AttemptSnapshot?.WriteReceipt(output,
+                operation, "Failed", [new ScriptOutputReferenceData("artifact-directory", output.DirectoryPath)], reason: ex.Message);
+            new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
+        }
+    }
+
+    private static void Report(FoundryContext ctx, bool dryRun, OutputStorage runOutput) {
         var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
         var op = new ReconcileFamily(model, dryRun, sharedSource: ctx.SelectedProfile.SharedParameterSource());
-        var runOutput = ctx.Storage.Output().TimestampedSubDir();
         var writer = new ProcessingResultBuilder(runOutput).WithProfile(model, ctx.SelectedProfile.TextPrimary).WithReconcile(op);
         using var processor = new OperationProcessor(ctx.Doc);
         var (contexts, ms) = processor.WithArtifactWriter(writer, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish)
@@ -65,9 +76,10 @@ public class CmdFFManager : IExternalCommand {
         balloon.Show();
     }
 
-    private static void HandleBuild(FoundryContext ctx) {
+    private static void HandleBuild(FoundryContext ctx) => RunAttempt(ctx, "familyfoundry.build", output => Build(ctx, output));
+
+    private static void Build(FoundryContext ctx, OutputStorage runOutput) {
         var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
-        var runOutput = ctx.Storage.Output().TimestampedSubDir("build");
         var outputPath = Path.Combine(runOutput.DirectoryPath, $"{model.Family.Name}.rfa");
         var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, outputPath,
             overwrite: true, sharedSource: ctx.SelectedProfile.SharedParameterSource());

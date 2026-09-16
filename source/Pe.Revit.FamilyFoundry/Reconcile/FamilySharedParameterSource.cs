@@ -7,7 +7,7 @@ using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
-/// <summary>Embedded definitions take precedence; otherwise the current Parameters Service collection is authoritative.</summary>
+/// <summary>Pod execution resolves declared current APS definitions. Non-pod capture replay can supply embedded definitions.</summary>
 public sealed class FamilySharedParameterSource(Document document,
     IReadOnlyList<ParametersApi.Parameters.ParametersResult>? definitions = null,
     string? collectionId = null,
@@ -23,7 +23,7 @@ public sealed class FamilySharedParameterSource(Document document,
     private ParametersApi.Parameters.ParametersResult Find(string name) {
         if (this._definitions is null) {
             if (requireDeclaration && requiredResourceIds is not { Count: > 0 })
-                throw new InvalidOperationException("Pod-authored shared parameters without embedded definitions require an aps.parameters declaration.");
+                throw new InvalidOperationException("Pod-authored shared parameters require an aps.parameters declaration; embedded definitions are not an authority.");
             var current = ParametersServiceCache.ResolveCurrentAsync(collectionId).GetAwaiter().GetResult();
             var missing = (requiredResourceIds ?? []).Where(id => !current.ResourceIds.Contains(id)).ToList();
             if (missing.Count > 0)
@@ -32,7 +32,8 @@ public sealed class FamilySharedParameterSource(Document document,
             this._definitions = current.Definitions;
             this.ObservedParametersDigest = current.Digest;
         }
-        var matches = this._definitions.Where(p => !p.IsArchived && p.Name == name).ToList();
+        var matches = this._definitions.Where(p => !p.IsArchived && p.Name == name
+            && (!requireDeclaration || requiredResourceIds?.Contains(p.Id) == true)).ToList();
         return matches.Count == 1 ? matches[0] : throw new InvalidOperationException(
             $"Shared parameter '{name}' resolves to {matches.Count} active APS definitions; exactly one is required.");
     }
@@ -49,7 +50,7 @@ public sealed class FamilySharedParameterSource(Document document,
                 continue;
             }
             SharedDefinitionSpec definition;
-            if (parameter.Value<string>("sharedSpecId") is { } specId) {
+            if (!requireDeclaration && parameter.Value<string>("sharedSpecId") is { } specId) {
                 definition = new SharedDefinitionSpec(property.Name, new ForgeTypeId(specId),
                     Guid: parameter["sharedGuid"]?.ToObject<Guid?>() ?? throw new InvalidOperationException("Embedded shared definition requires sharedGuid."),
                     Description: parameter.Value<string>("tooltip") ?? "",
@@ -65,6 +66,9 @@ public sealed class FamilySharedParameterSource(Document document,
             }
             if (parameter["sharedGuid"]?.ToObject<Guid?>() is { } requested && requested != definition.Guid)
                 throw new InvalidOperationException($"Shared parameter '{property.Name}' requested GUID {requested}, source defines {definition.Guid}.");
+            if (requireDeclaration && parameter.Value<string>("sharedSpecId") is { } requestedSpec
+                && requestedSpec != definition.DataType.TypeId)
+                throw new InvalidOperationException($"Shared parameter '{property.Name}' requested data type '{requestedSpec}', APS defines '{definition.DataType.TypeId}'.");
             this._resolved[property.Name] = definition;
             this.ResolvedDefinitions[property.Name] = definition;
             target["sharedGuid"] = definition.Guid!.Value.ToString();

@@ -43,6 +43,7 @@ public class BatchScheduleListItem : IPaletteListItem {
     }
 
     internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting? AttemptSnapshot { get; private set; }
 
     /// <summary> Full path to the batch configuration JSON file </summary>
     public string FilePath { get; }
@@ -76,9 +77,11 @@ public class BatchScheduleListItem : IPaletteListItem {
     ///     Loads the batch settings from the file.
     /// </summary>
     public BatchScheduleSettings LoadBatchSettings() {
+        this.AttemptSnapshot = null;
         if (this.Prepared is null)
             return this._settings.ReadRequired(this._relativePath);
         this.Prepared = this.Prepared.Refresh();
+        this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<BatchScheduleSettings>.ReadPrepared(
             this.Prepared.RawContent,
             this.Prepared.ComposedContent,

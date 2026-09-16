@@ -19,13 +19,23 @@ internal sealed record PreparedPodSetting(
     string RawContent,
     string ComposedContent,
     string FullSourcePath,
-    IReadOnlyList<PodExternalRequirement> ExternalRequirements
+    IReadOnlyList<PodExternalRequirement> ExternalRequirements,
+    PreparedPod Snapshot,
+    string WorkspaceRoot
 ) {
     public PreparedPodSetting Refresh() => PreparedPodSettingsCatalog.Get(this.PodId, this.SourcePath);
 
+    public OutputStorage Output() => OutputStorage.ExactDir(Path.Combine(this.WorkspaceRoot, "output"));
+
+    public PreparedPodSetting Member(string sourcePath) =>
+        PreparedPodSettingsCatalog.Project(this.Snapshot, this.WorkspaceRoot, [])
+            .SingleOrDefault(setting => string.Equals(setting.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+        ?? throw new InvalidDataException($"Pod '{this.PodId}' snapshot '{this.SnapshotHash}' has no member '{sourcePath}'.");
+
     public string WriteReceipt(OutputStorage output, string operation, string outcome,
         IEnumerable<ScriptOutputReferenceData>? outputs = null,
-        IEnumerable<ObservedExternalRevisionData>? observedExternalRevisions = null) {
+        IEnumerable<ObservedExternalRevisionData>? observedExternalRevisions = null,
+        string? reason = null) {
         var runId = Guid.NewGuid().ToString("N");
         return output.Json($"pod-receipt-{runId}.json").Write(new PodExecutionAttributionData(
             this.PodId,
@@ -37,7 +47,7 @@ internal sealed record PreparedPodSetting(
             runId,
             outcome,
             outputs?.ToList() ?? [],
-            observedExternalRevisions?.ToList() ?? []));
+            observedExternalRevisions?.ToList() ?? [], reason));
     }
 
     public IReadOnlyList<ObservedExternalRevisionData> ResolveExternalRequirements() =>
@@ -80,7 +90,7 @@ internal static class PreparedPodSettingsCatalog {
             string.Equals(setting.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IEnumerable<PreparedPodSetting> Project(PreparedPod prepared, string workspaceRoot, string[] suffixes) {
+    internal static IEnumerable<PreparedPodSetting> Project(PreparedPod prepared, string workspaceRoot, string[] suffixes) {
         foreach (var document in prepared.ComposedSettings.Values.Where(document => suffixes.Length == 0 ||
                      suffixes.Any(suffix => document.Path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))) {
             var sourcePath = "settings/" + document.Path["composed/".Length..];
@@ -95,7 +105,9 @@ internal static class PreparedPodSettingsCatalog {
                 System.Text.Encoding.UTF8.GetString(source.Bytes),
                 document.Content,
                 Path.Combine(workspaceRoot, sourcePath.Replace('/', Path.DirectorySeparatorChar)),
-                prepared.Manifest.ExternalRequirements
+                prepared.Manifest.ExternalRequirements,
+                prepared,
+                workspaceRoot
             );
         }
     }

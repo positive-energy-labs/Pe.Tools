@@ -36,11 +36,14 @@ public class ScheduleListItem : IPaletteListItem {
     }
 
     internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting? AttemptSnapshot { get; private set; }
 
     internal ScheduleProfile Load(ModuleSettingsStorage<ScheduleProfile> legacy) {
+        this.AttemptSnapshot = null;
         if (this.Prepared is null)
             return legacy.ReadRequired(this.TextPrimary);
         this.Prepared = this.Prepared.Refresh();
+        this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(
             this.Prepared.RawContent,
             this.Prepared.ComposedContent,

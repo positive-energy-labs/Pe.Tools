@@ -46,17 +46,21 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     /// <summary>The families come from the palette selection when any are selected, else from the patch's `select`.</summary>
-    private static void Process(FoundryContext ctx, bool dryRun) {
+    private static void Process(FoundryContext ctx, bool dryRun) => CmdFFManager.RunAttempt(ctx,
+        dryRun ? "familyfoundry.plan" : "familyfoundry.migrate", output => ProcessPrepared(ctx, dryRun, output));
+
+    private static void ProcessPrepared(FoundryContext ctx, bool dryRun, OutputStorage runOutput) {
         var patch = ctx.SelectedProfile!.LoadPatch(ctx.Documents);
         var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
         var families = picked is { Count: > 0 } ? picked : ctx.Doc.FamiliesMatching(patch.Select);
         if (families.Count == 0) {
+            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+                dryRun ? "familyfoundry.plan" : "familyfoundry.migrate", "Skipped", reason: "The patch selects no loaded family.");
             new Ballogger().Add(LogEventLevel.Warning, new StackFrame(), "The patch selects no loaded family.").Show();
             return;
         }
 
         var op = new ReconcileFamily(patch, dryRun, sharedSource: ctx.SelectedProfile.SharedParameterSource());
-        var runOutput = ctx.Storage.Output().TimestampedSubDir();
         var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, ctx.SelectedProfile!.TextPrimary).WithReconcile(op);
         using var processor = new OperationProcessor(ctx.Doc);
         var (contexts, ms) = processor.SelectFamilies(() => families).WithArtifactWriter(writer)
