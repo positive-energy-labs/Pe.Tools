@@ -13,6 +13,7 @@ namespace Pe.Revit.Tests;
 public sealed class RevitScriptingPortTests {
     [Test]
     public void Captured_pod_script_writes_readable_output_and_a_matching_receipt(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
         var workspaceKey = "pod-output-proof-" + Guid.NewGuid().ToString("N");
         var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         Assert.That(Directory.Exists(root), Is.False);
@@ -22,8 +23,9 @@ public sealed class RevitScriptingPortTests {
             FileBytes("src/Main.cs", """using Pe.Revit.Scripting.Context; public sealed class Main : PeScriptContainer { public override void Execute() { Artifacts.WriteJson("result.json", new { check = "pod-output" }); } }""")
         ], []);
         try {
-            var result = CreateExecutionService(uiApplication).Execute(null,
-                new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey, SourceBundle: bundle), workspaceKey);
+            var result = CreateExecutionService(uiApplication).Execute(document,
+                new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey,
+                    SourceBundle: bundle), workspaceKey);
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), string.Join("; ", result.Diagnostics.Select(d => d.Message)));
             var output = result.Artifacts.Single(artifact => artifact.Name == "result.json");
             var receipt = result.Artifacts.Single(artifact => artifact.Name == "pod-receipt.json");

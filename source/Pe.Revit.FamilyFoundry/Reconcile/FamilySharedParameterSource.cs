@@ -22,6 +22,8 @@ public sealed class FamilySharedParameterSource(Document document,
     private readonly Dictionary<string, SharedDefinitionSpec> _resolved = new(StringComparer.Ordinal);
     public Dictionary<string, object> ResolvedDefinitions { get; } = new(StringComparer.Ordinal);
     public string? ObservedParametersDigest { get; private set; } = observedParametersDigest;
+    private readonly HashSet<string> _observedResourceIds = new(StringComparer.Ordinal);
+    public IReadOnlyCollection<string> ObservedResourceIds => this._observedResourceIds;
 
     private ParametersApi.Parameters.ParametersResult Find(string name) {
         if (this._definitions is null) {
@@ -41,8 +43,10 @@ public sealed class FamilySharedParameterSource(Document document,
         }
         var matches = this._definitions.Where(p => !p.IsArchived && p.Name == name
             && (!requireDeclaration || requiredResourceIds?.Contains(p.Id) == true)).ToList();
-        return matches.Count == 1 ? matches[0] : throw new InvalidOperationException(
-            $"Shared parameter '{name}' resolves to {matches.Count} active APS definitions; exactly one is required.");
+        if (matches.Count != 1)
+            throw new InvalidOperationException($"Shared parameter '{name}' resolves to {matches.Count} active APS definitions; exactly one is required.");
+        this._observedResourceIds.Add(matches[0].Id);
+        return matches[0];
     }
 
     public FamilyModel Resolve(FamilyModel model, JObject authored) {

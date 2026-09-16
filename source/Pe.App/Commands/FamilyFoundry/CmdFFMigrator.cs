@@ -73,8 +73,7 @@ public class CmdFFMigrator : IExternalCommand {
             failed == 0 ? "Succeeded" : "Failed",
             [new ScriptOutputReferenceData("artifact-directory", runOutput.DirectoryPath)],
             op.ObservedParametersDigest is { } digest
-                ? ctx.SelectedProfile.Prepared!.ExternalRequirements.Where(requirement => requirement.Code == "aps.parameters")
-                    .Select(requirement => new ObservedExternalRevisionData(requirement.Code, requirement.ResourceId, digest))
+                ? op.ObservedResourceIds.Select(id => new ObservedExternalRevisionData("aps.parameters", id, digest))
                 : []);
         new Ballogger().Add(failed == 0 ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
             $"{(dryRun ? "Planned" : "Processed")} {contexts.Count} families in {ms:F0}ms, {failed} failed.\nOutput: {runOutput.DirectoryPath}").Show();

@@ -44,7 +44,8 @@ public sealed record FamilyReceipt(
     IReadOnlyList<FamilyChange> Residue,
     IReadOnlyList<FamilyModelUnmodeledFact> Unmodeled,
     bool Converged,
-    string? ObservedParametersDigest = null
+    string? ObservedParametersDigest = null,
+    IReadOnlyList<string>? ObservedResourceIds = null
 );
 
 /// <summary>

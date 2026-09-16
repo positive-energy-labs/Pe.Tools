@@ -65,7 +65,7 @@ public class CmdFFManager : IExternalCommand {
             dryRun ? "familyfoundry.plan" : "familyfoundry.reconcile",
             error is null && (logs?.Sum(log => log.ErrorCount) ?? 0) == 0 ? "Succeeded" : "Failed",
             [new ScriptOutputReferenceData("artifact-directory", runOutput.DirectoryPath)],
-            Observed(ctx.SelectedProfile, op.ObservedParametersDigest));
+            Observed(op.ObservedResourceIds, op.ObservedParametersDigest));
         var balloon = new Ballogger();
         if (error is not null) _ = balloon.Add(LogEventLevel.Error, new StackFrame(), error.Message);
         else {
@@ -85,13 +85,11 @@ public class CmdFFManager : IExternalCommand {
             overwrite: true, sharedSource: ctx.SelectedProfile.SharedParameterSource());
         _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
             "familyfoundry.build", receipt.Converged ? "Succeeded" : "Failed",
-            [new ScriptOutputReferenceData("file", outputPath)], Observed(ctx.SelectedProfile, receipt.ObservedParametersDigest));
+            [new ScriptOutputReferenceData("file", outputPath)], Observed(receipt.ObservedResourceIds ?? [], receipt.ObservedParametersDigest));
         new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
             $"Built {model.Family.Name} from {Path.GetFileName(templatePath)} → {outputPath}. Converged: {receipt?.Converged}, residue {receipt?.Residue.Count}.").Show();
     }
 
-    private static IEnumerable<ObservedExternalRevisionData> Observed(ProfileListItem item, string? digest) =>
-        digest is null || item.Prepared is null ? [] : item.Prepared.ExternalRequirements
-            .Where(requirement => requirement.Code == "aps.parameters")
-            .Select(requirement => new ObservedExternalRevisionData(requirement.Code, requirement.ResourceId, digest));
+    private static IEnumerable<ObservedExternalRevisionData> Observed(IReadOnlyList<string> resourceIds, string? digest) =>
+        digest is null ? [] : resourceIds.Select(id => new ObservedExternalRevisionData("aps.parameters", id, digest));
 }

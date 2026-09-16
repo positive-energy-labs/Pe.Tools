@@ -36,9 +36,6 @@ public sealed class ScriptArtifactWriter {
     public ScriptArtifactData WriteText(string relativePath, string content, string contentType = "text/plain") =>
         this.WriteArtifact(relativePath, content ?? string.Empty, contentType);
 
-    // TODO: WriteJson throws FileLoadException "A non-collectible assembly may not reference a collectible
-    // assembly" (Pe.Bcl.Compat) from an inline script in an attached dev session, 2026-09-05; every Artifacts.*
-    // door is dead for scripts until the load context is fixed. Result(...) is the only durable output.
     public ScriptArtifactData WriteJson<T>(string relativePath, T value) =>
         this.WriteArtifact(
             EnsureExtension(relativePath, ".json"),

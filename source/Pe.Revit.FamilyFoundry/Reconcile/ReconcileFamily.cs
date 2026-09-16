@@ -57,6 +57,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public FamilyPlan? LastPlan { get; private set; }
     public FamilyReceipt? LastReceipt { get; private set; }
     public string? ObservedParametersDigest { get; private set; }
+    public IReadOnlyList<string> ObservedResourceIds { get; private set; } = [];
 
     internal void Complete(bool committed, IReadOnlyList<(string Edit, bool IsError, string Message)>? diagnostics = null) {
         // Resolutions Revit took under run.failures are geometry the patch never named; they ride the receipt as RunEffects.
@@ -74,6 +75,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         this.LastReceipt = null;
         this._candidateReceipt = null;
         this.ObservedParametersDigest = null;
+        this.ObservedResourceIds = [];
     }
 
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
@@ -109,6 +111,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             return new OperationLog(this.Name, unitDiagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
         var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions, this._executionOptions);
         this.ObservedParametersDigest = source.ObservedParametersDigest;
+        this.ObservedResourceIds = source.ObservedResourceIds.OrderBy(id => id, StringComparer.Ordinal).ToList();
         this.LastPlan = plan;
         if (this._expectedPlanHash is { } expected && !string.Equals(expected, plan.PlanHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Plan hash drifted: expected {expected}, recomputed {plan.PlanHash}. Plan again.");
@@ -165,7 +168,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
         this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, applyPlan.PlanHash, outcomes, plan.RunEffects, residue, observed.Unmodeled,
-            residue.Count == 0 && logs.All(l => l.PendingCount == 0), this.ObservedParametersDigest);
+            residue.Count == 0 && logs.All(l => l.PendingCount == 0), this.ObservedParametersDigest, this.ObservedResourceIds);
         if (!this._candidateReceipt.Converged)
             throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries ({string.Join(", ", logs.SelectMany(l => l.Entries).Where(e => e.HasPendingWork).Select(e => e.Name))}): {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");
 
