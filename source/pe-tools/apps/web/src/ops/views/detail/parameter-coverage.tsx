@@ -1,20 +1,15 @@
-import { token } from "#/lib/token";
 import type {
   FamilyEditorSnapshot,
-  RevitDetailFamilyModel,
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
 } from "@pe/host-contracts/generated";
-import { FactChip } from "#/components/lang/chip";
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type Column, DataTable, KVGrid, VizChip } from "#/ops/primitives";
-import { type OpViewProps, type OpViewRegistry, UnrecognizedShape, asRecord } from "#/ops/registry";
+import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { MAX_TYPE_COLUMNS } from "./parameter-links";
-import { LoadedFamiliesView, ParameterLinksView } from "./parameter-links";
-import { ElementsView, SheetsView } from "./sheets";
-import { SchedulesView, issueLine, pageNote } from "./schedules";
+import { issueLine, pageNote } from "./schedules";
 
 export function ParameterCoverageView({ data }: OpViewProps) {
   const rec = asRecord(data);
@@ -189,94 +184,3 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
     </div>
   );
 }
-
-interface CaptureEvidence {
-  typeNames: string[];
-  parameters: unknown[];
-  diagnostics: {
-    provenance?: string;
-    code?: string;
-    path?: string;
-    confidence?: number | null;
-    message?: string;
-  }[];
-}
-
-export function FamilyModelView({ data }: OpViewProps) {
-  const rec = asRecord(data);
-  if (!rec || typeof rec.familyName !== "string" || !asRecord(rec.evidence))
-    return <UnrecognizedShape />;
-  const res = rec as unknown as RevitDetailFamilyModel.Res.Response;
-  // The generated contract does not yet carry the capture evidence the operation actually returns;
-  // this view reads it off the wire and says so rather than inventing counts.
-  const ev = (res as unknown as { evidence: CaptureEvidence }).evidence;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <KVGrid
-        columns={3}
-        items={[
-          { label: "family", value: res.familyName },
-          {
-            label: "unmodeled",
-            value: res.unmodeledCount,
-            tone: res.unmodeledCount > 0 ? "caution" : undefined,
-          },
-          { label: "types captured", value: ev.typeNames.length },
-          { label: "parameters captured", value: ev.parameters.length },
-          { label: "model.json size", value: `${res.modelJson.length} chars` },
-        ]}
-      />
-      {ev.typeNames.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {ev.typeNames.map((t) => (
-            <FactChip key={t} title="captured type">
-              {t}
-            </FactChip>
-          ))}
-        </div>
-      )}
-      {ev.diagnostics.length > 0 ? (
-        <Section label="diagnostics">
-          <div className="">
-            {ev.diagnostics.map((d, i) => (
-              <div key={i} className="px-2 py-1">
-                <span
-                  className=""
-                  style={{
-                    color:
-                      d.provenance === "Unresolved" || d.provenance === "Inferred"
-                        ? token("caution")
-                        : token("ink-2"),
-                  }}
-                >
-                  {d.code} @ {d.path}
-                  {d.confidence != null ? ` (confidence ${d.confidence})` : ""}
-                </span>
-                <div className="">{d.message}</div>
-              </div>
-            ))}
-          </div>
-        </Section>
-      ) : (
-        <Provenance>no capture diagnostics — every parameter resolved exactly</Provenance>
-      )}
-      <Provenance>
-        evidence: {ev.parameters.length} parameters × {ev.typeNames.length} types resolved from the
-        family document
-      </Provenance>
-    </div>
-  );
-}
-
-export const views: OpViewRegistry = {
-  "revit.detail.schedules": SchedulesView,
-  "revit.detail.sheets": SheetsView,
-  "revit.detail.elements": ElementsView,
-  "revit.detail.parameter-links": ParameterLinksView,
-  "revit.matrix.loaded-families": LoadedFamiliesView,
-  "revit.matrix.parameter-coverage": ParameterCoverageView,
-  "revit.matrix.schedule-coverage": ScheduleCoverageView,
-  "family.editor.snapshot": FamilyEditorSnapshotView,
-  "revit.detail.family-model": FamilyModelView,
-};

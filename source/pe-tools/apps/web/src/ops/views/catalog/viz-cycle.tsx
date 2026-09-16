@@ -2,7 +2,7 @@ import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { type TreeNode, TreeView, VizChip, type VizIndex } from "#/ops/primitives";
+import { type TreeNode, TreeView } from "#/ops/primitives";
 import {
   type OpViewProps,
   UnrecognizedShape,
@@ -12,20 +12,8 @@ import {
   asString,
 } from "#/ops/registry";
 
-export const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
-
-export function vizFor(name: string): VizIndex {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return VIZ_CYCLE[Math.abs(hash) % VIZ_CYCLE.length] ?? 3;
-}
-
 export function MonoAside({ children }: { children: ReactNode }) {
   return <span className="">{children}</span>;
-}
-
-export function Dash() {
-  return <span className="">—</span>;
 }
 
 export function pageNote(data: Record<string, unknown>): string | undefined {
@@ -62,29 +50,6 @@ export function IssuesNote({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-export function ChipRow({
-  values,
-  viz = 3,
-  max = 4,
-}: {
-  values: string[];
-  viz?: VizIndex | ((value: string) => VizIndex);
-  max?: number;
-}) {
-  if (values.length === 0) return <Dash />;
-  const shown = values.slice(0, max);
-  return (
-    <span className="inline-flex flex-wrap items-center gap-1">
-      {shown.map((value) => (
-        <VizChip key={value} viz={typeof viz === "function" ? viz(value) : viz} title={value}>
-          {value}
-        </VizChip>
-      ))}
-      {values.length > max && <MonoAside>+{values.length - max}</MonoAside>}
-    </span>
-  );
-}
-
 export function insertPath(
   roots: TreeNode[],
   index: Map<string, TreeNode>,
@@ -112,7 +77,7 @@ export function insertPath(
   return node;
 }
 
-export type IndexSection = {
+type IndexSection = {
   key: string;
   label: string;
   count: number | undefined;
@@ -120,7 +85,7 @@ export type IndexSection = {
   toNode: (entry: Record<string, unknown>, i: number) => TreeNode;
 };
 
-export function nestByBrowserPaths(section: IndexSection): TreeNode[] {
+function nestByBrowserPaths(section: IndexSection): TreeNode[] {
   const roots: TreeNode[] = [];
   const index = new Map<string, TreeNode>();
   section.entries.forEach((entry, i) => {
