@@ -68,7 +68,7 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
         };
         presetProperty.ExtensionData ??= new Dictionary<string, object?>();
         presetProperty.ExtensionData["examples"] = new List<string> {
-            $"@local/{normalizedRoot}/my-preset", $"@global/{normalizedRoot}/my-preset"
+            $"@local/{normalizedRoot}/my-preset"
         };
 
         schema.Properties["$preset"] = presetProperty;

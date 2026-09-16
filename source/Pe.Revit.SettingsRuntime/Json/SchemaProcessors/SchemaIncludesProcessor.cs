@@ -79,7 +79,7 @@ public class SchemaIncludesProcessor : ISchemaProcessor {
         if (!string.IsNullOrWhiteSpace(normalizedRoot)) {
             includeProperty.ExtensionData ??= new Dictionary<string, object?>();
             includeProperty.ExtensionData["examples"] = new List<string> {
-                $"@local/{normalizedRoot}/my-fragment", $"@global/{normalizedRoot}/my-fragment"
+                $"@local/{normalizedRoot}/my-fragment"
             };
         }
 

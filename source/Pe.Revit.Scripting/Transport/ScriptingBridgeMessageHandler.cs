@@ -171,7 +171,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         }
     }
 
-    [Op("scripting.pod.import", Does = "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces.", Title = "Import Script Pod", Finds = ["script", "pod", "import", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.pod.import", Does = "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new local folder under Documents/Pe.Tools/Pods.", Title = "Import Script Pod", Finds = ["script", "pod", "import", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptPodImportData> ImportPodAsync(
         ScriptPodImportRequest request,
         CancellationToken cancellationToken

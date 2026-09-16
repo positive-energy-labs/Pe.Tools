@@ -1,7 +1,7 @@
 /**
  * Settings seed data — plain values, no store, no host, no behaviour. `?demo=<action>` mounts one
  * of these through `useRoute`'s demo owner. The captured world is REAL: the actual
- * CmdScheduleManager/schedules MechEquip/TEST.json and the actual ScheduleProfile schema, both
+ * default pod's MechEquip/TEST.schedule.json and the actual ScheduleProfile schema, both
  * captured live on 2026-08-17. File Readings are seeded with their raw content strings.
  */
 import type {
@@ -12,7 +12,12 @@ import type {
 } from "@pe/agent-contracts";
 
 import { SETTINGS_SEED_RAW } from "#/settings-panes/seed-content";
-import { SETTINGS_SEED_SCHEMA } from "#/settings-panes/seed-schema";
+import { SETTINGS_SEED_SCHEMA as CAPTURED_SETTINGS_SEED_SCHEMA } from "#/settings-panes/seed-schema";
+
+const SETTINGS_SEED_SCHEMA = CAPTURED_SETTINGS_SEED_SCHEMA.replace(
+  ',\r\n                  "@global/_fields/my-fragment"',
+  "",
+);
 
 /** The Readings this route subscribes: the bound document, and the schema that renders it. */
 export type SettingsReading = "document" | "schema";
@@ -32,20 +37,19 @@ export interface SettingsPage {
 export type SettingsAction = "open" | "refresh" | "validate" | "adopt" | "save" | "stage";
 
 export const SETTINGS_SEED_DOCUMENT_ID: SettingsDocumentId = {
-  moduleKey: "CmdScheduleManager",
-  rootKey: "schedules",
-  relativePath: "MechEquip/TEST.json",
+  moduleKey: "default",
+  rootKey: "settings",
+  relativePath: "MechEquip/TEST.schedule.json",
 };
 
 export const SETTINGS_SEED_SCHEMA_ID: SettingsDocumentId = {
-  moduleKey: "CmdScheduleManager",
-  rootKey: "schedules",
-  relativePath:
-    "../../../Global/schemas/cmdschedulemanager/profiles/pe-shared-revitdata-schedules-scheduleprofile.schema.json",
+  moduleKey: "default",
+  rootKey: "settings",
+  relativePath: ".schemas/schedule-profile.schema.json",
 };
 
 export const SETTINGS_SEED_PATH =
-  "C:/Users/kaitp/OneDrive/Documents/Pe.Tools/settings/CmdScheduleManager/schedules/MechEquip/TEST.json";
+  "C:/Users/kaitp/OneDrive/Documents/Pe.Tools/Pods/default/settings/MechEquip/TEST.schedule.json";
 
 /**
  * Seeded trichotomy on REAL pointers in the real document — one of each thing a reviewer must be

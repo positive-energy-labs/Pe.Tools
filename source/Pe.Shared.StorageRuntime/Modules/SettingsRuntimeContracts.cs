@@ -47,7 +47,7 @@ public sealed class SettingsRootBinding<TSettings>(
 
 public static class SettingsStorageProfiles {
     public static SettingsStorageModuleOptions SharedAuthoring { get; } = new(
-        ["_shared", .. SettingsDirectiveRootCatalog.GlobalIncludeRoots],
-        SettingsDirectiveRootCatalog.GlobalPresetRoots
+        ["_shared", .. SettingsDirectiveRootCatalog.IncludeRoots],
+        SettingsDirectiveRootCatalog.PresetRoots
     );
 }

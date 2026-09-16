@@ -21,7 +21,7 @@ import {
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { capturePod } from "./operation-script.ts";
 import { LocalOpError } from "./local-error.ts";
-import { productSettingsRootPath } from "./product-paths.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import {
   localOpFileError,
   makeDirectory,
@@ -149,14 +149,14 @@ export function saveSettingsDocument(
 }
 
 function defaultSettingsBasePath(): string {
-  return productSettingsRootPath();
+  return productPodsRootPath();
 }
 
 function normalizeSettingsTreeRequest(input: SettingsTreeRequest): Required<SettingsTreeRequest> {
   return {
     mode: input.mode ?? "module",
-    moduleKey: input.moduleKey || "Global",
-    rootKey: input.rootKey || "fragments",
+    moduleKey: input.moduleKey || "default",
+    rootKey: input.rootKey || "settings",
     subDirectory: input.subDirectory ?? null,
     recursive: input.recursive === true,
     includeFragments: input.includeFragments !== false,
@@ -708,63 +708,13 @@ function getSchemaJson(value: unknown): string | null {
   return typeof schemaJson === "string" && schemaJson.trim() ? schemaJson : null;
 }
 
-const discoverModule = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  ctx: SettingsRuntimeContext,
-) {
-  if (documentId.moduleKey.toLowerCase() === "global")
-    return {
-      moduleKey: "Global",
-      defaultRootKey: "fragments",
-      roots: [{ rootKey: "fragments", displayName: "fragments" }],
-      storageOptions: { includeRoots: [], presetRoots: [] },
-    } satisfies SettingsModuleDescriptor;
-
-  if (!ctx.invokeBridge)
-    return {
-      moduleKey: documentId.moduleKey,
-      defaultRootKey: documentId.rootKey,
-      roots: [{ rootKey: documentId.rootKey, displayName: documentId.rootKey }],
-      storageOptions: { includeRoots: [], presetRoots: [] },
-    } satisfies SettingsModuleDescriptor;
-
-  const catalogResult = yield* Effect.result(
-    ctx.invokeBridge("settings.module-catalog", undefined, ctx.bridgeSessionId),
-  );
-  if (catalogResult._tag === "Failure")
-    return yield* Effect.fail(
-      new Error(
-        `Unable to discover settings module '${documentId.moduleKey}': ${errorMessage(catalogResult.failure)}`,
-      ),
-    );
-
-  const modules = normalizeModuleCatalog(catalogResult.success);
-  const module = modules.find(
-    (candidate) => candidate.moduleKey.toLowerCase() === documentId.moduleKey.toLowerCase(),
-  );
-  if (!module) throw new Error(`Unknown settings module '${documentId.moduleKey}'.`);
-  if (!module.roots.some((root) => root.rootKey.toLowerCase() === documentId.rootKey.toLowerCase()))
-    throw new Error(`Unknown root '${documentId.rootKey}' for module '${documentId.moduleKey}'.`);
-  return module;
-});
-
-function normalizeModuleCatalog(value: unknown): SettingsModuleDescriptor[] {
-  const modules = (value as Partial<{ modules: unknown[] }>).modules;
-  return Array.isArray(modules)
-    ? modules.filter((module): module is SettingsModuleDescriptor => isSettingsModule(module))
-    : [];
-}
-
-function isSettingsModule(value: unknown): value is SettingsModuleDescriptor {
-  const candidate = value as Partial<SettingsModuleDescriptor>;
-  return (
-    value != null &&
-    typeof value === "object" &&
-    typeof candidate.moduleKey === "string" &&
-    typeof candidate.defaultRootKey === "string" &&
-    Array.isArray(candidate.roots)
-  );
-}
+const discoverModule = (documentId: SettingsDocumentId, _ctx: SettingsRuntimeContext) =>
+  Effect.succeed({
+    moduleKey: documentId.moduleKey,
+    defaultRootKey: documentId.rootKey,
+    roots: [{ rootKey: documentId.rootKey, displayName: documentId.rootKey }],
+    storageOptions: { includeRoots: [], presetRoots: [] },
+  } satisfies SettingsModuleDescriptor);
 
 // --- URL-native $schema ------------------------------------------------------
 // Settings schemas are session state (value-domain samples come from the open
@@ -839,228 +789,3 @@ function containsDirectiveMetadata(value: unknown): boolean {
   return Object.values(value).some(containsDirectiveMetadata);
 }
 
-function statMtime(info: FileSystem.File.Info): Date {
-  return Option.getOrElse(info.mtime, () => new Date(0));
-}
-
-const listSettingsDirectory: (
-  directory: string,
-  rootDirectory: string,
-  recursive: boolean,
-  operationKey: string,
-) => Effect.Effect<SettingsDirectoryListing, LocalOpError, FileSystem.FileSystem> =
-  Effect.fnUntraced(function* (
-    directory: string,
-    rootDirectory: string,
-    recursive: boolean,
-    operationKey: string,
-  ) {
-    const entries = yield* readDirectoryEntriesOrEmpty(directory, operationKey);
-    const files: string[] = [];
-    const directories: string[] = [];
-    for (const entry of entries) {
-      const path = join(directory, entry.name);
-      if (entry.info.type === "Directory") {
-        directories.push(toRelativePath(rootDirectory, path));
-        if (recursive) {
-          const nested = yield* listSettingsDirectory(path, rootDirectory, true, operationKey);
-          files.push(...nested.files);
-          directories.push(...nested.directories);
-        }
-        continue;
-      }
-      if (entry.info.type === "File" && entry.name.toLowerCase().endsWith(".json"))
-        files.push(path);
-    }
-    return { files, directories } satisfies SettingsDirectoryListing;
-  });
-
-const createSettingsFileEntry = Effect.fnUntraced(function* (
-  filePath: string,
-  rootDirectory: string,
-  operationKey: string,
-) {
-  const file = yield* statFile(filePath, operationKey);
-  const relativePath = toRelativePath(rootDirectory, filePath);
-  const relativePathWithoutExtension = stripJsonExtension(relativePath);
-  const directory = dirnameRelative(relativePath);
-  const name = basename(relativePath);
-  const isSchema =
-    name.toLowerCase().endsWith(".schema.json") || name.toLowerCase() === "schema.json";
-  const isFragment = relativePath.split("/").some((segment) => segment.startsWith("_"));
-  return {
-    path: filePath,
-    relativePath,
-    relativePathWithoutExtension,
-    name,
-    baseName: stripJsonExtension(name),
-    directory,
-    modifiedUtc: statMtime(file).toISOString(),
-    kind: isSchema
-      ? SettingsFileKind.Schema
-      : isFragment
-        ? SettingsFileKind.Fragment
-        : SettingsFileKind.Profile,
-    isFragment,
-    isSchema,
-  };
-});
-
-function buildSettingsDirectoryTree(
-  rootName: string,
-  rootRelativePath: string,
-  files: SettingsFileEntry[],
-  directories: string[],
-): SettingsDirectoryNode {
-  const root: MutableSettingsDirectoryNode = {
-    name: rootName,
-    relativePath: rootRelativePath,
-    directories: [],
-    files: [],
-  };
-  for (const directory of [...new Set(directories)].filter(Boolean)) {
-    ensureDirectoryNode(
-      root,
-      rootRelativePath,
-      localRelativePath(directory, rootRelativePath).split("/").filter(Boolean),
-    );
-  }
-  for (const file of files) {
-    const segments = localRelativePath(file.relativePath, rootRelativePath)
-      .split("/")
-      .filter(Boolean);
-    const name = segments.pop();
-    if (!name) continue;
-    const current = ensureDirectoryNode(root, rootRelativePath, segments);
-    current.files.push({
-      name,
-      relativePath: file.relativePath,
-      relativePathWithoutExtension: file.relativePathWithoutExtension,
-      id: file.relativePathWithoutExtension,
-      modifiedUtc: file.modifiedUtc,
-      kind: file.kind,
-      isFragment: file.isFragment,
-      isSchema: file.isSchema,
-    } satisfies SettingsFileNode);
-  }
-  sortSettingsTree(root);
-  return root;
-}
-
-function ensureDirectoryNode(
-  root: MutableSettingsDirectoryNode,
-  rootRelativePath: string,
-  segments: string[],
-): MutableSettingsDirectoryNode {
-  let current = root;
-  let currentRelativePath = rootRelativePath;
-  for (const segment of segments) {
-    currentRelativePath = currentRelativePath ? `${currentRelativePath}/${segment}` : segment;
-    let next = current.directories.find(
-      (directory) => directory.name.toLowerCase() === segment.toLowerCase(),
-    );
-    if (!next) {
-      next = { name: segment, relativePath: currentRelativePath, directories: [], files: [] };
-      current.directories.push(next);
-    }
-    current = next;
-  }
-  return current;
-}
-
-function sortSettingsTree(node: MutableSettingsDirectoryNode): void {
-  node.directories.sort((left, right) => left.name.localeCompare(right.name));
-  node.files.sort((left, right) => left.name.localeCompare(right.name));
-  for (const directory of node.directories) sortSettingsTree(directory);
-}
-
-const resolveLocalPath = Effect.fnUntraced(function* <A>(operationKey: string, resolve: () => A) {
-  return yield* Effect.try({
-    try: resolve,
-    catch: (error) => newLocalOpError(operationKey, errorMessage(error), 400),
-  });
-});
-
-function resolveSettingsRootDirectory(
-  basePath: string,
-  moduleKey: string,
-  rootKey: string,
-): string {
-  return safeJoin(
-    safeJoin(basePath, normalizeRelativePath(moduleKey)),
-    normalizeRelativePath(rootKey),
-  );
-}
-
-function resolveSettingsDocumentPath(rootDirectory: string, relativePath: string): string {
-  const normalized = normalizeRelativePath(relativePath);
-  if (!normalized) throw new Error("Settings document path is required.");
-  return safeJoin(
-    rootDirectory,
-    normalized.toLowerCase().endsWith(".json") ? normalized : `${normalized}.json`,
-  );
-}
-
-function safeJoin(rootPath: string, relativePath: string): string {
-  const root = win32.resolve(rootPath);
-  const combined = win32.resolve(root, relativePath.replace(/\//g, "\\"));
-  if (combined !== root && !combined.toLowerCase().startsWith(`${root.toLowerCase()}\\`))
-    throw new Error("Path escapes the configured settings root.");
-  return combined;
-}
-
-function normalizeRelativePath(input: string | null | undefined): string {
-  if (!input) return "";
-  if (win32.isAbsolute(input)) throw new Error("Rooted settings paths are not allowed.");
-  const segments = input
-    .replace(/\\/g, "/")
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  if (segments.some((segment) => segment === "." || segment === ".."))
-    throw new Error("Invalid settings path segment.");
-  return segments.join("/");
-}
-
-function toRelativePath(rootDirectory: string, filePath: string): string {
-  return win32.relative(rootDirectory, filePath).replace(/\\/g, "/");
-}
-
-function localRelativePath(relativePath: string, rootRelativePath: string): string {
-  if (!rootRelativePath) return relativePath;
-  const prefix = `${rootRelativePath.replace(/\/$/, "")}/`;
-  if (relativePath.toLowerCase().startsWith(prefix.toLowerCase()))
-    return relativePath.slice(prefix.length);
-  return relativePath.toLowerCase() === rootRelativePath.toLowerCase()
-    ? basename(relativePath)
-    : relativePath;
-}
-
-function dirnameRelative(relativePath: string): string | null {
-  const index = relativePath.lastIndexOf("/");
-  return index <= 0 ? null : relativePath.slice(0, index);
-}
-
-function stripJsonExtension(path: string): string {
-  return path.toLowerCase().endsWith(".json") ? path.slice(0, -5) : path;
-}
-
-function normalizeJsonTrailingNewline(rawContent: string): string {
-  return `${rawContent.replace(/\s*$/, "")}\n`;
-}
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function newLocalOpError(key: string, note: string, statusCode?: number): LocalOpError {
-  return new LocalOpError(key, note, statusCode);
-}

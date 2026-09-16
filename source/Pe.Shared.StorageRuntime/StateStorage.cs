@@ -15,12 +15,6 @@ public sealed class StateStorage {
         return new StateStorage(resolvedDirectoryPath, useExactDirectory: true);
     }
 
-    public static StateStorage ExactDir(string directoryPath, string legacyDirectoryPath) {
-        var resolvedDirectoryPath = EnsureDirectory(directoryPath);
-        TryMigrateLegacyDirectory(resolvedDirectoryPath, legacyDirectoryPath);
-        return new StateStorage(resolvedDirectoryPath, useExactDirectory: true);
-    }
-
     public JsonReadWriter<T> Json<T>() where T : class, new() =>
         new LocalDiskJsonFile<T>(this.GetJsonPath(DefaultName));
 
@@ -68,37 +62,4 @@ public sealed class StateStorage {
         return fullPath;
     }
 
-    private static void TryMigrateLegacyDirectory(string directoryPath, string legacyDirectoryPath) {
-        if (string.IsNullOrWhiteSpace(legacyDirectoryPath))
-            return;
-
-        var resolvedLegacyDirectoryPath = Path.GetFullPath(legacyDirectoryPath);
-        if (!Directory.Exists(resolvedLegacyDirectoryPath))
-            return;
-
-        if (string.Equals(directoryPath, resolvedLegacyDirectoryPath, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if (Directory.EnumerateFileSystemEntries(directoryPath).Any())
-            return;
-
-        CopyDirectoryContents(resolvedLegacyDirectoryPath, directoryPath);
-    }
-
-    private static void CopyDirectoryContents(string sourceDirectoryPath, string destinationDirectoryPath) {
-        foreach (var sourceDirectory in Directory.EnumerateDirectories(sourceDirectoryPath, "*", SearchOption.AllDirectories)) {
-            var relativePath = BclCompat.GetRelativePath(sourceDirectoryPath, sourceDirectory);
-            _ = Directory.CreateDirectory(Path.Combine(destinationDirectoryPath, relativePath));
-        }
-
-        foreach (var sourceFilePath in Directory.EnumerateFiles(sourceDirectoryPath, "*", SearchOption.AllDirectories)) {
-            var relativePath = BclCompat.GetRelativePath(sourceDirectoryPath, sourceFilePath);
-            var destinationFilePath = Path.Combine(destinationDirectoryPath, relativePath);
-            var destinationParent = Path.GetDirectoryName(destinationFilePath);
-            if (!string.IsNullOrWhiteSpace(destinationParent))
-                _ = Directory.CreateDirectory(destinationParent);
-
-            File.Copy(sourceFilePath, destinationFilePath, overwrite: false);
-        }
-    }
 }

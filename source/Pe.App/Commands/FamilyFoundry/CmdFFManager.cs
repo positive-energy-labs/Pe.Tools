@@ -54,7 +54,7 @@ public class CmdFFManager : IExternalCommand {
     }
 
     private static void Report(FoundryContext ctx, bool dryRun, OutputStorage runOutput) {
-        var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
+        var model = ctx.SelectedProfile!.LoadModel();
         var op = new ReconcileFamily(model, dryRun, sharedSource: ctx.SelectedProfile.SharedParameterSource());
         var writer = new ProcessingResultBuilder(runOutput).WithProfile(model, ctx.SelectedProfile.TextPrimary).WithReconcile(op);
         using var processor = new OperationProcessor(ctx.Doc);
@@ -79,7 +79,7 @@ public class CmdFFManager : IExternalCommand {
     private static void HandleBuild(FoundryContext ctx) => RunAttempt(ctx, "familyfoundry.build", output => Build(ctx, output));
 
     private static void Build(FoundryContext ctx, OutputStorage runOutput) {
-        var model = ctx.SelectedProfile!.LoadModel(ctx.Documents);
+        var model = ctx.SelectedProfile!.LoadModel();
         var outputPath = Path.Combine(runOutput.DirectoryPath, $"{model.Family.Name}.rfa");
         var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, outputPath,
             overwrite: true, sharedSource: ctx.SelectedProfile.SharedParameterSource());

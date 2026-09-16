@@ -14,19 +14,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openSettingsDocument, saveSettingsDocument } from "../src/settings.ts";
 import { writeFileStringAtomic } from "../src/files/index.ts";
-import { productSettingsRootPath } from "../src/product-paths.ts";
+import { productPodsRootPath } from "../src/product-paths.ts";
 import { dispatchTsOnlyOperation } from "../src/call-route.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 
 let directory: string;
 let previous: string | undefined;
-const documentId = { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "file.json" };
+const documentId = { moduleKey: "sample", rootKey: "settings", relativePath: "file.json" };
 const digest = (raw: string | Uint8Array) => createHash("sha256").update(raw).digest("hex");
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
   Effect.runPromise(
     effect.pipe(Effect.provide(NodeServices.layer), Effect.provide(NodeHttpClient.layerUndici)),
   );
-const path = () => join(productSettingsRootPath(), "FamilyFoundry", "models", "file.json");
+const path = () => join(productPodsRootPath(), "sample", "settings", "file.json");
 const open = () =>
   run(openSettingsDocument({ documentId, mode: "file", includeComposedContent: true }));
 const save = (rawContent: string, version?: string) =>
@@ -42,7 +42,7 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "pe-file-basis-"));
   previous = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  await mkdir(join(productSettingsRootPath(), "FamilyFoundry", "models"), { recursive: true });
+  await mkdir(join(productPodsRootPath(), "sample", "settings"), { recursive: true });
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -165,7 +165,7 @@ test("permission failures are not absence and cannot authorize creation", async 
       }),
     ),
   ).rejects.toMatchObject({ note: expect.stringContaining("PermissionDenied") });
-  expect(await readdir(join(productSettingsRootPath(), "FamilyFoundry", "models"))).toEqual([]);
+  expect(await readdir(join(productPodsRootPath(), "sample", "settings"))).toEqual([]);
 });
 
 test("partial temp write failure cleans only the acquired temp and preserves destination", async () => {
@@ -199,9 +199,7 @@ test("partial temp write failure cleans only the acquired temp and preserves des
     ),
   ).rejects.toMatchObject({ note: expect.stringContaining("injected partial write") });
   expect(await readFile(path(), "utf8")).toBe("original");
-  expect(await readdir(join(productSettingsRootPath(), "FamilyFoundry", "models"))).toEqual([
-    "file.json",
-  ]);
+  expect(await readdir(join(productPodsRootPath(), "sample", "settings"))).toEqual(["file.json"]);
 });
 
 test("wx acquisition collision is never removed by cleanup", async () => {
@@ -245,9 +243,7 @@ test("host rejects cross-address open and create before touching another file", 
       }),
     ),
   ).rejects.toMatchObject({ note: expect.stringContaining("another Work") });
-  expect(await readdir(join(productSettingsRootPath(), "FamilyFoundry", "models"))).toEqual([
-    "file.json",
-  ]);
+  expect(await readdir(join(productPodsRootPath(), "sample", "settings"))).toEqual(["file.json"]);
 });
 
 test("independent Work runtimes saving one reviewed file meet the same host semaphore", async () => {
@@ -339,5 +335,5 @@ test("invalid UTF-8 bytes and unpaired text surrogates refuse without replacemen
   await expect(save("\uD800")).rejects.toMatchObject({
     note: expect.stringContaining("unpaired surrogates"),
   });
-  expect(await readdir(join(productSettingsRootPath(), "FamilyFoundry", "models"))).toEqual([]);
+  expect(await readdir(join(productPodsRootPath(), "sample", "settings"))).toEqual([]);
 });

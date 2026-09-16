@@ -23,7 +23,7 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = dir;
   configurePeaProductToolContext({ hostBaseUrl: "http://pod-consumer" });
-  const workspace = join(productUserContentRootPath(), "workspaces", "sample");
+  const workspace = join(productUserContentRootPath(), "Pods", "sample");
   await mkdir(join(workspace, "src"), { recursive: true });
   const manifest = {
     id: "sample",
@@ -88,7 +88,7 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
         effects.push({ session, openId, requestId });
         expect(
           await readFile(
-            join(productUserContentRootPath(), "workspaces", input.workspaceKey, input.sourcePath),
+            join(productUserContentRootPath(), "Pods", input.workspaceKey, input.sourcePath),
             "utf8",
           ),
         ).toBe("// authored pod source");

@@ -5,14 +5,13 @@ using Pe.Shared.StorageRuntime;
 namespace Pe.Revit.Scripting.Storage;
 
 public static class RevitScriptingStorageLocations {
-    public const string WorkspacesDirectoryName = ScriptingWorkspaceLocations.DefaultWorkspacesDirectoryName;
     public const string ProjectFileName = ScriptingWorkspaceLayout.ProjectFileName;
     public const string AgentsFileName = ScriptingWorkspaceLayout.AgentInstructionsFileName;
     public const string ReadmeFileName = ScriptingWorkspaceLayout.ReadmeFileName;
     public const string PodManifestFileName = ScriptingWorkspaceLayout.PodManifestFileName;
     public const string JoinGuideFileName = "JOIN_GUIDE.md";
     public const string SourceDirectoryName = ScriptingWorkspaceLayout.SourceDirectoryName;
-    public const string InlineTraceDirectoryName = ProductPathNames.InlineScriptsDirectoryName;
+    public const string InlineTraceDirectoryName = "inline";
     public const string SampleFileName = ScriptingWorkspaceLayout.SampleScriptFileName;
 
     public static string GetDefaultBasePath() => ScriptingWorkspaceLocations.GetDefaultBasePath();

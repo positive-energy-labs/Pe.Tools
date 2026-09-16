@@ -14,35 +14,18 @@ namespace Pe.App.Commands.Schedules.Ui;
 ///     Palette list item representing a batch schedule configuration.
 /// </summary>
 public class BatchScheduleListItem : IPaletteListItem {
-    private readonly ModuleDocumentStorage _documents;
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
-    private readonly ModuleSettingsStorage<BatchScheduleSettings> _settings;
 
-    public BatchScheduleListItem(
-        string filePath,
-        string relativePath,
-        ModuleSettingsStorage<BatchScheduleSettings> settings
-    ) {
-        this.FilePath = filePath;
-        this._fileInfo = new FileInfo(filePath);
-        this._relativePath = relativePath;
-        this._settings = settings;
-        this._documents = settings.Documents();
-        this.ScheduleCount = ExtractScheduleCount(filePath);
-    }
-
-    internal BatchScheduleListItem(PreparedPodSetting prepared, ModuleSettingsStorage<BatchScheduleSettings> settings) {
+    internal BatchScheduleListItem(PreparedPodSetting prepared) {
         this.FilePath = prepared.FullSourcePath;
         this._fileInfo = new FileInfo(this.FilePath);
         this._relativePath = prepared.SourcePath;
-        this._settings = settings;
-        this._documents = settings.Documents();
         this.Prepared = prepared;
         this.ScheduleCount = ExtractScheduleCountFromContent(prepared.ComposedContent);
     }
 
-    internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting Prepared { get; private set; }
     internal PreparedPodSetting? AttemptSnapshot { get; private set; }
 
     /// <summary> Full path to the batch configuration JSON file </summary>
@@ -78,50 +61,12 @@ public class BatchScheduleListItem : IPaletteListItem {
     /// </summary>
     public BatchScheduleSettings LoadBatchSettings() {
         this.AttemptSnapshot = null;
-        if (this.Prepared is null)
-            return this._settings.ReadRequired(this._relativePath);
         this.Prepared = this.Prepared.Refresh();
         this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<BatchScheduleSettings>.ReadPrepared(
             this.Prepared.RawContent,
             this.Prepared.ComposedContent,
             $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
-    }
-
-    /// <summary>
-    ///     Discovers all batch configuration JSON files in a directory.
-    /// </summary>
-    public static List<BatchScheduleListItem> DiscoverProfiles(ModuleSettingsStorage<BatchScheduleSettings> settings) {
-        var documents = settings.Documents();
-        var discovered = documents
-            .DiscoverAsync(
-                new SettingsDiscoveryOptions(
-                    Recursive: true,
-                    IncludeFragments: false,
-                    IncludeSchemas: false
-                )
-            )
-            .GetAwaiter()
-            .GetResult();
-
-        return discovered.Files
-            .Select(file => new BatchScheduleListItem(
-                documents.ResolveDocumentPath(file.RelativePath),
-                file.RelativePath,
-                settings))
-            .OrderByDescending(p => p.LastModified)
-            .ToList();
-    }
-
-    /// <summary>
-    ///     Extracts the schedule count from a batch configuration JSON file.
-    /// </summary>
-    private static int ExtractScheduleCount(string filePath) {
-        try {
-            return ExtractScheduleCountFromContent(File.ReadAllText(filePath));
-        } catch {
-            return 0;
-        }
     }
 
     private static int ExtractScheduleCountFromContent(string content) {

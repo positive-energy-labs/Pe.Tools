@@ -682,7 +682,7 @@ test("crash before source seal retains unprepared identity and refuses recapture
   const directory = await mkdtemp(join(tmpdir(), "script-unsealed-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  const workspace = join(productUserContentRootPath(), "workspaces", "sample");
+  const workspace = join(productUserContentRootPath(), "Pods", "sample");
   await mkdir(join(workspace, "src"), { recursive: true });
   await writeFile(join(workspace, "pod.json"), "{}");
   await writeFile(join(workspace, "src/Main.cs"), "first");
@@ -740,7 +740,7 @@ test("source seal captures the positive pod set and exact dependency bytes once"
   const directory = await mkdtemp(join(tmpdir(), "script-portable-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  const workspaces = join(productUserContentRootPath(), "workspaces");
+  const workspaces = join(productUserContentRootPath(), "Pods");
   const root = join(workspaces, "sample");
   const dependency = join(workspaces, "library");
   const hash = "a".repeat(64);
@@ -803,7 +803,7 @@ test("source seal carries portable release evidence without installed author dep
   const directory = await mkdtemp(join(tmpdir(), "script-release-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  const workspaces = join(productUserContentRootPath(), "workspaces");
+  const workspaces = join(productUserContentRootPath(), "Pods");
   const root = join(workspaces, "sample");
   try {
     await mkdir(join(root, "src"), { recursive: true });
