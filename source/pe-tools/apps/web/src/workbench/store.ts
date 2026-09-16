@@ -3,12 +3,17 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/route";
+import type { LensScrollIntent } from "./model";
 
 export interface WorkbenchAttachment {
   name?: string;
   mimeType?: string;
   text?: string;
   data?: string;
+  /** Bytes, for the chip. */
+  size?: number;
+  /** An object URL for an image chip's thumbnail; the composer revokes it when the chip goes. */
+  preview?: string;
 }
 
 interface ChatDraft {
@@ -54,7 +59,15 @@ export function createChatPageStore(deps: {
   // A pinned tool outranks hover and focal in the trace lane's inspect window, so an inspection
   // survives the pointer leaving (and survives scrolling the transcript).
   const lensPinKey = core.owned("page/lens-pin-key", Atom.make<string | null>(null));
-  const lensFollowing = core.owned("widget/lens-following", Atom.make(!deps.search.turn));
+  // The one owner of where the transcript should sit: the tail (following) or a turn the user
+  // scrolled to. Follow state and the URL `turn` are derived from it, never written beside it.
+  const lensIntent = core.owned(
+    "widget/lens-intent",
+    Atom.make<LensScrollIntent>(
+      deps.search.turn ? { kind: "turn", turn: deps.search.turn } : { kind: "tail" },
+    ),
+  );
+  const lensFollowing = Atom.map(lensIntent, (intent) => intent.kind === "tail");
   const world = core.owned<Atom.Writable<WorldState>>(
     "widget/world",
     Atom.make<WorldState>({
@@ -100,9 +113,19 @@ export function createChatPageStore(deps: {
       const open = typeof value === "function" ? value(previous === pane) : value;
       return open ? pane : previous === pane ? null : previous;
     });
-  const setTurn = (turn?: number) => {
+  const setLensIntent = (next: LensScrollIntent) => {
+    const previous = deps.registry.get(lensIntent);
+    if (
+      next.kind === "tail"
+        ? previous.kind === "tail"
+        : previous.kind === "turn" && previous.turn === next.turn
+    )
+      return;
+    set("set-lens-intent", lensIntent, next);
     if (turnTimer) clearTimeout(turnTimer);
-    turnTimer = setTimeout(() => void deps.search.patch({ turn }, true), 1000);
+    // Back at the tail: clear the URL turn now, so a reload does not reopen a stale position.
+    if (next.kind === "tail") void deps.search.patch({ turn: undefined }, true);
+    else turnTimer = setTimeout(() => void deps.search.patch({ turn: next.turn }, true), 1000);
   };
 
   core.expose({
@@ -120,6 +143,7 @@ export function createChatPageStore(deps: {
       pluginOpen,
       lensInspectKey,
       lensPinKey,
+      lensIntent,
       lensFollowing,
       world,
       worldCache,
@@ -132,7 +156,6 @@ export function createChatPageStore(deps: {
       setLensInspectKey: (value: Setter<string | null>) =>
         set("set-lens-inspect-key", lensInspectKey, value),
       setLensPinKey: (value: Setter<string | null>) => set("set-lens-pin-key", lensPinKey, value),
-      setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
       setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
       setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
       setDraft,
@@ -140,7 +163,7 @@ export function createChatPageStore(deps: {
         if (deps.registry.get(draft) === sent) setDraft({ text: "", attachments: [] });
       },
       setMode: (mode: string) => void deps.search.patch({ mode }),
-      setTurn,
+      setLensIntent,
       setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
       openThread: (thread: string, replace = false) => deps.search.patch({ thread }, replace),
     },

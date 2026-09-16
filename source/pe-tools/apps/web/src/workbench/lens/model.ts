@@ -1,14 +1,14 @@
 import { token } from "#/lib/token";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { useThreadMessages } from "../aui";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
 import { useThreadScope } from "#/chat/scope";
-import { selectBreakdown } from "../chat-state";
+import { selectBreakdown, selectMessages } from "../chat-state";
 import {
   lensScrollIntent,
   nextTailFollowState,
+  type LensScrollIntent,
   scrollTopForIntent,
   turnAtFocalPoint,
   type TailFollowState,
@@ -19,22 +19,19 @@ import { TARGET_RAIL_COLOR, buildTraceCells, toMoments } from "./context-strip";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
 
+const USER_INPUT_MS = 800;
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
 export function useLensModel({
   state,
   mode,
-  initialTurn,
-  scrollKey = "",
-  onTurnChange,
   sideOpen = true,
 }: {
   state: ChatState;
   mode: Mode;
-  initialTurn?: number;
-  scrollKey?: string;
-  onTurnChange?: (turn: number | undefined) => void;
   sideOpen?: boolean;
 }) {
-  const messages = useThreadMessages();
+  const messages = useMemo(() => selectMessages(state), [state]);
 
   const moments = toMoments(messages);
 
@@ -49,7 +46,7 @@ export function useLensModel({
 
   const cache = useCacheView(breakdown, userTurns);
 
-  const { currentThreadId, revit } = useWorkbench();
+  const { currentThreadId, revit, loading } = useWorkbench();
   const threadScope = useThreadScope(currentThreadId, revit === true);
   // The rail is the thread head: a chosen document reads as meta, none as muted.
   const targetTone = threadScope.defaultTarget === null ? "muted" : "meta";
@@ -94,34 +91,25 @@ export function useLensModel({
 
   const setInspectKey = store.actions.setLensInspectKey;
 
-  const turnRef = useRef<number | undefined>(initialTurn);
-
-  const initialTurnRef = useRef(initialTurn);
-
-  initialTurnRef.current = initialTurn;
-
-  const tailFollowRef = useRef<TailFollowState>(initialTurn ? "detached" : "following");
+  // The position intent lives in the store (`lensIntent`); follow is derived from it. The store
+  // is per thread (WorkbenchProvider is keyed on it), so nothing here resets on a thread switch.
+  const intent = useCallback(() => store.registry.get(store.atoms.lensIntent), [store]);
+  const setIntent = store.actions.setLensIntent;
 
   const following = useAtomValue(store.atoms.lensFollowing);
 
-  const setFollowing = store.actions.setLensFollowing;
-
   const scrollTopRef = useRef(0);
 
-  const initialScrollRef = useRef({ key: "", done: false });
+  // A `turn` intent from the URL is not realised until its moment has registered with geometry.
+  // Until then every measure retries; user input takes over from it.
+  const landedRef = useRef(false);
+
+  // The last wheel/touch/key/drag. A scroll event this soon after one is the user's.
+  const userInputAtRef = useRef(-Infinity);
 
   const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
 
   const bumpPending = useRef(false);
-
-  const initialScrollKey = scrollKey;
-
-  if (initialScrollRef.current.key !== initialScrollKey) {
-    initialScrollRef.current = { key: initialScrollKey, done: false };
-    turnRef.current = initialTurn;
-    tailFollowRef.current = initialTurn ? "detached" : "following";
-    scrollTopRef.current = 0;
-  }
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -134,7 +122,7 @@ export function useLensModel({
     return () => observer.disconnect();
   }, []);
 
-  // Register each assistant-ui-rendered moment's DOM node so the scroll controller can
+  // Register each rendered moment's DOM node so the scroll controller can
   // measure it (bands, fisheye). Keyed by message id — aligned with `moments`. Each
   // register/unregister schedules a re-measure so geometry tracks the async mount.
   const registerMoment = useCallback((id: string, el: HTMLElement | null) => {
@@ -151,42 +139,55 @@ export function useLensModel({
   }, []);
 
   // drag the gutter to scrub (gutter motion ÷ SCALE = chat motion); a tap centers the band.
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    const startY = event.clientY;
-    const startScroll = scroller.scrollTop;
-    const bandKey = (event.target as HTMLElement).closest<HTMLElement>(".mapdial-band")?.dataset
-      .key;
-    let dragged = false;
-    const move = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientY - startY) > 3) dragged = true;
-      if (dragged) scroller.scrollTop = startScroll + (ev.clientY - startY) / SCALE;
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      if (!dragged && bandKey) {
-        const g = geomRef.current.find((geom) => geom.key === bandKey);
-        if (g)
-          scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
-      }
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }, []);
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const startY = event.clientY;
+      const startScroll = scroller.scrollTop;
+      const bandKey = (event.target as HTMLElement).closest<HTMLElement>(
+        '[data-annotation="dial-band"]',
+      )?.dataset.key;
+      let dragged = false;
+      const move = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientY - startY) > 3) dragged = true;
+        if (!dragged) return;
+        userInputAtRef.current = performance.now();
+        scroller.scrollTop = startScroll + (ev.clientY - startY) / SCALE;
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        if (!dragged && bandKey) {
+          const g = geomRef.current.find((geom) => geom.key === bandKey);
+          if (g) {
+            // A tap detaches first, so no follow snap fights the animation.
+            landedRef.current = true;
+            setIntent({ kind: "turn", turn: g.turn });
+            scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
+          }
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [setIntent],
+  );
 
-  // Jump-to-tail: re-attach follow and scroll to the bottom (the re-measure snap keeps it there).
+  // Jump-to-tail: re-attach follow and snap to the bottom (the re-measure snap keeps it there).
   const scrollToTail = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    tailFollowRef.current = "following";
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-  }, []);
+    landedRef.current = true;
+    setIntent({ kind: "tail" });
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+  }, [setIntent]);
 
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
-  useEffect(() => {
+  // A layout effect: the snap lands after the grown content is laid out and before it paints.
+  // The scroller has no CSS smooth scrolling, so every `scrollTop =` here is instant.
+  useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const frame = frameRef.current;
     const strip = stripRef.current;
@@ -247,14 +248,14 @@ export function useLensModel({
       if (csFocalRef.current) csFocalRef.current.style.top = `${fy}px`;
       if (caretRef.current) caretRef.current.style.top = `${fy}px`;
 
-      const metrics = { scrollTop: s, scrollHeight: scroller.scrollHeight, clientHeight: V };
-      const nextTurn =
-        tailFollowRef.current === "following" ? undefined : turnAtFocalPoint(geom, metrics, FOCAL);
-      if (nextTurn !== turnRef.current) {
-        turnRef.current = nextTurn;
-        onTurnChange?.(nextTurn);
+      // While detached, the intent tracks the turn on the focal axis (what a reload reopens).
+      // Not before a URL turn has landed: a scroll before that is not the user's.
+      const current = intent();
+      if (current.kind === "turn" && landedRef.current) {
+        const metrics = { scrollTop: s, scrollHeight: scroller.scrollHeight, clientHeight: V };
+        const turn = turnAtFocalPoint(geom, metrics, FOCAL);
+        if (turn !== undefined && turn !== current.turn) setIntent({ kind: "turn", turn });
       }
-      setFollowing(tailFollowRef.current === "following");
 
       strip.style.transform = `translateY(${focalG - SCALE * (s + FOCAL * V)}px)`;
 
@@ -323,12 +324,12 @@ export function useLensModel({
         const scrollerTop = scroller.getBoundingClientRect().top;
         for (const marker of chat.querySelectorAll<HTMLElement>("[data-tool-id]")) {
           const toolId = marker.dataset.toolId;
-          const parent = marker.closest<HTMLElement>(".lens-moment")?.dataset.key;
+          const parent = marker.closest<HTMLElement>('[data-annotation="moment"]')?.dataset.key;
           if (!toolId || !parent) continue;
           const anchor = marker.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
           const key = `tool:${toolId}`;
           cardAnchors.push({ key, parent, anchor });
-          const rail = marker.querySelector<HTMLElement>(".lens-marker");
+          const rail = marker.querySelector<HTMLElement>('[data-annotation="tool-marker"]');
           if (rail) markerByKey.set(key, rail);
         }
       }
@@ -347,16 +348,18 @@ export function useLensModel({
         scrollHeight: scroller.scrollHeight,
         clientHeight: scroller.clientHeight,
       };
-      if (!initialScrollRef.current.done) {
-        scroller.scrollTop = scrollTopForIntent(
-          lensScrollIntent(initialTurnRef.current),
-          geom,
-          metrics,
-          FOCAL,
-        );
-        initialScrollRef.current.done = true;
-      } else if (tailFollowRef.current === "following") {
-        scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
+      const current = intent();
+      if (current.kind === "tail") {
+        scroller.scrollTop = scrollTopForIntent(current, geom, metrics, FOCAL);
+      } else if (!landedRef.current) {
+        if (geom.some((g) => g.turn === current.turn && g.height > 0)) {
+          scroller.scrollTop = scrollTopForIntent(current, geom, metrics, FOCAL);
+          landedRef.current = true;
+        } else if (!loading && !moments.some((moment) => moment.turn === current.turn)) {
+          // The thread is here and has no such turn: open at the tail instead.
+          setIntent({ kind: "tail" });
+          scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
+        }
       }
       scrollTopRef.current = scroller.scrollTop;
       sync();
@@ -378,40 +381,70 @@ export function useLensModel({
     };
 
     measure();
+    // The box AND the content: a message that grows after render (highlighting, an image, a tool
+    // body) re-measures and, while following, re-snaps before paint.
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
-    const onScroll = () => {
+    if (chatRef.current) ro.observe(chatRef.current);
+    const follow = (byUser: boolean) => {
       const metrics = {
         scrollTop: scroller.scrollTop,
         scrollHeight: scroller.scrollHeight,
         clientHeight: scroller.clientHeight,
       };
-      tailFollowRef.current = nextTailFollowState(
-        tailFollowRef.current,
-        metrics,
-        scrollTopRef.current,
-      );
+      if (byUser) landedRef.current = true;
+      const before: TailFollowState = intent().kind === "tail" ? "following" : "detached";
+      const next = nextTailFollowState(before, metrics, scrollTopRef.current, byUser);
+      if (next !== before) {
+        const turn = turnAtFocalPoint(geomRef.current, metrics, FOCAL);
+        setIntent(next === "following" ? { kind: "tail" } : { kind: "turn", turn: turn ?? 1 });
+      }
       scrollTopRef.current = scroller.scrollTop;
       schedule();
     };
+    const onScroll = () => follow(performance.now() - userInputAtRef.current < USER_INPUT_MS);
+    // Touch momentum sends no input events after the finger lifts, so a long fling outruns the
+    // window. The scroll's end still belongs to the gesture that started it.
+    let scrollEndAt = -Infinity;
+    const onScrollEnd = () => {
+      const byGesture = userInputAtRef.current > scrollEndAt;
+      scrollEndAt = performance.now();
+      if (byGesture) follow(true);
+    };
+    const onUserInput = () => {
+      userInputAtRef.current = performance.now();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(event.key)) onUserInput();
+    };
     scroller.addEventListener("scroll", onScroll, { passive: true });
+    scroller.addEventListener("scrollend", onScrollEnd);
+    scroller.addEventListener("wheel", onUserInput, { passive: true });
+    scroller.addEventListener("touchmove", onUserInput, { passive: true });
+    scroller.addEventListener("keydown", onKey);
 
-    // Transcript turn-number tags dispatch this (aui.tsx TurnTag): center that turn on the focal
+    // Transcript turn-number tags dispatch this (moments.tsx MomentHead): center that turn on the focal
     // axis — same gesture as tapping its mapdial band.
+    // Smooth is safe here: the intent detaches first, so no follow snap fights the animation.
     const onFocusTurn = (event: Event) => {
       const turn = (event as CustomEvent<number>).detail;
       if (!Number.isFinite(turn)) return;
-      tailFollowRef.current = "detached";
-      scroller.scrollTop = scrollTopForIntent(
-        lensScrollIntent(turn),
-        geomRef.current,
-        {
-          scrollTop: scroller.scrollTop,
-          scrollHeight: scroller.scrollHeight,
-          clientHeight: scroller.clientHeight,
-        },
-        FOCAL,
-      );
+      landedRef.current = true;
+      const target: LensScrollIntent = lensScrollIntent(turn);
+      setIntent(target);
+      scroller.scrollTo({
+        top: scrollTopForIntent(
+          target,
+          geomRef.current,
+          {
+            scrollTop: scroller.scrollTop,
+            scrollHeight: scroller.scrollHeight,
+            clientHeight: scroller.clientHeight,
+          },
+          FOCAL,
+        ),
+        behavior: "smooth",
+      });
     };
     window.addEventListener("pe:focus-turn", onFocusTurn);
 
@@ -433,6 +466,10 @@ export function useLensModel({
     return () => {
       ro.disconnect();
       scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("scrollend", onScrollEnd);
+      scroller.removeEventListener("wheel", onUserInput);
+      scroller.removeEventListener("touchmove", onUserInput);
+      scroller.removeEventListener("keydown", onKey);
       window.removeEventListener("pe:focus-turn", onFocusTurn);
       cancelAnimationFrame(raf);
       chat?.removeEventListener("mouseover", onChatOver);
@@ -441,14 +478,18 @@ export function useLensModel({
       trace?.removeEventListener("mouseleave", onChatLeave);
     };
     // moments/traceCells are fresh arrays each render; re-running re-measures geometry as the
-    // thread (and streaming text heights) change. The register callback re-measures once aui
-    // mounts the moment sections. `sideOpen` is here so expanding the collapsed rail re-runs the
+    // thread (and streaming text heights) change. The register callback re-measures once the
+    // moment sections mount. `sideOpen` is here so expanding the collapsed rail re-runs the
     // controller and measures the freshly-mounted trace cards (the scroller itself doesn't resize
     // when the lane collapses, so nothing else would trigger a re-measure). Hover survives via
     // hoverKeyRef.
-  }, [moments, traceCells, mode, onTurnChange, sideOpen]);
+  }, [moments, traceCells, mode, sideOpen, loading, intent, setIntent]);
+  // An empty thread is a claim; while the body loads it is not known (the composer head says so).
+  const showEmpty = !loading && moments.length === 0;
   return {
+    messages,
     moments,
+    showEmpty,
     traceCells,
     breakdown,
     userTurns,

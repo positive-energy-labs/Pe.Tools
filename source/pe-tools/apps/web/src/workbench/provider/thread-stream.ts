@@ -1,7 +1,8 @@
-import { useHostCall } from "#/readings";
-import type { AgentControllerEvent, MastraClient } from "@mastra/client-js";
+import { previousOf, useHostCall } from "#/readings";
+import type { Reading } from "@pe/agent-contracts";
+import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { emptyChatState, type ChatDisplay, type ChatState } from "../chat-state";
+import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
@@ -15,6 +16,17 @@ const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
   "model_changed",
   "mode_changed",
 ]);
+
+/**
+ * Whether the chat is still waiting for its thread body. Decided by what has arrived, not by
+ * request states: the host status Reading starts `absent` (never `loading`) until its first frame,
+ * and until it lands there is no session, so no thread fetch either. A failed host status ends the
+ * wait. Read as "loaded and empty" too early, the lens dropped a `?turn` it could not yet find.
+ */
+export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean): boolean {
+  const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
+  return !hostKnown || threadPending;
+}
 
 export const threadQueryKey = (origin: string, threadId: string | null) =>
   ["pe-thread", origin, threadId] as const;
@@ -39,10 +51,16 @@ export function useThreadStream(options: {
   // frame, so no fetch ever competes with it and no clock is needed.
   const [frame, setFrame] = useState<ChatDisplay | null>(null);
   const [streamFault, setStreamFault] = useState<Error | null>(null);
+  // A user turn the stream announced but the fetched body does not hold yet. The display frame
+  // carries it only until the assistant's first delta replaces `currentMessage`, and the host
+  // persists the row later than the `message_end` refetch, so without this the sent message
+  // vanished until the assistant block ended. The wire id is the persisted row id.
+  const [sent, setSent] = useState<MastraDBMessage[]>([]);
 
   useEffect(() => {
     setFrame(null);
     setStreamFault(null);
+    setSent([]);
   }, [threadId]);
 
   // The one refetch path: cancel kills a fetch that left before the change, so an older body
@@ -60,6 +78,12 @@ export function useThreadStream(options: {
     let stopped = false;
     const accept = (event: AgentControllerEvent) => {
       if (stopped) return;
+      const started = event.type === "message_start" ? (event.message as MastraDBMessage) : null;
+      if (started && isUserTurn(started)) {
+        setSent((previous) =>
+          previous.some((item) => item.id === started.id) ? previous : [...previous, started],
+        );
+      }
       if (event.type === "display_state_changed") {
         setFrame(event.displayState as ChatDisplay);
         if ((event.displayState as ChatDisplay).isRunning) setStreamFault(null);
@@ -100,18 +124,20 @@ export function useThreadStream(options: {
     };
   }, [invalidate, hydrated, session, threadId]);
 
-  const chat = useMemo<ChatState>(
-    () => (query.data ? { ...query.data, display: frame ?? {} } : EMPTY),
-    [query.data, frame],
-  );
+  const chat = useMemo<ChatState>(() => {
+    if (!query.data) return EMPTY;
+    const stored = new Set(query.data.messages.map((message) => message.id));
+    const unstored = sent.filter((message) => !stored.has(message.id));
+    const messages = unstored.length ? [...query.data.messages, ...unstored] : query.data.messages;
+    return { ...query.data, messages, display: frame ?? {} };
+  }, [query.data, frame, sent]);
 
   return {
     chat,
-    // Pending ONLY while there is nothing to show. `useHostCall` raises `pending` on every
-    // refetch — and message_end, agent_end and each SSE reconnect refetch — so reporting raw
-    // pending flashed "Loading thread state" after every completed turn over a thread that was
-    // already on screen.
-    pending: threadId !== null && query.isPending && !hydrated,
+    // Pending exactly while a named thread has no body and no failure. Not `query.isPending`:
+    // that is false on the first render after the thread appears (the fetch starts in an
+    // effect), and true again on every refetch over a thread already on screen.
+    pending: threadId !== null && !hydrated && query.error === undefined,
     error: query.error ?? streamFault,
     invalidate,
   };

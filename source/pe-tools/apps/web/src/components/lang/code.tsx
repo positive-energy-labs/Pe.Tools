@@ -19,6 +19,7 @@
  * growing a windowing layer; the systemic fix for large tool output is Owed in the ledger.
  */
 import { useMemo, useState, type ComponentProps } from "react";
+import { useCopy } from "#/lib/use-copy";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { css } from "@tanstack/highlight/languages/css";
 import { diff } from "@tanstack/highlight/languages/diff";
@@ -123,7 +124,7 @@ export function Code({
   wrap,
   tone,
 }: CodeProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopy();
   const [showAll, setShowAll] = useState(false);
   const gated = code.length > TOKENIZE_LIMIT;
   const shown = gated && !showAll ? code.slice(0, TOKENIZE_LIMIT) : code;
@@ -168,15 +169,7 @@ export function Code({
               show all
             </Press>
           ) : null}
-          <Press
-            tone="quiet"
-            size="label"
-            onClick={() => {
-              void navigator.clipboard.writeText(code);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
+          <Press tone="quiet" size="label" onClick={() => copy(code)}>
             {copied ? "copied" : "copy"}
           </Press>
         </span>

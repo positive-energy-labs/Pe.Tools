@@ -44,7 +44,8 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-behavior: smooth;
+  /* No smooth scroll behaviour here: follow snaps and the initial landing must be instant. The
+     gestures that animate (band tap, turn tag) ask for it per call. */
   /* No browser scrollbar in the chat lane — the mapdial IS the position instrument. */
   scrollbar-width: none;
 }
@@ -543,9 +544,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-annotation="scroller"] {
-    scroll-behavior: auto;
-  }
   [data-annotation="tool-marker"].active {
     animation: none;
   }

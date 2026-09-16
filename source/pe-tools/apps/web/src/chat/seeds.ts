@@ -212,6 +212,18 @@ export const CHAT_SEEDS = {
     readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
     page: {},
   },
+  new: {
+    title: "a thread to leave for a fresh one",
+    work: CHAT_SEED_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  fork: {
+    title: "a thread to clone before trying another path",
+    work: CHAT_SEED_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
   cancel: {
     title: "pea mid-turn, with an approval owed",
     work: CHAT_SEED_STATE,

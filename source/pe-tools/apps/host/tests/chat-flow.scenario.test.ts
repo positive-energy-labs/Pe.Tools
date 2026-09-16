@@ -275,7 +275,7 @@ test("the browser walks one durable chat lifecycle", async () => {
     await composer.fill("APPROVAL_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
     // Allow/refuse lives in the composer head's proposals band, not in the stream row
-    // (`web/src/chat/composer-head.tsx`, `web/src/workbench/aui.tsx`): one location for the gate,
+    // (`web/src/chat/composer-head.tsx`, `web/src/workbench/moments.tsx`): one location for the gate,
     // the stream stays a record.
     const proposals = page.locator('[aria-label="Pea proposals"]');
     const approve = proposals.getByRole("button", { name: "Approve" });

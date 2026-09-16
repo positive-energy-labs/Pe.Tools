@@ -1,8 +1,8 @@
 /**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
  * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
- * second copy. The two actions are the two the surface already had (`workbench/actions.ts`);
- * they close over the session the provider holds, because that session IS chat's host caller.
+ * second copy. `send` and `cancel` run `workbench/actions.ts` over the session the provider holds,
+ * because that session IS chat's host caller; `new` and `fork` run the provider's thread verbs.
  */
 import { z } from "zod";
 
@@ -24,6 +24,11 @@ export interface ChatRouteDeps {
    * action runs the session directly.
    */
   send?: (input: PromptInput) => Promise<void>;
+  /** Whether the thread holds any message; an empty thread has nothing to fork. */
+  hasMessages?: boolean;
+  /** The provider's thread verbs; absent on the static registration. */
+  newThread?: () => void;
+  forkThread?: () => Promise<void>;
 }
 
 const promptInput = z.object({
@@ -31,11 +36,13 @@ const promptInput = z.object({
   attachments: z.array(z.unknown()).optional(),
 });
 
+export type ChatActionKey = "send" | "cancel" | "new" | "fork";
+
 export const chatManifest = (
   deps: ChatRouteDeps,
-): RouteManifest<ChatState, ChatReading, ChatPage, "send" | "cancel"> => {
+): RouteManifest<ChatState, ChatReading, ChatPage, ChatActionKey> => {
   const context = { session: deps.session, display: deps.display ?? emptyChatState().display };
-  return defineRoute<ChatState, ChatReading, ChatPage, "send" | "cancel">({
+  return defineRoute<ChatState, ChatReading, ChatPage, ChatActionKey>({
     key: "chat",
     name: "Chat",
     // Conversation needs no Revit target; each invoked capability resolves its own requirement.
@@ -76,6 +83,36 @@ export const chatManifest = (
         ready: () => CHAT_ACTIONS.cancel.ready(context),
         run: async () => {
           await CHAT_ACTIONS.cancel.run(context);
+        },
+      },
+      new: {
+        label: "new",
+        says: "starts a new, empty thread and opens it",
+        needs: "host",
+        actor: "human",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: ["head"],
+        ready: () => (deps.newThread ? null : "Chat is not ready"),
+        run: async () => {
+          deps.newThread?.();
+        },
+      },
+      fork: {
+        label: "fork",
+        says: "clones this thread, messages and all, and opens the clone",
+        needs: "host",
+        actor: "human",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: ["head"],
+        ready: () => {
+          if (!deps.thread) return "No thread to fork";
+          if (!context.session) return "Session is not ready";
+          if (!deps.hasMessages) return "This thread has no messages to fork";
+          if (context.display.isRunning) return "Pea is working";
+          return deps.forkThread ? null : "Chat is not ready";
+        },
+        run: async () => {
+          await deps.forkThread?.();
         },
       },
     },

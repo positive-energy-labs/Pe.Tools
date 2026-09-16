@@ -49,6 +49,7 @@ test("tail follow survives content growth until the user scrolls up", () => {
       "following",
       { scrollTop: 1500, scrollHeight: 2400, clientHeight: 500 },
       1500,
+      true,
     ),
   ).toBe("following");
   expect(
@@ -56,6 +57,7 @@ test("tail follow survives content growth until the user scrolls up", () => {
       "following",
       { scrollTop: 1200, scrollHeight: 2400, clientHeight: 500 },
       1500,
+      true,
     ),
   ).toBe("detached");
 });
@@ -68,6 +70,7 @@ test("upward scroll inside the tail zone detaches (no snap-back)", () => {
       "following",
       { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
       1500,
+      true,
     ),
   ).toBe("detached");
   // scrolling back down into the zone re-attaches
@@ -76,6 +79,7 @@ test("upward scroll inside the tail zone detaches (no snap-back)", () => {
       "detached",
       { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
       1400,
+      true,
     ),
   ).toBe("following");
 });
@@ -90,4 +94,24 @@ test("focal point reports the current turn", () => {
       { scrollTop: 300, scrollHeight: 1500, clientHeight: 500 },
     ),
   ).toBe(2);
+});
+
+test("only user intent moves follow; a browser clamp does not", () => {
+  // Content shrank and the browser clamped scrollTop down: the view is still at the tail.
+  expect(
+    nextTailFollowState(
+      "following",
+      { scrollTop: 900, scrollHeight: 1500, clientHeight: 600 },
+      1000,
+      false,
+    ),
+  ).toBe("following");
+  expect(
+    nextTailFollowState(
+      "following",
+      { scrollTop: 900, scrollHeight: 1500, clientHeight: 600 },
+      1000,
+      true,
+    ),
+  ).toBe("detached");
 });

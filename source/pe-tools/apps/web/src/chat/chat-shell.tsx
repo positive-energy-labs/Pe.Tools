@@ -7,7 +7,6 @@ import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
-import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { selectBreakdown } from "#/workbench/chat-state";
@@ -26,23 +25,15 @@ import "#/workbench/lens.css";
 export type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 
-export function ChatShell({
-  initialTurn,
-  plugin,
-}: {
-  initialTurn?: number;
-  plugin?: ChatPluginRoute;
-}) {
+export function ChatShell({ plugin }: { plugin?: ChatPluginRoute }) {
   return (
     <HotkeysProvider>
-      <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} plugin={plugin} />
-      </WorkbenchRuntimeProvider>
+      <Surface plugin={plugin} />
     </HotkeysProvider>
   );
 }
 
-function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
+function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
   const {
     store,
     chat,
@@ -54,6 +45,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
     operationError,
     sendPrompt,
     newThread,
+    forkThread,
     openThread,
     renameThread,
     deleteThread,
@@ -68,8 +60,19 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
         display: chat.display,
         session,
         send: (input) => sendPrompt(input.text, input.attachments),
+        hasMessages: chat.messages.length > 0,
+        newThread,
+        forkThread,
       }),
-    [currentThreadId, chat.display, session, sendPrompt],
+    [
+      currentThreadId,
+      chat.display,
+      chat.messages.length,
+      session,
+      sendPrompt,
+      newThread,
+      forkThread,
+    ],
   );
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
@@ -166,9 +169,6 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
               <Lens
                 state={chat}
                 mode={mode}
-                initialTurn={initialTurn}
-                scrollKey={currentThreadId}
-                onTurnChange={store.actions.setTurn}
                 sideOpen={sideOpen}
                 onSideOpenChange={store.actions.setSideOpen}
                 pinKey={pinKey}
@@ -190,7 +190,6 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                 <div className="pe-composer-lane">
                   <div ref={composerRef} className="pointer-events-auto">
                     <Composer
-                      setMode={setMode}
                       handle={handle}
                       topBar={
                         <>

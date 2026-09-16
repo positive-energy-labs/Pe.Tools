@@ -1,7 +1,6 @@
 import { annotation } from "#/components/anatomy";
-import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
-import { Moments } from "../aui";
+import { Moments } from "../moments";
 import { RouteChatPluginDock } from "../route-chat-plugins";
 import { SessionStrip } from "../world";
 import { SidePane } from "#/components/lang/side-pane";
@@ -15,9 +14,6 @@ import type { ChatState } from "../chat-state";
 export function Lens({
   state,
   mode,
-  initialTurn,
-  scrollKey = "",
-  onTurnChange,
   sideHead,
   threadList,
   onSideResize,
@@ -28,9 +24,6 @@ export function Lens({
 }: {
   state: ChatState;
   mode: Mode;
-  initialTurn?: number;
-  scrollKey?: string;
-  onTurnChange?: (turn: number | undefined) => void;
   sideHead?: React.ReactNode;
   threadList?: React.ReactNode;
   onSideResize?: (px: number) => void;
@@ -41,7 +34,9 @@ export function Lens({
   onPinChange?: (key: string | null) => void;
 }) {
   const {
+    messages,
     moments,
+    showEmpty,
     traceCells,
     breakdown,
     userTurns,
@@ -66,7 +61,7 @@ export function Lens({
     registerMoment,
     onPointerDown,
     scrollToTail,
-  } = useLensModel({ state, mode, initialTurn, scrollKey, onTurnChange, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
+  } = useLensModel({ state, mode, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
@@ -130,23 +125,21 @@ export function Lens({
             ) : null}
           </div>
 
-          <ThreadPrimitive.Root style={{ display: "contents" }}>
-            <div {...annotation("chat")} ref={chatRef}>
-              {moments.length === 0 ? (
-                <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
-                  <h1 className={emptyMark()} data-tone="pea">
-                    Pea
-                  </h1>
-                  <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
-                    no messages in this thread yet
-                  </EmptyState>
-                </div>
-              ) : null}
-              <ContextStrip state={state} depth={modeDepth(mode)} />
-              <Moments register={registerMoment} />
-              <RouteChatPluginDock />
-            </div>
-          </ThreadPrimitive.Root>
+          <div {...annotation("chat")} ref={chatRef}>
+            {showEmpty ? (
+              <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
+                <h1 className={emptyMark()} data-tone="pea">
+                  Pea
+                </h1>
+                <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
+                  no messages in this thread yet
+                </EmptyState>
+              </div>
+            ) : null}
+            <ContextStrip state={state} depth={modeDepth(mode)} />
+            <Moments messages={messages} register={registerMoment} />
+            <RouteChatPluginDock />
+          </div>
 
           <div className="col-start-1 sticky top-0 flex" {...annotation("side-pane")}>
             <SidePane

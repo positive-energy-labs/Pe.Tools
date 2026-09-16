@@ -1,8 +1,10 @@
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -12,40 +14,32 @@ import { Paperclip, X } from "lucide-react";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
-import { selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
-import type { Mode } from "#/workbench/depth";
+import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { chipRecipe } from "#/components/lang/chip";
+import { Thumbnail } from "#/workbench/thumbnail";
 import { cn } from "#/lib/utils";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation";
 
+/** A skill the thread's inspect lists: the one thing the slash menu offers. `new` and `fork` are
+ * route verbs (`chat/manifest.ts`); mode switches are the mode dial. */
 interface SlashCommand {
   name: string;
   description: string;
-  kind: "builtin" | "skill";
 }
 
-const BUILTIN_COMMANDS: SlashCommand[] = [
-  { name: "new", description: "Start a new thread", kind: "builtin" },
-  { name: "fork", description: "Fork this thread", kind: "builtin" },
-  { name: "threads", description: "Show the thread list", kind: "builtin" },
-  { name: "trace", description: "Show the trace gutter", kind: "builtin" },
-  { name: "world", description: "Show the context world inspector", kind: "builtin" },
-];
-
 export function Composer({
-  setMode,
   handle,
   topBar,
 }: {
-  setMode: (mode: Mode) => void;
   /** The route handle; Enter runs its Send verb scoped to this draft, the head draws the same. */
   handle: ChatHandle;
   /** Rendered flush at the top edge of the box — the composer head and the budget bar. */
   topBar?: ReactNode;
 }) {
-  const { store, chat, newThread, forkThread } = useWorkbench();
+  const { store, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const liveDraft = useAtomValue(store.atoms.draft);
   const draft = liveDraft;
@@ -64,19 +58,49 @@ export function Composer({
     store.actions.setDraft(update);
   };
   const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const addFiles = async (list: ArrayLike<File>) => {
+    const { admitted, refusal } = admitFiles(Array.from(list), attachments.length);
+    setRefusal(refusal);
+    if (admitted.length === 0) return;
+    const next = await Promise.all(admitted.map(readAttachment));
+    setAttachments((previous) => [...previous, ...next]);
+  };
+  // A thumbnail's object URL lives exactly as long as its chip: removed or sent, it is revoked.
+  // ponytail: an unmount with image chips still in the draft leaks their URLs until the page
+  // unloads (the draft atom outlives the composer and still points at them). It matters only if
+  // many large drafts are abandoned in one long session; revoke from the store if that shows up.
+  const previews = useRef(new Set<string>());
+  useEffect(() => {
+    const live = new Set(attachments.flatMap((attachment) => attachment.preview ?? []));
+    for (const url of previews.current) if (!live.has(url)) URL.revokeObjectURL(url);
+    previews.current = live;
+  }, [attachments]);
+  // A file dropped anywhere else must not navigate the tab to it.
+  useEffect(() => {
+    const guard = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+    return () => {
+      window.removeEventListener("dragover", guard);
+      window.removeEventListener("drop", guard);
+    };
+  }, []);
+  const carriesFiles = (event: ReactDragEvent) =>
+    Array.from(event.dataTransfer?.types ?? []).includes("Files");
+  const onDragOver = (event: ReactDragEvent) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    setDragging(true);
+  };
   const menuId = useId();
   const [activeCommand, setActiveCommand] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
 
-  const commands = useMemo<SlashCommand[]>(
-    () => [
-      ...BUILTIN_COMMANDS,
-      ...selectSkillCommands(chat.inspect).map(
-        (skill): SlashCommand => ({ ...skill, kind: "skill" }),
-      ),
-    ],
-    [chat.inspect],
-  );
+  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat.inspect), [chat.inspect]);
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
   const matches =
     slash !== undefined
@@ -88,42 +112,9 @@ export function Composer({
   const showMenu =
     !menuDismissed && slash !== undefined && !text.includes(" ") && visibleMatches.length > 0;
 
-  const runBuiltin = (name: string): boolean => {
-    switch (name) {
-      case "new":
-        newThread();
-        return true;
-      case "fork":
-        void forkThread();
-        return true;
-      case "threads":
-      case "trace":
-      case "world":
-        setMode(name as Mode);
-        return true;
-      default:
-        return false;
-    }
-  };
-
-  const pick = (command: SlashCommand) => {
-    if (command.kind === "builtin") {
-      runBuiltin(command.name);
-      setText("");
-    } else {
-      setText(`Use the ${command.name} skill: `);
-    }
-  };
+  const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
 
   const sendCurrent = () => {
-    const trimmed = text.trim();
-    if (trimmed.startsWith("/")) {
-      const name = trimmed.slice(1).split(/\s+/)[0]!.toLowerCase();
-      if (runBuiltin(name)) {
-        setText("");
-        return;
-      }
-    }
     // Enter is the same verb as the head's Send; a refused verb stays quiet here, as it always
     // has, and the head's button is where the refusal speaks.
     if (send.refusal) return;
@@ -165,8 +156,7 @@ export function Composer({
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    const next = await Promise.all(Array.from(files).map(readAttachment));
-    setAttachments((previous) => [...previous, ...next]);
+    await addFiles(files);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -185,7 +175,7 @@ export function Composer({
         >
           {visibleMatches.map((command, index) => (
             <Press
-              key={`${command.kind}:${command.name}`}
+              key={command.name}
               id={`${menuId}-${index}`}
               type="button"
               role="option"
@@ -208,34 +198,42 @@ export function Composer({
 
       {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
           input reads as a place you write rather than a strip the transcript ran into. */}
+      {/* Files dropped anywhere on the box attach; while a file drag is over it, the box takes
+          the recess ground. */}
       <div
         className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
-        data-surface="artifact"
+        data-surface={dragging ? "recess" : "artifact"}
+        data-drop-zone=""
+        onDragEnter={onDragOver}
+        onDragOver={onDragOver}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setDragging(false);
+          void addFiles(event.dataTransfer.files);
+        }}
       >
         {topBar}
 
         {attachments.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+          <div className="flex flex-wrap items-end gap-1.5 px-3 pt-3">
             {attachments.map((attachment, index) => (
-              <span
+              <AttachmentChip
                 key={index}
-                className="hairline-x-faint hairline-y-faint inline-flex items-center gap-1 rounded-sm px-2 py-0.5 t-small t-upper"
-                data-surface="recess"
-              >
-                {attachment.name ?? "attachment"}
-                <Press
-                  type="button"
-                  title="Remove"
-                  onClick={() =>
-                    setAttachments((previous) =>
-                      previous.filter((_, position) => position !== index),
-                    )
-                  }
-                >
-                  <X className="size-3" />
-                </Press>
-              </span>
+                attachment={attachment}
+                onRemove={() =>
+                  setAttachments((previous) => previous.filter((_, position) => position !== index))
+                }
+              />
             ))}
+          </div>
+        ) : null}
+        {refusal ? (
+          <div className="px-3 pt-2 t-small" data-tone="caution">
+            {refusal}
           </div>
         ) : null}
 
@@ -250,7 +248,7 @@ export function Composer({
             aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
             size="compact"
             surface="embedded"
-            placeholder="Ask Pea…  ( / for commands )"
+            placeholder="Ask Pea…  ( / for skills )"
             rows={1}
             autoFocus
             value={text}
@@ -260,6 +258,12 @@ export function Composer({
               setMenuDismissed(false);
             }}
             onKeyDown={onKeyDown}
+            onPaste={(event) => {
+              const files = event.clipboardData.files;
+              if (files.length === 0) return;
+              event.preventDefault();
+              void addFiles(files);
+            }}
           />
           {/* Control row: attachments + session controls (model/access), then Send — the same
               manifest verb Enter runs, with the Situation's flag (moved here from the head,
@@ -280,6 +284,9 @@ export function Composer({
               hidden
               onChange={(event) => void onFiles(event.currentTarget.files)}
             />
+            {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
+            <SituationAction handle={handle} name="new" action={handle.actions.new} />
+            <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
             <ControlChips />
             <span className="ml-auto flex items-center gap-1.5">
               {isRunning ? (
@@ -294,6 +301,58 @@ export function Composer({
   );
 }
 
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: WorkbenchAttachment;
+  onRemove: () => void;
+}) {
+  const { base, label, count } = chipRecipe();
+  const name = attachment.name ?? "attachment";
+  return (
+    <span
+      className={base({ class: attachment.preview ? "h-auto py-[3px]" : undefined })}
+      data-surface="artifact"
+      title={`${name} is attached to the next message`}
+    >
+      {attachment.preview ? <Thumbnail src={attachment.preview} name={name} fit="chip" /> : null}
+      <span className={label()}>{name}</span>
+      {!attachment.preview && attachment.size !== undefined ? (
+        <span className={count()}>{formatBytes(attachment.size)}</span>
+      ) : null}
+      <Press type="button" tone="quiet" title={`Remove ${name}`} onClick={onRemove}>
+        <X className="size-3" />
+      </Press>
+    </span>
+  );
+}
+
+// ponytail: our own ceiling, 5 MB a file and 10 a message; the model provider's limit is the real
+// authority. Raise these when a provider accepts more and users hit them.
+const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
+
+/** The one attachment rule: which files fit beside `held` ones, and one line naming the rest. */
+function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
+  const admitted: File[] = [];
+  const tooBig: string[] = [];
+  const tooMany: string[] = [];
+  for (const file of files) {
+    if (file.size > ATTACHMENT_LIMITS.fileBytes) tooBig.push(file.name);
+    else if (held + admitted.length >= ATTACHMENT_LIMITS.files) tooMany.push(file.name);
+    else admitted.push(file);
+  }
+  const reasons = [
+    tooBig.length
+      ? `${tooBig.join(", ")} (over the ${ATTACHMENT_LIMITS.fileBytes / 1024 / 1024} MB limit per file)`
+      : "",
+    tooMany.length
+      ? `${tooMany.join(", ")} (${ATTACHMENT_LIMITS.files} files per message at most)`
+      : "",
+  ].filter(Boolean);
+  return { admitted, refusal: reasons.length ? `Not added: ${reasons.join("; ")}` : undefined };
+}
+
 async function readAttachment(file: File): Promise<WorkbenchAttachment> {
   const textual =
     file.type.startsWith("text/") ||
@@ -301,12 +360,19 @@ async function readAttachment(file: File): Promise<WorkbenchAttachment> {
       file.name,
     );
   if (textual) {
-    return { name: file.name, mimeType: file.type || "text/plain", text: await file.text() };
+    return {
+      name: file.name,
+      mimeType: file.type || "text/plain",
+      size: file.size,
+      text: await file.text(),
+    };
   }
   return {
     name: file.name,
     mimeType: file.type || "application/octet-stream",
+    size: file.size,
     data: base64FromBuffer(await file.arrayBuffer()),
+    ...(file.type.startsWith("image/") ? { preview: URL.createObjectURL(file) } : {}),
   };
 }
 
