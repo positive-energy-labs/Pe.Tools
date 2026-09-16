@@ -7,7 +7,7 @@ import { callHostRpc } from "#/host/client";
 import type { Lane } from "#/readings";
 import { DeployBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
-import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
+import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 
 const DOC_FETCH_BOUND = 12;
 

@@ -4,7 +4,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
-import type { SyntheticViewProps } from "#/ops/synthetic";
+import type { SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, SERIES_META, Stat, categoryViz, composition, obs } from "./viz-cycle";
 
 export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {

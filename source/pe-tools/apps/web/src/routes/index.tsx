@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   FileScan,
+  FlaskConical,
   Boxes,
   History,
   LayoutGrid,
@@ -83,6 +84,14 @@ const TOOLS = [
     icon: FileScan,
     description:
       "The grounded-document engine in isolation — parsed markdown beside the PDF pages, hover either side to link them.",
+  },
+  {
+    to: "/lab",
+    title: "Lab",
+    label: "Experimental",
+    icon: FlaskConical,
+    description:
+      "Composed glances — many host calls gathered into one drawing, run against a session you pick.",
   },
   {
     to: "/ops",

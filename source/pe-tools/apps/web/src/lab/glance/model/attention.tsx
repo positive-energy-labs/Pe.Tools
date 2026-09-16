@@ -5,7 +5,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { KVGrid, VizChip } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
-import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
+import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, composition, obs } from "./viz-cycle";
 import { ModelGlanceView } from "./summary";
 
