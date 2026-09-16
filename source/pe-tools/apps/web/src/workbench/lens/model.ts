@@ -324,12 +324,12 @@ export function useLensModel({
         const scrollerTop = scroller.getBoundingClientRect().top;
         for (const marker of chat.querySelectorAll<HTMLElement>("[data-tool-id]")) {
           const toolId = marker.dataset.toolId;
-          const parent = marker.closest<HTMLElement>(".lens-moment")?.dataset.key;
+          const parent = marker.closest<HTMLElement>('[data-annotation="moment"]')?.dataset.key;
           if (!toolId || !parent) continue;
           const anchor = marker.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
           const key = `tool:${toolId}`;
           cardAnchors.push({ key, parent, anchor });
-          const rail = marker.querySelector<HTMLElement>(".lens-marker");
+          const rail = marker.querySelector<HTMLElement>('[data-annotation="tool-marker"]');
           if (rail) markerByKey.set(key, rail);
         }
       }
