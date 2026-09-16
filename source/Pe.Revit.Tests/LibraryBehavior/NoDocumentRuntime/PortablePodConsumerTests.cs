@@ -21,10 +21,11 @@ public sealed class PortablePodConsumerTests {
             ["composed/batch.batch.json"] = new("composed/batch.batch.json", "{}", []),
             ["composed/one.schedule.json"] = new("composed/one.schedule.json", "{\"Name\":\"Original\"}", [])
         };
-        var snapshot = new PreparedPod(manifest, "snapshot", files, composed, [], []);
+        var snapshot = new PreparedPod(manifest, "snapshot", files, composed, [], []) { ReleaseHash = "verified-release" };
         var batch = PreparedPodSettingsCatalog.Project(snapshot, Path.GetTempPath(), [".batch.json"]).Single();
         var member = batch.Member("settings/one.schedule.json");
         Assert.That(member.Snapshot, Is.SameAs(snapshot));
+        Assert.That(member.ReleaseHash, Is.EqualTo("verified-release"));
         Assert.That(member.ComposedContent, Does.Contain("Original"));
         Assert.Throws<InvalidDataException>(() => batch.Member("settings/missing.schedule.json"));
     }

@@ -99,7 +99,7 @@ internal static class PreparedPodSettingsCatalog {
                 prepared.Manifest.Id,
                 prepared.Manifest.Version,
                 prepared.ContentHash,
-                prepared.Manifest.Parent is not null && prepared.Manifest.Parent.ReleaseHash == prepared.ContentHash ? prepared.ContentHash : null,
+                prepared.ReleaseHash,
                 sourcePath,
                 document.Path,
                 System.Text.Encoding.UTF8.GetString(source.Bytes),
