@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { emptyChatState } from "#/workbench/chat-state";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -30,6 +30,14 @@ test("the slash menu offers skills only; built-in commands are gone", () => {
   lane.unmount();
 });
 
+const newAction = {
+  label: "new",
+  says: "starts a new, empty thread and opens it",
+  refusal: null,
+  count: null,
+  run: vi.fn(),
+};
+
 function mount({ skills = [] as { name: string; description: string }[] } = {}) {
   const registry = AtomRegistry.make();
   const store = createChatPageStore({
@@ -50,7 +58,17 @@ function mount({ skills = [] as { name: string; description: string }[] } = {}) 
           {
             actions: {
               send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+              new: newAction,
+              fork: {
+                label: "fork",
+                says: "clones this thread",
+                refusal: "No thread to fork",
+                count: null,
+                run: vi.fn(),
+              },
             },
+            outcome: null,
+            busy: null,
           } as never
         }
       />
@@ -164,4 +182,17 @@ test("a file over the limit is refused with one caution line naming it", async (
   await settle();
   expect(lane.attachments()).toHaveLength(10);
   expect(lane.container.querySelector("[data-tone='caution']")?.textContent).toContain("10 files");
+});
+
+test("new and fork sit in the control row as route actions, refusals shown the same way", () => {
+  const lane = mount();
+  const row = screen.getByTitle("Attach files").parentElement!;
+  const fresh = within(row).getByRole("button", { name: "new" });
+  const fork = within(row).getByRole("button", { name: "fork" });
+  expect(fresh.getAttribute("aria-disabled")).toBe("false");
+  expect(fork.getAttribute("aria-disabled")).toBe("true");
+  expect(fork.getAttribute("title")).toBe("No thread to fork");
+  fireEvent.click(fresh);
+  expect(newAction.run).toHaveBeenCalledOnce();
+  lane.unmount();
 });

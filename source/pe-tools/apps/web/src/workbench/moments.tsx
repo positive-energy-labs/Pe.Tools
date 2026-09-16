@@ -76,9 +76,14 @@ function MomentSection({
       ref={setRef}
       className="group/moment relative"
     >
-      {/* Out of flow, so it never shifts the message; shown on hover or keyboard focus. */}
+      {/* Out of flow, in the gap under the message (pea's at the left, yours at the right), so it
+          never adds height; shown on hover or keyboard focus. */}
       {markdown ? (
-        <span className="absolute top-0 right-0" data-surface="page">
+        <span
+          data-copy-anchor=""
+          className={`absolute top-full z-raised ${role === "user" ? "right-0" : "left-[10px]"}`}
+          data-surface="page"
+        >
           <span className="sr-only group-hover/moment:not-sr-only focus-within:not-sr-only">
             <CopyMessage markdown={markdown} />
           </span>

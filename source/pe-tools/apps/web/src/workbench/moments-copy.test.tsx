@@ -42,3 +42,23 @@ test("each message copies its text as markdown source, and says so", async () =>
   act(() => void vi.advanceTimersByTime(1500));
   expect(copy.textContent).toBe("copy");
 });
+
+test("the copy control overlays below the message: pea's at the left, yours at the right", () => {
+  const user = {
+    id: "u1",
+    role: "user",
+    createdAt: new Date("2026-09-16T11:59:00Z"),
+    content: { format: 2, parts: [{ type: "text", text: "hi" }] },
+  } as unknown as MastraDBMessage;
+  const messages = selectMessages({ ...emptyChatState(), messages: [user, assistant] });
+  const { container } = render(<Moments messages={messages} register={() => {}} />);
+  const anchor = (role: string) =>
+    container.querySelector(`[data-role='${role}'] [data-copy-anchor]`)!.className.split(" ");
+  // Out of flow and below the message's box: no added height, no shift.
+  expect(anchor("assistant")).toEqual(
+    expect.arrayContaining(["absolute", "top-full", "left-[10px]"]),
+  );
+  expect(anchor("assistant")).not.toContain("right-0");
+  expect(anchor("user")).toEqual(expect.arrayContaining(["absolute", "top-full", "right-0"]));
+  expect(anchor("user")).not.toContain("left-[10px]");
+});
