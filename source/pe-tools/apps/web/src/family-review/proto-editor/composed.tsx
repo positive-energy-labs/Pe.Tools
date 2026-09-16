@@ -19,13 +19,25 @@ import { token } from "#/lib/token";
  * document this family was already materialized into; nothing can, and the no-sync law says the UI
  * must never suggest otherwise.
  *
- * THE JSON PANE IS A COMPOSITION, NOT `JsonEditor`. `JsonEditor` takes no `decorations`, so an
- * editable pane cannot paint a highlighted range with it. `JsonView` does, and the shipped
- * `.jsonpane-input` / `.jsonpane-paint` classes are exactly the overlay contract — so the pane here
- * is `JsonView` as paint under the shipped textarea. Two rules of local css, zero edits to the
- * sibling-owned file. The promotion fix is one `decorations` prop on `JsonEditor`.
+ * THE JSON PANE IS `prism-react-editor` (POC). It owns the textarea overlay, JSON grammar, bracket
+ * matching, Tab indent and undo; the focused field's range is a one-match search scoped to its span.
+ * The editor is uncontrolled: its `value` prop is held still while a draft is in flight, because a
+ * new prop resets caret and history.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Editor as PrismEditorView } from "prism-react-editor";
+import {
+  addEditorHotkey,
+  indentSelectedLines,
+  insertTab,
+  useEditHistory,
+} from "prism-react-editor/commands";
+import { usePrismEditor } from "prism-react-editor/extensions";
+import { useBracketMatcher } from "prism-react-editor/match-brackets";
+import { useHighlightBracketPairs } from "prism-react-editor/highlight-brackets";
+import { useEditorSearch } from "prism-react-editor/search";
+import "prism-react-editor/prism/languages/json";
+import "prism-react-editor/layout.css";
 
 import { FactChip } from "#/components/lang/chip";
 import { Verb } from "#/components/lang/verb";
@@ -34,7 +46,6 @@ import { PartSidebar, SentenceGrids } from "#/family-review/proto-editor/compose
 import { Triptych } from "#/family-review/proto-editor/composed-triptych";
 import { jsonWithSpans, pointerAtOffset } from "#/family-review/proto-editor/json-map";
 import { StatePanel, TypeStage, type Editor } from "#/family-review/proto-editor/shell";
-import { JsonView, type HighlightDecoration } from "#/settings-panes/json-editor";
 import type { FamilyModel } from "#/family/family-model";
 
 import "./composed.css";
@@ -135,31 +146,15 @@ function Chrome({
 // ── the synced json pane ────────────────────────────────────────────────────────────────────────
 
 function JsonPane({ editor }: { editor: Editor }) {
-  const [draft, setDraft] = useState<string | null>(null);
+  // The text the editor was handed when a draft began; held so typing never resets the caret.
+  const [held, setHeld] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const paint = useRef<HTMLDivElement>(null);
-  const pane = useRef<HTMLDivElement>(null);
 
   const map = useMemo(() => jsonWithSpans(editor.model), [editor.model]);
-  const text = draft ?? map.text;
+  const value = held ?? map.text;
 
-  const decorations = useMemo<HighlightDecoration[]>(() => {
-    const span = editor.focus == null ? undefined : map.byPointer.get(editor.focus);
-    // A draft in flight moves every offset, so the paint would land on the wrong characters.
-    if (!span || draft != null) return [];
-    return [{ range: [span.start, span.end] as const, className: "dec-field" }];
-  }, [editor.focus, map, draft]);
-
-  // Bring the painted range into view when the focus arrived from a structured surface.
-  useEffect(() => {
-    paint.current?.querySelector(".dec-field")?.scrollIntoView({ block: "nearest" });
-  }, [editor.focus]);
-
-  const caretMoved = (event: React.SyntheticEvent) => {
-    const target = event.target as HTMLTextAreaElement;
-    if (target.tagName !== "TEXTAREA" || draft != null) return;
-    editor.setFocus(pointerAtOffset(map, target.selectionStart));
-  };
+  // A draft in flight moves every offset, so the paint would land on the wrong characters.
+  const span = held == null && editor.focus != null ? map.byPointer.get(editor.focus) : undefined;
 
   return (
     <div className="flex min-h-0 w-[420px] flex-col" style={{ borderColor: token("line") }}>
@@ -176,46 +171,66 @@ function JsonPane({ editor }: { editor: Editor }) {
           that parsed.
         </p>
       ) : null}
-      <div ref={pane} className="min-h-0 flex-1">
-        <div className="h-full">
-          <div ref={paint}>
-            <JsonView code={`${text}\n`} decorations={decorations} />
-          </div>
-          <textarea
-            value={text}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoComplete="off"
-            wrap="off"
-            aria-label="raw family.json"
-            onChange={(event) => {
-              const next = event.target.value;
-              setDraft(next);
-              try {
-                const parsed = JSON.parse(next) as FamilyModel;
-                setParseError(null);
-                editor.apply(() => parsed);
-              } catch (error) {
-                setParseError(error instanceof Error ? error.message : "parse failed");
-              }
-            }}
-            onBlur={() => {
+      <div data-json-prism="" className="min-h-0 flex-1">
+        <PrismEditorView
+          language="json"
+          value={value}
+          lineNumbers={false}
+          textareaProps={{
+            "aria-label": "raw family.json",
+            onBlur: () => {
               // Re-normalize to the canonical serialization once the user is done typing, so the
               // pointer→range map and the text can never disagree.
-              if (parseError == null) setDraft(null);
-            }}
-            onSelect={caretMoved}
-            onClick={caretMoved}
-            onKeyUp={caretMoved}
-            onScroll={(event) => {
-              const node = paint.current;
-              if (!node) return;
-              node.scrollTop = event.currentTarget.scrollTop;
-              node.scrollLeft = event.currentTarget.scrollLeft;
-            }}
-          />
-        </div>
+              if (parseError == null) setHeld(null);
+            },
+          }}
+          onUpdate={(next, prism) => {
+            if (!prism.focused) return; // the editor echoing a new `value` prop, not an edit
+            if (held == null) setHeld(value);
+            try {
+              const parsed = JSON.parse(next) as FamilyModel;
+              setParseError(null);
+              editor.apply(() => parsed);
+            } catch (error) {
+              setParseError(error instanceof Error ? error.message : "parse failed");
+            }
+          }}
+          onSelectionChange={([start], _, prism) => {
+            if (prism.focused && held == null) editor.setFocus(pointerAtOffset(map, start));
+          }}
+        >
+          <JsonExtensions value={value} start={span?.start} end={span?.end} />
+        </PrismEditorView>
       </div>
     </div>
   );
+}
+
+/** JSON grammar is imported above; this adds bracket matching, Tab indent, undo and the field paint. */
+function JsonExtensions({ value, start, end }: { value: string; start?: number; end?: number }) {
+  const [prism] = usePrismEditor();
+  useBracketMatcher(prism, false);
+  useHighlightBracketPairs(prism);
+  useEditHistory(prism);
+  useEffect(() => {
+    const indent = addEditorHotkey(prism, "Tab", (on) => {
+      const [from, to] = on.getSelection();
+      return from === to ? insertTab(on, from) : indentSelectedLines(on);
+    });
+    const outdent = addEditorHotkey(prism, "Shift+Tab", (on) => indentSelectedLines(on, true));
+    return () => {
+      indent();
+      outdent();
+    };
+  }, [prism]);
+
+  const field = useEditorSearch(prism);
+  useEffect(() => {
+    field.container.dataset.jsonField = "";
+    if (start == null || end == null) return field.stopSearch();
+    field.search(prism.value.slice(start, end), true, false, false, [start, end]);
+    // Bring the painted range into view only when the focus arrived from a structured surface.
+    if (!prism.focused) field.container.querySelector("span")?.scrollIntoView({ block: "nearest" });
+  }, [prism, field, value, start, end]);
+  return null;
 }

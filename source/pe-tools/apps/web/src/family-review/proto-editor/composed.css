@@ -1,18 +1,45 @@
-/* PROTOTYPE (round 3) — the two rules the composed page adds to the shipped json pane.
+/* PROTOTYPE (round 3) — the prism-react-editor json pane, themed on the design-lang role tokens
+   (the same mapping as settings-panes/json-editor.css). No stock prism theme. */
 
-   `settings-panes/json-editor.css` styles line decorations only (`.th-line.dec-*`), and its
-   `JsonEditor` takes no `decorations` at all — so a pane that is BOTH editable and cross-pane
-   highlighted has to compose `JsonView` (which does take decorations) as the paint layer under the
-   shipped `.jsonpane-input` textarea. These two rules are what that composition needs; everything
-   else comes from the shipped stylesheet. Sibling-owned file, so nothing there was edited. */
+[data-json-prism] {
+  position: relative;
+}
 
-.fed-json-paint > .jsonpane {
-  position: static;
-  overflow: visible;
+[data-json-prism] .prism-code-editor {
+  position: absolute;
+  inset: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  --pce-bg: transparent;
+  --pce-cursor: var(--pe-ink);
+  --pce-selection: color-mix(in srgb, var(--pe-ink) 18%, transparent);
+}
+
+[data-json-prism] .token.property {
+  color: var(--pe-ink);
+}
+[data-json-prism] .token.string {
+  color: var(--pe-ink-2);
+}
+[data-json-prism] .token.number {
+  color: var(--pe-commit);
+}
+[data-json-prism] .token.boolean,
+[data-json-prism] .token.null {
+  color: var(--pe-caution);
+}
+[data-json-prism] .token.punctuation,
+[data-json-prism] .token.operator {
+  color: var(--pe-ink-mute);
+}
+
+[data-json-prism] .active-bracket {
+  box-shadow: inset 0 0 0 1px var(--pe-ink-mute);
 }
 
 /* The focused structured field, painted in the json. Selection is a FILL, never a hue. */
-.jsonpane .th-decoration.dec-field {
+[data-json-prism] [data-json-field] span {
   background: var(--pe-select);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pe-ink) 20%, transparent);
   border-radius: var(--radius);

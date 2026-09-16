@@ -40,6 +40,7 @@
     "cmdk": "catalog:",
     "effect": "4.0.0-beta.92",
     "lucide-react": "1.21.0",
+    "prism-react-editor": "catalog:",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
