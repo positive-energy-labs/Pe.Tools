@@ -2,7 +2,7 @@
 
 ## Result
 
-`sanitizeSvg` now removes only the Google Fonts `@import` rules emitted by `beautiful-mermaid@1.1.3`. All remaining renderer CSS is preserved, including the page-owned `font: "var(--font-body)"` family and the library's local/system fallbacks.
+`sanitizeSvg` now removes only the Google Fonts `@import` rules emitted by `beautiful-mermaid@1.1.3` and normalizes its quoted CSS-variable family to `font-family: var(--font-body), system-ui, sans-serif`. The page-owned theme variable and the library's fallback stack therefore remain effective.
 
 ## Cause
 
@@ -17,11 +17,11 @@ Installed-source evidence:
 
 ## Adapter boundary
 
-The normalization matches the renderer's literal `@import url('https://fonts.googleapis.com/css2?family=...');` output. It removes both the primary import and the optional JetBrains Mono import while leaving font-family declarations and theme variables intact. It is not a general CSS sanitizer.
+The normalization matches the renderer's literal `@import url('https://fonts.googleapis.com/css2?family=...');` output and its literal `font-family: 'var(--font-body)',` output. It removes both the primary import and the optional JetBrains Mono import, then unquotes only that known theme token while retaining `system-ui, sans-serif`. It is not a general CSS sanitizer.
 
 ## Proof and commit
 
-- Generated flowchart and class-diagram regression: no `fonts.googleapis.com`; `font-family: 'var(--font-body)', system-ui, sans-serif` remains.
+- Generated flowchart and class-diagram regression: no `fonts.googleapis.com`; the effective `font-family: var(--font-body), system-ui, sans-serif` remains, with no quoted variable token.
 - Deterministic focused check: `vp test apps/web/src/components/lang/diagram.test.tsx` - **PASS**, 1 file / 9 tests.
 - Focused static check: `vp check apps/web/src/components/lang/diagram.tsx apps/web/src/components/lang/diagram.test.tsx` - **PASS**, formatting, lint, and types.
 - Fix commit: `4427579` (`fix diagram font imports`).

@@ -64,7 +64,8 @@ test("generated diagrams keep theme fonts without requesting Google Fonts", () =
   for (const source of [FLOW, "classDiagram\n  class AHU {\n    +start()\n  }"]) {
     const svg = sanitizeSvg(renderMermaidSVG(source, diagramColors()));
     expect(svg).not.toContain("fonts.googleapis.com");
-    expect(svg).toContain("font-family: 'var(--font-body)', system-ui, sans-serif");
+    expect(svg).toContain("font-family: var(--font-body), system-ui, sans-serif");
+    expect(svg).not.toContain("font-family: 'var(--font-body)'");
   }
 });
 
