@@ -15,16 +15,23 @@ public sealed class ScriptArtifactWriter {
     private readonly string _runRoot;
     private long _totalBytes;
 
-    public ScriptArtifactWriter(string executionId, string? runName = null) {
+    public ScriptArtifactWriter(string executionId, string? runName = null, string? outputRoot = null) {
         var safeRunName = SanitizeFileName(string.IsNullOrWhiteSpace(runName) ? executionId : runName!);
         this._runRoot = Path.Combine(
-            ProductUserContentLayout.ForCurrentUser().Output.RootPath,
+            outputRoot ?? ProductUserContentLayout.ForCurrentUser().Output.RootPath,
             "scripts",
             safeRunName
         );
     }
 
     public IReadOnlyList<ScriptArtifactData> Artifacts => this._artifacts;
+
+    internal ScriptArtifactData WriteReceipt(PodExecutionAttributionData receipt) {
+        var path = this.ResolveArtifactPath("pod-receipt.json");
+        Directory.CreateDirectory(this._runRoot);
+        File.WriteAllText(path, JsonConvert.SerializeObject(receipt, Formatting.Indented));
+        return new ScriptArtifactData("pod-receipt.json", "pod-receipt.json", path, "application/json", new FileInfo(path).Length);
+    }
 
     public ScriptArtifactData WriteText(string relativePath, string content, string contentType = "text/plain") =>
         this.WriteArtifact(relativePath, content ?? string.Empty, contentType);

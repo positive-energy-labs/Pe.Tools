@@ -11,6 +11,7 @@ internal sealed class ScriptOutputSink {
     private bool _truncated;
 
     public Pe.Shared.HostContracts.Scripting.PodExecutionAttributionData? Attribution { get; set; }
+    public Pe.Revit.Scripting.Storage.ScriptArtifactWriter? Artifacts { get; set; }
 
     public string GetBufferedOutput() {
         lock (this._sync)

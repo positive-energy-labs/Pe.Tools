@@ -106,6 +106,8 @@ public sealed class RevitScriptExecutionService(
 
             var plan = planResult.Plan;
             outputSink.Attribution = plan.Attribution;
+            outputSink.Artifacts = new ScriptArtifactWriter(plan.ExecutionId, outputRoot:
+                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod ? Path.Combine(plan.WorkspaceRoot, "output") : null);
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
@@ -791,7 +793,7 @@ public sealed class RevitScriptExecutionService(
             document,
             selection,
             plan.RevitVersion,
-            new ScriptArtifactWriter(plan.ExecutionId),
+            outputSink.Artifacts!,
             cancellationToken,
             outputSink.WriteLine,
             this._notificationSink
@@ -1138,25 +1140,36 @@ public sealed class RevitScriptExecutionService(
         string executionId,
         IReadOnlyList<ScriptArtifactData>? artifacts = null,
         object? data = null
-    ) => new(
+    ) {
+        var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
+            Outcome = status.ToString(),
+            Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
+            Outputs = [
+                .. (artifacts ?? []).Select(artifact => new ScriptOutputReferenceData("artifact", artifact.RelativePath))
+            ]
+        };
+        var resultArtifacts = artifacts?.ToList() ?? [];
+        var resultDiagnostics = diagnostics.ToList();
+        if (attribution is not null && outputSink.Artifacts is not null) {
+            try {
+                resultArtifacts.Add(outputSink.Artifacts.WriteReceipt(attribution));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                resultDiagnostics.Add(ScriptDiagnosticFactory.Warning("pod.receipt", $"Execution finished but its receipt could not be saved: {exception.Message}"));
+            }
+        }
+        return new(
         status,
         outputSink.GetBufferedOutput(),
-        diagnostics.ToList(),
+        resultDiagnostics,
         revitVersion,
         targetFramework,
         containerTypeName,
         executionId,
-        artifacts?.ToList() ?? [],
+        resultArtifacts,
         data,
-        outputSink.Attribution is null ? null : outputSink.Attribution with {
-            Outcome = status.ToString(),
-            Outputs = [
-                .. (artifacts ?? []).Select(artifact => new ScriptOutputReferenceData("artifact", artifact.RelativePath)),
-                .. (data is null ? [] : new[] { new ScriptOutputReferenceData("operation-result", "data") }),
-                .. (string.IsNullOrWhiteSpace(outputSink.GetBufferedOutput()) ? [] : new[] { new ScriptOutputReferenceData("output", "buffer") })
-            ]
-        }
+        attribution
     );
+    }
 
     private static void AppendDiagnostic(
         List<ScriptDiagnostic> diagnostics,
