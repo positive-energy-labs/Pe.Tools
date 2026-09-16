@@ -7,6 +7,7 @@ import { fb, flagLabel, type StagedItem, useFb } from "./staging";
 import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
+import { Code } from "#/components/lang/code";
 
 export function ExportActions(props: {
   items: StagedItem[];
@@ -94,12 +95,9 @@ export function ExportStatus(props: { className?: string }) {
       {lastExport.warning && <span style={{ color: token("alarm") }}>{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
-        <pre
-          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all p-1.5"
-          style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
-        >
-          {lastExport.text}
-        </pre>
+        <div className="mt-1">
+          <Code code={lastExport.text} lang="plaintext" />
+        </div>
       </details>
     </div>
   );

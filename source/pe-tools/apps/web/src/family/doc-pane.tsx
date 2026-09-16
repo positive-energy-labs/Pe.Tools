@@ -18,6 +18,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Switcher } from "#/components/lang/switcher";
 import { hashOf } from "#/family/model";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
+import { Code } from "#/components/lang/code";
 
 export function SpecText({
   spec,
@@ -70,7 +71,7 @@ export function SpecText({
                   </>
                 }
               >
-                <pre className="mt-1 px-2 py-1.5">{block.md}</pre>
+                <Code code={block.md} lang="markdown" />
               </ArtifactFrame>
             </div>
           );

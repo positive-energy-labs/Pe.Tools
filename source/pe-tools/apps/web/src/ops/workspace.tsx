@@ -20,6 +20,7 @@ import { OpForm, requestOf, seedValues, type FormValues } from "#/ops/form";
 import { isMutation, opsManifest, type HostOperationCatalogEntry } from "#/ops/manifest";
 import { outputRenderers } from "#/ops/renderers";
 import { runOp } from "#/ops/run";
+import { Code, stringify } from "#/components/lang/code";
 
 type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 type Value = { op: string; request: unknown; value: unknown; elapsedMs: number };
@@ -207,9 +208,7 @@ export function OpsRoute({
                   ) : null}
                   <details open={!Output}>
                     <summary className="cursor-pointer">raw response</summary>
-                    <pre className="max-h-[32rem] overflow-auto p-3">
-                      {JSON.stringify(value.value, null, 2)}
-                    </pre>
+                    <Code code={stringify(value.value)} lang="json" />
                   </details>
                 </section>
               ) : null}

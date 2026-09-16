@@ -1,5 +1,6 @@
 import { CircleHelp } from "lucide-react";
 import { FactChip, Tag } from "#/components/lang/chip";
+import { Code, stringify } from "#/components/lang/code";
 import { Label } from "#/components/lang/label";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
@@ -18,11 +19,7 @@ function formatValue(value: unknown): string | undefined {
     return String(value);
   }
 
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value as string);
-  }
+  return stringify(value);
 }
 
 function summarizeValue(value: unknown): string | undefined {
@@ -84,13 +81,7 @@ function FieldMetadataTooltip({
                 ) : null}
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
-                    <div className="t-small t-upper text-ink">Default</div>
-                    <pre
-                      className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
-                      data-surface="recess"
-                    >
-                      {formattedDefault}
-                    </pre>
+                    <Code code={formattedDefault} lang="json" title="Default" clamp={false} />
                   </div>
                 ) : null}
               </div>
@@ -112,12 +103,10 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
   const afterSummary = summarizeValue(change.afterValue);
   const beforeValue = formatValue(change.beforeValue);
   const afterValue = formatValue(change.afterValue);
-  const beforeDisplay = change.isComposite
-    ? beforeSummary
-    : (beforeValue ?? beforeSummary ?? "undefined");
-  const afterDisplay = change.isComposite
-    ? afterSummary
-    : (afterValue ?? afterSummary ?? "undefined");
+  const beforeDisplay =
+    (change.isComposite ? beforeSummary : (beforeValue ?? beforeSummary)) ?? "undefined";
+  const afterDisplay =
+    (change.isComposite ? afterSummary : (afterValue ?? afterSummary)) ?? "undefined";
   const nestedChanges = change.isComposite ? Math.max(1, change.descendantChanges) : 0;
   const label =
     change.isComposite && nestedChanges > 0
@@ -143,22 +132,10 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
                   </p>
                 ) : null}
                 <div className="space-y-1">
-                  <div className="t-small t-upper text-ink">Before</div>
-                  <pre
-                    className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
-                    data-surface="recess"
-                  >
-                    {beforeDisplay}
-                  </pre>
+                  <Code code={beforeDisplay} lang="json" title="Before" clamp={false} />
                 </div>
                 <div className="space-y-1">
-                  <div className="t-small t-upper text-ink">After</div>
-                  <pre
-                    className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
-                    data-surface="recess"
-                  >
-                    {afterDisplay}
-                  </pre>
+                  <Code code={afterDisplay} lang="json" title="After" clamp={false} />
                 </div>
               </div>
             </Tooltip.Popup>

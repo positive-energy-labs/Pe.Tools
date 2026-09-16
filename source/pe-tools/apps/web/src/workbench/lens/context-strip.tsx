@@ -60,11 +60,7 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
             </span>
           }
         >
-          {open ? (
-            <pre className="m-0 px-[9px] py-2 break-words whitespace-pre-wrap">
-              {systemPrompt.content}
-            </pre>
-          ) : null}
+          {open ? <Code code={systemPrompt.content} lang="plaintext" /> : null}
         </ArtifactFrame>
       ) : null}
     </div>

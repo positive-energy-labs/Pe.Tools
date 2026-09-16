@@ -117,7 +117,9 @@ export function Code({
     className: clamp ? "max-h-[32rem] overflow-auto" : undefined,
   };
   return (
-    <div className={base()}>
+    // A named group: the head's controls and the payload are one object, and the name is what a
+    // caller's old `aria-label` said. `title` stays the visible word too — no second label.
+    <div className={base()} role="group" aria-label={title ?? lang}>
       <div className={head()}>
         <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
         <span className="ml-auto flex items-baseline gap-2">

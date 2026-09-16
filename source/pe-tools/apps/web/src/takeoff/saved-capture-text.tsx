@@ -25,7 +25,7 @@ export function SavedCaptureText({ id, base = "" }: { id: string; base?: string 
       ) : text.data ? (
         <>
           <p>{text.data.path}</p>
-          <div className="max-h-64 overflow-auto" data-testid="saved-capture-text">
+          <div data-testid="saved-capture-text">
             <Code code={text.data.text} lang="json" title="file text" />
           </div>
         </>

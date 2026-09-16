@@ -18,7 +18,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { exportSeed, type Reading } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
-import { stringify } from "#/components/lang/code";
+import { Code, stringify } from "#/components/lang/code";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { Section } from "#/components/lang/section";
@@ -97,9 +97,9 @@ function Row({ name, raw, children }: { name: string; raw?: unknown; children: R
         )}
       </div>
       {open && raw !== undefined ? (
-        <pre className="mt-1 mb-1 max-h-48 overflow-auto border border-line p-1 t-small face-mono break-all whitespace-pre-wrap">
-          {stringify(raw)}
-        </pre>
+        <div className="mt-1 mb-1">
+          <Code code={stringify(raw)} lang="json" title={name} />
+        </div>
       ) : null}
     </div>
   );

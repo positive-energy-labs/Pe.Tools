@@ -1,4 +1,4 @@
-import { Code } from "#/components/lang/code";
+import { Code, stringify } from "#/components/lang/code";
 import { Workspace } from "#/components/anatomy";
 import { RouteShell } from "#/route";
 import { Picker } from "#/route/picker";
@@ -106,11 +106,11 @@ function FamilyHead() {
                 "capture",
                 <details key="capture">
                   <summary className="cursor-pointer">native capture</summary>
-                  <pre className="max-h-64 max-w-2xl overflow-auto">
-                    {JSON.stringify(evidence.coverage, null, 2)}
-                    {"\n"}
-                    {evidence.modelJson}
-                  </pre>
+                  <Code
+                    code={`${stringify(evidence.coverage)}\n${evidence.modelJson}`}
+                    lang="json"
+                    title="native capture"
+                  />
                 </details>,
               ] as const,
             ]
@@ -124,9 +124,7 @@ function FamilyHead() {
                 // this string under a name that claims a composition nobody performed.
                 <details key="basis">
                   <summary className="cursor-pointer">raw text</summary>
-                  <div className="max-h-64 max-w-2xl overflow-auto">
-                    <Code code={snapshot.rawContent} lang="json" title="raw text" />
-                  </div>
+                  <Code code={snapshot.rawContent} lang="json" title="raw text" />
                 </details>,
               ] as const,
             ]

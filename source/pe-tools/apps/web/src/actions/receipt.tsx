@@ -14,6 +14,7 @@ import {
   readScopedActionStatuses,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { ActionButton } from "#/components/lang/action-button";
+import { Code, stringify } from "#/components/lang/code";
 
 /**
  * A receipt reads its original ID, independent of the current pane or thread Scope. `base` and
@@ -69,7 +70,7 @@ export function ActionReceiptView({
               {"error" in step && (
                 <details>
                   <summary>Step error</summary>
-                  <pre className="whitespace-pre-wrap break-all">{step.error}</pre>
+                  <Code code={step.error} lang="plaintext" tone="error" />
                 </details>
               )}
             </div>
@@ -84,11 +85,11 @@ export function ActionReceiptView({
           {"error" in row && (
             <details>
               <summary>{row.error.split("\n")[0]}</summary>
-              <pre className="whitespace-pre-wrap break-all">{row.error}</pre>
+              <Code code={row.error} lang="plaintext" tone="error" />
             </details>
           )}
           {row.kind === "operation" && "result" in row && (
-            <pre aria-label="Returned operation payload">{JSON.stringify(row.result, null, 2)}</pre>
+            <Code code={stringify(row.result)} lang="json" title="Returned operation payload" />
           )}
         </>
       )}

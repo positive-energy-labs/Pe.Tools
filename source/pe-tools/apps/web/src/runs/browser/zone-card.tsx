@@ -7,6 +7,7 @@ import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown
 import { ZonePanel } from "./zone-panel";
 import { MissingPanel, STAT_ROWS, RunPickButton } from "./missing-panel";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code } from "#/components/lang/code";
 
 export function ZoneCard(props: {
   name: string;
@@ -137,9 +138,7 @@ export function ZoneCard(props: {
         </div>
       )}
       {b?.triage.verdict === "error" && (
-        <pre className="whitespace-pre-wrap break-words" data-tone="alarm">
-          {b.triage.reason}
-        </pre>
+        <Code code={b.triage.reason} lang="plaintext" tone="error" />
       )}
 
       <div className="flex gap-2">
