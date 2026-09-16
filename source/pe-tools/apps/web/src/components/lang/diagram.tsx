@@ -39,6 +39,11 @@ export function sanitizeSvg(svg: string): string {
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
   if (doc.querySelector("parsererror")) throw new Error("The renderer returned invalid SVG");
   for (const element of doc.querySelectorAll("script, foreignObject")) element.remove();
+  for (const style of doc.querySelectorAll("style"))
+    style.textContent = style.textContent?.replace(
+      /@import url\('https:\/\/fonts\.googleapis\.com\/css2\?family=[^']+'\);\s*/g,
+      "",
+    );
   for (const element of doc.querySelectorAll("*")) {
     // `attributes` is live: copy it, or removing one skips the next.
     for (const attribute of Array.from(element.attributes)) {
