@@ -57,15 +57,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string>();
   const settlingApprovalsRef = useRef(new Set<string>());
 
+  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched (the route's
+  // `useRoute` mounts the same seed for its readings). No session, so every action refuses.
+  const [demo] = useState(() =>
+    typeof location === "undefined"
+      ? undefined
+      : CHAT_SEEDS[new URLSearchParams(location.search).get("demo") as keyof typeof CHAT_SEEDS]
+          ?.work,
+  );
   const controllerId = info?.controllerId;
   const resourceId = info?.resourceId;
   const session = useMemo(() => {
-    if (!controllerId || !resourceId) return undefined;
+    if (demo || !controllerId || !resourceId) return undefined;
     const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
       controllerId,
     );
     return controller.session(resourceId, currentThreadId);
-  }, [config.origin, currentThreadId, controllerId, resourceId]);
+  }, [config.origin, currentThreadId, controllerId, resourceId, demo]);
 
   const refreshThreads = useCallback(async () => {
     if (!session) return;
@@ -76,17 +84,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
   }, [session]);
 
-  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched (the route's
-  // `useRoute` mounts the same seed for its readings). No session, so every action refuses.
-  const [demo] = useState(() =>
-    typeof location === "undefined"
-      ? undefined
-      : CHAT_SEEDS[new URLSearchParams(location.search).get("demo") as keyof typeof CHAT_SEEDS]
-          ?.work,
-  );
   const stream = useThreadStream({
     origin: config.origin,
-    thread: session && !demo ? { id: currentThreadId, session } : null,
+    thread: session ? { id: currentThreadId, session } : null,
   });
   const { pending: threadPending, error: streamFault, invalidate } = stream;
   const chat = demo ?? stream.chat;
