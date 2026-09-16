@@ -147,9 +147,7 @@ export function InstancesCluster({
   const work = route.work;
   const workspaceId = work.key.work!;
   const { worlds, isLoading } = fleet;
-  // `session list --all` (useFleet({all:true})) includes the graveyard; the table shows only
-  // worlds that still exist as processes or receipts — gone rows serve the census, not the picker.
-  const liveWorlds = worlds.filter((world) => world.phase !== "gone");
+  const liveWorlds = worlds;
   const doctor = useHostCall(
     async (signal) =>
       (await readReading({ kind: "sdk", read: "doctor" }, signal, peReadings)) as {

@@ -1,7 +1,7 @@
 /**
  * The instances route, declared once. Instances is where sessions come FROM, so it declares no
  * `needs`: it must render with nothing attached. Its Readings are the four SDK/broker subjects the
- * surface already subscribes (`useFleet({all:true})` = sessions + inventory, plus the doctor's
+ * surface already subscribes (`useFleet()` = sessions + inventory, plus the doctor's
  * installed years and the per-year recents), and its one route-level action is the refresh that
  * reacquires them without touching Work — the lifecycle commands (start/open/restart/stop) are
  * staged-document verbs and stay in the cluster's sticky card.
@@ -30,7 +30,7 @@ export type InstancesHandle = RouteHandle<InstancesDocument, InstancesReading, o
 export const INSTANCES_WORK: WorkKey = { route: "instances", target: null, work: "instances" };
 
 const READINGS = {
-  sessions: { kind: "sdk", read: "sessions", all: true },
+  sessions: { kind: "sdk", read: "sessions" },
   inventory: { kind: "inventory" },
   doctor: { kind: "sdk", read: "doctor" },
   recents: { kind: "sdk", read: "recents" },

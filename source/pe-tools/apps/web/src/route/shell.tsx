@@ -82,14 +82,15 @@ export function useHostLamp(enabled = true): Lamp {
   if (!seen.bridgeIsConnected)
     return {
       tone: "ink",
-      word: "no Revit bridge",
-      says: "the host supports Revit, but no Revit bridge is attached",
+      word: "Revit not attached",
+      says:
+        "the host answers, but no running Revit has attached its Pe.Tools add-in; scripts and operations wait until one does",
       checked: null,
     };
   return {
     tone: "done",
-    word: "connected",
-    says: `Revit is attached — host ${seen.controllerId}`,
+    word: "Revit attached",
+    says: `a Revit holds an open connection to host ${seen.controllerId}; scripts and operations can run`,
     checked: null,
   };
 }

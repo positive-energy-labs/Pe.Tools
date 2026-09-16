@@ -47,6 +47,7 @@ export function sessionSub(world: Inventory): string {
 const PHASE_VERDICT = {
   booting: { word: "booting", tone: "ink" },
   failed: { word: "failed", tone: "alarm" },
+  unattached: { word: "not attached", tone: "caution" },
   gone: { word: "gone", tone: "mute", dim: true },
   ready: { word: "ready", tone: "done" },
   unresponsive: { word: "unresponsive", tone: "caution" },
@@ -87,7 +88,8 @@ export function InstancesPage({
   shell?: boolean;
 }) {
   const handle = useRoute(instancesManifest, { work: "instances" });
-  const fleet = useFleet({ all: true });
+  // The SDK's default census is the live set; the graveyard (`--all`) is not a picker.
+  const fleet = useFleet();
   const censusExceptions = fleet.unreadableReceipts
     .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
     .concat(

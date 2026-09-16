@@ -55,7 +55,7 @@ export type { Custody, Lane };
 /* -- The one wire ------------------------------------------------------------------------- */
 
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
-type Source = Pick<EventSource, "onmessage" | "onerror" | "close">;
+type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
 export class PeReadings {
@@ -69,6 +69,8 @@ export class PeReadings {
     }
   >();
   private source?: Source;
+  /** The stream being replaced by a topology swap; closed once the replacement opens. */
+  private retiring?: Source;
   private generation = 0;
   private scheduled = false;
   private pendingFenced = false;
@@ -90,6 +92,8 @@ export class PeReadings {
     this.retry = undefined;
     this.source?.close();
     this.source = undefined;
+    this.retiring?.close();
+    this.retiring = undefined;
     this.entries.clear();
   }
 
@@ -129,6 +133,8 @@ export class PeReadings {
     this.generation++;
     this.source?.close();
     this.source = undefined;
+    this.retiring?.close();
+    this.retiring = undefined;
     for (const [key, entry] of this.entries) {
       entry.stale = true;
       for (const accept of entry.listeners) accept({ kind: "stale", key });
@@ -140,13 +146,17 @@ export class PeReadings {
       }, 1000);
   }
 
+  /**
+   * A topology change (a key joined or left) swaps the stream without fencing: subscribed keys
+   * keep their evidence and never see `stale`, so the lamp cannot flicker on every mount. Only an
+   * explicit invalidation (`dirty`) fences, because stale evidence must not survive a write.
+   */
   private schedule(fenceNow = true) {
     if (this.closed) return;
     clearTimeout(this.retry);
     this.retry = undefined;
-    // `subscribe` can be reached while React evaluates a new aggregate atom. Defer that topology
-    // fence with the already-batched reconnect so it cannot update another render synchronously.
-    // Explicit invalidation still fences now: stale evidence must not survive a completed write.
+    // `subscribe` can be reached while React evaluates a new aggregate atom. Defer the reconnect
+    // so it cannot update another render synchronously.
     if (fenceNow && !this.pendingFenced) {
       this.lose(false);
       this.pendingFenced = true;
@@ -157,7 +167,6 @@ export class PeReadings {
       this.scheduled = false;
       clearTimeout(this.retry);
       this.retry = undefined;
-      if (!this.pendingFenced) this.lose(false);
       this.pendingFenced = false;
       this.open();
     });
@@ -171,9 +180,17 @@ export class PeReadings {
       "keys",
       JSON.stringify([...this.entries.values()].map(({ request }) => request)),
     );
+    // The old stream stays open until the replacement opens; its frames are ignored once replaced.
+    this.retiring?.close();
+    this.retiring = this.source;
     const source = this.connect(url.toString());
     this.source = source;
     const current = () => this.generation === generation && this.source === source;
+    source.onopen = () => {
+      if (!current()) return;
+      this.retiring?.close();
+      this.retiring = undefined;
+    };
     const lost = () => {
       if (this.closed || !current()) return;
       this.lose(true);
@@ -417,7 +434,8 @@ export function inventoryOf(entries: readonly BridgeSessionListEntry[]): Session
     }));
 }
 
-type InventoryPhase = FleetPhase | "failed";
+/** `unattached`: Revit runs and the SDK answers, but the Pe.Tools add-in has not connected to this host. */
+type InventoryPhase = FleetPhase | "failed" | "unattached";
 
 /** One Revit as the sentence speaks about it and /instances tables it. */
 export interface Inventory {
@@ -517,9 +535,14 @@ export function inventoryView(
       : undefined;
     if (session) claimed.add(session.sessionId);
     const observed = row.case === "observed-active";
+    // One meaning for "ready" everywhere: the host bridge holds this Revit. The SDK bridge alone
+    // proves the payload loaded, not that scripts and operations can run (lamp and table agree).
+    const unattached = phase === "ready" && !session;
     return {
-      phase,
-      detail,
+      phase: unattached ? "unattached" : phase,
+      detail: unattached
+        ? "Revit is running, but the Pe.Tools add-in has not attached to this host: scripts and operations wait until it does."
+        : detail,
       id: observed ? String(row.process.pid) : row.id,
       brokerSessionId: row.brokerSessionId,
       custody: observed ? "observed" : "controlled",
@@ -582,10 +605,10 @@ export const useTargetInventory = (enabled = true): TargetInventory =>
   targetInventory(useInventory(enabled));
 
 /** Every Revit the SDK census knows, joined to the ones the bridge can see. */
-export function useFleet(options: { all?: boolean } = {}) {
-  const all = options.all ?? false;
+export function useFleet() {
   const inventory = useInventory();
-  const census = useReading<Envelope<SessionListResult>>({ kind: "sdk", read: "sessions", all });
+  // The SDK's default census is the live set; `--all` (the graveyard) is a census view, not a picker.
+  const census = useReading<Envelope<SessionListResult>>({ kind: "sdk", read: "sessions" });
   const [brokerIds, setBrokerIds] = useState<ReadonlyMap<string, string>>(new Map());
   const result = previousOf(census)?.result;
   const rows = useMemo(() => result?.sessions ?? [], [result]);
