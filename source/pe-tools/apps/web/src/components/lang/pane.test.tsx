@@ -235,6 +235,7 @@ test("workspace gutters appear only beside present outer panes and do not clip p
   );
   const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
   expect(workspace.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(workspace.classList.contains("overflow-hidden")).toBe(false);
   const visual = container.querySelector<HTMLElement>("[data-kind='visual']")!;
   expect(visual.parentElement?.classList.contains("overflow-hidden")).toBe(false);
   expect(
