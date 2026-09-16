@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { stringify } from "#/components/lang/code";
+import { Code, stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
 import { imageSource, selectToolCalls, type ChatState, type ToolCall } from "../chat-state";
 import { Press } from "#/components/lang/press";
@@ -109,23 +109,15 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
   return (
     <>
       <CellHeader call={call} />
-      {input !== undefined ? (
-        <>
-          <div {...annotation("io-label")}>in</div>
-          <pre>{stringify(input)}</pre>
-        </>
-      ) : null}
+      {input !== undefined ? <Code code={stringify(input)} lang="json" title="in" /> : null}
       {images.length > 0 ? (
         images.map((src, index) => (
           <img key={index} {...annotation("tool-image")} src={src} alt="" />
         ))
       ) : output !== undefined ? (
-        <>
-          <div {...annotation("io-label")}>out</div>
-          <pre>{stringify(output)}</pre>
-        </>
+        <Code code={stringify(output)} lang="json" title="out" />
       ) : null}
-      {error ? <pre {...annotation("io-error")}>{error}</pre> : null}
+      {error ? <Code code={error} title="error" tone="error" /> : null}
     </>
   );
 }

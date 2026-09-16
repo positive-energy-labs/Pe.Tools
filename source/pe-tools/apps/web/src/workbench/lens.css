@@ -435,11 +435,6 @@
 [data-annotation="inspect"] [data-annotation="cell-head"] {
   flex: none;
 }
-[data-annotation="inspect"] [data-annotation="io-label"] {
-  flex: none;
-  padding: 3px 8px 0;
-  color: var(--pe-ink-2);
-}
 [data-annotation="inspect"] pre {
   margin: 0;
   padding: 3px 8px 6px;
@@ -451,9 +446,6 @@
   word-break: break-word;
   min-height: 0;
   overflow: auto;
-}
-[data-annotation="inspect"] [data-annotation="io-error"] {
-  color: var(--pe-caution); /* a failed bridge call is an ERROR, not the model disagreeing */
 }
 /* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
    in mono. Tight density so the collapsed strip stays ~28px. */
