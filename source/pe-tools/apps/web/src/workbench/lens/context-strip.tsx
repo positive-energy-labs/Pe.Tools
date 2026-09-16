@@ -4,14 +4,9 @@ import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
-import {
-  imageSource,
-  selectToolCalls,
-  stringify,
-  type ChatState,
-  type ToolCall,
-} from "../chat-state";
+import { imageSource, selectToolCalls, type ChatState, type ToolCall } from "../chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
@@ -117,7 +112,7 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       {input !== undefined ? (
         <>
           <div {...annotation("io-label")}>in</div>
-          <pre>{stringify(input, 2)}</pre>
+          <pre>{stringify(input)}</pre>
         </>
       ) : null}
       {images.length > 0 ? (
@@ -127,7 +122,7 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       ) : output !== undefined ? (
         <>
           <div {...annotation("io-label")}>out</div>
-          <pre>{stringify(output, 2)}</pre>
+          <pre>{stringify(output)}</pre>
         </>
       ) : null}
       {error ? <pre {...annotation("io-error")}>{error}</pre> : null}

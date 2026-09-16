@@ -1,9 +1,9 @@
-/* settings-panes round 1 — json pane primitive (throwaway with the round).
-   Token classes come from @tanstack/highlight (`th-token th-<class>`); colors ride
-   the design-lang role tokens (design-lang.css) so the pane reads as part of the
-   design under review. Washes follow lang.css's color-mix-over---pe-on idiom. */
+/* The code block's token and overlay CSS. Token classes come from @tanstack/highlight
+   (`th-token th-<class>`); colors ride the design-lang role tokens (design-lang.css) so a
+   block reads as part of the design around it. Washes follow lang.css's
+   color-mix-over---pe-on idiom. */
 
-[data-json-pane] {
+[data-code-pane] {
   position: relative;
   overflow: auto;
   tab-size: 2;
@@ -12,7 +12,7 @@
   line-height: var(--type-small-line-height);
 }
 
-[data-json-pane] pre.th-code {
+[data-code-pane] pre.th-code {
   font: inherit;
   margin: 0;
   padding: 8px 12px;
@@ -20,66 +20,66 @@
 }
 
 /* json token roles — property keys lead; strings/numbers get quiet distinction. */
-[data-json-pane] .th-property {
+[data-code-pane] .th-property {
   color: var(--pe-ink);
   font-weight: var(--weight-medium);
 }
-[data-json-pane] .th-string {
+[data-code-pane] .th-string {
   color: var(--pe-ink-2);
 }
-[data-json-pane] .th-number {
+[data-code-pane] .th-number {
   color: var(--pe-commit);
 }
-[data-json-pane] .th-literal {
+[data-code-pane] .th-literal {
   color: var(--pe-caution);
 }
-[data-json-pane] .th-operator,
-[data-json-pane] .th-meta {
+[data-code-pane] .th-operator,
+[data-code-pane] .th-meta {
   color: var(--pe-ink-mute);
 }
 
-/* line decorations (JsonView only) — variants pass classNames on decorations */
-[data-json-pane] .th-line {
+/* line decorations — callers pass classNames on decorations */
+[data-code-pane] .th-line {
   display: inline-block;
   min-width: 100%;
 }
-[data-json-pane] .th-line.dec-proposed {
+[data-code-pane] .th-line.dec-proposed {
   background: color-mix(in srgb, var(--pe-pea-ink) 12%, var(--pe-on));
 }
-[data-json-pane] .th-line.dec-staged {
+[data-code-pane] .th-line.dec-staged {
   background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
 }
-[data-json-pane] .th-line.dec-attention {
+[data-code-pane] .th-line.dec-attention {
   background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
   box-shadow: inset 2px 0 0 var(--pe-caution);
 }
-[data-json-pane] .th-line.dec-issue {
+[data-code-pane] .th-line.dec-issue {
   box-shadow: inset 2px 0 0 var(--pe-alarm);
 }
 
 /* The focused structured field, painted in the json. Selection is a FILL, never a hue. */
-[data-json-pane] .th-decoration.dec-field {
+[data-code-pane] .th-decoration.dec-field {
   background: var(--pe-select);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pe-ink) 20%, transparent);
   border-radius: var(--radius);
 }
 
 /* ── editor overlay: paint and textarea share one grid cell; the pane is the only scroller ── */
-[data-json-editor] {
+[data-code-editor] {
   display: grid;
   height: 100%;
 }
 
-[data-json-paint],
-[data-json-input] {
+[data-code-paint],
+[data-code-input] {
   grid-area: 1 / 1;
 }
 
-[data-json-paint] {
+[data-code-paint] {
   pointer-events: none;
 }
 
-[data-json-input] {
+[data-code-input] {
   min-width: 0;
   padding: 8px 12px;
   margin: 0;
@@ -96,6 +96,35 @@
   overflow: hidden;
 }
 
-[data-json-input]::selection {
+[data-code-input]::selection {
   background: color-mix(in srgb, var(--pe-ink) 18%, transparent);
+}
+
+/* ── the roles JSON does not have: every other language's tokens, on the same palette ── */
+[data-code-pane] .th-keyword,
+[data-code-pane] .th-tag {
+  color: var(--pe-ink);
+  font-weight: var(--weight-medium);
+}
+[data-code-pane] .th-type,
+[data-code-pane] .th-function,
+[data-code-pane] .th-selector,
+[data-code-pane] .th-command {
+  color: var(--pe-pea-ink);
+}
+[data-code-pane] .th-comment {
+  color: var(--pe-ink-mute);
+}
+[data-code-pane] .th-attr,
+[data-code-pane] .th-variable,
+[data-code-pane] .th-link,
+[data-code-pane] .th-heading,
+[data-code-pane] .th-code-inline {
+  color: var(--pe-ink-2);
+}
+[data-code-pane] .th-inserted {
+  color: var(--pe-done);
+}
+[data-code-pane] .th-deleted {
+  color: var(--pe-alarm);
 }

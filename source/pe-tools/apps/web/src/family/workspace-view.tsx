@@ -1,4 +1,4 @@
-import { JsonView } from "#/settings-panes/json-editor";
+import { Code } from "#/components/lang/code";
 import { Workspace } from "#/components/anatomy";
 import { RouteShell } from "#/route";
 import { Picker } from "#/route/picker";
@@ -125,7 +125,7 @@ function FamilyHead() {
                 <details key="basis">
                   <summary className="cursor-pointer">raw text</summary>
                   <div className="max-h-64 max-w-2xl overflow-auto">
-                    <JsonView code={snapshot.rawContent} />
+                    <Code code={snapshot.rawContent} lang="json" title="raw text" />
                   </div>
                 </details>,
               ] as const,

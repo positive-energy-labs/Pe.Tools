@@ -1,50 +1,165 @@
 /**
- * The raw-JSON pane primitive — @tanstack/highlight under a transparent textarea.
+ * CODE — the one read-only highlighted block, and the one editable JSON surface.
  *
- * SHARED across round-1 variants because the primitive itself is not in question
- * (ruled: must use @tanstack/highlight; it is read-only, so editing is the classic
- * overlay). The WRITE MODEL is what varies, and that lives in each variant.
+ * RULINGS EMBODIED (docs/features/design-system/LEDGER.md, 2026-09-15):
+ * - A code block is a MACHINE-OPERATED OBJECT, so it wears `artifactFrameRecipe`: one ground
+ *   shift plus one inset hairline, no radius, no shadow. Its head band carries the language on
+ *   the left and the machine-measured facts on the right — line count, copy, and "show all".
+ * - `Code` owns the height clamp; the container owns show/hide.
+ * - `@tanstack/highlight` is the only highlighter. C# is ours because Pods are C# scripts.
+ * - One `stringify` lives here, and `Code` takes a string, so the byte count is a fact the
+ *   caller can see before it hands the block over.
  *
- * `JsonView` is the read-only half; `decorations` (line- or range-anchored, with
- * classNames) is how variants pin trichotomy marks / validation issues to lines.
- * ponytail: no virtualization, no folding — settings files are a few hundred lines;
- * revisit if a profile ever exceeds a few thousand.
+ * WHY TWO EXPORTS AND NOT ONE `editable` FLAG (ledger line 18): a textarea owns caret,
+ * selection, and the native undo stack, and paint is a pure function of a string. One component
+ * with a flag would have to own both and would own neither well. `Code` is paint with chrome;
+ * `JsonEditor` is paint under a live textarea and nothing else — its callers frame it.
+ *
+ * ponytail: no virtualization, no folding. Above 64 KB the block stops tokenizing rather than
+ * growing a windowing layer; the systemic fix for large tool output is Owed in the ledger.
  */
-import { useMemo, type ComponentProps } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
+import { css } from "@tanstack/highlight/languages/css";
+import { diff } from "@tanstack/highlight/languages/diff";
+import { html as htmlLang } from "@tanstack/highlight/languages/html";
+import { js } from "@tanstack/highlight/languages/js";
 import { json } from "@tanstack/highlight/languages/json";
+import { jsx } from "@tanstack/highlight/languages/jsx";
+import { markdown } from "@tanstack/highlight/languages/markdown";
+import { plaintext } from "@tanstack/highlight/languages/plaintext";
+import { python } from "@tanstack/highlight/languages/python";
+import { shell } from "@tanstack/highlight/languages/shell";
+import { sql } from "@tanstack/highlight/languages/sql";
+import { toml } from "@tanstack/highlight/languages/toml";
+import { ts } from "@tanstack/highlight/languages/ts";
+import { tsx } from "@tanstack/highlight/languages/tsx";
+import { yaml } from "@tanstack/highlight/languages/yaml";
 
-import "./json-editor.css";
+import { artifactFrameRecipe } from "#/components/lang/artifact-frame";
+import { csharp } from "#/components/lang/csharp-language";
+import { Press } from "#/components/lang/press";
 
-const highlighter = createHighlighter({ languages: [json] });
+import "./code.css";
+
+export const highlighter = createHighlighter({
+  fallbackLanguage: "plaintext",
+  languages: [
+    json,
+    ts,
+    tsx,
+    js,
+    jsx,
+    python,
+    shell,
+    yaml,
+    markdown,
+    sql,
+    htmlLang,
+    css,
+    diff,
+    toml,
+    plaintext,
+    csharp,
+  ],
+});
 
 export type { HighlightDecoration };
 
-export function JsonView({
-  code,
-  decorations,
-  lineNumbers,
-}: {
+/** The one pretty-printer. Anything that refuses to serialize still has to render as something. */
+export function stringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** Past this many bytes the block shows a slice and never tokenizes; see the header. */
+const TOKENIZE_LIMIT = 64 * 1024;
+
+export interface CodeProps {
   code: string;
+  lang?: string;
+  /** Head label; falls back to the language. */
+  title?: string;
   decorations?: readonly HighlightDecoration[];
   lineNumbers?: boolean;
-}) {
+  /** Default true: cap at 32rem and scroll. `false` lets the block run its full height. */
+  clamp?: boolean;
+  tone?: "error";
+}
+
+export function Code({
+  code,
+  lang = "plaintext",
+  title,
+  decorations,
+  lineNumbers,
+  clamp = true,
+  tone,
+}: CodeProps) {
+  const [copied, setCopied] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const gated = code.length > TOKENIZE_LIMIT;
+  const shown = gated && !showAll ? code.slice(0, TOKENIZE_LIMIT) : code;
+  const lines = useMemo(() => code.split("\n").length, [code]);
+
   const html = useMemo(
-    () => highlighter.highlightToHtml(code, { lang: "json", decorations, lineNumbers }),
-    [code, decorations, lineNumbers],
+    () => (gated ? null : highlighter.highlightToHtml(code, { lang, decorations, lineNumbers })),
+    [gated, code, lang, decorations, lineNumbers],
   );
+
+  const { base, head } = artifactFrameRecipe();
+  const body = {
+    "data-code-pane": "",
+    "data-tone": tone === "error" ? "alarm" : undefined,
+    className: clamp ? "max-h-[32rem] overflow-auto" : undefined,
+  };
   return (
-    <div
-      data-json-pane=""
-      // eslint-disable-next-line react/no-danger -- highlighter output, escaped upstream
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className={base()}>
+      <div className={head()}>
+        <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+        <span className="ml-auto flex items-baseline gap-2">
+          <span className="t-small face-mono tabular-nums text-ink-mute">{lines} lines</span>
+          {gated && !showAll ? (
+            <Press tone="quiet" size="label" onClick={() => setShowAll(true)}>
+              show all
+            </Press>
+          ) : null}
+          <Press
+            tone="quiet"
+            size="label"
+            onClick={() => {
+              void navigator.clipboard.writeText(code);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+          >
+            {copied ? "copied" : "copy"}
+          </Press>
+        </span>
+      </div>
+      {html === null ? (
+        <div {...body}>
+          <pre className="th-code">{shown}</pre>
+        </div>
+      ) : (
+        // eslint-disable-next-line react/no-danger -- highlighter output, escaped upstream
+        <div {...body} dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </div>
   );
 }
 
-/** Controlled editor: the highlighted pre is aria-hidden paint and the transparent textarea
+/**
+ * Controlled editor: the highlighted pre is aria-hidden paint and the transparent textarea
  * sits in the same grid cell, sized by the paint. The pane is the one scroller, so the two
- * layers cannot drift. Font metrics MUST match (both inherit the pane's). */
+ * layers cannot drift. Font metrics MUST match (both inherit the pane's).
+ *
+ * No head, no frame — see the module header for why this is not `Code` with a flag. A caller
+ * that wants the chrome wraps this in `ArtifactFrame` itself.
+ */
 export function JsonEditor({
   value,
   onChange,
@@ -62,10 +177,10 @@ export function JsonEditor({
   );
 
   return (
-    <div data-json-pane="" data-json-editor="">
-      <div data-json-paint="" aria-hidden dangerouslySetInnerHTML={{ __html: html }} />
+    <div data-code-pane="" data-code-editor="">
+      <div data-code-paint="" aria-hidden dangerouslySetInnerHTML={{ __html: html }} />
       <textarea
-        data-json-input=""
+        data-code-input=""
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"

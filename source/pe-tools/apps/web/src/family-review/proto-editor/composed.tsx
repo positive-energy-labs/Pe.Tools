@@ -27,8 +27,8 @@ import { ParamGrid } from "#/family-review/proto-editor/composed-params";
 import { PartSidebar, SentenceGrids } from "#/family-review/proto-editor/composed-parts";
 import { Triptych } from "#/family-review/proto-editor/composed-triptych";
 import { jsonWithSpans, pointerAtOffset } from "#/family-review/proto-editor/json-map";
-import { StatePanel, TypeStage, type Editor } from "#/family-review/proto-editor/shell";
-import { JsonEditor, type HighlightDecoration } from "#/settings-panes/json-editor";
+import { StatePanel, TypeBand, type Editor } from "#/family-review/proto-editor/shell";
+import { JsonEditor, type HighlightDecoration } from "#/components/lang/code";
 import type { FamilyModel } from "#/family/family-model";
 
 export function ParadigmD({ editor }: { editor: Editor }) {
@@ -93,7 +93,7 @@ function Chrome({
       <span>family-model-showcase.family.json</span>
       <span>· writes to</span>
       <span>the same json</span>
-      <TypeStage editor={editor} />
+      <TypeBand editor={editor} />
       <FactChip
         tone="meta"
         title="Every edit on this page lands in the json and nowhere else. A family.json may already be materialized into many documents across many years; landing a write here changes none of them, and this surface will never imply it can."

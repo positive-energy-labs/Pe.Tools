@@ -1,12 +1,12 @@
 import { useState } from "react";
 
-import { JsonView } from "#/settings-panes/json-editor";
+import { Code } from "#/components/lang/code";
 import { readSavedTakeoffText } from "../../../../packages/mcps/src/shared/takeoff-capture-client";
 import { useHostCall } from "#/readings";
 
 /**
  * The capture file's own stored text, read once by its already-validated ID when a reader opens it.
- * Read-only: JsonView highlights the supplied string with no parse and no write callback, so
+ * Read-only: Code highlights the supplied string with no parse and no write callback, so
  * whitespace and malformed JSON survive exactly. Expanding never adopts, writes, or refetches.
  */
 export function SavedCaptureText({ id, base = "" }: { id: string; base?: string }) {
@@ -26,7 +26,7 @@ export function SavedCaptureText({ id, base = "" }: { id: string; base?: string 
         <>
           <p>{text.data.path}</p>
           <div className="max-h-64 overflow-auto" data-testid="saved-capture-text">
-            <JsonView code={text.data.text} />
+            <Code code={text.data.text} lang="json" title="file text" />
           </div>
         </>
       ) : (
