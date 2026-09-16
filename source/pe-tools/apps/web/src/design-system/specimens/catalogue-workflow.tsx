@@ -3,6 +3,7 @@ import { Save } from "lucide-react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Code, JsonEditor } from "#/components/lang/code";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -62,8 +63,42 @@ export function CatalogueWorkflow() {
           full-width CellStateKey to be the last child.
         </Gap>
       </Demo>
+      <CodeCatalogue />
       <ArmingCatalogue />
     </>
+  );
+}
+
+const FAILED_OUT = `{
+  "target": null
+}`;
+
+const POD = `[Pod("door.audit")]
+public async Task<Element> Get(string id) => await _db.Find(id); // one element
+`;
+
+function CodeCatalogue() {
+  const [draft, setDraft] = useState('{ "clear_width": 36 }');
+  return (
+    <Demo
+      label="Code / JsonEditor"
+      consumers="chat fenced blocks, the lens tool cell, receipts, ops output, and the settings panes"
+      spec="A code payload is a machine-operated object, so it wears the artifact frame: language left, machine facts right — line count, copy, and, past 64 KB, show all. Code owns the height clamp; the container owns show/hide."
+    >
+      <div className="max-w-lg">
+        <Code code={POD} lang="csharp" />
+      </div>
+      <div className="max-w-lg">
+        <Code code={FAILED_OUT} lang="json" title="out" tone="error" />
+      </div>
+      <CounterExample why="editing is a textarea's job — caret, selection and undo — so the editable half is paint with no chrome, and its caller frames it">
+        <div className="max-w-lg">
+          <ArtifactFrame head={<Tag>settings profile</Tag>}>
+            <JsonEditor value={draft} onChange={setDraft} aria-label="profile json" />
+          </ArtifactFrame>
+        </div>
+      </CounterExample>
+    </Demo>
   );
 }
 
