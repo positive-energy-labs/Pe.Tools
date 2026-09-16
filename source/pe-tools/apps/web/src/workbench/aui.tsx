@@ -27,7 +27,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
 import { isRenderable, toThreadMessages } from "./aui-adapter";
 import { readRecord, readString, toolTarget } from "./chat-state";
-import { MARKDOWN_COMPONENTS, PROSE_CLASS } from "./prose";
+import { CHAT_MARKDOWN_COMPONENTS, PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
@@ -247,7 +247,7 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
 }
 
 const MarkdownText: TextMessagePartComponent = () => (
-  <MarkdownTextPrimitive className={PROSE_CLASS} components={MARKDOWN_COMPONENTS} />
+  <MarkdownTextPrimitive className={PROSE_CLASS} components={CHAT_MARKDOWN_COMPONENTS} />
 );
 
 const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {

@@ -75,11 +75,27 @@ export function stringify(value: unknown): string {
   }
 }
 
+/**
+ * Does the highlighter hold a grammar for this tag? `normalizeLanguage` is the highlighter's own
+ * lookup, but it answers the fallback for anything it does not know, so `rust` and `text` both
+ * come back `plaintext`. The fallback's own names settle which of the two was asked for.
+ */
+const PLAIN_NAMES = new Set([plaintext.name, ...(plaintext.aliases ?? [])]);
+function holdsGrammar(tag: string): boolean {
+  const name = tag.trim().toLowerCase();
+  return highlighter.normalizeLanguage(name) !== plaintext.name || PLAIN_NAMES.has(name);
+}
+
 /** Past this many bytes the block shows a slice and never tokenizes; see the header. */
 const TOKENIZE_LIMIT = 64 * 1024;
 
 export interface CodeProps {
   code: string;
+  /**
+   * The payload's own language tag, verbatim — a fence's `csharp` or `text`. The head says it as
+   * given. A tag with no grammar renders plain and the head says `no grammar`; no tag at all
+   * renders plain and the head says nothing.
+   */
   lang?: string;
   /** Head label; falls back to the language. */
   title?: string;
@@ -99,7 +115,7 @@ export interface CodeProps {
 
 export function Code({
   code,
-  lang = "plaintext",
+  lang,
   title,
   decorations,
   lineNumbers,
@@ -118,6 +134,8 @@ export function Code({
     [gated, code, lang, decorations, lineNumbers],
   );
 
+  const noGrammar = lang !== undefined && !holdsGrammar(lang);
+
   const { base, head } = artifactFrameRecipe();
   const body = {
     "data-code-pane": "",
@@ -128,9 +146,16 @@ export function Code({
   return (
     // A named group: the head's controls and the payload are one object, and the name is what a
     // caller's old `aria-label` said. `title` stays the visible word too — no second label.
-    <div className={base()} role="group" aria-label={title ?? lang}>
+    <div className={base()} role="group" aria-label={title ?? lang ?? "code"}>
       <div className={head()}>
-        <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+        {(title ?? lang) ? (
+          <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+        ) : null}
+        {noGrammar ? (
+          <span className="t-small face-mono" data-tone="caution">
+            no grammar
+          </span>
+        ) : null}
         <span className="ml-auto flex items-baseline gap-2">
           <span className="t-small face-mono tabular-nums text-ink-mute">{lines} lines</span>
           {gated && !showAll ? (
