@@ -46,6 +46,7 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
     regions: els.map((el, index) => ({
       id: el.dataset.paneId ?? `${el.dataset.kind ?? "pane"}-${index}`,
       label:
+        el.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
         el.querySelector('[data-slot="pane-header"] h2')?.textContent?.trim() ||
         el.dataset.paneId ||
         el.dataset.kind ||

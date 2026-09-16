@@ -60,8 +60,8 @@ export function PaneWorkspace({
   });
 
   const style = {
-    gridTemplateColumns: `${navigation ? navigationState.renderedSize : 0}px ${hasNavigationHandle ? 8 : 0}px minmax(0, 1fr) ${hasInspectorHandle ? 8 : 0}px ${inspector ? inspectorState.renderedSize : 0}px`,
-    gridTemplateRows: `${visualState.renderedSize}px ${hasVisualHandle ? 8 : 0}px minmax(0, 1fr)`,
+    gridTemplateColumns: `${navigation ? navigationState.renderedSize : 0}px var(--gutter) minmax(0, 1fr) var(--gutter) ${inspector ? inspectorState.renderedSize : 0}px`,
+    gridTemplateRows: `${visualState.renderedSize}px var(--gutter) minmax(0, 1fr)`,
   } satisfies CSSProperties;
 
   return (
@@ -74,7 +74,7 @@ export function PaneWorkspace({
     >
       {navigation != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-r border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
+          className="min-h-0 min-w-0 overflow-hidden"
           style={{ gridColumn: 1, gridRow: "1 / 4" }}
         >
           {navigation}
@@ -97,16 +97,13 @@ export function PaneWorkspace({
         </div>
       )}
 
-      <div
-        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
-        style={{ gridColumn: 3, gridRow: 1 }}
-      >
+      <div className="min-h-0 min-w-0 overflow-hidden" style={{ gridColumn: 3, gridRow: 1 }}>
         {visual}
       </div>
 
       {inspector != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-l border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
+          className="min-h-0 min-w-0 overflow-hidden"
           style={{ gridColumn: 5, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           {inspector}
@@ -158,7 +155,7 @@ export function PaneWorkspace({
       )}
 
       <div
-        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
+        className="min-h-0 min-w-0 overflow-hidden"
         style={{ gridColumn: inspectorSpan === "visual" ? "3 / 6" : 3, gridRow: 3 }}
       >
         {content}

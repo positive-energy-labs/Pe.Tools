@@ -169,8 +169,8 @@ const paneResizeHandleRecipe = tv({
   },
   variants: {
     axis: {
-      horizontal: { root: "h-full w-2 cursor-col-resize", bar: "h-8 w-px" },
-      vertical: { root: "h-2 w-full cursor-row-resize", bar: "h-px w-8" },
+      horizontal: { root: "h-full w-(--gutter) cursor-col-resize", bar: "h-8 w-px" },
+      vertical: { root: "h-(--gutter) w-full cursor-row-resize", bar: "h-px w-8" },
     },
   },
 });

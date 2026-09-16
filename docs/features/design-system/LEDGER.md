@@ -14,6 +14,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-16, `--gutter`, `--halo`, `--rail-h`, and `--halo-ink` own shared surface spacing and focus color.
+- 2026-09-16, `Rail` is the one head band. `ArtifactFrame` owns its rail through `head` and `headTrail` slots.
+- 2026-09-16, active `Pane` focus uses an outline in the gutter.
+- 2026-09-16, `Pane` has a `flank` kind for a collapsed regional title and retained shortcuts.
+- 2026-09-16, `Pane` owns suspension and render failure recovery. A changing child target passes `boundaryKey`.
+- 2026-09-16, `Surface` owns viewport grid anatomy and explicit gutter tracks.
+- 2026-09-16, `MasterTable` owns one rail and an optional filter row.
 - 2026-09-16, A `mermaid` fence renders as a diagram inside `Code`, with a source and render toggle in the head. The renderer is `beautiful-mermaid`, because it takes `var(--pe-*)` colors and needs no live DOM; official `mermaid` needs a live DOM, rejects `var()` colors, and leaks an element on each failed render. The fence renders once it closes and shows its source while open. `gantt`, `pie`, and `mindmap` stay as source. A closed fence that fails to parse renders collapsed to its head band with `invalid diagram` and a `show source` toggle, because invalid mermaid is hard to read as text (kaitpw). D2 (5.85 MB wasm), PlantUML, and Structurizr (JVM) are rejected (`.artifacts/handoffs/render-blocks-20260916/diagram.md`).
 - 2026-09-15, A code block is a machine-operated object and wears the artifact frame. `Code` (`components/lang/code.tsx`) is the one read-only highlighted block for every language and every site: chat fenced blocks, tool call in/out, trace lane, atom inspector, receipts, ops output. Its head band holds the language on the left and copy, line count, and "show all" on the right. `Code` owns the height clamp; the container owns show/hide. Consumers: `workbench/aui.tsx`, `workbench/lens/context-strip.tsx`, `actions/receipt.tsx`, `ops/operation-pane.tsx`, `route/inspector.tsx`, `state/owner-inspector.tsx`.
 - 2026-09-15, `JsonEditor` is the one editable JSON surface, controlled `value`/`onChange`, paint under a transparent textarea in a shared grid cell (kaitpw: "yes agree" to the tanstack worktree). Read-only paint and editing stay two exports of one module, never one component with an editable flag, because a textarea owns caret, selection, and undo and paint is a pure function of a string.
@@ -511,6 +518,8 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-15 — Chat's send is a Situation action (kaitpw: "it uses primitives the way i want, keep it that way"). Its look is not liked; a children slot on the verb may replace the rendering later. Not a button component of its own.
 
 ## Tried & rejected
+
+- 2026-09-16, Overlay composer (B) is rejected for its z-level defect. Enclosure-everywhere (C) is rejected for panes.
 - 2026-09-15, `prism-react-editor` for the JSON editor (worktree `proto/json-prism`): uncontrolled write model needed a `held` freeze so a new `value` did not reset caret and history, range highlight was a search hit not a decoration, and it added a dependency for bracket matching that settings-sized files do not need.
 - 2026-09-15, A universal mutable route object or one route-wide lifecycle hides differences between authored Work, observed Readings, Page navigation and external Action outcomes. Compose their owners instead; storage placement is not a substitute for semantic ownership.
 - 2026-09-15, A common pane layout and a mandatory proposal/staged/committed workflow do not fit every route. Shared ownership and head projections are the substrate; product layout and workflow remain route-specific.
