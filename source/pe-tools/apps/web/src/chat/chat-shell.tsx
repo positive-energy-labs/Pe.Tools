@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { Activity, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
-import { Composer } from "#/chat/composer";
+import { ThreadComposer } from "#/chat/composer";
+import type { ChatHandle } from "#/chat/composer-head";
 import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
@@ -19,6 +20,8 @@ import { ComposerHead } from "#/chat/composer-head";
 import { RouteShell, keyMeta, useRoute } from "#/route";
 import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
+import type { ChatDraft } from "#/workbench/prompt";
+import { useCurrentThreadView } from "#/workbench/thread-view";
 
 /** Routes hostable as in-realm chat workspace panes.
  * Route names and titles come from the plugin registry — one registration per route. */
@@ -41,6 +44,7 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     error,
     threads,
     currentThreadId,
+    prompt,
     session,
     operationError,
     sendPrompt,
@@ -87,7 +91,8 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
   // opening either pane collapses the other to its 40px rail (nothing is unmounted).
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   // A tool call clicked open in the transcript owns the trace lane's inspect window until unpinned.
-  const pinKey = useAtomValue(store.atoms.lensPinKey);
+  const view = useCurrentThreadView();
+  const pinKey = useAtomValue(view.atoms.lensPinKey);
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
@@ -102,21 +107,6 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     [chat.messages],
   );
   const cache = useCacheView(breakdown, userTurns);
-
-  // The composer floats over the chat lane; publish its live height as --composer-h so the chat
-  // can pad its tail by exactly the input box (which grows as the textarea expands).
-  const mainRef = useRef<HTMLElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const main = mainRef.current;
-    const box = composerRef.current;
-    if (!main || !box) return;
-    const apply = () => main.style.setProperty("--composer-h", `${box.offsetHeight}px`);
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, []);
 
   useHotkeys([
     // Surface chords, not manifest actions: they move Page state and never refuse. Tagged so the
@@ -152,7 +142,6 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
 
   return (
     <main
-      ref={mainRef}
       data-chat="surface"
       data-mode={mode}
       data-plugin={plugin}
@@ -172,7 +161,7 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
                 sideOpen={sideOpen}
                 onSideOpenChange={store.actions.setSideOpen}
                 pinKey={pinKey}
-                onPinChange={store.actions.setLensPinKey}
+                onPinChange={view.actions.setLensPinKey}
                 sideHead={<ModeDial mode={mode} setMode={setMode} />}
                 threadList={
                   <ThreadList
@@ -186,25 +175,22 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
                   />
                 }
               />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
-                <div className="pe-composer-lane">
-                  <div ref={composerRef} className="pointer-events-auto">
-                    <Composer
-                      handle={handle}
-                      topBar={
-                        <>
-                          <ComposerHead handle={handle} status={status} />
-                          <ContextRibbon
-                            breakdown={breakdown}
-                            cache={cache}
-                            onOpenWorld={() => setMode("world")}
-                          />
-                        </>
-                      }
+              <ComposerBank
+                currentThreadId={currentThreadId}
+                threads={threads}
+                prompt={prompt}
+                handle={handle}
+                topBar={
+                  <>
+                    <ComposerHead handle={handle} status={status} />
+                    <ContextRibbon
+                      breakdown={breakdown}
+                      cache={cache}
+                      onOpenWorld={() => setMode("world")}
                     />
-                  </div>
-                </div>
-              </div>
+                  </>
+                }
+              />
             </div>
 
             {plugin ? (
@@ -248,5 +234,52 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
         onDelete={handleDeleteThread}
       />
     </main>
+  );
+}
+
+function ComposerBank({
+  currentThreadId,
+  threads,
+  prompt,
+  handle,
+  topBar,
+}: {
+  currentThreadId: string;
+  threads: { id: string }[];
+  prompt?: string;
+  handle: ChatHandle;
+  topBar: ReactNode;
+}) {
+  const [visited, setVisited] = useState(() => new Set([currentThreadId]));
+  const known = useMemo(
+    () => new Set([...threads.map(({ id }) => id), currentThreadId]),
+    [threads, currentThreadId],
+  );
+  useEffect(() => {
+    setVisited((previous) => {
+      const next = new Set([...previous, currentThreadId].filter((id) => known.has(id)));
+      return next.size === previous.size && [...next].every((id) => previous.has(id))
+        ? previous
+        : next;
+    });
+  }, [currentThreadId, known]);
+  const composerIds = useMemo(
+    () => [...new Set([...visited, currentThreadId])],
+    [visited, currentThreadId],
+  );
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
+      <div className="pe-composer-lane pointer-events-auto">
+        {composerIds.map((threadId) => {
+          const initialDraft: ChatDraft | undefined =
+            threadId === currentThreadId && prompt ? { text: prompt, attachments: [] } : undefined;
+          return (
+            <Activity key={threadId} mode={threadId === currentThreadId ? "visible" : "hidden"}>
+              <ThreadComposer handle={handle} topBar={topBar} initialDraft={initialDraft} />
+            </Activity>
+          );
+        })}
+      </div>
+    </div>
   );
 }

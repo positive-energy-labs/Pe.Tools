@@ -3,9 +3,10 @@ import { MastraClient, type PlanResume } from "@mastra/client-js";
 import type { PeaSessionDescriptor } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
 import { type AccessLevel, type ChatState } from "../chat-state";
-import { type ChatPageStore, type WorkbenchAttachment } from "../store";
+import { type ChatPageStore } from "../store";
+import { type WorkbenchAttachment } from "../prompt";
 
-export type { WorkbenchAttachment } from "../store";
+export type { WorkbenchAttachment } from "../prompt";
 
 export interface StoredThreadSummary {
   id: string;
@@ -34,6 +35,7 @@ export interface WorkbenchContextValue {
   error?: string;
   threads: StoredThreadSummary[];
   currentThreadId: string;
+  prompt?: string;
   revit?: boolean;
   world?: PeaSessionDescriptor;
   isRunning: boolean;

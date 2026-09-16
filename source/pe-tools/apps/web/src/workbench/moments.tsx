@@ -11,6 +11,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
 import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
+import { useCurrentThreadView } from "./thread-view";
 import {
   readRecord,
   readString,
@@ -290,8 +291,9 @@ function succeededDiagram(call: ToolCall): DiagramSpec | undefined {
 }
 
 function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval }) {
-  const { resolveApproval, store } = useWorkbench();
-  const pinKey = useAtomValue(store.atoms.lensPinKey);
+  const { resolveApproval } = useWorkbench();
+  const view = useCurrentThreadView();
+  const pinKey = useAtomValue(view.atoms.lensPinKey);
   // One gesture, two lanes: clicking a marker opens its I/O here AND pins it in the trace lane's
   // inspect window, so the inspection survives the pointer leaving and the transcript scrolling.
   const key = `tool:${call.id}`;
@@ -325,11 +327,11 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
             ? "Close this call (unpins the trace lane)"
             : "Open this call's input and output, and pin it in the trace lane"
         }
-        onClick={() => store.actions.setLensPinKey(open ? null : key)}
+        onClick={() => view.actions.setLensPinKey(open ? null : key)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            store.actions.setLensPinKey(open ? null : key);
+            view.actions.setLensPinKey(open ? null : key);
           }
         }}
         className={tone}

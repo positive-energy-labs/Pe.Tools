@@ -13,7 +13,9 @@ import {
 import { previousOf, useHostStatus } from "#/readings";
 import { appAtomRegistry } from "#/route";
 import { useRouteOwner } from "#/route";
-import { createChatPageStore, type WorkbenchAttachment } from "../store";
+import { createChatPageStore } from "../store";
+import { CurrentThreadViewOwner } from "../thread-view";
+import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
@@ -111,11 +113,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const prompt = text.trim();
       if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
       if (!session) throw Error("Session is not ready");
-      const sentDraft = store.registry.get(store.atoms.draft);
-      const ownsDraft =
-        sentDraft.text.trim() === prompt &&
-        (attachments === sentDraft.attachments ||
-          (!attachments && sentDraft.attachments.length === 0));
       try {
         setError(undefined);
         // The host admits the turn under the thread's Scope; the browser names no target.
@@ -123,7 +120,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
         if (refusal) throw Error(refusal);
         await CHAT_ACTIONS.send.run(context, { text, attachments });
-        if (ownsDraft) store.actions.clearDraftIfUnchanged(sentDraft);
         if (threadPending) await invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
@@ -273,6 +269,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       threads,
       currentThreadId,
+      prompt: search.prompt,
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
       isRunning,
@@ -296,6 +293,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       threads,
       currentThreadId,
+      search.prompt,
       info,
       isRunning,
       operationError,
@@ -305,5 +303,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
+  return (
+    <WorkbenchContext.Provider value={context}>
+      <CurrentThreadViewOwner
+        key={currentThreadId}
+        registry={appAtomRegistry}
+        turn={search.turn}
+        patch={(partial, replace = false) =>
+          navigate({ search: (previous) => ({ ...previous, ...partial }), replace })
+        }
+      >
+        {children}
+      </CurrentThreadViewOwner>
+    </WorkbenchContext.Provider>
+  );
 }

@@ -57,10 +57,9 @@ function RouteComponent() {
 
 export function ChatRouteContent({
   plugin,
-  thread,
 }: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "thread">) {
   return (
-    <WorkbenchProvider key={thread ?? "draft"}>
+    <WorkbenchProvider>
       <ChatShell plugin={plugin} />
     </WorkbenchProvider>
   );
