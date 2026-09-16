@@ -220,3 +220,29 @@ test("the scroller never animates a programmatic snap", () => {
   const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "lens.css"), "utf8");
   expect(css).not.toMatch(/\[data-annotation="scroller"\]\s*\{[^}]*scroll-behavior:\s*smooth/);
 });
+
+test("a touch fling that coasts into the tail re-attaches follow when the scroll ends", async () => {
+  let now = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+  const lane = setup({ loading: false });
+  render(lane.view(thread(3)));
+  const scroller = lane.scroller();
+  await flush();
+  act(() => {
+    fireEvent.touchMove(scroller);
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+  });
+  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
+
+  // A second fling: the finger lifts, and momentum carries the view down well past the window.
+  act(() => void fireEvent.touchMove(scroller));
+  now += 3000;
+  act(() => {
+    scroller.scrollTop = 6 * H - V;
+    fireEvent.scroll(scroller);
+  });
+  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
+  act(() => void fireEvent(scroller, new Event("scrollend")));
+  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(true);
+});

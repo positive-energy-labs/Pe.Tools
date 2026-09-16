@@ -386,13 +386,12 @@ export function useLensModel({
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
     if (chatRef.current) ro.observe(chatRef.current);
-    const onScroll = () => {
+    const follow = (byUser: boolean) => {
       const metrics = {
         scrollTop: scroller.scrollTop,
         scrollHeight: scroller.scrollHeight,
         clientHeight: scroller.clientHeight,
       };
-      const byUser = performance.now() - userInputAtRef.current < USER_INPUT_MS;
       if (byUser) landedRef.current = true;
       const before: TailFollowState = intent().kind === "tail" ? "following" : "detached";
       const next = nextTailFollowState(before, metrics, scrollTopRef.current, byUser);
@@ -403,6 +402,15 @@ export function useLensModel({
       scrollTopRef.current = scroller.scrollTop;
       schedule();
     };
+    const onScroll = () => follow(performance.now() - userInputAtRef.current < USER_INPUT_MS);
+    // Touch momentum sends no input events after the finger lifts, so a long fling outruns the
+    // window. The scroll's end still belongs to the gesture that started it.
+    let scrollEndAt = -Infinity;
+    const onScrollEnd = () => {
+      const byGesture = userInputAtRef.current > scrollEndAt;
+      scrollEndAt = performance.now();
+      if (byGesture) follow(true);
+    };
     const onUserInput = () => {
       userInputAtRef.current = performance.now();
     };
@@ -410,6 +418,7 @@ export function useLensModel({
       if (SCROLL_KEYS.has(event.key)) onUserInput();
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
+    scroller.addEventListener("scrollend", onScrollEnd);
     scroller.addEventListener("wheel", onUserInput, { passive: true });
     scroller.addEventListener("touchmove", onUserInput, { passive: true });
     scroller.addEventListener("keydown", onKey);
@@ -457,6 +466,7 @@ export function useLensModel({
     return () => {
       ro.disconnect();
       scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("scrollend", onScrollEnd);
       scroller.removeEventListener("wheel", onUserInput);
       scroller.removeEventListener("touchmove", onUserInput);
       scroller.removeEventListener("keydown", onKey);
