@@ -19,44 +19,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("/fork dispatches the native provider verb", () => {
-  const registry = AtomRegistry.make();
-  const store = createChatPageStore({
-    registry,
-    search: { mode: "threads", prompt: "/fork", patch: async () => undefined },
-  });
-  const forkThread = vi.fn(async () => undefined);
-  workbench.value = {
-    store,
-    chat: emptyChatState(),
-    sendPrompt: vi.fn(async () => undefined),
-    cancel: vi.fn(),
-    newThread: vi.fn(),
-    forkThread,
-    isRunning: false,
-  };
-
-  render(
-    <RegistryContext.Provider value={registry}>
-      <Composer
-        setMode={vi.fn()}
-        handle={
-          {
-            actions: {
-              send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
-            },
-          } as never
-        }
-      />
-    </RegistryContext.Provider>,
-  );
-  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
-
-  expect(forkThread).toHaveBeenCalledOnce();
-  store.dispose();
+test("the slash menu offers skills only; built-in commands are gone", () => {
+  const lane = mount({ skills: [{ name: "audit", description: "Audit the model" }] });
+  const box = screen.getByRole("textbox");
+  fireEvent.change(box, { target: { value: "/" } });
+  const options = screen.getAllByRole("option").map((option) => option.textContent);
+  expect(options).toEqual(["/auditAudit the model"]);
+  fireEvent.change(box, { target: { value: "/fork" } });
+  expect(screen.queryByRole("listbox")).toBe(null);
+  lane.unmount();
 });
 
-function mount() {
+function mount({ skills = [] as { name: string; description: string }[] } = {}) {
   const registry = AtomRegistry.make();
   const store = createChatPageStore({
     registry,
@@ -64,17 +38,14 @@ function mount() {
   });
   workbench.value = {
     store,
-    chat: emptyChatState(),
+    chat: { ...emptyChatState(), inspect: { skills } },
     sendPrompt: vi.fn(async () => undefined),
     cancel: vi.fn(),
-    newThread: vi.fn(),
-    forkThread: vi.fn(),
     isRunning: false,
   };
   const view = render(
     <RegistryContext.Provider value={registry}>
       <Composer
-        setMode={vi.fn()}
         handle={
           {
             actions: {

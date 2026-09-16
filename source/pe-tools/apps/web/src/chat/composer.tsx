@@ -15,7 +15,6 @@ import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
-import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import { chipRecipe } from "#/components/lang/chip";
@@ -24,32 +23,23 @@ import { cn } from "#/lib/utils";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation";
 
+/** A skill the thread's inspect lists: the one thing the slash menu offers. `new` and `fork` are
+ * route verbs (`chat/manifest.ts`); mode switches are the mode dial. */
 interface SlashCommand {
   name: string;
   description: string;
-  kind: "builtin" | "skill";
 }
 
-const BUILTIN_COMMANDS: SlashCommand[] = [
-  { name: "new", description: "Start a new thread", kind: "builtin" },
-  { name: "fork", description: "Fork this thread", kind: "builtin" },
-  { name: "threads", description: "Show the thread list", kind: "builtin" },
-  { name: "trace", description: "Show the trace gutter", kind: "builtin" },
-  { name: "world", description: "Show the context world inspector", kind: "builtin" },
-];
-
 export function Composer({
-  setMode,
   handle,
   topBar,
 }: {
-  setMode: (mode: Mode) => void;
   /** The route handle; Enter runs its Send verb scoped to this draft, the head draws the same. */
   handle: ChatHandle;
   /** Rendered flush at the top edge of the box — the composer head and the budget bar. */
   topBar?: ReactNode;
 }) {
-  const { store, chat, newThread, forkThread } = useWorkbench();
+  const { store, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const liveDraft = useAtomValue(store.atoms.draft);
   const draft = liveDraft;
@@ -110,15 +100,7 @@ export function Composer({
   const [activeCommand, setActiveCommand] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
 
-  const commands = useMemo<SlashCommand[]>(
-    () => [
-      ...BUILTIN_COMMANDS,
-      ...selectSkillCommands(chat.inspect).map(
-        (skill): SlashCommand => ({ ...skill, kind: "skill" }),
-      ),
-    ],
-    [chat.inspect],
-  );
+  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat.inspect), [chat.inspect]);
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
   const matches =
     slash !== undefined
@@ -130,42 +112,9 @@ export function Composer({
   const showMenu =
     !menuDismissed && slash !== undefined && !text.includes(" ") && visibleMatches.length > 0;
 
-  const runBuiltin = (name: string): boolean => {
-    switch (name) {
-      case "new":
-        newThread();
-        return true;
-      case "fork":
-        void forkThread();
-        return true;
-      case "threads":
-      case "trace":
-      case "world":
-        setMode(name as Mode);
-        return true;
-      default:
-        return false;
-    }
-  };
-
-  const pick = (command: SlashCommand) => {
-    if (command.kind === "builtin") {
-      runBuiltin(command.name);
-      setText("");
-    } else {
-      setText(`Use the ${command.name} skill: `);
-    }
-  };
+  const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
 
   const sendCurrent = () => {
-    const trimmed = text.trim();
-    if (trimmed.startsWith("/")) {
-      const name = trimmed.slice(1).split(/\s+/)[0]!.toLowerCase();
-      if (runBuiltin(name)) {
-        setText("");
-        return;
-      }
-    }
     // Enter is the same verb as the head's Send; a refused verb stays quiet here, as it always
     // has, and the head's button is where the refusal speaks.
     if (send.refusal) return;
@@ -226,7 +175,7 @@ export function Composer({
         >
           {visibleMatches.map((command, index) => (
             <Press
-              key={`${command.kind}:${command.name}`}
+              key={command.name}
               id={`${menuId}-${index}`}
               type="button"
               role="option"
@@ -299,7 +248,7 @@ export function Composer({
             aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
             size="compact"
             surface="embedded"
-            placeholder="Ask Pea…  ( / for commands )"
+            placeholder="Ask Pea…  ( / for skills )"
             rows={1}
             autoFocus
             value={text}

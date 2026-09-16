@@ -45,6 +45,7 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     operationError,
     sendPrompt,
     newThread,
+    forkThread,
     openThread,
     renameThread,
     deleteThread,
@@ -59,8 +60,19 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
         display: chat.display,
         session,
         send: (input) => sendPrompt(input.text, input.attachments),
+        hasMessages: chat.messages.length > 0,
+        newThread,
+        forkThread,
       }),
-    [currentThreadId, chat.display, session, sendPrompt],
+    [
+      currentThreadId,
+      chat.display,
+      chat.messages.length,
+      session,
+      sendPrompt,
+      newThread,
+      forkThread,
+    ],
   );
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
@@ -178,7 +190,6 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
                 <div className="pe-composer-lane">
                   <div ref={composerRef} className="pointer-events-auto">
                     <Composer
-                      setMode={setMode}
                       handle={handle}
                       topBar={
                         <>

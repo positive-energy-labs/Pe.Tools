@@ -14,7 +14,7 @@ import { targetInventory } from "#/readings";
 import { Picker } from "#/route/picker";
 import { ChainLamp, Cluster, Ledger, PageLog, useDocumentLadder } from "#/route/situation";
 import type { ActionHandle, RouteHandle } from "#/route/use-route";
-import type { ChatReading } from "#/chat/manifest";
+import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
@@ -27,7 +27,7 @@ import {
 } from "#/workbench/chat-state";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 
-export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, "send" | "cancel">;
+export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
 /**
  * Send, scoped to the composer draft: the one verb, whether pressed in the head or entered in the

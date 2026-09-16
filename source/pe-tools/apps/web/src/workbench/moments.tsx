@@ -22,6 +22,7 @@ import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
 import { FactChip } from "#/components/lang/chip";
 import { Thumbnail } from "./thumbnail";
+import { useCopy } from "#/lib/use-copy";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -63,6 +64,9 @@ function MomentSection({
 }) {
   const { id, role } = message;
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
+  const markdown = message.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n\n");
   return (
     <section
       aria-label={`${role === "user" ? "User" : "Assistant"} message`}
@@ -70,9 +74,33 @@ function MomentSection({
       data-role={role}
       {...annotation("moment")}
       ref={setRef}
+      className="group/moment relative"
     >
+      {/* Out of flow, so it never shifts the message; shown on hover or keyboard focus. */}
+      {markdown ? (
+        <span className="absolute top-0 right-0" data-surface="page">
+          <span className="sr-only group-hover/moment:not-sr-only focus-within:not-sr-only">
+            <CopyMessage markdown={markdown} />
+          </span>
+        </span>
+      ) : null}
       {children}
     </section>
+  );
+}
+
+function CopyMessage({ markdown }: { markdown: string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <Press
+      type="button"
+      tone="quiet"
+      size="label"
+      title="Copy this message as markdown"
+      onClick={() => copy(markdown)}
+    >
+      {copied ? "copied" : "copy"}
+    </Press>
   );
 }
 
