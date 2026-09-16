@@ -19,6 +19,7 @@ import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import { chipRecipe } from "#/components/lang/chip";
+import { Thumbnail } from "#/workbench/thumbnail";
 import { cn } from "#/lib/utils";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation";
@@ -77,6 +78,9 @@ export function Composer({
     setAttachments((previous) => [...previous, ...next]);
   };
   // A thumbnail's object URL lives exactly as long as its chip: removed or sent, it is revoked.
+  // ponytail: an unmount with image chips still in the draft leaks their URLs until the page
+  // unloads (the draft atom outlives the composer and still points at them). It matters only if
+  // many large drafts are abandoned in one long session; revoke from the store if that shows up.
   const previews = useRef(new Set<string>());
   useEffect(() => {
     const live = new Set(attachments.flatMap((attachment) => attachment.preview ?? []));
@@ -360,9 +364,7 @@ function AttachmentChip({
       data-surface="artifact"
       title={`${name} is attached to the next message`}
     >
-      {attachment.preview ? (
-        <img src={attachment.preview} alt="" className="size-8 object-cover" />
-      ) : null}
+      {attachment.preview ? <Thumbnail src={attachment.preview} name={name} fit="chip" /> : null}
       <span className={label()}>{name}</span>
       {!attachment.preview && attachment.size !== undefined ? (
         <span className={count()}>{formatBytes(attachment.size)}</span>
@@ -384,18 +386,25 @@ function formatBytes(bytes: number): string {
 // authority. Raise these when a provider accepts more and users hit them.
 const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
 
-/** The one attachment rule: which files fit beside `held` ones, and one line on why any did not. */
+/** The one attachment rule: which files fit beside `held` ones, and one line naming the rest. */
 function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
   const admitted: File[] = [];
-  let refusal: string | undefined;
+  const tooBig: string[] = [];
+  const tooMany: string[] = [];
   for (const file of files) {
-    if (file.size > ATTACHMENT_LIMITS.fileBytes)
-      refusal = `${file.name} was not added: over the ${ATTACHMENT_LIMITS.fileBytes / 1024 / 1024} MB limit per file`;
-    else if (held + admitted.length >= ATTACHMENT_LIMITS.files)
-      refusal = `${file.name} was not added: ${ATTACHMENT_LIMITS.files} files per message at most`;
+    if (file.size > ATTACHMENT_LIMITS.fileBytes) tooBig.push(file.name);
+    else if (held + admitted.length >= ATTACHMENT_LIMITS.files) tooMany.push(file.name);
     else admitted.push(file);
   }
-  return { admitted, refusal };
+  const reasons = [
+    tooBig.length
+      ? `${tooBig.join(", ")} (over the ${ATTACHMENT_LIMITS.fileBytes / 1024 / 1024} MB limit per file)`
+      : "",
+    tooMany.length
+      ? `${tooMany.join(", ")} (${ATTACHMENT_LIMITS.files} files per message at most)`
+      : "",
+  ].filter(Boolean);
+  return { admitted, refusal: reasons.length ? `Not added: ${reasons.join("; ")}` : undefined };
 }
 
 async function readAttachment(file: File): Promise<WorkbenchAttachment> {

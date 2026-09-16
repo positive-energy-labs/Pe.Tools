@@ -167,7 +167,11 @@ test("a file over the limit is refused with one caution line naming it", async (
   const lane = mount();
   fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: {
-      files: [png("huge.png", 5 * 1024 * 1024 + 1), png("ok.png")],
+      files: [
+        png("huge.png", 5 * 1024 * 1024 + 1),
+        png("ok.png"),
+        png("bigger.png", 6 * 1024 * 1024),
+      ],
       types: ["Files"],
       getData: () => "",
     },
@@ -177,6 +181,7 @@ test("a file over the limit is refused with one caution line naming it", async (
   const line = lane.container.querySelector("[data-tone='caution']");
   expect(line?.textContent).toContain("huge.png");
   expect(line?.textContent).toContain("5 MB");
+  expect(line?.textContent).toContain("bigger.png");
 
   fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: {

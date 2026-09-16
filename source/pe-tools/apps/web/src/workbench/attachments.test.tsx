@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from "@mastra/client-js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { emptyChatState, selectMessages, type ChatState } from "./chat-state";
 import { toFiles } from "./provider/use-workbench";
@@ -93,4 +93,13 @@ test("the thread draws an image thumbnail and a chip per other file", () => {
 test("a text attachment reaches Mastra as a data URL it can decode", () => {
   const [file] = toFiles([{ name: "notes.txt", mimeType: "text/plain", text: "hello" }]) ?? [];
   expect(file?.data).toBe("data:text/plain;base64,aGVsbG8=");
+});
+
+test("a sent image opens full size in the kit dialog", async () => {
+  const state: ChatState = { ...emptyChatState(), messages: [persisted] };
+  render(<Moments messages={selectMessages(state)} register={() => {}} />);
+  fireEvent.click(screen.getByTitle("Open dot.png full size"));
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog.dataset.slot).toBe("dialog-content");
+  expect(dialog.querySelector(`img[src='data:image/png;base64,${PNG}']`)).toBeTruthy();
 });

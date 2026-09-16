@@ -1,4 +1,4 @@
-import { Component, useCallback, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight } from "lucide-react";
@@ -20,6 +20,7 @@ import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
 import { FactChip } from "#/components/lang/chip";
+import { Thumbnail } from "./thumbnail";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -184,41 +185,15 @@ function Part({ part }: { part: ChatPart }): ReactNode {
 
 type AttachmentPart = Extract<ChatPart, { type: "image" | "file" }>;
 
-/** A sent file: an image opens full size in a native dialog; anything else is a name chip. */
+/** A sent file: an image is a thumbnail that opens full size; anything else is a name chip. */
 function Attachment({ part }: { part: AttachmentPart }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   if (part.type === "file")
     return (
       <FactChip title={`${part.name} (${part.mimeType}), sent with this message`}>
         <span>{part.name}</span> <span className="text-ink-2">{part.mimeType}</span>
       </FactChip>
     );
-  const name = part.name ?? "attachment";
-  return (
-    <>
-      <Press
-        type="button"
-        hover="bare"
-        title={`Open ${name} full size`}
-        onClick={() => dialog.current?.showModal()}
-      >
-        <img
-          src={part.image}
-          alt={name}
-          className="hairline-x-faint hairline-y-faint max-h-40 object-contain"
-        />
-      </Press>
-      <dialog
-        ref={dialog}
-        aria-label={name}
-        className="m-auto max-h-[92dvh] max-w-[92vw] p-0"
-        data-surface="page"
-        onClick={() => dialog.current?.close()}
-      >
-        <img src={part.image} alt={name} className="max-h-[92dvh] max-w-[92vw] object-contain" />
-      </dialog>
-    </>
-  );
+  return <Thumbnail src={part.image} name={part.name ?? "attachment"} />;
 }
 
 class PartsBoundary extends Component<{ children: ReactNode }, { error?: string }> {
