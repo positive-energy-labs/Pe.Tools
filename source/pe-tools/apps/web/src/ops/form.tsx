@@ -8,7 +8,8 @@ import { useMemo } from "react";
 import { applySchemaDefaultsToValue, parseSchema } from "@pe/schema-core";
 import type { ExecutionTarget } from "@pe/agent-contracts";
 
-import { Textarea } from "#/components/lang/textarea";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { JsonEditor } from "#/components/lang/code";
 import { SchemaToFieldRender, type RemoteOptionsHook } from "#/lib/schema-to-field-render";
 import { useHostOp } from "#/readings";
 
@@ -84,16 +85,7 @@ export function OpForm({
       ),
     [scope.bridgeSessionId, scope.openDocumentId], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  if (!schema)
-    return (
-      <Textarea
-        size="tall"
-        aria-label="Operation request JSON"
-        value={typeof values.$raw === "string" ? values.$raw : "{}"}
-        onChange={(event) => onChange({ $raw: event.currentTarget.value })}
-        spellCheck={false}
-      />
-    );
+  if (!schema) return <RawRequest values={values} onChange={onChange} />;
   return (
     <SchemaToFieldRender
       schema={schema}
@@ -104,6 +96,47 @@ export function OpForm({
       onChange={(path, value) => onChange(setPath(values, path.split("."), value) as FormValues)}
       useRemoteOptions={useRemoteOptions}
     />
+  );
+}
+
+/** Says what `requestOf` would say about this text, without being the parser. */
+function parses(text: string): boolean {
+  if (!text.trim()) return true;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A schemaless op has no fields to draw, so the request IS the JSON. `requestOf` is still the
+ * only parser — the head's word reports what that parse would say, and refuses nothing. */
+function RawRequest({
+  values,
+  onChange,
+}: {
+  values: FormValues;
+  onChange: (next: FormValues) => void;
+}) {
+  const raw = typeof values.$raw === "string" ? values.$raw : "{}";
+  return (
+    <ArtifactFrame
+      head={
+        <>
+          <span className="t-small t-upper text-ink-2">operation request</span>
+          <span className="ml-auto t-small face-mono" data-tone={parses(raw) ? undefined : "alarm"}>
+            {parses(raw) ? "valid" : "invalid JSON"}
+          </span>
+        </>
+      }
+    >
+      <JsonEditor
+        aria-label="Operation request JSON"
+        value={raw}
+        onChange={(next) => onChange({ $raw: next })}
+      />
+    </ArtifactFrame>
   );
 }
 
