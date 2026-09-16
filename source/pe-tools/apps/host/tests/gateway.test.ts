@@ -797,3 +797,47 @@ test("source seal captures the positive pod set and exact dependency bytes once"
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("source seal carries portable release evidence without installed author dependencies", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "script-release-"));
+  const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
+  const root = join(productUserContentRootPath(), "workspaces", "sample");
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await mkdir(join(root, "composed"), { recursive: true });
+    await mkdir(join(root, "inspection", "library", "settings"), { recursive: true });
+    await writeFile(
+      join(root, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "sample",
+        name: "Sample",
+        version: "1.0.0",
+        entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
+        requires: [{ id: "missing-library", releaseHash: "a".repeat(64) }],
+      }),
+    );
+    await writeFile(join(root, "release.json"), "{}");
+    await writeFile(join(root, "src/Main.cs"), "source");
+    await writeFile(join(root, "composed/main.settings.json"), '{"closed":true}');
+    await writeFile(join(root, "inspection/index.json"), "[]");
+    await writeFile(join(root, "inspection/library/settings/base.settings.json"), '{"base":1}');
+
+    const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
+
+    expect(sealed?.sourceBundle.dependencies).toEqual([]);
+    expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
+      "composed/main.settings.json",
+      "inspection/index.json",
+      "inspection/library/settings/base.settings.json",
+      "pod.json",
+      "release.json",
+      "src/Main.cs",
+    ]);
+  } finally {
+    if (oldRoot === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
+    else process.env.PE_TOOLS_DOCUMENTS_ROOT = oldRoot;
+    await rm(directory, { recursive: true, force: true });
+  }
+});

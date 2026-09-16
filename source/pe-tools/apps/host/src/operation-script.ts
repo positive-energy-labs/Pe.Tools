@@ -59,7 +59,7 @@ export async function freezeScript(
           if (path.length > 1024) throw Error("Pod path exceeds 1024 characters");
           if (entry.isDirectory()) {
             if (
-              ["src", "settings", "assets"].some(
+              ["src", "settings", "composed", "assets", "inspection"].some(
                 (root) => path === root || path.startsWith(`${root}/`),
               )
             )
@@ -67,8 +67,10 @@ export async function freezeScript(
             continue;
           }
           if (
-            !["pod.json", "PeScripts.csproj"].includes(path) &&
-            !["src/", "settings/", "assets/"].some((root) => path.startsWith(root))
+            !["pod.json", "release.json", "PeScripts.csproj"].includes(path) &&
+            !["src/", "settings/", "composed/", "assets/", "inspection/"].some((root) =>
+              path.startsWith(root),
+            )
           )
             continue;
           const info = await lstat(join(directory, path));
@@ -77,6 +79,7 @@ export async function freezeScript(
           const content = await readFile(join(directory, path));
           if ((bytes += content.length) > 4 * 1024 * 1024) throw Error("Pod capture exceeds 4 MiB");
           files.push({ path, bytesBase64: content.toString("base64") });
+          if (files.length > 200) throw Error("Pod capture exceeds 200 files");
         }
       };
       await walk("");
@@ -90,7 +93,24 @@ export async function freezeScript(
       for (const requirement of manifest.requires ?? []) {
         if (typeof requirement.id !== "string" || typeof requirement.releaseHash !== "string")
           throw Error(`Pod '${id}' has an invalid requires entry`);
-        if (requirement.id === workspace || captured.has(requirement.id)) continue;
+        if (requirement.id === workspace)
+          throw Error(`Pod dependency '${requirement.id}' cannot overwrite the root pod capture`);
+        if (captured.has(requirement.id)) continue;
+        const dependencyDirectory = join(
+          productUserContentRootPath(),
+          productPathNames.workspacesDirectoryName,
+          requirement.id,
+        );
+        try {
+          await lstat(dependencyDirectory);
+        } catch (error) {
+          if (
+            files.some((file) => file.path === "release.json") &&
+            (error as NodeJS.ErrnoException).code === "ENOENT"
+          )
+            continue;
+          throw error;
+        }
         captured.set(requirement.id, {
           id: requirement.id,
           releaseHash: requirement.releaseHash,

@@ -1,4 +1,7 @@
 using Pe.Revit.Scripting.Pods;
+using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Pods;
+using System.Text;
 
 namespace Pe.Revit.Tests;
 
@@ -67,6 +70,134 @@ public sealed class ScriptPodPreparationTests {
         var mismatch = this._service.Prepare("consumer");
         Assert.That(mismatch.Success, Is.False);
         Assert.That(mismatch.Outcomes.Select(outcome => outcome.Code), Does.Contain("pod.dependency.hash-mismatch"));
+    }
+
+    [Test]
+    public void Foreign_composed_documents_keep_their_own_local_and_upstream_resolution() {
+        WritePod("upstream", """
+            {"schemaVersion":2,"id":"upstream","name":"Upstream","version":"1.0.0","entrypoints":[]}
+            """, new Dictionary<string, string> { ["settings/nested.settings.json"] = "{\"upstream\":1}" });
+        var upstreamHash = this._service.Prepare("upstream").ContentHash;
+        WritePod("library", $$"""
+            {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[],"requires":[{"id":"upstream","releaseHash":"{{upstreamHash}}"}]}
+            """, new Dictionary<string, string> {
+                ["settings/nested.settings.json"] = "{\"library\":1}",
+                ["settings/base.settings.json"] = "{\"$preset\":\"@local/nested.settings.json\",\"fromUpstream\":{\"$include\":\"@upstream/nested.settings.json\"}}"
+            });
+        var libraryHash = this._service.Prepare("library").ContentHash;
+        WritePod("consumer", $$"""
+            {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[],"requires":[{"id":"library","releaseHash":"{{libraryHash}}"}]}
+            """, new Dictionary<string, string> {
+                ["settings/nested.settings.json"] = "{\"consumer\":1}",
+                ["settings/main.settings.json"] = "{\"$preset\":\"@library/base.settings.json\"}"
+            });
+
+        var prepared = this._service.Prepare("consumer");
+        var content = prepared.ComposedSettings["composed/main.settings.json"].Content;
+        Assert.Multiple(() => {
+            Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
+            Assert.That(content, Does.Contain("\"library\": 1"));
+            Assert.That(content, Does.Contain("\"upstream\": 1"));
+            Assert.That(content, Does.Not.Contain("consumer"));
+            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+                Does.Contain(("library", "settings/base.settings.json")));
+            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+                Does.Contain(("library", "settings/nested.settings.json")));
+            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+                Does.Contain(("upstream", "settings/nested.settings.json")));
+        });
+    }
+
+    [Test]
+    public void Composer_rejects_malformed_directives_and_emits_stable_closed_json() {
+        foreach (var malformed in new[] {
+                     "{\"$preset\":null}", "{\"$preset\":3}", "{\"$preset\":[]}",
+                     "{\"$include\":null}", "{\"$include\":3}", "{\"$include\":[]}"
+                 }) {
+            var rejected = PodComposer.Compose("settings/main.settings.json", malformed, NeverResolve);
+            Assert.That(rejected.Document, Is.Null, malformed);
+            Assert.That(rejected.Diagnostics, Is.Not.Empty, malformed);
+        }
+
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["@local/base.settings.json"] = "{\"nested\":{\"a\":1,\"b\":1}}",
+            ["@local/value.settings.json"] = "{\"fromInclude\":true}"
+        };
+        var composed = PodComposer.Compose("settings/main.settings.json",
+            "{\"$preset\":\"@local/base.settings.json\",\"nested\":{\"b\":{\"$include\":\"@local/value.settings.json\"}}}", Resolve);
+        Assert.Multiple(() => {
+            Assert.That(composed.Diagnostics, Is.Empty);
+            Assert.That(composed.Document!.Content, Does.EndWith("\n"));
+            Assert.That(composed.Document.Content, Does.Not.Contain("\r\n"));
+            Assert.That(composed.Document.Content, Does.Not.Contain("$preset"));
+            Assert.That(composed.Document.Content, Does.Not.Contain("$include"));
+            Assert.That(composed.Document.Content, Does.Contain("fromInclude"));
+        });
+
+        return;
+        static bool NeverResolve(string reference, out PodConsumedDependency dependency, out string reason) {
+            dependency = null!;
+            reason = "unexpected";
+            return false;
+        }
+        bool Resolve(string reference, out PodConsumedDependency dependency, out string reason) {
+            reason = string.Empty;
+            if (!sources.TryGetValue(reference, out var content)) {
+                dependency = null!;
+                reason = "missing";
+                return false;
+            }
+            dependency = new PodConsumedDependency("local", string.Empty, reference[1..], content);
+            return true;
+        }
+    }
+
+    [Test]
+    public void Bundle_rejects_a_dependency_that_overwrites_the_root_capture() {
+        var manifest = Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            "{\"schemaVersion\":2,\"id\":\"sample\",\"name\":\"Sample\",\"version\":\"1.0.0\",\"entrypoints\":[]}"));
+        var bundle = new ScriptPodSourceBundle([new ScriptPodSourceFile("pod.json", manifest)], [
+            new ScriptPodDependencyBundle("sample", "hash", [new ScriptPodSourceFile("pod.json", manifest)])
+        ]);
+        Assert.That(() => this._service.Prepare("sample", bundle), Throws.TypeOf<InvalidDataException>()
+            .With.Message.Contains("root"));
+    }
+
+    [Test]
+    public void Capture_rejects_a_linked_positive_directory() {
+        WritePod("linked", """
+            {"schemaVersion":2,"id":"linked","name":"Linked","version":"1.0.0","entrypoints":[]}
+            """);
+        var outside = Path.Combine(this._root, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "payload.bin"), "escape");
+        var link = Path.Combine(this._root, "linked", "assets");
+        try {
+            Directory.CreateSymbolicLink(link, outside);
+        } catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException) {
+            Assert.Ignore($"Directory links are unavailable on this machine: {exception.Message}");
+        }
+
+        var prepared = this._service.Prepare("linked");
+        Assert.That(prepared.Success, Is.False);
+        Assert.That(prepared.Outcomes.Select(outcome => outcome.Code), Does.Contain("pod.directory.link"));
+        Assert.That(prepared.Files.Keys, Has.None.EqualTo("assets/payload.bin"));
+    }
+
+    [Test]
+    public void Capture_enforces_the_shared_file_count_bound() {
+        WritePod("bounded", """
+            {"schemaVersion":2,"id":"bounded","name":"Bounded","version":"1.0.0","entrypoints":[]}
+            """);
+        Directory.CreateDirectory(Path.Combine(this._root, "bounded", "assets"));
+        for (var index = 0; index < 200; index++)
+            File.WriteAllText(Path.Combine(this._root, "bounded", "assets", $"{index:D3}.txt"), string.Empty);
+
+        var prepared = this._service.Prepare("bounded");
+
+        Assert.That(prepared.Success, Is.False);
+        Assert.That(prepared.Outcomes.Select(outcome => outcome.Code), Does.Contain("pod.file.limit"));
+        Assert.That(prepared.Files.Count, Is.EqualTo(200));
     }
 
     [Test]

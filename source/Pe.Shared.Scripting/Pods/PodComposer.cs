@@ -14,7 +14,9 @@ public sealed record PodConsumedDependency(
     string PodId,
     string ReleaseHash,
     string SourcePath,
-    string Content
+    string Content,
+    string? SourceContent = null,
+    IReadOnlyList<PodConsumedDependency>? Dependencies = null
 );
 
 public sealed record PodCompositionResult(
@@ -36,15 +38,21 @@ public static class PodComposer {
             return new PodCompositionResult(null, [Error("pod.settings.json", path, ex.Message)]);
         }
 
+        ValidateDirectives(root, path, diagnostics);
+        if (diagnostics.Count > 0)
+            return new PodCompositionResult(null, diagnostics);
+
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         var expanded = ExpandPresets(root, path, resolve, visiting, dependencies, diagnostics);
         expanded = ExpandIncludes(expanded, path, resolve, visiting, dependencies, diagnostics);
         StripSchema(expanded);
+        if (ContainsDirective(expanded))
+            diagnostics.Add(Error("pod.settings.directive", path, "Composed settings contain an unresolved directive."));
         if (diagnostics.Count > 0)
             return new PodCompositionResult(null, diagnostics);
 
         return new PodCompositionResult(
-            new PodComposedDocument(path, expanded.ToString(Formatting.Indented) + Environment.NewLine, dependencies),
+            new PodComposedDocument(path, expanded.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n", dependencies),
             []
         );
     }
@@ -72,7 +80,9 @@ public static class PodComposer {
             visiting.Remove(reference);
             return null;
         }
-        dependencies.Add(dependency);
+        dependencies.Add(dependency with { Content = dependency.SourceContent ?? dependency.Content, SourceContent = null, Dependencies = null });
+        foreach (var nested in dependency.Dependencies ?? [])
+            dependencies.Add(nested);
         try {
             var loaded = JToken.Parse(dependency.Content, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
             return ExpandIncludes(
@@ -172,6 +182,19 @@ public static class PodComposer {
                 ? MergeRightWins(current, replacement)
                 : property.Value.DeepClone();
         return result;
+    }
+
+    private static void ValidateDirectives(JToken token, string owner, ICollection<ScriptDiagnostic> diagnostics) {
+        if (token is JObject obj) {
+            foreach (var name in new[] { "$preset", "$include" })
+                if (obj.TryGetValue(name, out var value) && value.Type != JTokenType.String)
+                    diagnostics.Add(Error("pod.settings.directive", owner, $"{name} must be a string reference."));
+            foreach (var property in obj.Properties())
+                ValidateDirectives(property.Value, owner, diagnostics);
+        } else if (token is JArray array) {
+            foreach (var item in array)
+                ValidateDirectives(item, owner, diagnostics);
+        }
     }
 
     private static void StripSchema(JToken token) {

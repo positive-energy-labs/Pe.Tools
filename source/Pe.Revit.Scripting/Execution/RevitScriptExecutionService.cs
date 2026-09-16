@@ -643,21 +643,29 @@ public sealed class RevitScriptExecutionService(
             var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(id);
             if (!File.Exists(manifestPath))
                 throw new ArgumentException($"Workspace '{id}' has no pod.json.", PodManifestValidator.DiagnosticStage);
-            var paths = Directory.EnumerateFiles(podRoot, "*", SearchOption.AllDirectories)
-                .Where(path => IsCaptured(GetRelativePath(podRoot, path).Replace('\\', '/')))
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var captured = paths.Select(path => new ScriptPodSourceFile(
-                GetRelativePath(podRoot, path).Replace('\\', '/'), Read(path))).ToList();
+            var paths = PositiveFiles(podRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
+            if (paths.Count > ScriptPodSourceNormalizer.MaxFiles)
+                throw new IOException($"Pod capture exceeds {ScriptPodSourceNormalizer.MaxFiles} files.");
+            var bytes = 0L;
+            var captured = paths.Select(path => {
+                var content = Read(path);
+                if ((bytes += Convert.FromBase64String(content).LongLength) > 4 * 1024 * 1024)
+                    throw new IOException("Pod capture exceeds 4 MiB.");
+                return new ScriptPodSourceFile(GetRelativePath(podRoot, path).Replace('\\', '/'), content);
+            }).ToList();
             if (!includeDependencies)
                 return captured;
             var manifest = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), id);
             if (!manifest.Success || manifest.Manifest is null)
                 throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(diagnostic => diagnostic.Message)), PodManifestValidator.DiagnosticStage);
             foreach (var requirement in manifest.Manifest.Requires) {
+                if (requirement.Id == workspaceKey)
+                    throw new ArgumentException($"Pod dependency '{requirement.Id}' cannot overwrite the root pod capture.", PodManifestValidator.DiagnosticStage);
                 if (visiting.Contains(requirement.Id))
                     throw new ArgumentException($"Pod dependency cycle through '{requirement.Id}'.", PodManifestValidator.DiagnosticStage);
                 if (!capturedDependencies.Add(requirement.Id))
+                    continue;
+                if (!Directory.Exists(RevitScriptingStorageLocations.ResolveWorkspaceRoot(requirement.Id)) && captured.Any(file => file.Path == "release.json"))
                     continue;
                 _ = visiting.Add(requirement.Id);
                 dependencies.Add(new ScriptPodDependencyBundle(requirement.Id, requirement.ReleaseHash, Capture(requirement.Id, true)));
@@ -675,10 +683,32 @@ public sealed class RevitScriptExecutionService(
             return Convert.ToBase64String(bytes);
         }
 
-        static bool IsCaptured(string path) => path is "pod.json" or "PeScripts.csproj"
-            || path.StartsWith("src/", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("assets/", StringComparison.OrdinalIgnoreCase);
+        static IEnumerable<string> PositiveFiles(string root) {
+            foreach (var name in new[] { "pod.json", "release.json", "PeScripts.csproj" }) {
+                var path = Path.Combine(root, name);
+                if (File.Exists(path)) yield return path;
+            }
+            var directoryCount = 1;
+            foreach (var name in new[] { "src", "settings", "composed", "assets", "inspection" }) {
+                var directory = Path.Combine(root, name);
+                if (!Directory.Exists(directory)) continue;
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException($"Pod input directory cannot be a link: {name}");
+                var pending = new Stack<string>();
+                pending.Push(directory);
+                while (pending.Count > 0) {
+                    var current = pending.Pop();
+                    if (++directoryCount > 256) throw new IOException("Pod directory limit exceeded.");
+                    foreach (var child in Directory.EnumerateDirectories(current)) {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                            throw new IOException($"Pod input directory cannot be a link: {GetRelativePath(root, child)}");
+                        pending.Push(child);
+                    }
+                    foreach (var path in Directory.EnumerateFiles(current))
+                        yield return path;
+                }
+            }
+        }
     }
 
     private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {

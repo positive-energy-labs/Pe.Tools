@@ -17,7 +17,8 @@ public sealed class ScriptWorkspaceBootstrapService(
         bool createSampleScript,
         string revitVersion,
         string targetFramework,
-        string runtimeAssemblyPath
+        string runtimeAssemblyPath,
+        bool preserveProject = false
     ) {
         var generatedFiles = new List<string>();
         var productHomePath = this._productHomePath;
@@ -49,7 +50,8 @@ public sealed class ScriptWorkspaceBootstrapService(
             targetFramework,
             runtimeAssemblyPath
         );
-        WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
+        if (!preserveProject)
+            WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
 
         EnsureFile(productAgentsPath, ScriptFileTemplates.CreateProductAgents(), generatedFiles);
         EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);

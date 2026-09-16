@@ -17,9 +17,9 @@ public sealed class ScriptPodArchiveService(
     ScriptProjectGenerator projectGenerator,
     Func<string, string>? workspaceRootResolver = null
 ) {
-    private const int MaxArchiveEntryCount = 1000;
-    private const long MaxArchiveEntryBytes = 10 * 1024 * 1024;
-    private const long MaxArchiveTotalBytes = 50 * 1024 * 1024;
+    private const int MaxArchiveEntryCount = 200;
+    private const long MaxArchiveEntryBytes = 512 * 1024;
+    private const long MaxArchiveTotalBytes = 4 * 1024 * 1024;
 
     private readonly ScriptWorkspaceBootstrapService _bootstrapService = bootstrapService;
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
@@ -75,8 +75,6 @@ public sealed class ScriptPodArchiveService(
             tempRoot = CreateTempDirectory();
             ExtractEntries(entries, tempRoot);
             ValidateEntrypointFiles(tempRoot, manifest);
-            WriteParentAncestry(Path.Combine(tempRoot, ProductPathNames.PodManifestFileName), release);
-
             _ = Directory.CreateDirectory(Path.GetDirectoryName(workspaceRoot)!);
             MoveDirectory(tempRoot, workspaceRoot);
             tempRoot = string.Empty;
@@ -86,7 +84,8 @@ public sealed class ScriptPodArchiveService(
                 createSampleScript: false,
                 revitVersion,
                 targetFramework,
-                runtimeAssemblyPath
+                runtimeAssemblyPath,
+                preserveProject: true
             );
             var diagnostics = manifestResult.Diagnostics.ToList();
 
@@ -250,7 +249,7 @@ public sealed class ScriptPodArchiveService(
         var inspectionRows = new JArray();
         foreach (var dependency in prepared.InspectionDependencies.OrderBy(item => item.PodId, StringComparer.Ordinal).ThenBy(item => item.SourcePath, StringComparer.Ordinal)) {
             var inspectionPath = $"inspection/{dependency.PodId}/{dependency.SourcePath}";
-            entries[inspectionPath] = Encoding.UTF8.GetBytes(dependency.Content);
+            entries[inspectionPath] = Encoding.UTF8.GetBytes(dependency.SourceContent ?? dependency.Content);
             inspectionRows.Add(new JObject {
                 ["podId"] = dependency.PodId,
                 ["releaseHash"] = dependency.ReleaseHash,
@@ -261,7 +260,7 @@ public sealed class ScriptPodArchiveService(
         if (inspectionRows.Count > 0)
             entries["inspection/index.json"] = Encoding.UTF8.GetBytes(inspectionRows.ToString(Formatting.Indented) + Environment.NewLine);
 
-        var releaseHash = ComputeReleaseHash(prepared.Manifest, entries);
+        var releaseHash = ScriptPodPreparationService.ComputeReleaseHash(prepared.Manifest, entries);
         var releaseJson = new JObject {
             ["schemaVersion"] = 1,
             ["podId"] = prepared.Manifest.Id,
@@ -391,7 +390,7 @@ public sealed class ScriptPodArchiveService(
         var manifestResult = PodManifestValidator.ValidateJson(manifestJson);
         if (!manifestResult.Success)
             throw new InvalidDataException("Portable pod release contains an invalid pod.json.");
-        var actualHash = ComputeReleaseHash(manifestResult.Manifest!, entryBytes);
+        var actualHash = ScriptPodPreparationService.ComputeReleaseHash(manifestResult.Manifest!, entryBytes);
         if (!string.Equals(actualHash, expectedHash, StringComparison.Ordinal))
             throw new InvalidDataException($"Portable pod release content hash mismatch: expected '{expectedHash}', computed '{actualHash}'.");
 
@@ -409,27 +408,6 @@ public sealed class ScriptPodArchiveService(
             fileRows.OfType<JObject>().Select(row => new ScriptPodFileHashData(row["path"]!.Value<string>()!, row["sha256"]!.Value<string>()!)).ToList(),
             []
         );
-    }
-
-    private static void WriteParentAncestry(string manifestPath, ScriptPodReleaseData release) {
-        var manifest = JObject.Parse(File.ReadAllText(manifestPath));
-        manifest["parent"] = new JObject {
-            ["id"] = release.PodId,
-            ["releaseHash"] = release.ContentHash,
-            ["version"] = release.Version
-        };
-        File.WriteAllText(manifestPath, manifest.ToString(Formatting.Indented) + Environment.NewLine);
-    }
-
-    private static string ComputeReleaseHash(PodManifest manifest, IReadOnlyDictionary<string, byte[]> entries) {
-        var hashed = new Dictionary<string, byte[]>(StringComparer.Ordinal) {
-            ["pod.semantic.json"] = Encoding.UTF8.GetBytes(ScriptPodPreparationService.ManifestSemantics(manifest))
-        };
-        foreach (var entry in entries.Where(pair => pair.Key != "pod.json"
-            && pair.Key != "release.json"
-            && !pair.Key.StartsWith("inspection/", StringComparison.OrdinalIgnoreCase)))
-            hashed[entry.Key] = entry.Value;
-        return ScriptPodPreparationService.ComputeContentHash(hashed);
     }
 
     private static ScriptPodReleaseData BuildReleaseData(PreparedPod prepared, IReadOnlyList<FileEntry> entries) {

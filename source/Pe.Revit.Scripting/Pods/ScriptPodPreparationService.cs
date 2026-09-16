@@ -39,8 +39,10 @@ public sealed record PreparedPod(
 public sealed class ScriptPodPreparationService(
     Func<string, string>? workspaceRootResolver = null
 ) {
-    private const long MaxFileBytes = 10 * 1024 * 1024;
-    private const long MaxTotalBytes = 50 * 1024 * 1024;
+    private const long MaxFileBytes = 512 * 1024;
+    private const long MaxTotalBytes = 4 * 1024 * 1024;
+    private const int MaxFileCount = 200;
+    private const int MaxDirectoryCount = 256;
     private static readonly string[] SettingsSuffixes = [".family.json", ".patch.json", ".schedule.json", ".batch.json", ".settings.json"];
     private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
 
@@ -54,6 +56,8 @@ public sealed class ScriptPodPreparationService(
             WriteCapture(workspaceKey, bundle.Files);
             var dependencyIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var dependency in bundle.Dependencies) {
+                if (string.Equals(dependency.Id, workspaceKey, StringComparison.Ordinal))
+                    throw new InvalidDataException($"Captured dependency '{dependency.Id}' cannot overwrite the root pod capture.");
                 if (!dependencyIds.Add(dependency.Id))
                     throw new InvalidDataException($"Captured pod dependency is duplicated: {dependency.Id}");
                 WriteCapture(dependency.Id, dependency.Files);
@@ -129,13 +133,24 @@ public sealed class ScriptPodPreparationService(
             var manifest = manifestResult.Manifest!;
             var outcomes = new List<PodGateOutcome>();
             var files = CaptureFiles(workspaceRoot, outcomes);
+            var released = TryUseVerifiedRelease(manifest, files, outcomes, out var originRelease);
+            if (released is not null) {
+                prepared[workspaceKey] = released;
+                return released;
+            }
+            var editedRelease = files.ContainsKey("release.json");
+            if (originRelease is not null) {
+                manifest = manifest with { Parent = originRelease };
+                files = files.Where(pair => IsAuthoredPath(pair.Key))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            }
             var dependencies = new Dictionary<string, PreparedPod>(StringComparer.Ordinal);
             foreach (var requirement in manifest.Requires) {
                 var dependency = this.Prepare(requirement.Id, prepared, visiting);
                 dependencies[requirement.Id] = dependency;
                 if (!dependency.Success) {
                     outcomes.Add(new PodGateOutcome(
-                        "pod.dependency.invalid",
+                        editedRelease ? "pod.dependency.missing-after-release-edit" : "pod.dependency.invalid",
                         $"pod.json#requires/{requirement.Id}",
                         $"Required pod '{requirement.Id}' is not prepared and valid.",
                         $"Prepare or reinstall '{requirement.Id}' and retry."
@@ -171,7 +186,7 @@ public sealed class ScriptPodPreparationService(
                     continue;
                 var composedPath = "composed/" + file.Path["settings/".Length..];
                 composed[composedPath] = result.Document with { Path = composedPath };
-                foreach (var dependency in result.Document.Dependencies.Where(dependency => dependency.PodId != manifest.Id))
+                foreach (var dependency in result.Document.Dependencies)
                     inspection[$"{dependency.PodId}\0{dependency.SourcePath}"] = dependency;
 
                 bool Resolve(string reference, out PodConsumedDependency dependency, out string reason) {
@@ -202,7 +217,14 @@ public sealed class ScriptPodPreparationService(
                         reason = $"Reference '{reference}' does not name a composed document in release '{foreign.ContentHash}'.";
                         return false;
                     }
-                    dependency = new PodConsumedDependency(podId, foreign.ContentHash, "settings/" + relativePath, Encoding.UTF8.GetString(foreignSource.Bytes));
+                    dependency = new PodConsumedDependency(
+                        podId,
+                        foreign.ContentHash,
+                        "settings/" + relativePath,
+                        foreignDocument.Content,
+                        Encoding.UTF8.GetString(foreignSource.Bytes),
+                        foreignDocument.Dependencies
+                    );
                     return true;
                 }
             }
@@ -236,16 +258,14 @@ public sealed class ScriptPodPreparationService(
     private static Dictionary<string, PreparedPodFile> CaptureFiles(string workspaceRoot, ICollection<PodGateOutcome> outcomes) {
         var files = new Dictionary<string, PreparedPodFile>(StringComparer.OrdinalIgnoreCase);
         var total = 0L;
-        foreach (var path in Directory.EnumerateFiles(workspaceRoot, "*", SearchOption.AllDirectories)) {
+        foreach (var path in PositiveFiles(workspaceRoot, outcomes)) {
             var relative = BclCompat.GetRelativePath(workspaceRoot, path).Replace('\\', '/');
-            if (!IsReleaseInput(relative))
-                continue;
             if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) {
                 outcomes.Add(new PodGateOutcome("pod.file.link", relative, "Release inputs cannot be links.", "Replace the link with a regular file."));
                 continue;
             }
             var info = new FileInfo(path);
-            if (info.Length > MaxFileBytes || (total += info.Length) > MaxTotalBytes) {
+            if (files.Count >= MaxFileCount || info.Length > MaxFileBytes || (total += info.Length) > MaxTotalBytes) {
                 outcomes.Add(new PodGateOutcome("pod.file.limit", relative, "Pod release input exceeds the bounded file or total size.", "Remove or reduce the execution asset."));
                 continue;
             }
@@ -255,12 +275,128 @@ public sealed class ScriptPodPreparationService(
         return files;
     }
 
-    private static bool IsReleaseInput(string relative) =>
-        relative == "pod.json"
-        || relative == "PeScripts.csproj"
-        || relative.StartsWith("src/", StringComparison.OrdinalIgnoreCase)
-        || relative.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
-        || relative.StartsWith("assets/", StringComparison.OrdinalIgnoreCase);
+    private static IEnumerable<string> PositiveFiles(string workspaceRoot, ICollection<PodGateOutcome> outcomes) {
+        foreach (var name in new[] { "pod.json", "release.json", "PeScripts.csproj" }) {
+            var path = Path.Combine(workspaceRoot, name);
+            if (File.Exists(path))
+                yield return path;
+        }
+        var directoryCount = 1;
+        foreach (var name in new[] { "src", "settings", "composed", "assets", "inspection" }) {
+            var root = Path.Combine(workspaceRoot, name);
+            if (!Directory.Exists(root))
+                continue;
+            if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) {
+                outcomes.Add(new PodGateOutcome("pod.directory.link", name, "Release input directories cannot be links.", "Replace the link with a regular directory."));
+                continue;
+            }
+            var pending = new Stack<string>();
+            pending.Push(root);
+            while (pending.Count > 0) {
+                var directory = pending.Pop();
+                if (++directoryCount > MaxDirectoryCount) {
+                    outcomes.Add(new PodGateOutcome("pod.directory.limit", name, $"Pod input exceeds {MaxDirectoryCount} directories.", "Reduce the pod directory count."));
+                    break;
+                }
+                foreach (var child in Directory.EnumerateDirectories(directory)) {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) {
+                        outcomes.Add(new PodGateOutcome("pod.directory.link", BclCompat.GetRelativePath(workspaceRoot, child).Replace('\\', '/'), "Release input directories cannot be links.", "Replace the link with a regular directory."));
+                        continue;
+                    }
+                    pending.Push(child);
+                }
+                foreach (var path in Directory.EnumerateFiles(directory))
+                    yield return path;
+            }
+        }
+    }
+
+    private static PreparedPod? TryUseVerifiedRelease(
+        PodManifest manifest,
+        IReadOnlyDictionary<string, PreparedPodFile> files,
+        ICollection<PodGateOutcome> outcomes,
+        out PodReleaseReference? originRelease
+    ) {
+        originRelease = null;
+        if (!files.TryGetValue("release.json", out var releaseFile))
+            return null;
+
+        try {
+            var release = JObject.Parse(Encoding.UTF8.GetString(releaseFile.Bytes));
+            var podId = release["podId"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing podId.");
+            var version = release["version"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing version.");
+            var contentHash = release["contentHash"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing contentHash.");
+            var rows = release["files"] as JArray ?? throw new InvalidDataException("release.json is missing files.");
+            if (release["schemaVersion"]?.Value<int>() != 1 || podId != manifest.Id || version != manifest.Version)
+                throw new InvalidDataException("release.json identity does not match pod.json.");
+            originRelease = new PodReleaseReference(podId, contentHash, version);
+
+            if (contentHash.Length != 64)
+                throw new InvalidDataException("release.json contentHash is not a SHA-256 digest.");
+            var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in rows) {
+                if (token is not JObject row)
+                    throw new InvalidDataException("release.json contains a non-object file row.");
+                var path = row["path"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without path.");
+                var hash = row["sha256"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without sha256.");
+                if (hash.Length != 64 || !expected.TryAdd(path, hash))
+                    throw new InvalidDataException($"release.json contains an invalid or duplicate file row '{path}'.");
+            }
+            var actual = files.Where(pair => pair.Key != "release.json").ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            var actualHash = ComputeReleaseHash(manifest, actual.ToDictionary(pair => pair.Key, pair => pair.Value.Bytes, StringComparer.OrdinalIgnoreCase));
+            var fileRowsMatch = expected.Count == actual.Count
+                && expected.All(pair => actual.TryGetValue(pair.Key, out var file) && file.Sha256 == pair.Value);
+            if (!fileRowsMatch && actualHash == contentHash)
+                throw new InvalidDataException("release.json file rows do not match the released files.");
+            var authoredChanged = expected.Where(pair => IsAuthoredPath(pair.Key)).Any(pair => !actual.TryGetValue(pair.Key, out var file) || file.Sha256 != pair.Value)
+                || actual.Keys.Where(IsAuthoredPath).Any(path => !expected.ContainsKey(path));
+            if (authoredChanged)
+                return null;
+
+            if (!fileRowsMatch || actualHash != contentHash)
+                throw new InvalidDataException("Released file integrity or content identity does not match release.json.");
+
+            var inspection = ReadInspection(actual);
+            var composed = actual.Values.Where(file => file.Path.StartsWith("composed/", StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(file => file.Path, file => new PodComposedDocument(file.Path, Encoding.UTF8.GetString(file.Bytes), inspection), StringComparer.OrdinalIgnoreCase);
+            foreach (var requirement in manifest.ExternalRequirements)
+                outcomes.Add(new PodGateOutcome(
+                    "pod.external.runtime-required",
+                    $"pod.json#externalRequirements/{requirement.Code}/{requirement.ResourceId}",
+                    $"Execution must resolve current '{requirement.Code}' resource '{requirement.ResourceId}' from its authority.",
+                    "Connect the owning service. Cached definitions are not a fallback.",
+                    ScriptDiagnosticSeverity.Info
+                ));
+            return new PreparedPod(manifest, contentHash, files, composed, inspection, outcomes.ToList());
+        } catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException) {
+            outcomes.Add(new PodGateOutcome("pod.release.integrity", "release.json", exception.Message, "Restore or re-import the exact release before execution."));
+            return new PreparedPod(manifest, string.Empty, files, new Dictionary<string, PodComposedDocument>(), [], outcomes.ToList());
+        }
+    }
+
+    private static IReadOnlyList<PodConsumedDependency> ReadInspection(IReadOnlyDictionary<string, PreparedPodFile> files) {
+        if (!files.TryGetValue("inspection/index.json", out var index))
+            return [];
+        var rows = JArray.Parse(Encoding.UTF8.GetString(index.Bytes));
+        var dependencies = new List<PodConsumedDependency>();
+        foreach (var token in rows) {
+            if (token is not JObject row)
+                throw new InvalidDataException("Release inspection index contains a non-object row.");
+            var podId = row["podId"]?.Value<string>() ?? throw new InvalidDataException("Release inspection row is missing podId.");
+            var releaseHash = row["releaseHash"]?.Value<string>() ?? throw new InvalidDataException("Release inspection row is missing releaseHash.");
+            var sourcePath = row["sourcePath"]?.Value<string>() ?? throw new InvalidDataException("Release inspection row is missing sourcePath.");
+            var inspectionPath = row["inspectionPath"]?.Value<string>() ?? throw new InvalidDataException("Release inspection row is missing inspectionPath.");
+            if (!files.TryGetValue(inspectionPath, out var source))
+                throw new InvalidDataException($"Release inspection source is missing: {inspectionPath}");
+            dependencies.Add(new PodConsumedDependency(podId, releaseHash, sourcePath, Encoding.UTF8.GetString(source.Bytes)));
+        }
+        return dependencies;
+    }
+
+    private static bool IsAuthoredPath(string path) => path is "pod.json" or "PeScripts.csproj"
+        || path.StartsWith("src/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("assets/", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateEntrypoints(PodManifest manifest, IReadOnlyDictionary<string, PreparedPodFile> files, ICollection<PodGateOutcome> outcomes) {
         foreach (var entrypoint in manifest.Entrypoints) {
@@ -325,6 +461,17 @@ public sealed class ScriptPodPreparationService(
         var rows = files.OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Key + "\0" + Sha256(pair.Value) + "\n");
         return Sha256(Encoding.UTF8.GetBytes(string.Concat(rows)));
+    }
+
+    internal static string ComputeReleaseHash(PodManifest manifest, IReadOnlyDictionary<string, byte[]> files) {
+        var hashed = new Dictionary<string, byte[]>(StringComparer.Ordinal) {
+            ["pod.semantic.json"] = Encoding.UTF8.GetBytes(ManifestSemantics(manifest))
+        };
+        foreach (var file in files.Where(pair => pair.Key != "pod.json"
+            && pair.Key != "release.json"
+            && !pair.Key.StartsWith("inspection/", StringComparison.OrdinalIgnoreCase)))
+            hashed[file.Key] = file.Value;
+        return ComputeContentHash(hashed);
     }
 
     internal static string Sha256(byte[] bytes) {
