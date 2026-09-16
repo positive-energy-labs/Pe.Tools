@@ -18,12 +18,23 @@ export function productUserContentRootPath(): string {
   return join(userDocumentsPath(), productIdentity.productName);
 }
 
-export function productSettingsRootPath(): string {
-  return join(productUserContentRootPath(), productPathNames.settingsDirectoryName);
+export function productPodsRootPath(): string {
+  return join(productUserContentRootPath(), productPathNames.podsDirectoryName);
 }
 
-export function productGlobalSettingsPath(): string {
-  return join(productSettingsRootPath(), productPathNames.globalDirectoryName, "settings.json");
+export function productPreferencesPath(): string {
+  return join(productUserContentRootPath(), productPathNames.preferencesFileName);
+}
+
+export function productApsCredentialsPath(): string {
+  return join(
+    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+    productIdentity.vendorName,
+    productIdentity.productName,
+    productPathNames.stateDirectoryName,
+    "aps-auth",
+    "credentials.json",
+  );
 }
 
 function resolveUserDocumentsPath(): string {

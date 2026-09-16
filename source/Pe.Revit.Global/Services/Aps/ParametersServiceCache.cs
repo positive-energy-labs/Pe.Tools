@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.Extensions.Id;
 using Pe.Shared.ApsAuth;
 using Pe.Shared.RevitData;
+using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using Serilog;
@@ -371,10 +372,10 @@ public sealed class EnrichedParameterData {
 }
 
 public sealed class CacheParametersServiceSettings : IParametersTokenProvider {
-    public string GetAccountId() => ReadGlobalSettings().Bim360AccountId;
-    public string GetGroupId() => ReadGlobalSettings().ParamServiceGroupId;
-    public string GetCollectionId() => ReadGlobalSettings().ParamServiceCollectionId;
+    public string GetAccountId() => ReadPreferences().Bim360AccountId;
+    public string GetGroupId() => ReadPreferences().ParamServiceGroupId;
+    public string GetCollectionId() => ReadPreferences().ParamServiceCollectionId;
 
-    private static GlobalSettings ReadGlobalSettings() =>
-        StorageClient.Default.Global().Settings<GlobalSettings>().Read();
+    private static ProductPreferences ReadPreferences() =>
+        new LocalDiskJsonFile<ProductPreferences>(ProductUserContentLayout.ForCurrentUser().PreferencesPath).Read();
 }

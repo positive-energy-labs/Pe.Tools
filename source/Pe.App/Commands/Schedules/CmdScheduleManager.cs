@@ -41,26 +41,19 @@ public class CmdScheduleManager : IExternalCommand {
 
         try {
             var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsRegistration.ModuleKey);
-            var profilesStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Profiles);
-            var batchStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Batch);
-
             // Context for Schedule tabs
             var podSettings = PreparedPodSettingsCatalog.List(".schedule.json", ".batch.json");
             var context = new ScheduleManagerContext {
                 Doc = doc,
                 UiDoc = uiDoc,
-                Storage = storage,
-                ProfilesStorage = profilesStorage.Settings(),
-                ProfilesDocuments = profilesStorage.Documents()
+                Storage = storage
             };
 
             // Collect items for both tabs
-            var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage.Documents())
-                .Concat(podSettings.Where(setting => setting.SourcePath.EndsWith(".schedule.json", StringComparison.OrdinalIgnoreCase)).Select(setting => new ScheduleListItem(setting)))
+            var createItems = podSettings.Where(setting => setting.SourcePath.EndsWith(".schedule.json", StringComparison.OrdinalIgnoreCase)).Select(setting => new ScheduleListItem(setting))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();
-            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage.Settings())
-                .Concat(podSettings.Where(setting => setting.SourcePath.EndsWith(".batch.json", StringComparison.OrdinalIgnoreCase)).Select(setting => new BatchScheduleListItem(setting, batchStorage.Settings())))
+            var batchItems = podSettings.Where(setting => setting.SourcePath.EndsWith(".batch.json", StringComparison.OrdinalIgnoreCase)).Select(setting => new BatchScheduleListItem(setting))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();
 
@@ -72,7 +65,7 @@ public class CmdScheduleManager : IExternalCommand {
                     var createItem = item.GetCreateItem();
                     if (createItem == null || ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
-                    var previewData = this.TryLoadPreviewData(createItem, context.ProfilesStorage);
+                    var previewData = this.TryLoadPreviewData(createItem);
                     if (ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
                     // Update shared UI context only after background work completes.
@@ -156,15 +149,12 @@ public class CmdScheduleManager : IExternalCommand {
         }
 
         context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context.ProfilesStorage);
+        context.PreviewData = this.TryLoadPreviewData(profileItem);
     }
 
-    private SchedulePreviewData TryLoadPreviewData(
-        ScheduleListItem profileItem,
-        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
-    ) {
+    private SchedulePreviewData TryLoadPreviewData(ScheduleListItem profileItem) {
         try {
-            return this.LoadValidPreviewData(profileItem, profilesStorage);
+            return this.LoadValidPreviewData(profileItem);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (Exception ex) {
@@ -172,11 +162,8 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private SchedulePreviewData LoadValidPreviewData(
-        ScheduleListItem profileItem,
-        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
-    ) {
-        var profile = profileItem.Load(profilesStorage);
+    private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem) {
+        var profile = profileItem.Load();
 
         // Serialize profile to JSON
         var profileJson = JsonConvert.SerializeObject(
@@ -285,7 +272,7 @@ public class CmdScheduleManager : IExternalCommand {
         SharedScheduleProfile scheduleProfile;
         IReadOnlyList<ObservedExternalRevisionData> observedExternalRevisions;
         try {
-            scheduleProfile = ctx.SelectedProfile.Load(ctx.ProfilesStorage);
+            scheduleProfile = ctx.SelectedProfile.Load();
             observedExternalRevisions = ctx.SelectedProfile.Prepared?.ResolveExternalRequirements() ?? [];
         } catch (Exception ex) {
             _ = profileItem.AttemptSnapshot?.WriteReceipt(runOutput,
@@ -403,7 +390,7 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        var profile = context.SelectedProfile.Load(context.ProfilesStorage);
+        var profile = context.SelectedProfile.Load();
 
         // Get families of the schedule's category
         var category = CategoryNamesValueDomain.TryFindCategoryByName(context.Doc, profile.CategoryName);
@@ -476,20 +463,11 @@ public class CmdScheduleManager : IExternalCommand {
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule profile
-                    var podSetting = batchItem.Prepared?.Member("settings/" + scheduleFile.Replace('\\', '/'));
-                    var scheduleFilePath = podSetting?.FullSourcePath ?? context.ProfilesDocuments.ResolveDocumentPath(scheduleFile);
-                    if (podSetting is null && !File.Exists(scheduleFilePath)) {
-                        results.Add((scheduleFile, false, "File not found"));
-                        _ = this.WriteErrorOutput(context, scheduleFile, "File not found", null, "batch");
-                        continue;
-                    }
-
-                    var scheduleProfile = podSetting is null
-                        ? context.ProfilesStorage.ReadRequired(scheduleFile)
-                        : ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
-                            podSetting.RawContent,
-                            podSetting.ComposedContent,
-                            $"{podSetting.PodId}:{podSetting.SourcePath}");
+                    var podSetting = batchItem.Prepared.Member("settings/" + scheduleFile.Replace('\\', '/'));
+                    var scheduleProfile = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
+                        podSetting.RawContent,
+                        podSetting.ComposedContent,
+                        $"{podSetting.PodId}:{podSetting.SourcePath}");
 
                     // Create the schedule
                     using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleProfile.Name}");
@@ -643,8 +621,6 @@ public class ScheduleManagerContext {
     public required Document Doc { get; init; }
     public required UIDocument UiDoc { get; init; }
     public required ModuleStorage Storage { get; init; }
-    public required ModuleSettingsStorage<SharedScheduleProfile> ProfilesStorage { get; init; }
-    public required ModuleDocumentStorage ProfilesDocuments { get; init; }
     internal OutputStorage? RunOutput { get; set; }
 
     // UI state: what's currently selected and displayed

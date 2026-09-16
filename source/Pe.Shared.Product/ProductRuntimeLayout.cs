@@ -31,6 +31,7 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
     public string ApsAuthStatePath => Path.Combine(this.RootPath, "aps-auth");
     public string ApsTokenStorePath => Path.Combine(this.ApsAuthStatePath, "tokens.json");
+    public string ApsCredentialsPath => Path.Combine(this.ApsAuthStatePath, "credentials.json");
 
     public string ResolveModuleStatePath(string moduleKey) =>
         ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));

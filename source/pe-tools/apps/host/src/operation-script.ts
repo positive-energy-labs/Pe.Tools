@@ -38,11 +38,7 @@ export async function freezeScript(
     if (active.has(id)) throw Error(`Pod dependency cycle through '${id}'`);
     active.add(id);
     try {
-      const directory = join(
-        productUserContentRootPath(),
-        productPathNames.workspacesDirectoryName,
-        id,
-      );
+      const directory = join(productUserContentRootPath(), productPathNames.podsDirectoryName, id);
       if ((await lstat(directory)).isSymbolicLink())
         throw Error("Pod workspace cannot follow links");
       const files: ScriptingExecute.Req.ScriptPodSourceFile[] = [];
@@ -100,7 +96,7 @@ export async function freezeScript(
         if (captured.has(requirement.id)) continue;
         const dependencyDirectory = join(
           productUserContentRootPath(),
-          productPathNames.workspacesDirectoryName,
+          productPathNames.podsDirectoryName,
           requirement.id,
         );
         try {

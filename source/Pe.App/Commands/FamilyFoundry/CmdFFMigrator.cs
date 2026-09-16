@@ -50,7 +50,7 @@ public class CmdFFMigrator : IExternalCommand {
         dryRun ? "familyfoundry.plan" : "familyfoundry.migrate", output => ProcessPrepared(ctx, dryRun, output));
 
     private static void ProcessPrepared(FoundryContext ctx, bool dryRun, OutputStorage runOutput) {
-        var patch = ctx.SelectedProfile!.LoadPatch(ctx.Documents);
+        var patch = ctx.SelectedProfile!.LoadPatch();
         var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
         var families = picked is { Count: > 0 } ? picked : ctx.Doc.FamiliesMatching(patch.Select);
         if (families.Count == 0) {

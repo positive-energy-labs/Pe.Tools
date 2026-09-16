@@ -4823,7 +4823,7 @@ export namespace ScriptingPodExport {
   }
 }
 
-/** Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces. */
+/** Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new local folder under Documents/Pe.Tools/Pods. */
 export namespace ScriptingPodImport {
   export namespace Req {
     export interface Request {

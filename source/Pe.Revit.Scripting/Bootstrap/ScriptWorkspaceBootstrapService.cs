@@ -1,5 +1,6 @@
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Product;
 
 namespace Pe.Revit.Scripting.Bootstrap;
 
@@ -27,6 +28,9 @@ public sealed class ScriptWorkspaceBootstrapService(
         var workspaceRoot = this._workspaceRootResolver(workspaceKey);
         var projectFilePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ProjectFileName);
         var sourceDirectory = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.SourceDirectoryName);
+        var settingsDirectory = Path.Combine(workspaceRoot, ProductPathNames.SettingsDirectoryName);
+        var assetsDirectory = Path.Combine(workspaceRoot, ProductPathNames.AssetsDirectoryName);
+        var outputDirectory = Path.Combine(workspaceRoot, ProductPathNames.OutputDirectoryName);
         var vscodeDirectory = Path.Combine(workspaceRoot, ".vscode");
         var sampleScriptPath = Path.Combine(sourceDirectory, RevitScriptingStorageLocations.SampleFileName);
         var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
@@ -38,6 +42,9 @@ public sealed class ScriptWorkspaceBootstrapService(
         _ = Directory.CreateDirectory(productHomePath);
         _ = Directory.CreateDirectory(workspaceRoot);
         _ = Directory.CreateDirectory(sourceDirectory);
+        _ = Directory.CreateDirectory(settingsDirectory);
+        _ = Directory.CreateDirectory(assetsDirectory);
+        _ = Directory.CreateDirectory(outputDirectory);
         _ = Directory.CreateDirectory(vscodeDirectory);
 
         var existingProjectContent = File.Exists(projectFilePath)

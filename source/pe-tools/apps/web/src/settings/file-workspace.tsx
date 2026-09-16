@@ -88,7 +88,7 @@ export function FileWorkspace({
   }, [subject]);
   return (
     <div className="flex min-h-0 flex-col">
-      {!opened && (!selected.file || error) && <FilePicker family={family} select={select} />}
+      {!opened && (!selected.file || error) && <FilePicker select={select} />}
       {!opened && selected.file && !error && <span>Reading {selected.file}?</span>}
       {error && <OutcomeLine kind="error" label="file read failed" says={error} />}
       {opened?.workspaceId && (
@@ -108,13 +108,7 @@ export const fileAddressSearch = (previous: Record<string, unknown>, id: Setting
   file: id.relativePath,
 });
 
-function FilePicker({
-  family,
-  select,
-}: {
-  family: boolean;
-  select: (id: SettingsDocumentId) => Promise<void>;
-}) {
+function FilePicker({ select }: { select: (id: SettingsDocumentId) => Promise<void> }) {
   const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<typeof host.workspaces>>>([]);
   const [files, setFiles] = useState<Awaited<ReturnType<typeof host.tree>>>([]);
   const [bound, setBound] = useState<{
@@ -124,8 +118,8 @@ function FilePicker({
     file: string | null;
   }>({
     workspace: null,
-    module: family ? "FamilyFoundry" : null,
-    root: family ? "models" : null,
+    module: null,
+    root: null,
     file: null,
   });
   const [error, setError] = useState("");

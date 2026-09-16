@@ -17,14 +17,6 @@ public enum FoundryFileKind { FamilyModel, Patch }
 public class ProfileListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
 
-    public ProfileListItem(string filePath, string relativePath, FoundryFileKind kind) {
-        this.FilePath = filePath;
-        this.RelativePath = relativePath;
-        this.Kind = kind;
-        this._fileInfo = new FileInfo(filePath);
-        this.LineCount = File.ReadAllLines(filePath).Length;
-    }
-
     internal ProfileListItem(PreparedPodSetting prepared, FoundryFileKind kind) {
         this.FilePath = prepared.FullSourcePath;
         this.RelativePath = prepared.SourcePath;
@@ -37,33 +29,27 @@ public class ProfileListItem : IPaletteListItem {
     public string FilePath { get; }
     public string RelativePath { get; }
     public FoundryFileKind Kind { get; }
-    internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting Prepared { get; private set; }
     internal PreparedPodSetting? AttemptSnapshot { get; private set; }
     internal void BeginAttempt() => this.AttemptSnapshot = null;
     public int LineCount { get; }
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
     public string TextPrimary => Path.GetFileName(this.FilePath);
-    public string TextSecondary => this.Prepared is null
-        ? this.Kind == FoundryFileKind.Patch ? "patch" : "family.json"
-        : $"{this.Prepared.PodId} · {(this.Kind == FoundryFileKind.Patch ? "patch" : "family.json")}";
+    public string TextSecondary => $"{this.Prepared.PodId} · {(this.Kind == FoundryFileKind.Patch ? "patch" : "family.json")}";
     public string TextPill => $"{this.LineCount} lines";
     public Func<string> GetTextInfo => () => string.Empty;
     public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
 
-    internal FamilyModel LoadModel(ModuleDocumentStorage documents) {
-        if (this.Prepared is null)
-            return new ModuleSettingsStorage<FamilyModel>(documents).ReadRequired(this.RelativePath, FamilyModelSettingsRegistration.RootKey);
+    internal FamilyModel LoadModel() {
         this.Prepared = this.Prepared.Refresh();
         this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<FamilyModel>.ReadPrepared(
             this.Prepared.RawContent, this.Prepared.ComposedContent, $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
     }
 
-    internal FamilyPatch LoadPatch(ModuleDocumentStorage documents) {
-        if (this.Prepared is null)
-            return new ModuleSettingsStorage<FamilyPatch>(documents).ReadRequired(this.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
+    internal FamilyPatch LoadPatch() {
         this.Prepared = this.Prepared.Refresh();
         this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<FamilyPatch>.ReadPrepared(
@@ -71,8 +57,6 @@ public class ProfileListItem : IPaletteListItem {
     }
 
     internal Func<Document, FamilySharedParameterSource>? SharedParameterSource() {
-        if (this.Prepared is null)
-            return null;
         var requirements = this.Prepared.ExternalRequirements;
         var unsupported = requirements.FirstOrDefault(requirement => requirement.Code != "aps.parameters");
         if (unsupported is not null)
@@ -93,14 +77,4 @@ public class ProfileListItem : IPaletteListItem {
             requiredResourceIds: resourceIds, requireDeclaration: true, observedParametersDigest: current.Digest);
     }
 
-    public static List<ProfileListItem> Discover(ModuleDocumentStorage storage) {
-        List<ProfileListItem> In(string rootKey, FoundryFileKind kind) {
-            var discovered = storage.DiscoverAsync(new SettingsDiscoveryOptions(Recursive: true, IncludeFragments: false, IncludeSchemas: false), rootKey).GetAwaiter().GetResult();
-            return discovered.Files.Select(f => new ProfileListItem(storage.ResolveDocumentPath(f.RelativePath, rootKey), f.RelativePath, kind)).ToList();
-        }
-        return In(FamilyModelSettingsRegistration.RootKey, FoundryFileKind.FamilyModel)
-            .Concat(In(FamilyModelSettingsRegistration.PatchRootKey, FoundryFileKind.Patch))
-            .OrderByDescending(p => p.LastModified)
-            .ToList();
-    }
 }

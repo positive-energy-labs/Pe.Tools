@@ -32,10 +32,8 @@ internal static class ScriptFileTemplates {
 
         ## Folders
 
-        - `{{ProductPathNames.SettingsDirectoryName}}/` - authored settings grouped by module.
-        - `{{ProductPathNames.WorkspacesDirectoryName}}/` - Revit scripting workspaces.
-        - `{{ProductPathNames.InlineScriptsDirectoryName}}/` - saved inline script traces from quick executions.
-        - `{{ProductPathNames.OutputDirectoryName}}/` - generated user-visible command output.
+        - `{{ProductPathNames.PreferencesFileName}}` - product-wide user preferences.
+        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/` - portable authored settings, scripts, assets, and output.
 
         Runtime state, logs, caches, and installed binaries live under Local AppData, not this folder.
         """;
@@ -50,21 +48,20 @@ internal static class ScriptFileTemplates {
 
         ## Purpose
 
-        This folder holds editable settings, scripting workspaces, inline script traces, and generated user output. Runtime state, logs, caches, and installed binaries live elsewhere.
+        This folder holds product preferences and portable Pods. Runtime state, logs, caches, credentials, and installed binaries live elsewhere.
 
         ## Entry Points
 
-        - `{{ProductPathNames.SettingsDirectoryName}}/` - authored settings.
-        - `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/` - scripting workspaces.
-        - `{{ProductPathNames.InlineScriptsDirectoryName}}/` - retained inline snippet traces.
-        - `{{ProductPathNames.OutputDirectoryName}}/` - durable user-visible output.
+        - `{{ProductPathNames.PreferencesFileName}}` - product-wide preferences.
+        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/settings/` - authored typed JSON.
+        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/src/` - authored scripts.
+        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/assets/` - shipped assets.
+        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/output/` - useful generated output.
 
         ## Notes
 
-        - Prefer workspace-relative script execution from `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/src/` for durable work.
-        - Treat `{{ProductPathNames.InlineScriptsDirectoryName}}/` as trace history.
-        - Settings are flattened as `{{ProductPathNames.SettingsDirectoryName}}/<module>/<root>/`.
-        - Shared settings fragments and schemas belong under `{{ProductPathNames.SettingsDirectoryName}}/{{ProductPathNames.GlobalDirectoryName}}/`.
+        - Prefer pod-relative script execution from `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/src/` for durable work.
+        - Keep reusable settings and their source dependencies inside the same pod.
         """;
 
     public static string CreateReadme() =>
@@ -131,7 +128,7 @@ internal static class ScriptFileTemplates {
 
         ## Scope
 
-        Agent guidance for a generated scripting workspace under product `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/`.
+        Agent guidance for a generated scripting workspace under product `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/`.
 
         ## Purpose
 

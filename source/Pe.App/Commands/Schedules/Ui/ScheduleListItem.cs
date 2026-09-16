@@ -18,14 +18,6 @@ public class ScheduleListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
     private readonly string? _relativePath;
 
-    public ScheduleListItem(string filePath, string? relativePath = null) {
-        this.FilePath = filePath;
-        this._fileInfo = new FileInfo(filePath);
-        this._relativePath = relativePath;
-        this.CategoryName = ExtractCategoryName(filePath);
-        this.FieldCount = ExtractFieldCount(filePath);
-    }
-
     internal ScheduleListItem(PreparedPodSetting prepared) {
         this.FilePath = prepared.FullSourcePath;
         this._fileInfo = new FileInfo(this.FilePath);
@@ -35,13 +27,11 @@ public class ScheduleListItem : IPaletteListItem {
         this.FieldCount = ExtractFieldCountFromContent(prepared.ComposedContent);
     }
 
-    internal PreparedPodSetting? Prepared { get; private set; }
+    internal PreparedPodSetting Prepared { get; private set; }
     internal PreparedPodSetting? AttemptSnapshot { get; private set; }
 
-    internal ScheduleProfile Load(ModuleSettingsStorage<ScheduleProfile> legacy) {
+    internal ScheduleProfile Load() {
         this.AttemptSnapshot = null;
-        if (this.Prepared is null)
-            return legacy.ReadRequired(this.TextPrimary);
         this.Prepared = this.Prepared.Refresh();
         this.AttemptSnapshot = this.Prepared;
         return ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(
@@ -83,14 +73,6 @@ public class ScheduleListItem : IPaletteListItem {
     /// <summary>
     ///     Extracts the CategoryName value from a schedule profile JSON file.
     /// </summary>
-    private static string ExtractCategoryName(string filePath) {
-        try {
-            return ExtractCategoryNameFromContent(File.ReadAllText(filePath));
-        } catch {
-            return string.Empty;
-        }
-    }
-
     private static string ExtractCategoryNameFromContent(string content) {
         var jObject = JObject.Parse(content);
         return (jObject.TryGetValue("CategoryName", out var token) ? token.Value<string>() : null) ?? string.Empty;
@@ -99,35 +81,9 @@ public class ScheduleListItem : IPaletteListItem {
     /// <summary>
     ///     Extracts the field count from a schedule profile JSON file.
     /// </summary>
-    private static int ExtractFieldCount(string filePath) {
-        try {
-            return ExtractFieldCountFromContent(File.ReadAllText(filePath));
-        } catch {
-            return 0;
-        }
-    }
-
     private static int ExtractFieldCountFromContent(string content) {
         var jObject = JObject.Parse(content);
         return jObject.TryGetValue("Fields", out var fieldsToken) && fieldsToken is JArray fieldsArray ? fieldsArray.Count : 0;
     }
 
-    /// <summary>
-    ///     Discovers all schedule profile JSON files in a directory, excluding schema files.
-    ///     If using a SettingsSubDir with recursive discovery, will find files in nested subdirectories.
-    /// </summary>
-    public static List<ScheduleListItem> DiscoverProfiles(ModuleDocumentStorage storage) {
-        var discovered = storage.DiscoverAsync(new SettingsDiscoveryOptions(
-            Recursive: true,
-            IncludeFragments: false,
-            IncludeSchemas: false
-        )).GetAwaiter().GetResult();
-
-        return discovered.Files
-            .Select(file => new ScheduleListItem(
-                storage.ResolveDocumentPath(file.RelativePath),
-                file.RelativePath))
-            .OrderByDescending(p => p.LastModified)
-            .ToList();
-    }
 }

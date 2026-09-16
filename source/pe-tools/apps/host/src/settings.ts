@@ -22,7 +22,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { LocalOpError } from "./local-error.ts";
-import { productSettingsRootPath } from "./product-paths.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import {
   localOpFileError,
   makeDirectory,
@@ -158,14 +158,14 @@ export function saveSettingsDocument(
 }
 
 function defaultSettingsBasePath(): string {
-  return productSettingsRootPath();
+  return productPodsRootPath();
 }
 
 function normalizeSettingsTreeRequest(input: SettingsTreeRequest): Required<SettingsTreeRequest> {
   return {
     mode: input.mode ?? "module",
-    moduleKey: input.moduleKey || "Global",
-    rootKey: input.rootKey || "fragments",
+    moduleKey: input.moduleKey || "default",
+    rootKey: input.rootKey || "settings",
     subDirectory: input.subDirectory ?? null,
     recursive: input.recursive === true,
     includeFragments: input.includeFragments !== false,
@@ -695,63 +695,13 @@ function getSchemaJson(value: unknown): string | null {
   return typeof schemaJson === "string" && schemaJson.trim() ? schemaJson : null;
 }
 
-const discoverModule = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  ctx: SettingsRuntimeContext,
-) {
-  if (documentId.moduleKey.toLowerCase() === "global")
-    return {
-      moduleKey: "Global",
-      defaultRootKey: "fragments",
-      roots: [{ rootKey: "fragments", displayName: "fragments" }],
-      storageOptions: { includeRoots: [], presetRoots: [] },
-    } satisfies SettingsModuleDescriptor;
-
-  if (!ctx.invokeBridge)
-    return {
-      moduleKey: documentId.moduleKey,
-      defaultRootKey: documentId.rootKey,
-      roots: [{ rootKey: documentId.rootKey, displayName: documentId.rootKey }],
-      storageOptions: { includeRoots: [], presetRoots: [] },
-    } satisfies SettingsModuleDescriptor;
-
-  const catalogResult = yield* Effect.result(
-    ctx.invokeBridge("settings.module-catalog", undefined, ctx.bridgeSessionId),
-  );
-  if (catalogResult._tag === "Failure")
-    return yield* Effect.fail(
-      new Error(
-        `Unable to discover settings module '${documentId.moduleKey}': ${errorMessage(catalogResult.failure)}`,
-      ),
-    );
-
-  const modules = normalizeModuleCatalog(catalogResult.success);
-  const module = modules.find(
-    (candidate) => candidate.moduleKey.toLowerCase() === documentId.moduleKey.toLowerCase(),
-  );
-  if (!module) throw new Error(`Unknown settings module '${documentId.moduleKey}'.`);
-  if (!module.roots.some((root) => root.rootKey.toLowerCase() === documentId.rootKey.toLowerCase()))
-    throw new Error(`Unknown root '${documentId.rootKey}' for module '${documentId.moduleKey}'.`);
-  return module;
-});
-
-function normalizeModuleCatalog(value: unknown): SettingsModuleDescriptor[] {
-  const modules = (value as Partial<{ modules: unknown[] }>).modules;
-  return Array.isArray(modules)
-    ? modules.filter((module): module is SettingsModuleDescriptor => isSettingsModule(module))
-    : [];
-}
-
-function isSettingsModule(value: unknown): value is SettingsModuleDescriptor {
-  const candidate = value as Partial<SettingsModuleDescriptor>;
-  return (
-    value != null &&
-    typeof value === "object" &&
-    typeof candidate.moduleKey === "string" &&
-    typeof candidate.defaultRootKey === "string" &&
-    Array.isArray(candidate.roots)
-  );
-}
+const discoverModule = (documentId: SettingsDocumentId, _ctx: SettingsRuntimeContext) =>
+  Effect.succeed({
+    moduleKey: documentId.moduleKey,
+    defaultRootKey: documentId.rootKey,
+    roots: [{ rootKey: documentId.rootKey, displayName: documentId.rootKey }],
+    storageOptions: { includeRoots: [], presetRoots: [] },
+  } satisfies SettingsModuleDescriptor);
 
 // --- URL-native $schema ------------------------------------------------------
 // Settings schemas are session state (value-domain samples come from the open
@@ -878,7 +828,7 @@ const expandPresets: (
     if (!isRecord(value)) return value;
     if ("$preset" in value) {
       const directive = yield* Effect.try(() =>
-        resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? [], false),
+        resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? []),
       );
       const path = yield* resolveDirectiveFilePath(directive);
       if (visited.has(path.toLowerCase()))
@@ -983,12 +933,7 @@ const expandIncludes: (
           for (const item of candidate) {
             if (isRecord(item) && "$include" in item) {
               const directive = yield* Effect.try(() =>
-                resolveDirective(
-                  item.$include,
-                  localRootDirectory,
-                  options.includeRoots ?? [],
-                  true,
-                ),
+                resolveDirective(item.$include, localRootDirectory, options.includeRoots ?? []),
               );
               const path = yield* resolveDirectiveFilePath(directive);
               if (visited.has(path.toLowerCase()))
@@ -1036,7 +981,7 @@ const expandIncludes: (
           let merged: unknown = {};
           for (const includePath of paths) {
             const directive = yield* Effect.try(() =>
-              resolveDirective(includePath, localRootDirectory, options.includeRoots ?? [], true),
+              resolveDirective(includePath, localRootDirectory, options.includeRoots ?? []),
             );
             const path = yield* resolveDirectiveFilePath(directive);
             if (visited.has(path.toLowerCase()))
@@ -1095,29 +1040,23 @@ function resolveDirective(
   directivePath: unknown,
   localRootDirectory: string,
   allowedRoots: readonly string[],
-  requireGlobalAllowedRoot: boolean,
 ): ResolvedDirective {
   if (typeof directivePath !== "string" || !directivePath.trim())
     throw new Error("Directive path must be a non-empty string.");
-  const isGlobal = directivePath.toLowerCase().startsWith("@global/");
   const isLocal = directivePath.toLowerCase().startsWith("@local/");
-  if (!isGlobal && !isLocal)
-    throw new Error("Directive path must start with '@local/' or '@global/'.");
-  const rawRelativePath = directivePath.slice(isGlobal ? "@global/".length : "@local/".length);
+  if (!isLocal) throw new Error("Directive path must start with '@local/'.");
+  const rawRelativePath = directivePath.slice("@local/".length);
   const relativePath = normalizeRelativePath(rawRelativePath);
   const rootSegment = relativePath.split("/")[0];
   const roots = normalizeAllowedRoots(allowedRoots);
   if (roots.size !== 0 && !roots.has(rootSegment.toLowerCase()))
     throw new Error(`Directive root '${rootSegment}' is not allowed.`);
-  if (isGlobal && roots.size === 0 && requireGlobalAllowedRoot)
-    throw new Error("Global directives require an allowed root.");
-  const globalRootDirectory = tryResolveGlobalFragmentsDirectory(localRootDirectory);
   return {
     originalPath: directivePath,
     relativePath,
-    rootDirectory: isGlobal ? globalRootDirectory : localRootDirectory,
+    rootDirectory: localRootDirectory,
     rootSegment,
-    scope: isGlobal ? SettingsDirectiveScope.Global : SettingsDirectiveScope.Local,
+    scope: SettingsDirectiveScope.Local,
   };
 }
 
@@ -1154,10 +1093,8 @@ function createDependency(
   return {
     directivePath: directive.originalPath,
     documentId: {
-      moduleKey:
-        directive.scope === SettingsDirectiveScope.Global ? "Global" : sourceDocumentId.moduleKey,
-      rootKey:
-        directive.scope === SettingsDirectiveScope.Global ? "fragments" : sourceDocumentId.rootKey,
+      moduleKey: sourceDocumentId.moduleKey,
+      rootKey: sourceDocumentId.rootKey,
       relativePath: stripJsonExtension(toRelativePath(rootDirectory, sourceFilePath)),
     },
     kind,
@@ -1370,14 +1307,6 @@ function normalizeAllowedRoots(allowedRoots: readonly string[]): Set<string> {
       .filter(Boolean)
       .map((root) => root.toLowerCase()),
   );
-}
-
-function tryResolveGlobalFragmentsDirectory(settingsRootPath: string): string {
-  const parts = win32.resolve(settingsRootPath).split(/[\\/]/);
-  const settingsIndex = parts.findIndex((part) => part.toLowerCase() === "settings");
-  if (settingsIndex >= 0)
-    return win32.join(...parts.slice(0, settingsIndex + 1), "Global", "fragments");
-  return win32.resolve(settingsRootPath, "..", "..", "Global", "fragments");
 }
 
 function toRelativePath(rootDirectory: string, filePath: string): string {

@@ -16,7 +16,7 @@ import {
   type ApsTokenResult,
 } from "@pe/host-contracts/operation-types";
 import { LocalOpError } from "./local-error.ts";
-import { productGlobalSettingsPath } from "./product-paths.ts";
+import { productApsCredentialsPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
 const CALLBACK_PORT = 8080;
@@ -394,7 +394,7 @@ const readApsCredentials = Effect.fnUntraced(function* (
   operationKey: string,
   requireSecret: boolean,
 ) {
-  const settingsPath = globalSettingsPath();
+  const settingsPath = apsCredentialsPath();
   const fs = yield* FileSystem.FileSystem;
   const contentResult = yield* Effect.result(fs.readFileString(settingsPath));
   if (contentResult._tag === "Failure")
@@ -432,8 +432,8 @@ const readApsCredentials = Effect.fnUntraced(function* (
   return { clientId, clientSecret } satisfies ApsCredentials;
 });
 
-function globalSettingsPath(): string {
-  return productGlobalSettingsPath();
+function apsCredentialsPath(): string {
+  return productApsCredentialsPath();
 }
 
 function tokenStorePath(): string {

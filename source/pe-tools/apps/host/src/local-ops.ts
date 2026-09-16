@@ -25,7 +25,7 @@ import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { resolvePeaWorld, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { productSettingsRootPath } from "./product-paths.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 export {
   discoverSettingsTree,
   openSettingsDocument,
@@ -157,21 +157,14 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
   };
 });
 
-export const getSettingsWorkspaces = Effect.fnUntraced(function* (ctx: LocalOpContext) {
-  const bridgeModules = ctx.bridge.connected
-    ? yield* Effect.result(ctx.invokeBridge("settings.module-catalog"))
-    : undefined;
-  const diskModules = yield* discoverSettingsModules();
-  const modules =
-    bridgeModules?._tag === "Success"
-      ? mergeSettingsModules(diskModules, normalizeBridgeModuleCatalog(bridgeModules.success))
-      : diskModules;
+export const getSettingsWorkspaces = Effect.fnUntraced(function* (_ctx: LocalOpContext) {
+  const modules = yield* discoverSettingsModules();
 
   return {
     workspaces: [
       {
-        workspaceKey: "default",
-        displayName: "Default Workspace",
+        workspaceKey: "pods",
+        displayName: "Pods",
         basePath: defaultSettingsBasePath(),
         modules: modules.map((module) => ({
           moduleKey: module.moduleKey,
@@ -303,49 +296,27 @@ const discoverSettingsModules = Effect.fnUntraced(function* () {
     .pipe(Effect.catch(() => Effect.succeed([] as string[])));
   const modules: SettingsModuleWorkspaceDescriptor[] = [];
   for (const moduleKey of names) {
-    const roots = yield* fs
-      .readDirectory(join(base, moduleKey))
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])));
-    const directories = [];
-    for (const rootKey of roots) {
-      const info = yield* fs
-        .stat(join(base, moduleKey, rootKey))
-        .pipe(Effect.catch(() => Effect.succeed(null)));
-      if (info?.type === "Directory") directories.push({ rootKey, displayName: rootKey });
-    }
-    if (directories.length)
-      modules.push({ moduleKey, defaultRootKey: directories[0].rootKey, roots: directories });
+    const manifest = yield* fs
+      .stat(join(base, moduleKey, "pod.json"))
+      .pipe(Effect.catch(() => Effect.succeed(null)));
+    const info = yield* fs
+      .stat(join(base, moduleKey, productPathNames.settingsDirectoryName))
+      .pipe(Effect.catch(() => Effect.succeed(null)));
+    if (manifest?.type === "File" && info?.type === "Directory")
+      modules.push({
+        moduleKey,
+        defaultRootKey: productPathNames.settingsDirectoryName,
+        roots: [
+          {
+            rootKey: productPathNames.settingsDirectoryName,
+            displayName: productPathNames.settingsDirectoryName,
+          },
+        ],
+      });
   }
-  return mergeSettingsModules(neutralSettingsModules(), modules);
+  return modules;
 });
 
-function neutralSettingsModules(): SettingsModuleWorkspaceDescriptor[] {
-  return [
-    {
-      moduleKey: "Global",
-      defaultRootKey: "fragments",
-      roots: [{ rootKey: "fragments", displayName: "fragments" }],
-    },
-  ];
-}
-
-function normalizeBridgeModuleCatalog(value: unknown): SettingsModuleWorkspaceDescriptor[] {
-  const parsed = value as Partial<{ modules: SettingsModuleWorkspaceDescriptor[] }>;
-  return Array.isArray(parsed.modules) ? parsed.modules : [];
-}
-
-function mergeSettingsModules(
-  localModules: SettingsModuleWorkspaceDescriptor[],
-  bridgeModules: SettingsModuleWorkspaceDescriptor[],
-): SettingsModuleWorkspaceDescriptor[] {
-  const modules = new Map<string, SettingsModuleWorkspaceDescriptor>();
-  for (const module of localModules) modules.set(module.moduleKey.toLowerCase(), module);
-  for (const module of bridgeModules)
-    if (!modules.has(module.moduleKey.toLowerCase()))
-      modules.set(module.moduleKey.toLowerCase(), module);
-  return [...modules.values()];
-}
-
 function defaultSettingsBasePath(): string {
-  return productSettingsRootPath();
+  return productPodsRootPath();
 }

@@ -32,7 +32,6 @@ import {
 import { LocalOpError } from "../src/local-error.ts";
 import {
   discoverSettingsTree,
-  openSettingsDocument,
   openSettingsDocumentWithModule,
   saveSettingsDocument,
   validateSettingsDocument,
@@ -145,103 +144,38 @@ test("settings save uses content hash version tokens", async () => {
 
 test("settings save writes schema-invalid documents and returns validation issues", async () => {
   const profile = withTempUserProfile();
+  const seen: string[] = [];
   try {
     const result = await runDispatch(
       saveSettingsDocument(
         {
           expected: { kind: "missing" },
           documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/invalid-but-saved",
+            moduleKey: "customer-library",
+            rootKey: "settings",
+            relativePath: "invalid-but-saved.schedule.json",
           },
           rawContent: "{}",
         },
         {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: [], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : {
-                    schemaJson:
-                      '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
-                  },
-            ),
+          invokeBridge: (operationKey) => {
+            seen.push(operationKey);
+            if (operationKey === "settings.module-catalog")
+              throw new Error("Pod folder names are not registered library module names.");
+            return Effect.succeed({
+              schemaJson:
+                '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
+            });
+          },
         },
       ),
     );
 
     expect(result.kind).toBe("written");
     if (result.kind !== "written") throw new Error("expected write");
+    expect(seen).not.toContain("settings.module-catalog");
     expect(result.snapshot.validation.isValid).toBe(false);
     expect(result.snapshot.validation.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings open composes global includes from bridge-discovered module options", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const settingsRoot = join(profile.path, "Documents", "Pe.Tools", "settings");
-    mkdirSync(join(settingsRoot, "Global", "fragments", "_fields"), { recursive: true });
-    mkdirSync(join(settingsRoot, "CmdScheduleManager", "schedules", "profiles"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(settingsRoot, "Global", "fragments", "_fields", "shared.json"),
-      '[{"Name":"Room"}]',
-    );
-    writeFileSync(
-      join(settingsRoot, "CmdScheduleManager", "schedules", "profiles", "main.json"),
-      '{"Fields":[{"$include":"@global/_fields/shared"}]}',
-    );
-
-    const snapshot = await runDispatch(
-      openSettingsDocument(
-        {
-          documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/main",
-          },
-          includeComposedContent: true,
-        },
-        {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: ["_fields"], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : { schemaJson: "{}" },
-            ),
-        },
-      ),
-    );
-
-    expect(snapshot.composedContent).toContain('"Name": "Room"');
-    expect(snapshot.dependencies[0]).toMatchObject({
-      directivePath: "@global/_fields/shared",
-      scope: "Global",
-      kind: "Include",
-    });
   } finally {
     profile.dispose();
   }
@@ -250,7 +184,7 @@ test("settings open composes global includes from bridge-discovered module optio
 test("composition preserves authored JSON, substitutes keyed presets, and fails closed", async () => {
   const profile = withTempUserProfile();
   try {
-    const root = join(profile.path, "Documents", "Pe.Tools", "settings", "FamilyFoundry", "models");
+    const root = join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "settings");
     mkdirSync(join(root, "_fragments"), { recursive: true });
     writeFileSync(
       join(root, "_fragments", "parameters.json"),
@@ -262,11 +196,11 @@ test("composition preserves authored JSON, substitutes keyed presets, and fails 
       join(root, "_fragments", "cycle.json"),
       '[{"$include":"@local/_fragments/cycle"}]',
     );
-    const documentId = { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "main" };
+    const documentId = { moduleKey: "family-library", rootKey: "settings", relativePath: "main" };
     const module = {
-      moduleKey: "FamilyFoundry",
-      defaultRootKey: "models",
-      roots: [{ rootKey: "models", displayName: "Models" }],
+      moduleKey: "family-library",
+      defaultRootKey: "settings",
+      roots: [{ rootKey: "settings", displayName: "Settings" }],
       storageOptions: { includeRoots: ["_fragments"], presetRoots: ["_fragments"] },
     };
     const open = async (raw: string) => {
@@ -493,20 +427,55 @@ test("settings validation merges registered semantic diagnostics after structura
   );
 });
 
-test("settings workspaces calls internal module catalog without fake payload", async () => {
+test("settings workspaces are discovered from local pods without consulting Revit", async () => {
+  const profile = withTempUserProfile();
   const seen: unknown[] = [];
-  const result = await runDispatch(
-    getSettingsWorkspaces({
-      bridge: { connected: true },
-      invokeBridge: (operationKey, payload) => {
-        seen.push({ operationKey, payload });
-        return Effect.succeed({ modules: [] });
-      },
-    }),
-  );
+  try {
+    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "settings"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "pod.json"),
+      "{}",
+    );
+    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "script-only", "src"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(profile.path, "Documents", "Pe.Tools", "Pods", "script-only", "pod.json"),
+      "{}",
+    );
+    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "manifestless", "settings"), {
+      recursive: true,
+    });
+    const result = await runDispatch(
+      getSettingsWorkspaces({
+        bridge: { connected: true },
+        invokeBridge: (operationKey, payload) => {
+          seen.push({ operationKey, payload });
+          return Effect.succeed({ modules: [] });
+        },
+      }),
+    );
 
-  expect(seen).toEqual([{ operationKey: "settings.module-catalog", payload: undefined }]);
-  expect(result.workspaces.length).toBe(1);
+    expect(seen).toEqual([]);
+    expect(result.workspaces).toEqual([
+      {
+        workspaceKey: "pods",
+        displayName: "Pods",
+        basePath: join(profile.path, "Documents", "Pe.Tools", "Pods"),
+        modules: [
+          {
+            moduleKey: "family-library",
+            defaultRootKey: "settings",
+            roots: [{ rootKey: "settings", displayName: "settings" }],
+          },
+        ],
+      },
+    ]);
+  } finally {
+    profile.dispose();
+  }
 });
 
 test("aps auth defaults preserve C# token-store key shape", () => {
