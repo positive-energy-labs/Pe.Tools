@@ -6,6 +6,14 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PodManifestValidatorTests {
     [Test]
+    public void Duplicate_manifest_identity_is_rejected_instead_of_silently_replaced() {
+        var result = PodManifestValidator.ValidateJson("""{"schemaVersion":2,"id":"alice","id":"bob","name":"Example","version":"1"}""");
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Manifest, Is.Null);
+        Assert.That(result.Diagnostics.Single().Message, Does.Contain("already exists"));
+    }
+
+    [Test]
     public void Valid_manifest_loads_entrypoints() {
         var result = PodManifestValidator.ValidateJson(
             """

@@ -90,7 +90,7 @@ public static class PodManifestValidator {
 
         JObject root;
         try {
-            root = JObject.Parse(json);
+            root = JObject.Parse(json, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
         } catch (JsonException ex) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json is not valid JSON: {ex.Message}"));
             return new PodManifestValidationResult(null, diagnostics);
