@@ -33,7 +33,7 @@ export function VizChip({
   );
 }
 
-export type KVTone = "caution";
+type KVTone = "caution";
 
 const KV_TONE: Record<KVTone, string> = {
   caution: token("caution"),

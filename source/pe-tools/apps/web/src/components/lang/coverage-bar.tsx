@@ -3,7 +3,7 @@
  * consumer (design-lang.css: "--viz-* … governed by the grayscale law (from ops CoverageBar,
  * this palette's first shipped consumer)").
  *
- * CONSUMERS: src/ops/** glance views (migrating from ops/primitives CoverageBar).
+ * CONSUMERS: src/ops/views/detail/parameter-coverage.tsx, src/lab/glance/** and the design-system specimen.
  *
  * RULINGS EMBODIED:
  * - Segments spend the VIZ ladder by INDEX (`viz: 1..6`), never a meaning role and never a
