@@ -30,7 +30,7 @@ function FamilyEditorProto() {
   const editor = useEditor();
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-screen min-h-0 flex-col">
       <header
         className="flex flex-wrap items-baseline gap-2 px-3 py-2"
         style={{ borderColor: token("line") }}

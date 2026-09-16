@@ -18,12 +18,6 @@ import { token } from "#/lib/token";
  * drawn as the seam it is rather than implied by silence. Nothing here syncs anything to any
  * document this family was already materialized into; nothing can, and the no-sync law says the UI
  * must never suggest otherwise.
- *
- * THE JSON PANE IS A COMPOSITION, NOT `JsonEditor`. `JsonEditor` takes no `decorations`, so an
- * editable pane cannot paint a highlighted range with it. `JsonView` does, and the shipped
- * `.jsonpane-input` / `.jsonpane-paint` classes are exactly the overlay contract — so the pane here
- * is `JsonView` as paint under the shipped textarea. Two rules of local css, zero edits to the
- * sibling-owned file. The promotion fix is one `decorations` prop on `JsonEditor`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,11 +27,9 @@ import { ParamGrid } from "#/family-review/proto-editor/composed-params";
 import { PartSidebar, SentenceGrids } from "#/family-review/proto-editor/composed-parts";
 import { Triptych } from "#/family-review/proto-editor/composed-triptych";
 import { jsonWithSpans, pointerAtOffset } from "#/family-review/proto-editor/json-map";
-import { StatePanel, TypeBand, type Editor } from "#/family-review/proto-editor/shell";
-import { JsonView, type HighlightDecoration } from "#/settings-panes/json-editor";
+import { StatePanel, TypeStage, type Editor } from "#/family-review/proto-editor/shell";
+import { JsonEditor, type HighlightDecoration } from "#/settings-panes/json-editor";
 import type { FamilyModel } from "#/family/family-model";
-
-import "./composed.css";
 
 export function ParadigmD({ editor }: { editor: Editor }) {
   const [selected, setSelected] = useState<string | null>("solid:body");
@@ -101,7 +93,7 @@ function Chrome({
       <span>family-model-showcase.family.json</span>
       <span>· writes to</span>
       <span>the same json</span>
-      <TypeBand editor={editor} />
+      <TypeStage editor={editor} />
       <FactChip
         tone="meta"
         title="Every edit on this page lands in the json and nowhere else. A family.json may already be materialized into many documents across many years; landing a write here changes none of them, and this surface will never imply it can."
@@ -137,7 +129,6 @@ function Chrome({
 function JsonPane({ editor }: { editor: Editor }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const paint = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLDivElement>(null);
 
   const map = useMemo(() => jsonWithSpans(editor.model), [editor.model]);
@@ -152,13 +143,12 @@ function JsonPane({ editor }: { editor: Editor }) {
 
   // Bring the painted range into view when the focus arrived from a structured surface.
   useEffect(() => {
-    paint.current?.querySelector(".dec-field")?.scrollIntoView({ block: "nearest" });
+    pane.current?.querySelector(".dec-field")?.scrollIntoView({ block: "nearest" });
   }, [editor.focus]);
 
-  const caretMoved = (event: React.SyntheticEvent) => {
-    const target = event.target as HTMLTextAreaElement;
-    if (target.tagName !== "TEXTAREA" || draft != null) return;
-    editor.setFocus(pointerAtOffset(map, target.selectionStart));
+  const caretMoved = (event: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    if (draft != null) return;
+    editor.setFocus(pointerAtOffset(map, event.currentTarget.selectionStart));
   };
 
   return (
@@ -177,44 +167,29 @@ function JsonPane({ editor }: { editor: Editor }) {
         </p>
       ) : null}
       <div ref={pane} className="min-h-0 flex-1">
-        <div className="h-full">
-          <div ref={paint}>
-            <JsonView code={`${text}\n`} decorations={decorations} />
-          </div>
-          <textarea
-            value={text}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoComplete="off"
-            wrap="off"
-            aria-label="raw family.json"
-            onChange={(event) => {
-              const next = event.target.value;
-              setDraft(next);
-              try {
-                const parsed = JSON.parse(next) as FamilyModel;
-                setParseError(null);
-                editor.apply(() => parsed);
-              } catch (error) {
-                setParseError(error instanceof Error ? error.message : "parse failed");
-              }
-            }}
-            onBlur={() => {
-              // Re-normalize to the canonical serialization once the user is done typing, so the
-              // pointer→range map and the text can never disagree.
-              if (parseError == null) setDraft(null);
-            }}
-            onSelect={caretMoved}
-            onClick={caretMoved}
-            onKeyUp={caretMoved}
-            onScroll={(event) => {
-              const node = paint.current;
-              if (!node) return;
-              node.scrollTop = event.currentTarget.scrollTop;
-              node.scrollLeft = event.currentTarget.scrollLeft;
-            }}
-          />
-        </div>
+        <JsonEditor
+          value={text}
+          decorations={decorations}
+          aria-label="raw family.json"
+          onChange={(next) => {
+            setDraft(next);
+            try {
+              const parsed = JSON.parse(next) as FamilyModel;
+              setParseError(null);
+              editor.apply(() => parsed);
+            } catch (error) {
+              setParseError(error instanceof Error ? error.message : "parse failed");
+            }
+          }}
+          onBlur={() => {
+            // Re-normalize to the canonical serialization once the user is done typing, so the
+            // pointer→range map and the text can never disagree.
+            if (parseError == null) setDraft(null);
+          }}
+          onSelect={caretMoved}
+          onClick={caretMoved}
+          onKeyUp={caretMoved}
+        />
       </div>
     </div>
   );

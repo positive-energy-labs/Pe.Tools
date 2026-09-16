@@ -10,7 +10,7 @@
  * ponytail: no virtualization, no folding — settings files are a few hundred lines;
  * revisit if a profile ever exceeds a few thousand.
  */
-import { useMemo } from "react";
+import { useMemo, type ComponentProps } from "react";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { json } from "@tanstack/highlight/languages/json";
 
@@ -42,21 +42,23 @@ export function JsonView({
   );
 }
 
-/** Controlled editor: caret/selection/scroll belong to the textarea; the highlighted
- * pre is aria-hidden paint underneath. Font metrics MUST match (both wear .jsonpane). */
+/** Controlled editor: the highlighted pre is aria-hidden paint and the transparent textarea
+ * sits in the same grid cell, sized by the paint. The pane is the one scroller, so the two
+ * layers cannot drift. Font metrics MUST match (both inherit the pane's). */
 export function JsonEditor({
   value,
   onChange,
-  placeholder,
+  decorations,
+  ...textarea
 }: {
   value: string;
   onChange: (next: string) => void;
-  placeholder?: string;
-}) {
+  decorations?: readonly HighlightDecoration[];
+} & Omit<ComponentProps<"textarea">, "value" | "onChange">) {
   const html = useMemo(
     // Trailing newline keeps the pre's height in step while the caret sits on a fresh line.
-    () => highlighter.highlightToHtml(value + "\n", { lang: "json" }),
-    [value],
+    () => highlighter.highlightToHtml(value + "\n", { lang: "json", decorations }),
+    [value, decorations],
   );
 
   return (
@@ -64,18 +66,19 @@ export function JsonEditor({
       <div data-json-paint="" aria-hidden dangerouslySetInnerHTML={{ __html: html }} />
       <textarea
         data-json-input=""
-        value={value}
-        placeholder={placeholder}
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"
         wrap="off"
+        {...textarea}
+        value={value}
         onChange={(e) => onChange(e.target.value)}
-        onScroll={(e) => {
-          const paint = e.currentTarget.previousElementSibling;
-          if (!(paint instanceof HTMLElement)) return;
-          paint.scrollTop = e.currentTarget.scrollTop;
-          paint.scrollLeft = e.currentTarget.scrollLeft;
+        onKeyDown={(e) => {
+          textarea.onKeyDown?.(e);
+          if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+          e.preventDefault();
+          // execCommand keeps the edit on the native undo stack; setting value would not.
+          document.execCommand("insertText", false, "  ");
         }}
       />
     </div>
