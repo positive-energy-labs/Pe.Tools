@@ -5,13 +5,7 @@ import { toolTitle } from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
-import {
-  imageSource,
-  selectToolCalls,
-  type ChatMessage,
-  type ChatState,
-  type ToolCall,
-} from "../chat-state";
+import { selectToolCalls, type ChatMessage, type ChatState, type ToolCall } from "../chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
@@ -106,7 +100,7 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
   const input = call.args;
   const output = call.status === "completed" ? call.result : undefined;
   const error = call.status === "failed" ? call.error : undefined;
-  const images = toolImages(output);
+  const images = call.status === "completed" ? call.images : [];
   return (
     <>
       <CellHeader call={call} />
@@ -121,21 +115,6 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       {error ? <Code code={error} lang="plaintext" title="error" tone="error" wrap /> : null}
     </>
   );
-}
-
-export function toolImages(output: unknown): string[] {
-  const parts = Array.isArray(output) ? output : [output];
-  return parts.flatMap((part) => {
-    if (typeof part === "string") return part.startsWith("data:image/") ? [part] : [];
-    if (part === null || typeof part !== "object") return [];
-    const record = part as Record<string, unknown>;
-    const mime = (record.mediaType ?? record.mimeType) as string | undefined;
-    if (mime && !mime.startsWith("image/")) return [];
-    const direct = (record.image ?? record.url) as string | undefined;
-    const data = typeof record.data === "string" ? record.data : undefined;
-    const url = imageSource(direct, data, mime);
-    return url && (mime?.startsWith("image/") || url.startsWith("data:image/")) ? [url] : [];
-  });
 }
 
 export function toMoments(messages: ChatMessage[]): Moment[] {

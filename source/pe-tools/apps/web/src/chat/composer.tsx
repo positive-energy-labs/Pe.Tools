@@ -14,7 +14,7 @@ import { Paperclip, X } from "lucide-react";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
-import { selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
+import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -374,12 +374,6 @@ function AttachmentChip({
       </Press>
     </span>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // ponytail: our own ceiling, 5 MB a file and 10 a message; the model provider's limit is the real

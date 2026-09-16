@@ -8,6 +8,7 @@ import { useWorkbench } from "./provider";
 import {
   readRecord,
   readString,
+  toolOutputForDisplay,
   type Approval,
   type ChatMessage,
   type ChatPart,
@@ -300,13 +301,27 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           {failed ? "err" : running ? "run" : "ok"}
         </span>
       </div>
+      {/* What the call captured, visible without opening it and while it still runs. */}
+      {call.images.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {call.images.map((src, index) => (
+            <Thumbnail key={index} src={src} name={`${toolTitle(call.title)} image ${index + 1}`} />
+          ))}
+        </div>
+      ) : null}
       {open ? (
         <div {...annotation("tool-body")}>
           <Code code={stringify(call.args)} lang="json" title="in" />
           {result === undefined ? null : failed ? (
-            <Code code={stringify(result)} lang="json" title="out" tone="error" wrap />
+            <Code
+              code={stringify(toolOutputForDisplay(result))}
+              lang="json"
+              title="out"
+              tone="error"
+              wrap
+            />
           ) : (
-            <Code code={stringify(result)} lang="json" title="out" />
+            <Code code={stringify(toolOutputForDisplay(result))} lang="json" title="out" />
           )}
         </div>
       ) : null}

@@ -71,6 +71,8 @@ export type ToolCall = {
   args: unknown;
   target?: string;
   parentMessageId?: string;
+  /** Images the call produced so far, from its result or, while it runs, its progress. */
+  images: string[];
 } & ToolOutcome;
 
 /**
@@ -114,6 +116,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const completed = terminal || active?.status === "completed";
       const args = call.rawInput ?? call.args;
       const result = call.result ?? active?.result;
+      const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = failed
         ? {
             status: "failed",
@@ -127,6 +130,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
         args,
         target: toolTarget(args),
         parentMessageId: message.id,
+        images,
         ...outcome,
       });
     }
@@ -145,10 +149,78 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       args: tool.args,
       target: toolTarget(tool.args),
       parentMessageId: lastAssistantId,
+      images: toolImages(tool.result ?? progressOutput(tool.partialResult)),
       ...outcome,
     });
   }
   return calls;
+}
+
+/**
+ * The one rule for "is this tool output entry an image": a `data:image/` string, or a record with
+ * an image media type (or none) whose `data`, `image`, or `url` resolves to an image source.
+ * `field` names where the bytes sit, for the display projection below.
+ */
+function toolImage(part: unknown): { url: string; mime: string; field?: string } | undefined {
+  if (typeof part === "string")
+    return part.startsWith("data:image/")
+      ? { url: part, mime: part.slice(5, part.indexOf(";")) }
+      : undefined;
+  const record = readRecord(part);
+  if (!record) return undefined;
+  const mime = readString(record.mediaType) ?? readString(record.mimeType);
+  if (mime && !mime.startsWith("image/")) return undefined;
+  const data = readString(record.data);
+  const direct = readString(record.image) ?? readString(record.url);
+  const url = imageSource(direct, data, mime);
+  if (!url || !(mime?.startsWith("image/") || url.startsWith("data:image/"))) return undefined;
+  const field =
+    data !== undefined ? "data" : readString(record.image) !== undefined ? "image" : "url";
+  return { url, mime: mime ?? url.slice(5, url.indexOf(";")), field };
+}
+
+const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
+
+/** Which images a tool call produced. The transcript strip and the trace lane both read this. */
+export function toolImages(output: unknown): string[] {
+  return outputEntries(output).flatMap((part) => toolImage(part)?.url ?? []);
+}
+
+/**
+ * A running call's progress, as Mastra stores it: `tool_update` stringifies a non-string
+ * payload onto `activeTools[id].partialResult`. Parse it back so its images count.
+ */
+function progressOutput(partial: unknown): unknown {
+  if (typeof partial !== "string") return partial;
+  try {
+    return JSON.parse(partial) as unknown;
+  } catch {
+    return partial;
+  }
+}
+
+/**
+ * The tool output as the `out` block shows it: each inline image payload becomes a short
+ * placeholder, so the block never spells base64. Display only; the output itself is untouched.
+ */
+export function toolOutputForDisplay(output: unknown): unknown {
+  let count = 0;
+  const swap = (part: unknown): unknown => {
+    const image = toolImage(part);
+    if (!image?.url.startsWith("data:")) return part;
+    count += 1;
+    const base64 = image.url.slice(image.url.indexOf(",") + 1);
+    const bytes = Math.floor((base64.length * 3) / 4) - (base64.match(/=+$/)?.[0].length ?? 0);
+    const label = `<image ${count}: ${image.mime}, ${formatBytes(bytes)}>`;
+    return image.field ? { ...readRecord(part), [image.field]: label } : label;
+  };
+  return Array.isArray(output) ? output.map(swap) : swap(output);
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export type ChatPart =
