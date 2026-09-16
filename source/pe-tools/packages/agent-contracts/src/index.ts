@@ -23,3 +23,5 @@ export * from "./action-receipts.ts";
 export * from "./family-actions.ts";
 
 export * from "./seed.ts";
+
+export * from "./diagram.ts";

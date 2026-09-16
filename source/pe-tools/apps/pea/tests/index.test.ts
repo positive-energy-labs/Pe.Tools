@@ -23,6 +23,7 @@ test("pea exposes three capability doors, one Scope door, and the media and docs
     "target_set",
     "capture_view",
     "read_image",
+    "diagram",
     "request_access",
     "revit_api_docs_search",
     "revit_api_docs_fetch",

@@ -56,3 +56,9 @@ test("bundled skills are unique, parseable, and carry a trigger", () => {
     expect(description).toMatch(/\bUse (when|for|after|before|at)\b/);
   }
 });
+
+test("kernel sends diagrams through the diagram tool, never through mermaid fences", () => {
+  expect(peaProductToolMetadata.diagram).toEqual({ category: "read", requiresRevit: false });
+  expect(peaAgentInstructions).toMatch(/draw diagrams with the diagram tool/i);
+  expect(peaAgentInstructions).toMatch(/never write mermaid fences/i);
+});
