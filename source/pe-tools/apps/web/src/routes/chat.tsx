@@ -51,18 +51,17 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, thread, turn } = Route.useSearch();
-  return <ChatRouteContent plugin={plugin} thread={thread} turn={turn} />;
+  const { plugin, thread } = Route.useSearch();
+  return <ChatRouteContent plugin={plugin} thread={thread} />;
 }
 
 export function ChatRouteContent({
   plugin,
   thread,
-  turn,
-}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "thread" | "turn">) {
+}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "thread">) {
   return (
     <WorkbenchProvider key={thread ?? "draft"}>
-      <ChatShell initialTurn={turn} plugin={plugin} />
+      <ChatShell plugin={plugin} />
     </WorkbenchProvider>
   );
 }

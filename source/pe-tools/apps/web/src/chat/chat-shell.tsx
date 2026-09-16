@@ -25,21 +25,15 @@ import "#/workbench/lens.css";
 export type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 
-export function ChatShell({
-  initialTurn,
-  plugin,
-}: {
-  initialTurn?: number;
-  plugin?: ChatPluginRoute;
-}) {
+export function ChatShell({ plugin }: { plugin?: ChatPluginRoute }) {
   return (
     <HotkeysProvider>
-      <Surface initialTurn={initialTurn} plugin={plugin} />
+      <Surface plugin={plugin} />
     </HotkeysProvider>
   );
 }
 
-function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
+function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
   const {
     store,
     chat,
@@ -163,9 +157,6 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
               <Lens
                 state={chat}
                 mode={mode}
-                initialTurn={initialTurn}
-                scrollKey={currentThreadId}
-                onTurnChange={store.actions.setTurn}
                 sideOpen={sideOpen}
                 onSideOpenChange={store.actions.setSideOpen}
                 pinKey={pinKey}

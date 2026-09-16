@@ -14,9 +14,6 @@ import type { ChatState } from "../chat-state";
 export function Lens({
   state,
   mode,
-  initialTurn,
-  scrollKey = "",
-  onTurnChange,
   sideHead,
   threadList,
   onSideResize,
@@ -27,9 +24,6 @@ export function Lens({
 }: {
   state: ChatState;
   mode: Mode;
-  initialTurn?: number;
-  scrollKey?: string;
-  onTurnChange?: (turn: number | undefined) => void;
   sideHead?: React.ReactNode;
   threadList?: React.ReactNode;
   onSideResize?: (px: number) => void;
@@ -66,7 +60,7 @@ export function Lens({
     registerMoment,
     onPointerDown,
     scrollToTail,
-  } = useLensModel({ state, mode, initialTurn, scrollKey, onTurnChange, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
+  } = useLensModel({ state, mode, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
