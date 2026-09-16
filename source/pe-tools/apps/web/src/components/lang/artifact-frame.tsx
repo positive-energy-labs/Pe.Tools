@@ -59,7 +59,7 @@ export function ArtifactFrame({
     >
       {head != null ? <Rail ground="recess" lead={head} trail={headTrail} /> : null}
       {children}
-      {foot != null ? <Rail ground="recess" lead={foot} /> : null}
+      {foot != null ? <Rail ground="recess" lead={foot} edge="top" /> : null}
     </div>
   );
 }

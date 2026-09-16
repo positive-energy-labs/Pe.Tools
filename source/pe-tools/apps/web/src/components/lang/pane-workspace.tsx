@@ -47,6 +47,8 @@ export function PaneWorkspace({
   const hasNavigationHandle = navigation != null && resize?.navigation != null;
   const hasVisualHandle = resize?.visual != null;
   const hasInspectorHandle = inspector != null && resize?.inspector != null;
+  const visualColumn = navigation != null ? 3 : 1;
+  const inspectorColumn = visualColumn + 2;
 
   const rootSize = (axis: "horizontal" | "vertical") => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -60,7 +62,15 @@ export function PaneWorkspace({
   });
 
   const style = {
-    gridTemplateColumns: `${navigation ? navigationState.renderedSize : 0}px var(--gutter) minmax(0, 1fr) var(--gutter) ${inspector ? inspectorState.renderedSize : 0}px`,
+    gridTemplateColumns: [
+      navigation != null && `${navigationState.renderedSize}px`,
+      navigation != null && "var(--gutter)",
+      "minmax(0, 1fr)",
+      inspector != null && "var(--gutter)",
+      inspector != null && `${inspectorState.renderedSize}px`,
+    ]
+      .filter(Boolean)
+      .join(" "),
     gridTemplateRows: `${visualState.renderedSize}px var(--gutter) minmax(0, 1fr)`,
   } satisfies CSSProperties;
 
@@ -74,7 +84,7 @@ export function PaneWorkspace({
     >
       {navigation != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden"
+          className="min-h-0 min-w-0 overflow-visible"
           style={{ gridColumn: 1, gridRow: "1 / 4" }}
         >
           {navigation}
@@ -82,7 +92,7 @@ export function PaneWorkspace({
       )}
 
       {hasNavigationHandle && (
-        <div className="col-start-2 row-start-1 row-span-3">
+        <div style={{ gridColumn: 2, gridRow: "1 / 4" }}>
           <PaneResizeHandle
             axis="horizontal"
             value={navigationState.renderedSize}
@@ -97,14 +107,17 @@ export function PaneWorkspace({
         </div>
       )}
 
-      <div className="min-h-0 min-w-0 overflow-hidden" style={{ gridColumn: 3, gridRow: 1 }}>
+      <div
+        className="min-h-0 min-w-0 overflow-visible"
+        style={{ gridColumn: visualColumn, gridRow: 1 }}
+      >
         {visual}
       </div>
 
       {inspector != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden"
-          style={{ gridColumn: 5, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
+          className="min-h-0 min-w-0 overflow-visible"
+          style={{ gridColumn: inspectorColumn, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           {inspector}
         </div>
@@ -112,11 +125,7 @@ export function PaneWorkspace({
 
       {hasInspectorHandle && (
         <div
-          className={
-            inspectorSpan === "full"
-              ? "col-start-4 row-start-1 row-span-3"
-              : "col-start-4 row-start-1"
-          }
+          style={{ gridColumn: visualColumn + 1, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           <PaneResizeHandle
             axis="horizontal"
@@ -134,11 +143,13 @@ export function PaneWorkspace({
 
       {hasVisualHandle && (
         <div
-          className={
-            inspectorSpan === "visual"
-              ? "col-start-3 row-start-2 col-span-3"
-              : "col-start-3 row-start-2"
-          }
+          style={{
+            gridColumn:
+              inspectorSpan === "visual" && inspector != null
+                ? `${visualColumn} / ${inspectorColumn + 1}`
+                : visualColumn,
+            gridRow: 2,
+          }}
         >
           <PaneResizeHandle
             axis="vertical"
@@ -155,8 +166,14 @@ export function PaneWorkspace({
       )}
 
       <div
-        className="min-h-0 min-w-0 overflow-hidden"
-        style={{ gridColumn: inspectorSpan === "visual" ? "3 / 6" : 3, gridRow: 3 }}
+        className="min-h-0 min-w-0 overflow-visible"
+        style={{
+          gridColumn:
+            inspectorSpan === "visual" && inspector != null
+              ? `${visualColumn} / ${inspectorColumn + 1}`
+              : visualColumn,
+          gridRow: 3,
+        }}
       >
         {content}
       </div>
