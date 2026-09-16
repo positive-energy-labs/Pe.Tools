@@ -23,7 +23,7 @@ const VISUAL_DEFAULT: PaneSizeSpec = { defaultSize: 340, minSize: 140 };
 const INSPECTOR_DEFAULT: PaneSizeSpec = { defaultSize: 320, minSize: 240 };
 
 export const paneWorkspaceRecipe = tv({
-  base: "grid size-full min-h-0 min-w-0 overflow-hidden",
+  base: "grid size-full min-h-0 min-w-0 overflow-visible",
   variants: { grow: { true: "min-h-0 flex-1" } },
 });
 

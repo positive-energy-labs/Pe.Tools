@@ -18,7 +18,7 @@
 - PROVEN[deterministic]: `vp test src/components/lang/pane.test.tsx src/components/lang/code.test.tsx src/workbench/prose.test.tsx src/components/master-table/master-table.test.tsx` passed 37 tests. New behavior coverage: one rail/no halo, collapsed flank hotkeys, suspension, retry, target-key recovery, default header opt-out, outer gutter geometry, footer edge, header filters, and rail actions.
 - PROVEN[deterministic]: `vp run @pe/repo-guards#test` passed 93 tests with no baseline changes.
 - FALSIFIED[compile]: `vp check` reports `src/family/workspace-doc-pane.tsx:282` because it passes `headerSurface="artifact"`; `Pane.headerSurface` is now `page | recess`. This consumer must migrate to `recess` or own a different surface composition.
-- FALSIFIED[deterministic]: the full `vp run @pe/web#test` had unrelated failures in `scripts/fixture-census.test.ts` and two `src/schedule-grid/seams.test.tsx` cases. The cutover-specific pane and Code failures were repaired and their scoped suite passed.
+- PROVEN[deterministic, baseline `527048f`]: `scripts/fixture-census.test.ts` and both `src/schedule-grid/seams.test.tsx` failures predate L0. Root ran the exact files against production-equivalent `main1406e70` (docs-only after `527048f`): 3 failed, 4 passed. The failures match exactly: fixture census expected 0 canonical fixtures but received 1; schedule receipt resolution is blocked by the missing `captures/schedules/837acb27a0b40e690b5a8435ad905d4395ea5b103577e2ca4985d461cfafc682.json`; and the apply queue sees `stale-revision` after the document moves to `r2`.
 - UNPROVEN[browser]: no browser route was run.
 
 ## Consumer migration
