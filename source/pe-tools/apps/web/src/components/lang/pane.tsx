@@ -73,6 +73,8 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll
   help?: ReactNode;
   actions?: ReactNode;
   toolbar?: ReactNode;
+  /** Default chrome is a rail. Set only when this pane intentionally has no header. */
+  headerless?: boolean;
   side?: "left" | "right";
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
@@ -153,6 +155,7 @@ export function Pane({
   help,
   actions,
   toolbar,
+  headerless = false,
   scroll,
   side = "left",
   collapsed = false,
@@ -162,7 +165,6 @@ export function Pane({
   onRetry,
   children,
 }: PaneProps) {
-  const hasHeader = title != null || meta != null || help != null || actions != null;
   const collapsedFlank = kind === "flank" && collapsed;
   const { root, body } = paneRecipe({ kind, scroll });
   const rootRef = useRef<HTMLElement>(null);
@@ -293,7 +295,7 @@ export function Pane({
         </div>
       ) : (
         <>
-          {hasHeader && (
+          {!headerless && (
             <div data-slot="pane-header" className="shrink-0">
               <Rail
                 ground={headerSurface ?? "page"}

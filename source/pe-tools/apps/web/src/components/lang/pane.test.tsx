@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Pane, PaneWorkspace } from "#/components/lang/pane";
 
 afterEach(() => {
@@ -211,6 +212,58 @@ test("a pane header owns one rail and no halo node", () => {
 
   expect(container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
   expect(container.querySelector("[data-slot='pane-halo']")).toBeNull();
+});
+
+test("pane headers default on and require an explicit headerless opt-out", () => {
+  const view = render(<Pane kind="content">body</Pane>);
+  expect(view.container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
+
+  view.rerender(
+    <Pane kind="content" headerless>
+      body
+    </Pane>,
+  );
+  expect(view.container.querySelector("[data-slot='pane-header']")).toBeNull();
+});
+
+test("workspace gutters appear only beside present outer panes and do not clip pane outlines", () => {
+  const { container, rerender } = render(
+    <PaneWorkspace
+      visual={<Pane kind="visual">plan</Pane>}
+      content={<Pane kind="content">table</Pane>}
+    />,
+  );
+  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
+  expect(workspace.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  const visual = container.querySelector<HTMLElement>("[data-kind='visual']")!;
+  expect(visual.parentElement?.classList.contains("overflow-hidden")).toBe(false);
+  expect(
+    visual.querySelector("[data-slot='pane-body']")?.classList.contains("overflow-hidden"),
+  ).toBe(true);
+
+  rerender(
+    <PaneWorkspace
+      navigation={<Pane kind="navigation">nav</Pane>}
+      visual={<Pane kind="visual">plan</Pane>}
+      content={<Pane kind="content">table</Pane>}
+      inspector={<Pane kind="inspector">inspect</Pane>}
+    />,
+  );
+  expect(workspace.style.gridTemplateColumns).toBe(
+    "288px var(--gutter) minmax(0, 1fr) var(--gutter) 320px",
+  );
+});
+
+test("artifact feet keep their top separator", () => {
+  const { container } = render(
+    <ArtifactFrame head="head" foot="foot">
+      body
+    </ArtifactFrame>,
+  );
+  const rails = container.querySelectorAll("[data-slot='rail']");
+  expect(rails).toHaveLength(2);
+  expect(rails[1]?.classList.contains("hairline-t")).toBe(true);
+  expect(rails[1]?.classList.contains("hairline-b")).toBe(false);
 });
 
 test("a collapsed flank keeps its shortcut registration and hides its body", () => {
