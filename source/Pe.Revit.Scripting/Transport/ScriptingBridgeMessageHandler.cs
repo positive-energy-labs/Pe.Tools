@@ -215,6 +215,17 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         // Pure disk IO — no Revit API access, so it never waits behind the execution slot.
         Task.FromResult(ScriptPodCatalogService.List());
 
+    [Op("scripting.pod.prepare", Does = "Validate and compose one captured pod snapshot without executing scripts or resolving external services. Returns composed settings only when preparation succeeds, with gate reasons on every result.", Title = "Prepare Pod", Finds = ["pod", "settings", "compose", "validate"], Tier = OpTier.Expert)]
+    public Task<ScriptPodPrepareData> PreparePodAsync(ScriptPodPrepareRequest request, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = new ScriptPodPreparationService().Prepare(request.WorkspaceKey, request.SourceBundle);
+        return Task.FromResult(new ScriptPodPrepareData(
+            prepared.Success ? prepared.ContentHash : null,
+            prepared.Success ? prepared.ComposedSettings.ToDictionary(pair => pair.Key, pair => pair.Value.Content) : [],
+            prepared.Outcomes.Select(outcome => new ScriptPodGateOutcomeData(outcome.Code, outcome.Location,
+                outcome.Reason, outcome.Remedy, outcome.Severity)).ToList()));
+    }
+
     private async Task<T> EnqueueAsync<T>(
         string operationName,
         Func<T> action,

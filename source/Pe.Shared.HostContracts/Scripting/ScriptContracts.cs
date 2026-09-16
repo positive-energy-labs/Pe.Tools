@@ -109,6 +109,14 @@ public record ScriptPodExportRequest(
 
 public record ScriptPodListRequest();
 
+public record ScriptPodPrepareRequest(string WorkspaceKey, ScriptPodSourceBundle SourceBundle);
+
+public record ScriptPodPrepareData(
+    string? ContentHash,
+    Dictionary<string, string> ComposedSettings,
+    List<ScriptPodGateOutcomeData> Outcomes
+);
+
 public record ScriptPodListData(
     string WorkspacesRootPath,
     List<ScriptPodListItemData> Pods

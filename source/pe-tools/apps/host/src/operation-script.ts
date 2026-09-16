@@ -25,23 +25,27 @@ export async function freezeScript(
   if (input.workspaceKey != null && typeof input.workspaceKey !== "string")
     throw Error("Invalid Pod workspace identity");
   const workspace = (input.workspaceKey as string | undefined) || "default";
+  return { sourceBundle: await capturePod(workspace) };
+}
+
+export async function capturePod(
+  workspace: string,
+  podsRoot = join(productUserContentRootPath(), productPathNames.workspacesDirectoryName),
+  override?: ScriptingExecute.Req.ScriptPodSourceFile,
+): Promise<ScriptingExecute.Req.ScriptPodSourceBundle> {
   validateFolder(workspace);
 
   const captured = new Map<string, ScriptingExecute.Req.ScriptPodDependencyBundle>();
   const active = new Set<string>();
   const rootFiles = await capture(workspace);
-  return { sourceBundle: { files: rootFiles, dependencies: [...captured.values()] } };
+  return { files: rootFiles, dependencies: [...captured.values()] };
 
   async function capture(id: string): Promise<ScriptingExecute.Req.ScriptPodSourceFile[]> {
     validateFolder(id);
     if (active.has(id)) throw Error(`Pod dependency cycle through '${id}'`);
     active.add(id);
     try {
-      const directory = join(
-        productUserContentRootPath(),
-        productPathNames.workspacesDirectoryName,
-        id,
-      );
+      const directory = join(podsRoot, id);
       if ((await lstat(directory)).isSymbolicLink())
         throw Error("Pod workspace cannot follow links");
       const files: ScriptingExecute.Req.ScriptPodSourceFile[] = [];
@@ -83,6 +87,11 @@ export async function freezeScript(
         }
       };
       await walk("");
+      if (id === workspace && override) {
+        const index = files.findIndex((file) => file.path === override.path);
+        if (index >= 0) files[index] = override;
+        else files.push(override);
+      }
       if (hasExactReleasedFileSet(files)) return files;
       const manifestFile = files.find((file) => file.path === "pod.json");
       if (!manifestFile) throw Error(`Pod '${id}' has no pod.json`);
@@ -100,6 +109,7 @@ export async function freezeScript(
         const dependencyFolder = await resolveDependencyFolder(
           requirement.id,
           requirement.releaseHash,
+          podsRoot,
         );
         captured.set(requirement.id, {
           id: requirement.id,
@@ -122,8 +132,11 @@ function validateFolder(folder: string): void {
     throw Error(`Invalid local Pod folder '${folder}'`);
 }
 
-async function resolveDependencyFolder(id: string, releaseHash: string): Promise<string> {
-  const root = join(productUserContentRootPath(), productPathNames.workspacesDirectoryName);
+async function resolveDependencyFolder(
+  id: string,
+  releaseHash: string,
+  root: string,
+): Promise<string> {
   const candidates: { folder: string; exactRelease: boolean }[] = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue;

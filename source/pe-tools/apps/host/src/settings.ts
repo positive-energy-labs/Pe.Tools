@@ -3,8 +3,6 @@ import { basename, join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { Effect, FileSystem, Option, Semaphore } from "effect";
 import {
-  SettingsDirectiveScope,
-  SettingsDocumentDependencyKind,
   SettingsFileKind,
   type OpenSettingsDocumentRequest,
   type SaveSettingsDocumentRequest,
@@ -21,13 +19,13 @@ import {
   type ValidateSettingsDocumentRequest,
 } from "@pe/host-contracts/operation-types";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { capturePod } from "./operation-script.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productSettingsRootPath } from "./product-paths.ts";
 import {
   localOpFileError,
   makeDirectory,
   readDirectoryEntriesOrEmpty,
-  readFileString,
   statFile,
   writeFileStringAtomic,
 } from "./files/index.ts";
@@ -69,13 +67,6 @@ type ParsedJson =
       readonly ok: false;
       readonly issue: SettingsValidationIssue;
     };
-
-type CompositionDependency = {
-  readonly documentId: SettingsDocumentId;
-  readonly directivePath: string;
-  readonly kind: SettingsDocumentDependencyKind;
-  readonly scope: SettingsDirectiveScope;
-};
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // ponytail: one host-wide save lane; per-file locks only if unrelated saves contend.
@@ -415,7 +406,7 @@ const settingsSnapshot = Effect.fnUntraced(function* (
     validation: materialized.validation,
     capabilityHints: {
       backend: "ts-local-disk",
-      compositionPolicy: includeComposedContent ? "module-scoped" : "not-requested",
+      compositionPolicy: includeComposedContent ? "pod-preparation" : "not-requested",
       schemaValidation: materialized.schemaValidation,
       semanticValidation: materialized.semanticValidation,
     },
@@ -440,13 +431,7 @@ const materializeDocument = Effect.fnUntraced(function* (
       validation: { isValid: false, issues: [parsed.issue] },
     };
 
-  const composition = yield* composeForRead(
-    documentId,
-    parsed.value,
-    module,
-    true,
-    ctx.storageRoot,
-  );
+  const composition = yield* composeForRead(documentId, parsed.value, rawContent, ctx);
   const schemaValidation = yield* validateWithProviderSchema(
     documentId,
     composition.value ?? parsed.value,
@@ -482,50 +467,78 @@ const materializeDocument = Effect.fnUntraced(function* (
 const composeForRead = Effect.fnUntraced(function* (
   documentId: SettingsDocumentId,
   value: unknown,
-  module: SettingsModuleDescriptor,
-  includeComposedContent: boolean,
-  storageRoot?: string,
+  rawContent: string,
+  ctx: SettingsRuntimeContext,
 ) {
-  const options = module.storageOptions ?? {};
-  if (!shouldRunComposition(value, options)) {
-    return {
-      dependencies: [] as SettingsDocumentDependency[],
-      issues: [] as SettingsValidationIssue[],
-      value: includeComposedContent ? cloneJson(value) : null,
-    };
-  }
+  const dependencies: SettingsDocumentDependency[] = [];
+  if (!containsDirectiveMetadata(value))
+    return { dependencies, issues: [] as SettingsValidationIssue[], value };
 
-  const { rootDirectory } = yield* resolveDocumentPath(
-    documentId,
-    "settings.document.compose",
-    storageRoot,
-  );
-  const dependencies: CompositionDependency[] = [];
   const result = yield* Effect.result(
-    expandPresets(cloneJson(value), rootDirectory, options, dependencies, documentId).pipe(
-      Effect.flatMap((expanded) =>
-        expandIncludes(expanded, rootDirectory, options, dependencies, documentId),
-      ),
-    ),
+    Effect.gen(function* () {
+      if (!ctx.invokeBridge)
+        return yield* Effect.fail(
+          new Error(
+            "Pod composition requires the native preparation service. Connect the matching Revit session to preview composed JSON.",
+          ),
+        );
+      const relativePath = normalizeRelativePath(documentId.relativePath);
+      const member = `settings/${relativePath.toLowerCase().endsWith(".json") ? relativePath : `${relativePath}.json`}`;
+      const sourceBundle = yield* Effect.tryPromise(() =>
+        capturePod(documentId.moduleKey, ctx.storageRoot, {
+          path: member,
+          bytesBase64: Buffer.from(rawContent, "utf8").toString("base64"),
+        }),
+      );
+      const prepared = yield* ctx.invokeBridge(
+        "scripting.pod.prepare",
+        {
+          workspaceKey: documentId.moduleKey,
+          sourceBundle,
+        },
+        ctx.bridgeSessionId,
+      );
+      if (
+        !isRecord(prepared) ||
+        !Array.isArray(prepared.outcomes) ||
+        !isRecord(prepared.composedSettings)
+      )
+        return yield* Effect.fail(new Error("Pod preparation returned an invalid response."));
+      const issues: SettingsValidationIssue[] = [];
+      for (const outcome of prepared.outcomes) {
+        if (
+          !isRecord(outcome) ||
+          typeof outcome.code !== "string" ||
+          typeof outcome.reason !== "string"
+        )
+          return yield* Effect.fail(new Error("Pod preparation returned an invalid gate outcome."));
+        issues.push({
+          path: typeof outcome.location === "string" ? outcome.location : "$",
+          code: outcome.code,
+          severity: String(outcome.severity).toLowerCase(),
+          message: outcome.reason,
+          suggestion: typeof outcome.remedy === "string" ? outcome.remedy : null,
+        });
+      }
+      if (issues.some((issue) => issue.severity === "error")) return { value: null, issues };
+      const content = prepared.composedSettings[member.replace(/^settings\//, "composed/")];
+      if (typeof content !== "string")
+        return yield* Effect.fail(new Error(`Pod preparation did not produce '${member}'.`));
+      return { value: yield* Effect.try(() => JSON.parse(content) as unknown), issues };
+    }),
   );
-  if (result._tag === "Success")
-    return {
-      dependencies: distinctDependencies(dependencies),
-      issues: [] as SettingsValidationIssue[],
-      value: result.success,
-    };
-
+  if (result._tag === "Success") return { dependencies, ...result.success };
   return {
-    dependencies: distinctDependencies(dependencies),
+    dependencies,
     issues: [
       {
         path: "$",
-        code: "CompositionError",
+        code: "PodPreparationUnavailable",
         severity: "error",
         message: errorMessage(result.failure),
-        suggestion: "Fix the directive path or allowed root configuration.",
+        suggestion: "Resolve the reported preparation failure and retry.",
       },
-    ] satisfies SettingsValidationIssue[],
+    ],
     value: null,
   };
 });
@@ -819,360 +832,11 @@ function parseJson(rawContent: string): ParsedJson {
   }
 }
 
-function parseJsonValue(rawContent: string) {
-  return Effect.try({
-    try: () => JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown,
-    catch: (error) => new Error(errorMessage(error)),
-  });
-}
-
-function shouldRunComposition(
-  value: unknown,
-  options: NonNullable<SettingsModuleDescriptor["storageOptions"]>,
-): boolean {
-  return (
-    (options.includeRoots?.length ?? 0) > 0 ||
-    (options.presetRoots?.length ?? 0) > 0 ||
-    containsDirectiveMetadata(value)
-  );
-}
-
 function containsDirectiveMetadata(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsDirectiveMetadata);
   if (!isRecord(value)) return false;
   if ("$include" in value || "$preset" in value) return true;
   return Object.values(value).some(containsDirectiveMetadata);
-}
-
-const expandPresets: (
-  value: unknown,
-  localRootDirectory: string,
-  options: NonNullable<SettingsModuleDescriptor["storageOptions"]>,
-  dependencies: CompositionDependency[],
-  sourceDocumentId: SettingsDocumentId,
-  visited?: Set<string>,
-) => Effect.Effect<unknown, LocalOpError | Error, FileSystem.FileSystem> = Effect.fnUntraced(
-  function* (
-    value: unknown,
-    localRootDirectory: string,
-    options: NonNullable<SettingsModuleDescriptor["storageOptions"]>,
-    dependencies: CompositionDependency[],
-    sourceDocumentId: SettingsDocumentId,
-    visited: Set<string> = new Set(),
-  ) {
-    if (Array.isArray(value)) {
-      const next: unknown[] = [];
-      for (const item of value)
-        next.push(
-          yield* expandPresets(
-            item,
-            localRootDirectory,
-            options,
-            dependencies,
-            sourceDocumentId,
-            visited,
-          ),
-        );
-      return next;
-    }
-    if (!isRecord(value)) return value;
-    if ("$preset" in value) {
-      const directive = yield* Effect.try(() =>
-        resolveDirective(value.$preset, localRootDirectory, options.presetRoots ?? [], false),
-      );
-      const path = yield* resolveDirectiveFilePath(directive);
-      if (visited.has(path.toLowerCase()))
-        return yield* Effect.fail(new Error(`Circular preset reference detected: ${path}`));
-      visited.add(path.toLowerCase());
-      const content = yield* readFileString(path, "settings.document.compose");
-      const parsed = yield* parseJsonValue(content);
-      if (!isRecord(parsed))
-        return yield* Effect.fail(
-          new Error(`Preset '${basename(path)}' has invalid format. Expected a JSON object.`),
-        );
-      dependencies.push(
-        createDependency(sourceDocumentId, directive, path, SettingsDocumentDependencyKind.Preset),
-      );
-      const expanded = yield* expandPresets(
-        cloneJson(parsed),
-        localRootDirectory,
-        options,
-        dependencies,
-        sourceDocumentId,
-        visited,
-      );
-      visited.delete(path.toLowerCase());
-      if (isRecord(expanded)) delete expanded.$schema;
-      const inline = Object.fromEntries(Object.entries(value).filter(([key]) => key !== "$preset"));
-      if (!Object.keys(inline).length) return expanded;
-      const overrides = yield* expandPresets(
-        inline,
-        localRootDirectory,
-        options,
-        dependencies,
-        sourceDocumentId,
-        visited,
-      );
-      // Resolve referenced fields before merging, so overrides can refine included objects too.
-      return mergeCompositionFields(
-        yield* expandIncludes(
-          expanded,
-          localRootDirectory,
-          options,
-          dependencies,
-          sourceDocumentId,
-        ),
-        yield* expandIncludes(
-          overrides,
-          localRootDirectory,
-          options,
-          dependencies,
-          sourceDocumentId,
-        ),
-      );
-    }
-    const next: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value))
-      next[key] = yield* expandPresets(
-        child,
-        localRootDirectory,
-        options,
-        dependencies,
-        sourceDocumentId,
-        visited,
-      );
-    return next;
-  },
-);
-
-// Preset overrides and keyed includes share recursive fields; later arrays/scalars replace.
-function mergeCompositionFields(earlier: unknown, later: unknown): unknown {
-  if (!isRecord(earlier) || !isRecord(later)) return later;
-  return {
-    ...earlier,
-    ...Object.fromEntries(
-      Object.entries(later).map(([key, value]) => [
-        key,
-        mergeCompositionFields(Object.hasOwn(earlier, key) ? earlier[key] : undefined, value),
-      ]),
-    ),
-  };
-}
-
-const expandIncludes: (
-  value: unknown,
-  localRootDirectory: string,
-  options: NonNullable<SettingsModuleDescriptor["storageOptions"]>,
-  dependencies: CompositionDependency[],
-  sourceDocumentId: SettingsDocumentId,
-) => Effect.Effect<unknown, LocalOpError | Error, FileSystem.FileSystem> = Effect.fnUntraced(
-  function* (
-    value: unknown,
-    localRootDirectory: string,
-    options: NonNullable<SettingsModuleDescriptor["storageOptions"]>,
-    dependencies: CompositionDependency[],
-    sourceDocumentId: SettingsDocumentId,
-  ) {
-    const expand: (
-      candidate: unknown,
-      visited: Set<string>,
-    ) => Effect.Effect<unknown, LocalOpError | Error, FileSystem.FileSystem> = Effect.fnUntraced(
-      function* (candidate: unknown, visited: Set<string>) {
-        if (Array.isArray(candidate)) {
-          const next: unknown[] = [];
-          for (const item of candidate) {
-            if (isRecord(item) && "$include" in item) {
-              const directive = yield* Effect.try(() =>
-                resolveDirective(
-                  item.$include,
-                  localRootDirectory,
-                  options.includeRoots ?? [],
-                  true,
-                ),
-              );
-              const path = yield* resolveDirectiveFilePath(directive);
-              if (visited.has(path.toLowerCase()))
-                return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
-              visited.add(path.toLowerCase());
-              if (Object.keys(item).some((key) => key !== "$include"))
-                return yield* Effect.fail(
-                  new Error("Invalid '$include' usage. Includes do not support inline overrides."),
-                );
-              const fragment = yield* loadFragmentItems(path);
-              dependencies.push(
-                createDependency(
-                  sourceDocumentId,
-                  directive,
-                  path,
-                  SettingsDocumentDependencyKind.Include,
-                ),
-              );
-              for (const fragmentItem of fragment) {
-                const expanded = yield* expandPresets(
-                  fragmentItem,
-                  localRootDirectory,
-                  options,
-                  dependencies,
-                  sourceDocumentId,
-                );
-                next.push(yield* expand(expanded, visited));
-              }
-              visited.delete(path.toLowerCase());
-              continue;
-            }
-            next.push(yield* expand(item, visited));
-          }
-          return next;
-        }
-        if (!isRecord(candidate)) return candidate;
-        if ("$include" in candidate) {
-          if (Object.keys(candidate).some((key) => key !== "$include"))
-            return yield* Effect.fail(
-              new Error("Includes do not support inline overrides. Edit the shared fragment."),
-            );
-          const paths = Array.isArray(candidate.$include)
-            ? candidate.$include
-            : [candidate.$include];
-          let merged: unknown = {};
-          for (const includePath of paths) {
-            const directive = yield* Effect.try(() =>
-              resolveDirective(includePath, localRootDirectory, options.includeRoots ?? [], true),
-            );
-            const path = yield* resolveDirectiveFilePath(directive);
-            if (visited.has(path.toLowerCase()))
-              return yield* Effect.fail(new Error(`Circular fragment include detected: ${path}`));
-            visited.add(path.toLowerCase());
-            const fragment = yield* parseJsonValue(
-              yield* readFileString(path, "settings.document.compose"),
-            );
-            if (!isRecord(fragment))
-              return yield* Effect.fail(
-                new Error(`Keyed include '${path}' must contain a JSON object.`),
-              );
-            dependencies.push(
-              createDependency(
-                sourceDocumentId,
-                directive,
-                path,
-                SettingsDocumentDependencyKind.Include,
-              ),
-            );
-            const presets = yield* expandPresets(
-              fragment,
-              localRootDirectory,
-              options,
-              dependencies,
-              sourceDocumentId,
-            );
-            const expanded = yield* expand(presets, visited);
-            merged = mergeCompositionFields(merged, expanded);
-            visited.delete(path.toLowerCase());
-          }
-          if (!isRecord(merged))
-            return yield* Effect.fail(new Error("Keyed includes must compose to a JSON object."));
-          delete merged.$schema;
-          return merged;
-        }
-        const next: Record<string, unknown> = {};
-        for (const [key, child] of Object.entries(candidate))
-          next[key] = yield* expand(child, visited);
-        return next;
-      },
-    );
-    return yield* expand(value, new Set());
-  },
-);
-
-type ResolvedDirective = {
-  readonly originalPath: string;
-  readonly relativePath: string;
-  readonly rootDirectory: string;
-  readonly rootSegment: string;
-  readonly scope: SettingsDirectiveScope;
-};
-
-function resolveDirective(
-  directivePath: unknown,
-  localRootDirectory: string,
-  allowedRoots: readonly string[],
-  requireGlobalAllowedRoot: boolean,
-): ResolvedDirective {
-  if (typeof directivePath !== "string" || !directivePath.trim())
-    throw new Error("Directive path must be a non-empty string.");
-  const isGlobal = directivePath.toLowerCase().startsWith("@global/");
-  const isLocal = directivePath.toLowerCase().startsWith("@local/");
-  if (!isGlobal && !isLocal)
-    throw new Error("Directive path must start with '@local/' or '@global/'.");
-  const rawRelativePath = directivePath.slice(isGlobal ? "@global/".length : "@local/".length);
-  const relativePath = normalizeRelativePath(rawRelativePath);
-  const rootSegment = relativePath.split("/")[0];
-  const roots = normalizeAllowedRoots(allowedRoots);
-  if (roots.size !== 0 && !roots.has(rootSegment.toLowerCase()))
-    throw new Error(`Directive root '${rootSegment}' is not allowed.`);
-  if (isGlobal && roots.size === 0 && requireGlobalAllowedRoot)
-    throw new Error("Global directives require an allowed root.");
-  const globalRootDirectory = tryResolveGlobalFragmentsDirectory(localRootDirectory);
-  return {
-    originalPath: directivePath,
-    relativePath,
-    rootDirectory: isGlobal ? globalRootDirectory : localRootDirectory,
-    rootSegment,
-    scope: isGlobal ? SettingsDirectiveScope.Global : SettingsDirectiveScope.Local,
-  };
-}
-
-const resolveDirectiveFilePath = Effect.fnUntraced(function* (directive: ResolvedDirective) {
-  const normalizedPath = directive.relativePath.replace(/\//g, "\\");
-  const hasJsonExtension = directive.relativePath.toLowerCase().endsWith(".json");
-  const jsonPath = safeJoin(
-    directive.rootDirectory,
-    hasJsonExtension ? normalizedPath : `${normalizedPath}.json`,
-  );
-  const fs = yield* FileSystem.FileSystem;
-  if (yield* fs.exists(jsonPath)) return jsonPath;
-  return yield* Effect.fail(new Error(`Settings composition file not found: ${jsonPath}`));
-});
-
-const loadFragmentItems = Effect.fnUntraced(function* (path: string) {
-  const parsed = yield* parseJsonValue(yield* readFileString(path, "settings.document.compose"));
-  if (Array.isArray(parsed)) return parsed;
-  if (isRecord(parsed) && Array.isArray(parsed.Items)) return parsed.Items;
-  return yield* Effect.fail(
-    new Error(
-      `Fragment '${basename(path)}' has invalid format. Expected array or object with Items array.`,
-    ),
-  );
-});
-
-function createDependency(
-  sourceDocumentId: SettingsDocumentId,
-  directive: ResolvedDirective,
-  sourceFilePath: string,
-  kind: SettingsDocumentDependencyKind,
-): CompositionDependency {
-  const rootDirectory = directive.rootDirectory;
-  return {
-    directivePath: directive.originalPath,
-    documentId: {
-      moduleKey:
-        directive.scope === SettingsDirectiveScope.Global ? "Global" : sourceDocumentId.moduleKey,
-      rootKey:
-        directive.scope === SettingsDirectiveScope.Global ? "fragments" : sourceDocumentId.rootKey,
-      relativePath: stripJsonExtension(toRelativePath(rootDirectory, sourceFilePath)),
-    },
-    kind,
-    scope: directive.scope,
-  };
-}
-
-function distinctDependencies(dependencies: CompositionDependency[]): SettingsDocumentDependency[] {
-  const seen = new Set<string>();
-  return dependencies.filter((dependency) => {
-    const key = `${dependency.kind}:${dependency.scope}:${dependency.directivePath}:${stableDocumentId(dependency.documentId)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function statMtime(info: FileSystem.File.Info): Date {
@@ -1358,28 +1022,6 @@ function normalizeRelativePath(input: string | null | undefined): string {
   return segments.join("/");
 }
 
-function normalizeAllowedRoots(allowedRoots: readonly string[]): Set<string> {
-  return new Set(
-    allowedRoots
-      .map((root) =>
-        root
-          .replace(/\\/g, "/")
-          .replace(/^\/|\/$/g, "")
-          .trim(),
-      )
-      .filter(Boolean)
-      .map((root) => root.toLowerCase()),
-  );
-}
-
-function tryResolveGlobalFragmentsDirectory(settingsRootPath: string): string {
-  const parts = win32.resolve(settingsRootPath).split(/[\\/]/);
-  const settingsIndex = parts.findIndex((part) => part.toLowerCase() === "settings");
-  if (settingsIndex >= 0)
-    return win32.join(...parts.slice(0, settingsIndex + 1), "Global", "fragments");
-  return win32.resolve(settingsRootPath, "..", "..", "Global", "fragments");
-}
-
 function toRelativePath(rootDirectory: string, filePath: string): string {
   return win32.relative(rootDirectory, filePath).replace(/\\/g, "/");
 }
@@ -1407,19 +1049,8 @@ function normalizeJsonTrailingNewline(rawContent: string): string {
   return `${rawContent.replace(/\s*$/, "")}\n`;
 }
 
-function stableDocumentId(documentId: SettingsDocumentId): string {
-  return (
-    documentId.stableId ??
-    `${documentId.moduleKey}:${documentId.rootKey}:${documentId.relativePath}`
-  ).toLowerCase();
-}
-
 function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
-}
-
-function cloneJson(value: unknown): unknown {
-  return JSON.parse(JSON.stringify(value)) as unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

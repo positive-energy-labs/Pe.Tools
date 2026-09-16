@@ -4936,6 +4936,47 @@ export namespace ScriptingPodList {
   }
 }
 
+/** Validate and compose one captured pod snapshot without executing scripts or resolving external services. Returns composed settings only when preparation succeeds, with gate reasons on every result. */
+export namespace ScriptingPodPrepare {
+  export namespace Req {
+    export interface Request {
+      workspaceKey: string;
+      sourceBundle: ScriptPodSourceBundle;
+    }
+    export interface ScriptPodSourceBundle {
+      files: ScriptPodSourceFile[];
+      dependencies: ScriptPodDependencyBundle[];
+    }
+    export interface ScriptPodSourceFile {
+      path: string;
+      bytesBase64: string;
+    }
+    export interface ScriptPodDependencyBundle {
+      id: string;
+      releaseHash: string;
+      files: ScriptPodSourceFile[];
+    }
+  }
+  export namespace Res {
+    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      contentHash?: null | string;
+      composedSettings: {
+        [k: string]: string;
+      };
+      outcomes: ScriptPodGateOutcomeData[];
+    }
+    export interface ScriptPodGateOutcomeData {
+      code: string;
+      location: string;
+      reason: string;
+      remedy?: null | string;
+      severity: ScriptDiagnosticSeverity;
+    }
+  }
+}
+
 /** Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script. */
 export namespace ScriptingWorkspaceBootstrap {
   export namespace Req {
@@ -5441,6 +5482,7 @@ export interface HostOps {
   "scripting.pod.export": { request: ScriptingPodExport.Req.Request; response: ScriptingPodExport.Res.Response };
   "scripting.pod.import": { request: ScriptingPodImport.Req.Request; response: ScriptingPodImport.Res.Response };
   "scripting.pod.list": { request: ScriptingPodList.Req.Request; response: ScriptingPodList.Res.Response };
+  "scripting.pod.prepare": { request: ScriptingPodPrepare.Req.Request; response: ScriptingPodPrepare.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
   "settings.document.semantic-validation": { request: SettingsDocumentSemanticValidation.Req.Request; response: SettingsDocumentSemanticValidation.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
@@ -5510,6 +5552,7 @@ export const hostOpKeys = [
   "scripting.pod.export",
   "scripting.pod.import",
   "scripting.pod.list",
+  "scripting.pod.prepare",
   "scripting.workspace.bootstrap",
   "settings.document.semantic-validation",
   "settings.field-options",
