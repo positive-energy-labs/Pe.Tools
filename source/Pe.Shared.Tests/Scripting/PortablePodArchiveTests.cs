@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
+using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts.Scripting;
@@ -122,6 +123,7 @@ public sealed class PortablePodArchiveTests {
         Assert.Multiple(() => {
             Assert.That(unchanged.Success, Is.True, string.Join("; ", unchanged.Outcomes.Select(outcome => outcome.Reason)));
             Assert.That(unchanged.ContentHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(unchanged.ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
             Assert.That(unchanged.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"library\": 1"));
         });
 
@@ -148,8 +150,81 @@ public sealed class PortablePodArchiveTests {
         Assert.Multiple(() => {
             Assert.That(edited.Success, Is.True, string.Join("; ", edited.Outcomes.Select(outcome => outcome.Reason)));
             Assert.That(edited.ContentHash, Is.Not.EqualTo(exported.Release!.ContentHash));
+            Assert.That(edited.ReleaseHash, Is.Null);
             Assert.That(edited.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
             Assert.That(edited.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"consumer\": 2"));
+        });
+    }
+
+    [Test]
+    public void Native_capture_skips_an_installed_incompatible_sibling_for_an_exact_release() {
+        var library = this._resolve("library");
+        Write(library, "pod.json", """
+            {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[]}
+            """);
+        Write(library, "settings/base.settings.json", "{\"library\":1}");
+        var libraryHash = this._preparation.Prepare("library").ContentHash;
+        var consumer = this._resolve("consumer");
+        Write(consumer, "pod.json", $$"""
+            {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}],"requires":[{"id":"library","releaseHash":"{{libraryHash}}"}]}
+            """);
+        Write(consumer, "src/Main.cs", "public sealed class Main : PeScriptContainer { public override void Execute() { } }");
+        Write(consumer, "settings/main.settings.json", "{\"$preset\":\"@library/base.settings.json\"}");
+        var archivePath = Path.Combine(this._root, "native-capture.zip");
+        var exported = this._service.Export(new ScriptPodExportRequest("consumer", archivePath), "net8.0-windows", "2025");
+        Assert.That(exported.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+        Directory.Delete(Path.Combine(this._root, "workspaces"), true);
+        Assert.That(this._service.Import(new ScriptPodImportRequest(archivePath), "2025", "net8.0-windows",
+            typeof(PeScriptContainer).Assembly.Location).Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+        Write(library, "pod.json", "not json");
+
+        var bundle = RevitScriptExecutionService.CapturePodSource("consumer", "src/Main.cs", this._resolve);
+        var prepared = this._preparation.Prepare("consumer", bundle);
+
+        Assert.Multiple(() => {
+            Assert.That(bundle.Dependencies, Is.Empty);
+            Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
+            Assert.That(prepared.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+        });
+    }
+
+    [Test]
+    public void Imported_release_version_and_workspace_identity_edits_create_derivatives() {
+        var workspace = this._resolve("portable");
+        Write(workspace, "pod.json", """
+            {"schemaVersion":2,"id":"portable","name":"Portable","version":"1.0.0","entrypoints":[]}
+            """);
+        Write(workspace, "settings/main.settings.json", "{\"value\":1}");
+        var archivePath = Path.Combine(this._root, "derivative.zip");
+        var exported = this._service.Export(new ScriptPodExportRequest("portable", archivePath), "net8.0-windows", "2025");
+        Assert.That(exported.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+        Directory.Delete(workspace, true);
+        Assert.That(this._service.Import(new ScriptPodImportRequest(archivePath), "2025", "net8.0-windows",
+            typeof(PeScriptContainer).Assembly.Location).Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
+
+        var manifestPath = Path.Combine(workspace, "pod.json");
+        var versionEdit = JObject.Parse(File.ReadAllText(manifestPath));
+        versionEdit["version"] = "2.0.0";
+        File.WriteAllText(manifestPath, versionEdit.ToString());
+        var versioned = this._preparation.Prepare("portable");
+        Assert.Multiple(() => {
+            Assert.That(versioned.Success, Is.True, string.Join("; ", versioned.Outcomes.Select(outcome => outcome.Reason)));
+            Assert.That(versioned.ReleaseHash, Is.Null);
+            Assert.That(versioned.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(versioned.Manifest.Version, Is.EqualTo("2.0.0"));
+        });
+
+        var renamedWorkspace = this._resolve("portable-copy");
+        Directory.Move(workspace, renamedWorkspace);
+        var idEdit = JObject.Parse(File.ReadAllText(Path.Combine(renamedWorkspace, "pod.json")));
+        idEdit["id"] = "portable-copy";
+        File.WriteAllText(Path.Combine(renamedWorkspace, "pod.json"), idEdit.ToString());
+        var renamed = this._preparation.Prepare("portable-copy");
+        Assert.Multiple(() => {
+            Assert.That(renamed.Success, Is.True, string.Join("; ", renamed.Outcomes.Select(outcome => outcome.Reason)));
+            Assert.That(renamed.ReleaseHash, Is.Null);
+            Assert.That(renamed.Manifest.Parent?.Id, Is.EqualTo("portable"));
+            Assert.That(renamed.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
         });
     }
 

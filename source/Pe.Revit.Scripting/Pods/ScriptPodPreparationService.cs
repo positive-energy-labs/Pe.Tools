@@ -28,6 +28,8 @@ public sealed record PreparedPod(
     IReadOnlyList<PodGateOutcome> Outcomes
 ) {
     public bool Success => this.Outcomes.All(outcome => outcome.Severity != ScriptDiagnosticSeverity.Error);
+    /// <summary>The verified release hash when this snapshot uses shipped release bytes unchanged; otherwise null.</summary>
+    public string? ReleaseHash { get; init; }
 }
 
 /// <summary>
@@ -327,32 +329,26 @@ public sealed class ScriptPodPreparationService(
             var version = release["version"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing version.");
             var contentHash = release["contentHash"]?.Value<string>() ?? throw new InvalidDataException("release.json is missing contentHash.");
             var rows = release["files"] as JArray ?? throw new InvalidDataException("release.json is missing files.");
-            if (release["schemaVersion"]?.Value<int>() != 1 || podId != manifest.Id || version != manifest.Version)
-                throw new InvalidDataException("release.json identity does not match pod.json.");
+            if (release["schemaVersion"]?.Value<int>() != 1)
+                throw new InvalidDataException("release.json has an unsupported schemaVersion.");
             originRelease = new PodReleaseReference(podId, contentHash, version);
 
             if (contentHash.Length != 64)
                 throw new InvalidDataException("release.json contentHash is not a SHA-256 digest.");
-            var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in rows) {
-                if (token is not JObject row)
-                    throw new InvalidDataException("release.json contains a non-object file row.");
-                var path = row["path"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without path.");
-                var hash = row["sha256"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without sha256.");
-                if (hash.Length != 64 || !expected.TryAdd(path, hash))
-                    throw new InvalidDataException($"release.json contains an invalid or duplicate file row '{path}'.");
-            }
+            var expected = ReadReleaseFileHashes(rows);
             var actual = files.Where(pair => pair.Key != "release.json").ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
             var actualHash = ComputeReleaseHash(manifest, actual.ToDictionary(pair => pair.Key, pair => pair.Value.Bytes, StringComparer.OrdinalIgnoreCase));
             var fileRowsMatch = expected.Count == actual.Count
                 && expected.All(pair => actual.TryGetValue(pair.Key, out var file) && file.Sha256 == pair.Value);
-            if (!fileRowsMatch && actualHash == contentHash)
-                throw new InvalidDataException("release.json file rows do not match the released files.");
             var authoredChanged = expected.Where(pair => IsAuthoredPath(pair.Key)).Any(pair => !actual.TryGetValue(pair.Key, out var file) || file.Sha256 != pair.Value)
                 || actual.Keys.Where(IsAuthoredPath).Any(path => !expected.ContainsKey(path));
             if (authoredChanged)
                 return null;
 
+            if (!fileRowsMatch && actualHash == contentHash)
+                throw new InvalidDataException("release.json file rows do not match the released files.");
+            if (podId != manifest.Id || version != manifest.Version)
+                throw new InvalidDataException("release.json identity does not match unchanged pod.json.");
             if (!fileRowsMatch || actualHash != contentHash)
                 throw new InvalidDataException("Released file integrity or content identity does not match release.json.");
 
@@ -367,11 +363,41 @@ public sealed class ScriptPodPreparationService(
                     "Connect the owning service. Cached definitions are not a fallback.",
                     ScriptDiagnosticSeverity.Info
                 ));
-            return new PreparedPod(manifest, contentHash, files, composed, inspection, outcomes.ToList());
+            return new PreparedPod(manifest, contentHash, files, composed, inspection, outcomes.ToList()) { ReleaseHash = contentHash };
         } catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException) {
             outcomes.Add(new PodGateOutcome("pod.release.integrity", "release.json", exception.Message, "Restore or re-import the exact release before execution."));
             return new PreparedPod(manifest, string.Empty, files, new Dictionary<string, PodComposedDocument>(), [], outcomes.ToList());
         }
+    }
+
+    internal static bool HasExactReleasedFileSet(IReadOnlyDictionary<string, byte[]> files) {
+        try {
+            if (!files.TryGetValue("release.json", out var releaseBytes))
+                return false;
+            var release = JObject.Parse(Encoding.UTF8.GetString(releaseBytes));
+            var rows = release["files"] as JArray;
+            if (release["schemaVersion"]?.Value<int>() != 1 || rows is null)
+                return false;
+            var expected = ReadReleaseFileHashes(rows);
+            var actual = files.Where(pair => pair.Key != "release.json").ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            return expected.Count == actual.Count
+                && expected.All(pair => actual.TryGetValue(pair.Key, out var bytes) && Sha256(bytes) == pair.Value);
+        } catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException) {
+            return false;
+        }
+    }
+
+    private static Dictionary<string, string> ReadReleaseFileHashes(JArray rows) {
+        var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in rows) {
+            if (token is not JObject row)
+                throw new InvalidDataException("release.json contains a non-object file row.");
+            var path = row["path"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without path.");
+            var hash = row["sha256"]?.Value<string>() ?? throw new InvalidDataException("release.json contains a file without sha256.");
+            if (hash.Length != 64 || !expected.TryAdd(path, hash))
+                throw new InvalidDataException($"release.json contains an invalid or duplicate file row '{path}'.");
+        }
+        return expected;
     }
 
     private static IReadOnlyList<PodConsumedDependency> ReadInspection(IReadOnlyDictionary<string, PreparedPodFile> files) {

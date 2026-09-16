@@ -17,6 +17,9 @@
 - 2026-09-16: An unchanged imported release executes its verified shipped composed bytes without author dependencies. Any authored edit discards shipped composed/inspection bytes, prepares source again, and retains the imported release as the prepared derivative's parent; missing author dependencies fail specifically instead of running stale content.
 - 2026-09-16: Import preserves the released `pod.json` and project bytes. It does not write ancestry into authored source or regenerate the released project, because either mutation would falsify the unchanged release identity.
 - 2026-09-16: Host and native capture admit only the positive pod roots, reject linked directories before traversal, and share bounds of 200 files, 256 directories, 512 KiB per file, and 4 MiB total.
+- 2026-09-16: Capture compares a root snapshot with the complete `release.json` file table before touching declared sibling workspaces. An exact released file set goes directly to native full release verification, so an installed sibling that is modified, invalid, or linked outside its root cannot block unchanged-release execution.
+- 2026-09-16: `PreparedPod.ReleaseHash` is the authority for unchanged-release attribution. It equals the verified release content hash only when shipped bytes execute unchanged; derivatives return null and retain the old release in `Manifest.Parent`.
+- 2026-09-16: Editing a release's human version creates a derivative without changing content identity by itself. Editing its pod id is permitted when the workspace directory identity changes with it; both preserve the exact old release as ancestry.
 
 ## Tried & rejected
 

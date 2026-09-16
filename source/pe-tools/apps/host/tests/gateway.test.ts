@@ -3,9 +3,10 @@ import sourceCatalog from "./fixtures/operation-source-catalog.json" with { type
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { test, expect, vi } from "vite-plus/test";
-import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { Context, Effect, Layer, Queue, Fiber } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { address, takeoffsRouteState } from "@pe/agent-contracts";
@@ -802,7 +803,8 @@ test("source seal carries portable release evidence without installed author dep
   const directory = await mkdtemp(join(tmpdir(), "script-release-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  const root = join(productUserContentRootPath(), "workspaces", "sample");
+  const workspaces = join(productUserContentRootPath(), "workspaces");
+  const root = join(workspaces, "sample");
   try {
     await mkdir(join(root, "src"), { recursive: true });
     await mkdir(join(root, "composed"), { recursive: true });
@@ -818,11 +820,38 @@ test("source seal carries portable release evidence without installed author dep
         requires: [{ id: "missing-library", releaseHash: "a".repeat(64) }],
       }),
     );
-    await writeFile(join(root, "release.json"), "{}");
     await writeFile(join(root, "src/Main.cs"), "source");
     await writeFile(join(root, "composed/main.settings.json"), '{"closed":true}');
     await writeFile(join(root, "inspection/index.json"), "[]");
     await writeFile(join(root, "inspection/library/settings/base.settings.json"), '{"base":1}');
+    const releasePaths = [
+      "composed/main.settings.json",
+      "inspection/index.json",
+      "inspection/library/settings/base.settings.json",
+      "pod.json",
+      "src/Main.cs",
+    ];
+    await writeFile(
+      join(root, "release.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        podId: "sample",
+        version: "1.0.0",
+        contentHash: "b".repeat(64),
+        files: await Promise.all(
+          releasePaths.map(async (path) => ({
+            path,
+            sha256: createHash("sha256")
+              .update(await readFile(join(root, path)))
+              .digest("hex"),
+          })),
+        ),
+      }),
+    );
+    const outsideLibrary = join(directory, "outside-library");
+    await mkdir(outsideLibrary, { recursive: true });
+    await writeFile(join(outsideLibrary, "pod.json"), "not json");
+    await symlink(outsideLibrary, join(workspaces, "missing-library"), "junction");
 
     const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
 

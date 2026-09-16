@@ -1,4 +1,5 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import type { ScriptingExecute } from "@pe/host-contracts/generated";
@@ -83,6 +84,7 @@ export async function freezeScript(
         }
       };
       await walk("");
+      if (hasExactReleasedFileSet(files)) return files;
       const manifestFile = files.find((file) => file.path === "pod.json");
       if (!manifestFile) throw Error(`Pod '${id}' has no pod.json`);
       const manifest = JSON.parse(
@@ -121,5 +123,35 @@ export async function freezeScript(
     } finally {
       active.delete(id);
     }
+  }
+}
+
+function hasExactReleasedFileSet(files: ScriptingExecute.Req.ScriptPodSourceFile[]): boolean {
+  try {
+    const releaseFile = files.find((file) => file.path === "release.json");
+    if (!releaseFile) return false;
+    const release = JSON.parse(Buffer.from(releaseFile.bytesBase64, "base64").toString("utf8")) as {
+      schemaVersion?: unknown;
+      files?: { path?: unknown; sha256?: unknown }[];
+    };
+    if (release.schemaVersion !== 1 || !Array.isArray(release.files)) return false;
+    const actual = new Map(
+      files.filter((file) => file.path !== "release.json").map((file) => [file.path, file]),
+    );
+    if (release.files.length !== actual.size) return false;
+    const seen = new Set<string>();
+    return release.files.every((row) => {
+      if (typeof row.path !== "string" || typeof row.sha256 !== "string" || seen.has(row.path))
+        return false;
+      seen.add(row.path);
+      const file = actual.get(row.path);
+      return (
+        file != null &&
+        createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex") ===
+          row.sha256
+      );
+    });
+  } catch {
+    return false;
   }
 }
