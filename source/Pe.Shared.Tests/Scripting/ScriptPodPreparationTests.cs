@@ -154,14 +154,15 @@ public sealed class ScriptPodPreparationTests {
     }
 
     [Test]
-    public void Bundle_rejects_a_dependency_that_overwrites_the_root_capture() {
+    public void Bundle_keeps_root_address_separate_from_dependency_identity() {
         var manifest = Convert.ToBase64String(Encoding.UTF8.GetBytes(
             "{\"schemaVersion\":2,\"id\":\"sample\",\"name\":\"Sample\",\"version\":\"1.0.0\",\"entrypoints\":[]}"));
         var bundle = new ScriptPodSourceBundle([new ScriptPodSourceFile("pod.json", manifest)], [
             new ScriptPodDependencyBundle("sample", "hash", [new ScriptPodSourceFile("pod.json", manifest)])
         ]);
-        Assert.That(() => this._service.Prepare("sample", bundle), Throws.TypeOf<InvalidDataException>()
-            .With.Message.Contains("root"));
+        var prepared = this._service.Prepare("sample", bundle);
+        Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
+        Assert.That(prepared.Manifest.Id, Is.EqualTo("sample"));
     }
 
     [Test]

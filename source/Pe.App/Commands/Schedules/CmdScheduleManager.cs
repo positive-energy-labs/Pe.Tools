@@ -274,3 +274,402 @@ public class CmdScheduleManager : IExternalCommand {
         try {
             scheduleProfile = ctx.SelectedProfile.Load();
             observedExternalRevisions = []; // Schedules consume document fields, not APS definitions.
+        } catch (Exception ex) {
+            _ = profileItem.AttemptSnapshot?.WriteReceipt(runOutput,
+                "schedule.create", "Failed", reason: ex.Message);
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), ex, true)
+                .Show();
+            return;
+        }
+
+        ScheduleCreationResult result;
+        try {
+            using var trans = new Transaction(ctx.Doc, "Create Schedule");
+            _ = trans.Start();
+            result = ctx.Doc.ApplyScheduleProfile(scheduleProfile);
+            _ = trans.Commit();
+        } catch (Exception ex) {
+            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+                "schedule.create", "Failed", observedExternalRevisions: observedExternalRevisions, reason: ex.Message);
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), ex, true)
+                .Show();
+            return;
+        }
+
+        // Write output to storage
+        var outputPath = this.WriteCreationOutput(ctx, result);
+        if (string.IsNullOrEmpty(outputPath)) {
+            _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+                "schedule.create", "Succeeded",
+                [new ScriptOutputReferenceData("operation-result", "schedule-created-without-output-file")],
+                observedExternalRevisions);
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), "Failed to write creation output")
+                .Show();
+            return;
+        }
+        _ = ctx.SelectedProfile.Prepared?.WriteReceipt(runOutput,
+            "schedule.create", "Succeeded", [new ScriptOutputReferenceData("file", outputPath)], observedExternalRevisions);
+
+        // Build comprehensive balloon message
+        var hasIssues = result.SkippedCalculatedFields.Count > 0 ||
+                        result.SkippedFields.Count > 0 ||
+                        result.SkippedSortGroups.Count > 0 ||
+                        result.SkippedFilters.Count > 0 ||
+                        result.SkippedHeaderGroups.Count > 0 ||
+                        !string.IsNullOrEmpty(result.SkippedViewTemplate) ||
+                        !string.IsNullOrEmpty(result.FilterBySheetSkipped) ||
+                        result.Warnings.Count > 0;
+
+        var hasHeaderGroups = result.AppliedHeaderGroups.Count > 0 || result.SkippedHeaderGroups.Count > 0;
+        var headerGroupCount = result.AppliedHeaderGroups.Count + result.SkippedHeaderGroups.Count;
+        var hasFields = result.AppliedFields.Count > 0 || result.SkippedFields.Count > 0;
+        var fieldCount = result.AppliedFields.Count + result.SkippedFields.Count;
+        var hasSortGroups = result.AppliedSortGroups.Count > 0 || result.SkippedSortGroups.Count > 0;
+        var sortGroupCount = result.AppliedSortGroups.Count + result.SkippedSortGroups.Count;
+        var hasFilters = result.AppliedFilters.Count > 0 || result.SkippedFilters.Count > 0;
+        var filterCount = result.AppliedFilters.Count + result.SkippedFilters.Count;
+        var hasAppliedViewTemplate =
+            !string.IsNullOrEmpty(scheduleProfile.ViewTemplateName) && result.AppliedViewTemplate != null;
+        var viewTemplateCount = result.AppliedViewTemplate != null ? 1 : 0;
+        var viewTemplateSkippedCount = result.SkippedViewTemplate != null ? 1 : 0;
+        var hasCalculatedFields = result.SkippedCalculatedFields.Count > 0;
+        var calculatedFieldCount = result.SkippedCalculatedFields.Count;
+        var hasWarnings = result.Warnings.Count > 0;
+
+        new Ballogger()
+            .Add(LogEventLevel.Information, null,
+                $"Created schedule '{result.ScheduleName}' from profile '{ctx.SelectedProfile.TextPrimary}'")
+            .AddIf(hasIssues, LogEventLevel.Warning, null,
+                "THERE WERE ISSUES WITH THE SCHEDULE CREATION. SEE THE OUTPUT FILE FOR DETAILS.")
+            .AddIf(hasCalculatedFields, LogEventLevel.Warning, null,
+                $"{calculatedFieldCount} calculated field(s) require manual creation - see output file")
+            .AddIf(result.FilterBySheetApplied, LogEventLevel.Information, null,
+                "Filter by sheet: Enabled")
+            .AddIf(!string.IsNullOrEmpty(result.FilterBySheetSkipped), LogEventLevel.Warning, null,
+                $"Filter by sheet skipped: {result.FilterBySheetSkipped}")
+            .AddIf(hasHeaderGroups, LogEventLevel.Information, null,
+                $"Field header(s) applied: {result.AppliedHeaderGroups.Count} / {headerGroupCount} ")
+            .AddIf(hasFields, LogEventLevel.Information, null,
+                $"Field(s) applied: {result.AppliedFields.Count} / {fieldCount} ")
+            .AddIf(hasSortGroups, LogEventLevel.Information, null,
+                $"Sort/group(s) applied: {result.AppliedSortGroups.Count} / {sortGroupCount} ")
+            .AddIf(hasFilters, LogEventLevel.Information, null,
+                $"Filter(s) applied: {result.AppliedFilters.Count} / {filterCount} ")
+            .AddIf(hasAppliedViewTemplate, LogEventLevel.Information, null,
+                $"View template applied: {result.AppliedViewTemplate}")
+            .AddIf(!string.IsNullOrEmpty(scheduleProfile.ViewTemplateName) && result.AppliedViewTemplate == null,
+                LogEventLevel.Warning, null,
+                $"View template skipped: {result.SkippedViewTemplate}")
+            .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
+            .AddIf(hasWarnings, LogEventLevel.Warning, null,
+                string.Join("\n", result.Warnings.Select(w => $"  • {w}")))
+            .Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
+
+
+        // Open the schedule view
+        // if (scheduleProfile.OnFinish.OpenScheduleOnFinish) {
+        //     ctx.UiDoc.ActiveView = result.Schedule;
+        // }
+    }
+
+    private void HandlePlaceSampleFamilies(ScheduleManagerContext context, ISchedulePaletteItem item) {
+        var profileItem = item.GetCreateItem();
+        if (profileItem == null) return;
+
+        // Update context with selected profile
+        this.BuildPreviewData(profileItem, context);
+
+        if (context.SelectedProfile == null || context.PreviewData?.IsValid != true) {
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(),
+                    "Cannot place sample families - profile has validation errors")
+                .Show();
+            return;
+        }
+
+        var profile = context.SelectedProfile.Load();
+
+        // Get families of the schedule's category
+        var category = CategoryNamesValueDomain.TryFindCategoryByName(context.Doc, profile.CategoryName);
+        var categoryLabel = profile.CategoryName;
+
+        if (category == null) {
+            new Ballogger()
+                .Add(LogEventLevel.Warning, new StackFrame(), $"Category '{categoryLabel}' not found")
+                .Show();
+            return;
+        }
+
+        var allFamilies = new FilteredElementCollector(context.Doc)
+            .OfClass(typeof(Family))
+            .Cast<Family>()
+            .Where(f => f.FamilyCategory?.Id == category.Id)
+            .ToList();
+
+        if (allFamilies.Count == 0) {
+            new Ballogger()
+                .Add(LogEventLevel.Warning, new StackFrame(),
+                    $"No {categoryLabel} families found in the project")
+                .Show();
+            return;
+        }
+
+        // Use Revit's native schedule filtering to find families that match the profile's filters
+        var matchingFamilyNames = context.Doc.GetFamiliesMatchingScheduleProfileFilters(
+            profile,
+            allFamilies);
+
+        if (matchingFamilyNames.Count == 0) {
+            new Ballogger()
+                .Add(LogEventLevel.Warning, new StackFrame(), "No families match the schedule filters")
+                .Show();
+            return;
+        }
+
+        FamilyPlacementHelper.PromptAndPlaceFamilies(
+            context.UiDoc.Application,
+            matchingFamilyNames,
+            "Schedule Manager");
+    }
+
+    private void HandleOpenFile(ISchedulePaletteItem item) {
+        var filePath = item.GetCreateItem()?.FilePath ?? item.GetBatchItem()?.FilePath;
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
+            new Ballogger()
+                .Add(LogEventLevel.Warning, new StackFrame(), $"Profile file not found: {filePath}")
+                .Show();
+            return;
+        }
+
+        FileUtils.OpenInDefaultApp(filePath);
+    }
+
+    private void HandleCreateBatch(ScheduleManagerContext context, ISchedulePaletteItem item) {
+        var batchItem = item.GetBatchItem();
+        if (batchItem == null) return;
+
+        var runOutput = (batchItem.Prepared?.Output() ?? context.Storage.Output()).TimestampedSubDir(Guid.NewGuid().ToString("N"));
+        context.RunOutput = runOutput;
+
+        try {
+            var batchSettings = batchItem.LoadBatchSettings();
+            var observedExternalRevisions = new List<ObservedExternalRevisionData>();
+            var results = new List<(string profileName, bool success, string errorMessage)>();
+            var createdSchedules = new List<string>();
+
+            foreach (var scheduleFile in batchSettings.ScheduleFiles) {
+                try {
+                    // Load the schedule profile
+                    var podSetting = batchItem.Prepared.Member("settings/" + scheduleFile.Replace('\\', '/'));
+                    var scheduleProfile = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
+                        podSetting.RawContent,
+                        podSetting.ComposedContent,
+                        $"{podSetting.PodId}:{podSetting.SourcePath}");
+
+                    // Create the schedule
+                    using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleProfile.Name}");
+                    _ = trans.Start();
+                    var result = context.Doc.ApplyScheduleProfile(scheduleProfile);
+                    _ = trans.Commit();
+
+                    results.Add((scheduleFile, true, string.Empty));
+                    createdSchedules.Add(result.ScheduleName);
+
+                    // Write output for this schedule
+                    _ = this.WriteCreationOutput(context, result, scheduleFile, "batch");
+                } catch (Exception ex) {
+                    results.Add((scheduleFile, false, ex.Message));
+                    _ = this.WriteErrorOutput(context, scheduleFile, ex.Message, ex, "batch");
+                }
+            }
+
+            // Show summary balloon
+            var balloon = new Ballogger();
+            var successCount = results.Count(r => r.success);
+            var failCount = results.Count(r => !r.success);
+
+            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                $"Batch Complete: {successCount} succeeded, {failCount} failed");
+
+            if (createdSchedules.Any()) {
+                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  • {s}"))}");
+            }
+
+            if (failCount > 0) {
+                var failures = results.Where(r => !r.success).ToList();
+                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
+                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
+            }
+
+            var outputPath = runOutput.DirectoryPath;
+            _ = batchItem.Prepared?.WriteReceipt(runOutput,
+                "schedule.batch", failCount == 0 ? "Succeeded" : "Failed",
+                [new ScriptOutputReferenceData("artifact-directory", outputPath)],
+                observedExternalRevisions.Distinct().ToList());
+            balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output Folder");
+        } catch (Exception ex) {
+            _ = batchItem.AttemptSnapshot?.WriteReceipt(runOutput,
+                "schedule.batch", "Failed", reason: ex.Message);
+            new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
+        }
+    }
+
+    private string? WriteCreationOutput(ScheduleManagerContext ctx,
+        ScheduleCreationResult result,
+        string? profileName = null,
+        string outputSubDirectory = "create") {
+        try {
+            var createOutputDir = ctx.RunOutput ?? ctx.Storage.Output().SubDir(outputSubDirectory);
+
+            var outputData = new {
+                result.ScheduleName,
+                result.CategoryName,
+                result.IsItemized,
+                result.FilterBySheetApplied,
+                result.FilterBySheetSkipped,
+                ProfileName = profileName ?? ctx.SelectedProfile?.TextPrimary ?? "Unknown",
+                CreatedAt = DateTime.Now,
+                Summary =
+                    new {
+                        AppliedFieldsCount = result.AppliedFields.Count,
+                        SkippedFieldsCount = result.SkippedFields.Count,
+                        AppliedSortGroupsCount = result.AppliedSortGroups.Count,
+                        SkippedSortGroupsCount = result.SkippedSortGroups.Count,
+                        AppliedFiltersCount = result.AppliedFilters.Count,
+                        SkippedFiltersCount = result.SkippedFilters.Count,
+                        AppliedHeaderGroupsCount = result.AppliedHeaderGroups.Count,
+                        SkippedHeaderGroupsCount = result.SkippedHeaderGroups.Count,
+                        CalculatedFieldsCount = result.SkippedCalculatedFields.Count,
+                        WarningsCount = result.Warnings.Count
+                    },
+                AppliedFields =
+                    result.AppliedFields.Select(f => new {
+                        f.ParameterName,
+                        f.ColumnHeaderOverride,
+                        f.IsHidden,
+                        f.ColumnWidth,
+                        DisplayType = f.DisplayType.ToString()
+                    }).ToList(),
+                SkippedFields = result.SkippedFields.Select(s => new { Reason = s }).ToList(),
+                AppliedSortGroups =
+                    result.AppliedSortGroups.Select(sg => new {
+                        sg.FieldName,
+                        SortOrder = sg.SortOrder.ToString(),
+                        sg.ShowHeader,
+                        sg.ShowFooter,
+                        sg.ShowBlankLine
+                    }).ToList(),
+                SkippedSortGroups = result.SkippedSortGroups.Select(s => new { Reason = s }).ToList(),
+                AppliedFilters =
+                    result.AppliedFilters.Select(f =>
+                        new { f.FieldName, FilterType = f.FilterType.ToString(), f.Value, f.StorageType }).ToList(),
+                SkippedFilters = result.SkippedFilters.Select(s => new { Reason = s }).ToList(),
+                result.AppliedHeaderGroups,
+                SkippedHeaderGroups = result.SkippedHeaderGroups.Select(s => new { Reason = s }).ToList(),
+                CalculatedFields =
+                    result.SkippedCalculatedFields
+                        .Select(f => new { f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField }).ToList(),
+                result.AppliedViewTemplate,
+                result.SkippedViewTemplate,
+                result.Warnings
+            };
+
+            // Prepend timestamp to filename
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var outputPath = createOutputDir.Json($"{timestamp}_{result.ScheduleName}.json").Write(outputData);
+            return outputPath;
+        } catch (Exception ex) {
+            Log.Error(ex, "Failed to write schedule creation output");
+            return null;
+        }
+    }
+
+    private string? WriteErrorOutput(ScheduleManagerContext ctx,
+        string profileName,
+        string errorMessage,
+        Exception? ex = null,
+        string outputSubDirectory = "create") {
+        try {
+            var createOutputDir = ctx.RunOutput ?? ctx.Storage.Output().SubDir(outputSubDirectory);
+
+            var outputData = new {
+                ProfileName = profileName,
+                CreatedAt = DateTime.Now,
+                Success = false,
+                ErrorMessage = errorMessage,
+                ExceptionType = ex?.GetType().Name,
+                ex?.StackTrace
+            };
+
+            // Prepend timestamp to filename
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var safeProfileName = Path.GetFileNameWithoutExtension(profileName);
+            var outputPath = createOutputDir.Json($"{timestamp}_ERROR_{safeProfileName}.json").Write(outputData);
+            return outputPath;
+        } catch (Exception writeEx) {
+            Log.Error(writeEx, "Failed to write schedule error output");
+            return null;
+        }
+    }
+}
+
+public class ScheduleManagerContext {
+    public required Document Doc { get; init; }
+    public required UIDocument UiDoc { get; init; }
+    public required ModuleStorage Storage { get; init; }
+    internal OutputStorage? RunOutput { get; set; }
+
+    // UI state: what's currently selected and displayed
+    public ScheduleListItem? SelectedProfile { get; set; }
+    public SchedulePreviewData? PreviewData { get; set; }
+}
+
+public enum ScheduleTabType {
+    Create,
+    Batch
+}
+
+/// <summary>
+///     Interface for items in the unified schedule palette
+/// </summary>
+public interface ISchedulePaletteItem : IPaletteListItem {
+    ScheduleTabType TabType { get; }
+    string CategoryName { get; }
+    ScheduleListItem? GetCreateItem();
+    BatchScheduleListItem? GetBatchItem();
+}
+
+/// <summary>
+///     Wrapper that adapts both item types to work in the unified palette
+/// </summary>
+public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
+    private readonly IPaletteListItem _inner;
+
+    public SchedulePaletteItemWrapper(IPaletteListItem inner, ScheduleTabType tabType) {
+        this._inner = inner;
+        this.TabType = tabType;
+    }
+
+    public ScheduleTabType TabType { get; }
+
+    public string CategoryName => this._inner switch {
+        ScheduleListItem create => create.CategoryName,
+        BatchScheduleListItem => "Batch",
+        _ => string.Empty
+    };
+
+    public ScheduleListItem? GetCreateItem() => this._inner as ScheduleListItem;
+    public BatchScheduleListItem? GetBatchItem() => this._inner as BatchScheduleListItem;
+
+    // Delegate all IPaletteListItem members to inner
+    public string TextPrimary => this._inner.TextPrimary;
+    public string TextSecondary => this._inner.TextSecondary;
+    public string? TextPill => this._inner.TextPill;
+    public Func<string> GetTextInfo => this._inner.GetTextInfo;
+    public ImageSource? Icon => this._inner.Icon;
+    public Color? ItemColor => this._inner.ItemColor;
+}

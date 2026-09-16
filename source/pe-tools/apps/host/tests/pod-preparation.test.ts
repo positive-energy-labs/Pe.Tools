@@ -9,18 +9,22 @@ import { openSettingsDocumentWithModule, validateSettingsDocument } from "../src
 test("editor delegates captured draft composition and preserves native gate reasons", async () => {
   const root = await mkdtemp(join(tmpdir(), "pod-editor-"));
   const workspace = "Local Copy";
-  const documentId = { moduleKey: workspace, rootKey: "settings", relativePath: "main.json" };
+  const documentId = {
+    moduleKey: workspace,
+    rootKey: "settings",
+    relativePath: "main.settings.json",
+  };
   const module = {
     moduleKey: workspace,
     defaultRootKey: "settings",
     roots: [{ rootKey: "settings", displayName: "Settings" }],
   };
-  const raw = '{"$preset":"@local/settings/base.json"}';
+  const raw = '{"$preset":"@local/base.settings.json"}';
   try {
     await mkdir(join(root, workspace, "settings"), { recursive: true });
     await writeFile(join(root, workspace, "pod.json"), '{"id":"lineage"}');
-    await writeFile(join(root, workspace, "settings", "main.json"), raw);
-    await writeFile(join(root, workspace, "settings", "base.json"), '{"value":1}');
+    await writeFile(join(root, workspace, "settings", "main.settings.json"), raw);
+    await writeFile(join(root, workspace, "settings", "base.settings.json"), '{"value":1}');
     let refused = false;
     let captured = "";
     const ctx = {
@@ -33,7 +37,7 @@ test("editor delegates captured draft composition and preserves native gate reas
           };
           expect(request.workspaceKey).toBe(workspace);
           captured = Buffer.from(
-            request.sourceBundle.files.find((file) => file.path === "settings/main.json")!
+            request.sourceBundle.files.find((file) => file.path === "settings/main.settings.json")!
               .bytesBase64,
             "base64",
           ).toString("utf8");
@@ -45,7 +49,7 @@ test("editor delegates captured draft composition and preserves native gate reas
                   outcomes: [
                     {
                       code: "pod.settings.reference",
-                      location: "settings/main.json",
+                      location: "settings/main.settings.json",
                       reason: "Pinned dependency is unavailable",
                       remedy: "Install the pinned release",
                       severity: "Error",
@@ -54,7 +58,7 @@ test("editor delegates captured draft composition and preserves native gate reas
                 }
               : {
                   contentHash: "snapshot",
-                  composedSettings: { "composed/main.json": '{"value":42}' },
+                  composedSettings: { "composed/main.settings.json": '{"value":42}' },
                   outcomes: [],
                 },
           );
@@ -75,7 +79,7 @@ test("editor delegates captured draft composition and preserves native gate reas
     expect(result.rawContent).toBe(raw);
     expect(JSON.parse(result.composedContent!)).toEqual({ value: 42 });
     expect(captured).toBe(raw);
-    const draft = '{"$preset":"@local/settings/changed.json"}';
+    const draft = '{"$preset":"@local/changed.settings.json"}';
     await Effect.runPromise(
       validateSettingsDocument({ documentId, rawContent: draft }, ctx).pipe(
         Effect.provide(NodeServices.layer),
@@ -86,7 +90,7 @@ test("editor delegates captured draft composition and preserves native gate reas
     const failure = await open();
     expect(failure.composedContent).toBeNull();
     expect(failure.validation.issues).toContainEqual({
-      path: "settings/main.json",
+      path: "settings/main.settings.json",
       code: "pod.settings.reference",
       severity: "error",
       message: "Pinned dependency is unavailable",

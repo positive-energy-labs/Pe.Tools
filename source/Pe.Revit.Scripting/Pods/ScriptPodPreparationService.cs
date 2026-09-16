@@ -52,19 +52,18 @@ public sealed class ScriptPodPreparationService(
         this.Prepare(workspaceKey, new Dictionary<string, PreparedPod>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
 
     public PreparedPod Prepare(string workspaceKey, ScriptPodSourceBundle bundle) {
+        _ = Pe.Shared.Product.ScriptingWorkspaceLayout.NormalizeWorkspaceKey(workspaceKey);
         var captureRoot = Path.Combine(Path.GetTempPath(), "Pe.Tools", "pod-captures", Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(captureRoot);
         try {
-            WriteCapture(workspaceKey, bundle.Files);
+            WriteCapture("root", bundle.Files);
             var dependencyIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var dependency in bundle.Dependencies) {
-                if (string.Equals(dependency.Id, workspaceKey, StringComparison.Ordinal))
-                    throw new InvalidDataException($"Captured dependency '{dependency.Id}' cannot overwrite the root pod capture.");
                 if (!dependencyIds.Add(dependency.Id))
                     throw new InvalidDataException($"Captured pod dependency is duplicated: {dependency.Id}");
-                WriteCapture(dependency.Id, dependency.Files);
+                WriteCapture("dependency-" + dependency.Id, dependency.Files);
             }
-            return new ScriptPodPreparationService(id => Path.Combine(captureRoot, id)).Prepare(workspaceKey);
+            return new ScriptPodPreparationService(id => Path.Combine(captureRoot, id)).Prepare("root");
         } finally {
             if (Directory.Exists(captureRoot))
                 Directory.Delete(captureRoot, true);

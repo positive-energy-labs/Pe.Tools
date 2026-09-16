@@ -13,6 +13,8 @@
 - 2026-09-16: Useful output files and a receipt share a unique run folder under the pod's excluded output directory. Attribution records snapshot, member, actual operation, outcome, and output references. No automatic archival of every return value or tracking of objects moved between Revit projects is required.
 - 2026-09-16: Pea's bundled build-pod guidance and generated pod guidance teach these identity and authoring rules. Product guidance must not depend on repo history.
 
+- 2026-09-16: Editor previews delegate captured draft bytes to the same native preparation service as execution. A declared `$schema` selects library validation independently of the local Pod folder; it does not bind an operation. Generic JSON without that declaration has no library validator selected.
+
 ## Tried & rejected
 
 - 2026-09-16: Binding library operations to authored JSON manifest entries; this makes reusable data look executable.
@@ -23,5 +25,6 @@
 ## Owed
 
 - Prove actual Family Foundry and Schedule operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
-- Finish the Documents hard cutover and consolidate interactive/execution composition behind one authority before merge.
+- Replace the preparation result placeholder manifest with an explicit rejected/prepared result before claiming the state model complete.
+- Editor composition uses native preparation; offline authored JSON stays editable but directive previews require that service.
 - Add Git/cloud transport only when its concrete workflow is selected; archive transport is the present carrier.

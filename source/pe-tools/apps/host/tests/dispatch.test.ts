@@ -155,11 +155,14 @@ test("settings save writes schema-invalid documents and returns validation issue
             rootKey: "settings",
             relativePath: "invalid-but-saved.schedule.json",
           },
-          rawContent: "{}",
+          rawContent:
+            '{"$schema":"http://localhost/schemas/settings/CmdScheduleManager/schedules.json"}',
         },
         {
-          invokeBridge: (operationKey) => {
+          invokeBridge: (operationKey, payload) => {
             seen.push(operationKey);
+            if (operationKey === "settings.schema")
+              expect(payload).toEqual({ moduleKey: "CmdScheduleManager", rootKey: "schedules" });
             if (operationKey === "settings.module-catalog")
               throw new Error("Pod folder names are not registered library module names.");
             return Effect.succeed({
@@ -176,105 +179,6 @@ test("settings save writes schema-invalid documents and returns validation issue
     expect(seen).not.toContain("settings.module-catalog");
     expect(result.snapshot.validation.isValid).toBe(false);
     expect(result.snapshot.validation.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("composition preserves authored JSON, substitutes keyed presets, and fails closed", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const root = join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "settings");
-    mkdirSync(join(root, "_fragments"), { recursive: true });
-    writeFileSync(
-      join(root, "_fragments", "parameters.json"),
-      '{"Width":{"dataType":"Length","value":"24in"}}',
-    );
-    writeFileSync(join(root, "_fragments", "item.json"), '{"name":"Width"}');
-    writeFileSync(join(root, "_fragments", "list.json"), '[{"$preset":"@local/_fragments/item"}]');
-    writeFileSync(
-      join(root, "_fragments", "cycle.json"),
-      '[{"$include":"@local/_fragments/cycle"}]',
-    );
-    const documentId = { moduleKey: "family-library", rootKey: "settings", relativePath: "main" };
-    const module = {
-      moduleKey: "family-library",
-      defaultRootKey: "settings",
-      roots: [{ rootKey: "settings", displayName: "Settings" }],
-      storageOptions: { includeRoots: ["_fragments"], presetRoots: ["_fragments"] },
-    };
-    const open = async (raw: string) => {
-      writeFileSync(join(root, "main.json"), raw);
-      return runDispatch(
-        openSettingsDocumentWithModule({ documentId, includeComposedContent: true }, module),
-      );
-    };
-    const raw =
-      '{"parameters":{"$preset":"@local/_fragments/parameters"},"items":[{"$include":"@local/_fragments/list"}]}';
-    const snapshot = await open(raw);
-    expect(snapshot.rawContent).toBe(raw);
-    expect(JSON.parse(snapshot.composedContent!)).toEqual({
-      parameters: { Width: { dataType: "Length", value: "24in" } },
-      items: [{ name: "Width" }],
-    });
-    expect(snapshot.dependencies).toHaveLength(3);
-    writeFileSync(
-      join(root, "_fragments", "later.json"),
-      '{"Width":{"value":"42in"},"Enabled":{"value":true}}',
-    );
-    const keyedRaw =
-      '{"parameters":{"$include":["@local/_fragments/parameters","@local/_fragments/later"]}}';
-    const keyed = await open(keyedRaw);
-    expect(keyed.rawContent).toBe(keyedRaw);
-    expect(JSON.parse(keyed.composedContent!)).toEqual({
-      parameters: { Width: { dataType: "Length", value: "42in" }, Enabled: { value: true } },
-    });
-    expect(keyed.dependencies).toHaveLength(2);
-    writeFileSync(
-      join(root, "_fragments", "defaults.json"),
-      JSON.stringify({
-        parameters: { $include: ["@local/_fragments/parameters", "@local/_fragments/later"] },
-        filter: {
-          IncludeNames: { Equaling: ["earlier"], Containing: ["preserved"] },
-          ExcludeNames: { Equaling: ["excluded"] },
-        },
-      }),
-    );
-    const overrideRaw = JSON.stringify({
-      $preset: "@local/_fragments/defaults",
-      parameters: { Width: { value: "48in" } },
-      filter: { IncludeNames: { Equaling: ["profile"] }, ExcludeNames: {} },
-    });
-    const overridden = await open(overrideRaw);
-    expect(overridden.validation.isValid).toBe(true);
-    expect(overridden.rawContent).toBe(overrideRaw);
-    expect(JSON.parse(overridden.composedContent!)).toEqual({
-      parameters: { Width: { dataType: "Length", value: "48in" }, Enabled: { value: true } },
-      filter: {
-        IncludeNames: { Equaling: ["profile"], Containing: ["preserved"] },
-        ExcludeNames: { Equaling: ["excluded"] },
-      },
-    });
-    expect(overridden.dependencies.map((d) => d.directivePath)).toEqual([
-      "@local/_fragments/defaults",
-      "@local/_fragments/parameters",
-      "@local/_fragments/later",
-    ]);
-    for (const invalid of [
-      '{"parameters":{"$include":"@local/_fragments/parameters","Width":{}}}',
-      '{"parameters":{"$include":"@local/_fragments/list"}}',
-      '{"items":[{"$include":"@local/_fragments/list","ignored":true}]}',
-      '{"items":[{"$include":"@local/_fragments/cycle"}]}',
-      '{"parameters":{"$preset":"@local/forbidden/parameters"}}',
-    ]) {
-      const result = await open(invalid);
-      expect(result.rawContent).toBe(invalid);
-      expect(result.validation.isValid).toBe(false);
-      expect(result.validation.issues.some((issue) => issue.code === "CompositionError")).toBe(
-        true,
-      );
-      expect(result.composedContent).toBeNull();
-    }
   } finally {
     profile.dispose();
   }
@@ -319,7 +223,8 @@ test("settings validation uses bridge schema json", async () => {
             rootKey: "schedules",
             relativePath: "profiles/main",
           },
-          rawContent: "{}",
+          rawContent:
+            '{"$schema":"http://localhost/schemas/settings/CmdScheduleManager/schedules.json"}',
         },
         {
           invokeBridge: (operationKey) =>
@@ -383,7 +288,8 @@ test("settings validation merges registered semantic diagnostics after structura
           rootKey: "models",
           relativePath: "showcase",
         },
-        rawContent: '{"family":{"name":"Showcase"}}',
+        rawContent:
+          '{"$schema":"http://localhost/schemas/settings/FamilyFoundry/models.json","family":{"name":"Showcase"}}',
       },
       {
         invokeBridge: (operationKey) => {

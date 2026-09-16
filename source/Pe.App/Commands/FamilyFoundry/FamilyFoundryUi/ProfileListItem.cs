@@ -36,7 +36,7 @@ public class ProfileListItem : IPaletteListItem {
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
     public string TextPrimary => Path.GetFileName(this.FilePath);
-    public string TextSecondary => $"{this.Prepared.PodId} Â· {(this.Kind == FoundryFileKind.Patch ? "patch" : "family.json")}";
+    public string TextSecondary => $"{this.Prepared.PodId} · {(this.Kind == FoundryFileKind.Patch ? "patch" : "family.json")}";
     public string TextPill => $"{this.LineCount} lines";
     public Func<string> GetTextInfo => () => string.Empty;
     public ImageSource? Icon => null;
@@ -60,3 +60,6 @@ public class ProfileListItem : IPaletteListItem {
         var requirements = this.Prepared.ExternalRequirements.Where(requirement => requirement.Code == "aps.parameters")
             .Select(requirement => new SharedParameterAuthority(requirement.ResourceId, requirement.CollectionId)).ToList();
         return document => new FamilySharedParameterSource(document, requireDeclaration: true, declaredRequirements: requirements);
+    }
+
+}

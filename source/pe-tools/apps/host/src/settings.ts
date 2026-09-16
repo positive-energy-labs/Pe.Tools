@@ -18,7 +18,6 @@ import {
   type SettingsValidationIssue,
   type ValidateSettingsDocumentRequest,
 } from "@pe/host-contracts/operation-types";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { capturePod } from "./operation-script.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -432,8 +431,9 @@ const materializeDocument = Effect.fnUntraced(function* (
     };
 
   const composition = yield* composeForRead(documentId, parsed.value, rawContent, ctx);
+  const provider = settingsSchemaProvider(parsed.value);
   const schemaValidation = yield* validateWithProviderSchema(
-    documentId,
+    provider,
     composition.value ?? parsed.value,
     ctx,
   );
@@ -446,6 +446,7 @@ const materializeDocument = Effect.fnUntraced(function* (
     ? { issues: [] as SettingsValidationIssue[], status: "not-run" }
     : yield* validateWithFeatureSemantics(
         documentId,
+        provider,
         rawContent,
         composition.value ?? parsed.value,
         ctx,
@@ -544,20 +545,17 @@ const composeForRead = Effect.fnUntraced(function* (
 });
 
 const validateWithProviderSchema = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
+  provider: SettingsSchemaProvider | null,
   value: unknown,
   ctx: SettingsRuntimeContext,
 ) {
   if (ctx.schemaJson)
     return { ...validateWithSchemaJson(ctx.schemaJson, value), schemaJson: ctx.schemaJson };
+  if (!provider) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
   if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
 
   const schemaResult = yield* Effect.result(
-    ctx.invokeBridge(
-      "settings.schema",
-      { moduleKey: documentId.moduleKey, rootKey: documentId.rootKey },
-      ctx.bridgeSessionId,
-    ),
+    ctx.invokeBridge("settings.schema", provider, ctx.bridgeSessionId),
   );
   if (schemaResult._tag === "Failure")
     return {
@@ -581,18 +579,19 @@ const validateWithProviderSchema = Effect.fnUntraced(function* (
 
 const validateWithFeatureSemantics = Effect.fnUntraced(function* (
   documentId: SettingsDocumentId,
+  provider: SettingsSchemaProvider | null,
   rawContent: string,
   composedValue: unknown,
   ctx: SettingsRuntimeContext,
 ) {
+  if (!provider) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
   if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
 
   const result = yield* Effect.result(
     ctx.invokeBridge(
       "settings.document.semantic-validation",
       {
-        moduleKey: documentId.moduleKey,
-        rootKey: documentId.rootKey,
+        ...provider,
         relativePath: documentId.relativePath,
         rawContent,
         composedContent: normalizeJsonTrailingNewline(JSON.stringify(composedValue, null, 2)),
@@ -716,34 +715,19 @@ const discoverModule = (documentId: SettingsDocumentId, _ctx: SettingsRuntimeCon
     storageOptions: { includeRoots: [], presetRoots: [] },
   } satisfies SettingsModuleDescriptor);
 
-// --- URL-native $schema ------------------------------------------------------
-// Settings schemas are session state (value-domain samples come from the open
-// document), so they are served live from GET /schemas/settings/... — never
-// persisted to disk. vscode-json-languageservice (VSCode and Zed) resolves
-// http $schema URLs, and localhost URLs are machine-portable: each teammate's
-// host answers for their own session.
+type SettingsSchemaProvider = { moduleKey: string; rootKey: string };
 
-export function settingsSchemaUrl(documentId: SettingsDocumentId): string {
-  // ponytail: persisted into documents — a nonstandard base bakes machine-specific
-  // URLs into files teammates open. Fine while everyone runs the default port.
-  const base =
-    process.env[hostProcessIdentity.hostBaseUrlVariable] ?? hostProcessIdentity.defaultHostBaseUrl;
-  const moduleKey = encodeURIComponent(documentId.moduleKey);
-  const rootKey = encodeURIComponent(documentId.rootKey);
-  return `${base}/schemas/settings/${moduleKey}/${rootKey}.json`;
-}
-
-/** Set/repair the document's $schema URL; returns content unchanged when not applicable. */
-export function injectSchemaReference(rawContent: string, schemaUrl: string): string {
+// A declared schema selects a data validator; the local folder never selects a library.
+function settingsSchemaProvider(value: unknown): SettingsSchemaProvider | null {
+  if (!isRecord(value) || typeof value.$schema !== "string") return null;
   try {
-    const parsed = JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return rawContent;
-    const record = parsed as Record<string, unknown>;
-    if (record.$schema === schemaUrl) return rawContent;
-    delete record.$schema;
-    return JSON.stringify({ $schema: schemaUrl, ...record }, null, 2);
+    const path = new URL(value.$schema).pathname;
+    const match = /^\/schemas\/settings\/([^/]+)\/([^/]+)\.json$/.exec(path);
+    return match
+      ? { moduleKey: decodeURIComponent(match[1]!), rootKey: decodeURIComponent(match[2]!) }
+      : null;
   } catch {
-    return rawContent;
+    return null;
   }
 }
 
@@ -789,3 +773,228 @@ function containsDirectiveMetadata(value: unknown): boolean {
   return Object.values(value).some(containsDirectiveMetadata);
 }
 
+function statMtime(info: FileSystem.File.Info): Date {
+  return Option.getOrElse(info.mtime, () => new Date(0));
+}
+
+const listSettingsDirectory: (
+  directory: string,
+  rootDirectory: string,
+  recursive: boolean,
+  operationKey: string,
+) => Effect.Effect<SettingsDirectoryListing, LocalOpError, FileSystem.FileSystem> =
+  Effect.fnUntraced(function* (
+    directory: string,
+    rootDirectory: string,
+    recursive: boolean,
+    operationKey: string,
+  ) {
+    const entries = yield* readDirectoryEntriesOrEmpty(directory, operationKey);
+    const files: string[] = [];
+    const directories: string[] = [];
+    for (const entry of entries) {
+      const path = join(directory, entry.name);
+      if (entry.info.type === "Directory") {
+        directories.push(toRelativePath(rootDirectory, path));
+        if (recursive) {
+          const nested = yield* listSettingsDirectory(path, rootDirectory, true, operationKey);
+          files.push(...nested.files);
+          directories.push(...nested.directories);
+        }
+        continue;
+      }
+      if (entry.info.type === "File" && entry.name.toLowerCase().endsWith(".json"))
+        files.push(path);
+    }
+    return { files, directories } satisfies SettingsDirectoryListing;
+  });
+
+const createSettingsFileEntry = Effect.fnUntraced(function* (
+  filePath: string,
+  rootDirectory: string,
+  operationKey: string,
+) {
+  const file = yield* statFile(filePath, operationKey);
+  const relativePath = toRelativePath(rootDirectory, filePath);
+  const relativePathWithoutExtension = stripJsonExtension(relativePath);
+  const directory = dirnameRelative(relativePath);
+  const name = basename(relativePath);
+  const isSchema =
+    name.toLowerCase().endsWith(".schema.json") || name.toLowerCase() === "schema.json";
+  const isFragment = relativePath.split("/").some((segment) => segment.startsWith("_"));
+  return {
+    path: filePath,
+    relativePath,
+    relativePathWithoutExtension,
+    name,
+    baseName: stripJsonExtension(name),
+    directory,
+    modifiedUtc: statMtime(file).toISOString(),
+    kind: isSchema
+      ? SettingsFileKind.Schema
+      : isFragment
+        ? SettingsFileKind.Fragment
+        : SettingsFileKind.Profile,
+    isFragment,
+    isSchema,
+  };
+});
+
+function buildSettingsDirectoryTree(
+  rootName: string,
+  rootRelativePath: string,
+  files: SettingsFileEntry[],
+  directories: string[],
+): SettingsDirectoryNode {
+  const root: MutableSettingsDirectoryNode = {
+    name: rootName,
+    relativePath: rootRelativePath,
+    directories: [],
+    files: [],
+  };
+  for (const directory of [...new Set(directories)].filter(Boolean)) {
+    ensureDirectoryNode(
+      root,
+      rootRelativePath,
+      localRelativePath(directory, rootRelativePath).split("/").filter(Boolean),
+    );
+  }
+  for (const file of files) {
+    const segments = localRelativePath(file.relativePath, rootRelativePath)
+      .split("/")
+      .filter(Boolean);
+    const name = segments.pop();
+    if (!name) continue;
+    const current = ensureDirectoryNode(root, rootRelativePath, segments);
+    current.files.push({
+      name,
+      relativePath: file.relativePath,
+      relativePathWithoutExtension: file.relativePathWithoutExtension,
+      id: file.relativePathWithoutExtension,
+      modifiedUtc: file.modifiedUtc,
+      kind: file.kind,
+      isFragment: file.isFragment,
+      isSchema: file.isSchema,
+    } satisfies SettingsFileNode);
+  }
+  sortSettingsTree(root);
+  return root;
+}
+
+function ensureDirectoryNode(
+  root: MutableSettingsDirectoryNode,
+  rootRelativePath: string,
+  segments: string[],
+): MutableSettingsDirectoryNode {
+  let current = root;
+  let currentRelativePath = rootRelativePath;
+  for (const segment of segments) {
+    currentRelativePath = currentRelativePath ? `${currentRelativePath}/${segment}` : segment;
+    let next = current.directories.find(
+      (directory) => directory.name.toLowerCase() === segment.toLowerCase(),
+    );
+    if (!next) {
+      next = { name: segment, relativePath: currentRelativePath, directories: [], files: [] };
+      current.directories.push(next);
+    }
+    current = next;
+  }
+  return current;
+}
+
+function sortSettingsTree(node: MutableSettingsDirectoryNode): void {
+  node.directories.sort((left, right) => left.name.localeCompare(right.name));
+  node.files.sort((left, right) => left.name.localeCompare(right.name));
+  for (const directory of node.directories) sortSettingsTree(directory);
+}
+
+const resolveLocalPath = Effect.fnUntraced(function* <A>(operationKey: string, resolve: () => A) {
+  return yield* Effect.try({
+    try: resolve,
+    catch: (error) => newLocalOpError(operationKey, errorMessage(error), 400),
+  });
+});
+
+function resolveSettingsRootDirectory(
+  basePath: string,
+  moduleKey: string,
+  rootKey: string,
+): string {
+  return safeJoin(
+    safeJoin(basePath, normalizeRelativePath(moduleKey)),
+    normalizeRelativePath(rootKey),
+  );
+}
+
+function resolveSettingsDocumentPath(rootDirectory: string, relativePath: string): string {
+  const normalized = normalizeRelativePath(relativePath);
+  if (!normalized) throw new Error("Settings document path is required.");
+  return safeJoin(
+    rootDirectory,
+    normalized.toLowerCase().endsWith(".json") ? normalized : `${normalized}.json`,
+  );
+}
+
+function safeJoin(rootPath: string, relativePath: string): string {
+  const root = win32.resolve(rootPath);
+  const combined = win32.resolve(root, relativePath.replace(/\//g, "\\"));
+  if (combined !== root && !combined.toLowerCase().startsWith(`${root.toLowerCase()}\\`))
+    throw new Error("Path escapes the configured settings root.");
+  return combined;
+}
+
+function normalizeRelativePath(input: string | null | undefined): string {
+  if (!input) return "";
+  if (win32.isAbsolute(input)) throw new Error("Rooted settings paths are not allowed.");
+  const segments = input
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === ".."))
+    throw new Error("Invalid settings path segment.");
+  return segments.join("/");
+}
+
+function toRelativePath(rootDirectory: string, filePath: string): string {
+  return win32.relative(rootDirectory, filePath).replace(/\\/g, "/");
+}
+
+function localRelativePath(relativePath: string, rootRelativePath: string): string {
+  if (!rootRelativePath) return relativePath;
+  const prefix = `${rootRelativePath.replace(/\/$/, "")}/`;
+  if (relativePath.toLowerCase().startsWith(prefix.toLowerCase()))
+    return relativePath.slice(prefix.length);
+  return relativePath.toLowerCase() === rootRelativePath.toLowerCase()
+    ? basename(relativePath)
+    : relativePath;
+}
+
+function dirnameRelative(relativePath: string): string | null {
+  const index = relativePath.lastIndexOf("/");
+  return index <= 0 ? null : relativePath.slice(0, index);
+}
+
+function stripJsonExtension(path: string): string {
+  return path.toLowerCase().endsWith(".json") ? path.slice(0, -5) : path;
+}
+
+function normalizeJsonTrailingNewline(rawContent: string): string {
+  return `${rawContent.replace(/\s*$/, "")}\n`;
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function newLocalOpError(key: string, note: string, statusCode?: number): LocalOpError {
+  return new LocalOpError(key, note, statusCode);
+}
