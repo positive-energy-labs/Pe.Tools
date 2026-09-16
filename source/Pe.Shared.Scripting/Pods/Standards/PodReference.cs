@@ -1,21 +1,25 @@
-namespace Pe.Shared.Scripting.Pods.Standards;
+﻿namespace Pe.Shared.Scripting.Pods.Standards;
 
 /// <summary>
-///     Verdict 2: `@global/` dies, `@<podId>/` replaces it, `@local/` stays and means "this pod".
+///     Verdict 2: `@global/` dies, @&lt;podId&gt;/ replaces it, `@local/` stays and means "this pod".
 ///     A reference is a closed union over those two shapes; a third shape is unrepresentable.
 /// </summary>
 public abstract record PodReference {
-    private PodReference(PodPath path) => this.Path = path;
+    private PodReference() { }
 
-    public PodPath Path { get; }
+    public abstract PodPath Path { get; }
 
-    /// <summary>`@local/x` — resolves inside the authoring pod.</summary>
-    public sealed record Local(PodPath Path) : PodReference(Path) {
+    /// <summary>`@local/x` â€” resolves inside the authoring pod.</summary>
+    public sealed record Local(PodPath Path) : PodReference {
+        public override PodPath Path { get; } = Path;
+
         public override string ToString() => $"@local/{this.Path}";
     }
 
-    /// <summary>`@mep-base/x` — resolves against another pod's `composed/`.</summary>
-    public sealed record Foreign(PodId PodId, PodPath Path) : PodReference(Path) {
+    /// <summary>`@mep-base/x` â€” resolves against another pod's `composed/`.</summary>
+    public sealed record Foreign(PodId PodId, PodPath Path) : PodReference {
+        public override PodPath Path { get; } = Path;
+
         public override string ToString() => $"@{this.PodId}/{this.Path}";
     }
 
@@ -23,7 +27,7 @@ public abstract record PodReference {
     ///     Ids the reference grammar burns. `local` cannot be a pod id because `@local/` already
     ///     means "this pod"; `global` is retired and refused loudly so stale authored files say why.
     /// </summary>
-    public static IReadOnlySet<string> ReservedIds { get; } =
+    public static HashSet<string> ReservedIds { get; } =
         new HashSet<string>(StringComparer.Ordinal) { "local", "global" };
 
     public static bool TryParse(string? raw, out PodReference reference, out string? reason) {
@@ -68,3 +72,4 @@ public abstract record PodReference {
         return true;
     }
 }
+

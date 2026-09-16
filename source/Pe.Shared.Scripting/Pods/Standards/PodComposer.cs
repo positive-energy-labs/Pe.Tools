@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 
 namespace Pe.Shared.Scripting.Pods.Standards;
 
@@ -69,8 +69,8 @@ public static class PodComposer {
         }
 
         var context = new ComposeContext(resolver, errors, dependencies);
-        var expanded = ExpandPresets(root, context, []);
-        expanded = ExpandIncludes(expanded, context, []);
+        var expanded = ExpandPresets(root, context, new HashSet<string>(StringComparer.Ordinal));
+        expanded = ExpandIncludes(expanded, context, new HashSet<string>(StringComparer.Ordinal));
         StripSchema(expanded);
 
         if (errors.Count > 0)
@@ -177,7 +177,7 @@ public static class PodComposer {
             var raw = obj[IncludeKey]!.Value<string>()!;
             var siblings = obj.Properties().Where(p => p.Name != IncludeKey).Select(p => p.Name).ToArray();
             if (siblings.Length > 0) {
-                // settings.ts :997-999, :1029-1031 — include is strictly no-override.
+                // settings.ts :997-999, :1029-1031 â€” include is strictly no-override.
                 context.Errors.Add($"'{IncludeKey}' of '{raw}' cannot sit beside {string.Join(", ", siblings.Select(s => $"'{s}'"))}; includes never override.");
                 return JValue.CreateNull();
             }
@@ -222,3 +222,4 @@ public static class PodComposer {
             obj.Remove(SchemaKey);
     }
 }
+

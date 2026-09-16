@@ -24,10 +24,10 @@ public sealed class PodSnapshot {
 
     public static PodSnapshot Create(string directoryName, IEnumerable<KeyValuePair<string, string>> files) {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (rawPath, content) in files) {
-            if (!PodPath.TryParse(rawPath, out var path, out var reason))
+        foreach (var file in files) {
+            if (!PodPath.TryParse(file.Key, out var path, out var reason))
                 throw new ArgumentException(reason, nameof(files));
-            map[path.Value] = content;
+            map[path.Value] = file.Value;
         }
 
         return new PodSnapshot(directoryName, map);
@@ -43,6 +43,8 @@ public sealed class PodSnapshot {
             .Select(PodPath.Parse)
             .OrderBy(p => p.Value, StringComparer.Ordinal);
 
-    public static string Sha256(string content) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+    public static string Sha256(string content) {
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(content))).Replace("-", string.Empty).ToLowerInvariant();
+    }
 }

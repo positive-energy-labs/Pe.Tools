@@ -1,7 +1,20 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using Pe.Shared.Scripting.Analysis;
 
 namespace Pe.Shared.Scripting.Pods.Standards;
+
+/// <summary>Parse-or-reason, so no gate needs a try/catch around a yield.</summary>
+internal static class PodJson {
+    public static JToken? TryParse(string json, out string? reason) {
+        try {
+            reason = null;
+            return JToken.Parse(json);
+        } catch (Newtonsoft.Json.JsonException ex) {
+            reason = ex.Message;
+            return null;
+        }
+    }
+}
 
 /// <summary>
 ///     The gate table as data. `pea pod gates` can print this; an agent can read lane and rule
@@ -96,13 +109,9 @@ public sealed class PodClosureGate : PodGate {
         var required = subject.Header.Requires.ToDictionary(r => r.Id, r => r.Version);
 
         foreach (var path in subject.Snapshot.Under(PodLayout.SettingsRoot)) {
-            var content = subject.Snapshot.Read(path)!;
-            JToken parsed;
-            try {
-                parsed = JToken.Parse(content);
-            } catch (Newtonsoft.Json.JsonException) {
-                continue; // pod.compose already reported it.
-            }
+            // pod.compose already reports an unparsable document; this gate stays quiet about it.
+            if (PodJson.TryParse(subject.Snapshot.Read(path)!, out _) is not { } parsed)
+                continue;
 
             foreach (var raw in PodComposer.RawReferences(parsed).Distinct(StringComparer.Ordinal)) {
                 if (!PodReference.TryParse(raw, out var reference, out var reason)) {
@@ -142,7 +151,7 @@ public sealed class PodClosureGate : PodGate {
     private static PodPath? ResolveLocal(PodBuildSubject subject, PodReference.Local local) =>
         Candidates(PodLayout.SettingsRoot, local.Path).FirstOrDefault(subject.Snapshot.Contains);
 
-    private static bool MatchesAnyFile(IReadOnlySet<string> files, PodPath path) =>
+    private static bool MatchesAnyFile(HashSet<string> files, PodPath path) =>
         Candidates(PodLayout.ComposedRoot, path).Any(candidate => files.Contains(candidate.Value));
 
     /// <summary>
@@ -163,11 +172,9 @@ public sealed class PodComposedIsClosedGate : PodGate {
 
     public override IEnumerable<PodGateFinding> Inspect(PodBuildSubject subject) {
         foreach (var path in subject.Snapshot.Under(PodLayout.ComposedRoot)) {
-            JToken parsed;
-            try {
-                parsed = JToken.Parse(subject.Snapshot.Read(path)!);
-            } catch (Newtonsoft.Json.JsonException ex) {
-                yield return this.Error(path.Value, $"'{path}' is not valid JSON: {ex.Message}");
+            var parsed = PodJson.TryParse(subject.Snapshot.Read(path)!, out var parseError);
+            if (parsed is null) {
+                yield return this.Error(path.Value, $"'{path}' is not valid JSON: {parseError}");
                 continue;
             }
 
@@ -189,15 +196,11 @@ public sealed class PodNoMachineLocalPathGate : PodGate {
 
     public override IEnumerable<PodGateFinding> Inspect(PodBuildSubject subject) {
         foreach (var path in subject.Snapshot.Under(PodLayout.SettingsRoot)) {
-            JToken parsed;
-            try {
-                parsed = JToken.Parse(subject.Snapshot.Read(path)!);
-            } catch (Newtonsoft.Json.JsonException) {
+            if (PodJson.TryParse(subject.Snapshot.Read(path)!, out _) is not JContainer parsed)
                 continue;
-            }
 
             foreach (var value in parsed.DescendantsAndSelf().OfType<JValue>().Where(v => v.Type == JTokenType.String)) {
-                var text = v_Text(value);
+                var text = value.Value<string>() ?? string.Empty;
                 if (Offence(text) is not { } offence)
                     continue;
 
@@ -209,14 +212,12 @@ public sealed class PodNoMachineLocalPathGate : PodGate {
         }
     }
 
-    private static string v_Text(JValue value) => value.Value<string>() ?? string.Empty;
-
     private static string? Offence(string text) {
         if (text.Length >= 3 && char.IsLetter(text[0]) && text[1] == ':' && (text[2] == '\\' || text[2] == '/'))
             return "a rooted drive path";
         if (text.StartsWith("\\\\", StringComparison.Ordinal))
             return "a UNC share path";
-        if (text.Contains('%') && text.Count(c => c == '%') >= 2)
+        if (text.Count(c => c == '%') >= 2)
             return "an environment-variable path";
         if (text.StartsWith("/Users/", StringComparison.OrdinalIgnoreCase) || text.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
             return "a rooted home path";
@@ -235,7 +236,9 @@ public sealed class PodComposedIsFreshGate : PodGate {
     public override IEnumerable<PodGateFinding> Inspect(PodBuildSubject subject) {
         var onDisk = subject.Snapshot.Under(PodLayout.ComposedRoot).ToDictionary(p => p.Value, p => subject.Snapshot.Read(p)!, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (path, document) in subject.FreshCompose) {
+        foreach (var entry in subject.FreshCompose) {
+            var path = entry.Key;
+            var document = entry.Value;
             if (!onDisk.TryGetValue(path, out var actual)) {
                 yield return this.Error(path, $"'{path}' is missing. Run `pea pod build` to write it from settings/.");
                 continue;
@@ -249,13 +252,8 @@ public sealed class PodComposedIsFreshGate : PodGate {
             yield return this.Error(orphan, $"'{orphan}' has no source under settings/. Delete it or add the source document.");
     }
 
-    private static string Normalize(string json) {
-        try {
-            return JToken.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented);
-        } catch (Newtonsoft.Json.JsonException) {
-            return json;
-        }
-    }
+    private static string Normalize(string json) =>
+        PodJson.TryParse(json, out _)?.ToString(Newtonsoft.Json.Formatting.Indented) ?? json;
 }
 
 /// <summary>Verdict 6: manifest.json holds a sha256 per file in settings/ and composed/.</summary>
@@ -271,11 +269,8 @@ public sealed class PodFileIndexGate : PodGate {
             yield break;
         }
 
-        JObject index;
-        try {
-            index = JObject.Parse(indexJson);
-        } catch (Newtonsoft.Json.JsonException ex) {
-            yield return this.Error(PodLayout.FileIndexFile, $"manifest.json is not valid JSON: {ex.Message}");
+        if (PodJson.TryParse(indexJson, out var indexError) is not JObject index) {
+            yield return this.Error(PodLayout.FileIndexFile, $"manifest.json is not a valid JSON object: {indexError}");
             yield break;
         }
 
@@ -298,7 +293,7 @@ public sealed class PodFileIndexGate : PodGate {
                 yield return this.Error(path.Value, $"'{path}' hash {actual[..12]} does not match manifest.json {claimed[..Math.Min(12, claimed.Length)]}.");
         }
 
-        var expectedKeys = expected.Select(p => p.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedKeys = new HashSet<string>(expected.Select(p => p.Value), StringComparer.OrdinalIgnoreCase);
         foreach (var listed in files.Properties().Select(p => p.Name).Where(name => !expectedKeys.Contains(name)))
             yield return this.Error(listed, $"manifest.json lists '{listed}', which is not a file under settings/ or composed/.");
     }
@@ -341,3 +336,5 @@ public sealed class PodApsCollectionGate : PodGate {
 
     public override IEnumerable<PodGateFinding> Inspect(PodBuildSubject subject) => [];
 }
+
+

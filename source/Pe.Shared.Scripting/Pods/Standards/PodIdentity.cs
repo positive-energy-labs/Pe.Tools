@@ -1,4 +1,4 @@
-namespace Pe.Shared.Scripting.Pods.Standards;
+﻿namespace Pe.Shared.Scripting.Pods.Standards;
 
 /// <summary>
 ///     Spike: pod identity primitives. Parse-only construction, so an invalid id or version
@@ -114,7 +114,7 @@ public readonly record struct PodPath {
         }
 
         var normalized = raw.Replace('\\', '/').Trim('/');
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0) {
             reason = $"Pod-relative path '{raw}' is empty after normalization.";
             return false;
@@ -138,3 +138,4 @@ public readonly record struct PodPath {
     public static PodPath Parse(string raw) =>
         TryParse(raw, out var path, out var reason) ? path : throw new ArgumentException(reason, nameof(raw));
 }
+

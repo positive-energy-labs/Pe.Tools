@@ -1,4 +1,4 @@
-namespace Pe.Shared.Scripting.Pods.Standards;
+﻿namespace Pe.Shared.Scripting.Pods.Standards;
 
 public static class PodLayout {
     public const string ManifestFile = "pod.json";
@@ -19,13 +19,13 @@ public static class PodLayout {
 }
 
 /// <summary>
-///     What the build knows about another pod. It started as metadata only — id, version, and the
-///     file names the manifest claims — because verdict 3 (one version per id) leaves nothing to
+///     What the build knows about another pod. It started as metadata only â€” id, version, and the
+///     file names the manifest claims â€” because verdict 3 (one version per id) leaves nothing to
 ///     solve. It could not stay metadata: verdicts 4 and 8 require the build to inline another
 ///     pod's composed bytes, so the entry has to carry contents. See the adversary report finding 1.
 /// </summary>
 public sealed record PodWorldEntry(PodId Id, PodVersion Version, IReadOnlyDictionary<string, string> ComposedFiles) {
-    public IReadOnlySet<string> FileNames { get; } = ComposedFiles.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> FileNames { get; } = new HashSet<string>(ComposedFiles.Keys, StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed record PodWorld(IReadOnlyDictionary<PodId, PodWorldEntry> Pods) {
@@ -62,3 +62,5 @@ public sealed record PodBuildSubject(
     IReadOnlyList<string> ComposeErrors,
     bool OnlineChecksRan
 );
+
+

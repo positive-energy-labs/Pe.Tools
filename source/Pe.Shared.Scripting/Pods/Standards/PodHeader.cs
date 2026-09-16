@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Pe.Shared.Scripting.Pods.Standards;
@@ -52,7 +52,7 @@ public static class PodHeaderReader {
 
         foreach (var property in root.Properties()) {
             if (!TopLevelFields.Contains(property.Name))
-                findings.Add(Error($"pod.json#{property.Name}", $"Unknown field '{property.Name}'. Allowed: {string.Join(", ", TopLevelFields.Order(StringComparer.Ordinal))}."));
+                findings.Add(Error($"pod.json#{property.Name}", $"Unknown field '{property.Name}'. Allowed: {string.Join(", ", TopLevelFields.OrderBy(name => name, StringComparer.Ordinal))}."));
         }
 
         if (root["schemaVersion"]?.Value<int?>() != PodHeader.SchemaVersion)
@@ -176,3 +176,4 @@ public static class PodHeaderReader {
     private static PodGateFinding Error(string subject, string reason) =>
         new(GateId, PodGateLane.Deterministic, PodGateSeverity.Error, subject, reason);
 }
+
