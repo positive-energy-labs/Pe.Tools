@@ -88,6 +88,7 @@ export const TOOL_TITLES: Record<string, string> = {
   request_access: "Ask for access",
   read_image: "Look at an image",
   capture_view: "Capture a view",
+  diagram: "Draw a diagram",
   revit_api_docs_search: "Search the Revit docs",
   revit_api_docs_fetch: "Read the Revit docs",
 };

@@ -3,6 +3,7 @@ import { turnOf, type DocumentRequest } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
+import { diagram } from "../shared/diagram.ts";
 import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { peDo, peFind, peRead, peaHostBaseUrl, targetSet } from "./capability-tools.ts";
@@ -59,6 +60,7 @@ export const peaProductTools = {
   [targetSet.id]: targetSet,
   [captureView.id]: captureView,
   [readImage.id]: readImage,
+  [diagram.id]: diagram,
   [requestAccess.id]: requestAccess,
   [revitApiSearch.id]: revitApiSearch,
   [revitApiFetch.id]: revitApiFetch,
@@ -71,6 +73,7 @@ export const peaProductToolMetadata = {
   target_set: { category: "execute", requiresRevit: false },
   capture_view: { category: "read", requiresRevit: true },
   read_image: { category: "read", requiresRevit: false },
+  diagram: { category: "read", requiresRevit: false },
   request_access: { category: "edit", requiresRevit: false },
   revit_api_docs_search: { category: "read", requiresRevit: false },
   revit_api_docs_fetch: { category: "read", requiresRevit: false },

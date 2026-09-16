@@ -385,6 +385,7 @@ test(
       "pe_do",
       "target_set",
       "read_image",
+      "diagram",
       "request_access",
       "revit_api_docs_search",
       "revit_api_docs_fetch",

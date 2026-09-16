@@ -168,6 +168,89 @@ export const CHAT_SEED_STATE: ChatState = {
   access: "ask",
 };
 
+/** A duct system as pea passes it to the `diagram` tool: AHU, two mains, four branches, VAVs. */
+const DUCT_DIAGRAM_ARGS = {
+  title: "AHU-1 supply air",
+  direction: "LR",
+  nodes: [
+    { id: "AHU1", label: "AHU-1\n8000 cfm", shape: "stadium" },
+    { id: "M1", label: "Main A" },
+    { id: "M2", label: "Main B" },
+    { id: "B1", label: "Branch A1" },
+    { id: "B2", label: "Branch A2" },
+    { id: "B3", label: "Branch B1" },
+    { id: "B4", label: "Branch B2" },
+    { id: "V1", label: "VAV A1-1", shape: "round" },
+    { id: "V2", label: "VAV A2-1", shape: "round" },
+    { id: "V3", label: "VAV B1-1", shape: "round" },
+    { id: "V4", label: "VAV B2-1", shape: "round" },
+  ],
+  edges: [
+    { from: "AHU1", to: "M1", label: "4800 cfm", style: "thick" },
+    { from: "AHU1", to: "M2", label: "3200 cfm", style: "thick" },
+    { from: "M1", to: "B1", label: "2400 cfm" },
+    { from: "M1", to: "B2", label: "2400 cfm" },
+    { from: "M2", to: "B3", label: "1600 cfm" },
+    { from: "M2", to: "B4", label: "1600 cfm", style: "dashed" },
+    { from: "B1", to: "V1", label: "2400 cfm" },
+    { from: "B2", to: "V2", label: "2400 cfm" },
+    { from: "B3", to: "V3", label: "1600 cfm" },
+    { from: "B4", to: "V4", label: "1600 cfm" },
+  ],
+  groups: [
+    { id: "mainA", label: "Main A", nodes: ["M1", "B1", "B2", "V1", "V2"] },
+    { id: "mainB", label: "Main B", nodes: ["M2", "B3", "B4", "V3", "V4"] },
+  ],
+};
+
+/** Mastra keeps a rejected call as a `result` whose value is the validation error. */
+const DIAGRAM_REJECTED = {
+  error: true,
+  message:
+    'Tool input validation failed for diagram. Please fix the following errors and try again:\n- nodes.1.id: duplicate id "AHU"\n- edges.3.to: no node "VAV-9"',
+};
+
+/** Pea drew once with a bad spec (rejected, nothing drawn), then drew the duct system. */
+export const CHAT_DIAGRAM_STATE: ChatState = {
+  ...emptyChatState(),
+  messages: [
+    message("user-d1", "user", 40, [
+      { type: "text", text: "Sketch the AHU-1 supply duct system with airflow on each run." },
+    ]),
+    message("assistant-d1", "assistant", 41, [
+      tool(
+        "diagram-bad",
+        "diagram",
+        {
+          nodes: [
+            { id: "AHU", label: "AHU-1" },
+            { id: "AHU", label: "Main A" },
+          ],
+          edges: [
+            { from: "AHU", to: "AHU" },
+            { from: "AHU", to: "AHU" },
+            { from: "AHU", to: "AHU" },
+            { from: "AHU", to: "VAV-9" },
+          ],
+        },
+        DIAGRAM_REJECTED,
+      ),
+      tool("diagram-ok", "diagram", DUCT_DIAGRAM_ARGS, {
+        ok: true,
+        nodes: 11,
+        edges: 10,
+        groups: 2,
+      }),
+      {
+        type: "text",
+        text: "AHU-1 splits 60/40 across the two mains; Branch B2 is still planned.",
+      },
+    ]),
+  ],
+  models: CHAT_SEED_STATE.models,
+  inspect: CHAT_SEED_STATE.inspect,
+};
+
 /** Threads the seed pretends exist, as the thread list reads them. */
 export const CHAT_SEED_THREADS = [
   { id: "demo-review", title: "Level 2 coordination review", updatedAt: at(37).toISOString() },
@@ -221,6 +304,12 @@ export const CHAT_SEEDS = {
   fork: {
     title: "a thread to clone before trying another path",
     work: CHAT_SEED_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  diagram: {
+    title: "pea drew a duct system, after one rejected diagram call",
+    work: CHAT_DIAGRAM_STATE,
     readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
     page: {},
   },

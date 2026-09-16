@@ -9,9 +9,9 @@
  * No rehype plugin: the head band is a React component with state (copy flips to "copied",
  * "show all" unlatches the gate).
  */
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { isValidElement, type ReactNode } from "react";
+import { createContext, isValidElement, useContext, type ReactNode } from "react";
 
 import { Code } from "#/components/lang/code";
 import { cn } from "#/lib/utils";
@@ -47,15 +47,38 @@ function codeText(node: ReactNode): string {
   return "";
 }
 
+/**
+ * Is this fence finished? Decided from the fence's own raw text (its markdown node's span): the
+ * last line must be a closing run of the opener's character, at least as long. While a message
+ * streams, the fence under the cursor has no such line yet.
+ */
+export function fenceClosed(raw: string): boolean {
+  const lines = raw.trimEnd().split("\n");
+  const opener = /^\s*(`{3,}|~{3,})/.exec(lines[0] ?? "")?.[1];
+  if (!opener || lines.length < 2) return false;
+  const closer = lines.at(-1)!.trim();
+  return closer.length >= opener.length && closer === opener[0]!.repeat(closer.length);
+}
+
+/** The markdown source being rendered, so a fence can find its own raw text by offset. */
+const MarkdownSource = createContext("");
+
+function FencedBlock({ node, children }: { children?: ReactNode } & ExtraProps) {
+  const source = useContext(MarkdownSource);
+  const code = isValidElement<{ className?: string; children?: ReactNode }>(children)
+    ? children
+    : undefined;
+  const lang = /language-([\w#+-]+)/.exec(code?.props.className ?? "")?.[1];
+  const start = node?.position?.start.offset;
+  const end = node?.position?.end.offset;
+  const complete =
+    start === undefined || end === undefined || fenceClosed(source.slice(start, end));
+  // The trailing newline every fence carries is the fence's, not the payload's.
+  return <Code code={codeText(children).replace(/\n$/, "")} lang={lang} complete={complete} />;
+}
+
 const MARKDOWN_COMPONENTS: Components = {
-  pre: ({ children }) => {
-    const code = isValidElement<{ className?: string; children?: ReactNode }>(children)
-      ? children
-      : undefined;
-    const lang = /language-([\w#+-]+)/.exec(code?.props.className ?? "")?.[1];
-    // The trailing newline every fence carries is the fence's, not the payload's.
-    return <Code code={codeText(children).replace(/\n$/, "")} lang={lang} />;
-  },
+  pre: FencedBlock,
   // A table is the one block that can be wider than the lane. It gets its own scroll box so it
   // scrolls inside the message instead of widening the chat column.
   table: ({ node: _node, ...props }) => (
@@ -72,9 +95,11 @@ const REMARK_PLUGINS = [remarkGfm];
 export function Markdown({ text, className }: { text: string; className?: string }) {
   return (
     <div className={cn(PROSE_CLASS, className)}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
-        {text}
-      </ReactMarkdown>
+      <MarkdownSource.Provider value={text}>
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
+          {text}
+        </ReactMarkdown>
+      </MarkdownSource.Provider>
     </div>
   );
 }

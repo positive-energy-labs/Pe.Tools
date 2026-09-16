@@ -19,6 +19,18 @@
   white-space: pre;
 }
 
+/* A drawn `mermaid` block (`diagram.tsx`): the SVG fits the pane and centers; its colors are
+   already `var(--pe-*)`. */
+[data-code-pane][data-diagram] {
+  padding: 8px 12px;
+}
+[data-code-pane][data-diagram] svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
 /* `wrap`: machine prose with no line structure to protect — error text, a system prompt. */
 [data-code-pane][data-code-wrap] pre.th-code {
   white-space: pre-wrap;

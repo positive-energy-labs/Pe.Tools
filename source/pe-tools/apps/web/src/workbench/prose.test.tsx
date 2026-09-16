@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 
-import { Markdown } from "#/workbench/prose";
+import { Markdown, fenceClosed } from "#/workbench/prose";
 
 afterEach(cleanup);
 
@@ -57,4 +57,26 @@ test("a `c#` fence arrives with its whole tag", () => {
 test("a wide table scrolls inside its own box", () => {
   const { container } = chat("| a | b |\n|---|---|\n| 1 | 2 |\n");
   expect(container.querySelector("div.overflow-x-auto > table")).toBeTruthy();
+});
+
+test("a fence is closed only when its own closing fence is in the source", () => {
+  expect(fenceClosed("```mermaid\nflowchart TD\n  A --> B\n```")).toBe(true);
+  expect(fenceClosed("```mermaid\nflowchart TD\n  A --> B")).toBe(false);
+  expect(fenceClosed("```mermaid\nflowchart TD\n  A --> B\n``")).toBe(false);
+  expect(fenceClosed("```mermaid")).toBe(false);
+  expect(fenceClosed("````mermaid\n```\nstill inside\n````")).toBe(true);
+  expect(fenceClosed("````mermaid\nA\n```")).toBe(false);
+  expect(fenceClosed("~~~mermaid\nA\n~~~")).toBe(true);
+  expect(fenceClosed("~~~mermaid\nA\n```")).toBe(false);
+  expect(fenceClosed("  ```mermaid\n  A\n  ```  ")).toBe(true);
+});
+
+test("a streaming mermaid fence stays source until it closes", async () => {
+  const open = "Here:\n\n```mermaid\nflowchart LR\n  AHU --> Main";
+  const { container, rerender } = render(<Markdown text={open} />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(container.querySelector("[data-diagram]")).toBe(null);
+  expect(container.querySelector("pre")?.textContent).toContain("AHU --> Main");
+  rerender(<Markdown text={`${open}\n\`\`\`\n\nDone.`} />);
+  await waitFor(() => expect(container.querySelector("[data-diagram] svg")).toBeTruthy());
 });

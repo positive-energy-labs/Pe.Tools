@@ -1,6 +1,12 @@
 import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { toolTitle } from "@pe/agent-contracts";
+import {
+  DIAGRAM_TOOL_ID,
+  diagramSpecSchema,
+  toMermaid,
+  toolTitle,
+  type DiagramSpec,
+} from "@pe/agent-contracts";
 import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
 import { ActionButton } from "#/components/lang/action-button";
@@ -272,6 +278,14 @@ function ReasoningPart({ text }: { text: string }) {
   );
 }
 
+/** The spec a succeeded `diagram` call drew, or undefined for any other call. */
+function succeededDiagram(call: ToolCall): DiagramSpec | undefined {
+  if (call.title !== DIAGRAM_TOOL_ID || call.status !== "completed") return undefined;
+  if (readRecord(call.result)?.ok !== true) return undefined;
+  const spec = diagramSpecSchema.safeParse(call.args);
+  return spec.success ? spec.data : undefined;
+}
+
 function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval }) {
   const { resolveApproval, store } = useWorkbench();
   const pinKey = useAtomValue(store.atoms.lensPinKey);
@@ -280,6 +294,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const key = `tool:${call.id}`;
   const open = pinKey === key;
   const running = call.status === "in_progress";
+  const diagram = succeededDiagram(call);
   const failed = call.status === "failed";
   const tone = failed ? "failed" : running ? "active" : "";
   const result = failed ? (call.result ?? call.error) : call.result;
@@ -334,6 +349,10 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           {failed ? "err" : running ? "run" : "ok"}
         </span>
       </div>
+      {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
+      {diagram ? (
+        <Code code={toMermaid(diagram)} lang="mermaid" title={diagram.title ?? "diagram"} />
+      ) : null}
       {/* What the call captured, visible without opening it and while it still runs. */}
       {call.images.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">

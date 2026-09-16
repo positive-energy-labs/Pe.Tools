@@ -108,19 +108,26 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
       const interrupted =
         !terminal && !active && (messageAt < rows.length - 1 || state.display.isRunning !== true);
+      const args = call.rawInput ?? call.args;
+      const result = call.result ?? active?.result;
+      // Mastra keeps a call its input validation refused as a `result` holding the error.
+      const rejected = readRecord(result)?.error === true;
       const failed =
         call.isError === true ||
         (terminal && call.state !== "result") ||
         active?.status === "error" ||
+        rejected ||
         interrupted;
       const completed = terminal || active?.status === "completed";
-      const args = call.rawInput ?? call.args;
-      const result = call.result ?? active?.result;
       const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = failed
         ? {
             status: "failed",
-            error: call.errorText || text(result) || "Tool call ended without a terminal result.",
+            error:
+              call.errorText ||
+              readString(readRecord(result)?.message) ||
+              text(result) ||
+              "Tool call ended without a terminal result.",
             result,
           }
         : { status: completed ? "completed" : "in_progress", result };

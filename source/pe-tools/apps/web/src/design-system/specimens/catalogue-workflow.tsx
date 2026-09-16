@@ -77,19 +77,35 @@ const POD = `[Pod("door.audit")]
 public async Task<Element> Get(string id) => await _db.Find(id); // one element
 `;
 
+/** A duct system as pea would sketch it: one AHU, two mains, branches, terminals (10 nodes). */
+const DUCT_DIAGRAM = `flowchart LR
+  AHU[AHU-1] -->|6000 cfm| M1[Main A]
+  AHU -->|4000 cfm| M2[Main B]
+  M1 --> B1[Branch A1]
+  M1 --> B2[Branch A2]
+  M2 --> B3[Branch B1]
+  B1 --> T1([VAV A1-1])
+  B1 --> T2([VAV A1-2])
+  B2 --> T3([VAV A2-1])
+  B3 --> T4([VAV B1-1])
+`;
+
 function CodeCatalogue() {
   const [draft, setDraft] = useState('{ "clear_width": 36 }');
   return (
     <Demo
       label="Code / JsonEditor"
       consumers="chat fenced blocks, the lens tool cell, receipts, ops output, and the settings panes"
-      spec="A code payload is a machine-operated object, so it wears the artifact frame: language left, machine facts right — line count, copy, and, past 64 KB, show all. Code owns the height clamp; the container owns show/hide."
+      spec="A code payload is a machine-operated object, so it wears the artifact frame: language left, machine facts right — line count, copy, and, past 64 KB, show all. A closed mermaid fence draws as a diagram with a source toggle; unsupported types stay source. Code owns the height clamp; the container owns show/hide."
     >
       <div className="max-w-lg">
         <Code code={POD} lang="csharp" />
       </div>
       <div className="max-w-lg">
         <Code code={FAILED_OUT} lang="json" title="out" tone="error" />
+      </div>
+      <div className="max-w-lg">
+        <Code code={DUCT_DIAGRAM} lang="mermaid" />
       </div>
       <CounterExample why="editing is a textarea's job — caret, selection and undo — so the editable half is paint with no chrome, and its caller frames it">
         <div className="max-w-lg">
