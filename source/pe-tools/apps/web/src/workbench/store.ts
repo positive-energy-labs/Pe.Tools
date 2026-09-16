@@ -10,6 +10,10 @@ export interface WorkbenchAttachment {
   mimeType?: string;
   text?: string;
   data?: string;
+  /** Bytes, for the chip. */
+  size?: number;
+  /** An object URL for an image chip's thumbnail; the composer revokes it when the chip goes. */
+  preview?: string;
 }
 
 interface ChatDraft {

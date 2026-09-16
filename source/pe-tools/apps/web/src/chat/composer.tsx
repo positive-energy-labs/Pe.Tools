@@ -1,8 +1,10 @@
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -16,6 +18,7 @@ import { selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { chipRecipe } from "#/components/lang/chip";
 import { cn } from "#/lib/utils";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation";
@@ -64,6 +67,41 @@ export function Composer({
     store.actions.setDraft(update);
   };
   const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const addFiles = async (list: ArrayLike<File>) => {
+    const { admitted, refusal } = admitFiles(Array.from(list), attachments.length);
+    setRefusal(refusal);
+    if (admitted.length === 0) return;
+    const next = await Promise.all(admitted.map(readAttachment));
+    setAttachments((previous) => [...previous, ...next]);
+  };
+  // A thumbnail's object URL lives exactly as long as its chip: removed or sent, it is revoked.
+  const previews = useRef(new Set<string>());
+  useEffect(() => {
+    const live = new Set(attachments.flatMap((attachment) => attachment.preview ?? []));
+    for (const url of previews.current) if (!live.has(url)) URL.revokeObjectURL(url);
+    previews.current = live;
+  }, [attachments]);
+  // A file dropped anywhere else must not navigate the tab to it.
+  useEffect(() => {
+    const guard = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+    return () => {
+      window.removeEventListener("dragover", guard);
+      window.removeEventListener("drop", guard);
+    };
+  }, []);
+  const carriesFiles = (event: ReactDragEvent) =>
+    Array.from(event.dataTransfer?.types ?? []).includes("Files");
+  const onDragOver = (event: ReactDragEvent) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    setDragging(true);
+  };
   const menuId = useId();
   const [activeCommand, setActiveCommand] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
@@ -165,8 +203,7 @@ export function Composer({
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    const next = await Promise.all(Array.from(files).map(readAttachment));
-    setAttachments((previous) => [...previous, ...next]);
+    await addFiles(files);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -208,34 +245,42 @@ export function Composer({
 
       {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
           input reads as a place you write rather than a strip the transcript ran into. */}
+      {/* Files dropped anywhere on the box attach; while a file drag is over it, the box takes
+          the recess ground. */}
       <div
         className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
-        data-surface="artifact"
+        data-surface={dragging ? "recess" : "artifact"}
+        data-drop-zone=""
+        onDragEnter={onDragOver}
+        onDragOver={onDragOver}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setDragging(false);
+          void addFiles(event.dataTransfer.files);
+        }}
       >
         {topBar}
 
         {attachments.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+          <div className="flex flex-wrap items-end gap-1.5 px-3 pt-3">
             {attachments.map((attachment, index) => (
-              <span
+              <AttachmentChip
                 key={index}
-                className="hairline-x-faint hairline-y-faint inline-flex items-center gap-1 rounded-sm px-2 py-0.5 t-small t-upper"
-                data-surface="recess"
-              >
-                {attachment.name ?? "attachment"}
-                <Press
-                  type="button"
-                  title="Remove"
-                  onClick={() =>
-                    setAttachments((previous) =>
-                      previous.filter((_, position) => position !== index),
-                    )
-                  }
-                >
-                  <X className="size-3" />
-                </Press>
-              </span>
+                attachment={attachment}
+                onRemove={() =>
+                  setAttachments((previous) => previous.filter((_, position) => position !== index))
+                }
+              />
             ))}
+          </div>
+        ) : null}
+        {refusal ? (
+          <div className="px-3 pt-2 t-small" data-tone="caution">
+            {refusal}
           </div>
         ) : null}
 
@@ -260,6 +305,12 @@ export function Composer({
               setMenuDismissed(false);
             }}
             onKeyDown={onKeyDown}
+            onPaste={(event) => {
+              const files = event.clipboardData.files;
+              if (files.length === 0) return;
+              event.preventDefault();
+              void addFiles(files);
+            }}
           />
           {/* Control row: attachments + session controls (model/access), then Send — the same
               manifest verb Enter runs, with the Situation's flag (moved here from the head,
@@ -294,6 +345,59 @@ export function Composer({
   );
 }
 
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: WorkbenchAttachment;
+  onRemove: () => void;
+}) {
+  const { base, label, count } = chipRecipe();
+  const name = attachment.name ?? "attachment";
+  return (
+    <span
+      className={base({ class: attachment.preview ? "h-auto py-[3px]" : undefined })}
+      data-surface="artifact"
+      title={`${name} is attached to the next message`}
+    >
+      {attachment.preview ? (
+        <img src={attachment.preview} alt="" className="size-8 object-cover" />
+      ) : null}
+      <span className={label()}>{name}</span>
+      {!attachment.preview && attachment.size !== undefined ? (
+        <span className={count()}>{formatBytes(attachment.size)}</span>
+      ) : null}
+      <Press type="button" tone="quiet" title={`Remove ${name}`} onClick={onRemove}>
+        <X className="size-3" />
+      </Press>
+    </span>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ponytail: our own ceiling, 5 MB a file and 10 a message; the model provider's limit is the real
+// authority. Raise these when a provider accepts more and users hit them.
+const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
+
+/** The one attachment rule: which files fit beside `held` ones, and one line on why any did not. */
+function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
+  const admitted: File[] = [];
+  let refusal: string | undefined;
+  for (const file of files) {
+    if (file.size > ATTACHMENT_LIMITS.fileBytes)
+      refusal = `${file.name} was not added: over the ${ATTACHMENT_LIMITS.fileBytes / 1024 / 1024} MB limit per file`;
+    else if (held + admitted.length >= ATTACHMENT_LIMITS.files)
+      refusal = `${file.name} was not added: ${ATTACHMENT_LIMITS.files} files per message at most`;
+    else admitted.push(file);
+  }
+  return { admitted, refusal };
+}
+
 async function readAttachment(file: File): Promise<WorkbenchAttachment> {
   const textual =
     file.type.startsWith("text/") ||
@@ -301,12 +405,19 @@ async function readAttachment(file: File): Promise<WorkbenchAttachment> {
       file.name,
     );
   if (textual) {
-    return { name: file.name, mimeType: file.type || "text/plain", text: await file.text() };
+    return {
+      name: file.name,
+      mimeType: file.type || "text/plain",
+      size: file.size,
+      text: await file.text(),
+    };
   }
   return {
     name: file.name,
     mimeType: file.type || "application/octet-stream",
+    size: file.size,
     data: base64FromBuffer(await file.arrayBuffer()),
+    ...(file.type.startsWith("image/") ? { preview: URL.createObjectURL(file) } : {}),
   };
 }
 

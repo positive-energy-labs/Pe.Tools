@@ -1,4 +1,4 @@
-import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight } from "lucide-react";
@@ -19,6 +19,7 @@ import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
+import { FactChip } from "#/components/lang/chip";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -103,22 +104,22 @@ function MomentHead({ message, turn }: { message: ChatMessage; turn: number }) {
 function UserMoment({ message, head }: { message: ChatMessage; head: ReactNode }) {
   const text = message.parts
     .map((part) => (part.type === "text" ? part.text : ""))
-    .join("")
+    .join("\n")
     .trim();
+  const attachments = message.parts.flatMap((part) =>
+    part.type === "image" || part.type === "file" ? [part] : [],
+  );
   return (
     <>
       {head}
       <div className="ml-auto flex w-fit max-w-[76%] flex-col items-end gap-1.5">
-        {message.parts.map((part, index) =>
-          part.type === "image" ? (
-            <img
-              key={index}
-              src={part.image}
-              alt="attachment"
-              className="hairline-x-faint hairline-y-faint max-h-64 rounded-sm object-contain"
-            />
-          ) : null,
-        )}
+        {attachments.length > 0 ? (
+          <div className="flex flex-wrap items-end justify-end gap-1.5">
+            {attachments.map((part, index) => (
+              <Attachment key={index} part={part} />
+            ))}
+          </div>
+        ) : null}
 
         {text ? (
           <div className="boundary-l px-3 py-1.5 t-prose text-ink" data-surface="recess">
@@ -174,10 +175,50 @@ function Part({ part }: { part: ChatPart }): ReactNode {
     case "reasoning":
       return <ReasoningPart text={part.text} />;
     case "image":
-      return <img src={part.image} alt="" className="max-h-64 object-contain" />;
+    case "file":
+      return <Attachment part={part} />;
     case "tool-call":
       return <ToolCallPart call={part.call} approval={part.approval} />;
   }
+}
+
+type AttachmentPart = Extract<ChatPart, { type: "image" | "file" }>;
+
+/** A sent file: an image opens full size in a native dialog; anything else is a name chip. */
+function Attachment({ part }: { part: AttachmentPart }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  if (part.type === "file")
+    return (
+      <FactChip title={`${part.name} (${part.mimeType}), sent with this message`}>
+        <span>{part.name}</span> <span className="text-ink-2">{part.mimeType}</span>
+      </FactChip>
+    );
+  const name = part.name ?? "attachment";
+  return (
+    <>
+      <Press
+        type="button"
+        hover="bare"
+        title={`Open ${name} full size`}
+        onClick={() => dialog.current?.showModal()}
+      >
+        <img
+          src={part.image}
+          alt={name}
+          className="hairline-x-faint hairline-y-faint max-h-40 object-contain"
+        />
+      </Press>
+      <dialog
+        ref={dialog}
+        aria-label={name}
+        className="m-auto max-h-[92dvh] max-w-[92vw] p-0"
+        data-surface="page"
+        onClick={() => dialog.current?.close()}
+      >
+        <img src={part.image} alt={name} className="max-h-[92dvh] max-w-[92vw] object-contain" />
+      </dialog>
+    </>
+  );
 }
 
 class PartsBoundary extends Component<{ children: ReactNode }, { error?: string }> {

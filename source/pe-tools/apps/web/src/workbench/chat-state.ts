@@ -154,7 +154,8 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
 export type ChatPart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
-  | { type: "image"; image: string }
+  | { type: "image"; image: string; name?: string }
+  | { type: "file"; name: string; mimeType: string }
   | { type: "tool-call"; call: ToolCall; approval?: Approval };
 
 /** One row of the chat transcript. */
@@ -188,13 +189,13 @@ export function selectMessages(state: ChatState): ChatMessage[] {
     const parts: ChatPart[] = [];
     for (const part of message.content.parts) {
       if (part.type === "text") {
-        if (part.text.trim()) parts.push({ type: "text", text: part.text });
+        const text = textPart(part.text, user);
+        if (text) parts.push(text);
       } else if (part.type === "reasoning") {
         if (part.reasoning.trim()) parts.push({ type: "reasoning", text: part.reasoning });
       } else if (part.type === "file") {
-        const url = imageSource(undefined, part.data, part.mimeType);
-        if (url && (!part.mimeType || part.mimeType.startsWith("image/")))
-          parts.push({ type: "image", image: url });
+        const file = filePart(part.data, part.mimeType, readString(readRecord(part)?.filename));
+        if (file) parts.push(file);
       } else if (part.type === "tool-invocation") {
         const call = callsById.get(part.toolInvocation.toolCallId);
         if (!call || emitted.has(call.id)) continue;
@@ -202,9 +203,11 @@ export function selectMessages(state: ChatState): ChatMessage[] {
         parts.push(toolPart(call));
       } else if (part.type === "data-signal" || part.type === "data-user-message") {
         const data = readRecord(part.data);
-        const said = signalText(data?.contents);
-        if (said.trim() && (user || data?.tagName === "route-workspace"))
-          parts.push({ type: "text", text: said });
+        if (user) parts.push(...signalParts(data?.contents));
+        else if (data?.tagName === "route-workspace") {
+          const said = signalText(data.contents);
+          if (said.trim()) parts.push({ type: "text", text: said });
+        }
       }
     }
     if (!user)
@@ -227,6 +230,48 @@ export function selectMessages(state: ChatState): ChatMessage[] {
   return messages.filter(
     (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
   );
+}
+
+/** Mastra inlines a text attachment into the user turn as `[File: name]` and a fence. */
+const INLINED_FILE = /^\[File: (.+)\]\n(`{3,})\n[\s\S]*\n\2$/;
+
+function textPart(text: string, user: boolean): ChatPart | undefined {
+  if (!text.trim()) return undefined;
+  const inlined = user ? INLINED_FILE.exec(text) : null;
+  return inlined
+    ? { type: "file", name: inlined[1]!, mimeType: "text/plain" }
+    : { type: "text", text };
+}
+
+function filePart(
+  data: string | undefined,
+  mimeType: string | undefined,
+  name: string | undefined,
+): ChatPart | undefined {
+  if (mimeType && !mimeType.startsWith("image/"))
+    return { type: "file", name: name ?? "file", mimeType };
+  const image = imageSource(data, data, mimeType);
+  return image ? { type: "image", image, ...(name ? { name } : {}) } : undefined;
+}
+
+/** A live user signal's `contents`: its text, then the files Mastra attached to the turn. */
+function signalParts(contents: unknown): ChatPart[] {
+  if (!Array.isArray(contents)) {
+    const text = typeof contents === "string" ? textPart(contents, true) : undefined;
+    return text ? [text] : [];
+  }
+  return contents.flatMap((entry) => {
+    const record = readRecord(entry);
+    const part =
+      record?.type === "file"
+        ? filePart(
+            readString(record.data),
+            readString(record.mediaType),
+            readString(record.filename),
+          )
+        : textPart(readString(record?.text) ?? "", true);
+    return part ? [part] : [];
+  });
 }
 
 function signalText(value: unknown): string {

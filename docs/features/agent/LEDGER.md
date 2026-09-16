@@ -143,7 +143,7 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
-- Chat build, in order, each slice with a red test first: (3) attachments: paste, drop, image previews, size limits, sent attachments shown in the thread; (4) pea's captured images inline under the tool call that took them; (5) a copy button per message, `new` and `fork` as route verbs.
+- Chat build, in order, each slice with a red test first: (4) pea's captured images inline under the tool call that took them; (5) a copy button per message, `new` and `fork` as route verbs.
 
 - Host zero-holder 404 lists every connected session with no year filter, and Pea reads that text, not `resolveScope`; carry the file year to the host or filter `eligible` there (review F8).
 - `heldDocuments` is the active document only (`ponytail:` at `apps/host/src/bridge.ts`), so a Revit tab switch flips the Scope to `unheld` while the file is open two feet away (F11).
