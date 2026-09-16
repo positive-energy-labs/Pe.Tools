@@ -40,6 +40,7 @@ import { yaml } from "@tanstack/highlight/languages/yaml";
 import { artifactFrameRecipe } from "#/components/lang/artifact-frame";
 import { csharp } from "#/components/lang/csharp-language";
 import { Press } from "#/components/lang/press";
+import { diagramKind, useDiagram } from "#/components/lang/diagram";
 
 import "./code.css";
 
@@ -112,6 +113,11 @@ export interface CodeProps {
    */
   wrap?: boolean;
   tone?: "error";
+  /**
+   * False while the payload is still arriving (an open markdown fence). A `mermaid` block shows
+   * its source until then and never draws a half-written graph.
+   */
+  complete?: boolean;
 }
 
 export function Code({
@@ -123,10 +129,18 @@ export function Code({
   clamp = true,
   wrap,
   tone,
+  complete = true,
 }: CodeProps) {
   const { copied, copy } = useCopy();
   const [showAll, setShowAll] = useState(false);
   const gated = code.length > TOKENIZE_LIMIT;
+  // A `mermaid` block draws once complete, supported, and under the gate; else it is source.
+  const mermaid = lang?.trim().toLowerCase() === "mermaid";
+  const drawable = mermaid && !gated && diagramKind(code) === "supported";
+  const [view, setView] = useState<"diagram" | "source">("diagram");
+  const diagram = useDiagram(code, drawable && complete);
+  const failed = diagram && "error" in diagram ? diagram.error : undefined;
+  const svg = view === "diagram" && diagram && "svg" in diagram ? diagram.svg : undefined;
   const shown = gated && !showAll ? code.slice(0, TOKENIZE_LIMIT) : code;
   const lines = useMemo(() => code.split("\n").length, [code]);
 
@@ -135,7 +149,7 @@ export function Code({
     [gated, code, lang, decorations, lineNumbers],
   );
 
-  const noGrammar = lang !== undefined && !holdsGrammar(lang);
+  const noGrammar = lang !== undefined && !mermaid && !holdsGrammar(lang);
 
   const { base, head } = artifactFrameRecipe();
   const body = {
@@ -160,6 +174,11 @@ export function Code({
             no grammar
           </span>
         ) : null}
+        {mermaid && complete && !drawable ? (
+          <span className="t-small face-mono" data-tone="caution">
+            source only
+          </span>
+        ) : null}
         <span className="ml-auto flex items-baseline gap-2">
           <span className="t-small face-mono tabular-nums text-ink-mute">
             {lines} {lines === 1 ? "line" : "lines"}
@@ -169,12 +188,28 @@ export function Code({
               show all
             </Press>
           ) : null}
+          {failed ? (
+            <Press tone="quiet" size="label" title={failed} data-tone="caution" aria-disabled>
+              diagram failed
+            </Press>
+          ) : drawable && complete ? (
+            <Press
+              tone="quiet"
+              size="label"
+              onClick={() => setView(view === "diagram" ? "source" : "diagram")}
+            >
+              {view === "diagram" ? "source" : "diagram"}
+            </Press>
+          ) : null}
           <Press tone="quiet" size="label" onClick={() => copy(code)}>
             {copied ? "copied" : "copy"}
           </Press>
         </span>
       </div>
-      {html === null ? (
+      {svg !== undefined ? (
+        // eslint-disable-next-line react/no-danger -- sanitized in `diagram.tsx`
+        <div {...body} data-diagram="" dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : html === null ? (
         <div {...body}>
           <pre className="th-code">{shown}</pre>
         </div>
