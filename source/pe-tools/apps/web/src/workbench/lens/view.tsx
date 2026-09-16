@@ -36,6 +36,7 @@ export function Lens({
   const {
     messages,
     moments,
+    showEmpty,
     traceCells,
     breakdown,
     userTurns,
@@ -125,7 +126,7 @@ export function Lens({
           </div>
 
           <div {...annotation("chat")} ref={chatRef}>
-            {moments.length === 0 ? (
+            {showEmpty ? (
               <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
                 <h1 className={emptyMark()} data-tone="pea">
                   Pea

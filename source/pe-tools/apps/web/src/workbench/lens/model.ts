@@ -484,9 +484,12 @@ export function useLensModel({
     // when the lane collapses, so nothing else would trigger a re-measure). Hover survives via
     // hoverKeyRef.
   }, [moments, traceCells, mode, sideOpen, loading, intent, setIntent]);
+  // An empty thread is a claim; while the body loads it is not known (the composer head says so).
+  const showEmpty = !loading && moments.length === 0;
   return {
     messages,
     moments,
+    showEmpty,
     traceCells,
     breakdown,
     userTurns,

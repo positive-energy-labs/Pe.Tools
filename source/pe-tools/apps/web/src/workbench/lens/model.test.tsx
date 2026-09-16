@@ -115,6 +115,7 @@ function Harness({ state }: { state: ChatState }) {
     <div ref={lens.frameRef}>
       <div ref={lens.scrollerRef} data-testid="scroller">
         <div ref={lens.stripRef} />
+        {lens.showEmpty ? <p>no messages in this thread yet</p> : null}
         <div ref={lens.chatRef} data-testid="chat">
           {lens.moments.map((moment) => (
             <Section key={moment.id} id={moment.id} register={lens.registerMoment} />
@@ -255,4 +256,18 @@ test("a touch fling that coasts into the tail re-attaches follow when the scroll
   expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
   act(() => void fireEvent(scroller, new Event("scrollend")));
   expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(true);
+});
+
+test("the empty state claims an empty thread only once the thread has loaded", async () => {
+  const lane = setup({ loading: chatLoading({ state: "absent" }, false) });
+  const { rerender, queryByText } = render(lane.view(emptyChatState()));
+  expect(queryByText("no messages in this thread yet")).toBe(null);
+  lane.bench.loading = chatLoading(READY, true);
+  rerender(lane.view(emptyChatState()));
+  expect(queryByText("no messages in this thread yet")).toBe(null);
+  lane.bench.loading = chatLoading(READY, false);
+  rerender(lane.view(emptyChatState()));
+  expect(queryByText("no messages in this thread yet")).not.toBe(null);
+  rerender(lane.view(thread(1)));
+  expect(queryByText("no messages in this thread yet")).toBe(null);
 });
