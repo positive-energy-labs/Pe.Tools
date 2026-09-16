@@ -8,6 +8,7 @@ import { SidePane, sidePaneRecipe } from "#/components/lang/side-pane";
 import { Switch, switchRecipe } from "#/components/lang/switch";
 import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
+import { Surface, SurfaceCell, SurfaceHandle } from "#/components/lang/surface";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -17,6 +18,25 @@ export function UiLayoutSpecimens() {
   const [active, setActive] = useState<string | null>(ITEMS[0]?.id ?? null);
   return (
     <>
+      <SpecimenFrame name="Surface" importPath="#/components/lang/surface">
+        <Surface columns="minmax(0,1fr) var(--gutter) minmax(0,1fr)">
+          <SurfaceCell style={{ gridColumn: 1 }}>
+            <span>first cell</span>
+          </SurfaceCell>
+          <SurfaceHandle
+            axis="horizontal"
+            value={20}
+            min={0}
+            growth={1}
+            containerSize={() => 100}
+            onResize={() => {}}
+            onReset={() => {}}
+          />
+          <SurfaceCell style={{ gridColumn: 3 }}>
+            <span>second cell</span>
+          </SurfaceCell>
+        </Surface>
+      </SpecimenFrame>
       <RecipeGrid
         name="Pane"
         importPath="#/components/lang/pane"

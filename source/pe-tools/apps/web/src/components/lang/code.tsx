@@ -37,7 +37,7 @@ import { ts } from "@tanstack/highlight/languages/ts";
 import { tsx } from "@tanstack/highlight/languages/tsx";
 import { yaml } from "@tanstack/highlight/languages/yaml";
 
-import { artifactFrameRecipe } from "#/components/lang/artifact-frame";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { csharp } from "#/components/lang/csharp-language";
 import { Press } from "#/components/lang/press";
 import { diagramKind, useDiagram } from "#/components/lang/diagram";
@@ -90,6 +90,7 @@ function holdsGrammar(tag: string): boolean {
 
 /** Past this many bytes the block shows a slice and never tokenizes; see the header. */
 const TOKENIZE_LIMIT = 64 * 1024;
+const FRAME_CLASS = "not-prose";
 
 export interface CodeProps {
   code: string;
@@ -153,7 +154,6 @@ export function Code({
 
   const noGrammar = lang !== undefined && !mermaid && !holdsGrammar(lang);
 
-  const { base, head } = artifactFrameRecipe();
   const body = {
     "data-code-pane": "",
     "data-code-wrap": wrap ? "" : undefined,
@@ -166,22 +166,28 @@ export function Code({
     // `not-prose`: a block is often dropped into rendered markdown, and typography's rules —
     // `prose-code:*` above all — would otherwise box the `<code>` inside our `<pre>` as if it
     // were inline code. The frame and `code.css` own every value inside; prose owns none.
-    <div className={base({ class: "not-prose" })} role="group" aria-label={title ?? lang ?? "code"}>
-      <div className={head()}>
-        {(title ?? lang) ? (
-          <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
-        ) : null}
-        {noGrammar ? (
-          <span className="t-small face-mono" data-tone="caution">
-            no grammar
-          </span>
-        ) : null}
-        {mermaid && complete && !drawable ? (
-          <span className="t-small face-mono" data-tone="caution">
-            source only
-          </span>
-        ) : null}
-        <span className="ml-auto flex items-baseline gap-2">
+    <ArtifactFrame
+      className={FRAME_CLASS}
+      label={title ?? lang ?? "code"}
+      head={
+        <>
+          {(title ?? lang) ? (
+            <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+          ) : null}
+          {noGrammar ? (
+            <span className="t-small face-mono" data-tone="caution">
+              no grammar
+            </span>
+          ) : null}
+          {mermaid && complete && !drawable ? (
+            <span className="t-small face-mono" data-tone="caution">
+              source only
+            </span>
+          ) : null}
+        </>
+      }
+      headTrail={
+        <span className="flex items-baseline gap-2">
           <span className="t-small face-mono tabular-nums text-ink-mute">
             {lines} {lines === 1 ? "line" : "lines"}
           </span>
@@ -212,7 +218,8 @@ export function Code({
             {copied ? "copied" : "copy"}
           </Press>
         </span>
-      </div>
+      }
+    >
       {failed && !sourceOpen ? null : svg !== undefined ? (
         // eslint-disable-next-line react/no-danger -- sanitized in `diagram.tsx`
         <div {...body} data-diagram="" dangerouslySetInnerHTML={{ __html: svg }} />
@@ -224,7 +231,7 @@ export function Code({
         // eslint-disable-next-line react/no-danger -- highlighter output, escaped upstream
         <div {...body} dangerouslySetInnerHTML={{ __html: html }} />
       )}
-    </div>
+    </ArtifactFrame>
   );
 }
 

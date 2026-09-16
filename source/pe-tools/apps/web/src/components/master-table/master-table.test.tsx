@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { NumberCell } from "#/components/master-table/cells";
+import { Press } from "#/components/lang/press";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState } from "#/components/master-table/model";
 
@@ -173,6 +174,24 @@ test("scope emptiness and filter emptiness remain distinct explanations", () => 
 
   view.rerender(table({ tableState: { ...emptyState, filters: { cat: "missing" } } }));
   expect(screen.getByText(/all 3 rows in scope are filtered out/i)).toBeTruthy();
+});
+
+test("the table owns one rail, optional filters, and rail actions", () => {
+  const { container, rerender } = renderTable({
+    modes: <Press>table mode</Press>,
+    actions: <Press>export</Press>,
+  });
+
+  expect(container.querySelectorAll("[data-slot='rail']")).toHaveLength(1);
+  expect(container.querySelector("[data-slot='table-filters']")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "table mode" }).closest("[data-slot='rail']"),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "export" }).closest("[data-slot='rail']")).toBeTruthy();
+
+  rerender(table({ chips: [{ label: "narrowed", onClear: () => undefined }] }));
+  expect(container.querySelector("[data-slot='table-filters']")).toBeTruthy();
+  expect(screen.getByText("narrowed")).toBeTruthy();
 });
 
 test("grid keys move the roving cell focus and release Tab at the outer boundary", () => {

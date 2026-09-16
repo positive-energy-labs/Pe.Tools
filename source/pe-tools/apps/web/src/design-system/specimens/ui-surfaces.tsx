@@ -19,11 +19,22 @@ import {
   dialogRecipe,
 } from "#/components/lang/dialog";
 import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
-import { RecipeGrid } from "./recipe-grid";
+import { Rail } from "#/components/lang/rail";
+import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiSurfaceSpecimens() {
   return (
     <>
+      <SpecimenFrame name="Rail" importPath="#/components/lang/rail">
+        <div className="grid w-80 gap-2">
+          <Rail lead={<span className="t-small t-upper">lead only</span>} />
+          <Rail
+            ground="recess"
+            lead={<span className="t-small t-upper">lead and trail</span>}
+            trail={<Press size="label">open</Press>}
+          />
+        </div>
+      </SpecimenFrame>
       <RecipeGrid
         name="Card"
         importPath="#/components/lang/card"

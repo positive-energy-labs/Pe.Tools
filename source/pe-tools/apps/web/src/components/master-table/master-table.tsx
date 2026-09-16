@@ -4,6 +4,8 @@ import { useTable, type RowData } from "@tanstack/react-table";
 import { cellFactsText, cellStateLabel } from "#/components/lang/cell";
 import { NarrowChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import { MasterTableBody } from "#/components/master-table/master-table-body";
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
@@ -27,6 +29,9 @@ export interface MasterTableProps<Row extends RowData> {
   searchPlaceholder?: string;
   chips?: { label: string; onClear: () => void }[];
   summary?: ReactNode;
+  filters?: ReactNode;
+  modes?: ReactNode;
+  actions?: ReactNode;
   empty?: ReactNode;
   onRowClick?: (row: Row) => void;
   rowClassName?: (row: Row) => string | undefined;
@@ -48,6 +53,9 @@ export function MasterTable<Row extends RowData>({
   searchPlaceholder,
   chips = [],
   summary,
+  filters,
+  modes,
+  actions,
   empty,
   onRowClick,
   rowClassName,
@@ -170,10 +178,46 @@ export function MasterTable<Row extends RowData>({
       else filters[key] = value;
       return { ...state, filters };
     });
+  const hasFilters =
+    filters != null || chips.length > 0 || Boolean(resolvedState.query) || activeFilters.length > 0;
+  const head = (
+    <>
+      <span
+        className="t-small t-upper"
+        title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
+      >
+        {scopeLabel}
+      </span>
+      {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
+    </>
+  );
+  const headTrail = (
+    <>
+      {searchPlaceholder && (
+        <div className="w-44">
+          <Input
+            face="mono"
+            value={resolvedState.query}
+            onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
+            placeholder={searchPlaceholder}
+            title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
+          />
+        </div>
+      )}
+      {modes}
+      {actions}
+    </>
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1">
+    <ArtifactFrame className="flex min-h-0 flex-1 flex-col" head={head} headTrail={headTrail}>
+      {hasFilters && (
+        <div
+          data-slot="table-filters"
+          className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-1 hairline-b"
+        >
+          {filters}
+          {/*
         <span
           className="t-small t-upper"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
@@ -198,44 +242,46 @@ export function MasterTable<Row extends RowData>({
           </span>
         )}
         {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
-        {chips.map((chip) => (
-          <NarrowChip
-            key={chip.label}
-            label={chip.label}
-            count={visibleRows.length}
-            onRemove={chip.onClear}
-            title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-          />
-        ))}
-        {resolvedState.query && (
-          <NarrowChip
-            label={`search: ${resolvedState.query}`}
-            count={visibleRows.length}
-            onRemove={() => updateState((state) => ({ ...state, query: "" }))}
-            title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-          />
-        )}
-        {activeFilters.map((column) => (
-          <NarrowChip
-            key={column.key}
-            label={`${column.label}: ${labelOf(column, rows, resolvedState.filters[column.key] ?? "")}`}
-            count={visibleRows.length}
-            onRemove={() => setFilter(column.key, null)}
-            title="A column filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-          />
-        ))}
-        {activeFilters.length > 0 && (
-          <Press
-            type="button"
-            onClick={() => updateState((state) => ({ ...state, filters: {} }))}
-            title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-            tone="quiet"
-            size="label"
-          >
-            clear column filters
-          </Press>
-        )}
-      </div>
+        */}
+          {chips.map((chip) => (
+            <NarrowChip
+              key={chip.label}
+              label={chip.label}
+              count={visibleRows.length}
+              onRemove={chip.onClear}
+              title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+            />
+          ))}
+          {resolvedState.query && (
+            <NarrowChip
+              label={`search: ${resolvedState.query}`}
+              count={visibleRows.length}
+              onRemove={() => updateState((state) => ({ ...state, query: "" }))}
+              title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+            />
+          )}
+          {activeFilters.map((column) => (
+            <NarrowChip
+              key={column.key}
+              label={`${column.label}: ${labelOf(column, rows, resolvedState.filters[column.key] ?? "")}`}
+              count={visibleRows.length}
+              onRemove={() => setFilter(column.key, null)}
+              title="A column filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+            />
+          ))}
+          {activeFilters.length > 0 && (
+            <Press
+              type="button"
+              onClick={() => updateState((state) => ({ ...state, filters: {} }))}
+              title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
+              tone="quiet"
+              size="label"
+            >
+              clear column filters
+            </Press>
+          )}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table
@@ -315,6 +361,6 @@ export function MasterTable<Row extends RowData>({
           }}
         </table.Subscribe>
       )}
-    </div>
+    </ArtifactFrame>
   );
 }

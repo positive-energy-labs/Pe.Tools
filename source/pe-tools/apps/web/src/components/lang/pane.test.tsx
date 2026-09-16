@@ -144,11 +144,11 @@ test("workspace resize is opt-in and keyboard accessible", () => {
   );
   const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
 
-  expect(workspace.style.gridTemplateRows).toBe("340px 8px minmax(0, 1fr)");
+  expect(workspace.style.gridTemplateRows).toBe("340px var(--gutter) minmax(0, 1fr)");
   fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), {
     key: "ArrowDown",
   });
-  expect(workspace.style.gridTemplateRows).toBe("356px 8px minmax(0, 1fr)");
+  expect(workspace.style.gridTemplateRows).toBe("356px var(--gutter) minmax(0, 1fr)");
 });
 
 test("a missing persisted size starts at the declared default", () => {
@@ -167,7 +167,7 @@ test("a missing persisted size starts at the declared default", () => {
   );
   const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
 
-  expect(workspace.style.gridTemplateRows).toBe("374px 8px minmax(0, 1fr)");
+  expect(workspace.style.gridTemplateRows).toBe("374px var(--gutter) minmax(0, 1fr)");
 });
 
 test("controlled collapse and inspector span are reflected by the workspace", () => {
@@ -188,7 +188,7 @@ test("controlled collapse and inspector span are reflected by the workspace", ()
   );
   const workspace = view.container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
 
-  expect(workspace.style.gridTemplateRows).toBe("34px 8px minmax(0, 1fr)");
+  expect(workspace.style.gridTemplateRows).toBe("34px var(--gutter) minmax(0, 1fr)");
   expect(workspace.dataset.inspectorSpan).toBe("visual");
 
   view.rerender(
@@ -200,4 +200,85 @@ test("controlled collapse and inspector span are reflected by the workspace", ()
     />,
   );
   expect(workspace.dataset.inspectorSpan).toBe("full");
+});
+
+test("a pane header owns one rail and no halo node", () => {
+  const { container } = render(
+    <Pane kind="content" title="rooms">
+      body
+    </Pane>,
+  );
+
+  expect(container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
+  expect(container.querySelector("[data-slot='pane-halo']")).toBeNull();
+});
+
+test("a collapsed flank keeps its shortcut registration and hides its body", () => {
+  const run = vi.fn();
+  const { container } = render(
+    <Pane
+      kind="flank"
+      title="rooms"
+      collapsed
+      shortcuts={[{ hotkey: "J", label: "next room", callback: run }]}
+    >
+      hidden body
+    </Pane>,
+  );
+  const pane = container.querySelector<HTMLElement>("[data-slot='pane']")!;
+
+  act(() => pane.focus());
+  fireEvent.keyDown(pane, { key: "j", code: "KeyJ" });
+  expect(run).toHaveBeenCalledOnce();
+  expect(screen.getByText("rooms")).toBeTruthy();
+  expect(screen.queryByText("hidden body")).toBeNull();
+  expect(container.querySelector("[data-slot='pane-header']")).toBeNull();
+});
+
+test("pane boundaries show suspension, retry errors, and recover for a new target", () => {
+  const waiting = new Promise<void>(() => {});
+  const Waiting = () => {
+    throw waiting;
+  };
+  const Broken = ({ target }: { target: string }) => {
+    if (target === "old") throw new Error("old target failed");
+    return <>new target</>;
+  };
+  const onRetry = vi.fn();
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const loading = render(
+    <Pane kind="content" title="rooms">
+      <Waiting />
+    </Pane>,
+  );
+  expect(screen.getByRole("status").textContent).toBe("loading rooms…");
+  loading.unmount();
+
+  const view = render(
+    <Pane kind="content" title="rooms" onRetry={onRetry} boundaryKey="old">
+      <Broken target="old" />
+    </Pane>,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("rooms failed to load");
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+
+  view.rerender(
+    <Pane kind="content" title="rooms" boundaryKey="new">
+      <Broken target="new" />
+    </Pane>,
+  );
+  expect(screen.getByText("new target")).toBeTruthy();
+  error.mockRestore();
+});
+
+test("boundary opt-out renders normal content without a recovery state", () => {
+  render(
+    <Pane kind="content" boundary={false}>
+      plain body
+    </Pane>,
+  );
+  expect(screen.getByText("plain body")).toBeTruthy();
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
 });
