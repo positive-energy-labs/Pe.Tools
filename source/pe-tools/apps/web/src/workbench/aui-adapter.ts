@@ -6,7 +6,7 @@ import {
   readRecord,
   readString,
   selectApprovals,
-  stringify,
+  text,
   toolTarget,
   type ChatDisplay,
   isUserTurn,
@@ -133,7 +133,7 @@ function toolCallPart(call: {
     type: "tool-call",
     toolCallId: call.id,
     toolName: call.name,
-    ...(args ? { args } : { argsText: stringify(call.args) }),
+    ...(args ? { args } : { argsText: text(call.args) }),
     ...(call.result !== undefined ? { result: call.result } : {}),
     ...(call.isError ? { isError: true } : {}),
     ...(approval

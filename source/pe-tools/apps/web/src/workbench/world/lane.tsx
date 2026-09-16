@@ -31,6 +31,7 @@ import {
 } from "./cap";
 import { ContextBudgetBar, whySentence } from "./bar";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code } from "#/components/lang/code";
 
 export function SessionStrip({
   breakdown,
@@ -307,11 +308,7 @@ export function ItemRow({
           </span>
         </PressContent>
       </Press>
-      {open && hasBody ? (
-        <pre className="m-0 max-h-[220px] overflow-auto px-[9px] py-2 break-words whitespace-pre-wrap">
-          {item.body}
-        </pre>
-      ) : null}
+      {open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : null}
     </li>
   );
 }

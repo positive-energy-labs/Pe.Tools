@@ -14,6 +14,7 @@ import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code, stringify } from "#/components/lang/code";
 
 export function FamilyWorkspaceDocPane() {
   const {
@@ -145,7 +146,7 @@ export function FamilyWorkspaceDocPane() {
         {native && (
           <details className="mb-2 t-small">
             <summary>Native parameter declaration</summary>
-            <pre className="max-h-48 overflow-auto">{JSON.stringify(native, null, 2)}</pre>
+            <Code code={stringify(native)} lang="json" />
           </details>
         )}
 

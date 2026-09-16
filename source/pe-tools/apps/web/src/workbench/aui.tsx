@@ -5,7 +5,6 @@ import {
   useContext,
   useMemo,
   useState,
-  type ComponentProps,
   type ErrorInfo,
   type ReactNode,
 } from "react";
@@ -29,8 +28,9 @@ import { Textarea } from "#/components/lang/textarea";
 import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
 import { isRenderable, toThreadMessages } from "./aui-adapter";
-import { readRecord, readString, stringify, toolTarget } from "./chat-state";
-import { PROSE_CLASS } from "./prose";
+import { readRecord, readString, toolTarget } from "./chat-state";
+import { CHAT_MARKDOWN_COMPONENTS, PROSE_CLASS } from "./prose";
+import { Code, stringify } from "#/components/lang/code";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
@@ -218,7 +218,9 @@ function AssistantMoment() {
       .join("|"),
   );
   const toolOnly = useMessage((message) =>
-    message.content.every((part) => part.type === "tool-call" || (part.type === "text" && !part.text.trim())),
+    message.content.every(
+      (part) => part.type === "tool-call" || (part.type === "text" && !part.text.trim()),
+    ),
   );
   const continues = useContinues(id, "assistant");
   const titles = tools ? tools.split("|") : [];
@@ -292,21 +294,11 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
 // passed it. It also buys strikethrough, task lists, and bare autolinks.
 const REMARK_PLUGINS = [remarkGfm];
 
-// A table is the one block that can be wider than the lane. It gets its own scroll box so it
-// scrolls inside the message instead of widening the chat column.
-const MARKDOWN_COMPONENTS = {
-  table: ({ node: _node, ...props }: ComponentProps<"table"> & { node?: unknown }) => (
-    <div className="my-2 max-w-full overflow-x-auto">
-      <table {...props} />
-    </div>
-  ),
-};
-
 const MarkdownText: TextMessagePartComponent = () => (
   <MarkdownTextPrimitive
     className={PROSE_CLASS}
     remarkPlugins={REMARK_PLUGINS}
-    components={MARKDOWN_COMPONENTS}
+    components={CHAT_MARKDOWN_COMPONENTS}
   />
 );
 
@@ -366,7 +358,11 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         data-open={open ? "" : undefined}
         role="button"
         tabIndex={0}
-        title={open ? "Close this call (unpins the trace lane)" : "Open this call's input and output, and pin it in the trace lane"}
+        title={
+          open
+            ? "Close this call (unpins the trace lane)"
+            : "Open this call's input and output, and pin it in the trace lane"
+        }
         onClick={() => store.actions.setLensPinKey(open ? null : key)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -398,14 +394,12 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
       </div>
       {open ? (
         <div {...annotation("tool-body")}>
-          <div {...annotation("io-label")}>in</div>
-          <pre>{stringify(args, 2)}</pre>
-          {result !== undefined ? (
-            <>
-              <div {...annotation("io-label")}>out</div>
-              <pre {...(isError ? annotation("io-error") : {})}>{stringify(result, 2)}</pre>
-            </>
-          ) : null}
+          <Code code={stringify(args)} lang="json" title="in" />
+          {result === undefined ? null : isError ? (
+            <Code code={stringify(result)} lang="json" title="out" tone="error" wrap />
+          ) : (
+            <Code code={stringify(result)} lang="json" title="out" />
+          )}
         </div>
       ) : null}
       <RouteChatPluginView

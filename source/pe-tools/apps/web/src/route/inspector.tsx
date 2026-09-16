@@ -18,6 +18,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { exportSeed, type Reading } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
+import { Code, stringify } from "#/components/lang/code";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { Section } from "#/components/lang/section";
@@ -74,14 +75,6 @@ function Alarm({ children }: { children: ReactNode }) {
 
 /* ── Rows ──────────────────────────────────────────────────────────────────── */
 
-const json = (value: unknown) => {
-  try {
-    return JSON.stringify(value, null, 2) ?? "undefined";
-  } catch (error) {
-    return `unserializable — ${error instanceof Error ? error.message : String(error)}`;
-  }
-};
-
 /** One noun's one line, with its raw JSON one click away. */
 function Row({ name, raw, children }: { name: string; raw?: unknown; children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -104,9 +97,9 @@ function Row({ name, raw, children }: { name: string; raw?: unknown; children: R
         )}
       </div>
       {open && raw !== undefined ? (
-        <pre className="mt-1 mb-1 max-h-48 overflow-auto border border-line p-1 t-small face-mono break-all whitespace-pre-wrap">
-          {json(raw)}
-        </pre>
+        <div className="mt-1 mb-1">
+          <Code code={stringify(raw)} lang="json" title={name} />
+        </div>
       ) : null}
     </div>
   );
@@ -357,7 +350,7 @@ function InspectorBody<W, R extends string, P, A extends string>({
         ) : (
           page.map(([key, value]) => (
             <Row key={key} name={key} raw={value}>
-              <span className="face-mono text-ink-2">{json(value).replaceAll("\n", " ")}</span>
+              <span className="face-mono text-ink-2">{stringify(value).replaceAll("\n", " ")}</span>
             </Row>
           ))
         )}

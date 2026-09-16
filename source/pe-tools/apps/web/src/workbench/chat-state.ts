@@ -6,6 +6,7 @@ import type {
   PermissionRules,
 } from "@mastra/client-js";
 import { threadAccessPolicies, type ThreadViewState } from "@pe/agent-contracts";
+import { stringify } from "#/components/lang/code";
 import type { PeInspect } from "#/host/inspect.ts";
 
 export type ChatDisplay = Omit<
@@ -97,7 +98,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
             status: "failed",
             error:
               call.errorText ||
-              stringify(call.result ?? active?.result) ||
+              text(call.result ?? active?.result) ||
               "Tool call ended without a terminal result.",
           }
         : completed
@@ -119,7 +120,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
     const outcome: ToolOutcome =
       tool.status === "error" || tool.isError
-        ? { status: "failed", error: stringify(tool.result) || "Tool call failed." }
+        ? { status: "failed", error: text(tool.result) || "Tool call failed." }
         : tool.status === "completed"
           ? { status: "completed", result }
           : { status: "in_progress" };
@@ -393,14 +394,11 @@ export function toolTarget(args: unknown): string | undefined {
   return undefined;
 }
 
-export function stringify(value: unknown, indent?: number): string {
+/** Display text for a value that may already BE text. Not `stringify`: an error message
+ * must not reach the user wrapped in quotes. */
+export function text(value: unknown): string {
   if (value === undefined || value === null) return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, indent) ?? "";
-  } catch {
-    return "[unserializable]";
-  }
+  return typeof value === "string" ? value : stringify(value);
 }
 
 export function shortId(value: string): string {

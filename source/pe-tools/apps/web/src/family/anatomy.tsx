@@ -45,6 +45,7 @@ import { boundParam } from "#/family/world";
 import { Press } from "#/components/lang/press";
 import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
+import { Code, stringify } from "#/components/lang/code";
 
 export function AnatomyDrawing({
   world,
@@ -124,7 +125,7 @@ export function AnatomyDrawing({
                     {entries.map(([name, spec]) => (
                       <details key={name}>
                         <summary>{name}</summary>
-                        <pre className="overflow-auto">{JSON.stringify(spec, null, 2)}</pre>
+                        <Code code={stringify(spec)} lang="json" title={name} />
                       </details>
                     ))}
                   </details>

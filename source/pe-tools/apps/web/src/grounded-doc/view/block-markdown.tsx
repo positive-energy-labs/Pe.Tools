@@ -7,7 +7,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
-import { PROSE_CLASS } from "#/workbench/prose";
+import { PROSE_CLASS, REACT_MARKDOWN_COMPONENTS } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { ImagesPane, MarkdownBlock, PagePane } from "./images-pane";
@@ -16,7 +16,9 @@ import { PressContent } from "#/components/anatomy/press-content";
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {
   return (
     <div className={cn(PROSE_CLASS, "max-w-none [&_table]:my-1 [&_:first-child]:mt-0")}>
-      <Markdown remarkPlugins={[remarkGfm]}>{md}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]} components={REACT_MARKDOWN_COMPONENTS}>
+        {md}
+      </Markdown>
     </div>
   );
 });

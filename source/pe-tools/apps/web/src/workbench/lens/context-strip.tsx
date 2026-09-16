@@ -4,14 +4,9 @@ import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Code, stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
-import {
-  imageSource,
-  selectToolCalls,
-  stringify,
-  type ChatState,
-  type ToolCall,
-} from "../chat-state";
+import { imageSource, selectToolCalls, type ChatState, type ToolCall } from "../chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
@@ -65,11 +60,7 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
             </span>
           }
         >
-          {open ? (
-            <pre className="m-0 px-[9px] py-2 break-words whitespace-pre-wrap">
-              {systemPrompt.content}
-            </pre>
-          ) : null}
+          {open ? <Code code={systemPrompt.content} lang="plaintext" wrap /> : null}
         </ArtifactFrame>
       ) : null}
     </div>
@@ -114,23 +105,15 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
   return (
     <>
       <CellHeader call={call} />
-      {input !== undefined ? (
-        <>
-          <div {...annotation("io-label")}>in</div>
-          <pre>{stringify(input, 2)}</pre>
-        </>
-      ) : null}
+      {input !== undefined ? <Code code={stringify(input)} lang="json" title="in" /> : null}
       {images.length > 0 ? (
         images.map((src, index) => (
           <img key={index} {...annotation("tool-image")} src={src} alt="" />
         ))
       ) : output !== undefined ? (
-        <>
-          <div {...annotation("io-label")}>out</div>
-          <pre>{stringify(output, 2)}</pre>
-        </>
+        <Code code={stringify(output)} lang="json" title="out" />
       ) : null}
-      {error ? <pre {...annotation("io-error")}>{error}</pre> : null}
+      {error ? <Code code={error} lang="plaintext" title="error" tone="error" wrap /> : null}
     </>
   );
 }

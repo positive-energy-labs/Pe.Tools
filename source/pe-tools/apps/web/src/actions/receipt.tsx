@@ -15,6 +15,7 @@ import {
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Code, stringify } from "#/components/lang/code";
 import { outputRenderers } from "#/ops/renderers";
 
 /**
@@ -113,7 +114,7 @@ export function ActionReceiptView({
                 {"error" in step && (
                   <details>
                     <summary>Step error</summary>
-                    <pre className="overflow-x-auto break-all whitespace-pre-wrap">{step.error}</pre>
+                    <Code code={step.error} lang="plaintext" tone="error" wrap />
                   </details>
                 )}
               </div>
@@ -128,7 +129,7 @@ export function ActionReceiptView({
             {"error" in row && (
               <details>
                 <summary data-tone="caution">{row.error.split("\n")[0]}</summary>
-                <pre className="overflow-x-auto break-all whitespace-pre-wrap">{row.error}</pre>
+                <Code code={row.error} lang="plaintext" tone="error" wrap />
               </details>
             )}
             {row.kind === "operation" && "result" in row && outputRenderers[row.key]
@@ -137,19 +138,19 @@ export function ActionReceiptView({
                   return <Output data={row.result} opKey={row.key} request={row.request} />;
                 })()
               : null}
-            {row.kind === "operation" && "result" in row && (
-              // The payload is the biggest thing a receipt holds and the least often wanted:
-              // folded by default, and it scrolls inside its own box instead of pushing the lane.
-              <details>
-                <summary className="cursor-pointer text-ink-2">Returned payload</summary>
-                <pre
-                  aria-label="Returned operation payload"
-                  className="mt-1 max-h-80 overflow-auto break-all whitespace-pre-wrap"
-                >
-                  {JSON.stringify(row.result, null, 2)}
-                </pre>
-              </details>
-            )}
+            {row.kind === "operation" &&
+              "result" in row && (
+                // The payload is the biggest thing a receipt holds and the least often wanted:
+                // folded by default; `Code` clamps it, so it scrolls inside its own frame.
+                <details>
+                  <summary className="cursor-pointer text-ink-2">Returned payload</summary>
+                  <Code
+                    code={stringify(row.result)}
+                    lang="json"
+                    title="Returned operation payload"
+                  />
+                </details>
+              )}
           </>
         )}
         {(receiptError || control.error) && (

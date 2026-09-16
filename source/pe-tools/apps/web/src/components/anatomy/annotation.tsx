@@ -26,8 +26,6 @@ export type AnnotationVariant =
   | "cell-head"
   | "cell-title"
   | "cell-meta"
-  | "io-label"
-  | "tool-image"
-  | "io-error";
+  | "tool-image";
 
 export const annotation = (variant: AnnotationVariant) => ({ "data-annotation": variant }) as const;

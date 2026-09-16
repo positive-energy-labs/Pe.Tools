@@ -63,7 +63,10 @@ function Harness({ changed = false }: { changed?: boolean }) {
 describe("SchemaToFieldRender over the seed model", () => {
   it("renders schema-driven fields, host dead", async () => {
     // `FieldRenderer` code-splits its three field kinds. Warm them first so Suspense resolves on
-    // the render pass rather than racing a module transform inside a waitFor budget.
+    // the render pass rather than racing a module transform inside a waitFor budget. The warm-up
+    // itself is the slow part — `array-field` pulls the highlighter and its languages in with
+    // `JsonEditor` — so this test owns a timeout that matches the `findByText` budget below
+    // rather than vitest's 5 s default, which it loses to under a full-suite transform load.
     await Promise.all([
       import("#/lib/schema-to-field-render/scalar-field"),
       import("#/lib/schema-to-field-render/object-field"),
@@ -83,7 +86,7 @@ describe("SchemaToFieldRender over the seed model", () => {
     expect(await screen.findByDisplayValue(parsed.Name)).toBeTruthy();
     expect(await screen.findByDisplayValue(parsed.CategoryName)).toBeTruthy();
     vi.unstubAllGlobals();
-  });
+  }, 20000);
 
   it("shows changed values against the raw document baseline", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no host in seed mode")));

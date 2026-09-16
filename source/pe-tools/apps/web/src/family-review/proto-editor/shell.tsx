@@ -31,6 +31,7 @@ import {
 import type { FamilyModel } from "#/family/family-model";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code, stringify } from "#/components/lang/code";
 
 // ── the edit channel ────────────────────────────────────────────────────────────────────────────
 
@@ -205,8 +206,7 @@ export function StatePanel({
       </div>
       {showDocument ? (
         <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-          <div className="mb-1">live document</div>
-          <pre>{JSON.stringify(editor.model, null, 2)}</pre>
+          <Code code={stringify(editor.model)} lang="json" title="live document" />
         </div>
       ) : null}
     </aside>

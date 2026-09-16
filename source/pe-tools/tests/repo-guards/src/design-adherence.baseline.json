@@ -1,13 +1,13 @@
 {
   "rawTable": {
-    "total": 16,
+    "total": 15,
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
       "families": 2,
       "family-review": 3,
       "lib": 1,
-      "ops": 2,
+      "ops": 1,
       "param-tables": 3,
       "parameter-links": 1,
       "runs": 2
@@ -20,12 +20,12 @@
     }
   },
   "hostBelowRoute": {
-    "total": 12,
+    "total": 11,
     "byArea": {
       "chat": 1,
       "families": 1,
       "grounded-doc": 1,
-      "ops": 3,
+      "ops": 2,
       "(root)": 1,
       "runs": 2,
       "takeoff": 1,
@@ -74,7 +74,7 @@
     }
   },
   "inlineColor": {
-    "total": 117,
+    "total": 111,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -82,10 +82,10 @@
       "family-review": 25,
       "grilles": 4,
       "host": 3,
-      "ops": 27,
+      "ops": 22,
       "param-tables": 5,
       "routes": 4,
-      "runs": 28,
+      "runs": 27,
       "takeoff": 3,
       "workbench": 8
     }

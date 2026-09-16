@@ -3,6 +3,7 @@ import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { inspectAtomRegistry } from "./atom-inspect";
 import { appAtomRegistry } from "#/route";
 import { inspectRetainedActions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { Code, stringify } from "#/components/lang/code";
 
 /** Presentation only. Its subscription observes inspector notifications, never producer atoms. */
 export function OwnerInspector({
@@ -32,7 +33,7 @@ export function OwnerInspector({
           <strong>{owner.id}</strong>
           <details>
             <summary>lastLocalCall (separate from cause)</summary>
-            <pre>{JSON.stringify(owner.lastLocalCall, null, 2)}</pre>
+            <Code code={stringify(owner.lastLocalCall)} lang="json" title="lastLocalCall" />
           </details>
           <dl>
             {Object.entries(owner.references).flatMap(([kind, entries]) =>
@@ -53,9 +54,7 @@ export function OwnerInspector({
                     </dt>
                     <dd>Readiness: {value.state}</dd>
                     <dd>
-                      <pre className="whitespace-pre-wrap break-all">
-                        {value.value ?? "unknown (not read)"}
-                      </pre>
+                      <Code code={value.value ?? "unknown (not read)"} lang="plaintext" wrap />
                     </dd>
                     <dd>Known cause: {cause}</dd>
                   </div>
@@ -67,7 +66,7 @@ export function OwnerInspector({
       ))}
       <details>
         <summary>Retained local admissions (inert evidence)</summary>
-        <pre>{JSON.stringify(inspectRetainedActions(), null, 2)}</pre>
+        <Code code={stringify(inspectRetainedActions())} lang="json" />
       </details>
     </section>
   );

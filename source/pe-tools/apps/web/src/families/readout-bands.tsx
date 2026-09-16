@@ -8,6 +8,7 @@ import { familyFlag, provenanceSummary } from "#/families/plan";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
+import { Code } from "#/components/lang/code";
 
 /**
  * THE TWO READOUT TABLES, on the ruled idiom (2026-08-31, `MasterTable` draws SEPARATE borders).
@@ -310,12 +311,9 @@ export function FamiliesReadoutBands() {
                 )}
               </div>
               {entry.modelJson && (
-                <pre
-                  className="t-small face-mono mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
-                  data-surface="recess"
-                >
-                  {entry.modelJson}
-                </pre>
+                <div className="mt-1">
+                  <Code code={entry.modelJson} lang="json" title="model json" />
+                </div>
               )}
             </div>
           ))}

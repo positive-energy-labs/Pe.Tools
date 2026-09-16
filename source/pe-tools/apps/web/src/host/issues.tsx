@@ -75,6 +75,8 @@ const SERVER_KIND: Record<HostErrorKind, HostIssueKind> = {
   BridgeBusy: "bridge_busy",
   InvalidRequest: "invalid_request",
   Conflict: "conflict",
+  // The request named an operation the catalog does not hold — the request is wrong, not the host.
+  CatalogLookup: "invalid_request",
   HostFailure: "host_failure",
 };
 
