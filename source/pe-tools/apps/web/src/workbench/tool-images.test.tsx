@@ -8,6 +8,7 @@ import {
   emptyChatState,
   selectMessages,
   selectToolCalls,
+  toolImages,
   toolOutputForDisplay,
   type ChatState,
 } from "./chat-state";
@@ -128,4 +129,32 @@ test("opening the call shows a placeholder, not the base64", () => {
   const body = container.querySelector("[data-annotation='tool-body']");
   expect(body?.textContent).toContain("<image 1: image/png, 68 B>");
   expect(body?.textContent).not.toContain(PNG);
+});
+
+test("a Revit docs search result is not an image", () => {
+  // `revit_api_docs_search` rows (packages/mcps/src/shared/rvt-api/local-docs.ts): no media type,
+  // and a `url` that is a member id, which the old rule wrapped as base64.
+  const docs = [
+    {
+      title: "DuctFittingAndAccessoryConnectorData Class",
+      namespace: "Autodesk.Revit.DB.Mechanical",
+      type: "class",
+      url: "local:T:Autodesk.Revit.DB.Mechanical.DuctFittingAndAccessoryConnectorData",
+      memberId: "T:Autodesk.Revit.DB.Mechanical.DuctFittingAndAccessoryConnectorData",
+      summary: "…",
+    },
+    { title: "x", url: "local:P:Autodesk.Revit.DB.Mechanical.DuctFittingAndAccessoryData.Shape" },
+  ];
+  expect(toolImages(docs)).toEqual([]);
+  // A media type alone does not make a payload an image, nor does base64 alone.
+  expect(toolImages({ mediaType: "image/png", data: "local:P:Autodesk.Revit.DB.Wall" })).toEqual(
+    [],
+  );
+  expect(toolImages({ data: PNG })).toEqual([]);
+  expect(toolImages("data:text/plain;base64,eA==")).toEqual([]);
+  // What the image tools really return still counts, and so does an http(s) image URL.
+  expect(toolImages(captured)).toEqual([URL_PNG]);
+  expect(toolImages({ mediaType: "image/png", url: "https://host/a.png" })).toEqual([
+    "https://host/a.png",
+  ]);
 });

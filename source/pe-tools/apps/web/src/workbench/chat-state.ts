@@ -157,27 +157,42 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
 }
 
 /**
- * The one rule for "is this tool output entry an image": a `data:image/` string, or a record with
- * an image media type (or none) whose `data`, `image`, or `url` resolves to an image source.
+ * The one rule for "is this tool output entry an image", fitted to what the image tools really
+ * return (`capture_view`, `read_image` in packages/mcps: `{ text, mediaType, byteSize, data }`):
+ * - a record needs an `image/*` media type AND either base64 `data` (or a `data:image/` URL in it)
+ *   or an `image`/`url` field holding a `data:image/` or http(s) URL;
+ * - a bare string must be a `data:image/…;base64,` URL.
+ * Anything else is not an image: a docs search row's `url: "local:P:…"` was wrapped as base64.
  * `field` names where the bytes sit, for the display projection below.
  */
 function toolImage(part: unknown): { url: string; mime: string; field?: string } | undefined {
-  if (typeof part === "string")
-    return part.startsWith("data:image/")
-      ? { url: part, mime: part.slice(5, part.indexOf(";")) }
-      : undefined;
+  if (typeof part === "string") {
+    const mime = DATA_IMAGE.exec(part)?.[1];
+    return mime ? { url: part, mime } : undefined;
+  }
   const record = readRecord(part);
-  if (!record) return undefined;
-  const mime = readString(record.mediaType) ?? readString(record.mimeType);
-  if (mime && !mime.startsWith("image/")) return undefined;
+  const mime = readString(record?.mediaType) ?? readString(record?.mimeType);
+  if (!record || !mime?.startsWith("image/")) return undefined;
   const data = readString(record.data);
-  const direct = readString(record.image) ?? readString(record.url);
-  const url = imageSource(direct, data, mime);
-  if (!url || !(mime?.startsWith("image/") || url.startsWith("data:image/"))) return undefined;
-  const field =
-    data !== undefined ? "data" : readString(record.image) !== undefined ? "image" : "url";
-  return { url, mime: mime ?? url.slice(5, url.indexOf(";")), field };
+  if (data !== undefined) {
+    if (DATA_IMAGE.test(data)) return { url: data, mime, field: "data" };
+    return looksBase64(data)
+      ? { url: `data:${mime};base64,${data}`, mime, field: "data" }
+      : undefined;
+  }
+  for (const field of ["image", "url"]) {
+    const url = readString(record[field]);
+    if (url && (DATA_IMAGE.test(url) || /^https?:\/\//i.test(url))) return { url, mime, field };
+  }
+  return undefined;
 }
+
+const DATA_IMAGE = /^data:(image\/[\w.+-]+);base64,/;
+
+// ponytail: checks the first 64 chars and the length, not every byte; a multi-MB capture is
+// re-read on every streamed frame. Tighten only if a non-image base64 look-alike shows up.
+const looksBase64 = (value: string) =>
+  value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value.slice(0, 64));
 
 const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
 
