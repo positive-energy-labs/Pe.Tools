@@ -83,8 +83,7 @@ export function useHostLamp(enabled = true): Lamp {
     return {
       tone: "ink",
       word: "Revit not attached",
-      says:
-        "the host answers, but no running Revit has attached its Pe.Tools add-in; scripts and operations wait until one does",
+      says: "the host answers, but no running Revit has attached its Pe.Tools add-in; scripts and operations wait until one does",
       checked: null,
     };
   return {

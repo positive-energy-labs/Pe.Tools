@@ -74,6 +74,10 @@
   --dash-reference: 12 3 2 3;
   --dash-void: 4 3;
   --motion-control: 120ms;
+  /* Ambient loops in the chat lens: the streaming caret, the running sheen, the waiting bud. */
+  --motion-blink: 1.1s;
+  --motion-sheen: 2.4s;
+  --motion-pulse: 2s;
   --pattern-caution-hatch: repeating-linear-gradient(
     -45deg,
     color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,

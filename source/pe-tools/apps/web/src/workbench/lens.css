@@ -513,7 +513,7 @@
   vertical-align: text-bottom;
   background: var(--pe-pea);
   border-radius: 0;
-  animation: mg-blink 1.1s steps(2, start) infinite;
+  animation: mg-blink var(--motion-blink) steps(2, start) infinite;
 }
 @keyframes mg-blink {
   50% {
@@ -532,7 +532,7 @@
   );
   background-size: 45% 100%;
   background-repeat: no-repeat;
-  animation: mg-sheen 2.4s linear infinite;
+  animation: mg-sheen var(--motion-sheen) linear infinite;
 }
 @keyframes mg-sheen {
   0% {
@@ -563,7 +563,7 @@
 
 /* Active OM-window fill pulse — referenced by world.tsx via the shared motion class. */
 .mg-bud-pulse {
-  animation: mg-bud-pulse 2s ease-in-out infinite;
+  animation: mg-bud-pulse var(--motion-pulse) ease-in-out infinite;
 }
 @keyframes mg-bud-pulse {
   0%,
