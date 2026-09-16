@@ -21,6 +21,8 @@ import {
   APPROVAL_OPTIONS,
   selectApprovals,
   selectRunStatus,
+  selectToolCalls,
+  toolTarget,
   type ChatState,
 } from "#/workbench/chat-state";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
@@ -68,7 +70,16 @@ const complaint = (resolution: TargetResolution): string | null =>
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
 
-export function ComposerHead({ handle }: { handle: ChatHandle }) {
+export function ComposerHead({
+  handle,
+  status,
+}: {
+  handle: ChatHandle;
+  /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
+   * Situation already answers "what is bound and how is it", and a rail that appears and
+   * disappears over the chat shifted the whole lane every time it spoke. */
+  status?: { text: string; caution: boolean };
+}) {
   const { currentThreadId, threads, chat, resolveApproval } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
@@ -111,6 +122,9 @@ export function ComposerHead({ handle }: { handle: ChatHandle }) {
   );
   const health = head.defaultTarget ? complaint(resolution) : null;
   const approvals = selectApprovals(chat.display);
+  // "Do" alone says nothing about what is being asked for. The proposal row names the capability
+  // key and the target the call would run against, read off the call itself in the stream.
+  const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
   const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? currentThreadId;
   return (
     <section
@@ -134,6 +148,16 @@ export function ComposerHead({ handle }: { handle: ChatHandle }) {
           {head.refusal ? (
             <span className="ml-3 t-small" data-tone="caution">
               {head.refusal}
+            </span>
+          ) : null}
+          {status ? (
+            <span
+              aria-live="polite"
+              className="ml-3 t-small t-upper"
+              data-tone={status.caution ? "caution" : undefined}
+              data-testid="composer-status"
+            >
+              {status.text}
             </span>
           ) : null}
         </p>
@@ -183,6 +207,21 @@ export function ComposerHead({ handle }: { handle: ChatHandle }) {
               data-tool-id={approval.toolCallId}
             >
               <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+              {(() => {
+                const call = callsById.get(approval.toolCallId);
+                const target = call ? toolTarget(call.args) : undefined;
+                return target ? (
+                  <code className="face-mono t-small text-ink" data-testid="approval-target">
+                    {target}
+                  </code>
+                ) : null;
+              })()}
+              {(() => {
+                const call = callsById.get(approval.toolCallId);
+                return call?.target && call.target !== toolTarget(call.args) ? (
+                  <span className="t-small truncate text-ink-2">{call.target}</span>
+                ) : null;
+              })()}
               <span className="t-small text-ink-2">{approval.kind}</span>
               {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
                 <span className="text-ink-2">answer it in the stream</span>

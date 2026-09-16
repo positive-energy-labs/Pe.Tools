@@ -23,6 +23,8 @@ export function Lens({
   onSideResize,
   sideOpen = true,
   onSideOpenChange,
+  pinKey = null,
+  onPinChange,
 }: {
   state: ChatState;
   mode: Mode;
@@ -34,6 +36,9 @@ export function Lens({
   onSideResize?: (px: number) => void;
   sideOpen?: boolean;
   onSideOpenChange?: (open: boolean) => void;
+  /** The tool call pinned open in the transcript — it owns the inspect window while set. */
+  pinKey?: string | null;
+  onPinChange?: (key: string | null) => void;
 }) {
   const {
     moments,
@@ -170,9 +175,22 @@ export function Lens({
                   </div>
 
                   {(() => {
-                    const cell = traceCells.find((c) => c.key === inspectKey);
+                    // A pin outranks hover and focal: the inspect window holds what you clicked
+                    // until you unpin it, so it can be read and scrolled.
+                    const cell = traceCells.find((c) => c.key === (pinKey ?? inspectKey));
                     return cell ? (
-                      <div {...annotation("inspect")}>
+                      <div {...annotation("inspect")} data-pinned={pinKey ? "" : undefined}>
+                        {pinKey ? (
+                          <Press
+                            type="button"
+                            tone="quiet"
+                            size="caption"
+                            title="Unpin this call"
+                            onClick={() => onPinChange?.(null)}
+                          >
+                            unpin
+                          </Press>
+                        ) : null}
                         <ToolCellBody call={cell.call} />
                       </div>
                     ) : null;

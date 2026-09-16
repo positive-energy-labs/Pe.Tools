@@ -107,7 +107,11 @@ export function useThreadStream(options: {
 
   return {
     chat,
-    pending: threadId !== null && query.isPending,
+    // Pending ONLY while there is nothing to show. `useHostCall` raises `pending` on every
+    // refetch — and message_end, agent_end and each SSE reconnect refetch — so reporting raw
+    // pending flashed "Loading thread state" after every completed turn over a thread that was
+    // already on screen.
+    pending: threadId !== null && query.isPending && !hydrated,
     error: query.error ?? streamFault,
     invalidate,
   };

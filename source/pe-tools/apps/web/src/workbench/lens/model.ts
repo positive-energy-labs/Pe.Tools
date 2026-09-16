@@ -424,7 +424,7 @@ export function useLensModel({
       setHover(toolId ? `tool:${toolId}` : undefined);
     };
     const onChatLeave = () => setHover(null);
-    const onTraceOver = (e: Event) => setHover(keyFrom(e, ".lens-cell"));
+    const onTraceOver = (e: Event) => setHover(keyFrom(e, '[data-annotation="trace-cell"]'));
     chat?.addEventListener("mouseover", onChatOver);
     chat?.addEventListener("mouseleave", onChatLeave);
     trace?.addEventListener("mouseover", onTraceOver);

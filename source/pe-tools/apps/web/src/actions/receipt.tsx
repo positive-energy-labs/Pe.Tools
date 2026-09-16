@@ -14,6 +14,8 @@ import {
   readScopedActionStatuses,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { ActionButton } from "#/components/lang/action-button";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { outputRenderers } from "#/ops/renderers";
 
 /**
  * A receipt reads its original ID, independent of the current pane or thread Scope. `base` and
@@ -44,80 +46,119 @@ export function ActionReceiptView({
         ? Error(rows.error.message)
         : undefined;
   return (
-    <div className="space-y-1 p-2">
-      <div>
-        Action {id} /{" "}
-        {row?.kind === "operation" && row.state === "succeeded"
-          ? "reply received"
-          : (row?.state ?? (receiptError ? "receipt read failed" : "reading receipt"))}
-      </div>
-      {row && (
-        <>
-          <div>
-            {row.key} / {row.startedAt} /{" "}
-            {row.destination.kind === "document"
-              ? `${row.destination.ref.session} / ${row.destination.ref.openId}`
-              : row.destination.kind}
-          </div>
-          {row.steps.map((step) => (
-            <div key={step.id}>
-              {step.kind} / {step.key} /{" "}
-              {row.kind === "operation" && step.state === "succeeded"
-                ? "reply received"
-                : step.state}
-              <code>{step.id}</code>
-              {"error" in step && (
-                <details>
-                  <summary>Step error</summary>
-                  <pre className="whitespace-pre-wrap break-all">{step.error}</pre>
-                </details>
-              )}
-            </div>
+    <ArtifactFrame
+      head={
+        <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
+          <span className="truncate t-small face-mono text-ink">
+            Action {id} /{" "}
+            {row?.kind === "operation" && row.state === "succeeded"
+              ? "reply received"
+              : (row?.state ?? (receiptError ? "receipt read failed" : "reading receipt"))}
+          </span>
+          {row ? (
+            <span
+              className="t-small face-mono"
+              data-tone={
+                row.state === "succeeded" ? "done" : row.state === "unknown" ? "caution" : undefined
+              }
+            >
+              {row.state}
+            </span>
+          ) : null}
+        </div>
+      }
+      foot={
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(actionControls) as ActionControlKey[]).map((key) => (
+            <ActionButton
+              key={key}
+              label={
+                key === "action.resume"
+                  ? "resume original action"
+                  : key === "action.recover"
+                    ? "recover native receipt"
+                    : "read status"
+              }
+              reason={actionControls[key].description}
+              disabled={
+                control.isPending ||
+                (key !== "action.read" &&
+                  row?.state !== "unknown" &&
+                  !(key === "action.resume" && row?.state === "incomplete"))
+              }
+              onClick={() => control.mutate(key)}
+            />
           ))}
-          <div>
-            {row.kind === "operation" ? "Operation reply" : "Work publication"} /{" "}
-            {row.kind === "operation" ? row.state : row.publication.state}
-            {row.publication.state === "recorded"
-              ? ` / ${JSON.stringify(row.publication.result)}`
-              : ""}
+        </div>
+      }
+    >
+      <div className="grid min-w-0 gap-1 px-2.5 py-2 t-small">
+        {row && (
+          <>
+            <div className="truncate face-mono text-ink-2">
+              {row.key} / {row.startedAt} /{" "}
+              {row.destination.kind === "document"
+                ? `${row.destination.ref.session} / ${row.destination.ref.openId}`
+                : row.destination.kind}
+            </div>
+            {row.steps.map((step) => (
+              <div key={step.id} className="min-w-0 face-mono text-ink-2">
+                <span className="truncate">
+                  {step.kind} / {step.key} /{" "}
+                  {row.kind === "operation" && step.state === "succeeded"
+                    ? "reply received"
+                    : step.state}
+                </span>{" "}
+                <code>{step.id}</code>
+                {"error" in step && (
+                  <details>
+                    <summary>Step error</summary>
+                    <pre className="overflow-x-auto break-all whitespace-pre-wrap">{step.error}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+            <div className="truncate text-ink">
+              {row.kind === "operation" ? "Operation reply" : "Work publication"} /{" "}
+              {row.kind === "operation" ? row.state : row.publication.state}
+              {row.publication.state === "recorded"
+                ? ` / ${JSON.stringify(row.publication.result)}`
+                : ""}
+            </div>
+            {"error" in row && (
+              <details>
+                <summary data-tone="caution">{row.error.split("\n")[0]}</summary>
+                <pre className="overflow-x-auto break-all whitespace-pre-wrap">{row.error}</pre>
+              </details>
+            )}
+            {row.kind === "operation" && "result" in row && outputRenderers[row.key]
+              ? (() => {
+                  const Output = outputRenderers[row.key]!;
+                  return <Output data={row.result} opKey={row.key} request={row.request} />;
+                })()
+              : null}
+            {row.kind === "operation" && "result" in row && (
+              // The payload is the biggest thing a receipt holds and the least often wanted:
+              // folded by default, and it scrolls inside its own box instead of pushing the lane.
+              <details>
+                <summary className="cursor-pointer text-ink-2">Returned payload</summary>
+                <pre
+                  aria-label="Returned operation payload"
+                  className="mt-1 max-h-80 overflow-auto break-all whitespace-pre-wrap"
+                >
+                  {JSON.stringify(row.result, null, 2)}
+                </pre>
+              </details>
+            )}
+          </>
+        )}
+        {(receiptError || control.error) && (
+          <div role="alert" data-tone="caution">
+            {String(receiptError ?? control.error)}
           </div>
-          {"error" in row && (
-            <details>
-              <summary>{row.error.split("\n")[0]}</summary>
-              <pre className="whitespace-pre-wrap break-all">{row.error}</pre>
-            </details>
-          )}
-          {row.kind === "operation" && "result" in row && (
-            <pre aria-label="Returned operation payload">{JSON.stringify(row.result, null, 2)}</pre>
-          )}
-        </>
-      )}
-      {(receiptError || control.error) && (
-        <div role="alert">{String(receiptError ?? control.error)}</div>
-      )}
-      <div className="flex gap-2">
-        {(Object.keys(actionControls) as ActionControlKey[]).map((key) => (
-          <ActionButton
-            key={key}
-            label={
-              key === "action.resume"
-                ? "resume original action"
-                : key === "action.recover"
-                  ? "recover native receipt"
-                  : "read status"
-            }
-            reason={actionControls[key].description}
-            disabled={
-              control.isPending ||
-              (key !== "action.read" &&
-                row?.state !== "unknown" &&
-                !(key === "action.resume" && row?.state === "incomplete"))
-            }
-            onClick={() => control.mutate(key)}
-          />
-        ))}
+        )}
       </div>
-    </div>
+    </ArtifactFrame>
   );
 }
 

@@ -83,6 +83,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
   // The plugin workspace is a right SidePane. Only ONE flank may be expanded at a time:
   // opening either pane collapses the other to its 40px rail (nothing is unmounted).
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
+  // A tool call clicked open in the transcript owns the trace lane's inspect window until unpinned.
+  const pinKey = useAtomValue(store.atoms.lensPinKey);
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
@@ -140,7 +142,10 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
     })),
   ]);
 
-  const statusLine = loading ? "Loading thread state" : (error ?? operationError);
+  const statusText = loading ? "Loading thread state" : (error ?? operationError);
+  const status = statusText
+    ? { text: statusText, caution: Boolean(error || operationError) }
+    : undefined;
 
   return (
     <main
@@ -156,17 +161,6 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
           none of its own. */}
       <div className="h-full px-5">
         <RouteShell manifest={manifest} handle={handle} situation={<></>}>
-          <div aria-live="polite" className="min-h-0">
-            {statusLine ? (
-              <div
-                data-tone={error || operationError ? "caution" : undefined}
-                className="hairline-b py-1.5 t-small t-upper"
-              >
-                {statusLine}
-              </div>
-            ) : null}
-          </div>
-
           <div className="relative flex min-h-0 min-w-0 flex-1">
             <div className="relative min-h-0 min-w-0 flex-1">
               <Lens
@@ -177,6 +171,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                 onTurnChange={store.actions.setTurn}
                 sideOpen={sideOpen}
                 onSideOpenChange={store.actions.setSideOpen}
+                pinKey={pinKey}
+                onPinChange={store.actions.setLensPinKey}
                 sideHead={<ModeDial mode={mode} setMode={setMode} />}
                 threadList={
                   <ThreadList
@@ -198,7 +194,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                       handle={handle}
                       topBar={
                         <>
-                          <ComposerHead handle={handle} />
+                          <ComposerHead handle={handle} status={status} />
                           <ContextRibbon
                             breakdown={breakdown}
                             cache={cache}

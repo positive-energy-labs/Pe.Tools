@@ -265,9 +265,12 @@
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
 [data-annotation="moment"] {
-  /* left inset is unconditional: the focal rule is an inset shadow, so padding it on ALL moments
-     keeps the contents put when focus moves. */
-  padding: 10px 0 10px 10px;
+  /* ONE rhythm: a moment is spaced like any other row (3px), so a run of folded tool turns reads
+     as one list instead of N widely-spaced islands. The air is spent at the speaker handoff
+     instead — see the hairline rules below, which own both the rule and the padding.
+     The left inset is unconditional: the focal rule is an inset shadow, so padding it on ALL
+     moments keeps the contents put when focus moves. */
+  padding: 3px 0 3px 10px;
   scroll-margin-top: 12px;
 }
 
@@ -284,6 +287,8 @@
 [data-annotation="moment"][data-role="user"] + [data-annotation="moment"][data-role="assistant"],
 [data-annotation="moment"][data-role="assistant"] + [data-annotation="moment"][data-role="user"] {
   border-top: 0.5px solid var(--pe-line);
+  margin-top: 10px;
+  padding-top: 10px;
 }
 /* The focal turn's left rule answers "where am I" — a locate mark, neutral ink for BOTH roles
    (R13a). The old per-role provenance hue spent identity on a selection question.
@@ -292,17 +297,21 @@
   box-shadow: inset 2px 0 0 var(--pe-ink);
 }
 [data-annotation="tool-marker"] {
-  /* full-width ledger row: identifiers left, the mono status owns the right track */
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* full-width ledger row: identifiers pack left, the mono status owns the right edge. A flex row,
+     not a grid: the grid's 1fr middle track gapped the name from its key and spilled any span
+     without an explicit column onto a second row. */
+  display: flex;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 7px;
   /* The marker is a grid item; min-width:0 lets its track shrink to the lane (default `auto`
      grows the track to the long target's min-content) so the target can ellipsis-truncate. */
   min-width: 0;
   max-width: 100%;
-  border-left: 2px solid var(--pe-pea);
-  padding: 1px 7px 1px 9px;
+  /* NO left rail. The ⌗ glyph already marks a tool row, and the rails stacked a second vertical
+     ruling beside the moment's own — so a tool row starts flush with the prose and the artifacts
+     beside it. Outcome still reads on the right (ok/err), failure still in caution. */
+  padding: 1px 7px 1px 0;
   border-radius: 0; /* instrument surface — hard square */
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
@@ -317,32 +326,27 @@
   white-space: nowrap;
 }
 [data-annotation="tool-marker"] > span:last-child {
-  grid-column: 3;
+  margin-left: auto;
+  flex: none;
+}
+/* every middle identifier shrinks and ellipses rather than wrapping the row */
+[data-annotation="tool-marker"] > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* tool = pea acting → SOLID pea rail (dashed is reserved for seam; a tool call is real).
    memory = the memory lane's taxonomy hue. */
-[data-annotation="tool-marker"].memory {
-  border-left-color: var(--viz-5);
-}
-[data-annotation="tool-marker"].active {
-  border-left-color: var(--pe-pea);
-}
-[data-annotation="tool-marker"].failed {
-  border-left-color: var(--pe-caution);
-}
 /* focal stub → heavier rail + tint, but ONLY the single tool at the focal point (`.tool-focal`,
    set per-marker by the scroll controller), not the whole message's tool group. Hover still tints
    the whole hovered message's markers (a separate, coarser affordance). */
-[data-annotation="tool-marker"].tool-focal {
-  border-left-width: 3px;
-}
 [data-annotation="tool-marker"].tool-focal,
 [data-annotation="moment"].hover [data-annotation="tool-marker"] {
   background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
 }
 [data-annotation="tool-marker"] code {
-  grid-column: 2;
-  min-width: 0; /* allow the ellipsis inside the marker's middle grid track */
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--type-small-size);
   color: var(--pe-ink-2);
@@ -517,7 +521,7 @@
   vertical-align: text-bottom;
   background: var(--pe-pea);
   border-radius: 0;
-  animation: mg-blink var(--motion-control) steps(2, start) infinite;
+  animation: mg-blink 1.1s steps(2, start) infinite;
 }
 @keyframes mg-blink {
   50% {
@@ -536,7 +540,7 @@
   );
   background-size: 45% 100%;
   background-repeat: no-repeat;
-  animation: mg-sheen var(--motion-control) linear infinite;
+  animation: mg-sheen 2.4s linear infinite;
 }
 @keyframes mg-sheen {
   0% {
@@ -567,7 +571,7 @@
 
 /* Active OM-window fill pulse — referenced by world.tsx via the shared motion class. */
 .mg-bud-pulse {
-  animation: mg-bud-pulse var(--motion-control) ease-in-out infinite;
+  animation: mg-bud-pulse 2s ease-in-out infinite;
 }
 @keyframes mg-bud-pulse {
   0%,
@@ -577,4 +581,95 @@
   50% {
     filter: brightness(1.2);
   }
+}
+
+/* ===== Tool runs, opened calls, pinned inspection ===================== */
+/* A turn that is only tool calls folds behind one summary row: the transcript reads as prose with
+   machinery tucked under it, not as N banners. The marker rows inside keep their own grammar. */
+[data-annotation="tool-run"] > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+  padding: 1px 7px 1px 0;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink-2);
+}
+[data-annotation="tool-run"] > summary::-webkit-details-marker {
+  display: none;
+}
+[data-annotation="tool-run"] > summary::after {
+  content: "▸";
+  margin-left: auto;
+  color: var(--pe-ink-2);
+}
+[data-annotation="tool-run"][open] > summary::after {
+  content: "▾";
+}
+[data-annotation="tool-run"] > summary:hover {
+  background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
+}
+[data-annotation="tool-run"] > summary span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A marker is a control now (click opens its I/O here and pins it in the trace lane). */
+[data-annotation="tool-marker"] {
+  cursor: pointer;
+}
+[data-annotation="tool-marker"]:hover,
+[data-annotation="tool-marker"][data-open] {
+  background: color-mix(in srgb, var(--pe-pea) 8%, transparent);
+}
+
+/* the opened call's own I/O, inline under its marker. Bounded in both axes so a fat payload
+   scrolls inside the call instead of stretching the chat lane. */
+[data-annotation="tool-body"] {
+  border-left: 0.5px solid var(--pe-line);
+  background: var(--pe-recess);
+  --pe-on: var(--pe-recess);
+}
+[data-annotation="tool-body"] [data-annotation="io-label"] {
+  padding: 3px 8px 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+}
+[data-annotation="tool-body"] pre {
+  margin: 0;
+  padding: 2px 8px 6px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+[data-annotation="tool-body"] [data-annotation="io-error"] {
+  color: var(--pe-caution);
+}
+
+/* A pinned inspection is a held reading: it gets the full lane height and scrolls, where the
+   transient hover preview stays a peek above the rows. */
+[data-annotation="inspect"][data-pinned] {
+  max-height: calc(var(--vp, 560px) - 48px);
+  overflow: auto;
+  border-bottom-color: var(--pe-pea);
+}
+/* the unpin control rides the top of the pinned window, above its own scroll */
+[data-annotation="inspect"][data-pinned] > button {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  align-self: flex-end;
+  background: var(--pe-page);
+  --pe-on: var(--pe-page);
 }

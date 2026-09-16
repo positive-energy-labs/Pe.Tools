@@ -112,12 +112,14 @@ export function InlineRoutePlugin({
   revision?: number;
   children: ReactNode;
 }) {
+  // The card folds: it is evidence beside a call, not the call. Open by default would make every
+  // receipt in a long thread a wall.
   return (
     <ArtifactFrame
       head={
-        <div>
-          <span className="">{title}</span>
-          <span className="">{action}</span>
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="t-small t-upper text-ink">{title}</span>
+          <span className="truncate t-small text-ink-2">{action}</span>
           {revision !== undefined ? (
             <span className="t-small face-mono text-ink-2" data-testid="plugin-revision">
               r{revision}
@@ -126,7 +128,14 @@ export function InlineRoutePlugin({
         </div>
       }
     >
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-2">{children}</div>
+      {/* min-w-0 is what stops a wide <pre> inside from blowing the card past the lane; the
+          overflow then belongs to the card, not the page. */}
+      <details className="min-w-0" open>
+        <summary className="cursor-pointer px-2.5 py-1 t-small text-ink-2">details</summary>
+        <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 overflow-x-auto px-2.5 pb-2">
+          {children}
+        </div>
+      </details>
     </ArtifactFrame>
   );
 }

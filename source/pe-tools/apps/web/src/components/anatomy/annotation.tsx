@@ -20,6 +20,8 @@ export type AnnotationVariant =
   | "moment"
   | "streaming-caret"
   | "tool-marker"
+  | "tool-run"
+  | "tool-body"
   | "trace-cell"
   | "cell-head"
   | "cell-title"

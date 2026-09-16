@@ -51,6 +51,9 @@ export function createChatPageStore(deps: {
   const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
   const pluginOpen = Atom.map(expandedPane, (pane) => pane === "plugin");
   const lensInspectKey = core.owned("page/lens-inspect-key", Atom.make<string | null>(null));
+  // A pinned tool outranks hover and focal in the trace lane's inspect window, so an inspection
+  // survives the pointer leaving (and survives scrolling the transcript).
+  const lensPinKey = core.owned("page/lens-pin-key", Atom.make<string | null>(null));
   const lensFollowing = core.owned("widget/lens-following", Atom.make(!deps.search.turn));
   const world = core.owned<Atom.Writable<WorldState>>(
     "widget/world",
@@ -116,6 +119,7 @@ export function createChatPageStore(deps: {
       sideOpen,
       pluginOpen,
       lensInspectKey,
+      lensPinKey,
       lensFollowing,
       world,
       worldCache,
@@ -127,6 +131,7 @@ export function createChatPageStore(deps: {
       setPluginOpen: (value: Setter<boolean>) => setPaneOpen("plugin", value),
       setLensInspectKey: (value: Setter<string | null>) =>
         set("set-lens-inspect-key", lensInspectKey, value),
+      setLensPinKey: (value: Setter<string | null>) => set("set-lens-pin-key", lensPinKey, value),
       setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
       setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
       setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
