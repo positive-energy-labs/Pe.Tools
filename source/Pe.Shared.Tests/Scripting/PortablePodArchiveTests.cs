@@ -50,10 +50,10 @@ public sealed class PortablePodArchiveTests {
         Write(this._resolve("Renamed Again"), "settings/main.settings.json", "{\"value\":99}");
         var prepared = this._preparation.Prepare("Renamed Again");
         Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(o => o.Reason)));
-        Assert.That(prepared.Manifest.Id, Is.EqualTo("lineage"));
-        Assert.That(prepared.Manifest.Parent!.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
-        Assert.That(prepared.ReleaseHash, Is.Null);
-        Assert.That(prepared.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("99"));
+        Assert.That(((PreparedPod)prepared).Manifest.Id, Is.EqualTo("lineage"));
+        Assert.That(((PreparedPod)prepared).Manifest.Parent!.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+        Assert.That(((PreparedPod)prepared).ReleaseHash, Is.Null);
+        Assert.That(((PreparedPod)prepared).ComposedSettings["composed/main.settings.json"].Content, Does.Contain("99"));
     }
 
     [Test]
@@ -88,8 +88,8 @@ public sealed class PortablePodArchiveTests {
         Assert.Multiple(() => {
             Assert.That(imported.Status, Is.EqualTo(ScriptPodTransferStatus.Succeeded));
             Assert.That(manifest["parent"], Is.Null);
-            Assert.That(prepared.ContentHash, Is.EqualTo(exported.Release!.ContentHash));
-            Assert.That(prepared.Manifest.Parent, Is.Null);
+            Assert.That(((PreparedPod)prepared).ContentHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)prepared).Manifest.Parent, Is.Null);
         });
         var republishedPath = Path.Combine(this._root, "republished.zip");
         var republished = this._service.Export(new ScriptPodExportRequest("portable", republishedPath), "net8.0-windows");
@@ -135,7 +135,7 @@ public sealed class PortablePodArchiveTests {
             {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[]}
             """);
         Write(library, "settings/base.settings.json", "{\"library\":1}");
-        var libraryHash = this._preparation.Prepare("library").ContentHash;
+        var libraryHash = ((PreparedPod)this._preparation.Prepare("library")).ContentHash;
         var consumer = this._resolve("consumer");
         Write(consumer, "pod.json", $$"""
             {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[],"requires":[{"id":"library","releaseHash":"{{libraryHash}}"}]}
@@ -152,9 +152,9 @@ public sealed class PortablePodArchiveTests {
         var unchanged = this._preparation.Prepare("consumer");
         Assert.Multiple(() => {
             Assert.That(unchanged.Success, Is.True, string.Join("; ", unchanged.Outcomes.Select(outcome => outcome.Reason)));
-            Assert.That(unchanged.ContentHash, Is.EqualTo(exported.Release!.ContentHash));
-            Assert.That(unchanged.ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
-            Assert.That(unchanged.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"library\": 1"));
+            Assert.That(((PreparedPod)unchanged).ContentHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)unchanged).ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
+            Assert.That(((PreparedPod)unchanged).ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"library\": 1"));
         });
 
         File.WriteAllText(Path.Combine(consumer, "composed", "main.settings.json"), "{\"tampered\":true}");
@@ -170,7 +170,7 @@ public sealed class PortablePodArchiveTests {
         var editedWithoutDependency = this._preparation.Prepare("consumer");
         Assert.That(editedWithoutDependency.Success, Is.False);
         Assert.That(editedWithoutDependency.Outcomes.Select(outcome => outcome.Code), Does.Contain("pod.dependency.missing-after-release-edit"));
-        Assert.That(editedWithoutDependency.ComposedSettings, Is.Empty);
+        Assert.That(editedWithoutDependency, Is.TypeOf<RejectedPod>());
 
         Write(library, "pod.json", """
             {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[]}
@@ -179,10 +179,10 @@ public sealed class PortablePodArchiveTests {
         var edited = this._preparation.Prepare("consumer");
         Assert.Multiple(() => {
             Assert.That(edited.Success, Is.True, string.Join("; ", edited.Outcomes.Select(outcome => outcome.Reason)));
-            Assert.That(edited.ContentHash, Is.Not.EqualTo(exported.Release!.ContentHash));
-            Assert.That(edited.ReleaseHash, Is.Null);
-            Assert.That(edited.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
-            Assert.That(edited.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"consumer\": 2"));
+            Assert.That(((PreparedPod)edited).ContentHash, Is.Not.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)edited).ReleaseHash, Is.Null);
+            Assert.That(((PreparedPod)edited).Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release.ContentHash));
+            Assert.That(((PreparedPod)edited).ComposedSettings["composed/main.settings.json"].Content, Does.Contain("\"consumer\": 2"));
         });
     }
 
@@ -193,7 +193,7 @@ public sealed class PortablePodArchiveTests {
             {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[]}
             """);
         Write(library, "settings/base.settings.json", "{\"library\":1}");
-        var libraryHash = this._preparation.Prepare("library").ContentHash;
+        var libraryHash = ((PreparedPod)this._preparation.Prepare("library")).ContentHash;
         var consumer = this._resolve("consumer");
         Write(consumer, "pod.json", $$"""
             {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}],"requires":[{"id":"library","releaseHash":"{{libraryHash}}"}]}
@@ -214,7 +214,7 @@ public sealed class PortablePodArchiveTests {
         Assert.Multiple(() => {
             Assert.That(bundle.Dependencies, Is.Empty);
             Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
-            Assert.That(prepared.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)prepared).ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
         });
     }
 
@@ -239,9 +239,9 @@ public sealed class PortablePodArchiveTests {
         var versioned = this._preparation.Prepare("portable");
         Assert.Multiple(() => {
             Assert.That(versioned.Success, Is.True, string.Join("; ", versioned.Outcomes.Select(outcome => outcome.Reason)));
-            Assert.That(versioned.ReleaseHash, Is.Null);
-            Assert.That(versioned.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
-            Assert.That(versioned.Manifest.Version, Is.EqualTo("2.0.0"));
+            Assert.That(((PreparedPod)versioned).ReleaseHash, Is.Null);
+            Assert.That(((PreparedPod)versioned).Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)versioned).Manifest.Version, Is.EqualTo("2.0.0"));
         });
 
         var renamedWorkspace = this._resolve("portable-copy");
@@ -252,9 +252,9 @@ public sealed class PortablePodArchiveTests {
         var renamed = this._preparation.Prepare("portable-copy");
         Assert.Multiple(() => {
             Assert.That(renamed.Success, Is.True, string.Join("; ", renamed.Outcomes.Select(outcome => outcome.Reason)));
-            Assert.That(renamed.ReleaseHash, Is.Null);
-            Assert.That(renamed.Manifest.Parent?.Id, Is.EqualTo("portable"));
-            Assert.That(renamed.Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
+            Assert.That(((PreparedPod)renamed).ReleaseHash, Is.Null);
+            Assert.That(((PreparedPod)renamed).Manifest.Parent?.Id, Is.EqualTo("portable"));
+            Assert.That(((PreparedPod)renamed).Manifest.Parent?.ReleaseHash, Is.EqualTo(exported.Release!.ContentHash));
         });
     }
 

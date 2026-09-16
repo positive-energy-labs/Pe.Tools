@@ -220,8 +220,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         cancellationToken.ThrowIfCancellationRequested();
         var prepared = new ScriptPodPreparationService().Prepare(request.WorkspaceKey, request.SourceBundle);
         return Task.FromResult(new ScriptPodPrepareData(
-            prepared.Success ? prepared.ContentHash : null,
-            prepared.Success ? prepared.ComposedSettings.ToDictionary(pair => pair.Key, pair => pair.Value.Content) : [],
+            prepared is PreparedPod snapshot ? snapshot.ContentHash : null,
+            prepared is PreparedPod composed ? composed.ComposedSettings.ToDictionary(pair => pair.Key, pair => pair.Value.Content) : [],
             prepared.Outcomes.Select(outcome => new ScriptPodGateOutcomeData(outcome.Code, outcome.Location,
                 outcome.Reason, outcome.Remedy, outcome.Severity)).ToList()));
     }

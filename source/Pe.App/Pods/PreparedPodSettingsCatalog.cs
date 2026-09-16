@@ -61,10 +61,10 @@ internal static class PreparedPodSettingsCatalog {
         foreach (var workspaceRoot in Directory.EnumerateDirectories(root).OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
             var podId = Path.GetFileName(workspaceRoot);
             try {
-                var prepared = new ScriptPodPreparationService().Prepare(podId);
-                if (!prepared.Success) {
+                var preparation = new ScriptPodPreparationService().Prepare(podId);
+                if (preparation is not PreparedPod prepared) {
                     Log.Warning("Portable pod settings skipped: PodId={PodId}, Diagnostics={Diagnostics}", podId,
-                        prepared.Outcomes.Where(outcome => outcome.Severity == Pe.Shared.HostContracts.Scripting.ScriptDiagnosticSeverity.Error)
+                        preparation.Outcomes.Where(outcome => outcome.Severity == Pe.Shared.HostContracts.Scripting.ScriptDiagnosticSeverity.Error)
                             .Select(outcome => $"{outcome.Code}:{outcome.Location}:{outcome.Reason}"));
                     continue;
                 }
@@ -78,9 +78,9 @@ internal static class PreparedPodSettingsCatalog {
 
     internal static PreparedPodSetting Get(string podId, string sourcePath) {
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(podId);
-        var prepared = new ScriptPodPreparationService().Prepare(podId);
-        if (!prepared.Success)
-            throw new InvalidDataException(string.Join("; ", prepared.Outcomes
+        var preparation = new ScriptPodPreparationService().Prepare(podId);
+        if (preparation is not PreparedPod prepared)
+            throw new InvalidDataException(string.Join("; ", preparation.Outcomes
                 .Where(outcome => outcome.Severity == Pe.Shared.HostContracts.Scripting.ScriptDiagnosticSeverity.Error)
                 .Select(outcome => $"{outcome.Code} at {outcome.Location}: {outcome.Reason}")));
         return Project(prepared, workspaceRoot, []).Single(setting =>

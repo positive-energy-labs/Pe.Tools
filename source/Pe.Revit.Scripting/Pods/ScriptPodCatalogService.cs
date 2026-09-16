@@ -42,7 +42,7 @@ public static class ScriptPodCatalogService {
                 workspaceKey,
                 workspaceRoot,
                 prepared.Success,
-                string.IsNullOrEmpty(prepared.ContentHash) ? null : ScriptPodArchiveService.ToSummary(prepared.Manifest),
+                prepared is PreparedPod snapshot ? ScriptPodArchiveService.ToSummary(snapshot.Manifest) : null,
                 prepared.Outcomes.Select(outcome => new ScriptDiagnostic(
                     "prepare",
                     outcome.Severity,

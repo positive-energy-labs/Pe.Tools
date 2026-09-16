@@ -19,6 +19,17 @@ public sealed record PodGateOutcome(
 
 public sealed record PreparedPodFile(string Path, byte[] Bytes, string Sha256);
 
+public abstract record PodPreparationResult {
+    public abstract IReadOnlyDictionary<string, PreparedPodFile> Files { get; init; }
+    public abstract IReadOnlyList<PodGateOutcome> Outcomes { get; init; }
+    public bool Success => this is PreparedPod;
+}
+
+public sealed record RejectedPod(
+    IReadOnlyDictionary<string, PreparedPodFile> Files,
+    IReadOnlyList<PodGateOutcome> Outcomes
+) : PodPreparationResult;
+
 public sealed record PreparedPod(
     PodManifest Manifest,
     string ContentHash,
@@ -26,8 +37,7 @@ public sealed record PreparedPod(
     IReadOnlyDictionary<string, PodComposedDocument> ComposedSettings,
     IReadOnlyList<PodConsumedDependency> InspectionDependencies,
     IReadOnlyList<PodGateOutcome> Outcomes
-) {
-    public bool Success => this.Outcomes.All(outcome => outcome.Severity != ScriptDiagnosticSeverity.Error);
+) : PodPreparationResult {
     /// <summary>The verified release hash when this snapshot uses shipped release bytes unchanged; otherwise null.</summary>
     public string? ReleaseHash { get; init; }
 }
@@ -48,10 +58,10 @@ public sealed class ScriptPodPreparationService(
     private static readonly string[] SettingsSuffixes = [".family.json", ".patch.json", ".schedule.json", ".batch.json", ".settings.json"];
     private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
 
-    public PreparedPod Prepare(string workspaceKey) =>
-        this.Prepare(workspaceKey, new Dictionary<string, PreparedPod>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
+    public PodPreparationResult Prepare(string workspaceKey) =>
+        this.Prepare(workspaceKey, new Dictionary<string, PodPreparationResult>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
 
-    public PreparedPod Prepare(string workspaceKey, ScriptPodSourceBundle bundle) {
+    public PodPreparationResult Prepare(string workspaceKey, ScriptPodSourceBundle bundle) {
         _ = Pe.Shared.Product.ScriptingWorkspaceLayout.NormalizeWorkspaceKey(workspaceKey);
         var captureRoot = Path.Combine(Path.GetTempPath(), "Pe.Tools", "pod-captures", Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(captureRoot);
@@ -96,33 +106,29 @@ public sealed class ScriptPodPreparationService(
         }
     }
 
-    private PreparedPod Prepare(
+    private PodPreparationResult Prepare(
         string workspaceKey,
-        IDictionary<string, PreparedPod> prepared,
+        IDictionary<string, PodPreparationResult> prepared,
         ISet<string> visiting
     ) {
         if (prepared.TryGetValue(workspaceKey, out var cached))
             return cached;
         if (!visiting.Add(workspaceKey))
-            return Failed(workspaceKey, "pod.dependency.cycle", "pod.json", $"Dependency cycle through pod '{workspaceKey}'.", "Remove the cyclic requires entry.");
+            return Failed("pod.dependency.cycle", "pod.json", $"Dependency cycle through pod '{workspaceKey}'.", "Remove the cyclic requires entry.");
 
         try {
             var workspaceRoot = this._workspaceRootResolver(workspaceKey);
             if (Directory.Exists(workspaceRoot) && (File.GetAttributes(workspaceRoot) & FileAttributes.ReparsePoint) != 0)
-                return Failed(workspaceKey, "pod.directory.link", workspaceRoot, "Pod roots cannot be linked directories.", "Use a regular local pod folder.");
+                return Failed("pod.directory.link", workspaceRoot, "Pod roots cannot be linked directories.", "Use a regular local pod folder.");
             var manifestPath = Path.Combine(workspaceRoot, "pod.json");
             if (!File.Exists(manifestPath))
-                return Failed(workspaceKey, "pod.manifest.missing", "pod.json", $"Pod '{workspaceKey}' has no pod.json.", "Create pod.json before preparing or executing the pod.");
+                return Failed("pod.manifest.missing", "pod.json", $"Pod '{workspaceKey}' has no pod.json.", "Create pod.json before preparing or executing the pod.");
 
             var manifestBytes = ReadBoundedFile(manifestPath);
             var manifestResult = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(manifestBytes));
             if (!manifestResult.Success)
-                return new PreparedPod(
-                    manifestResult.Manifest ?? EmptyManifest(workspaceKey),
-                    string.Empty,
+                return new RejectedPod(
                     new Dictionary<string, PreparedPodFile>(),
-                    new Dictionary<string, PodComposedDocument>(),
-                    [],
                     manifestResult.Diagnostics.Select(diagnostic => new PodGateOutcome(
                         "pod.manifest.invalid",
                         diagnostic.Source ?? "pod.json",
@@ -139,6 +145,8 @@ public sealed class ScriptPodPreparationService(
             var files = CaptureFiles(workspaceRoot, outcomes);
             if (!outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error))
                 outcomes.Add(new("pod.capture.valid", workspaceRoot, $"Captured {files.Count} bounded regular files from the portable input roots.", null, ScriptDiagnosticSeverity.Info));
+            if (outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error))
+                return new RejectedPod(files, outcomes);
             var released = TryUseVerifiedRelease(manifest, files, outcomes, out var originRelease);
             if (released is not null) {
                 prepared[workspaceKey] = released;
@@ -150,9 +158,9 @@ public sealed class ScriptPodPreparationService(
                 files = files.Where(pair => IsAuthoredPath(pair.Key))
                     .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
             }
-            var dependencies = new Dictionary<string, PreparedPod>(StringComparer.Ordinal);
+            var dependencies = new Dictionary<string, PodPreparationResult>(StringComparer.Ordinal);
             foreach (var requirement in manifest.Requires) {
-                PreparedPod dependency;
+                PodPreparationResult dependency;
                 try {
                     var dependencyKey = ResolveDependencyWorkspaceKey(workspaceRoot, requirement);
                     dependency = this.Prepare(dependencyKey, prepared, visiting);
@@ -162,18 +170,18 @@ public sealed class ScriptPodPreparationService(
                     continue;
                 }
                 dependencies[requirement.Id] = dependency;
-                if (!dependency.Success) {
+                if (dependency is not PreparedPod validDependency) {
                     outcomes.Add(new PodGateOutcome(
                         editedRelease ? "pod.dependency.missing-after-release-edit" : "pod.dependency.invalid",
                         $"pod.json#requires/{requirement.Id}",
                         $"Required pod '{requirement.Id}' is not prepared and valid.",
                         $"Prepare or reinstall '{requirement.Id}' and retry."
                     ));
-                } else if (!string.Equals(dependency.ContentHash, requirement.ReleaseHash, StringComparison.Ordinal)) {
+                } else if (!string.Equals(validDependency.ContentHash, requirement.ReleaseHash, StringComparison.Ordinal)) {
                     outcomes.Add(new PodGateOutcome(
                         "pod.dependency.hash-mismatch",
                         $"pod.json#requires/{requirement.Id}",
-                        $"Required pod '{requirement.Id}' has content hash '{dependency.ContentHash}', not '{requirement.ReleaseHash}'.",
+                        $"Required pod '{requirement.Id}' has content hash '{validDependency.ContentHash}', not '{requirement.ReleaseHash}'.",
                         "Install the exact required release or update the requirement explicitly."
                     ));
                 }
@@ -221,19 +229,19 @@ public sealed class ScriptPodPreparationService(
                         reason = $"Reference '{reference}' names undeclared pod '{podId}'.";
                         return false;
                     }
-                    if (!dependencies.TryGetValue(podId, out var foreign) || !foreign.Success) {
+                    if (!dependencies.TryGetValue(podId, out var foreign) || foreign is not PreparedPod validForeign) {
                         reason = $"Reference '{reference}' requires pod '{podId}', which is not prepared and valid.";
                         return false;
                     }
                     var foreignPath = "composed/" + relativePath;
-                    if (!foreign.ComposedSettings.TryGetValue(foreignPath, out var foreignDocument)
-                        || !foreign.Files.TryGetValue("settings/" + relativePath, out var foreignSource)) {
-                        reason = $"Reference '{reference}' does not name a composed document in release '{foreign.ContentHash}'.";
+                    if (!validForeign.ComposedSettings.TryGetValue(foreignPath, out var foreignDocument)
+                        || !validForeign.Files.TryGetValue("settings/" + relativePath, out var foreignSource)) {
+                        reason = $"Reference '{reference}' does not name a composed document in release '{validForeign.ContentHash}'.";
                         return false;
                     }
                     dependency = new PodConsumedDependency(
                         podId,
-                        foreign.ContentHash,
+                        validForeign.ContentHash,
                         "settings/" + relativePath,
                         foreignDocument.Content,
                         Encoding.UTF8.GetString(foreignSource.Bytes),
@@ -264,7 +272,9 @@ public sealed class ScriptPodPreparationService(
             if (!outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error))
                 outcomes.Add(new("pod.prepared", "pod.json", $"Source composition and entrypoint checks passed for snapshot '{contentHash}'.", null, ScriptDiagnosticSeverity.Info));
 
-            var resultPod = new PreparedPod(manifest, contentHash, files, composed, inspection.Values.ToList(), outcomes);
+            PodPreparationResult resultPod = outcomes.Any(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error)
+                ? new RejectedPod(files, outcomes)
+                : new PreparedPod(manifest, contentHash, files, composed, inspection.Values.ToList(), outcomes);
             prepared[workspaceKey] = resultPod;
             return resultPod;
         } finally {
@@ -328,7 +338,7 @@ public sealed class ScriptPodPreparationService(
         }
     }
 
-    private static PreparedPod? TryUseVerifiedRelease(
+    private static PodPreparationResult? TryUseVerifiedRelease(
         PodManifest manifest,
         IReadOnlyDictionary<string, PreparedPodFile> files,
         ICollection<PodGateOutcome> outcomes,
@@ -382,7 +392,7 @@ public sealed class ScriptPodPreparationService(
             return new PreparedPod(manifest, contentHash, files, composed, inspection, outcomes.ToList()) { ReleaseHash = contentHash };
         } catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException) {
             outcomes.Add(new PodGateOutcome("pod.release.integrity", "release.json", exception.Message, "Restore or re-import the exact release before execution."));
-            return new PreparedPod(manifest, string.Empty, files, new Dictionary<string, PodComposedDocument>(), [], outcomes.ToList());
+            return new RejectedPod(files, outcomes.ToList());
         }
     }
 
@@ -554,8 +564,6 @@ public sealed class ScriptPodPreparationService(
             : $"Pod '{requirement.Id}' is ambiguous between local folders: {string.Join(", ", selected.Select(candidate => candidate.Key))}.");
     }
 
-    private static PreparedPod Failed(string id, string code, string location, string reason, string remedy) =>
-        new(EmptyManifest(id), string.Empty, new Dictionary<string, PreparedPodFile>(), new Dictionary<string, PodComposedDocument>(), [], [new PodGateOutcome(code, location, reason, remedy)]);
-
-    private static PodManifest EmptyManifest(string id) => new(PodManifestValidator.CurrentSchemaVersion, id, id, string.Empty, null, [], [], null, null, []);
+    private static RejectedPod Failed(string code, string location, string reason, string remedy) =>
+        new(new Dictionary<string, PreparedPodFile>(), [new PodGateOutcome(code, location, reason, remedy)]);
 }

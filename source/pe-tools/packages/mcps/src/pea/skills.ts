@@ -174,6 +174,8 @@ For an independent editable copy, import with independent=true (CLI: pea script 
 
 The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<local-folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
 
+For editor validation, a declared $schema URL under /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. The local Pod folder never selects a validator. JSON without a declared schema remains generic data; the consuming operation still owns validation before applying it. Directive previews require the native preparation service and report an explicit reason when it is unavailable.
+
 APS Parameters Service is the sole authority for shared parameter definitions. Retrieve current definitions only when the selected library operation consumes them. The library validates compatibility; storage validates portable structure. An unrelated member's unavailable service must not block this operation. No bundled or cached authority fallback.
 
 Each useful run produces files under its pod's output directory, with a receipt identifying the snapshot, selected member, actual operation, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.

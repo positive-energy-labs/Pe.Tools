@@ -37,9 +37,9 @@ public sealed class ScriptPodPreparationTests {
 
         Assert.Multiple(() => {
             Assert.That(first.Success, Is.True);
-            Assert.That(first.ComposedSettings["composed/default.settings.json"].Content, Does.Contain("1"));
-            Assert.That(edited.ContentHash, Is.Not.EqualTo(first.ContentHash));
-            Assert.That(outputEdited.ContentHash, Is.EqualTo(edited.ContentHash));
+            Assert.That(((PreparedPod)first).ComposedSettings["composed/default.settings.json"].Content, Does.Contain("1"));
+            Assert.That(((PreparedPod)edited).ContentHash, Is.Not.EqualTo(((PreparedPod)first).ContentHash));
+            Assert.That(((PreparedPod)outputEdited).ContentHash, Is.EqualTo(((PreparedPod)edited).ContentHash));
             Assert.That(outputEdited.Files.Keys, Has.None.EqualTo("output/old-result.json"));
         });
     }
@@ -52,7 +52,7 @@ public sealed class ScriptPodPreparationTests {
                 ["settings/base.settings.json"] = "{\"base\":1}",
                 ["settings/unused.settings.json"] = "{\"unused\":true}"
             });
-        var releaseHash = this._service.Prepare("library").ContentHash;
+        var releaseHash = ((PreparedPod)this._service.Prepare("library")).ContentHash;
         Directory.Move(Path.Combine(this._root, "library"), Path.Combine(this._root, "Office Library"));
         WritePod("consumer", $$"""
             {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[],"requires":[{"id":"library","releaseHash":"{{releaseHash}}"}]}
@@ -63,8 +63,8 @@ public sealed class ScriptPodPreparationTests {
         var prepared = this._service.Prepare("consumer");
         Assert.Multiple(() => {
             Assert.That(prepared.Success, Is.True);
-            Assert.That(prepared.ComposedSettings["composed/main.settings.json"].Content, Does.Contain("base"));
-            Assert.That(prepared.InspectionDependencies.Select(item => item.SourcePath), Is.EqualTo(new[] { "settings/base.settings.json" }));
+            Assert.That(((PreparedPod)prepared).ComposedSettings["composed/main.settings.json"].Content, Does.Contain("base"));
+            Assert.That(((PreparedPod)prepared).InspectionDependencies.Select(item => item.SourcePath), Is.EqualTo(new[] { "settings/base.settings.json" }));
         });
 
         File.WriteAllText(Path.Combine(this._root, "Office Library", "settings", "base.settings.json"), "{\"base\":3}");
@@ -78,14 +78,14 @@ public sealed class ScriptPodPreparationTests {
         WritePod("upstream", """
             {"schemaVersion":2,"id":"upstream","name":"Upstream","version":"1.0.0","entrypoints":[]}
             """, new Dictionary<string, string> { ["settings/nested.settings.json"] = "{\"upstream\":1}" });
-        var upstreamHash = this._service.Prepare("upstream").ContentHash;
+        var upstreamHash = ((PreparedPod)this._service.Prepare("upstream")).ContentHash;
         WritePod("library", $$"""
             {"schemaVersion":2,"id":"library","name":"Library","version":"1.0.0","entrypoints":[],"requires":[{"id":"upstream","releaseHash":"{{upstreamHash}}"}]}
             """, new Dictionary<string, string> {
                 ["settings/nested.settings.json"] = "{\"library\":1}",
                 ["settings/base.settings.json"] = "{\"$preset\":\"@local/nested.settings.json\",\"fromUpstream\":{\"$include\":\"@upstream/nested.settings.json\"}}"
             });
-        var libraryHash = this._service.Prepare("library").ContentHash;
+        var libraryHash = ((PreparedPod)this._service.Prepare("library")).ContentHash;
         WritePod("consumer", $$"""
             {"schemaVersion":2,"id":"consumer","name":"Consumer","version":"1.0.0","entrypoints":[],"requires":[{"id":"library","releaseHash":"{{libraryHash}}"}]}
             """, new Dictionary<string, string> {
@@ -94,17 +94,17 @@ public sealed class ScriptPodPreparationTests {
             });
 
         var prepared = this._service.Prepare("consumer");
-        var content = prepared.ComposedSettings["composed/main.settings.json"].Content;
+        var content = ((PreparedPod)prepared).ComposedSettings["composed/main.settings.json"].Content;
         Assert.Multiple(() => {
             Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
             Assert.That(content, Does.Contain("\"library\": 1"));
             Assert.That(content, Does.Contain("\"upstream\": 1"));
             Assert.That(content, Does.Not.Contain("consumer"));
-            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+            Assert.That(((PreparedPod)prepared).InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
                 Does.Contain(("library", "settings/base.settings.json")));
-            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+            Assert.That(((PreparedPod)prepared).InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
                 Does.Contain(("library", "settings/nested.settings.json")));
-            Assert.That(prepared.InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
+            Assert.That(((PreparedPod)prepared).InspectionDependencies.Select(item => (item.PodId, item.SourcePath)),
                 Does.Contain(("upstream", "settings/nested.settings.json")));
         });
     }
@@ -162,7 +162,7 @@ public sealed class ScriptPodPreparationTests {
         ]);
         var prepared = this._service.Prepare("sample", bundle);
         Assert.That(prepared.Success, Is.True, string.Join("; ", prepared.Outcomes.Select(outcome => outcome.Reason)));
-        Assert.That(prepared.Manifest.Id, Is.EqualTo("sample"));
+        Assert.That(((PreparedPod)prepared).Manifest.Id, Is.EqualTo("sample"));
     }
 
     [Test]

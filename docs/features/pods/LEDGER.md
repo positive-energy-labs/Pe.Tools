@@ -15,6 +15,8 @@
 
 - 2026-09-16: Editor previews delegate captured draft bytes to the same native preparation service as execution. A declared `$schema` selects library validation independently of the local Pod folder; it does not bind an operation. Generic JSON without that declaration has no library validator selected.
 
+- 2026-09-16: Preparation returns either a `PreparedPod` or a `RejectedPod`. Rejections carry captured-file evidence and gate reasons; they have no manifest, content identity, or composed settings that execution could accidentally consume.
+
 ## Tried & rejected
 
 - 2026-09-16: Binding library operations to authored JSON manifest entries; this makes reusable data look executable.
@@ -25,6 +27,4 @@
 ## Owed
 
 - Prove actual Family Foundry and Schedule operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
-- Replace the preparation result placeholder manifest with an explicit rejected/prepared result before claiming the state model complete.
-- Editor composition uses native preparation; offline authored JSON stays editable but directive previews require that service.
 - Add Git/cloud transport only when its concrete workflow is selected; archive transport is the present carrier.

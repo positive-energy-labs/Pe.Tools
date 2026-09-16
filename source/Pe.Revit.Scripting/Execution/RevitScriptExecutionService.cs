@@ -445,9 +445,9 @@ public sealed class RevitScriptExecutionService(
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
                 var bundle = request.SourceBundle ?? CapturePodSource(workspaceKey, request.SourcePath!);
-                var prepared = new ScriptPodPreparationService().Prepare(workspaceKey, bundle);
-                if (!prepared.Success)
-                    throw new ArgumentException(string.Join("; ", prepared.Outcomes
+                var preparation = new ScriptPodPreparationService().Prepare(workspaceKey, bundle);
+                if (preparation is not PreparedPod prepared)
+                    throw new ArgumentException(string.Join("; ", preparation.Outcomes
                         .Where(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error)
                         .Select(outcome => $"{outcome.Code} at {outcome.Location}: {outcome.Reason} {outcome.Remedy}")), PodManifestValidator.DiagnosticStage);
                 var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);

@@ -157,14 +157,14 @@ public sealed class ScriptPodArchiveService(
             var manifest = manifestResult.Manifest!;
             ValidateEntrypointFiles(workspaceRoot, manifest);
 
-            var prepared = this._preparationService.Prepare(workspaceKey);
-            if (!prepared.Success)
+            var preparation = this._preparationService.Prepare(workspaceKey);
+            if (preparation is not PreparedPod prepared)
                 return CreateRejectedExport(
                     archivePath,
                     workspaceKey,
                     workspaceRoot,
                     archiveEntryPaths,
-                    prepared.Outcomes.Select(ToDiagnostic).ToList()
+                    preparation.Outcomes.Select(ToDiagnostic).ToList()
                 );
 
             archivePath = Path.GetFullPath(request.ArchivePath);
