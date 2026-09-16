@@ -620,33 +620,12 @@
   background: color-mix(in srgb, var(--pe-pea) 8%, transparent);
 }
 
-/* the opened call's own I/O, inline under its marker. Bounded in both axes so a fat payload
-   scrolls inside the call instead of stretching the chat lane. */
+/* the opened call's own I/O, inline under its marker: two `Code` blocks, each its own frame
+   with its own clamp, so the container only stacks them. */
 [data-annotation="tool-body"] {
-  border-left: 0.5px solid var(--pe-line);
-  background: var(--pe-recess);
-  --pe-on: var(--pe-recess);
-}
-[data-annotation="tool-body"] [data-annotation="io-label"] {
-  padding: 3px 8px 0;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  color: var(--pe-ink-2);
-}
-[data-annotation="tool-body"] pre {
-  margin: 0;
-  padding: 2px 8px 6px;
-  max-height: 320px;
-  overflow: auto;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  line-height: var(--type-small-line-height);
-  color: var(--pe-ink-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-[data-annotation="tool-body"] [data-annotation="io-error"] {
-  color: var(--pe-caution);
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 /* A pinned inspection is a held reading: it gets the full lane height and scrolls, where the
