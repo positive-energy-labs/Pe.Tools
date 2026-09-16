@@ -8,6 +8,8 @@ Design-language and primitive gaps this cluster hit are owned by the design-syst
 restated here.
 
 ## Decided
+- 2026-09-16, Chat renders its own message list over `ChatState` with one `react-markdown` path; `@assistant-ui/react` and `@assistant-ui/react-markdown` leave (kaitpw: "yes to all three"). This reverses the 2026-08-26 rejection: a census found we use only the part switch, the tool `Fallback`, the part status rule, the optimistic row, and the typewriter, about 50 lines to own, against a 191-line translation layer that keeps a second message list, 69 packages, and 13 MB. The second list lags the lens by one effect, which causes the lost initial scroll and streaming jitter (`.artifacts/handoffs/chat-stack-20260916/`). The typewriter is dropped.
+- 2026-09-16, The composer stays ours. `new` and `fork` become route verbs; the `threads`, `trace`, and `world` slash commands are deleted. Skills arrive later as their own surface.
 - 2026-09-12, restore flex growth on the ChatShell conversation row after route-shell nesting. Shared Chrome measured the composer bottom gap fall from 365px to 12px at the same 1385px viewport with no page overflow; source change is one layout class.
 - 2026-09-12, Chrome Agent live-host walkthrough proved unbound Chat composer, persisted prompt in thread 98dbd83d-c204-4f96-a4cb-1026a2b63d99, and one SSE attach across 15 seconds after stabilizing session identity and URL thread selection. ProviderAuthRequiredError for Anthropic prevented a reply; no successful conversation claim. Browser evidence: .artifacts/runs/browser-20260912-cutover/chat-stability.json.
 
@@ -125,7 +127,6 @@ restated here.
 - 2026-09-01 — A prompt compiler, section registry, model-family kernels, or a second memory/compaction/inspector layer: every candidate concern already has a native owner and no failing behavior case demanded a new one.
 - 2026-08-26 — Fake Mesa through Git copy/sync, the in-process SDK filesystem, or a claimed mount without authenticated FUSE plus `bwrap`: none proves a versioned, isolated user world.
 - 2026-08-26 — Rewrite Pea/Host around Effect AI or newer Effect v4 for novelty: Mastra and Effect already own different seams, and the rewrite offered no deletion or named fix.
-- 2026-08-26 — Replace assistant-ui with private Mastra Factory UI or local primitives: Factory UI is not a public package, and rebuilding assistant-ui's 590-LOC render boundary would recreate message, markdown, streaming, and accessibility behavior.
 - 2026-08-17 — AG-UI as the browser event protocol, evaluated against ACP on a full HarnessEvent-by-event adapter map: its native `STATE_SNAPSHOT`/`STATE_DELTA` and run lifecycle are real wins, but plans, partial tool output, shell output, and tool-error metadata all fall back to `CUSTOM pea.*` events that only a Pea-aware frontend can render. Declined. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
 - 2026-08-17 — ACP-shaped session/update is the transport Pea speaks: native `tool_call`/`tool_call_update` carry kind, status, and raw input/output in one card, and `plan` is native. Pea-only facts ride ACP `_meta["pe.tools/workbench.update"]`, never new top-level fields. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
 - 2026-07 — One broad "context dump" operation for Revit orientation: expensive, stale-prone, and it removes the agent's ability to choose a zoom path. Replaced by the bounded-projection ladder.
@@ -142,6 +143,7 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+- Chat build, in order, each slice with a red test first: (1) own the message list and drop assistant-ui; a sent message stays visible from send until the server echoes it (kaitpw: it often disappears until the first assistant block finishes streaming); (2) scroll: one owner for the scroll position, re-measure on content growth, snap before paint and without smooth scrolling, detach only on user intent, land on `turn` or the tail on open (`.artifacts/handoffs/chat-stack-20260916/scroll.md`); (3) attachments: paste, drop, image previews, size limits, sent attachments shown in the thread; (4) pea's captured images inline under the tool call that took them; (5) a copy button per message, `new` and `fork` as route verbs.
 
 - Host zero-holder 404 lists every connected session with no year filter, and Pea reads that text, not `resolveScope`; carry the file year to the host or filter `eligible` there (review F8).
 - `heldDocuments` is the active document only (`ponytail:` at `apps/host/src/bridge.ts`), so a Revit tab switch flips the Scope to `unheld` while the file is open two feet away (F11).

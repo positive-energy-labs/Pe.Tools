@@ -570,6 +570,7 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-10 — Keys are one registration shape across three tiers (route manifest chord, pane `shortcuts`, widget `useHotkeys`) via `keyMeta({name, description, tier, region?, refusal?})`; pane keys gained `says` and `refusal` (a refused key reveals the card). The help page `route/help.tsx` (Alt+/) is rebuilt over registrations: measured panes with leaders per region, manifest chords in a band, `manifest.docs` below. No root manifest until a navigation chord exists; chat's palette and mode chords are tagged surface chords, not actions.
 
 ## Owed
+- Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
 - Chat and grounded-doc run two markdown pipelines (`workbench/aui.tsx` via `@assistant-ui/react-markdown`, `grounded-doc/view/block-markdown.tsx` via `react-markdown`). Fold to one when either is next touched; both must render fenced code through `Code`.
 - Large tool outputs (element lists in the MB range) are rendered whole. `Code`'s 64 KB gate is the interim; the real fix is a bounded output contract on the tool result itself.
 - Product follow-up after RP merge: extend the Situation motif to low-priority routes, finish file-picker ergonomics, and improve incomplete frozen seed slots. These do not authorize a competing Work, Reading or Action owner.
