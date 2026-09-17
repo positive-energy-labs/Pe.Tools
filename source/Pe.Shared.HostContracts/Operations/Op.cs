@@ -396,7 +396,26 @@ public sealed record HostOpsCatalogEntry(
     }
 }
 
-public sealed record HostOpsCatalogData(IReadOnlyList<HostOpsCatalogEntry> Operations);
+/// <summary>The op catalog plus the contract constants typegen emits as `export const`s.</summary>
+public sealed record HostOpsCatalogData(
+    IReadOnlyList<HostOpsCatalogEntry> Operations,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> Constants
+) {
+    /// <summary>
+    ///     Public const fields of each contract-constants class, keyed by camel-cased class and field name.
+    ///     The live catalog and the offline `pe-dev ops-catalog` both call this, so they agree.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() =>
+        new[] { typeof(Scripting.ScriptPodSourceBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
+            type => CamelCase(type.Name),
+            type => (IReadOnlyDictionary<string, object>)type
+                .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(field => field.IsLiteral)
+                .OrderBy(field => field.MetadataToken)
+                .ToDictionary(field => CamelCase(field.Name), field => field.GetRawConstantValue()!));
+
+    private static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
+}
 
 public static class OpDocumentGate {
     public static void Require(OpNeeds needs, bool hasDocument, bool isFamilyDocument) {

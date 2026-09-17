@@ -91,16 +91,9 @@ export const writeMemberOnce = (
 /** The `$schema` a family model member carries; C# owns the URL shape. */
 const familyModelSchema = `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
 
-/**
- * The inline spec the family engine takes (`{ select, patch, run }`). A family model member is a
- * patch with no selector, so it is sent as `{ patch: model }`, the same way the palettes send it.
- */
-const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) => {
-  const { spec, schemaUrl } = await runPods(deps, composedSpec(source, pods));
-  if (!schemaUrl?.endsWith("/schemas/settings/FamilyFoundry/models.json")) return spec;
-  const { $schema: _, ...model } = JSON.parse(spec) as Record<string, unknown>;
-  return JSON.stringify({ patch: model });
-};
+/** The composed member as authored; the C# family edge reads its `$schema`. */
+const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) =>
+  (await runPods(deps, composedSpec(source, pods))).spec;
 
 /** A captured family model becomes a member that says what it is. */
 const familyMember = (modelJson: string) =>
@@ -376,8 +369,7 @@ export async function admitFamilyAction(
         };
       }
       const input = familyActions["family.build"].input.parse(admission.input);
-      const { spec } = await runPods(deps, composedSpec(input.source, pods));
-      const { $schema: _, ...model } = JSON.parse(spec) as Record<string, unknown>;
+      const spec = await familySpec(deps, input.source, pods);
       const file = win32.join(
         await runPods(deps, podFolder(input.source.pod, pods)),
         input.source.path,
@@ -387,7 +379,7 @@ export async function admitFamilyAction(
         process,
         nativeKey: "family.build",
         input: {
-          specJson: JSON.stringify(model),
+          specJson: spec,
           source: input.source,
           ...(deps.nativePaths
             ? await deps.nativePaths(input, admission.id, file)

@@ -6,6 +6,7 @@ using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData.Families;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
+using Pe.App.Host;
 using Pe.App.Pods;
 using Pe.Shared.StorageRuntime.Modules;
 
@@ -27,8 +28,8 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
     public EphemeralWindow Build() {
         var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
         var files = PodMembers.List(FamilyModelSettingsRegistration.Root, FamilyModelSettingsRegistration.PatchRoot)
-            .Select(member => new ProfileListItem(member,
-                member.Schema!.EndsWith(SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.PatchRoot), StringComparison.OrdinalIgnoreCase)
+            .Select(entry => new ProfileListItem(entry.Pod, entry.Member,
+                entry.Member.Schema!.EndsWith(SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.PatchRoot), StringComparison.OrdinalIgnoreCase)
                     ? FoundryFileKind.Patch
                     : FoundryFileKind.FamilyModel))
             .OrderByDescending(item => item.LastModified)
@@ -49,6 +50,9 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
             Name = a.Name,
             Execute = _ => a.Handler(context),
             CanExecute = _ => a.CanExecute?.Invoke(context) ?? true
+        }).Append(new PaletteAction<ProfileListItem> {
+            Name = "Open in Pods",
+            Execute = item => _ = PeToolsBrowser.TryLaunch(new PodMemberAddress(item.Pod.Manifest.Id, item.Member.Path))
         }).ToList();
 
         return PaletteFactory.Create($"{displayName} - Select family.json or patch", new PaletteOptions<ProfileListItem> {
@@ -67,13 +71,13 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
         var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
             if (item.Kind == FoundryFileKind.Patch) {
-                var patch = item.Member.Load<FamilyPatch>().Spec;
+                var patch = item.Member.Load<FamilyPatch>(item.Pod).Spec;
                 var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
                     ? []
                     : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
                 return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-            var composed = item.Member.Load<FamilyModel>().Spec;
+            var composed = item.Member.Load<FamilyModel>(item.Pod).Spec;
             var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };

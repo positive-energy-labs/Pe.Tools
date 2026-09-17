@@ -59,12 +59,15 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
           : [];
       const body: {
         operations: unknown[];
+        constants?: unknown;
         bridgeSessionId?: string;
         bridgeCatalogError?: string;
       } = {
         operations: [...bridgeOps, ...tsOnlyOperationCatalog],
         bridgeSessionId: readSessionId,
       };
+      if (result._tag === "Success")
+        body.constants = (result.success.value as { constants?: unknown }).constants;
       if (result._tag === "Failure")
         body.bridgeCatalogError = String(result.failure.message ?? result.failure);
       return Response.jsonUnsafe(body);

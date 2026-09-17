@@ -21,11 +21,7 @@ public static class FamilyModelSettingsRegistration {
 
     public static StructuralSettingsModuleDescriptor Module { get; } = new(
         ModuleKey,
-        RootKey,
-        [new SettingsRootDescriptor(RootKey, "Family Models"), new SettingsRootDescriptor(PatchRootKey, "Family Patches")],
-        SettingsStorageProfiles.SharedAuthoring,
-        SettingsModuleHostScope.Session,
-        SettingsModuleActiveDocumentKind.Any
+        [new SettingsRootDescriptor(RootKey, "Family Models"), new SettingsRootDescriptor(PatchRootKey, "Family Patches")]
     );
 
     public static ISettingsRootBinding<FamilyModel> Root { get; } =
