@@ -219,103 +219,101 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
           none of its own. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
         <PageSurface>
-          <>
-            <PaneSplit
-              axis="horizontal"
-              grow
-              resize={{
-                target: "start",
-                defaultSize: 300,
-                minSize: 240,
-                persist: "pe.sideWidth",
-                collapse: { collapsed: !sideOpen, collapsedSize: 40 },
-              }}
-              start={
-                <Pane
-                  kind="flank"
-                  id="threads"
-                  title="threads"
-                  meta={threads.length}
-                  actions={<ModeDial mode={mode} setMode={setMode} />}
-                  collapsed={!sideOpen}
-                  onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
-                >
-                  {mode === "threads" ? (
-                    <ThreadList
-                      threads={threads}
-                      currentThreadId={currentThreadId}
-                      onSelect={openThread}
-                      onNew={newThread}
-                      onRename={handleRenameThread}
-                      onDelete={handleDeleteThread}
-                      onSearch={() => store.actions.setPaletteOpen(true)}
-                    />
-                  ) : mode === "trace" ? (
-                    <div data-annotation="trace-frame">
-                      <div data-annotation="trace-pin">
-                        {traceCells.map((cell) => (
-                          <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
-                        ))}
-                      </div>
-                      {traceCell ? (
-                        <div data-annotation="inspect" data-pinned>
-                          <Press
-                            tone="quiet"
-                            size="caption"
-                            title="Unpin this call"
-                            onClick={() => view.actions.setLensPinKey(null)}
-                          >
-                            unpin
-                          </Press>
-                          <ToolCellBody call={traceCell.call} />
-                        </div>
-                      ) : null}
+          <PaneSplit
+            axis="horizontal"
+            grow
+            resize={{
+              target: "start",
+              defaultSize: 300,
+              minSize: 240,
+              persist: "pe.sideWidth",
+              collapse: { collapsed: !sideOpen, collapsedSize: 40 },
+            }}
+            start={
+              <Pane
+                kind="flank"
+                id="threads"
+                title="threads"
+                meta={threads.length}
+                actions={<ModeDial mode={mode} setMode={setMode} />}
+                collapsed={!sideOpen}
+                onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
+              >
+                {mode === "threads" ? (
+                  <ThreadList
+                    threads={threads}
+                    currentThreadId={currentThreadId}
+                    onSelect={openThread}
+                    onNew={newThread}
+                    onRename={handleRenameThread}
+                    onDelete={handleDeleteThread}
+                    onSearch={() => store.actions.setPaletteOpen(true)}
+                  />
+                ) : mode === "trace" ? (
+                  <div data-annotation="trace-frame">
+                    <div data-annotation="trace-pin">
+                      {traceCells.map((cell) => (
+                        <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
+                      ))}
                     </div>
-                  ) : (
-                    <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-                  )}
-                </Pane>
-              }
-              end={
-                <PaneSplit
-                  axis="horizontal"
-                  grow
-                  resize={{
-                    target: "end",
-                    defaultSize: 640,
-                    minSize: 480,
-                    persist: "pe.pluginWidth",
-                    collapse: { collapsed: !plugin || !pluginOpen, collapsedSize: 40 },
-                  }}
-                  start={chatColumn}
-                  end={
-                    plugin ? (
-                      <Pane
-                        kind="flank"
-                        side="right"
-                        id="plugin"
-                        title={chatPluginTitle(plugin)}
-                        collapsed={!pluginOpen}
-                        onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
-                        actions={
-                          <Press
-                            tone="quiet"
-                            size="icon"
-                            title="Close workspace"
-                            onClick={() => store.actions.setPlugin(undefined)}
-                          >
-                            <X />
-                          </Press>
-                        }
-                      >
-                        {PluginPane ? <PluginPane store={store} /> : null}
-                      </Pane>
-                    ) : null
-                  }
-                />
-              }
-            />
-          </>
+                    {traceCell ? (
+                      <div data-annotation="inspect" data-pinned>
+                        <Press
+                          tone="quiet"
+                          size="caption"
+                          title="Unpin this call"
+                          onClick={() => view.actions.setLensPinKey(null)}
+                        >
+                          unpin
+                        </Press>
+                        <ToolCellBody call={traceCell.call} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                )}
+              </Pane>
+            }
+            end={
+              <PaneSplit
+                axis="horizontal"
+                grow
+                resize={{
+                  target: "end",
+                  defaultSize: 640,
+                  minSize: 480,
+                  persist: "pe.pluginWidth",
+                  collapse: { collapsed: !plugin || !pluginOpen, collapsedSize: 40 },
+                }}
+                start={chatColumn}
+                end={
+                  plugin ? (
+                    <Pane
+                      kind="flank"
+                      side="right"
+                      id="plugin"
+                      title={chatPluginTitle(plugin)}
+                      collapsed={!pluginOpen}
+                      onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
+                      actions={
+                        <Press
+                          tone="quiet"
+                          size="icon"
+                          title="Close workspace"
+                          onClick={() => store.actions.setPlugin(undefined)}
+                        >
+                          <X />
+                        </Press>
+                      }
+                    >
+                      {PluginPane ? <PluginPane store={store} /> : null}
+                    </Pane>
+                  ) : null
+                }
+              />
+            }
+          />
         </PageSurface>
       </RouteShell>
 

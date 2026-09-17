@@ -161,132 +161,130 @@ function DataTablesWorkspace({
 
   return (
     <Surface>
-      <>
-        <AddressingBar
-          name="data tables"
-          sentence={
-            <span>
-              <span>{draft ? draft.name : "no table open"}</span>
-              <HelpTip>
-                Data tables are freely editable key schedules whose cells stay addressable by a
-                stable row key. Apply upserts by table name + row key, and prunes rows the draft no
-                longer carries — deleting a row here deletes it in Revit.
-              </HelpTip>
-            </span>
-          }
-          facts={
-            draft ? (
-              <FactChip title="columns × rows in the open draft">
-                {draft.columns.length}×{draft.rows.length}
-              </FactChip>
-            ) : undefined
-          }
-          verb={
-            <ActionButton
-              tone="commit"
-              label="apply to revit"
-              icon={CheckCheck}
-              busy={busy === "apply"}
-              disabled={!onApply || !draft || draft.name.trim().length === 0}
-              onClick={() => applyDraft()}
-              reason={applyReason}
-            />
-          }
-        />
-        <PaneSplit
-          axis="horizontal"
-          grow
-          resize={{
-            target: "start",
-            defaultSize: 248,
-            minSize: 200,
-            persist: "data-tables:rail",
-            collapse: {
-              collapsed: railCollapsed,
-              onCollapsedChange: setRailCollapsed,
-              collapsedSize: 40,
-              collapseBelow: 100,
-            },
-          }}
-          start={
-            <Pane
-              kind="flank"
-              title="tables"
-              meta={`${tables.length} tables`}
-              side="left"
-              collapsed={railCollapsed}
-              onCollapsedChange={setRailCollapsed}
-              actions={
-                <>
-                  <ActionButton
-                    label="re-read"
-                    icon={List}
-                    busy={isFetching}
-                    disabled={!onRefetch}
-                    onClick={() => void onRefetch?.()}
-                    reason={
-                      onRefetch
-                        ? "Re-read every data table from the document"
-                        : "fixture data is already loaded locally"
-                    }
-                  />
-                  <ActionButton
-                    label="new"
-                    icon={Plus}
-                    onClick={newTable}
-                    reason="Start a blank draft — nothing exists in Revit until apply"
-                  />
-                </>
-              }
-            >
-              <PickList
-                items={tables.map((t) => ({
-                  id: t.name,
-                  label: t.name,
-                  meta: `${t.columns.length}×${t.rows.length}`,
-                  hint:
-                    t.placements.length > 0
-                      ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
-                      : undefined,
-                }))}
-                activeId={draft && !draft.isNew ? draft.name : null}
-                onPick={(id) => {
-                  const handle = tables.find((t) => t.name === id);
-                  if (handle) openTable(handle);
-                }}
-                placeholder="Filter tables…"
-                emptyNote={
-                  isLoading ? (
-                    <OutcomeLine kind="busy" label="reading data tables" />
-                  ) : (
-                    <EmptyState story="scope" exit="create one with the new verb above">
-                      no data tables in this document
-                    </EmptyState>
-                  )
-                }
-              />
-            </Pane>
-          }
-          end={
-            <Pane kind="content" title={draft?.name ?? "table"} scroll="clip">
-              <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3">
-                {draft ? (
-                  <DraftEditor draft={draft} setDraft={setDraft} />
+      <AddressingBar
+        name="data tables"
+        sentence={
+          <span>
+            <span>{draft ? draft.name : "no table open"}</span>
+            <HelpTip>
+              Data tables are freely editable key schedules whose cells stay addressable by a stable
+              row key. Apply upserts by table name + row key, and prunes rows the draft no longer
+              carries — deleting a row here deletes it in Revit.
+            </HelpTip>
+          </span>
+        }
+        facts={
+          draft ? (
+            <FactChip title="columns × rows in the open draft">
+              {draft.columns.length}×{draft.rows.length}
+            </FactChip>
+          ) : undefined
+        }
+        verb={
+          <ActionButton
+            tone="commit"
+            label="apply to revit"
+            icon={CheckCheck}
+            busy={busy === "apply"}
+            disabled={!onApply || !draft || draft.name.trim().length === 0}
+            onClick={() => applyDraft()}
+            reason={applyReason}
+          />
+        }
+      />
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{
+          target: "start",
+          defaultSize: 248,
+          minSize: 200,
+          persist: "data-tables:rail",
+          collapse: {
+            collapsed: railCollapsed,
+            onCollapsedChange: setRailCollapsed,
+            collapsedSize: 40,
+            collapseBelow: 100,
+          },
+        }}
+        start={
+          <Pane
+            kind="flank"
+            title="tables"
+            meta={`${tables.length} tables`}
+            side="left"
+            collapsed={railCollapsed}
+            onCollapsedChange={setRailCollapsed}
+            actions={
+              <>
+                <ActionButton
+                  label="re-read"
+                  icon={List}
+                  busy={isFetching}
+                  disabled={!onRefetch}
+                  onClick={() => void onRefetch?.()}
+                  reason={
+                    onRefetch
+                      ? "Re-read every data table from the document"
+                      : "fixture data is already loaded locally"
+                  }
+                />
+                <ActionButton
+                  label="new"
+                  icon={Plus}
+                  onClick={newTable}
+                  reason="Start a blank draft — nothing exists in Revit until apply"
+                />
+              </>
+            }
+          >
+            <PickList
+              items={tables.map((t) => ({
+                id: t.name,
+                label: t.name,
+                meta: `${t.columns.length}×${t.rows.length}`,
+                hint:
+                  t.placements.length > 0
+                    ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
+                    : undefined,
+              }))}
+              activeId={draft && !draft.isNew ? draft.name : null}
+              onPick={(id) => {
+                const handle = tables.find((t) => t.name === id);
+                if (handle) openTable(handle);
+              }}
+              placeholder="Filter tables…"
+              emptyNote={
+                isLoading ? (
+                  <OutcomeLine kind="busy" label="reading data tables" />
                 ) : (
-                  <div className="grid h-full place-items-center">
-                    <EmptyState
-                      story="scope"
-                      exit="pick a table from the rail, or start one with the new verb"
-                    >
-                      no table open
-                    </EmptyState>
-                  </div>
-                )}
-              </div>
-            </Pane>
-          }
-        />
-      </>
+                  <EmptyState story="scope" exit="create one with the new verb above">
+                    no data tables in this document
+                  </EmptyState>
+                )
+              }
+            />
+          </Pane>
+        }
+        end={
+          <Pane kind="content" title={draft?.name ?? "table"} scroll="clip">
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3">
+              {draft ? (
+                <DraftEditor draft={draft} setDraft={setDraft} />
+              ) : (
+                <div className="grid h-full place-items-center">
+                  <EmptyState
+                    story="scope"
+                    exit="pick a table from the rail, or start one with the new verb"
+                  >
+                    no table open
+                  </EmptyState>
+                </div>
+              )}
+            </div>
+          </Pane>
+        }
+      />
     </Surface>
   );
 }

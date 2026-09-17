@@ -33,25 +33,23 @@ export function Workspace({
   return (
     <div className={cn("h-full", className)}>
       <Surface head={headRail}>
-        <>
-          {readoutBand != null && (
-            <div data-slot="readout-band" className="shrink-0 px-2 py-1.5">
-              {readoutBand}
-            </div>
-          )}
-          {visual == null ? (
-            table
-          ) : (
-            <PaneWorkspace
-              {...pane}
-              grow
-              navigation={navigation}
-              visual={visual}
-              content={table}
-              inspector={sidePanel}
-            />
-          )}
-        </>
+        {readoutBand != null && (
+          <div data-slot="readout-band" className="shrink-0 px-2 py-1.5">
+            {readoutBand}
+          </div>
+        )}
+        {visual == null ? (
+          table
+        ) : (
+          <PaneWorkspace
+            {...pane}
+            grow
+            navigation={navigation}
+            visual={visual}
+            content={table}
+            inspector={sidePanel}
+          />
+        )}
       </Surface>
     </div>
   );

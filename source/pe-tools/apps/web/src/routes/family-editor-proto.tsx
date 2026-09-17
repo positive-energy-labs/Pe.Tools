@@ -33,39 +33,37 @@ function FamilyEditorProto() {
 
   return (
     <Surface>
-      <>
-        <Pane kind="content" title="family editor" scroll="clip">
-          <header
-            className="flex flex-wrap items-baseline gap-2 px-3 py-2"
-            style={{ borderColor: token("line") }}
+      <Pane kind="content" title="family editor" scroll="clip">
+        <header
+          className="flex flex-wrap items-baseline gap-2 px-3 py-2"
+          style={{ borderColor: token("line") }}
+        >
+          <span>family editor</span>
+          <span>{editor.model.family.name}</span>
+          <TypeBand editor={editor} />
+          {/* The chip states the fact; the HelpTip beside it carries the provenance sentence. */}
+          <FactChip
+            tone="caution"
+            dashed
+            title="What this editor reads from, and where its edits go — the seam is a fixture, so both answers are stated in full beside it."
           >
-            <span>family editor</span>
-            <span>{editor.model.family.name}</span>
-            <TypeBand editor={editor} />
-            {/* The chip states the fact; the HelpTip beside it carries the provenance sentence. */}
-            <FactChip
-              tone="caution"
-              dashed
-              title="What this editor reads from, and where its edits go — the seam is a fixture, so both answers are stated in full beside it."
-            >
-              fixture · in memory · writes nowhere
-            </FactChip>
-            <HelpTip>
-              The checked-in family-model-showcase fixture, parsed from the same text the roundtrip
-              suite builds against. Edits live in memory for the length of a page view and are
-              written nowhere — a shipping editor states which document it reads from and which it
-              would send to.
-            </HelpTip>
-            <ActionButton
-              label="reset"
-              reason="Throw away every staged edit and re-read the checked-in fixture"
-              onClick={editor.reset}
-            />
-          </header>
+            fixture · in memory · writes nowhere
+          </FactChip>
+          <HelpTip>
+            The checked-in family-model-showcase fixture, parsed from the same text the roundtrip
+            suite builds against. Edits live in memory for the length of a page view and are written
+            nowhere — a shipping editor states which document it reads from and which it would send
+            to.
+          </HelpTip>
+          <ActionButton
+            label="reset"
+            reason="Throw away every staged edit and re-read the checked-in fixture"
+            onClick={editor.reset}
+          />
+        </header>
 
-          <ParadigmD editor={editor} />
-        </Pane>
-      </>
+        <ParadigmD editor={editor} />
+      </Pane>
     </Surface>
   );
 }
