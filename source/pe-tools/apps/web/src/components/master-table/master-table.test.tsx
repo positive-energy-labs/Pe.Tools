@@ -194,7 +194,7 @@ test("the table owns one rail, optional filters, and rail actions", () => {
   expect(screen.getByText("narrowed")).toBeTruthy();
 });
 
-test("the rail truncates lead facts while scrolling focused controls into view", () => {
+test("the rail scrolls its lead and focused controls into view", () => {
   const originalScrollIntoView = Object.getOwnPropertyDescriptor(
     HTMLElement.prototype,
     "scrollIntoView",
@@ -214,7 +214,7 @@ test("the rail truncates lead facts while scrolling focused controls into view",
 
   expect(rail.classList.contains("overflow-hidden")).toBe(false);
   expect(lead.classList.contains("whitespace-nowrap")).toBe(true);
-  expect(lead.classList.contains("overflow-hidden")).toBe(true);
+  expect(lead.classList.contains("overflow-x-auto")).toBe(true);
   expect(trail.dataset.slot).toBe("rail-actions");
   expect(trail.classList.contains("no-scrollbar")).toBe(true);
   expect(trail.classList.contains("overflow-x-auto")).toBe(true);
