@@ -7,6 +7,7 @@ import { Context, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
 import { readingKey, settingsRouteState } from "@pe/agent-contracts";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
@@ -34,6 +35,8 @@ const family = (
       {
         member: { pod: "demo", path: "settings/models/box.json" },
         rawContent: JSON.stringify({
+          // The page's origin, as the web lane seeds it; capture must not echo it.
+          $schema: "http://localhost:3000/schemas/settings/FamilyFoundry/models.json",
           family: {
             name: "Box",
             category: "Generic Models",
@@ -218,7 +221,10 @@ test("demo Family capture files a new member and returns what the capture saw", 
   const written = JSON.parse(
     await readFile(await f.owner.settings.memberPath(result.member), "utf8"),
   );
-  expect(written.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+  // The host names what the member is, never the opened member's origin.
+  expect(written.$schema).toBe(
+    `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`,
+  );
 });
 
 test("demo Family apply confirms a plan, applies that exact hash, and refuses changed bytes", async () => {
@@ -237,7 +243,7 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
           key: planHash ? "family.apply" : "family.confirm",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
-          input: { source, ...(planHash ? { planHash } : {}) },
+          input: { source, ...(planHash ? { expectedPlanHashes: { "1": planHash } } : {}) },
           bases: {},
         })
       ).status,
@@ -250,6 +256,7 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
   expect(confirm.steps.map((step) => step.key)).toEqual(["family.plan"]);
   const planHash = (confirm as { result: { plan: { planHash: string } } }).result.plan.planHash;
   expect(planHash).toMatch(/^[a-f0-9]{64}$/);
+  expect((confirm as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
   const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");

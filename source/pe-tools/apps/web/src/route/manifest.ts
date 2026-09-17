@@ -156,8 +156,6 @@ export interface PlanEntry {
 /** The plan apply confirms (dogma law 9), as its confirm workflow returned it. */
 export interface PlanSheet {
   entries: readonly PlanEntry[];
-  /** Apply sends one hash per included row (`expectedPlanHashes`); absent = the one `planHash`. */
-  each?: true;
 }
 
 export interface EntityPage {
@@ -216,7 +214,6 @@ export interface ApplyPlan<W, R extends string, P> {
   excluded?: (view: EntityView<W, R, P>) => readonly string[];
   confirm: (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
-    sheet: PlanSheet,
     included: readonly PlanEntry[],
     source: MemberSource,
   ) => Promise<void>;
@@ -295,8 +292,8 @@ export const workflow = async (
 
 /**
  * The plan lane for a confirm/apply workflow pair (dogma law 14): `confirm` returns `{ plan }` and
- * mutates nothing, `apply` requires the hashes it returned. A `plan` array (with `included`) is one
- * row per subject and applies `expectedPlanHashes`; a single plan applies its `planHash`.
+ * mutates nothing, `apply` requires the hashes it returned. `plan` is one plan or one per subject;
+ * apply sends each included row's hash as `expectedPlanHashes`.
  * `authored` is what the route's Work adds to both; with it, confirm reads against that revision.
  */
 export const admissionPlan = <W, R extends string, P>(
@@ -316,21 +313,16 @@ export const admissionPlan = <W, R extends string, P>(
     read: async (ctx, source) => {
       const { input, bases } = workOf(ctx);
       const result = await workflow(keys.confirm, { source, ...input }, ctx, bases);
-      return {
-        entries: [result.plan].flat().map(row),
-        ...(result.included ? { each: true as const } : {}),
-      };
+      return { entries: [result.plan].flat().map(row) };
     },
-    confirm: async (ctx, sheet, included, source) => {
+    confirm: async (ctx, included, source) => {
       const { executionOptions } = workOf(ctx).input;
       await workflow(
         keys.apply,
         {
           source,
           ...(executionOptions ? { executionOptions } : {}),
-          ...(sheet.each
-            ? { expectedPlanHashes: Object.fromEntries(included.map((r) => [r.id, r.planHash])) }
-            : { planHash: included[0]!.planHash }),
+          expectedPlanHashes: Object.fromEntries(included.map((r) => [r.id, r.planHash])),
         },
         ctx,
       );
@@ -452,7 +444,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     run: async (ctx) => {
       const view = sheetView(ctx);
       if (!plan || !view) throw Error("plan first");
-      await plan.confirm(ctx as never, view.sheet, view.included, sourceOf(ctx));
+      await plan.confirm(ctx as never, view.included, sourceOf(ctx));
       ctx.setPage({ confirming: false, sheet: null });
     },
   };

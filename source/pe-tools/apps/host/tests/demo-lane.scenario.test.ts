@@ -339,7 +339,9 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
     await pick(page, /^Capturing/, /^Applying/);
     await run(page, "apply schedule");
-    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    await expect
+      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
+      .toContain("apply ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("succeeded");
@@ -355,7 +357,11 @@ test("live /family: capture, confirm, apply files a run receipt", async () => {
     await pick(page, /^Capturing/, /^Applying/);
     await run(page, "plan");
     await run(page, "apply family");
-    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    await expect
+      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
+      .toContain("confirm ran");
+    // The owner answers the lamp's host-status read, so the head names no broken host.
+    expect(await page.locator("body").innerText()).not.toContain("unreachable");
     return receiptOnPods(page, pod, path, "family.apply");
   });
   expect(shown).toContain("succeeded");
@@ -373,7 +379,9 @@ test("live /families: capture, confirm, apply files a run receipt", async () => 
     await pick(page, /^Capturing/, /^Applying/);
     await run(page, "plan");
     await run(page, "apply families");
-    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    await expect
+      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
+      .toContain("confirm ran");
     return receiptOnPods(page, pod, path, "families.apply");
   });
   expect(shown).toContain("succeeded");
