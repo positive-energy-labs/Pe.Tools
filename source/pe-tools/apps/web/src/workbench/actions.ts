@@ -1,7 +1,7 @@
 import { selectApprovals, type ChatState } from "./chat-state";
 import type { SessionClient } from "./provider/thread-summary";
 import { rejectApproval, toFiles } from "./provider/use-workbench";
-import type { WorkbenchAttachment } from "./store";
+import type { WorkbenchAttachment } from "./prompt";
 
 export type ChatActionService = Pick<
   SessionClient,

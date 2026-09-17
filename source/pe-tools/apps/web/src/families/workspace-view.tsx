@@ -1,4 +1,5 @@
-import { Workspace } from "#/components/anatomy";
+import { Pane } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { FamiliesMatrix } from "#/families/matrix";
 import { manifest } from "#/families/manifest";
 import { FamiliesReadoutBands } from "#/families/readout-bands";
@@ -116,17 +117,23 @@ function FamiliesHead() {
 export function FamiliesWorkspaceView() {
   const { store } = useFamiliesWorkspace();
   return (
-    <Workspace
-      headRail={
-        <RouteShell manifest={manifest} handle={store.handle} situation={<FamiliesHead />} />
-      }
-      readoutBand={
-        <>
-          <FamiliesFilterBand />
-          <FamiliesReadoutBands />
-        </>
-      }
-      table={<FamiliesMatrix />}
-    />
+    <Surface
+      head={<RouteShell manifest={manifest} handle={store.handle} situation={<FamiliesHead />} />}
+    >
+      <div data-slot="readout-band" className="shrink-0 py-1.5">
+        <FamiliesFilterBand />
+        <FamiliesReadoutBands />
+      </div>
+      <Pane
+        kind="content"
+        title="families"
+        help="Families and types in the applied scope. Filter or open a row to inspect its authored family."
+        scroll="clip"
+        flush
+        headerless
+      >
+        <FamiliesMatrix />
+      </Pane>
+    </Surface>
   );
 }

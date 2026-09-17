@@ -12,7 +12,8 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton, ActionGroup } from "#/components/lang/action-button";
-import { SidePane } from "#/components/lang/side-pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -225,7 +226,7 @@ export function ParameterLinksWorkspace({
         };
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden">
+    <Surface>
       <AddressingBar
         name="parameter links"
         sentence={
@@ -295,94 +296,115 @@ export function ParameterLinksWorkspace({
 
       <OutcomeStrip failure={route.failure} />
 
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-          {route.work.revision === null ? (
-            <OutcomeLine kind="busy" label="hydrating route state" />
-          ) : (
-            <>
-              <ActionGroup title="draft" radius="shared document · revit read">
-                <ActionButton
-                  label="refresh"
-                  icon={RefreshCw}
-                  busy={busy === "refresh"}
-                  disabled={busy != null}
-                  onClick={() => void runRead("refresh")}
-                  reason="Re-read the stored profile, shared draft, and evaluation from the host"
-                />
-                <ActionButton
-                  tone="commit"
-                  label="save draft"
-                  icon={Save}
-                  disabled={busy != null || !editing || !hasUnsavedEdits}
-                  onClick={() => {
-                    if (editing) void saveDraft(editing);
-                  }}
-                  reason={
-                    hasUnsavedEdits
-                      ? "Write the local edits onto the shared document, where pea can see them"
-                      : "no unsaved local edits — the shared document already matches"
-                  }
-                />
-                <ActionButton
-                  label="preview"
-                  icon={Eye}
-                  busy={busy === "preview"}
-                  disabled={busy != null || !editing}
-                  onClick={() => void runRead("preview")}
-                  reason={
-                    editing
-                      ? "Evaluate the draft against Revit and project its target writes — writes nothing"
-                      : "no profile to preview — add a definition first"
-                  }
-                />
-              </ActionGroup>
-              {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{
+          target: "end",
+          defaultSize: 520,
+          minSize: 340,
+          maxSize: 760,
+          persist: "pe.parameterLinks.evalPane",
+          collapse: {
+            collapsed: !rightOpen,
+            onCollapsedChange: (collapsed) => setRightOpen(!collapsed),
+            collapsedSize: 40,
+            collapseBelow: 170,
+          },
+        }}
+        start={
+          <Pane kind="content" title="profile" scroll="clip" flush>
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              {route.work.revision === null ? (
+                <OutcomeLine kind="busy" label="hydrating route state" />
+              ) : (
+                <>
+                  <ActionGroup title="draft" radius="shared document · revit read">
+                    <ActionButton
+                      label="refresh"
+                      icon={RefreshCw}
+                      busy={busy === "refresh"}
+                      disabled={busy != null}
+                      onClick={() => void runRead("refresh")}
+                      reason="Re-read the stored profile, shared draft, and evaluation from the host"
+                    />
+                    <ActionButton
+                      tone="commit"
+                      label="save draft"
+                      icon={Save}
+                      disabled={busy != null || !editing || !hasUnsavedEdits}
+                      onClick={() => {
+                        if (editing) void saveDraft(editing);
+                      }}
+                      reason={
+                        hasUnsavedEdits
+                          ? "Write the local edits onto the shared document, where pea can see them"
+                          : "no unsaved local edits — the shared document already matches"
+                      }
+                    />
+                    <ActionButton
+                      label="preview"
+                      icon={Eye}
+                      busy={busy === "preview"}
+                      disabled={busy != null || !editing}
+                      onClick={() => void runRead("preview")}
+                      reason={
+                        editing
+                          ? "Evaluate the draft against Revit and project its target writes — writes nothing"
+                          : "no profile to preview — add a definition first"
+                      }
+                    />
+                  </ActionGroup>
+                  {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
                   (re-plan runs preview); arming =
                   the reason input is the last gate before the one commit. */}
-              {editing != null ? (
-                <ArmingStrip
-                  verb="apply"
-                  target={documentAddress}
-                  count={evaluation?.changedWriteCount ?? 0}
-                  planHash={profileHash(savedDraft)}
-                  reason={writeReason}
-                  onReasonChange={setWriteReason}
-                  state={armingState}
-                  onCommit={() => {
-                    if (busy == null) void runApply();
-                  }}
-                  onCancel={() => setWriteReason("")}
-                />
-              ) : null}
-              <ProfileEditor
-                profile={editing}
-                disabled={busy != null || peaActive}
-                fieldOptionsEnabled={fieldOptionsEnabled}
-                onChange={onDraftChange}
-              />
-            </>
-          )}
-        </div>
-
-        <SidePane
-          side="right"
-          storageKey="pe.parameterLinks.evalPane"
-          open={rightOpen}
-          onOpenChange={setRightOpen}
-          minWidth={340}
-          defaultWidth={520}
-          maxWidth={760}
-          header={<span>Evaluation</span>}
-        >
-          <div className="flex h-full flex-col gap-4 px-4 py-3">
-            <RuntimeStatusBar status={status} appliedWriteCount={reading?.appliedWriteCount ?? 0} />
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <EvaluationView evaluation={evaluation} />
+                  {editing != null ? (
+                    <ArmingStrip
+                      verb="apply"
+                      target={documentAddress}
+                      count={evaluation?.changedWriteCount ?? 0}
+                      planHash={profileHash(savedDraft)}
+                      reason={writeReason}
+                      onReasonChange={setWriteReason}
+                      state={armingState}
+                      onCommit={() => {
+                        if (busy == null) void runApply();
+                      }}
+                      onCancel={() => setWriteReason("")}
+                    />
+                  ) : null}
+                  <ProfileEditor
+                    profile={editing}
+                    disabled={busy != null || peaActive}
+                    fieldOptionsEnabled={fieldOptionsEnabled}
+                    onChange={onDraftChange}
+                  />
+                </>
+              )}
             </div>
-          </div>
-        </SidePane>
-      </div>
-    </main>
+          </Pane>
+        }
+        end={
+          <Pane
+            kind="flank"
+            title="evaluation"
+            side="right"
+            flush
+            collapsed={!rightOpen}
+            onCollapsedChange={(collapsed) => setRightOpen(!collapsed)}
+          >
+            <div className="flex h-full flex-col gap-4">
+              <RuntimeStatusBar
+                status={status}
+                appliedWriteCount={reading?.appliedWriteCount ?? 0}
+              />
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <EvaluationView evaluation={evaluation} />
+              </div>
+            </div>
+          </Pane>
+        }
+      />
+    </Surface>
   );
 }

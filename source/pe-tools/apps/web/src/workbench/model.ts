@@ -29,11 +29,17 @@ export function tailFollowState(metrics: ScrollMetrics): TailFollowState {
   return isNearTail(metrics) ? "following" : "detached";
 }
 
+/**
+ * Follow moves only on user intent (wheel, touch, scroll keys, gutter drag). A scrollTop the
+ * browser changes on its own (content shrank, a clamp) leaves follow where it was.
+ */
 export function nextTailFollowState(
   current: TailFollowState,
   metrics: ScrollMetrics,
   previousScrollTop: number,
+  byUser: boolean,
 ): TailFollowState {
+  if (!byUser) return current;
   if (metrics.scrollTop < previousScrollTop) return "detached";
   if (isNearTail(metrics)) return "following";
   return current;

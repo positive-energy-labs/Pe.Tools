@@ -19,6 +19,7 @@
  * growing a windowing layer; the systemic fix for large tool output is Owed in the ledger.
  */
 import { useMemo, useState, type ComponentProps } from "react";
+import { useCopy } from "#/lib/use-copy";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { css } from "@tanstack/highlight/languages/css";
 import { diff } from "@tanstack/highlight/languages/diff";
@@ -36,9 +37,10 @@ import { ts } from "@tanstack/highlight/languages/ts";
 import { tsx } from "@tanstack/highlight/languages/tsx";
 import { yaml } from "@tanstack/highlight/languages/yaml";
 
-import { artifactFrameRecipe } from "#/components/lang/artifact-frame";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { csharp } from "#/components/lang/csharp-language";
 import { Press } from "#/components/lang/press";
+import { diagramKind, useDiagram } from "#/components/lang/diagram";
 
 import "./code.css";
 
@@ -88,6 +90,7 @@ function holdsGrammar(tag: string): boolean {
 
 /** Past this many bytes the block shows a slice and never tokenizes; see the header. */
 const TOKENIZE_LIMIT = 64 * 1024;
+const FRAME_CLASS = "not-prose";
 
 export interface CodeProps {
   code: string;
@@ -111,6 +114,11 @@ export interface CodeProps {
    */
   wrap?: boolean;
   tone?: "error";
+  /**
+   * False while the payload is still arriving (an open markdown fence). A `mermaid` block shows
+   * its source until then and never draws a half-written graph.
+   */
+  complete?: boolean;
 }
 
 export function Code({
@@ -122,10 +130,20 @@ export function Code({
   clamp = true,
   wrap,
   tone,
+  complete = true,
 }: CodeProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopy();
   const [showAll, setShowAll] = useState(false);
   const gated = code.length > TOKENIZE_LIMIT;
+  // A `mermaid` block draws once complete, supported, and under the gate; else it is source.
+  const mermaid = lang?.trim().toLowerCase() === "mermaid";
+  const drawable = mermaid && !gated && diagramKind(code) === "supported";
+  const [view, setView] = useState<"diagram" | "source">("diagram");
+  // An invalid diagram's source is hard to read, so it starts collapsed behind `show source`.
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const diagram = useDiagram(code, drawable && complete);
+  const failed = diagram && "error" in diagram ? diagram.error : undefined;
+  const svg = view === "diagram" && diagram && "svg" in diagram ? diagram.svg : undefined;
   const shown = gated && !showAll ? code.slice(0, TOKENIZE_LIMIT) : code;
   const lines = useMemo(() => code.split("\n").length, [code]);
 
@@ -134,9 +152,8 @@ export function Code({
     [gated, code, lang, decorations, lineNumbers],
   );
 
-  const noGrammar = lang !== undefined && !holdsGrammar(lang);
+  const noGrammar = lang !== undefined && !mermaid && !holdsGrammar(lang);
 
-  const { base, head } = artifactFrameRecipe();
   const body = {
     "data-code-pane": "",
     "data-code-wrap": wrap ? "" : undefined,
@@ -149,17 +166,28 @@ export function Code({
     // `not-prose`: a block is often dropped into rendered markdown, and typography's rules —
     // `prose-code:*` above all — would otherwise box the `<code>` inside our `<pre>` as if it
     // were inline code. The frame and `code.css` own every value inside; prose owns none.
-    <div className={base({ class: "not-prose" })} role="group" aria-label={title ?? lang ?? "code"}>
-      <div className={head()}>
-        {(title ?? lang) ? (
-          <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
-        ) : null}
-        {noGrammar ? (
-          <span className="t-small face-mono" data-tone="caution">
-            no grammar
-          </span>
-        ) : null}
-        <span className="ml-auto flex items-baseline gap-2">
+    <ArtifactFrame
+      className={FRAME_CLASS}
+      label={title ?? lang ?? "code"}
+      head={
+        <>
+          {(title ?? lang) ? (
+            <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+          ) : null}
+          {noGrammar ? (
+            <span className="t-small face-mono" data-tone="caution">
+              no grammar
+            </span>
+          ) : null}
+          {mermaid && complete && !drawable ? (
+            <span className="t-small face-mono" data-tone="caution">
+              source only
+            </span>
+          ) : null}
+        </>
+      }
+      headTrail={
+        <span className="flex items-baseline gap-2">
           <span className="t-small face-mono tabular-nums text-ink-mute">
             {lines} {lines === 1 ? "line" : "lines"}
           </span>
@@ -168,20 +196,34 @@ export function Code({
               show all
             </Press>
           ) : null}
-          <Press
-            tone="quiet"
-            size="label"
-            onClick={() => {
-              void navigator.clipboard.writeText(code);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
+          {failed ? (
+            <>
+              <span className="t-small face-mono" data-tone="caution" title={failed}>
+                invalid diagram
+              </span>
+              <Press tone="quiet" size="label" onClick={() => setSourceOpen(!sourceOpen)}>
+                {sourceOpen ? "hide source" : "show source"}
+              </Press>
+            </>
+          ) : drawable && complete ? (
+            <Press
+              tone="quiet"
+              size="label"
+              onClick={() => setView(view === "diagram" ? "source" : "diagram")}
+            >
+              {view === "diagram" ? "source" : "diagram"}
+            </Press>
+          ) : null}
+          <Press tone="quiet" size="label" onClick={() => copy(code)}>
             {copied ? "copied" : "copy"}
           </Press>
         </span>
-      </div>
-      {html === null ? (
+      }
+    >
+      {failed && !sourceOpen ? null : svg !== undefined ? (
+        // eslint-disable-next-line react/no-danger -- sanitized in `diagram.tsx`
+        <div {...body} data-diagram="" dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : html === null ? (
         <div {...body}>
           <pre className="th-code">{shown}</pre>
         </div>
@@ -189,7 +231,7 @@ export function Code({
         // eslint-disable-next-line react/no-danger -- highlighter output, escaped upstream
         <div {...body} dangerouslySetInnerHTML={{ __html: html }} />
       )}
-    </div>
+    </ArtifactFrame>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Code, stringify } from "#/components/lang/code";
-import { Workspace } from "#/components/anatomy";
+import { PaneSplit } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { RouteShell } from "#/route";
 import { Picker } from "#/route/picker";
 import { Situation, SituationCell, useDocumentLadder } from "#/route/situation";
@@ -175,28 +176,34 @@ function FamilyHead() {
 export function FamilyWorkspaceView() {
   const { store, anatomyCollapsed, setAnatomyCollapsed } = useFamilyWorkspace();
   return (
-    <Workspace
-      className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
-      headRail={<RouteShell manifest={manifest} handle={store.handle} situation={<FamilyHead />} />}
-      visual={<FamilyWorkspaceAnatomy />}
-      table={<FamilyWorkspaceTable />}
-      sidePanel={<FamilyWorkspaceDocPane />}
-      pane={{
-        inspectorSpan: "full",
-        resize: {
-          visual: {
-            defaultSize: 220,
-            minSize: 34,
-            collapse: {
-              collapsed: anatomyCollapsed,
-              onCollapsedChange: setAnatomyCollapsed,
-              collapsedSize: 34,
-              collapseBelow: 90,
-            },
-          },
-          inspector: { defaultSize: 340, minSize: 260, minOtherSize: 560 },
-        },
-      }}
-    />
+    <Surface
+      head={<RouteShell manifest={manifest} handle={store.handle} situation={<FamilyHead />} />}
+    >
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
+        start={
+          <PaneSplit
+            axis="vertical"
+            grow
+            resize={{
+              target: "start",
+              defaultSize: 220,
+              minSize: 34,
+              collapse: {
+                collapsed: anatomyCollapsed,
+                onCollapsedChange: setAnatomyCollapsed,
+                collapsedSize: 34,
+                collapseBelow: 90,
+              },
+            }}
+            start={<FamilyWorkspaceAnatomy />}
+            end={<FamilyWorkspaceTable />}
+          />
+        }
+        end={<FamilyWorkspaceDocPane />}
+      />
+    </Surface>
   );
 }

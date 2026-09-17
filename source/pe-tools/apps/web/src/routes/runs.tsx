@@ -2,6 +2,8 @@
 // the round-2 combo IS the surface, so there is no variant search param and no switcher — one
 // capability, one path. The body lives in src/runs/browser.tsx.
 import { RouteShell, emptyManifest } from "#/route";
+import { Pane } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
@@ -40,7 +42,13 @@ function RunsPage() {
     };
   }, []);
   if (!import.meta.env.DEV) {
-    return <div className="p-8 text-ink-2">/runs is a dev-only surface.</div>;
+    return (
+      <Surface>
+        <Pane kind="content" title="runs">
+          <span className="text-ink-2">/runs is a dev-only surface.</span>
+        </Pane>
+      </Surface>
+    );
   }
   return <RunsRouteContent />;
 }

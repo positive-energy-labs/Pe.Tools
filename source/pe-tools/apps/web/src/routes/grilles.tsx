@@ -23,7 +23,8 @@ import { useMemo, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
-import { Pane, PaneWorkspace } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
 import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";
@@ -83,6 +84,7 @@ function GrillesRoute() {
   const drawing = (
     <Pane
       kind="visual"
+      flush
       title="drawing"
       meta={
         drawingCollapsed
@@ -102,7 +104,7 @@ function GrillesRoute() {
       }
     >
       {active && !drawingCollapsed && (
-        <div className="h-full overflow-auto p-2">
+        <div className="h-full overflow-auto">
           <SpecDrawing g={active} set={setAll} px={26} />
         </div>
       )}
@@ -112,6 +114,7 @@ function GrillesRoute() {
   const table = (
     <Pane
       kind="content"
+      flush
       title="profiles"
       meta={`${rows.length} candidate profiles · ${picked.size} on the export sheet`}
       actions={
@@ -144,6 +147,7 @@ function GrillesRoute() {
   const chart = (
     <Pane
       kind="inspector"
+      flush
       title="field"
       meta={`free % vs qty, per opening width · ${field.length} buildable profiles for this stock`}
     >
@@ -169,7 +173,7 @@ function GrillesRoute() {
   );
 
   return (
-    <main className="flex h-full min-h-0 flex-col">
+    <Surface>
       <header
         className="flex flex-wrap items-baseline gap-2 px-3 py-2"
         style={{ borderColor: token("line") }}
@@ -185,24 +189,30 @@ function GrillesRoute() {
         </FactChip>
       </header>
 
-      <PaneWorkspace
+      <PaneSplit
+        axis="vertical"
         grow
-        visual={drawing}
-        content={table}
-        inspector={chart}
         resize={{
-          visual: {
-            defaultSize: 420,
-            minSize: 34,
-            collapse: {
-              collapsed: drawingCollapsed,
-              onCollapsedChange: setDrawingCollapsed,
-              collapsedSize: 34,
-              collapseBelow: 90,
-            },
+          target: "start",
+          defaultSize: 420,
+          minSize: 34,
+          collapse: {
+            collapsed: drawingCollapsed,
+            onCollapsedChange: setDrawingCollapsed,
+            collapsedSize: 34,
+            collapseBelow: 90,
           },
-          inspector: { defaultSize: 500, minSize: 420, minOtherSize: 560 },
         }}
+        start={
+          <PaneSplit
+            axis="horizontal"
+            grow
+            resize={{ target: "end", defaultSize: 500, minSize: 420, minOtherSize: 560 }}
+            start={drawing}
+            end={chart}
+          />
+        }
+        end={table}
       />
 
       {exporting && (
@@ -213,6 +223,6 @@ function GrillesRoute() {
           onClose={() => setExporting(false)}
         />
       )}
-    </main>
+    </Surface>
   );
 }

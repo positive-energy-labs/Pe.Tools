@@ -2,14 +2,21 @@ import { token } from "#/lib/token";
 import { annotation } from "#/components/anatomy";
 import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
-import { type ThreadMessageLike } from "@assistant-ui/react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
 import type { SessionEvent } from "#/host/world-log";
-import { imageSource, selectToolCalls, type ChatState, type ToolCall } from "../chat-state";
+import {
+  selectToolCalls,
+  formatBytes,
+  toolImages,
+  type ChatMessage,
+  type ChatState,
+  type ToolCall,
+} from "../chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
+import { deferredResultSummary, useDeferredToolResult } from "../deferred-result";
 
 export function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "trace" }) {
   const [open, setOpen] = useState(false);
@@ -98,15 +105,31 @@ export function CellHeader({ call }: { call: ToolCall }) {
 }
 
 export function ToolCellBody({ call }: { call: ToolCall }) {
+  const deferred = useDeferredToolResult(call, true);
   const input = call.args;
-  const output = call.status === "completed" ? call.result : undefined;
+  const output = call.status === "completed" ? deferred.result : undefined;
   const error = call.status === "failed" ? call.error : undefined;
-  const images = toolImages(output);
+  const images =
+    call.status === "completed" ? (deferred.ref ? toolImages(output) : call.images) : [];
   return (
     <>
       <CellHeader call={call} />
+      {deferred.ref ? (
+        <span className="t-small text-ink-2">
+          {deferredResultSummary(deferred.ref.summary)} · {formatBytes(deferred.ref.byteSize)}
+        </span>
+      ) : null}
       {input !== undefined ? <Code code={stringify(input)} lang="json" title="in" /> : null}
-      {images.length > 0 ? (
+      {deferred.pending ? (
+        <div className="t-prose text-ink-2">Loading full result…</div>
+      ) : deferred.error ? (
+        <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
+          <span>{deferred.error.message}</span>
+          <Press type="button" tone="quiet" size="caption" onClick={deferred.retry}>
+            retry
+          </Press>
+        </div>
+      ) : images.length > 0 ? (
         images.map((src, index) => (
           <img key={index} {...annotation("tool-image")} src={src} alt="" />
         ))
@@ -118,27 +141,12 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
   );
 }
 
-export function toolImages(output: unknown): string[] {
-  const parts = Array.isArray(output) ? output : [output];
-  return parts.flatMap((part) => {
-    if (typeof part === "string") return part.startsWith("data:image/") ? [part] : [];
-    if (part === null || typeof part !== "object") return [];
-    const record = part as Record<string, unknown>;
-    const mime = (record.mediaType ?? record.mimeType) as string | undefined;
-    if (mime && !mime.startsWith("image/")) return [];
-    const direct = (record.image ?? record.url) as string | undefined;
-    const data = typeof record.data === "string" ? record.data : undefined;
-    const url = imageSource(direct, data, mime);
-    return url && (mime?.startsWith("image/") || url.startsWith("data:image/")) ? [url] : [];
-  });
-}
-
-export function toMoments(messages: ThreadMessageLike[]): Moment[] {
+export function toMoments(messages: ChatMessage[]): Moment[] {
   let turn = 0;
-  return messages.map((message, index) => {
+  return messages.map((message) => {
     if (message.role === "user") turn += 1;
     return {
-      id: message.id ?? `m:${index}`,
+      id: message.id,
       turn: Math.max(1, turn),
       role: message.role,
       createdAt: message.createdAt,

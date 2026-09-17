@@ -23,7 +23,7 @@ const VISUAL_DEFAULT: PaneSizeSpec = { defaultSize: 340, minSize: 140 };
 const INSPECTOR_DEFAULT: PaneSizeSpec = { defaultSize: 320, minSize: 240 };
 
 export const paneWorkspaceRecipe = tv({
-  base: "grid size-full min-h-0 min-w-0 overflow-hidden",
+  base: "grid size-full min-h-0 min-w-0 overflow-visible",
   variants: { grow: { true: "min-h-0 flex-1" } },
 });
 
@@ -47,6 +47,8 @@ export function PaneWorkspace({
   const hasNavigationHandle = navigation != null && resize?.navigation != null;
   const hasVisualHandle = resize?.visual != null;
   const hasInspectorHandle = inspector != null && resize?.inspector != null;
+  const visualColumn = navigation != null ? 3 : 1;
+  const inspectorColumn = visualColumn + 2;
 
   const rootSize = (axis: "horizontal" | "vertical") => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -60,8 +62,16 @@ export function PaneWorkspace({
   });
 
   const style = {
-    gridTemplateColumns: `${navigation ? navigationState.renderedSize : 0}px ${hasNavigationHandle ? 8 : 0}px minmax(0, 1fr) ${hasInspectorHandle ? 8 : 0}px ${inspector ? inspectorState.renderedSize : 0}px`,
-    gridTemplateRows: `${visualState.renderedSize}px ${hasVisualHandle ? 8 : 0}px minmax(0, 1fr)`,
+    gridTemplateColumns: [
+      navigation != null && `${navigationState.renderedSize}px`,
+      navigation != null && "var(--gutter)",
+      "minmax(0, 1fr)",
+      inspector != null && "var(--gutter)",
+      inspector != null && `${inspectorState.renderedSize}px`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    gridTemplateRows: `${visualState.renderedSize}px var(--gutter) minmax(0, 1fr)`,
   } satisfies CSSProperties;
 
   return (
@@ -69,12 +79,13 @@ export function PaneWorkspace({
       ref={rootRef}
       data-slot="pane-workspace"
       data-inspector-span={inspectorSpan}
+      data-surface="recess"
       className={paneWorkspaceRecipe({ grow })}
       style={style}
     >
       {navigation != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-r border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
+          className="min-h-0 min-w-0 overflow-visible"
           style={{ gridColumn: 1, gridRow: "1 / 4" }}
         >
           {navigation}
@@ -82,7 +93,7 @@ export function PaneWorkspace({
       )}
 
       {hasNavigationHandle && (
-        <div className="col-start-2 row-start-1 row-span-3">
+        <div style={{ gridColumn: 2, gridRow: "1 / 4" }}>
           <PaneResizeHandle
             axis="horizontal"
             value={navigationState.renderedSize}
@@ -98,16 +109,16 @@ export function PaneWorkspace({
       )}
 
       <div
-        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
-        style={{ gridColumn: 3, gridRow: 1 }}
+        className="min-h-0 min-w-0 overflow-visible"
+        style={{ gridColumn: visualColumn, gridRow: 1 }}
       >
         {visual}
       </div>
 
       {inspector != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-l border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
-          style={{ gridColumn: 5, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
+          className="min-h-0 min-w-0 overflow-visible"
+          style={{ gridColumn: inspectorColumn, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           {inspector}
         </div>
@@ -115,11 +126,7 @@ export function PaneWorkspace({
 
       {hasInspectorHandle && (
         <div
-          className={
-            inspectorSpan === "full"
-              ? "col-start-4 row-start-1 row-span-3"
-              : "col-start-4 row-start-1"
-          }
+          style={{ gridColumn: visualColumn + 1, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           <PaneResizeHandle
             axis="horizontal"
@@ -137,11 +144,13 @@ export function PaneWorkspace({
 
       {hasVisualHandle && (
         <div
-          className={
-            inspectorSpan === "visual"
-              ? "col-start-3 row-start-2 col-span-3"
-              : "col-start-3 row-start-2"
-          }
+          style={{
+            gridColumn:
+              inspectorSpan === "visual" && inspector != null
+                ? `${visualColumn} / ${inspectorColumn + 1}`
+                : visualColumn,
+            gridRow: 2,
+          }}
         >
           <PaneResizeHandle
             axis="vertical"
@@ -158,8 +167,14 @@ export function PaneWorkspace({
       )}
 
       <div
-        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
-        style={{ gridColumn: inspectorSpan === "visual" ? "3 / 6" : 3, gridRow: 3 }}
+        className="min-h-0 min-w-0 overflow-visible"
+        style={{
+          gridColumn:
+            inspectorSpan === "visual" && inspector != null
+              ? `${visualColumn} / ${inspectorColumn + 1}`
+              : visualColumn,
+          gridRow: 3,
+        }}
       >
         {content}
       </div>

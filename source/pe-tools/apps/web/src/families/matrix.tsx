@@ -25,9 +25,8 @@ export function FamiliesMatrix() {
     <>
       {fixture && (
         <p className="px-4 py-1 t-small">
-          Fixture source (no Revit capture).{" "}
-          <a href="/families?source=fixture&fixture=native">native authored examples</a> /{" "}
-          <a href="/families?source=fixture">original review fixture</a>
+          Fixture review (no Revit capture).{" "}
+          <a href="/families?demo=plan">original review fixture</a>
         </p>
       )}
       <MasterTable

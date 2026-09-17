@@ -2,7 +2,7 @@ import { token } from "#/lib/token";
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
-import { useWorkbench } from "../provider";
+import { useCurrentThreadView } from "../thread-view";
 import {
   computeCacheView,
   signatureMap,
@@ -26,12 +26,12 @@ export function useCacheView(
   breakdown: ContextBreakdown | undefined,
   userTurns: number,
 ): CacheView {
-  const { store } = useWorkbench();
-  const cache = useAtomValue(store.atoms.worldCache);
+  const view = useCurrentThreadView();
+  const cache = useAtomValue(view.atoms.worldCache);
   const baseline =
     cache.lastTurn !== null && userTurns !== cache.lastTurn ? cache.prevSig : cache.baseline;
   useEffect(() => {
-    store.actions.setWorldCache((previous) => ({
+    view.actions.setWorldCache((previous) => ({
       lastTurn: userTurns,
       prevSig: signatureMap(breakdown),
       baseline:
@@ -41,7 +41,7 @@ export function useCacheView(
             ? previous.baseline
             : previous.prevSig,
     }));
-  }, [store, breakdown, userTurns]);
+  }, [view, breakdown, userTurns]);
   return computeCacheView(breakdown, baseline);
 }
 

@@ -62,22 +62,12 @@ const config = defineConfig(({ mode }) => {
         : undefined,
     },
     resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
-    // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
-    // multi-environment optimizer it can bind to a different React prebundle than react-dom's
-    // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
-    // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
       // committed). Serve the bundle as soon as it exists; a hanging import then shows up as one
       // pending request instead of a blank page.
-      include: [
-        "react",
-        "react-dom",
-        "react/jsx-runtime",
-        "@assistant-ui/react",
-        "@assistant-ui/react-markdown",
-      ],
+      include: ["react", "react-dom", "react/jsx-runtime"],
     },
     lint: {
       options: {

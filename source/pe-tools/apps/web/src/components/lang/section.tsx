@@ -14,12 +14,13 @@
  */
 import { tv } from "#/lib/tv";
 
+import { Rail } from "./rail";
+
 import "./lang.css";
 
 export const sectionRecipe = tv({
   slots: {
     base: "min-w-0",
-    head: "mb-1.5 flex items-baseline gap-2 border-b border-line pb-[3px]",
     label: "m-0 t-small t-upper",
     aside: "ml-auto flex items-center gap-1.5",
     provenance: "mt-1.5 mb-0 t-small face-mono tracking-[0.02em] text-ink-2",
@@ -42,11 +43,15 @@ export function Section({
   const slots = sectionRecipe();
   return (
     <section className={slots.base()}>
-      <div className={slots.head()}>
-        <h2 className={slots.label()}>{label}</h2>
-        {help}
-        {aside != null ? <div className={slots.aside()}>{aside}</div> : null}
-      </div>
+      <Rail
+        lead={
+          <>
+            <h2 className={slots.label()}>{label}</h2>
+            {help}
+          </>
+        }
+        trail={aside != null ? <div className={slots.aside()}>{aside}</div> : undefined}
+      />
       {children}
     </section>
   );

@@ -14,6 +14,37 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-17, Normalize production routes onto the closed `Surface` -> `PaneLayout` -> `Pane` -> artifact grammar. `Surface` owns the viewport and 8px perimeter; `PaneLayout` owns recessed 8px gutters and resizing; `Pane` owns the 24px rail, focus/help outline and standard 8px body inset; an explicit `flush` mode lets edge-owning artifacts fill the pane. Delete competing layout owners and target a net-negative total diff, including guards.
+- 2026-09-17, Run the normalization as one frozen foundation followed by disjoint Terra route waves and one serial Chrome-agent proof lane. Temporary layout regressions are allowed during the cutover, but the merged result must expose no relevant abnormality in deterministic, static, DOM, interaction or visual verification.
+
+- 2026-09-16, Use the prototype A `tone=line` treatment: a thin focused-pane outline, stronger while keyboard help is open. The halo must paint above the gray gutter on every edge, including the right; gutter siblings must not cover it.
+
+- 2026-09-16, Narrow tutorials retain the spatial pane map with horizontal scrolling; do not replace it with a stacked list.
+- 2026-09-16, Preserve the scroll-away route head. The workspace fills the viewport after the head scrolls away; its initial bottom extending below the viewport is intentional.
+
+- 2026-09-16, Chat's composer head shows actual turn state such as ready, running, waiting for the user, or failed. Threads, Trace and World remain view modes; Chat does not invent selectable workflow stages.
+
+- 2026-09-16, Shared rails are 24px. Tables have one artifact header for title, search, modes and actions, with an optional deliberate filter row. The composer has its own halo and keyboard-help region rather than highlighting the whole transcript pane.
+
+- 2026-09-16, Adopt unification lineup A: page-ground panes in the shared gutter root with the composer in flow. The user rejected overlay B and supplied a screenshot of table cells painting over its composer. Gutter and halo colors remain to be refined; shared rails are 24px.
+- 2026-09-16, Large tool results may load their full content on expand, provided the original result remains available. Receipts cannot replace transcript results because many tool calls have no receipt; use the transcript's authoritative result source.
+
+- 2026-09-16, Switching Chat threads retains each thread's unsent text and attachments without adding a separate persistence source. Evaluate React 19.2 Activity as the native retention boundary. Selecting an unloaded thread shows explicit loading for that thread inside a stable shell; the thread sidebar remains populated. Evaluate Suspense at pane/workspace boundaries as part of the shared design, not only a Chat repair.
+
+- 2026-09-16, The unification review follows systemic causes across the repo; commits after `fb5643d6a15b9470273e55c3ad926850d99d6f99` are evidence, not scope limits. Prefer deeper shared fixes and less code over accumulating local repairs. Record all findings in the owning feature.
+- 2026-09-16, Chat's Situation stays on the composer because targeting context must remain beside approvals and proposals. Its default head stays one header high; the thread sidebar must project the same route-owned selection exposed in the sentence.
+- 2026-09-16, Pane separation uses a shared gutter including the viewport perimeter, with room for the focus/help halo and resize handle. The suggested 8px gutter and 6px halo are provisional visual tuning values. Intermediate route breakage is allowed while restoring consistent height and responsive layout contracts.
+- 2026-09-16, Two concurrent Fable 5.1 low partners lead surface and runtime design. Both may delegate through Herdr to Opus/Sol low and Terra high swarms, never to more Fables. The runtime review measures Chrome CSS/layout/paint/render costs alongside transport and lifecycle. Meaningful design ambiguity returns to the user. See `UNIFICATION.md` for the active review brief.
+
+- 2026-09-16, `--gutter` and `--rail-h` own shared surface spacing. Pane owns the selected line treatment and its stronger help state.
+- 2026-09-16, `Rail` is the one head band. `ArtifactFrame` owns its rail through `head` and `headTrail` slots.
+- 2026-09-16, active `Pane` focus uses an outline in the gutter.
+- 2026-09-16, `Pane` has a `flank` kind for a collapsed regional title and retained shortcuts.
+- 2026-09-16, `Pane` owns suspension and render failure recovery. A changing child target passes `boundaryKey`.
+- 2026-09-16, `Surface` owns perimeter spacing and the optional scroll-away head; PaneSplit and PaneWorkspace own interior composition. Remove generic Surface grid tracks and SurfaceCell wrappers.
+- 2026-09-16, `MasterTable` owns one rail and an optional filter row.
+- 2026-09-16, `Pane` renders its rail by default. `headerless` is the intentional opt-out, and `ArtifactFrame.foot` uses the rail top edge.
+- 2026-09-16, A `mermaid` fence renders as a diagram inside `Code`, with a source and render toggle in the head. The renderer is `beautiful-mermaid`, because it takes `var(--pe-*)` colors and needs no live DOM; official `mermaid` needs a live DOM, rejects `var()` colors, and leaks an element on each failed render. The fence renders once it closes and shows its source while open. `gantt`, `pie`, and `mindmap` stay as source. A closed fence that fails to parse renders collapsed to its head band with `invalid diagram` and a `show source` toggle, because invalid mermaid is hard to read as text (kaitpw). D2 (5.85 MB wasm), PlantUML, and Structurizr (JVM) are rejected (`.artifacts/handoffs/render-blocks-20260916/diagram.md`).
 - 2026-09-15, A code block is a machine-operated object and wears the artifact frame. `Code` (`components/lang/code.tsx`) is the one read-only highlighted block for every language and every site: chat fenced blocks, tool call in/out, trace lane, atom inspector, receipts, ops output. Its head band holds the language on the left and copy, line count, and "show all" on the right. `Code` owns the height clamp; the container owns show/hide. Consumers: `workbench/aui.tsx`, `workbench/lens/context-strip.tsx`, `actions/receipt.tsx`, `ops/operation-pane.tsx`, `route/inspector.tsx`, `state/owner-inspector.tsx`.
 - 2026-09-15, `JsonEditor` is the one editable JSON surface, controlled `value`/`onChange`, paint under a transparent textarea in a shared grid cell (kaitpw: "yes agree" to the tanstack worktree). Read-only paint and editing stay two exports of one module, never one component with an editable flag, because a textarea owns caret, selection, and undo and paint is a pure function of a string.
 - 2026-09-15, `@tanstack/highlight` is the only highlighter. C# gets a `defineLanguage` grammar because Pods are C# scripts. `Code` stops tokenizing above 64 KB and shows the first slice with one "show all" press; the systemic fix for large tool outputs is Owed below.
@@ -510,6 +541,8 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-15 — Chat's send is a Situation action (kaitpw: "it uses primitives the way i want, keep it that way"). Its look is not liked; a children slot on the verb may replace the rendering later. Not a button component of its own.
 
 ## Tried & rejected
+
+- 2026-09-16, Overlay composer (B) is rejected for its z-level defect. Enclosure-everywhere (C) is rejected for panes.
 - 2026-09-15, `prism-react-editor` for the JSON editor (worktree `proto/json-prism`): uncontrolled write model needed a `held` freeze so a new `value` did not reset caret and history, range highlight was a search hit not a decoration, and it added a dependency for bracket matching that settings-sized files do not need.
 - 2026-09-15, A universal mutable route object or one route-wide lifecycle hides differences between authored Work, observed Readings, Page navigation and external Action outcomes. Compose their owners instead; storage placement is not a substitute for semantic ownership.
 - 2026-09-15, A common pane layout and a mandatory proposal/staged/committed workflow do not fit every route. Shared ownership and head projections are the substrate; product layout and workflow remain route-specific.
@@ -570,8 +603,15 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-10 — Keys are one registration shape across three tiers (route manifest chord, pane `shortcuts`, widget `useHotkeys`) via `keyMeta({name, description, tier, region?, refusal?})`; pane keys gained `says` and `refusal` (a refused key reveals the card). The help page `route/help.tsx` (Alt+/) is rebuilt over registrations: measured panes with leaders per region, manifest chords in a band, `manifest.docs` below. No root manifest until a navigation chord exists; chat's palette and mode chords are tagged surface chords, not actions.
 
 ## Owed
+- Complete the pane cutover across every production route. `OpsRoute` and `InstancesPage` render no `Pane`; Settings renders its file gate before its `Surface`; other routes still mix `Workspace`, `RouteShell`, local grids and pane primitives. Every visible workspace region must use the shared `Surface` perimeter and `Pane` chrome, or declare a reviewed exception.
+- Make `PaneSplit` and `PaneWorkspace` paint every `var(--gutter)` track with the same recess ground. They currently paint only tracks that contain `PaneResizeHandle`, so fixed and resizable pane separation differ even when both use the shared primitive.
+- Give pane content inset one owner. `Pane` currently gives only `inspector` bodies `p-2`, while route children add 0px, 8px, 12px, 16px or 20px. Define the standard body inset and a named edge-to-edge opt-out for tables, plans and other artifacts; remove route-owned compensating padding.
+- Make the focus/help outline available on every workspace region. Routes and gates that do not render `Pane` cannot show the shared halo, and local panel/table wrappers still create keyboard regions outside the pane contract.
+- Remove competing outer spacing. `Surface` owns the 8px viewport perimeter, but `Workspace.className`, its readout band, `RouteShell` and route bodies add separate gaps and padding. Browser evidence on root `c96156b` shows Chat and Takeoffs at an 8px perimeter, Ops at 16px, and Instances with no `Surface` or `Pane`.
+- Fix the collapsed Chat keys tab that covers the start of the composer sentence at narrow width.
+- Finish visible browser proof for the narrow tutorial's spatial horizontal scroll, the fully scrolled narrow workspace height, trusted code-block horizontal scroll and a table inside a narrow pane.
+- Add deterministic fixtures for Data Tables, Ops, Parameter Links, Runs and Schedule Grid. Review URLs alone do not prove their pane geometry or states.
 - Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
-- Chat and grounded-doc run two markdown pipelines (`workbench/aui.tsx` via `@assistant-ui/react-markdown`, `grounded-doc/view/block-markdown.tsx` via `react-markdown`). Fold to one when either is next touched; both must render fenced code through `Code`.
 - Large tool outputs (element lists in the MB range) are rendered whole. `Code`'s 64 KB gate is the interim; the real fix is a bounded output contract on the tool result itself.
 - Product follow-up after RP merge: extend the Situation motif to low-priority routes, finish file-picker ergonomics, and improve incomplete frozen seed slots. These do not authorize a competing Work, Reading or Action owner.
 - Review the design class allowlist increases recorded by Fable for five route files. They are explicit visual debt, not evidence that the layout has been validated.

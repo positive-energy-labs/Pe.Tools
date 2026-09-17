@@ -277,13 +277,21 @@ export interface LogEntry {
 /** Mount an owner for the life of a component; StrictMode's double-mount disposes once. */
 export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
   create: () => T,
+  identity?: unknown,
 ): T {
   const storeRef = useRef<T | null>(null);
+  const identityRef = useRef(identity);
+  const retiredRef = useRef<T[]>([]);
   const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  storeRef.current ??= create();
+  if (storeRef.current === null || !Object.is(identityRef.current, identity)) {
+    if (storeRef.current !== null) retiredRef.current.push(storeRef.current);
+    storeRef.current = create();
+    identityRef.current = identity;
+  }
   const store = storeRef.current;
   useEffect(() => {
     if (disposeTimer.current) clearTimeout(disposeTimer.current);
+    for (const retired of retiredRef.current.splice(0)) retired.dispose();
     return () => {
       disposeTimer.current = setTimeout(() => store.dispose(), 0);
     };

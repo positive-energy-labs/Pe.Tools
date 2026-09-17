@@ -33,6 +33,8 @@ export type ChatState = ThreadViewState<
   PermissionRules | undefined,
   PeInspect
 > & { display: ChatDisplay };
+/** `/pe/thread` is the durable body only; display state arrives solely over the stream. */
+export type ThreadBody = Omit<ChatState, "display">;
 export type AccessLevel = ChatState["access"];
 
 /**
@@ -58,10 +60,12 @@ export function emptyChatState(): ChatState {
   };
 }
 
-export type ToolOutcome =
+/** `result` is whatever the call has produced so far: partial while running, raw on failure. */
+export type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
-  | { status: "completed"; result?: unknown }
-  | { status: "failed"; error: string };
+  | { status: "completed" }
+  | { status: "failed"; error: string }
+);
 
 export type ToolCall = {
   id: string;
@@ -69,71 +73,317 @@ export type ToolCall = {
   args: unknown;
   target?: string;
   parentMessageId?: string;
+  /** Images the call produced so far, from its result or, while it runs, its progress. */
+  images: string[];
 } & ToolOutcome;
 
+/**
+ * The thread's user turns and assistant rows, with the message the run is streaming merged in by
+ * id. Every chat projection reads this list, so the transcript and the trace lane agree.
+ */
+function threadRows(state: ChatState): MastraDBMessage[] {
+  const stored = state.messages.filter(
+    (message) => isUserTurn(message) || message.role === "assistant",
+  );
+  const wire = state.display.isRunning ? state.display.currentMessage : undefined;
+  if (!wire) return stored;
+  const current: MastraDBMessage = { ...wire, createdAt: new Date(wire.createdAt) };
+  return stored.some((message) => message.id === current.id)
+    ? stored.map((message) => (message.id === current.id ? current : message))
+    : [...stored, current];
+}
+
+/** The one tool-call merge: stored invocations first (first sighting wins), then live-only tools,
+ * which belong to the last assistant row. */
 export function selectToolCalls(state: ChatState): ToolCall[] {
+  const rows = threadRows(state);
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
-  for (const [messageAt, message] of state.messages.entries()) {
+  for (const [messageAt, message] of rows.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
       const call = part.toolInvocation;
+      if (seen.has(call.toolCallId)) continue;
+      seen.add(call.toolCallId);
       const active = state.display.activeTools?.[call.toolCallId];
       const terminal =
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
       const interrupted =
-        !terminal &&
-        !active &&
-        (messageAt < state.messages.length - 1 || state.display.isRunning !== true);
+        !terminal && !active && (messageAt < rows.length - 1 || state.display.isRunning !== true);
+      const args = call.rawInput ?? call.args;
+      const result = call.result ?? active?.result;
+      // Mastra keeps a call its input validation refused as a `result` holding the error.
+      const rejected = readRecord(result)?.error === true;
       const failed =
         call.isError === true ||
         (terminal && call.state !== "result") ||
         active?.status === "error" ||
+        rejected ||
         interrupted;
       const completed = terminal || active?.status === "completed";
-      const args = call.rawInput ?? call.args;
-      seen.add(call.toolCallId);
+      const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = failed
         ? {
             status: "failed",
             error:
               call.errorText ||
-              text(call.result ?? active?.result) ||
+              readString(readRecord(result)?.message) ||
+              text(result) ||
               "Tool call ended without a terminal result.",
+            result,
           }
-        : completed
-          ? { status: "completed", result: call.result ?? active?.result }
-          : { status: "in_progress" };
+        : { status: completed ? "completed" : "in_progress", result };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
         args,
         target: toolTarget(args),
         parentMessageId: message.id,
+        images,
         ...outcome,
       });
     }
   }
-  const lastAssistantId = [...state.messages].reverse().find((m) => m.role === "assistant")?.id;
+  const lastAssistantId = rows.filter((m) => m.role === "assistant").at(-1)?.id;
   for (const [id, tool] of Object.entries(state.display.activeTools ?? {})) {
     if (seen.has(id)) continue;
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
     const outcome: ToolOutcome =
       tool.status === "error" || tool.isError
-        ? { status: "failed", error: text(tool.result) || "Tool call failed." }
-        : tool.status === "completed"
-          ? { status: "completed", result }
-          : { status: "in_progress" };
+        ? { status: "failed", error: text(tool.result) || "Tool call failed.", result }
+        : { status: tool.status === "completed" ? "completed" : "in_progress", result };
     calls.push({
       id,
       title: tool.name,
       args: tool.args,
       target: toolTarget(tool.args),
       parentMessageId: lastAssistantId,
+      images: toolImages(tool.result ?? progressOutput(tool.partialResult)),
       ...outcome,
     });
   }
   return calls;
+}
+
+/**
+ * The one rule for "is this tool output entry an image", fitted to what the image tools really
+ * return (`capture_view`, `read_image` in packages/mcps: `{ text, mediaType, byteSize, data }`):
+ * - a record needs an `image/*` media type AND either base64 `data` (or a `data:image/` URL in it)
+ *   or an `image`/`url` field holding a `data:image/` or http(s) URL;
+ * - a bare string must be a `data:image/…;base64,` URL.
+ * Anything else is not an image: a docs search row's `url: "local:P:…"` was wrapped as base64.
+ * `field` names where the bytes sit, for the display projection below.
+ */
+function toolImage(part: unknown): { url: string; mime: string; field?: string } | undefined {
+  if (typeof part === "string") {
+    const mime = DATA_IMAGE.exec(part)?.[1];
+    return mime ? { url: part, mime } : undefined;
+  }
+  const record = readRecord(part);
+  const mime = readString(record?.mediaType) ?? readString(record?.mimeType);
+  if (!record || !mime?.startsWith("image/")) return undefined;
+  const data = readString(record.data);
+  if (data !== undefined) {
+    if (DATA_IMAGE.test(data)) return { url: data, mime, field: "data" };
+    return looksBase64(data)
+      ? { url: `data:${mime};base64,${data}`, mime, field: "data" }
+      : undefined;
+  }
+  for (const field of ["image", "url"]) {
+    const url = readString(record[field]);
+    if (url && (DATA_IMAGE.test(url) || /^https?:\/\//i.test(url))) return { url, mime, field };
+  }
+  return undefined;
+}
+
+const DATA_IMAGE = /^data:(image\/[\w.+-]+);base64,/;
+
+// ponytail: checks the first 64 chars and the length, not every byte; a multi-MB capture is
+// re-read on every streamed frame. Tighten only if a non-image base64 look-alike shows up.
+const looksBase64 = (value: string) =>
+  value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value.slice(0, 64));
+
+const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
+
+/** Which images a tool call produced. The transcript strip and the trace lane both read this. */
+export function toolImages(output: unknown): string[] {
+  return outputEntries(output).flatMap((part) => toolImage(part)?.url ?? []);
+}
+
+/**
+ * A running call's progress, as Mastra stores it: `tool_update` stringifies a non-string
+ * payload onto `activeTools[id].partialResult`. Parse it back so its images count.
+ */
+function progressOutput(partial: unknown): unknown {
+  if (typeof partial !== "string") return partial;
+  try {
+    return JSON.parse(partial) as unknown;
+  } catch {
+    return partial;
+  }
+}
+
+/**
+ * The tool output as the `out` block shows it: each inline image payload becomes a short
+ * placeholder, so the block never spells base64. Display only; the output itself is untouched.
+ */
+export function toolOutputForDisplay(output: unknown): unknown {
+  let count = 0;
+  const swap = (part: unknown): unknown => {
+    const image = toolImage(part);
+    if (!image?.url.startsWith("data:")) return part;
+    count += 1;
+    const base64 = image.url.slice(image.url.indexOf(",") + 1);
+    const bytes = Math.floor((base64.length * 3) / 4) - (base64.match(/=+$/)?.[0].length ?? 0);
+    const label = `<image ${count}: ${image.mime}, ${formatBytes(bytes)}>`;
+    return image.field ? { ...readRecord(part), [image.field]: label } : label;
+  };
+  return Array.isArray(output) ? output.map(swap) : swap(output);
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export type ChatPart =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "image"; image: string; name?: string }
+  | { type: "file"; name: string; mimeType: string }
+  | { type: "tool-call"; call: ToolCall; approval?: Approval };
+
+/** One row of the chat transcript. */
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  parts: ChatPart[];
+  createdAt?: Date;
+  /** The assistant row the run is producing now; its last part is the one still moving. */
+  running: boolean;
+}
+
+/**
+ * The list the chat draws, in the same render as the lens. While the run has not started an
+ * assistant row yet, a running placeholder stands in so the caret shows at once.
+ */
+export function selectMessages(state: ChatState): ChatMessage[] {
+  const rows = threadRows(state);
+  const calls = selectToolCalls(state);
+  const callsById = new Map(calls.map((call) => [call.id, call]));
+  const approvals = selectApprovals(state.display);
+  const streamingId = state.display.isRunning ? state.display.currentMessage?.id : undefined;
+  const toolPart = (call: ToolCall): ChatPart => ({
+    type: "tool-call",
+    call,
+    approval: approvals.find((approval) => approval.toolCallId === call.id),
+  });
+  const emitted = new Set<string>();
+  const messages = rows.map((message): ChatMessage => {
+    const user = isUserTurn(message);
+    const parts: ChatPart[] = [];
+    for (const part of message.content.parts) {
+      if (part.type === "text") {
+        const text = textPart(part.text, user);
+        if (text) parts.push(text);
+      } else if (part.type === "reasoning") {
+        if (part.reasoning.trim()) parts.push({ type: "reasoning", text: part.reasoning });
+      } else if (part.type === "file") {
+        const file = filePart(part.data, part.mimeType, readString(readRecord(part)?.filename));
+        if (file) parts.push(file);
+      } else if (part.type === "tool-invocation") {
+        const call = callsById.get(part.toolInvocation.toolCallId);
+        if (!call || emitted.has(call.id)) continue;
+        emitted.add(call.id);
+        parts.push(toolPart(call));
+      } else if (part.type === "data-signal" || part.type === "data-user-message") {
+        const data = readRecord(part.data);
+        if (user) parts.push(...signalParts(data?.contents));
+        else if (data?.tagName === "route-workspace") {
+          const said = signalText(data.contents);
+          if (said.trim()) parts.push({ type: "text", text: said });
+        }
+      }
+    }
+    if (!user)
+      for (const call of calls)
+        if (call.parentMessageId === message.id && !emitted.has(call.id)) {
+          emitted.add(call.id);
+          parts.push(toolPart(call));
+        }
+    return {
+      id: message.id,
+      role: user ? "user" : "assistant",
+      parts,
+      ...createdAt(message),
+      running: !user && message.id === streamingId,
+    };
+  });
+  if (selectRunStatus(state) !== "idle" && messages.at(-1)?.role !== "assistant")
+    messages.push({ id: "pea-pending", role: "assistant", parts: [], running: true });
+  // The one renderable rule: speech, an image, a call, or the row still being produced.
+  return messages.filter(
+    (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
+  );
+}
+
+/** Mastra inlines a text attachment into the user turn as `[File: name]` and a fence. */
+const INLINED_FILE = /^\[File: (.+)\]\n(`{3,})\n[\s\S]*\n\2$/;
+
+function textPart(text: string, user: boolean): ChatPart | undefined {
+  if (!text.trim()) return undefined;
+  const inlined = user ? INLINED_FILE.exec(text) : null;
+  return inlined
+    ? { type: "file", name: inlined[1]!, mimeType: "text/plain" }
+    : { type: "text", text };
+}
+
+function filePart(
+  data: string | undefined,
+  mimeType: string | undefined,
+  name: string | undefined,
+): ChatPart | undefined {
+  if (mimeType && !mimeType.startsWith("image/"))
+    return { type: "file", name: name ?? "file", mimeType };
+  const image = imageSource(data, data, mimeType);
+  return image ? { type: "image", image, ...(name ? { name } : {}) } : undefined;
+}
+
+/** A live user signal's `contents`: its text, then the files Mastra attached to the turn. */
+function signalParts(contents: unknown): ChatPart[] {
+  if (!Array.isArray(contents)) {
+    const text = typeof contents === "string" ? textPart(contents, true) : undefined;
+    return text ? [text] : [];
+  }
+  return contents.flatMap((entry) => {
+    const record = readRecord(entry);
+    const part =
+      record?.type === "file"
+        ? filePart(
+            readString(record.data),
+            readString(record.mediaType),
+            readString(record.filename),
+          )
+        : textPart(readString(record?.text) ?? "", true);
+    return part ? [part] : [];
+  });
+}
+
+function signalText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => readString(readRecord(part)?.text) ?? "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function createdAt(message: MastraDBMessage): { createdAt?: Date } {
+  const at = message.createdAt;
+  if (!at) return {};
+  const date = at instanceof Date ? at : new Date(at);
+  return Number.isNaN(date.getTime()) ? {} : { createdAt: date };
 }
 
 /** A permission gate answers yes/no; a suspension answers with a resume payload. */

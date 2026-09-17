@@ -12,7 +12,6 @@ export type AnnotationVariant =
   | "caret"
   | "tail"
   | "chat"
-  | "side-pane"
   | "trace-frame"
   | "trace-pin"
   | "inspect"

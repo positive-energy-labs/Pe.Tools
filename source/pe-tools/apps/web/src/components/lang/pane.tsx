@@ -1,21 +1,28 @@
 import {
+  Component,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type FocusEvent,
+  type Key,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { HelpTip } from "#/components/lang/help";
+import { Kbd } from "#/components/lang/kbd";
 import { keyMeta } from "#/route/keys";
-import { ActionChrome } from "#/components/lang/action-button";
+import { Press } from "#/components/lang/press";
 import { tv, type VariantProps } from "#/lib/tv";
 
-export type PaneKind = "navigation" | "visual" | "content" | "inspector";
+import { Rail } from "./rail";
+
+export type PaneKind = "navigation" | "visual" | "content" | "inspector" | "flank";
 
 export type PaneShortcut = UseHotkeyDefinition & {
   label: string;
@@ -38,21 +45,27 @@ export const paneRecipe = tv({
       navigation: { body: "overflow-y-auto" },
       visual: { body: "relative overflow-hidden" },
       content: { body: "overflow-auto" },
-      inspector: { body: "overflow-y-auto p-2" },
+      inspector: { body: "overflow-y-auto" },
+      flank: { body: "overflow-y-auto" },
     },
     scroll: {
       auto: { body: "overflow-auto" },
       clip: { body: "overflow-hidden" },
       visible: { body: "overflow-visible" },
     },
+    flush: {
+      false: { body: "p-(--gutter)" },
+      true: { body: "p-0" },
+    },
   },
+  defaultVariants: { flush: false },
 });
 
-export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll"> {
+export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush" | "scroll"> {
   kind: PaneKind;
   id?: string;
   shortcuts?: readonly PaneShortcut[];
-  headerSurface?: "page" | "artifact" | "recess" | "document";
+  headerSurface?: "page" | "recess";
   title?: ReactNode;
   /**
    * A SHORT machine fact about what the pane is showing — a count, a mode word, a key. It
@@ -65,7 +78,76 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll
   help?: ReactNode;
   actions?: ReactNode;
   toolbar?: ReactNode;
+  /** Default chrome is a rail. Set only when this pane intentionally has no header. */
+  headerless?: boolean;
+  side?: "left" | "right";
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  boundary?: boolean;
+  /** Change this when the child changes target so an old error cannot mask the new target. */
+  boundaryKey?: Key;
+  onRetry?: () => void;
   children: ReactNode;
+}
+
+class PaneErrorBoundary extends Component<
+  { children: ReactNode; what?: ReactNode; onRetry?: () => void },
+  { failed: boolean; message: string }
+> {
+  state = { failed: false, message: "" };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { failed: true, message: error instanceof Error ? error.message : String(error) };
+  }
+
+  render() {
+    if (this.state.failed)
+      return (
+        <PaneError
+          what={this.props.what}
+          message={this.state.message}
+          retry={() => {
+            this.setState({ failed: false, message: "" });
+            this.props.onRetry?.();
+          }}
+        />
+      );
+    return this.props.children;
+  }
+}
+
+function PaneLoading({ what }: { what?: ReactNode }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-1 items-center justify-center t-small t-upper text-ink-mute"
+    >
+      {what != null ? <>loading {what}…</> : "loading…"}
+    </div>
+  );
+}
+
+function PaneError({
+  what,
+  message,
+  retry,
+}: {
+  what?: ReactNode;
+  message: string;
+  retry: () => void;
+}) {
+  return (
+    <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-2 p-2">
+      <span className="t-small t-upper" data-tone="alarm">
+        {what ?? "pane"} failed to load
+      </span>
+      <span className="text-ink-2">{message}</span>
+      <Press frame="line" size="value" onClick={retry}>
+        retry
+      </Press>
+    </div>
+  );
 }
 
 export function Pane({
@@ -78,11 +160,19 @@ export function Pane({
   help,
   actions,
   toolbar,
+  headerless = false,
+  flush,
   scroll,
+  side = "left",
+  collapsed = false,
+  onCollapsedChange,
+  boundary = true,
+  boundaryKey,
+  onRetry,
   children,
 }: PaneProps) {
-  const hasHeader = title != null || meta != null || help != null || actions != null;
-  const { root, body } = paneRecipe({ kind, scroll });
+  const collapsedFlank = kind === "flank" && collapsed;
+  const { root, body } = paneRecipe({ kind, scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -161,6 +251,14 @@ export function Pane({
     setCardVisible(false);
   };
 
+  const content = boundary ? (
+    <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
+      <Suspense fallback={<PaneLoading what={title} />}>{children}</Suspense>
+    </PaneErrorBoundary>
+  ) : (
+    children
+  );
+
   return (
     <section
       ref={rootRef}
@@ -169,7 +267,9 @@ export function Pane({
       data-pane-id={id}
       data-has-shortcuts={shortcuts.length > 0 || undefined}
       data-active={active}
+      data-help-visible={cardVisible || undefined}
       data-surface={kind === "visual" ? "artifact" : "page"}
+      aria-label={typeof title === "string" ? title : undefined}
       tabIndex={-1}
       onFocusCapture={activate}
       onBlurCapture={deactivate}
@@ -180,56 +280,70 @@ export function Pane({
         );
         if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
       }}
-      className={`${root()} ${active ? "z-raised" : ""}`}
+      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky outline outline-line-2" : "outline outline-transparent"} ${cardVisible ? "outline-2 outline-ink-mute" : ""} outline-offset-2 transition-[outline-color] duration-control motion-reduce:transition-none`}
     >
-      <span
-        aria-hidden="true"
-        data-slot="pane-halo"
-        className={`pointer-events-none absolute -inset-1 z-notice border-[3px] border-line-2 transition-[clip-path,opacity] duration-control motion-reduce:transition-none ${
-          active ? "opacity-100 [clip-path:inset(0)]" : "opacity-0 [clip-path:inset(0_100%_0_0)]"
-        }`}
-      />
-      {hasHeader && (
-        <div
-          data-slot="pane-header"
-          data-surface={headerSurface}
-          className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-2"
-        >
-          <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            {title != null && <h2 className="t-small t-upper min-w-0 truncate">{title}</h2>}
-            {meta != null && (
-              <span
-                title={typeof meta === "string" ? meta : undefined}
-                className="face-mono min-w-0 truncate text-ink-2"
-              >
-                {meta}
-              </span>
-            )}
-            {help != null && (
-              <span className="shrink-0 self-center">
-                <HelpTip>{help}</HelpTip>
-              </span>
-            )}
-          </div>
-          {actions != null && (
-            <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
-              {/* A header is chrome: a verb's refusal hovers, it does not wrap (see `ActionChrome`). */}
-              <ActionChrome value>{actions}</ActionChrome>
+      {collapsedFlank ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-2 py-2">
+          <Press
+            size="icon"
+            aria-label={`Expand ${typeof title === "string" ? title : "pane"}`}
+            onClick={() => onCollapsedChange?.(false)}
+          >
+            {side === "left" ? <ChevronRight /> : <ChevronLeft />}
+          </Press>
+          {title != null ? (
+            <span data-slot="pane-title" className="t-small t-upper [writing-mode:vertical-rl]">
+              {title}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {!headerless && (
+            <div data-slot="pane-header" className="shrink-0">
+              <Rail
+                ground={headerSurface ?? "page"}
+                lead={
+                  <>
+                    {title != null && <h2 className="t-small t-upper min-w-0 truncate">{title}</h2>}
+                    {meta != null && (
+                      <span
+                        title={typeof meta === "string" ? meta : undefined}
+                        className="face-mono min-w-0 truncate text-ink-2"
+                      >
+                        {meta}
+                      </span>
+                    )}
+                    {help != null && (
+                      <span className="shrink-0 self-center">
+                        <HelpTip>{help}</HelpTip>
+                      </span>
+                    )}
+                  </>
+                }
+                trail={
+                  actions != null ? (
+                    <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
+                      {actions}
+                    </div>
+                  ) : undefined
+                }
+              />
             </div>
           )}
-        </div>
+          {toolbar != null && (
+            <div
+              data-slot="pane-toolbar"
+              className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1"
+            >
+              {toolbar}
+            </div>
+          )}
+          <div data-slot="pane-body" className={body()}>
+            {content}
+          </div>
+        </>
       )}
-      {toolbar != null && (
-        <div
-          data-slot="pane-toolbar"
-          className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1"
-        >
-          {toolbar}
-        </div>
-      )}
-      <div data-slot="pane-body" className={body()}>
-        {children}
-      </div>
 
       {active && shortcuts.length > 0 && typeof document !== "undefined"
         ? createPortal(
@@ -261,12 +375,9 @@ export function Pane({
                         data-enabled={enabled}
                         className={enabled ? "contents" : "contents text-ink-mute"}
                       >
-                        <kbd
-                          data-surface="recess"
-                          className="face-mono t-small min-w-7 border border-line-2 px-1.5 py-0.5 text-center"
-                        >
+                        <Kbd mute={!enabled}>
                           {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
-                        </kbd>
+                        </Kbd>
                         <span className="whitespace-nowrap">
                           {shortcut.label}
                           {shortcut.refusal ? (

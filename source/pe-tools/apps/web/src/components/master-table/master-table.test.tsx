@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { NumberCell } from "#/components/master-table/cells";
+import { Press } from "#/components/lang/press";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState } from "#/components/master-table/model";
 
@@ -173,6 +174,56 @@ test("scope emptiness and filter emptiness remain distinct explanations", () => 
 
   view.rerender(table({ tableState: { ...emptyState, filters: { cat: "missing" } } }));
   expect(screen.getByText(/all 3 rows in scope are filtered out/i)).toBeTruthy();
+});
+
+test("the table owns one rail, optional filters, and rail actions", () => {
+  const { container, rerender } = renderTable({
+    modes: <Press>table mode</Press>,
+    actions: <Press>export</Press>,
+  });
+
+  expect(container.querySelectorAll("[data-slot='rail']")).toHaveLength(1);
+  expect(container.querySelector("[data-slot='table-filters']")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "table mode" }).closest("[data-slot='rail']"),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "export" }).closest("[data-slot='rail']")).toBeTruthy();
+
+  rerender(table({ chips: [{ label: "narrowed", onClear: () => undefined }] }));
+  expect(container.querySelector("[data-slot='table-filters']")).toBeTruthy();
+  expect(screen.getByText("narrowed")).toBeTruthy();
+});
+
+test("the rail scrolls its lead and focused controls into view", () => {
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollIntoView",
+  );
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  const { container } = renderTable({
+    summary: <span className="flex flex-wrap">facts</span>,
+    modes: <Press>table mode</Press>,
+    actions: <Press>export</Press>,
+  });
+  const rail = container.querySelector<HTMLElement>("[data-slot='rail']")!;
+  const [lead, trail] = Array.from(rail.children) as HTMLElement[];
+
+  expect(rail.classList.contains("overflow-hidden")).toBe(false);
+  expect(lead.classList.contains("whitespace-nowrap")).toBe(true);
+  expect(lead.classList.contains("overflow-x-auto")).toBe(true);
+  expect(trail.dataset.slot).toBe("rail-actions");
+  expect(trail.classList.contains("no-scrollbar")).toBe(true);
+  expect(trail.classList.contains("overflow-x-auto")).toBe(true);
+  expect(trail.classList.contains("whitespace-nowrap")).toBe(true);
+  screen.getByRole("button", { name: "export" }).focus();
+  expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+  if (originalScrollIntoView)
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+  else delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
 test("grid keys move the roving cell focus and release Tab at the outer boundary", () => {

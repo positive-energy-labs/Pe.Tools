@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-hotkeys";
 import { Keyboard } from "lucide-react";
 
+import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
 import { readKeyMeta, type KeyMeta } from "./keys";
 
@@ -46,7 +47,9 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
     regions: els.map((el, index) => ({
       id: el.dataset.paneId ?? `${el.dataset.kind ?? "pane"}-${index}`,
       label:
+        el.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
         el.querySelector('[data-slot="pane-header"] h2')?.textContent?.trim() ||
+        el.getAttribute("aria-label") ||
         el.dataset.paneId ||
         el.dataset.kind ||
         `pane ${index + 1}`,
@@ -55,26 +58,13 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
   };
 };
 
-function Key({ mute, children }: { mute?: boolean; children: ReactNode }) {
-  return (
-    <kbd
-      data-surface="recess"
-      className={`face-mono t-small inline-flex min-w-7 shrink-0 items-center justify-center border px-1 py-0.5 ${
-        mute ? "border-line text-ink-mute" : "border-line-2 text-ink"
-      }`}
-    >
-      {children}
-    </kbd>
-  );
-}
-
 function Rows({ keys }: { keys: readonly Bound[] }) {
   return (
     <dl className="grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small">
       {keys.map((k) => (
         <Fragment key={`${k.hotkey}:${k.name}`}>
           <dt>
-            <Key mute={Boolean(k.refusal)}>{k.hotkey}</Key>
+            <Kbd mute={Boolean(k.refusal)}>{k.hotkey}</Kbd>
           </dt>
           <dd
             className={k.refusal ? "text-ink-mute" : "text-ink"}
@@ -106,8 +96,9 @@ function Chart({
       if (rect) setSize({ w: rect.width, h: rect.height });
     };
     measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (mid.current) observer?.observe(mid.current);
+    return () => observer?.disconnect();
   }, []);
 
   const left = regions.filter(
@@ -116,7 +107,7 @@ function Chart({
   const right = regions.filter((r) => !left.includes(r));
 
   return (
-    <div ref={mid} className="relative min-h-0 flex-1">
+    <div ref={mid} className="relative size-full min-h-0 min-w-[808px]">
       {size
         ? (() => {
             const mapW = Math.max(200, Math.min(size.w - 2 * (CARD_W + 64), 640));
@@ -225,13 +216,15 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
         )}
       </div>
       {layout ? (
-        <Chart regions={layout.regions} frame={layout.frame} byRegion={byRegion} />
+        <div className="min-h-0 flex-1 overflow-x-auto">
+          <Chart regions={layout.regions} frame={layout.frame} byRegion={byRegion} />
+        </div>
       ) : (
         <div className="flex flex-1 items-center justify-center t-small text-ink-mute">
           this route draws no panes to explain
         </div>
       )}
-      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8">{docs}</div> : null}
+      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
     </div>
   );
 }

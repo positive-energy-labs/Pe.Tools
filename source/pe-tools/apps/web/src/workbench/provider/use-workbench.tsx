@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
 import { readRecord, readString, shortId, type Approval, type ChatState } from "../chat-state";
-import { type WorkbenchAttachment } from "../store";
+import { type WorkbenchAttachment } from "../prompt";
 import type {
   MessageFile,
   SessionClient,
@@ -95,10 +95,14 @@ export function toFiles(attachments: WorkbenchAttachment[] | undefined): Message
       ];
     }
     if (attachment.text !== undefined) {
+      // Mastra inlines a text file into the prompt only when it is `text/*` or JSON, and decodes
+      // only a `data:` URL; bare base64 reached the model as base64.
+      const mediaType =
+        attachment.mimeType === "application/json" ? "application/json" : "text/plain";
       return [
         {
-          data: toBase64(attachment.text),
-          mediaType: attachment.mimeType ?? "text/plain",
+          data: `data:${mediaType};base64,${toBase64(attachment.text)}`,
+          mediaType,
           ...(attachment.name ? { filename: attachment.name } : {}),
         },
       ];

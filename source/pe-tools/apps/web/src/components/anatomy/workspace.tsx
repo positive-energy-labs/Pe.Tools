@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 
 import { PaneWorkspace } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { cn } from "#/lib/utils";
 
 export interface WorkspaceProps {
@@ -27,17 +28,12 @@ export function Workspace({
   pane,
   className,
 }: WorkspaceProps) {
-  // Targeting is needed on page open and when a problem occurs, not while working: the head rail
-  // sits in outer scroll flow while the work area is a sticky full-viewport block, so one wheel
-  // notch retires the rail and the workspace pins (takeoffs annotations, 2026-08-31). Inner
-  // scrollers chain back up to reveal it again.
+  // Targeting scrolls away after page open while the workspace stays in the viewport. `Surface`
+  // owns that scroll boundary and the common gutter; panes own their body scrolling.
   return (
-    <main className={cn("no-scrollbar h-screen overflow-y-auto", className)}>
-      {headRail}
-      <div className="sticky top-0 flex h-screen min-h-0 flex-col">
+    <div className={cn("h-full", className)}>
+      <Surface head={headRail}>
         {readoutBand != null && (
-          // The band is a READOUT under the rail, not a strip glued to it: the container owns the
-          // inset so every chip and outcome line in it breathes the same (annotation, 2026-08-31).
           <div data-slot="readout-band" className="shrink-0 px-2 py-1.5">
             {readoutBand}
           </div>
@@ -54,7 +50,7 @@ export function Workspace({
             inspector={sidePanel}
           />
         )}
-      </div>
-    </main>
+      </Surface>
+    </div>
   );
 }

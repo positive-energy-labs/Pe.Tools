@@ -59,6 +59,7 @@ export const opsManifest = (
   return defineRoute<never, OpsReading, Record<string, never>, "run">({
     key: "ops",
     name: "Ops",
+    docs: "Select an operation, inspect its required target and custody, then run it only after the route can resolve those requirements.",
     // A session is always asked for so the catalogue can list that session's ops; a host-local
     // op still runs without one because its verb needs only the host.
     needs: needs === "host" ? "session" : needs,

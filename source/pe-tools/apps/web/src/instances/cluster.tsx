@@ -16,6 +16,7 @@ import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
+import { Pane } from "#/components/lang/pane";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import type { Inventory } from "#/readings";
@@ -445,7 +446,7 @@ export function InstancesCluster({
     );
 
   return (
-    <div className="flex flex-col gap-5" data-testid="instances-cluster">
+    <div className="flex min-h-0 flex-col gap-(--gutter)" data-testid="instances-cluster">
       {(doctor.error || recents.error) && (
         <OutcomeLine
           kind="error"
@@ -453,158 +454,177 @@ export function InstancesCluster({
         />
       )}
       {recovery && <Press onClick={() => stageDoc(recovery)}>recover {recovery.title}</Press>}
-      <div className="flex items-center gap-2">
-        <span className="t-small face-mono text-ink-2">year</span>
-        {years.map((candidate) => (
-          <Press
-            key={candidate}
-            size="caption"
-            frame="line"
-            tone="quiet"
-            state={yearPick === candidate ? "selected" : "rest"}
-            onClick={() => setYearPick((previous) => (previous === candidate ? null : candidate))}
-          >
-            20{candidate}
-          </Press>
-        ))}
-      </div>
       {/* Wrappers neutralize MasterTable's `flex-1` (basis 0): unwrapped, the column split its
        * height evenly and an empty fleet table hoarded ~1100px of dead space (annotation 2).
        * Content-sized up to a cap; past it the table scrolls under its own sticky header. */}
-      <div className="flex max-h-[40vh] flex-col">
-        <MasterTable
-          rows={visibleWorlds}
-          columns={fleetColumns}
-          rowKey={(world) => world.id}
-          scopeLabel="fleet — pick a session to filter documents"
-          searchPlaceholder="search sessions"
-          activeKey={pickedWorld?.id}
-          onRowClick={(world) => {
-            const id = sessionTarget(world);
-            setTarget(target === id ? "" : id);
-          }}
-          empty={
-            isLoading ? (
-              <OutcomeLine kind="busy" label="reading the fleet" />
-            ) : (
-              <EmptyState story="scope" exit="stage a document below — it starts its own session">
-                no live sessions
-              </EmptyState>
-            )
-          }
-        />
-      </div>
-      <div className="flex max-h-[60vh] flex-col">
-        <MasterTable
-          rows={visibleDocs}
-          columns={docColumns}
-          rowKey={(document) => document.id}
-          scopeLabel={
-            pickedWorld
-              ? `documents openable in ${sessionLabel(pickedWorld)}`
-              : "documents — pick a session explicitly, or stage a new session"
-          }
-          searchPlaceholder="search documents"
-          activeKey={staged?.doc?.id}
-          onRowClick={stageDoc}
-          empty={
-            recentsLoading || isLoading ? (
-              <OutcomeLine kind="busy" label="reading recents and the fleet" />
-            ) : (
-              <EmptyState story="scope" exit="open a document in Revit, or clear the fleet pick">
-                no documents known
-              </EmptyState>
-            )
-          }
-        />
-      </div>
-      <div className="hairline-x sticky bottom-0 z-sticky p-3" data-surface="page">
-        {staged ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="t-small face-mono text-ink-2">staged</span>
-            <span className="t-prose text-ink">
-              {staged.kind === "open"
-                ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
-                : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
-            </span>
-            {staged.kind === "start" ? (
-              <input
-                className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
-                aria-label="session name"
-                placeholder="name this session"
-                value={sessionName}
-                onChange={(event) => setSessionName(event.target.value)}
-              />
-            ) : null}
-            {staged.kind === "open" ? (
-              <VerbButton
-                tone="commit"
-                label={stagedScope && onDocument ? "use" : "open"}
-                reason={
-                  stagedScope && onDocument
-                    ? "use the staged document in this route"
-                    : (openRefusal ?? "open the staged document in its session")
-                }
-                disabled={busy !== null || (!stagedScope && openRefusal !== null)}
-                busy={busy === "open"}
+      <Pane
+        kind="content"
+        title="fleet"
+        flush
+        toolbar={
+          <div className="flex items-center gap-2">
+            <span className="t-small face-mono text-ink-2">year</span>
+            {years.map((candidate) => (
+              <Press
+                key={candidate}
+                size="caption"
+                frame="line"
+                tone="quiet"
+                state={yearPick === candidate ? "selected" : "rest"}
                 onClick={() =>
-                  stagedScope && onDocument ? onDocument(stagedScope) : void runCommand("open")
+                  setYearPick((previous) => (previous === candidate ? null : candidate))
                 }
-              />
-            ) : (
+              >
+                20{candidate}
+              </Press>
+            ))}
+          </div>
+        }
+      >
+        <div className="flex max-h-[40vh] flex-col">
+          <MasterTable
+            rows={visibleWorlds}
+            columns={fleetColumns}
+            rowKey={(world) => world.id}
+            scopeLabel="fleet — pick a session to filter documents"
+            searchPlaceholder="search sessions"
+            activeKey={pickedWorld?.id}
+            onRowClick={(world) => {
+              const id = sessionTarget(world);
+              setTarget(target === id ? "" : id);
+            }}
+            empty={
+              isLoading ? (
+                <OutcomeLine kind="busy" label="reading the fleet" />
+              ) : (
+                <EmptyState story="scope" exit="stage a document below — it starts its own session">
+                  no live sessions
+                </EmptyState>
+              )
+            }
+          />
+        </div>
+      </Pane>
+      <Pane kind="content" title="documents" flush>
+        <div className="flex max-h-[60vh] flex-col">
+          <MasterTable
+            rows={visibleDocs}
+            columns={docColumns}
+            rowKey={(document) => document.id}
+            scopeLabel={
+              pickedWorld
+                ? `documents openable in ${sessionLabel(pickedWorld)}`
+                : "documents — pick a session explicitly, or stage a new session"
+            }
+            searchPlaceholder="search documents"
+            activeKey={staged?.doc?.id}
+            onRowClick={stageDoc}
+            empty={
+              recentsLoading || isLoading ? (
+                <OutcomeLine kind="busy" label="reading recents and the fleet" />
+              ) : (
+                <EmptyState story="scope" exit="open a document in Revit, or clear the fleet pick">
+                  no documents known
+                </EmptyState>
+              )
+            }
+          />
+        </div>
+      </Pane>
+      <Pane kind="content" title="action" flush scroll="visible">
+        <div className="hairline-x sticky bottom-0 z-sticky p-3" data-surface="page">
+          {staged ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="t-small face-mono text-ink-2">staged</span>
+              <span className="t-prose text-ink">
+                {staged.kind === "open"
+                  ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
+                  : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
+              </span>
+              {staged.kind === "start" ? (
+                <input
+                  className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
+                  aria-label="session name"
+                  placeholder="name this session"
+                  value={sessionName}
+                  onChange={(event) => setSessionName(event.target.value)}
+                />
+              ) : null}
+              {staged.kind === "open" ? (
+                <VerbButton
+                  tone="commit"
+                  label={stagedScope && onDocument ? "use" : "open"}
+                  reason={
+                    stagedScope && onDocument
+                      ? "use the staged document in this route"
+                      : (openRefusal ?? "open the staged document in its session")
+                  }
+                  disabled={busy !== null || (!stagedScope && openRefusal !== null)}
+                  busy={busy === "open"}
+                  onClick={() =>
+                    stagedScope && onDocument ? onDocument(stagedScope) : void runCommand("open")
+                  }
+                />
+              ) : (
+                <VerbButton
+                  tone="commit"
+                  label={sessionIdOf(sessionName) ? `start ${sessionIdOf(sessionName)}` : "start"}
+                  reason="start the session and open the staged document"
+                  disabled={busy !== null}
+                  busy={busy === "start"}
+                  onClick={() => void runCommand("start")}
+                />
+              )}
               <VerbButton
-                tone="commit"
-                label={sessionIdOf(sessionName) ? `start ${sessionIdOf(sessionName)}` : "start"}
-                reason="start the session and open the staged document"
-                disabled={busy !== null}
-                busy={busy === "start"}
-                onClick={() => void runCommand("start")}
+                tone="act"
+                label="clear"
+                reason="unstage"
+                onClick={() => setStaged(null)}
               />
-            )}
-            <VerbButton tone="act" label="clear" reason="unstage" onClick={() => setStaged(null)} />
-          </div>
-        ) : pickedWorld ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="t-small face-mono text-ink-2">session</span>
-            <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
-            <VerbButton
-              tone="act"
-              label="restart"
-              reason="cold-swap this session (session hr --restart)"
-              disabled={busy !== null}
-              busy={busy === "restart"}
-              onClick={() => void runCommand("restart")}
-            />
-            <VerbButton
-              tone="act"
-              label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
-              reason="stop this session"
-              disabled={busy !== null}
-              busy={busy === "stop"}
-              onClick={() => void runCommand("stop")}
-            />
-            <VerbButton tone="act" label="clear" reason="unpick" onClick={() => setTarget("")} />
-          </div>
-        ) : (
-          <span className="t-small face-mono text-ink-mute">
-            nothing staged — pick a session above, or click a document row
-          </span>
-        )}
-        {route.failure ? <OutcomeLine kind="error" label={route.failure.message} /> : null}
-        {stored?.kind === "open" && !storedWorld ? (
-          <div>
-            <OutcomeLine kind="error" label={`staged session unavailable: ${stored.session}`} />
-            <VerbButton
-              tone="act"
-              label="clear"
-              reason="unstage unavailable session"
-              onClick={() => setStaged(null)}
-            />
-          </div>
-        ) : null}
-        {error && <OutcomeLine kind="error" label={error} />}
-        <ActionReceipts scope={{ kind: "instances", workspaceId }} lastId={lastId} />
-      </div>
+            </div>
+          ) : pickedWorld ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="t-small face-mono text-ink-2">session</span>
+              <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
+              <VerbButton
+                tone="act"
+                label="restart"
+                reason="cold-swap this session (session hr --restart)"
+                disabled={busy !== null}
+                busy={busy === "restart"}
+                onClick={() => void runCommand("restart")}
+              />
+              <VerbButton
+                tone="act"
+                label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
+                reason="stop this session"
+                disabled={busy !== null}
+                busy={busy === "stop"}
+                onClick={() => void runCommand("stop")}
+              />
+              <VerbButton tone="act" label="clear" reason="unpick" onClick={() => setTarget("")} />
+            </div>
+          ) : (
+            <span className="t-small face-mono text-ink-mute">
+              nothing staged — pick a session above, or click a document row
+            </span>
+          )}
+          {route.failure ? <OutcomeLine kind="error" label={route.failure.message} /> : null}
+          {stored?.kind === "open" && !storedWorld ? (
+            <div>
+              <OutcomeLine kind="error" label={`staged session unavailable: ${stored.session}`} />
+              <VerbButton
+                tone="act"
+                label="clear"
+                reason="unstage unavailable session"
+                onClick={() => setStaged(null)}
+              />
+            </div>
+          ) : null}
+          {error && <OutcomeLine kind="error" label={error} />}
+          <ActionReceipts scope={{ kind: "instances", workspaceId }} lastId={lastId} />
+        </div>
+      </Pane>
     </div>
   );
 }

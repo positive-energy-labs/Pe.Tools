@@ -3,16 +3,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCheck, List, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddressingBar } from "#/components/lang/addressing-bar";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
 import { PickList } from "#/components/lang/pick-list";
-import { SidePane } from "#/components/lang/side-pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/readings";
-import { RouteShell, appAtomRegistry, emptyManifest } from "#/route";
+import { RouteShell, appAtomRegistry, defineRoute } from "#/route";
 import { createRouteOwner, refuse } from "#/route";
 import { useRouteOwner } from "#/route";
 import { DraftEditor } from "#/data-tables/draft-editor";
@@ -26,8 +27,11 @@ import { DraftEditor } from "#/data-tables/draft-editor";
  */
 export const dataTablesSearch = (_search: Record<string, unknown>) => ({});
 
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("data-tables", "Data Tables");
+export const manifest = defineRoute({
+  key: "data-tables",
+  name: "Data Tables",
+  docs: "Create or select a data table, edit its columns and rows, then apply the staged definition to Revit.",
+});
 
 function RouteShelledDataTablesFileRoute() {
   return (
@@ -115,6 +119,7 @@ function DataTablesWorkspace({
   onApply?: (draft: Draft) => Promise<string[]>;
 }) {
   const [draft, setDraft] = useState<Draft | null>(initialDraft);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const store = useRouteOwner(() => createRouteOwner("data-tables", appAtomRegistry));
   const busy = useAtomValue(store.busy)?.key ?? null;
   const clearFailure = () => store.registry.set(store.failure, null);
@@ -155,7 +160,7 @@ function DataTablesWorkspace({
         : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden">
+    <Surface>
       <AddressingBar
         name="data tables"
         sentence={
@@ -187,16 +192,31 @@ function DataTablesWorkspace({
           />
         }
       />
-      <div className="flex min-h-0 flex-1">
-        <SidePane
-          side="left"
-          storageKey="data-tables:rail"
-          minWidth={200}
-          defaultWidth={248}
-          header={
-            <div className="flex items-center justify-between gap-2">
-              <Tag>tables · {tables.length}</Tag>
-              <span className="flex items-center gap-1">
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{
+          target: "start",
+          defaultSize: 248,
+          minSize: 200,
+          persist: "data-tables:rail",
+          collapse: {
+            collapsed: railCollapsed,
+            onCollapsedChange: setRailCollapsed,
+            collapsedSize: 40,
+            collapseBelow: 100,
+          },
+        }}
+        start={
+          <Pane
+            kind="flank"
+            title="tables"
+            meta={`${tables.length} tables`}
+            side="left"
+            collapsed={railCollapsed}
+            onCollapsedChange={setRailCollapsed}
+            actions={
+              <>
                 <ActionButton
                   label="re-read"
                   icon={List}
@@ -215,53 +235,56 @@ function DataTablesWorkspace({
                   onClick={newTable}
                   reason="Start a blank draft — nothing exists in Revit until apply"
                 />
-              </span>
-            </div>
-          }
-        >
-          <PickList
-            items={tables.map((t) => ({
-              id: t.name,
-              label: t.name,
-              meta: `${t.columns.length}×${t.rows.length}`,
-              hint:
-                t.placements.length > 0
-                  ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
-                  : undefined,
-            }))}
-            activeId={draft && !draft.isNew ? draft.name : null}
-            onPick={(id) => {
-              const handle = tables.find((t) => t.name === id);
-              if (handle) openTable(handle);
-            }}
-            placeholder="Filter tables…"
-            emptyNote={
-              isLoading ? (
-                <OutcomeLine kind="busy" label="reading data tables" />
-              ) : (
-                <EmptyState story="scope" exit="create one with the new verb above">
-                  no data tables in this document
-                </EmptyState>
-              )
+              </>
             }
-          />
-        </SidePane>
-
-        <section className="min-h-0 min-w-0 flex-1 overflow-auto p-3">
-          {draft ? (
-            <DraftEditor draft={draft} setDraft={setDraft} />
-          ) : (
-            <div className="grid h-full place-items-center">
-              <EmptyState
-                story="scope"
-                exit="pick a table from the rail, or start one with the new verb"
-              >
-                no table open
-              </EmptyState>
+          >
+            <PickList
+              items={tables.map((t) => ({
+                id: t.name,
+                label: t.name,
+                meta: `${t.columns.length}×${t.rows.length}`,
+                hint:
+                  t.placements.length > 0
+                    ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
+                    : undefined,
+              }))}
+              activeId={draft && !draft.isNew ? draft.name : null}
+              onPick={(id) => {
+                const handle = tables.find((t) => t.name === id);
+                if (handle) openTable(handle);
+              }}
+              placeholder="Filter tables…"
+              emptyNote={
+                isLoading ? (
+                  <OutcomeLine kind="busy" label="reading data tables" />
+                ) : (
+                  <EmptyState story="scope" exit="create one with the new verb above">
+                    no data tables in this document
+                  </EmptyState>
+                )
+              }
+            />
+          </Pane>
+        }
+        end={
+          <Pane kind="content" title={draft?.name ?? "table"} scroll="clip" flush>
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+              {draft ? (
+                <DraftEditor draft={draft} setDraft={setDraft} />
+              ) : (
+                <div className="grid h-full place-items-center">
+                  <EmptyState
+                    story="scope"
+                    exit="pick a table from the rail, or start one with the new verb"
+                  >
+                    no table open
+                  </EmptyState>
+                </div>
+              )}
             </div>
-          )}
-        </section>
-      </div>
-    </main>
+          </Pane>
+        }
+      />
+    </Surface>
   );
 }
