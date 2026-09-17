@@ -22,9 +22,7 @@ export function SettingsChatPlugin(props: RouteChatPluginProps) {
   return workspaceId ? (
     <FileSettingsChatPlugin key={workspaceId} {...props} workspaceId={workspaceId} />
   ) : (
-    <Link to="/settings" search={{ mode: "file" }}>
-      Open file Work
-    </Link>
+    <Link to="/pods">Open pods</Link>
   );
 }
 
@@ -91,18 +89,24 @@ function SettingsReview({
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
-        <Link
-          className="ml-auto"
-          to={isFamilyModel ? "/family" : "/settings"}
-          search={{
-            mode: "file",
-            module: document?.basis?.documentId.moduleKey,
-            root: document?.basis?.documentId.rootKey,
-            file: document?.basis?.documentId.relativePath,
-          }}
-        >
-          Open workspace
-        </Link>
+        {isFamilyModel ? (
+          <Link
+            className="ml-auto"
+            to="/family"
+            search={{
+              mode: "file",
+              module: document?.basis?.documentId.moduleKey,
+              root: document?.basis?.documentId.rootKey,
+              file: document?.basis?.documentId.relativePath,
+            }}
+          >
+            Open workspace
+          </Link>
+        ) : (
+          <Link className="ml-auto" to="/pods">
+            Open pods
+          </Link>
+        )}
       </div>
 
       {active && reviewable ? (

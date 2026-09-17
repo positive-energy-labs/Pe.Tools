@@ -1,6 +1,6 @@
 import { splitScheduleCellKey, scheduleReadingSchema } from "@pe/agent-contracts";
-import { LiveScheduleGridWorkspace } from "#/schedule-grid/live";
-import type { ScheduleGridState } from "#/schedule-grid/workspace";
+import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
+import type { ScheduleGridState } from "#/route/schedules/workspace";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "../provider";
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";

@@ -224,7 +224,7 @@ const SPECIMENS: readonly Specimen[] = [
     id: "select",
     name: "ui/select",
     consumers:
-      "routes/settings.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
+      "routes/pods.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
     shape: "Base UI Select · trigger-width popup · bottom/start with collision fit",
     defects: [
       "FIXED — Select keeps the trigger's width while Combobox adds a readable floor only for narrow single-value triggers.",

@@ -16,11 +16,10 @@ import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { PickList } from "#/components/lang/pick-list";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface } from "#/components/lang/surface";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
-import { PendingStrip } from "#/schedule-grid/pending-strip";
-import { useScheduleGridColumns } from "#/schedule-grid/columns";
+import { PendingStrip } from "./pending-strip";
+import { useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
 
 export interface ScheduleGridState {
@@ -30,7 +29,8 @@ export interface ScheduleGridState {
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
   peaActive: boolean;
   connected: boolean | null;
-  busy: "catalog" | "refresh" | "push" | null;
+  /** The running verb; capture and apply run from the Situation and lock the grid too. */
+  busy: string | null;
   failure: Refusal | null;
   snapshot: ScheduleGridSnapshot | null;
   catalog: ScheduleCatalog | null;
@@ -115,7 +115,7 @@ export function ScheduleGridWorkspace({
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
-    <Surface>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <AddressingBar
         name="schedules"
         sentence={
@@ -191,7 +191,7 @@ export function ScheduleGridWorkspace({
           target: "start",
           defaultSize: 264,
           minSize: 220,
-          persist: "schedule-grid:rail",
+          persist: "schedules:rail",
           collapse: {
             collapsed: railCollapsed,
             onCollapsedChange: setRailCollapsed,
@@ -337,6 +337,6 @@ export function ScheduleGridWorkspace({
           </Pane>
         }
       />
-    </Surface>
+    </div>
   );
 }

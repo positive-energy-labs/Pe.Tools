@@ -1,11 +1,11 @@
 /**
  * A route declares itself once: its Work schema, its Readings, its Page, its actions, its views.
- * Nothing here renders and nothing here holds React state — `useRoute` runs a manifest and
+ * Nothing here renders and nothing here holds React state â€” `useRoute` runs a manifest and
  * `RouteShell` draws it. The fable calls this type `Route`; every `routes/*.tsx` already exports a
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
 import type { ReactNode } from "react";
-import type { z } from "zod";
+import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { semanticActions, type SemanticActionKey } from "@pe/agent-contracts";
 import type {
@@ -107,7 +107,7 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   docs?: ReactNode;
 }
 
-/** Identity, for inference only. Exactly one `manifest` per route module (fable §8). */
+/** Identity, for inference only. Exactly one `manifest` per route module (fable Â§8). */
 export const defineRoute = <W, const R extends string, P, const A extends string>(
   m: RouteManifest<W, R, P, A>,
 ): RouteManifest<W, R, P, A> => m;
@@ -120,3 +120,181 @@ export const emptyManifest = (
   key,
   name,
 });
+
+/* â”€â”€ The entity route kernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+/** A pod member's address, everywhere (dogma law 11). */
+export interface MemberRef {
+  pod: string;
+  path: string;
+}
+
+/** One `pod.list` row, as the host projects it. */
+export interface PodRow {
+  id: string;
+  name: string;
+  version: string;
+  folder: string;
+  entrypoints: readonly string[];
+  members: readonly { path: string; sha256: string; schema: string | null }[];
+  diagnostics: readonly { message: string; path?: string }[];
+}
+
+export type EntityStage = "audit" | "capture" | "apply";
+export type EntityAction = "capture" | "apply";
+/** The Reading every entity route shares: the installed pods, provided by the route's owner. */
+export type EntityReading = "pods";
+
+export interface EntityPage {
+  stage: EntityStage;
+  /** The member the editor holds; capture lands here, apply reads it. Empty = none. */
+  pod: string;
+  path: string;
+}
+
+export const entityPage = z.object({
+  stage: z.enum(["audit", "capture", "apply"]).default("audit"),
+  pod: z.string().default(""),
+  path: z.string().default(""),
+});
+
+/** An entity route, declared once: `/family`, `/families`, `/schedules` differ only here. */
+export interface EntityRouteDef<W, R extends string, P> {
+  key: string;
+  name: string;
+  /** The noun a captured member is filed under: `settings/<entity>/â€¦`. */
+  entity: string;
+  /** `selection` = the document plus the audit rows the route has picked. */
+  target: "document" | "selection";
+  /** The spec's `$schema` path (`/schemas/settings/…`); the only thing that says a member is this route's. */
+  schema: string;
+  capture: string;
+  /** Families only: the confirmation sheet behind apply (dogma law 9). */
+  plan?: string;
+  apply: string;
+  /** What capture needs beyond the target, read off the audit; a string refuses. */
+  captureInput?: (ctx: Ctx<W, R, P & EntityPage>) => Record<string, unknown> | string;
+  docs?: ReactNode;
+}
+
+/** `$schema` is an absolute URL on whichever host served it; the path is what names the library. */
+export const isSpecOf = (schema: string | null | undefined, path: string) => {
+  if (!schema) return false;
+  try {
+    return new URL(schema, "http://host").pathname === path;
+  } catch {
+    return false;
+  }
+};
+
+type EntityCtx = Ctx<unknown, string, EntityPage>;
+
+const targetInput = (ctx: EntityCtx) =>
+  ctx.target.kind === "document" ? { target: ctx.target.ref } : {};
+
+const podsOf = (ctx: EntityCtx) => {
+  const reading = ctx.readings.pods;
+  return reading?.state === "ready" ? (reading.observation as readonly PodRow[]) : [];
+};
+
+/** Capture always files a new member; the timestamp is the only thing that makes it new. */
+export const capturePath = (entity: string, at = new Date()) =>
+  `settings/${entity}/${at.toISOString().replace(/[:.]/g, "-")}.json`;
+
+/**
+ * The one entity route. Stages are audit, capture, apply; the audit's own Work, Readings and
+ * verbs (a grid's `push`) ride in `audit` and keep their names.
+ */
+export function entityRoute<W, const R extends string, P extends object, const A extends string>(
+  def: EntityRouteDef<W, R, P>,
+  audit: Pick<RouteManifest<W, R, P, A>, "work" | "readings" | "page" | "actions" | "seeds"> = {},
+): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
+  const actions: Record<EntityAction, RouteAction<unknown, string, EntityPage, never>> = {
+    capture: {
+      label: `capture ${def.entity}`,
+      says: `reads the ${def.entity} from Revit into a new member of the chosen pod`,
+      needs: "project",
+      actor: "any",
+      stage: "capture",
+      input: z.void() as unknown as z.ZodType<never>,
+      dirties: ["pods"],
+      ready: (ctx) => {
+        if (!ctx.page.pod) return "choose the pod the capture lands in";
+        const extra = def.captureInput?.(ctx as never);
+        return typeof extra === "string" ? extra : null;
+      },
+      run: async (ctx) => {
+        const extra = def.captureInput?.(ctx as never);
+        if (typeof extra === "string") throw Error(extra);
+        const spec = await ctx.call(def.capture, { ...targetInput(ctx), ...extra });
+        const path = capturePath(def.entity);
+        const $schema = new URL(def.schema, globalThis.location.origin).href;
+        const content = JSON.stringify({ $schema, ...(spec as object) }, null, 2);
+        await ctx.call("pod.member.write", { pod: ctx.page.pod, path, content });
+        ctx.setPage({ path });
+      },
+    },
+    apply: {
+      label: `apply ${def.entity}`,
+      says: `writes the saved ${def.entity} spec to Revit and files a run receipt in its pod`,
+      needs: "project",
+      actor: "human",
+      stage: "apply",
+      input: z.void() as unknown as z.ZodType<never>,
+      dirties: ["pods"],
+      ready: (ctx) => {
+        if (!ctx.page.pod || !ctx.page.path) return "open a saved spec first";
+        const pod = podsOf(ctx).find((row) => row.id === ctx.page.pod);
+        const member = pod?.members.find((row) => row.path === ctx.page.path);
+        if (!member) return "save the spec before applying";
+        return isSpecOf(member.schema, def.schema)
+          ? null
+          : `the member is not a ${def.entity} spec`;
+      },
+      run: async (ctx) => {
+        const { pod, path } = ctx.page;
+        const member = podsOf(ctx)
+          .find((row) => row.id === pod)
+          ?.members.find((row) => row.path === path);
+        if (!member) throw Error("save the spec before applying");
+        const { composed } = (await ctx.call("pod.member.compose", { pod, path })) as {
+          composed: unknown;
+        };
+        const source = { pod, path, sha256: member.sha256 };
+        const plan = def.plan
+          ? ((await ctx.call(def.plan, { ...targetInput(ctx), spec: composed })) as {
+              planHash: string;
+            })
+          : null;
+        await ctx.call(def.apply, {
+          ...targetInput(ctx),
+          spec: composed,
+          source,
+          ...(plan ? { planHash: plan.planHash } : {}),
+        });
+      },
+    },
+  };
+  return defineRoute({
+    key: def.key,
+    name: def.name,
+    docs: def.docs,
+    needs: "project",
+    stages: [
+      { key: "audit", word: "Auditing" },
+      { key: "capture", word: "Capturing" },
+      { key: "apply", word: "Applying" },
+    ],
+    work: audit.work,
+    // `pods` is provided by the route's owner (a live `pod.list`, or the seed); never subscribed.
+    readings: { ...audit.readings, pods: () => null } as Record<
+      R | EntityReading,
+      ReadingSpec<P & EntityPage>
+    >,
+    page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
+      P & EntityPage
+    >,
+    actions: { ...audit.actions, ...actions } as never,
+    seeds: audit.seeds as never,
+  });
+}

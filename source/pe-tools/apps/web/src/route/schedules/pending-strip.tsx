@@ -6,7 +6,9 @@ import { Provenance, Section } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
-import type { CellState } from "#/schedule-grid/route";
+import type { ScheduleGridDocument } from "@pe/agent-contracts";
+
+type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
 
 export function PendingStrip({
   pending,
