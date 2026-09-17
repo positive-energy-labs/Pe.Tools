@@ -7,7 +7,6 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
-vi.mock("#/chat/control-chips", () => ({ ControlChips: () => null }));
 vi.mock("#/components/master-table/cells", () => ({ StateDot: () => null }));
 
 import { ThreadComposer } from "./composer";
@@ -45,6 +44,9 @@ function mount({
     sendPrompt: vi.fn(async () => undefined),
     cancel: vi.fn(),
     isRunning: false,
+    setModel: vi.fn(async () => undefined),
+    setAccessLevel: vi.fn(async () => undefined),
+    addApiKey: vi.fn(async () => undefined),
   };
   const view = render(
     <ThreadComposer
@@ -95,7 +97,24 @@ test("composer Pane lists its real keys without replacing textarea Enter", () =>
   expect(send).toHaveBeenCalledOnce();
   const attach = screen.getByTitle("Attach files");
   act(() => attach.focus());
-  fireEvent.keyDown(attach, { key: "Enter", code: "Enter" });
+  const nativeEnter = (button: HTMLElement) => {
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    button.dispatchEvent(event);
+    if (!event.defaultPrevented) fireEvent.click(button);
+    return event;
+  };
+  const fileInput = lane.container.querySelector<HTMLInputElement>("input[type='file']")!;
+  const openFiles = vi.spyOn(fileInput, "click");
+  expect(nativeEnter(attach).defaultPrevented).toBe(false);
+  expect(openFiles).toHaveBeenCalledOnce();
+  const model = screen.getByTitle("Model");
+  expect(nativeEnter(model).defaultPrevented).toBe(false);
+  expect(model.getAttribute("aria-expanded")).toBe("true");
   expect(send).toHaveBeenCalledOnce();
   act(() => box.focus());
   expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", isComposing: true })).toBe(true);

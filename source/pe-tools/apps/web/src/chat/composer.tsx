@@ -134,12 +134,14 @@ export function Composer({
       callback: () => {
         if (paneOwnsFocus()) sendCurrent();
       },
+      options: { preventDefault: false, stopPropagation: false },
     },
     {
       hotkey: "/",
       label: "skill commands",
       says: "Starts the composer skill menu from an empty draft.",
       callback: beginSlashCommand,
+      options: { preventDefault: false, stopPropagation: false },
     },
   ];
 
