@@ -2,17 +2,21 @@
  * THE MEMBER EDITOR — one member, one draft; form and raw JSON are two modes of that draft. A draft
  * the form cannot render stays raw, byte for byte. Offline the host answers schema issues only;
  * with a Revit session attached it adds the composed preview and the library's semantic issues.
- * `save` overwrites only the bytes it read; `save as new` files a sibling member.
- *
  * Beside the draft sits the member's Settings Work (`memberWork`): Pea's field proposals and the
- * fields a person staged, reviewed card by card and written with `settings.write`. Every route
- * that opens a member (`/pods`, `/family`, the product routes' spec pane) shows the same lane.
+ * fields a person staged, reviewed card by card. Every route that opens a member (`/pods`,
+ * `/family`, the product routes' spec pane) shows the same lane.
+ *
+ * One save per member. While the Work holds proposals or staged fields, the draft is the Work's
+ * root raw edit, staged fields apply on top of it, and save is `settings.write`. With a clean Work,
+ * save is `pod.member.save` of the exact bytes, and the Work re-opens on them. `save as new`
+ * files a sibling member.
  */
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { z } from "zod";
 import {
   memberWork,
   podMemberSchema,
+  settingsCandidate,
   settingsRouteState,
   type PodMember,
   type SettingsFieldState,
@@ -30,7 +34,7 @@ import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { useHostStatus } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
-import { CellTrichotomyReviewer } from "#/workbench/trichotomy-reviewer";
+import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 import {
   actionResult,
   saveSettingsAction,
@@ -199,7 +203,8 @@ const display = (value: unknown) =>
  */
 function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: string | null }) {
   const doc = work.work.doc;
-  const fields = doc?.fields ?? {};
+  // The root raw edit is the editor's draft, not a card.
+  const { [""]: _draft, ...fields } = doc?.fields ?? {};
   const cells = Object.values(fields);
   const proposed = cells.filter((cell) => cell.proposal != null && cell.staged == null).length;
   const staged = cells.filter((cell) => cell.staged != null).length;
@@ -304,7 +309,8 @@ export function SpecEditor({
     !fixture && status.state === "ready" && status.observation.bridgeIsConnected === true;
   const [basis, setBasis] = useState<string | null>(fixture?.content ?? null);
   const [basisSha, setBasisSha] = useState<string | null>(null);
-  const [draft, setDraft] = useState(fixture?.content ?? "");
+  /** What the person typed since the last read; null = the draft is the Work's or the disk's. */
+  const [typed, setDraft] = useState<string | null>(null);
   const [schemaJson, setSchemaJson] = useState<string | null>(fixture?.schema ?? null);
   const [mode, setMode] = useState<Mode>("form");
   const [composed, setComposed] = useState<Composed | null>(null);
@@ -315,6 +321,14 @@ export function SpecEditor({
   const work = useMemberWork(member, seed);
   // A `settings.write` moves the basis; the draft re-reads the bytes it wrote.
   const workSha = work.work.doc?.basis?.sha256 ?? null;
+  const fields = work.work.doc?.fields ?? {};
+  const rootEdit = fields[""]?.staged?.value as string | undefined;
+  const workBytes = rootEdit ?? work.work.doc?.basis?.rawContent ?? null;
+  // A Work with proposals or staged fields owns the member: the draft is its root raw edit.
+  const viaWork = !fixture && Object.values(fields).some((field) => field.staged || field.proposal);
+  const staged = Object.values(fields).some((field) => field.staged);
+  const draft = typed ?? (viaWork ? workBytes : null) ?? basis ?? "";
+  const synced = !viaWork || typed === null || typed === workBytes;
 
   useEffect(() => {
     if (fixture || !member) return;
@@ -322,7 +336,7 @@ export function SpecEditor({
     setBasis(null);
     setFailure(null);
     podHost.read(member).then(
-      ({ content, sha256 }) => live && (setBasis(content), setBasisSha(sha256), setDraft(content)),
+      ({ content, sha256 }) => live && (setBasis(content), setBasisSha(sha256), setDraft(null)),
       (error) => live && setFailure(message(error)),
     );
     return () => {
@@ -330,6 +344,23 @@ export function SpecEditor({
     };
     // `key` is the member's identity; the object is rebuilt every render.
   }, [key, fixture, workSha]);
+
+  // Typing becomes the Work's root raw edit; back at the basis bytes, the root edit clears.
+  const writeWork = work.work.write;
+  const basisBytes = work.work.doc?.basis?.rawContent;
+  useEffect(() => {
+    if (synced || typed === null) return;
+    const timer = setTimeout(
+      () =>
+        void writeWork(
+          typed === basisBytes
+            ? [{ path: ["fields", ""] }]
+            : [{ path: ["fields", ""], value: { proposal: null, staged: { value: typed } } }],
+        ),
+      400,
+    );
+    return () => clearTimeout(timer);
+  }, [synced, typed, basisBytes, writeWork]);
 
   const parsed = useMemo(() => parse(draft), [draft]);
   const form = useMemo(() => schemaFormModel(draft, schemaJson), [draft, schemaJson]);
@@ -364,18 +395,31 @@ export function SpecEditor({
       </EmptyState>
     );
 
-  const dirty = basis !== null && draft !== basis;
-  /** Save overwrites only the bytes this editor read; save as new files a sibling member. */
+  const dirty = viaWork ? staged : basis !== null && draft !== basis;
+  /**
+   * Save writes the Work (draft plus staged fields) or, with a clean Work, overwrites only the bytes
+   * this editor read. Save as new files the same content as a sibling member.
+   */
   const save = (asNew: boolean) =>
     startSave(async () => {
       const ref = asNew ? { pod: member.pod, path: siblingPath(member.path) } : member;
       try {
-        const written = asNew
-          ? await podHost.write(ref, draft)
-          : await podHost.save(ref, draft, basisSha!);
-        if (!asNew) {
+        if (asNew) {
+          const content =
+            viaWork && basisBytes !== undefined
+              ? settingsCandidate(basisBytes, { ...fields, "": { staged: { value: draft } } })
+              : draft;
+          await podHost.write(ref, content);
+        } else if (viaWork) {
+          const refusal = await work.actions.save.run();
+          if (refusal) throw Error(refusal.message);
+        } else {
+          const written = await podHost.save(ref, draft, basisSha!);
           setBasis(draft);
           setBasisSha(written.sha256);
+          setDraft(null);
+          // The clean Work follows the bytes it will review next.
+          if (work.work.doc?.basis) await work.actions.open.run({ member });
         }
         onSaved?.(ref);
       } catch (error) {
@@ -386,9 +430,11 @@ export function SpecEditor({
     ? "The demo member is read-only."
     : parsed.error
       ? `The draft is not JSON: ${parsed.error}`
-      : dirty
-        ? null
-        : "Nothing to save.";
+      : !synced
+        ? "The draft is still being staged on the member."
+        : dirty
+          ? null
+          : "Nothing to save.";
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5">
@@ -439,7 +485,9 @@ export function SpecEditor({
               disabled={!!saveReason || saving || !basisSha}
               reason={
                 saveReason ??
-                "Overwrite this member; refuses if it changed on disk since it was read."
+                (viaWork
+                  ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
+                  : "Overwrite this member; refuses if it changed on disk since it was read.")
               }
               onClick={() => save(false)}
             />

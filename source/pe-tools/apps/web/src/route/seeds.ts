@@ -18,6 +18,8 @@ export const hash = (n: number) => String(n).repeat(64).slice(0, 64);
 
 export const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";
 export const DEMO_FAMILIES_SPEC_PATH = "settings/families/Mech equipment standard.json";
+const DEMO_HEADER_PATH = "settings/_fields/Header.json";
+const DEMO_PERF_HEAT_PATH = "settings/_fields/IU Perf Heat.json";
 export const DEMO_RECEIPT_PATH = "output/2026-09-12T14-02-11Z/receipt.json";
 
 export const DEMO_PODS: readonly PodRow[] = [
@@ -30,8 +32,8 @@ export const DEMO_PODS: readonly PodRow[] = [
     members: [
       { path: DEMO_SPEC_PATH, sha256: hash(2), schema: SCHEDULE_SCHEMA },
       { path: DEMO_FAMILIES_SPEC_PATH, sha256: hash(8), schema: FAMILIES_SCHEMA },
-      { path: "settings/_fields/Header.json", sha256: hash(3), schema: null },
-      { path: "settings/_fields/IU Perf Heat.json", sha256: hash(4), schema: null },
+      { path: DEMO_HEADER_PATH, sha256: hash(3), schema: null },
+      { path: DEMO_PERF_HEAT_PATH, sha256: hash(4), schema: null },
       { path: DEMO_RECEIPT_PATH, sha256: hash(5), schema: null },
     ],
     diagnostics: [],
@@ -97,6 +99,23 @@ export const DEMO_SPEC: DemoSpec = {
   content: SCHEDULE_SEED_RAW,
   schema: SCHEDULE_SEED_SCHEMA,
   fields: SCHEDULE_SEED_FIELDS,
+};
+
+const fragment = (fields: object[]): DemoSpec => ({
+  content: JSON.stringify(fields, null, 2),
+  schema: "",
+});
+
+/** The schedule member's field fragments: plain data, fixture bytes. */
+export const DEMO_FRAGMENTS: Record<string, DemoSpec> = {
+  [DEMO_HEADER_PATH]: fragment([
+    { ParameterName: "PE_G___TagInstance", ColumnHeaderOverride: "Tag" },
+    { ParameterName: "PE_G___Model", ColumnHeaderOverride: "Model" },
+  ]),
+  [DEMO_PERF_HEAT_PATH]: fragment([
+    { ParameterName: "PE_M___HeatingCapacity", ColumnHeaderOverride: "Heating (MBH)" },
+    { ParameterName: "PE_M___EnteringAirTempHeating", ColumnHeaderOverride: "EAT (F)" },
+  ]),
 };
 
 /** `/pods?demo=browse`: the demo pods, the schedule spec open, its run beside it. */

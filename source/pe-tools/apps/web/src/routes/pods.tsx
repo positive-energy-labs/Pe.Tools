@@ -20,7 +20,12 @@ import { RECEIPT_PATH, podHost, usePodList, type Receipt } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
+import { familyFixtures } from "#/family/authored-families";
+import { familyDemoFields } from "#/family/store";
+import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
+  DEMO_FAMILIES_SPEC_PATH,
+  DEMO_FRAGMENTS,
   DEMO_PODS,
   DEMO_RECEIPT,
   DEMO_RECEIPT_PATH,
@@ -28,7 +33,7 @@ import {
   DEMO_SPEC_PATH,
   PODS_SEEDS,
 } from "#/route/seeds";
-import { SpecEditor } from "#/route/spec-editor";
+import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
 
 export const manifest = defineRoute({ key: "pods", name: "Pods", seeds: PODS_SEEDS });
 
@@ -40,11 +45,33 @@ const PRODUCT_ROUTES = [
   { to: "/families", def: familiesSpec },
 ] as const;
 
+// `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.
+const SEP = "|";
+
 /** The demo lane browses every product route's demo pod, so each deep link has a member to open. */
 const DEMO_BROWSE = [...DEMO_PODS, ...FAMILY_DEMO_PODS];
 
-// `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.
-const SEP = "|";
+/** Each demo member's own seeded bytes, by `pod|path`; the family models carry their Pea lane. */
+export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
+  [`${DEMO_PODS[0]!.id}${SEP}${DEMO_SPEC_PATH}`, DEMO_SPEC],
+  [`${DEMO_PODS[0]!.id}${SEP}${DEMO_FAMILIES_SPEC_PATH}`, DEMO_FAMILIES_SPEC],
+  ...Object.entries(DEMO_FRAGMENTS).map(
+    ([path, spec]) => [`${DEMO_PODS[0]!.id}${SEP}${path}`, spec] as const,
+  ),
+  ...FAMILY_DEMO_PODS[0]!.members.map((m) => {
+    const content =
+      familyFixtures[
+        m.path
+          .split("/")
+          .at(-1)!
+          .replace(/\.json$/, "") as never
+      ];
+    return [
+      `${FAMILY_DEMO_PODS[0]!.id}${SEP}${m.path}`,
+      { content, schema: "", fields: familyDemoFields(content) },
+    ] as const;
+  }),
+]);
 
 export const Route = createFileRoute("/pods")({
   validateSearch: (
@@ -200,9 +227,15 @@ export function PodsRouteContent({
                   </EmptyState>
                 ) : (
                   <SpecEditor
+                    // The draft is per member; switching members starts a fresh editor.
+                    key={member ? `${row!.id}${SEP}${member.path}` : ""}
                     member={member ? { pod: row!.id, path: member.path } : null}
                     schema={member?.schema ?? null}
-                    fixture={demo ? DEMO_SPEC : undefined}
+                    fixture={
+                      demo && member
+                        ? DEMO_MEMBER_SPECS.get(`${row!.id}${SEP}${member.path}`)
+                        : undefined
+                    }
                     onSaved={(saved) => {
                       refresh();
                       select(saved);

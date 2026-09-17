@@ -15,7 +15,7 @@ import {
   type RouteChatPluginProps,
   actionLabel,
 } from "../route-chat-plugins";
-import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
+import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 
 export function SettingsChatPlugin(props: RouteChatPluginProps) {
   const args =
