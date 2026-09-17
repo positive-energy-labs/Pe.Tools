@@ -6,7 +6,7 @@
  *   this proves render and parity: the head renders, every verb is disabled with that sentence,
  *   nothing throws and nothing is POSTed. Seeds are enumerated from the manifests themselves.
  * - Live: `?demo=<seed>&live=1` routes the page's host traffic to a simulated demo owner, so one
- *   capture → (confirm →) apply loop per product route runs end to end and `/pods` shows its receipt.
+ *   capture → (plan →) apply loop per product route runs end to end and `/pods` shows its receipt.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -273,12 +273,6 @@ async function run(page: Page, label: string) {
   await button.click();
 }
 
-/** Open a Situation picker by its current word and choose one option. */
-async function pick(page: Page, word: string | RegExp, option: string | RegExp) {
-  await page.getByRole("button", { name: word }).first().click();
-  await page.getByRole("button", { name: option }).first().click();
-}
-
 async function landed(page: Page, pattern: RegExp) {
   await expect
     .poll(() => decodeURIComponent(new URL(page.url()).searchParams.get("path") ?? ""), {
@@ -334,36 +328,35 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
       .toContain("Auditing schedule in Isolated demo (simulated)");
-    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await page
       .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
       .first()
       .click();
     await run(page, "capture schedule");
     const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
-    await pick(page, /^Capturing/, /^Applying/);
     await run(page, "apply schedule");
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("apply ran");
+      .toContain("apply schedule ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("succeeded");
   expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
 }, 180_000);
 
-test("live /family: capture, confirm, apply files a run receipt", async () => {
+test("live /family: capture, plan, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("family", async (page) => {
     const pod = await openLive(page, "/family", "demo=capture&live=1");
-    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await run(page, "capture family");
     const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
-    await pick(page, /^Capturing/, /^Applying/);
     await run(page, "plan");
     await run(page, "apply family");
+    // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("confirm ran");
+      .toContain("apply family ran");
     // The owner answers the lamp's host-status read, so the head names no broken host.
     expect(await page.locator("body").innerText()).not.toContain("unreachable");
     return receiptOnPods(page, pod, path, "family.apply");
@@ -371,25 +364,24 @@ test("live /family: capture, confirm, apply files a run receipt", async () => {
   expect(shown).toContain("succeeded");
   // The capture filed a run of its own on this member: that run holds the unmodeled facts.
   expect(shown).toContain("family.capture");
-  expect(workflows).toEqual(["family.capture", "family.confirm", "family.apply"]);
+  expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
 }, 180_000);
 
-test("live /families: capture, confirm, apply files a run receipt", async () => {
+test("live /families: capture, plan, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");
-    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await page.getByTitle(/^Add Fan Coil Unit - Ducted to the capture set/).click();
     await run(page, "capture families");
     const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
-    // The captured family model is itself a families spec: apply it.
-    await pick(page, /^Capturing/, /^Applying/);
+    // The captured family model is itself a families spec: plan and apply it.
     await run(page, "plan");
     await run(page, "apply families");
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("confirm ran");
+      .toContain("apply families ran");
     return receiptOnPods(page, pod, path, "families.apply");
   });
   expect(shown).toContain("succeeded");
-  expect(workflows).toEqual(["families.capture", "families.confirm", "families.apply"]);
+  expect(workflows).toEqual(["families.capture", "families.plan", "families.apply"]);
 }, 180_000);

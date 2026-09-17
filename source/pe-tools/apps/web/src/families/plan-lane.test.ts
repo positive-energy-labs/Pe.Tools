@@ -37,7 +37,7 @@ const view = (page: Record<string, unknown> = {}) => ({
   setPage: vi.fn(),
 });
 
-test("plan confirms the page's member against the reviewed Work, and writes no Work", async () => {
+test("plan reads the page's member against the reviewed Work, and writes no Work", async () => {
   const ctx = view();
   const plan = [{ familyId: 3101, familyName: "A", planHash: "p", changes: [], runEffects: ["x"] }];
   client.runSemanticAction.mockResolvedValueOnce({
@@ -47,15 +47,16 @@ test("plan confirms the page's member against the reviewed Work, and writes no W
       included: { "3101": "p" },
     },
   });
-  await manifest.actions!.apply.run(ctx as never, undefined as never);
+  await manifest.actions!.plan.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
-    "families.confirm",
+    "families.plan",
     { source, excludedIds: [3102] },
     ref,
     { work: { key: ctx.work.key, revision: 4 } },
   );
   expect(ctx.write).not.toHaveBeenCalled();
   expect(ctx.setPage).toHaveBeenCalledWith({
+    stage: "apply",
     confirming: true,
     sheet: { entries: [expect.objectContaining({ id: "3101", planHash: "p" })] },
   });
@@ -65,10 +66,10 @@ test("held-back rows are the Work's exclusions", () => {
   expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
 });
 
-test("confirm applies the source with exactly the included hashes", async () => {
+test("apply sends the source with exactly the included hashes", async () => {
   const ctx = view({ confirming: true, sheet: seed.page.sheet });
-  expect(manifest.actions!.confirm.ready(ctx as never, undefined as never)).toBeNull();
-  await manifest.actions!.confirm.run(ctx as never, undefined as never);
+  expect(manifest.actions!.apply.ready(ctx as never, undefined as never)).toBeNull();
+  await manifest.actions!.apply.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
     "families.apply",
     { source, expectedPlanHashes: { "3101": "plan-3101" } },

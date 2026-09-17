@@ -152,6 +152,8 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     work: () => Promise<Refusal | null>,
     keys?: readonly string[],
     onStopped?: () => void,
+    /** The word on the button. The log says what the user pressed, never the action key. */
+    label = key,
   ): Promise<Refusal | null> => {
     if (inFlight) {
       const refusal = refuse("busy", `${key} refused; another action is running`);
@@ -189,11 +191,11 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       const running = work();
       const result = await Promise.race([running, stopped]);
       if (result === "stopped") {
-        note("verb", key, "stopped · the wait was cancelled; the host may still finish", true);
+        note("verb", label, "stopped · the wait was cancelled; the host may still finish", true);
         const late = (says: string, refusal: Refusal | null) => {
           if (disposed) return;
           write(key, "failure", () => registry.set(failure, refusal));
-          note("verb", key, `late · ${says}`, Boolean(refusal));
+          note("verb", label, `late · ${says}`, Boolean(refusal));
           if (!refusal) invalidateKeys();
         };
         running
@@ -208,13 +210,13 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return null;
       }
       write(key, "failure", () => registry.set(failure, result));
-      note("verb", key, result ? `refused · ${result.message}` : "ran", Boolean(result));
+      note("verb", label, result ? `refused · ${result.message}` : "ran", Boolean(result));
       if (!result) invalidateKeys();
       return result;
     } catch (cause) {
       const refusal = refusalOf(cause);
       write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", key, `failed · ${refusal.message}`, true);
+      note("verb", label, `failed · ${refusal.message}`, true);
       return refusal;
     } finally {
       if (!detached) finish();
@@ -933,6 +935,7 @@ export function useRoute<W, R extends string, P, A extends string>(
               () => {
                 stopped = true;
               },
+              action.label,
             );
             setOutcome({ key: name, label: action.label, refusal, stopped, at: Date.now() });
             return refusal;
