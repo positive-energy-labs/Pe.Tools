@@ -4,7 +4,6 @@ import { Pane, PaneSplit, PaneWorkspace, paneRecipe } from "#/components/lang/pa
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
 import { paneWorkspaceRecipe } from "#/components/lang/pane-workspace";
 import { PickList, pickListRecipe } from "#/components/lang/pick-list";
-import { SidePane, sidePaneRecipe } from "#/components/lang/side-pane";
 import { Switch, switchRecipe } from "#/components/lang/switch";
 import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
@@ -102,24 +101,6 @@ export function UiLayoutSpecimens() {
         render={() => (
           <div className="h-40 w-64">
             <PickList items={ITEMS} activeId={active} onPick={setActive} />
-          </div>
-        )}
-      />
-      <RecipeGrid
-        name="SidePane"
-        importPath="#/components/lang/side-pane"
-        recipe={sidePaneRecipe}
-        render={(props) => (
-          <div className="flex h-32 w-64">
-            <SidePane
-              side={(props.side as "left" | "right") ?? "left"}
-              storageKey="swatch.side-pane"
-              defaultOpen={props.state !== "collapsed"}
-              minWidth={120}
-              defaultWidth={180}
-            >
-              body
-            </SidePane>
           </div>
         )}
       />

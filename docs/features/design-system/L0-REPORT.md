@@ -28,11 +28,12 @@
 - `family/workspace-doc-pane.tsx`: migrate `headerSurface="artifact"`.
 - `takeoff/atlas-visual.tsx` and `takeoff/atlas-table.tsx`: decide titles for currently headerless `Pane` calls; L0 preserves the intentional opt-out.
 - Every `Pane` now renders a header unless `headerless` is explicit. The two unnamed production callers above must add a title or `headerless` in their consumer lane.
-- Later lanes own `SidePane` callers in `chat/chat-shell.tsx`, `schedule-grid/workspace.tsx`, `workbench/lens/view.tsx`, `routes/data-tables.tsx`, and `routes/parameter-links.tsx`.
+- `SidePane` callers migrated in root `3a74472`; the obsolete primitive and duplicate specimen coverage are deleted below.
 - Later lanes own `PaneSplit` callers in `takeoff/atlas-table.tsx` and `runs/browser/view.tsx`, and `PaneWorkspace` callers in `components/anatomy/workspace.tsx`, `routes/grilles.tsx`, and the specimen.
 
 ## Follow-up
 
 - 2026-09-16, root browser evidence at `Pe.Tools-unify-workspaces/.artifacts/runs/root-browser-20260916/takeoffs-normal.png` showed the Takeoffs `MasterTable` body expanding below its bounded split track. `PaneSplit` side wrappers now form `min-h-0` flex columns, so both a `Pane` and a direct `ArtifactFrame` can fill the track and leave scrolling to the table body.
-- 2026-09-16, `Rail` remains 24px high and now clips its one-line lead and trail instead of allowing wrapped content to overlap. Takeoffs moves its field mode button to `MasterTable.modes`; its summary holds facts only and its existing pane help/shortcuts hold keyboard instructions.
+- 2026-09-16, `Rail` remains 24px high. Lead text truncates, while actions remain accessible through a no-scrollbar horizontal scroller that reveals keyboard focus. Takeoffs moves its field mode button to `MasterTable.modes`; its summary holds facts only and its existing pane help/shortcuts hold keyboard instructions.
 - Owed consumer migration: `grilles/sheet.tsx` still passes its `+ profile` `Press` through `MasterTable.summary`. Move it to `MasterTable.actions` in the Grilles lane; this follow-up did not alter that route.
+- 2026-09-16, production census found no `SidePane` import or JSX caller. Deleted `components/lang/side-pane.tsx` (172 LOC), its `UiLayoutSpecimens` block (19 LOC), its `recipe-grid.test.tsx` registration (2 LOC), and the dead `AnnotationVariant` member (1 LOC). `PickList` now names `Pane`; `Pane`, `PaneSplit`, and `PaneWorkspace` specimens cover the shared layout contract.
