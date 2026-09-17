@@ -3,7 +3,8 @@
 ## Commits
 
 - Consumer base: `36b9d51f84efa8ea6acecb72ff65d22e422b8453`.
-- Consumer commit: `f8e5506`.
+- Consumer commits: `fa41e06` and final correction `5479431`.
+- Evidence correction: `5794c2a` replaces the stale `f8e5506` reference.
 - Foundation follow-up: pending root commit. `Surface` must fill its parent before route or Chat browser proof.
 
 ## Changed routes
