@@ -36,7 +36,7 @@ internal static class FamilyFoundryBridgeOps {
     [Op("family.apply", Does = "Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
-            new Dictionary<long, string> { [document.Value.OwnerFamily.Id.Value()] = request.PlanHash }, document.Value, request.ExecutionOptions)), cancellationToken);
+            request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
 
     [Op("families.capture", Does = "Open selected loaded families read-only and capture each as a family.json spec with coverage.", Title = "Capture Loaded Families", Finds = ["families", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Expensive)]
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
@@ -50,7 +50,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, cancellationToken: cancellationToken)), cancellationToken);
 
-    [Op("family.build", Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template, save it to an explicit .rfa path, and write the run receipt into the source pod.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("family.build", Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyBuildData> BuildFamily(FamilyBuildRequest request, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => BuildWithReceipt(RevitUiSession.CurrentUIApplication.Application, request)), cancellationToken);
 
@@ -64,23 +64,22 @@ internal static class FamilyFoundryBridgeOps {
         }
     }
 
-    /// <summary>The one build edge: bridge op and palette both land here, and both leave a run in the source pod.</summary>
-    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request,
-        string? runFolder = null) {
-        var outputPath = ResolvePath(request.OutputPath, nameof(request.OutputPath));
-        if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
-            throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
-        if (File.Exists(outputPath) && !request.Overwrite)
-            throw BridgeOperationExceptions.Conflict($"Output family already exists: '{outputPath}'. Set overwrite=true to replace it.");
+    /// <summary>
+    ///     The one build edge: bridge op and palette both land here, and both leave a run in the source pod.
+    ///     The run folder is the output folder — a build never writes outside the pod it came from, so there
+    ///     is nothing to overwrite and no path to validate.
+    /// </summary>
+    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request) {
         var parsed = FamilyModelJson.Parse(request.SpecJson);
         if (parsed.Value == null || parsed.Diagnostics.Count != 0)
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
         var podFolder = PodMembers.VerifiedFolder(request.Source);
-        var run = runFolder ?? PodRuns.NewRunFolder(podFolder);
+        var run = PodRuns.NewRunFolder(podFolder);
+        var outputPath = Path.Combine(run, $"{FileName(parsed.Value.Family.Name)}.rfa");
         var source = request.Source;
         var handled = new List<(bool IsError, string Message)>();
         try {
-            var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, request.Overwrite,
+            var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
             var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
                 receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), EngineEdge.WarningsOutput(handled));
@@ -90,6 +89,11 @@ internal static class FamilyFoundryBridgeOps {
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
+
+    /// <summary>The family name as a file name; Revit admits characters a path does not.</summary>
+    private static string FileName(string familyName) =>
+        string.Join("_", familyName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)) is { Length: > 0 } name
+            ? name : "family";
 
     private static string ResolvePath(string? path, string field) {
         if (string.IsNullOrWhiteSpace(path)) throw BridgeOperationExceptions.BadRequest($"{field} is required.");

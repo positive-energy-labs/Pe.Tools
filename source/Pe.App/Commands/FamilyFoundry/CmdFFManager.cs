@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Host;
@@ -67,11 +67,9 @@ public class CmdFFManager : IExternalCommand {
     /// <summary>Builds into the source pod's `output/&lt;runId&gt;/` beside that run's receipt, from the member's own folder for nested models.</summary>
     private static void Build(FoundryContext ctx) {
         var (pod, member) = (ctx.SelectedProfile!.Pod, ctx.SelectedProfile.Member);
-        var (model, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>(pod);
-        var runFolder = Pe.Revit.Scripting.Pods.PodRuns.NewRunFolder(pod.Folder);
-        var outputPath = Path.Combine(runFolder, $"{model.Family.Name}.rfa");
+        var (_, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>(pod);
         var built = FamilyFoundryBridgeOps.BuildWithReceipt(ctx.UiDoc.Application.Application,
-            new FamilyBuildRequest(composed, outputPath, source, Path.GetDirectoryName(member.FullPath(pod))), runFolder);
+            new FamilyBuildRequest(composed, source, Path.GetDirectoryName(member.FullPath(pod))));
         new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
             $"Built {built.FamilyName} from {Path.GetFileName(built.TemplatePath)} → {built.OutputPath}. Converged: {built.Converged}, residue {built.ResidueCount}.\nReceipt: {built.ReceiptPath}").Show();
     }

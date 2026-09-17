@@ -99,16 +99,8 @@ export async function createDemoSettings(root: string) {
       await memberPath(request);
       return run(writeMember(request, ctx));
     },
-    async nativePaths(
-      input: { outputPath?: string; modelDirectory?: string },
-      id: string,
-      file: string,
-    ) {
+    async nativePaths(input: { modelDirectory?: string }, _id: string, file: string) {
       return {
-        outputPath: await assertDemoPath(
-          storageRoot,
-          input.outputPath ?? resolve(storageRoot, "outputs", `${id}.rfa`),
-        ),
         modelDirectory: await assertDemoPath(storageRoot, input.modelDirectory ?? dirname(file)),
       };
     },

@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
@@ -114,7 +114,8 @@ public class CmdScheduleManager : IExternalCommand {
                                 Execute = item => this.HandlePlaceSampleFamilies(context, item),
                                 CanExecute = item =>
                                     item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
-                            }
+                            },
+                            OpenInPods()
                         ) { FilterKeySelector = i => i.CategoryName },
                         new TabDefinition<ISchedulePaletteItem>(
                             "Batch",
@@ -129,7 +130,8 @@ public class CmdScheduleManager : IExternalCommand {
                                 Name = "Create Schedules",
                                 Execute = item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
-                            }
+                            },
+                            OpenInPods()
                         ) { FilterKeySelector = i => string.Empty }
                     ]
                 });
@@ -404,6 +406,18 @@ public class CmdScheduleManager : IExternalCommand {
             matchingFamilyNames,
             "Schedule Manager");
     }
+
+    /// <summary>The same `/pods?pod=&amp;path=` deep link both Family Foundry palettes carry (w4-revit claim 15).</summary>
+    private static PaletteAction<ISchedulePaletteItem> OpenInPods() => new() {
+        Name = "Open in Pods",
+        Execute = item => {
+            var address = item.GetCreateItem() is { } create ? new PodMemberAddress(create.Pod.Manifest.Id, create.Member.Path)
+                : item.GetBatchItem() is { } batch ? new PodMemberAddress(batch.Pod.Manifest.Id, batch.Member.Path)
+                : null;
+            if (address is not null) _ = PeToolsBrowser.TryLaunch(address);
+        },
+        CanExecute = item => item.GetCreateItem() != null || item.GetBatchItem() != null
+    };
 
     private void HandleOpenFile(ISchedulePaletteItem item) {
         var filePath = item.GetCreateItem()?.FilePath ?? item.GetBatchItem()?.FilePath;

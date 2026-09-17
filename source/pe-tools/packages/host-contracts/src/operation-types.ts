@@ -168,6 +168,39 @@ export const podListResponseSchema = Schema.Struct({
 });
 export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
 
+/** Runs of one pod, optionally narrowed to the member a route has open. */
+export const podRunsRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type PodRunsRequest = Schema.Schema.Type<typeof podRunsRequestSchema>;
+
+/** What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. */
+export const podReceiptSchema = Schema.Struct({
+  podId: Schema.String,
+  memberPath: Schema.String,
+  memberSha256: Schema.String,
+  operation: Schema.String,
+  planHash: Schema.NullOr(Schema.String),
+  outcome: Schema.String,
+  outputs: Schema.Array(Schema.String),
+  reason: Schema.NullOr(Schema.String),
+});
+export type PodReceipt = Schema.Schema.Type<typeof podReceiptSchema>;
+
+export const podRunsResponseSchema = Schema.Struct({
+  runs: Schema.Array(
+    Schema.Struct({
+      runId: Schema.String,
+      receiptPath: Schema.String,
+      /** Null exactly when the run folder holds no readable receipt; `error` says why. */
+      receipt: Schema.NullOr(podReceiptSchema),
+      error: Schema.NullOr(Schema.String),
+    }),
+  ),
+});
+export type PodRuns = Schema.Schema.Type<typeof podRunsResponseSchema>;
+
 export const podMemberReadResponseSchema = Schema.Struct({
   content: Schema.String,
   sha256: Schema.String,
@@ -672,6 +705,10 @@ export const tsOnlyOperationSchemas = {
   "pod.list": {
     response: podListResponseSchema,
   },
+  "pod.runs": {
+    request: podRunsRequestSchema,
+    response: podRunsResponseSchema,
+  },
   "pod.member.read": {
     request: podMemberSchema,
     response: podMemberReadResponseSchema,
@@ -857,7 +894,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Pods",
     description:
-      "Every installed pod under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Diagnostics cover the manifest only; a bad member never hides its siblings.",
+      "Every installed pod under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Members only — runs under output/ answer to pod.runs. Diagnostics cover the manifest only; a bad member never hides its siblings.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
@@ -865,6 +902,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "NoRequest",
     responseTypeName: "PodList",
     searchTerms: ["pods", "members", "settings", "specs", "list", "browse"],
+  },
+  {
+    key: "pod.runs",
+    origin: "host-local",
+    displayName: "Pod Runs",
+    description:
+      "Run receipts under one pod's output/<runId>/, newest first, optionally narrowed to one member path. A run folder with no readable receipt still lists, with the reason.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PodRunsRequest",
+    responseTypeName: "PodRuns",
+    searchTerms: ["pod", "runs", "receipts", "output", "apply", "history"],
   },
   {
     key: "pod.member.read",

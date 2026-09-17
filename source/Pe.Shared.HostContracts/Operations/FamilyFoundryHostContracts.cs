@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData.Families;
+﻿using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
@@ -30,8 +30,12 @@ public sealed record FamilyFoundryPlanData(
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
 );
 
-/// <summary>Apply a saved spec to the active family document; `planHash` from family.plan gates drift. The document is not saved.</summary>
-public sealed record FamilyApplyRequest(string SpecJson, string PlanHash, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
+/// <summary>
+///     Apply a saved spec to the active family document; the family's `expectedPlanHash` from family.plan
+///     gates drift. One key, the active document's owner family — the same shape `families.apply` takes, so
+///     one apply grammar serves both routes. The document is not saved.
+/// </summary>
+public sealed record FamilyApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.</summary>
 public sealed record FamiliesApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);

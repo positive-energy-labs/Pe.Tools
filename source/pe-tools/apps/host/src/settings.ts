@@ -12,6 +12,9 @@ import type {
   PodMemberSaveRequest,
   PodMemberWriteRequest,
   PodMemberWritten,
+  PodReceipt,
+  PodRuns,
+  PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
 import type {
   PodMemberCompose,
@@ -65,6 +68,66 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   }
   return { pods, unreadable: found.unreadable } satisfies PodList;
 });
+
+/**
+ * Runs of one pod, newest first. `pod.list` returns members; a run is not a member, so the reader
+ * that lists runs says so by name (w4-revit defect 11).
+ */
+export const listRuns = Effect.fnUntraced(function* (
+  request: PodRunsRequest,
+  ctx: PodContext = {},
+) {
+  const folder = yield* podFolder(request.pod, ctx);
+  const entries = yield* readDirectoryEntriesOrEmpty(join(folder, "output"), "pod.runs");
+  const runs: PodRuns["runs"][number][] = [];
+  for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
+    if (entry.info.type !== "Directory") continue;
+    const receiptPath = `output/${entry.name}/receipt.json`;
+    const read = yield* readText(join(folder, receiptPath), "pod.runs");
+    const receipt = read === null ? null : parseReceipt(read.content);
+    runs.push({
+      runId: entry.name,
+      receiptPath,
+      receipt: typeof receipt === "string" ? null : receipt,
+      error:
+        read === null
+          ? "The run folder holds no receipt.json."
+          : typeof receipt === "string"
+            ? receipt
+            : null,
+    });
+  }
+  return {
+    runs: request.path ? runs.filter((run) => run.receipt?.memberPath === request.path) : runs,
+  } satisfies PodRuns;
+});
+
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** The receipt, or the reason it could not be read. A crashed apply leaves that state on disk. */
+function parseReceipt(content: string): PodReceipt | string {
+  try {
+    const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
+    if (
+      !isRecord(value) ||
+      typeof value.operation !== "string" ||
+      typeof value.outcome !== "string"
+    )
+      return "receipt.json is not a run receipt.";
+    return {
+      podId: text(value.podId),
+      memberPath: text(value.memberPath),
+      memberSha256: text(value.memberSha256),
+      operation: value.operation,
+      planHash: typeof value.planHash === "string" ? value.planHash : null,
+      outcome: value.outcome,
+      outputs: Array.isArray(value.outputs) ? value.outputs.map(text) : [],
+      reason: typeof value.reason === "string" ? value.reason : null,
+    };
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
   const path = yield* memberFile(member, ctx, "pod.member.read");
@@ -368,8 +431,8 @@ const listMembers: (
   const entries = yield* readDirectoryEntriesOrEmpty(join(folder, relative), "pod.list");
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     const path = relative ? `${relative}/${entry.name}` : entry.name;
-    // Runs under output/ list so their receipts are readable; only pod.json is not a member.
-    if (path === "pod.json") continue;
+    // Members only. `output/` is runs (dogma law 1) and answers to `pod.runs`; `pod.json` is the manifest.
+    if (path === "pod.json" || path === "output") continue;
     if (entry.info.type === "Directory") members.push(...(yield* listMembers(folder, path)));
     else if (entry.info.type === "File") {
       const read = yield* readText(join(folder, path), "pod.list");

@@ -621,10 +621,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             } else if (key === "family.build" && seed.route === "family") {
               if (seed.scenario === "native-unknown")
                 throw new BridgeError("Simulated lost native result", 503);
-              const path = await assertDemoPath(root, (input as { outputPath: string }).outputPath);
               value = {
                 familyName: "Demo",
-                outputPath: path,
+                // The build lands in the run folder; the simulated engine names the same shape.
+                outputPath: `output/${new Date().toISOString().replace(/[:.]/g, "-")}/Demo.rfa`,
                 converged: true,
                 residueCount: 0,
                 receiptPath: null,

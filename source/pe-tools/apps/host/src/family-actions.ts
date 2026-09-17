@@ -64,11 +64,12 @@ export type PodDependencies = {
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
+    /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
-      input: { outputPath?: string; modelDirectory?: string },
+      input: { modelDirectory?: string },
       id: string,
       file: string,
-    ) => Promise<{ outputPath: string; modelDirectory: string }>;
+    ) => Promise<{ modelDirectory: string }>;
   };
 
 /** A conditional member write that refused wrote nothing: a clean refusal, never an unknown effect. */
@@ -309,9 +310,8 @@ export async function admitFamilyAction(
               nativeKey: "family.apply",
               input: {
                 specJson,
-                planHash: Object.values(
-                  familyActions[key].input.parse(admission.input).expectedPlanHashes,
-                )[0]!,
+                expectedPlanHashes: familyActions[key].input.parse(admission.input)
+                  .expectedPlanHashes,
                 source,
               },
             }
@@ -396,14 +396,10 @@ export async function admitFamilyAction(
         input: {
           specJson: spec,
           source: input.source,
+          // No output path: family.build lands the .rfa in its own run folder in the source pod.
           ...(deps.nativePaths
             ? await deps.nativePaths(input, admission.id, file)
-            : {
-                outputPath: resolve(
-                  input.outputPath ?? `.artifacts/tmp/family/${digest(admission.id)}.rfa`,
-                ),
-                modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)),
-              }),
+            : { modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)) }),
         },
       };
     },
@@ -544,7 +540,7 @@ export async function admitFamilyAction(
           executionContext: target,
           native: result,
           ...(key === "family.build"
-            ? { outputPath: (prepared.input as { outputPath: string }).outputPath }
+            ? { outputPath: (result as { outputPath?: string }).outputPath }
             : {}),
         };
       }
