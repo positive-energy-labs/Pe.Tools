@@ -6,11 +6,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionReceiptView } from "#/actions/receipt";
-import { Workspace } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
+import { Pane } from "#/components/lang/pane";
 import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
+import { Surface } from "#/components/lang/surface";
 import { previousOf, useFleet, useReading } from "#/readings";
 import { RouteShell, useRoute } from "#/route";
 import { Picker } from "#/route/picker";
@@ -115,40 +116,38 @@ export function OpsRoute({
   const Output = value ? outputRenderers[value.op] : undefined;
 
   return (
-    <Workspace
-      className="p-4"
-      headRail={
-        <div className="mx-auto w-full max-w-5xl">
-          <RouteShell
-            manifest={manifest}
-            handle={handle}
-            situation={
-              <Situation
-                handle={handle}
-                target={{ session: ladder.sessionWord, document: ladder.docWord }}
-                sentence={
-                  <>
-                    runs{" "}
-                    <SituationCell io="r" empty={!selected}>
-                      <Picker levels={[opLevel]} />
-                    </SituationCell>{" "}
-                    on{" "}
-                    <SituationCell
-                      io={selected && isMutation(selected) ? "w" : "r"}
-                      empty={!ladder.docWord}
-                    >
-                      <Picker levels={ladder.levels} />
-                    </SituationCell>
-                    .
-                  </>
-                }
-              />
-            }
-          />
-        </div>
+    <Surface
+      head={
+        <RouteShell
+          manifest={manifest}
+          handle={handle}
+          situation={
+            <Situation
+              handle={handle}
+              target={{ session: ladder.sessionWord, document: ladder.docWord }}
+              sentence={
+                <>
+                  runs{" "}
+                  <SituationCell io="r" empty={!selected}>
+                    <Picker levels={[opLevel]} />
+                  </SituationCell>{" "}
+                  on{" "}
+                  <SituationCell
+                    io={selected && isMutation(selected) ? "w" : "r"}
+                    empty={!ladder.docWord}
+                  >
+                    <Picker levels={ladder.levels} />
+                  </SituationCell>
+                  .
+                </>
+              }
+            />
+          }
+        />
       }
-      table={
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-auto pt-4">
+    >
+      <Pane kind="content" title="operation">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
           {actionId ? <ActionReceiptView id={actionId} /> : null}
           {selected ? (
             <section className="flex flex-col gap-4">
@@ -221,15 +220,11 @@ export function OpsRoute({
               no operation selected
             </EmptyState>
           )}
-        </div>
-      }
-      readoutBand={
-        <div className="mx-auto w-full max-w-5xl pt-2">
           <Provenance>
             catalog = host.ops.catalog · mutations use the host action journal
           </Provenance>
         </div>
-      }
-    />
+      </Pane>
+    </Surface>
   );
 }

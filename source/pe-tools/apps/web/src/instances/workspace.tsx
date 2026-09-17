@@ -9,6 +9,7 @@ import { timeAgo } from "#/lib/utils";
 import { RouteShell } from "#/route";
 import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
+import { Surface } from "#/components/lang/surface";
 import { InstancesCluster } from "#/instances/cluster";
 import { instancesManifest, type InstancesHandle } from "#/instances/manifest";
 
@@ -50,15 +51,13 @@ export function InstancesWorkspace({
   }, [ledger.length, ledgerOpen]);
 
   return (
-    <div className={shell ? "min-h-screen" : undefined} data-testid="instances-workspace">
-      {shell ? (
-        <div className="mx-auto max-w-6xl px-6 pt-6">
-          <RouteShell manifest={instancesManifest} />
-        </div>
-      ) : null}
+    <Surface head={shell ? <RouteShell manifest={instancesManifest} /> : undefined}>
       {/* No min-height: the tables are content-sized; a forced 75vh made MasterTable's flex-1
        * scroll body stretch and left dead space under the documents table (annotation 2). */}
-      <div className="mx-auto flex max-w-6xl gap-0 px-6 py-5">
+      <div
+        className="mx-auto flex size-full min-h-0 w-full max-w-6xl gap-0"
+        data-testid="instances-workspace"
+      >
         <div className="flex min-w-0 flex-1 flex-col pr-5">
           <InstancesCluster
             handle={handle}
@@ -115,6 +114,6 @@ export function InstancesWorkspace({
           </div>
         )}
       </div>
-    </div>
+    </Surface>
   );
 }
