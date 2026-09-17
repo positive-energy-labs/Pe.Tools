@@ -143,56 +143,61 @@ export function ComposerHead({
       <Rail
         ground="recess"
         lead={
-          <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
-            <b>Pea</b> in{" "}
-            <SituationCell io="rw">
-              <Picker
-                levels={[
-                  {
-                    key: "thread",
-                    label: threadLabel,
-                    placeholder: "choose a thread",
-                    options: threadOptions.map((thread) => ({
-                      id: thread.id,
-                      label: thread.title,
-                      sub: thread.updatedAt || undefined,
-                    })),
-                    picked: (id) => id === currentThreadId,
-                    pick: openThread,
-                  },
-                ]}
-                title="choose the active chat thread"
-              />
-            </SituationCell>{" "}
-            on{" "}
-            <SituationCell io="rw" empty={!head.defaultTarget}>
-              <Picker
-                levels={levels}
-                caution={Boolean(health)}
-                disabled={targetDisabled}
-                title={
-                  ladder.sessionWord
-                    ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-                    : "choose a session and a document; Chat runs without one, Revit operations do not"
-                }
-              />
-            </SituationCell>
-            {head.refusal ? (
-              <span className="ml-3 t-small" data-tone="caution">
-                {head.refusal}
-              </span>
-            ) : null}
-            {status ? (
-              <span
-                aria-live="polite"
-                className="ml-3 t-small t-upper"
-                data-tone={status.caution ? "caution" : undefined}
-                data-testid="composer-status"
-              >
-                {status.text}
-              </span>
-            ) : null}
-          </p>
+          <div
+            className="min-w-0 self-stretch overflow-x-auto overflow-y-hidden"
+            data-testid="composer-sentence"
+          >
+            <p className="w-max min-w-full whitespace-nowrap t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
+              <b>Pea</b> in{" "}
+              <SituationCell io="rw">
+                <Picker
+                  levels={[
+                    {
+                      key: "thread",
+                      label: threadLabel,
+                      placeholder: "choose a thread",
+                      options: threadOptions.map((thread) => ({
+                        id: thread.id,
+                        label: thread.title,
+                        sub: thread.updatedAt || undefined,
+                      })),
+                      picked: (id) => id === currentThreadId,
+                      pick: openThread,
+                    },
+                  ]}
+                  title="choose the active chat thread"
+                />
+              </SituationCell>{" "}
+              on{" "}
+              <SituationCell io="rw" empty={!head.defaultTarget}>
+                <Picker
+                  levels={levels}
+                  caution={Boolean(health)}
+                  disabled={targetDisabled}
+                  title={
+                    ladder.sessionWord
+                      ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+                      : "choose a session and a document; Chat runs without one, Revit operations do not"
+                  }
+                />
+              </SituationCell>
+              {head.refusal ? (
+                <span className="ml-3 t-small" data-tone="caution">
+                  {head.refusal}
+                </span>
+              ) : null}
+              {status ? (
+                <span
+                  aria-live="polite"
+                  className="ml-3 t-small t-upper"
+                  data-tone={status.caution ? "caution" : undefined}
+                  data-testid="composer-status"
+                >
+                  {status.text}
+                </span>
+              ) : null}
+            </p>
+          </div>
         }
         trail={
           <Cluster
