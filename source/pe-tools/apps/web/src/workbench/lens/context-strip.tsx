@@ -116,12 +116,12 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       <CellHeader call={call} />
       {deferred.ref ? (
         <span className="t-small text-ink-2">
-          {deferredResultSummary(deferred.ref.summary)} Â· {formatBytes(deferred.ref.byteSize)}
+          {deferredResultSummary(deferred.ref.summary)} · {formatBytes(deferred.ref.byteSize)}
         </span>
       ) : null}
       {input !== undefined ? <Code code={stringify(input)} lang="json" title="in" /> : null}
       {deferred.pending ? (
-        <div className="t-prose text-ink-2">Loading full resultâ€¦</div>
+        <div className="t-prose text-ink-2">Loading full result…</div>
       ) : deferred.error ? (
         <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
           <span>{deferred.error.message}</span>

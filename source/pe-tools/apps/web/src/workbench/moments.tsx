@@ -185,7 +185,7 @@ function AssistantMoment({ message, head }: { message: ChatMessage; head: ReactN
   );
   const toolOnly = titles.length === parts.length;
   const body = (
-    <div className="grid gap-[3px]">
+    <div className="flex min-w-0 flex-col gap-[3px]">
       <PartsBoundary>
         {parts.map((part, index) => (
           <Part key={part.type === "tool-call" ? part.call.id : index} part={part} />
@@ -315,7 +315,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
       ? readQuestion(approval.payload)
       : undefined;
   return (
-    <div className="grid gap-0.5" data-tool-id={call.id}>
+    <div className="flex min-w-0 flex-col gap-0.5" data-tool-id={call.id}>
       <div
         {...annotation("tool-marker")}
         data-kind="tool"
@@ -358,7 +358,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
       </div>
       {deferred.ref ? (
         <span className="t-small text-ink-2" data-testid="deferred-result-summary">
-          {deferredResultSummary(deferred.ref.summary)} Â· {formatBytes(deferred.ref.byteSize)}
+          {deferredResultSummary(deferred.ref.summary)} · {formatBytes(deferred.ref.byteSize)}
         </span>
       ) : null}
       {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
@@ -377,7 +377,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         <div {...annotation("tool-body")}>
           <Code code={stringify(call.args)} lang="json" title="in" />
           {deferred.pending ? (
-            <div className="t-prose text-ink-2">Loading full resultâ€¦</div>
+            <div className="t-prose text-ink-2">Loading full result…</div>
           ) : deferred.error ? (
             <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
               <span>{deferred.error.message}</span>
@@ -457,7 +457,7 @@ function AskUserPrompt({
   const [answer, setAnswer] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   return (
-    <div className="grid gap-2 py-1">
+    <div className="flex min-w-0 flex-col gap-2 py-1">
       <div className="t-prose">{question.text}</div>
       {question.options.length === 0 ? (
         <>
@@ -480,7 +480,7 @@ function AskUserPrompt({
         </>
       ) : question.multiple ? (
         <>
-          <div className="grid gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
             {question.options.map((option) => (
               <label key={option.label} className="flex items-start gap-2 t-prose">
                 <input
@@ -515,7 +515,7 @@ function AskUserPrompt({
           </div>
         </>
       ) : (
-        <div className="grid gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           {question.options.map((option) => (
             <div key={option.label} className="flex items-baseline gap-2">
               <ActionButton
