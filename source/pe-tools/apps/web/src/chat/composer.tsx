@@ -189,6 +189,7 @@ export function Composer({
     <Pane
       kind="content"
       scroll="visible"
+      flush
       id="composer"
       title="composer"
       help="Drafts stay with their visited thread until sent or deleted."

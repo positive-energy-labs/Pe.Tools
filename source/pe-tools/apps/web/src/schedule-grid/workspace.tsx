@@ -202,6 +202,7 @@ export function ScheduleGridWorkspace({
         start={
           <Pane
             kind="flank"
+            flush
             title="schedules"
             meta={catalog ? String(catalog.schedules.length) : undefined}
             side="left"
@@ -255,6 +256,7 @@ export function ScheduleGridWorkspace({
         end={
           <Pane
             kind="content"
+            flush
             title={snapshot?.scheduleName ?? "schedule"}
             headerless
             scroll="clip"

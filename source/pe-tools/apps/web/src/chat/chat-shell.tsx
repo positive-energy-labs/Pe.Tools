@@ -179,6 +179,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
         <Pane
           kind="content"
           scroll="clip"
+          flush
           id="transcript"
           title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
           boundaryKey={currentThreadId}
@@ -231,6 +232,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
             start={
               <Pane
                 kind="flank"
+                flush
                 id="threads"
                 title="threads"
                 meta={threads.length}
@@ -290,6 +292,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                   plugin ? (
                     <Pane
                       kind="flank"
+                      flush
                       side="right"
                       id="plugin"
                       title={chatPluginTitle(plugin)}
