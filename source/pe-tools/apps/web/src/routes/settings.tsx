@@ -29,6 +29,8 @@ import { RouteShell, useRoute } from "#/route";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 import { FileWorkspace, fileSearch } from "#/settings/file-workspace";
 import { settingsManifest, type SettingsHandle } from "#/settings/manifest";
+import { Pane } from "#/components/lang/pane";
+import { Surface, SurfaceCell } from "#/components/lang/surface";
 
 type Handle = SettingsHandle;
 
@@ -127,114 +129,121 @@ function SettingsWorkspace({ handle }: { handle: SettingsHandle }) {
   );
 
   return (
-    <main className="flex h-screen min-h-0 flex-col overflow-hidden" data-surface="page">
-      <RouteShell manifest={routeManifest} handle={handle} aside={aside} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
-        <div className="mx-auto max-w-5xl space-y-1.5">
-          {handle.failure ? (
-            <OutcomeLine
-              kind="error"
-              label={`settings ${handle.failure.code}`}
-              says={handle.failure.message}
-            />
-          ) : null}
-
-          {snapshot && (
-            <details open={!validation?.isValid}>
-              <summary>Authored basis / candidate JSON</summary>
-              <RawEditor content={candidate?.rawContent ?? snapshot.rawContent} handle={handle} />
-              {validation?.issues.map((issue, index) => (
+    <Surface columns="minmax(0,1fr)">
+      <SurfaceCell>
+        <RouteShell manifest={routeManifest} handle={handle} aside={aside} />
+        <Pane kind="content" title="settings files">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
+            <div className="mx-auto max-w-5xl space-y-1.5">
+              {handle.failure ? (
                 <OutcomeLine
-                  key={index}
                   kind="error"
-                  label={issue.path ?? "$"}
-                  says={issue.message}
+                  label={`settings ${handle.failure.code}`}
+                  says={handle.failure.message}
                 />
-              ))}
-            </details>
-          )}
-          {snapshot && formModel ? (
-            <>
-              <ArtifactFrame
-                head={
-                  <>
-                    <Tag>schema ledger</Tag>
-                    <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
-                      {snapshot.documentId.relativePath}
-                    </span>
-                    {snapshot.versionToken ? (
-                      <FactChip title="The open document version token.">
-                        v{snapshot.versionToken}
-                      </FactChip>
-                    ) : null}
-                    {snapshot.modifiedUtc ? (
-                      <FactChip title="The open file's modification time.">
-                        read {timeAgo(snapshot.modifiedUtc)}
-                      </FactChip>
-                    ) : null}
-                  </>
-                }
-              >
-                <div className="px-3 py-1.5">
-                  <SchemaToFieldRender
-                    schema={formModel.schema}
-                    moduleKey={snapshot.documentId.moduleKey}
-                    rootKey={snapshot.documentId.rootKey}
-                    baselineValues={formModel.baseline}
-                    values={values}
-                    onChange={(path, value) =>
-                      void stage(handle, settingsFieldPointer(path.split(".")), value)
-                    }
-                    validationResult={toValidationResult(validation)}
+              ) : null}
+
+              {snapshot && (
+                <details open={!validation?.isValid}>
+                  <summary>Authored basis / candidate JSON</summary>
+                  <RawEditor
+                    content={candidate?.rawContent ?? snapshot.rawContent}
+                    handle={handle}
                   />
-                </div>
-              </ArtifactFrame>
-              {proposalRows.length ? (
+                  {validation?.issues.map((issue, index) => (
+                    <OutcomeLine
+                      key={index}
+                      kind="error"
+                      label={issue.path ?? "$"}
+                      says={issue.message}
+                    />
+                  ))}
+                </details>
+              )}
+              {snapshot && formModel ? (
+                <>
+                  <ArtifactFrame
+                    head={
+                      <>
+                        <Tag>schema ledger</Tag>
+                        <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
+                          {snapshot.documentId.relativePath}
+                        </span>
+                        {snapshot.versionToken ? (
+                          <FactChip title="The open document version token.">
+                            v{snapshot.versionToken}
+                          </FactChip>
+                        ) : null}
+                        {snapshot.modifiedUtc ? (
+                          <FactChip title="The open file's modification time.">
+                            read {timeAgo(snapshot.modifiedUtc)}
+                          </FactChip>
+                        ) : null}
+                      </>
+                    }
+                  >
+                    <div className="px-3 py-1.5">
+                      <SchemaToFieldRender
+                        schema={formModel.schema}
+                        moduleKey={snapshot.documentId.moduleKey}
+                        rootKey={snapshot.documentId.rootKey}
+                        baselineValues={formModel.baseline}
+                        values={values}
+                        onChange={(path, value) =>
+                          void stage(handle, settingsFieldPointer(path.split(".")), value)
+                        }
+                        validationResult={toValidationResult(validation)}
+                      />
+                    </div>
+                  </ArtifactFrame>
+                  {proposalRows.length ? (
+                    <ArtifactFrame
+                      head={
+                        <>
+                          <Tag>pea proposals</Tag>
+                          <FactChip tone="pea" title="Open field proposals in this document.">
+                            {proposalRows.length} open
+                          </FactChip>
+                        </>
+                      }
+                    >
+                      <div className="hairline-rows">
+                        {proposalRows.map((row) => (
+                          <FieldRow key={row.path} row={row} busy={busy} handle={handle} />
+                        ))}
+                      </div>
+                    </ArtifactFrame>
+                  ) : null}
+                </>
+              ) : snapshot && rows.length ? (
                 <ArtifactFrame
                   head={
                     <>
-                      <Tag>pea proposals</Tag>
-                      <FactChip tone="pea" title="Open field proposals in this document.">
-                        {proposalRows.length} open
-                      </FactChip>
+                      <Tag>field readout</Tag>
+                      <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
+                        {snapshot.documentId.relativePath}
+                      </span>
                     </>
                   }
                 >
                   <div className="hairline-rows">
-                    {proposalRows.map((row) => (
+                    {rows.map((row) => (
                       <FieldRow key={row.path} row={row} busy={busy} handle={handle} />
                     ))}
                   </div>
                 </ArtifactFrame>
-              ) : null}
-            </>
-          ) : snapshot && rows.length ? (
-            <ArtifactFrame
-              head={
-                <>
-                  <Tag>field readout</Tag>
-                  <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
-                    {snapshot.documentId.relativePath}
-                  </span>
-                </>
-              }
-            >
-              <div className="hairline-rows">
-                {rows.map((row) => (
-                  <FieldRow key={row.path} row={row} busy={busy} handle={handle} />
-                ))}
-              </div>
-            </ArtifactFrame>
-          ) : (
-            <EmptyState story="scope" exit="bind the settings address and run open">
-              {snapshot
-                ? "Structured fields are unavailable; raw JSON is preserved above."
-                : "no settings document is open"}
-            </EmptyState>
-          )}
-        </div>
-      </div>
-    </main>
+              ) : (
+                <EmptyState story="scope" exit="bind the settings address and run open">
+                  {snapshot
+                    ? "Structured fields are unavailable; raw JSON is preserved above."
+                    : "no settings document is open"}
+                </EmptyState>
+              )}
+            </div>
+          </div>
+        </Pane>
+      </SurfaceCell>
+    </Surface>
   );
 }
 

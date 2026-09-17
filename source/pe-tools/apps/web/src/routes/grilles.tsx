@@ -24,6 +24,7 @@ import { useMemo, useState } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneWorkspace } from "#/components/lang/pane";
+import { Surface, SurfaceCell } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
 import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";
@@ -169,50 +170,52 @@ function GrillesRoute() {
   );
 
   return (
-    <main className="flex h-full min-h-0 flex-col">
-      <header
-        className="flex flex-wrap items-baseline gap-2 px-3 py-2"
-        style={{ borderColor: token("line") }}
-      >
-        <span>wood floor grille</span>
-        <span>free area calculator</span>
-        <FactChip
-          tone="caution"
-          dashed
-          title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
+    <Surface columns="minmax(0,1fr)">
+      <SurfaceCell>
+        <header
+          className="flex flex-wrap items-baseline gap-2 px-3 py-2"
+          style={{ borderColor: token("line") }}
         >
-          xlsx rows · in memory · writes nowhere
-        </FactChip>
-      </header>
+          <span>wood floor grille</span>
+          <span>free area calculator</span>
+          <FactChip
+            tone="caution"
+            dashed
+            title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
+          >
+            xlsx rows · in memory · writes nowhere
+          </FactChip>
+        </header>
 
-      <PaneWorkspace
-        grow
-        visual={drawing}
-        content={table}
-        inspector={chart}
-        resize={{
-          visual: {
-            defaultSize: 420,
-            minSize: 34,
-            collapse: {
-              collapsed: drawingCollapsed,
-              onCollapsedChange: setDrawingCollapsed,
-              collapsedSize: 34,
-              collapseBelow: 90,
+        <PaneWorkspace
+          grow
+          visual={drawing}
+          content={table}
+          inspector={chart}
+          resize={{
+            visual: {
+              defaultSize: 420,
+              minSize: 34,
+              collapse: {
+                collapsed: drawingCollapsed,
+                onCollapsedChange: setDrawingCollapsed,
+                collapsedSize: 34,
+                collapseBelow: 90,
+              },
             },
-          },
-          inspector: { defaultSize: 500, minSize: 420, minOtherSize: 560 },
-        }}
-      />
-
-      {exporting && (
-        <ExportSheet
-          rows={rows.filter((r) => picked.has(r.id))}
-          project={project}
-          onProject={setProject}
-          onClose={() => setExporting(false)}
+            inspector: { defaultSize: 500, minSize: 420, minOtherSize: 560 },
+          }}
         />
-      )}
-    </main>
+
+        {exporting && (
+          <ExportSheet
+            rows={rows.filter((r) => picked.has(r.id))}
+            project={project}
+            onProject={setProject}
+            onClose={() => setExporting(false)}
+          />
+        )}
+      </SurfaceCell>
+    </Surface>
   );
 }
