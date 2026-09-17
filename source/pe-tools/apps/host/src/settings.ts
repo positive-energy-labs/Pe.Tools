@@ -85,6 +85,27 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
   return { content: read.content, sha256: read.sha256 };
 });
 
+/**
+ * A run folder in the pod (dogma law 10). Runs are not members — `writeMember` refuses `output/` —
+ * so the writer that files a run says so by name. Overwrites, so a resumed action files one run.
+ */
+export const writeRun = (
+  pod: string,
+  runId: string,
+  files: Readonly<Record<string, string>>,
+  ctx: PodContext = {},
+) =>
+  writeLock.withPermit(
+    Effect.gen(function* () {
+      const key = "pod.run.write";
+      const folder = join(yield* podFolder(pod, ctx), "output", runId);
+      yield* makeDirectory(folder, key);
+      for (const [name, content] of Object.entries(files))
+        yield* writeFileStringAtomic(join(folder, name), content, key);
+      return `output/${runId}`;
+    }),
+  );
+
 /** Create a new member; refuses an existing path. */
 export const writeMember = (request: PodMemberWriteRequest, ctx: PodContext = {}) =>
   writeLock.withPermit(

@@ -1,3 +1,5 @@
+import { Link } from "@tanstack/react-router";
+
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -148,8 +150,18 @@ export function FamiliesCaptureBand() {
                     {section}: {state}
                   </FactChip>
                 ))}
+                {/* The facts are the run's `unmodeled.json`, never the member (law 12). */}
                 <FactChip tone={family.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
-                  {family.unmodeledCount} unmodeled
+                  {family.run && members[0] ? (
+                    <Link
+                      to="/pods"
+                      search={{ pod: members[0].pod, path: `${family.run}/unmodeled.json` }}
+                    >
+                      {family.unmodeledCount} unmodeled
+                    </Link>
+                  ) : (
+                    `${family.unmodeledCount} unmodeled`
+                  )}
                 </FactChip>
               </>
             ) : (

@@ -194,6 +194,9 @@ test("typed seed codec preserves dates/maps/sets and unknown original evidence; 
 });
 
 test("demo Family capture files a new member and returns what the capture saw", async () => {
+  // Defect 2: the member's schema origin is the host that is running, not the preferred port.
+  process.env[hostProcessIdentity.hostBaseUrlVariable] = "http://127.0.0.1:57296";
+  cleanup.push(async () => void delete process.env[hostProcessIdentity.hostBaseUrlVariable]);
   const f = await setup();
   const response = await f.fetch("/actions", {
     id: `${f.owner.id}:capture`,
@@ -211,20 +214,36 @@ test("demo Family capture files a new member and returns what the capture saw", 
     row as {
       result: {
         member: { pod: string; path: string; sha256: string };
-        evidence: { coverage: Record<string, string>; unmodeledCount: number; origin: string };
+        evidence: {
+          coverage: Record<string, string>;
+          unmodeledCount: number;
+          origin: string;
+          run: string;
+        };
       };
     }
   ).result;
   expect(result.member.path).toMatch(/^settings\/family\/Simulated-demo-family-.*\.json$/);
-  expect(result.evidence).toMatchObject({ origin: "capture", unmodeledCount: 0 });
+  expect(result.evidence).toMatchObject({ origin: "capture", unmodeledCount: 2 });
   expect(result.evidence.coverage.simulation).toBeTruthy();
   const written = JSON.parse(
     await readFile(await f.owner.settings.memberPath(result.member), "utf8"),
   );
   // The host names what the member is, never the opened member's origin.
-  expect(written.$schema).toBe(
-    `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`,
-  );
+  expect(written.$schema).toBe("http://127.0.0.1:57296/schemas/settings/FamilyFoundry/models.json");
+  // The unmodeled facts left the member for the capture's run (user verdict 2026-09-17), so the
+  // member passes its own confirm and the evidence is still on disk after a reload.
+  expect(written.unmodeled).toBeUndefined();
+  const runFile = (name: string) =>
+    f.owner.settings.memberPath({ pod: result.member.pod, path: `${result.evidence.run}/${name}` });
+  expect(JSON.parse(await readFile(await runFile("unmodeled.json"), "utf8"))).toHaveLength(2);
+  expect(JSON.parse(await readFile(await runFile("receipt.json"), "utf8"))).toMatchObject({
+    memberPath: result.member.path,
+    memberSha256: result.member.sha256,
+    operation: "family.capture",
+    outcome: "succeeded",
+    outputs: ["unmodeled.json"],
+  });
 });
 
 test("demo Family apply confirms a plan, applies that exact hash, and refuses changed bytes", async () => {

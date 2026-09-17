@@ -57,6 +57,8 @@ export const familiesCaptureEvidenceSchema = z.object({
       unmodeledCount: z.number().default(0),
       issues: z.array(revitDataIssueSchema).default([]),
       error: z.string().nullish(),
+      /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */
+      run: z.string().nullish(),
     }),
   ),
 });

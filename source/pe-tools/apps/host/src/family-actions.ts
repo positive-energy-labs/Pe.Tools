@@ -43,7 +43,14 @@ import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
-import { composedSpec, podFolder, saveMember, writeMember, type PodContext } from "./settings.ts";
+import {
+  composedSpec,
+  podFolder,
+  saveMember,
+  writeMember,
+  writeRun,
+  type PodContext,
+} from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
 
@@ -78,16 +85,29 @@ export const writeMemberOnce = (
     throw error;
   });
 
-/** The `$schema` a family model member carries; C# owns the URL shape. */
-const familyModelSchema = `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
+/**
+ * The `$schema` a family model member carries; C# owns the URL shape. The origin is the host that
+ * is running, never the preferred port: another checkout's host must not serve our members' schema.
+ */
+const familyModelSchema = () =>
+  `${process.env[hostProcessIdentity.hostBaseUrlVariable] || hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
 
 /** The composed member as authored; the C# family edge reads its `$schema`. */
 const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) =>
   (await runPods(deps, composedSpec(source, pods))).spec;
 
-/** A captured family model becomes a member that says what it is. */
-const familyMember = (modelJson: string) =>
-  `${JSON.stringify({ $schema: familyModelSchema, ...(JSON.parse(modelJson) as object) }, null, 2)}\n`;
+/**
+ * A captured family model becomes a member that says what it is. `unmodeled` is what the engine
+ * saw and cannot execute; it is evidence, so it leaves the member and lands in the capture's run
+ * (user verdict 2026-09-17). A member that kept it would fail its own confirm.
+ */
+const familyMember = (modelJson: string) => {
+  const { unmodeled = [], ...model } = JSON.parse(modelJson) as { unmodeled?: unknown[] };
+  return {
+    content: `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}\n`,
+    unmodeled,
+  };
+};
 
 export const runPods = <A, E>(
   deps: PodDependencies,
@@ -403,7 +423,8 @@ export async function admitFamilyAction(
                 f.success && f.modelJson
                   ? [
                       {
-                        spec: familyMember(f.modelJson),
+                        familyId: f.familyId,
+                        ...familyMember(f.modelJson),
                         path: capturePath("families", f.familyName ?? `family-${f.familyId}`, at),
                       },
                     ]
@@ -411,7 +432,8 @@ export async function admitFamilyAction(
               )
             : [
                 {
-                  spec: familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
+                  familyId: 0,
+                  ...familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
                   path:
                     prepared.path ??
                     capturePath(
@@ -422,15 +444,47 @@ export async function admitFamilyAction(
                 },
               ];
         const members: PodMemberWritten[] = [];
-        for (const { spec, path } of specs) {
-          const request = { pod: prepared.pod, path, content: spec };
-          members.push(
-            (await execution.step("file", "pod.member.write", request, () =>
-              writeMemberOnce(deps, request, pods),
-            )) as PodMemberWritten,
+        // Each captured member gets its own run, so `/pods` lists it against that member like any
+        // other run; the run holds the unmodeled facts the member cannot carry.
+        const runs = new Map<number, string>();
+        for (const { familyId, content, unmodeled, path } of specs) {
+          const request = { pod: prepared.pod, path, content };
+          const written = (await execution.step("file", "pod.member.write", request, () =>
+            writeMemberOnce(deps, request, pods),
+          )) as PodMemberWritten;
+          members.push(written);
+          const runId = `${prepared.at.replace(/[:.]/g, "-")}-${digest(path).slice(0, 8)}`;
+          runs.set(
+            familyId,
+            await runPods(
+              deps,
+              writeRun(
+                prepared.pod,
+                runId,
+                {
+                  "unmodeled.json": `${JSON.stringify(unmodeled, null, 2)}\n`,
+                  "receipt.json": `${JSON.stringify(
+                    {
+                      podId: written.pod,
+                      memberPath: written.path,
+                      memberSha256: written.sha256,
+                      operation: prepared.nativeKey,
+                      planHash: null,
+                      outcome: "succeeded",
+                      outputs: ["unmodeled.json"],
+                      reason: null,
+                    },
+                    null,
+                    2,
+                  )}\n`,
+                },
+                pods,
+              ),
+            ),
           );
         }
-        // The captured members plus what the capture saw: coverage and the unmodeled ledger.
+        // The captured members plus what the capture saw: coverage and the unmodeled ledger, which
+        // is a file in the run the panel can still read after a reload.
         if (prepared.nativeKey === "families.capture") {
           const { families, diagnostics } = captured as FamiliesCapture.Res.Response;
           return {
@@ -438,14 +492,22 @@ export async function admitFamilyAction(
             members,
             evidence: familiesCaptureEvidenceSchema.parse({
               diagnostics,
-              families: families.map(({ modelJson: _, ...family }) => family),
+              families: families.map(({ modelJson: _, ...family }) => ({
+                ...family,
+                run: runs.get(family.familyId) ?? null,
+              })),
             }),
           };
         }
         return {
           executionContext: target,
           member: members[0],
-          evidence: { ...(captured as object), origin: "capture", rfaPath: null },
+          evidence: {
+            ...(captured as object),
+            origin: "capture",
+            rfaPath: null,
+            run: runs.get(0) ?? null,
+          },
         };
       }
       if (prepared.kind === "native") {

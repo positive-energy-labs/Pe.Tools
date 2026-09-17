@@ -40,6 +40,15 @@ const unsupported = (key: string) =>
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 
 /** Native reads the browser reaches through `/call` on a project owner. */
+/**
+ * What a capture sees but cannot execute. The real engine emits these for every family with a
+ * sketch line it cannot name; the member never carries them, the capture's run does.
+ */
+const SIMULATED_UNMODELED = [
+  { reason: "SketchLineUnlocked", path: "$.forms", facts: { simulated: "true" } },
+  { reason: "PlaneNotNamed", path: "$.refPlanes.0", facts: { simulated: "true" } },
+];
+
 const SIMULATED_READS = ["revit.catalog.loaded-families", "revit.matrix.loaded-families"];
 
 type RunSource = { pod: string; path: string; sha256: string };
@@ -452,9 +461,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               value = {
                 reading: { at, version: null, observedAt: new Date().toISOString() },
                 familyName: "Simulated demo family",
-                // The native engine captures a bare model; the host names what it is.
-                modelJson: JSON.stringify({ ...JSON.parse(nativeModel), $schema: undefined }),
-                unmodeledCount: 0,
+                // The native engine captures a bare model; the host names what it is. A real capture
+                // always sees facts it cannot execute, so the simulation does too.
+                modelJson: JSON.stringify({
+                  ...JSON.parse(nativeModel),
+                  $schema: undefined,
+                  unmodeled: SIMULATED_UNMODELED,
+                }),
+                unmodeledCount: SIMULATED_UNMODELED.length,
                 coverage: { simulation: "Supplied demo model only; no native capture" },
                 issues: [],
                 simulated: true,
@@ -589,10 +603,15 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                     familyName,
                     success: familyName !== undefined,
                     modelJson: familyName
-                      ? JSON.stringify({ family: { name: familyName }, types: {}, parameters: {} })
+                      ? JSON.stringify({
+                          family: { name: familyName },
+                          types: {},
+                          parameters: {},
+                          unmodeled: SIMULATED_UNMODELED,
+                        })
                       : null,
                     coverage: { simulation: "Supplied demo profile only; no native capture" },
-                    unmodeledCount: 0,
+                    unmodeledCount: SIMULATED_UNMODELED.length,
                     issues: [],
                     error: familyName ? null : "Unknown simulated family",
                   };

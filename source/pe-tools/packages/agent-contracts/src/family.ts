@@ -80,6 +80,8 @@ export const familyEvidenceSchema = z.union([
     issues: z.array(revitDataIssueSchema),
     origin: z.literal("capture"),
     rfaPath: z.string().nullish(),
+    /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */
+    run: z.string().nullish(),
   }),
   fixtureEvidenceSchema,
 ]);
