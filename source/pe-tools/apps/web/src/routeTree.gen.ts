@@ -24,6 +24,7 @@ import { Route as LabRouteImport } from "./routes/lab";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as PrototypePodsRouteImport } from "./routes/prototype-pods";
 import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
@@ -112,6 +113,11 @@ const ParameterLinksRoute = ParameterLinksRouteImport.update({
   path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PrototypePodsRoute = PrototypePodsRouteImport.update({
+  id: "/prototype-pods",
+  path: "/prototype-pods",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const RunsRoute = RunsRouteImport.update({
   id: "/runs",
   path: "/runs",
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/prototype-pods": typeof PrototypePodsRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/prototype-pods": typeof PrototypePodsRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/prototype-pods": typeof PrototypePodsRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/prototype-pods"
     | "/runs"
     | "/schedule-grid"
     | "/settings"
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/prototype-pods"
     | "/runs"
     | "/schedule-grid"
     | "/settings"
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/prototype-pods"
     | "/runs"
     | "/schedule-grid"
     | "/settings"
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
+  PrototypePodsRoute: typeof PrototypePodsRoute;
   RunsRoute: typeof RunsRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
@@ -488,6 +501,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/prototype-pods": {
+      id: "/prototype-pods";
+      path: "/prototype-pods";
+      fullPath: "/prototype-pods";
+      preLoaderRoute: typeof PrototypePodsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/runs": {
       id: "/runs";
       path: "/runs";
@@ -602,6 +622,7 @@ const rootRouteChildren: RootRouteChildren = {
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
+  PrototypePodsRoute: PrototypePodsRoute,
   RunsRoute: RunsRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
