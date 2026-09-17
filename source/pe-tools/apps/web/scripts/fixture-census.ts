@@ -2,39 +2,29 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+type FixtureKind = "demo-fixture" | "inherent-static" | "live-route";
+
 const canonicalFixtures: Record<
   string,
-  { canonicalReviewUrl: string; fixtureKind: "inherent-static" | "query-fixture" } | undefined
+  { canonicalReviewUrl: string; fixtureKind: FixtureKind } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
-  "/chat": { canonicalReviewUrl: "/chat?source=fixture", fixtureKind: "query-fixture" },
-  "/data-tables": {
-    canonicalReviewUrl: "/data-tables?source=fixture",
-    fixtureKind: "query-fixture",
-  },
-  "/doc-lab": { canonicalReviewUrl: "/doc-lab?source=fixture", fixtureKind: "query-fixture" },
-  "/families": { canonicalReviewUrl: "/families?source=fixture", fixtureKind: "query-fixture" },
-  "/family": { canonicalReviewUrl: "/family?source=fixture", fixtureKind: "query-fixture" },
+  "/chat": { canonicalReviewUrl: "/chat?demo=diagram", fixtureKind: "demo-fixture" },
+  "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
+  "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },
+  "/families": { canonicalReviewUrl: "/families?demo=plan", fixtureKind: "demo-fixture" },
+  "/family": { canonicalReviewUrl: "/family?demo=plan", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
-  "/instances": { canonicalReviewUrl: "/instances?source=fixture", fixtureKind: "query-fixture" },
-  "/ops": { canonicalReviewUrl: "/ops?source=fixture", fixtureKind: "query-fixture" },
-  "/parameter-links": {
-    canonicalReviewUrl: "/parameter-links?source=fixture",
-    fixtureKind: "query-fixture",
-  },
-  "/runs": { canonicalReviewUrl: "/runs?source=fixture", fixtureKind: "query-fixture" },
-  "/schedule-grid": {
-    canonicalReviewUrl: "/schedule-grid?source=fixture",
-    fixtureKind: "query-fixture",
-  },
-  "/settings": { canonicalReviewUrl: "/settings?source=fixture", fixtureKind: "query-fixture" },
-  "/takeoffs": {
-    canonicalReviewUrl: "/takeoffs?source=fixture",
-    fixtureKind: "query-fixture",
-  },
+  "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
+  "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
+  "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
+  "/runs": { canonicalReviewUrl: "/runs", fixtureKind: "inherent-static" },
+  "/schedule-grid": { canonicalReviewUrl: "/schedule-grid", fixtureKind: "live-route" },
+  "/settings": { canonicalReviewUrl: "/settings?demo=save", fixtureKind: "demo-fixture" },
+  "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
 } as const;
 
-const explicitPrototypeRoutes = new Set(["/param-tables"]);
+const explicitPrototypeRoutes = new Set(["/lab", "/param-tables"]);
 const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 
 export function censusFromRouteTree(routeTree: string) {
