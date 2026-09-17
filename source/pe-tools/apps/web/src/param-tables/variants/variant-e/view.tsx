@@ -8,6 +8,8 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
+import { Pane } from "#/components/lang/pane";
+import { Surface, SurfaceCell } from "#/components/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
 import type {
   FactKey,
@@ -237,163 +239,167 @@ export function VariantE() {
   const bodLens = <VariantBodLens factCell={factCell} />;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <AddressingBar
-        name="param tables"
-        sentence={
-          <span>
-            <span className="">ProjectA_Clone_Aug_11</span>
-            <span style={muted}>›</span>
-            <span>Mechanical Equipment</span>
-            <span style={muted}>›</span>
-            <span>Main House fan coils</span>
-          </span>
-        }
-        facts={
-          <>
-            <FactChip title="rows and family types in scope — the substrate every lens projects">
-              {FC_UNITS.length} rows · {GROUPS.length} types
-            </FactChip>
-            {stagedRows > 0 ? (
+    <Surface columns="minmax(0,1fr)">
+      <SurfaceCell>
+        <Pane kind="content" title="parameter table" scroll="clip">
+          <AddressingBar
+            name="param tables"
+            sentence={
+              <span>
+                <span className="">ProjectA_Clone_Aug_11</span>
+                <span style={muted}>›</span>
+                <span>Mechanical Equipment</span>
+                <span style={muted}>›</span>
+                <span>Main House fan coils</span>
+              </span>
+            }
+            facts={
+              <>
+                <FactChip title="rows and family types in scope — the substrate every lens projects">
+                  {FC_UNITS.length} rows · {GROUPS.length} types
+                </FactChip>
+                {stagedRows > 0 ? (
+                  <FactChip
+                    tone="caution"
+                    title="unsaved — staged type writes derived from authored-fact edits; apply commits them"
+                  >
+                    {applicable.length} type writes · {stagedRows} rows staged
+                  </FactChip>
+                ) : null}
+                {driftRows > 0 ? (
+                  <FactChip
+                    tone="alarm"
+                    title="the model disagrees with a committed authored fact on these rows"
+                  >
+                    {driftRows} rows drift
+                  </FactChip>
+                ) : null}
+              </>
+            }
+            verb={
+              <ActionButton
+                tone="commit"
+                label="Apply staged writes"
+                onClick={apply}
+                disabled={applicable.length === 0}
+                reason={
+                  applicable.length > 0
+                    ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
+                    : refusals.length > 0
+                      ? "every staged write refuses — the edited fact only targets formula-owned types"
+                      : "nothing is staged — edit a design fact in the authored lane first"
+                }
+              />
+            }
+            seam={
               <FactChip
-                tone="caution"
-                title="unsaved — staged type writes derived from authored-fact edits; apply commits them"
+                dashed
+                title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
               >
-                {applicable.length} type writes · {stagedRows} rows staged
+                fixture · ProjectA_Clone_Aug_11
               </FactChip>
-            ) : null}
-            {driftRows > 0 ? (
-              <FactChip
-                tone="alarm"
-                title="the model disagrees with a committed authored fact on these rows"
-              >
-                {driftRows} rows drift
-              </FactChip>
-            ) : null}
-          </>
-        }
-        verb={
-          <ActionButton
-            tone="commit"
-            label="Apply staged writes"
-            onClick={apply}
-            disabled={applicable.length === 0}
-            reason={
-              applicable.length > 0
-                ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
-                : refusals.length > 0
-                  ? "every staged write refuses — the edited fact only targets formula-owned types"
-                  : "nothing is staged — edit a design fact in the authored lane first"
             }
           />
-        }
-        seam={
-          <FactChip
-            dashed
-            title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
-          >
-            fixture · ProjectA_Clone_Aug_11
-          </FactChip>
-        }
-      />
 
-      {outcomes.length > 0 ? (
-        <div className="flex flex-col gap-0.5 px-4 py-1">
-          {outcomes.map((o, i) => (
-            <OutcomeLine key={i} kind={o.kind} label={o.label} says={o.says} />
-          ))}
-        </div>
-      ) : null}
+          {outcomes.length > 0 ? (
+            <div className="flex flex-col gap-0.5 px-4 py-1">
+              {outcomes.map((o, i) => (
+                <OutcomeLine key={i} kind={o.kind} label={o.label} says={o.says} />
+              ))}
+            </div>
+          ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
-        <ArtifactFrame
-          head={
-            <span className="flex w-full items-center gap-3">
-              <span className="">Main House fan coils × PE_* parameters</span>
-              <HelpTip>
-                One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
-                exhibit and the BOD list are saved projections of the same rows and the same
-                authored facts — switching lens re-projects, it never copies. The authored lane
-                below is the write path: edit a design fact and its whole linked column stages,
-                grouped by type, because the parameters live at type scope.
-              </HelpTip>
-              <Switcher<Lens>
-                ariaLabel="Lens"
-                value={lens}
-                onChange={setLens}
-                options={[
-                  {
-                    value: "grid",
-                    label: "Grid",
-                    title: "Every fan coil × every attribute — the substrate itself",
-                  },
-                  {
-                    value: "fom",
-                    label: "FOM exhibit",
-                    title:
-                      "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout",
-                  },
-                  {
-                    value: "bod",
-                    label: "BOD",
-                    title:
-                      "The M001 Basis of Design projection — label × value over the same authored facts",
-                  },
-                ]}
-              />
-            </span>
-          }
-          foot={
-            <span className="flex w-full items-center gap-3" style={secondary}>
-              <span>
-                {FC_UNITS.length} rows · {GROUPS.length} type groups
-              </span>
-              {applicable.length > 0 ? (
-                <span style={{ color: token("caution") }}>
-                  {applicable.length} type writes stage {stagedRows} rows
-                  {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
+            <ArtifactFrame
+              head={
+                <span className="flex w-full items-center gap-3">
+                  <span className="">Main House fan coils × PE_* parameters</span>
+                  <HelpTip>
+                    One substrate, three lenses. The grid is every fan coil × every attribute; the
+                    FOM exhibit and the BOD list are saved projections of the same rows and the same
+                    authored facts — switching lens re-projects, it never copies. The authored lane
+                    below is the write path: edit a design fact and its whole linked column stages,
+                    grouped by type, because the parameters live at type scope.
+                  </HelpTip>
+                  <Switcher<Lens>
+                    ariaLabel="Lens"
+                    value={lens}
+                    onChange={setLens}
+                    options={[
+                      {
+                        value: "grid",
+                        label: "Grid",
+                        title: "Every fan coil × every attribute — the substrate itself",
+                      },
+                      {
+                        value: "fom",
+                        label: "FOM exhibit",
+                        title:
+                          "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout",
+                      },
+                      {
+                        value: "bod",
+                        label: "BOD",
+                        title:
+                          "The M001 Basis of Design projection — label × value over the same authored facts",
+                      },
+                    ]}
+                  />
                 </span>
-              ) : (
-                <span style={muted}>no staged writes</span>
-              )}
-              <span className="ml-auto" style={muted}>
-                lens: {lens}
-              </span>
-            </span>
-          }
-        >
-          {/* LANG GAP (3): the authored lane — a pinned band of design facts riding ON the
+              }
+              foot={
+                <span className="flex w-full items-center gap-3" style={secondary}>
+                  <span>
+                    {FC_UNITS.length} rows · {GROUPS.length} type groups
+                  </span>
+                  {applicable.length > 0 ? (
+                    <span style={{ color: token("caution") }}>
+                      {applicable.length} type writes stage {stagedRows} rows
+                      {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
+                    </span>
+                  ) : (
+                    <span style={muted}>no staged writes</span>
+                  )}
+                  <span className="ml-auto" style={muted}>
+                    lens: {lens}
+                  </span>
+                </span>
+              }
+            >
+              {/* LANG GAP (3): the authored lane — a pinned band of design facts riding ON the
               machine-operated table — has no primitive; hand-rolled, hairline-separated,
               deliberately on the frame's own ground (border budget: no second enclosure). */}
-          <div className="flex items-start gap-6 px-3 py-2" style={{ borderBottom: hairline }}>
-            <span className="pt-0.5" style={secondary}>
-              design facts
-            </span>
-            {(Object.keys(facts) as FactKey[]).map((key) => {
-              const fact = facts[key];
-              return (
-                <span key={key} className="flex items-baseline gap-1.5">
-                  <span className="" style={secondary}>
-                    {fact.label}
-                  </span>
-                  <span className="w-14">{factCell(key)}</span>
-                  <span className="" style={muted}>
-                    {fact.unit}
-                  </span>
-                  {fact.target != null ? (
-                    <span className="" style={muted}>
-                      → {fact.target}
-                    </span>
-                  ) : null}
+              <div className="flex items-start gap-6 px-3 py-2" style={{ borderBottom: hairline }}>
+                <span className="pt-0.5" style={secondary}>
+                  design facts
                 </span>
-              );
-            })}
+                {(Object.keys(facts) as FactKey[]).map((key) => {
+                  const fact = facts[key];
+                  return (
+                    <span key={key} className="flex items-baseline gap-1.5">
+                      <span className="" style={secondary}>
+                        {fact.label}
+                      </span>
+                      <span className="w-14">{factCell(key)}</span>
+                      <span className="" style={muted}>
+                        {fact.unit}
+                      </span>
+                      {fact.target != null ? (
+                        <span className="" style={muted}>
+                          → {fact.target}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                {lens === "grid" ? gridLens : lens === "fom" ? fomLens : bodLens}
+              </div>
+            </ArtifactFrame>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {lens === "grid" ? gridLens : lens === "fom" ? fomLens : bodLens}
-          </div>
-        </ArtifactFrame>
-      </div>
-    </div>
+        </Pane>
+      </SurfaceCell>
+    </Surface>
   );
 }

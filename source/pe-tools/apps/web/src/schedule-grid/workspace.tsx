@@ -9,14 +9,14 @@ import {
 } from "@pe/agent-contracts";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
-import { Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { PickList } from "#/components/lang/pick-list";
-import { SidePane } from "#/components/lang/side-pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface, SurfaceCell } from "#/components/lang/surface";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
 import { PendingStrip } from "#/schedule-grid/pending-strip";
@@ -64,6 +64,7 @@ export function ScheduleGridWorkspace({
   const cells = document?.cells ?? {};
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
+  const [railCollapsed, setRailCollapsed] = useState(false);
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
   const stagedCount = staged.length;
@@ -114,215 +115,228 @@ export function ScheduleGridWorkspace({
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden">
-      <AddressingBar
-        name="schedules"
-        sentence={
-          snapshot ? (
-            <span>{snapshot.scheduleName}</span>
-          ) : (
-            <Provenance>{hydrated ? "no schedule open" : "connecting"}</Provenance>
-          )
-        }
-        facts={
-          <>
-            <FactChip
-              tone={connected === true ? "meta" : "caution"}
-              title={
-                connected === true
-                  ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+    <Surface columns="minmax(0,1fr)">
+      <SurfaceCell>
+        <AddressingBar
+          name="schedules"
+          sentence={
+            snapshot ? (
+              <span>{snapshot.scheduleName}</span>
+            ) : (
+              <Provenance>{hydrated ? "no schedule open" : "connecting"}</Provenance>
+            )
+          }
+          facts={
+            <>
+              <FactChip
+                tone={connected === true ? "meta" : "caution"}
+                title={
+                  connected === true
+                    ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+                    : refreshing
+                      ? "The route-state stream is re-establishing over the slice already held. Writes are refused until it settles — this is a reconnect, not a lost session."
+                      : connected === null
+                        ? "No Work slice has arrived yet. Read a schedule to open one."
+                        : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
+                }
+              >
+                {/* A re-establishing stream is NOT a dead bridge, and must not be worded as one. */}
+                bridge{" "}
+                {connected === true
+                  ? "connected"
                   : refreshing
-                    ? "The route-state stream is re-establishing over the slice already held. Writes are refused until it settles — this is a reconnect, not a lost session."
+                    ? "refreshing"
                     : connected === null
-                      ? "No Work slice has arrived yet. Read a schedule to open one."
-                      : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
+                      ? "connecting"
+                      : "disconnected"}
+              </FactChip>
+              {snapshot ? (
+                <>
+                  <FactChip title="Columns × rows in this snapshot, as read from Revit.">
+                    {snapshot.columns.length}×{snapshot.rows.length}
+                  </FactChip>
+                  {snapshot.truncated ? (
+                    <FactChip
+                      tone="caution"
+                      title="The read hit its row cap — rows beyond it are not shown and cannot be edited here. Narrow the schedule in Revit or push what is visible."
+                    >
+                      truncated
+                    </FactChip>
+                  ) : null}
+                  {snapshot.takenAt ? (
+                    <FactChip title="When this snapshot was read from Revit. The model may have moved since — re-read to check.">
+                      read {timeAgo(snapshot.takenAt)}
+                    </FactChip>
+                  ) : null}
+                </>
+              ) : null}
+            </>
+          }
+          verb={
+            <ActionButton
+              tone="commit"
+              label={`push ${stagedCount} to Revit`}
+              busy={busy === "push"}
+              disabled={!pushable || busy != null}
+              reason={pushReason}
+              onClick={() => runCommand("push")}
+            />
+          }
+          advisory={peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
+        />
+
+        <PaneSplit
+          axis="horizontal"
+          grow
+          resize={{
+            target: "start",
+            defaultSize: 264,
+            minSize: 220,
+            persist: "schedule-grid:rail",
+            collapse: {
+              collapsed: railCollapsed,
+              onCollapsedChange: setRailCollapsed,
+              collapsedSize: 40,
+              collapseBelow: 110,
+            },
+          }}
+          start={
+            <Pane
+              kind="flank"
+              title="schedules"
+              meta={catalog ? String(catalog.schedules.length) : undefined}
+              side="left"
+              collapsed={railCollapsed}
+              onCollapsedChange={setRailCollapsed}
+              actions={
+                <ActionButton
+                  label="re-list"
+                  busy={busy === "catalog"}
+                  disabled={busy != null}
+                  reason="Read the document's schedule list from Revit again. A read — nothing is written."
+                  onClick={() => runCommand("catalog")}
+                />
               }
             >
-              {/* A re-establishing stream is NOT a dead bridge, and must not be worded as one. */}
-              bridge{" "}
-              {connected === true
-                ? "connected"
-                : refreshing
-                  ? "refreshing"
-                  : connected === null
-                    ? "connecting"
-                    : "disconnected"}
-            </FactChip>
-            {snapshot ? (
-              <>
-                <FactChip title="Columns × rows in this snapshot, as read from Revit.">
-                  {snapshot.columns.length}×{snapshot.rows.length}
-                </FactChip>
-                {snapshot.truncated ? (
-                  <FactChip
-                    tone="caution"
-                    title="The read hit its row cap — rows beyond it are not shown and cannot be edited here. Narrow the schedule in Revit or push what is visible."
+              {catalog == null ? (
+                <div className="space-y-2 px-3 py-3">
+                  <EmptyState
+                    story="scope"
+                    exit="list schedules to fill this rail — a read, nothing is changed"
                   >
-                    truncated
-                  </FactChip>
-                ) : null}
-                {snapshot.takenAt ? (
-                  <FactChip title="When this snapshot was read from Revit. The model may have moved since — re-read to check.">
-                    read {timeAgo(snapshot.takenAt)}
-                  </FactChip>
-                ) : null}
-              </>
-            ) : null}
-          </>
-        }
-        verb={
-          <ActionButton
-            tone="commit"
-            label={`push ${stagedCount} to Revit`}
-            busy={busy === "push"}
-            disabled={!pushable || busy != null}
-            reason={pushReason}
-            onClick={() => runCommand("push")}
-          />
-        }
-        advisory={peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
-      />
-
-      <div className="flex min-h-0 flex-1">
-        <SidePane
-          side="left"
-          storageKey="schedule-grid:rail"
-          minWidth={220}
-          defaultWidth={264}
-          header={
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-baseline gap-1.5">
-                <Tag>schedules</Tag>
-                {catalog ? (
-                  <FactChip title="Schedules returned by the current catalog read.">
-                    {catalog.schedules.length}
-                    {catalog.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
-                  </FactChip>
-                ) : null}
-              </span>
-              <ActionButton
-                label="re-list"
-                busy={busy === "catalog"}
-                disabled={busy != null}
-                reason="Read the document's schedule list from Revit again. A read — nothing is written."
-                onClick={() => runCommand("catalog")}
-              />
-            </div>
+                    no schedule list yet
+                  </EmptyState>
+                  <ActionButton
+                    label="list schedules"
+                    busy={busy === "catalog"}
+                    disabled={busy != null}
+                    reason="Reads every schedule in the document so you (or pea) can open any of them. A read — nothing is written."
+                    onClick={() => runCommand("catalog")}
+                  />
+                </div>
+              ) : (
+                <PickList
+                  items={catalog.schedules.map((entry) => ({
+                    id: String(entry.scheduleId),
+                    label: entry.name,
+                    group: entry.categoryName ?? "Other",
+                    // ponytail: Summary projection reports 0 rows for every schedule — show counts only when computed
+                    meta: entry.rowCount > 0 ? entry.rowCount : undefined,
+                    hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
+                  }))}
+                  activeId={snapshot ? String(snapshot.scheduleId) : null}
+                  onPick={(id) => runCommand("refresh", { scheduleId: Number(id) })}
+                  placeholder="Filter schedules…"
+                  disabled={busy != null}
+                  emptyNote="No schedules in the document."
+                />
+              )}
+            </Pane>
           }
-        >
-          {catalog == null ? (
-            <div className="space-y-2 px-3 py-3">
-              <EmptyState
-                story="scope"
-                exit="list schedules to fill this rail — a read, nothing is changed"
-              >
-                no schedule list yet
-              </EmptyState>
-              <ActionButton
-                label="list schedules"
-                busy={busy === "catalog"}
-                disabled={busy != null}
-                reason="Reads every schedule in the document so you (or pea) can open any of them. A read — nothing is written."
-                onClick={() => runCommand("catalog")}
-              />
-            </div>
-          ) : (
-            <PickList
-              items={catalog.schedules.map((entry) => ({
-                id: String(entry.scheduleId),
-                label: entry.name,
-                group: entry.categoryName ?? "Other",
-                // ponytail: Summary projection reports 0 rows for every schedule — show counts only when computed
-                meta: entry.rowCount > 0 ? entry.rowCount : undefined,
-                hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
-              }))}
-              activeId={snapshot ? String(snapshot.scheduleId) : null}
-              onPick={(id) => runCommand("refresh", { scheduleId: Number(id) })}
-              placeholder="Filter schedules…"
-              disabled={busy != null}
-              emptyNote="No schedules in the document."
-            />
-          )}
-        </SidePane>
-
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-1">
-            <ActionButton
-              label="re-read"
-              busy={busy === "refresh"}
-              disabled={!snapshot || busy != null}
-              reason={
-                snapshot
-                  ? `Read “${snapshot.scheduleName}” from Revit again — replaces this snapshot; proposals and staged cells stay.`
-                  : "No schedule is open — pick one from the rail."
-              }
-              onClick={() => runCommand("refresh", { scheduleId: snapshot?.scheduleId })}
-            />
-            <OutcomeStrip busy={busy} failure={failure} />
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col">
-            {snapshot ? (
-              <MasterTable
-                rows={snapshot.rows}
-                columns={gridColumns}
-                rowKey={(row) => String(row.rowNumber)}
-                gutter={(row) => {
-                  const owed = snapshot.columns.filter(
-                    (column) =>
-                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal != null,
-                  ).length;
-                  return owed > 0
-                    ? {
-                        count: owed,
-                        tone: "caution" as const,
-                        title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+          end={
+            <Pane
+              kind="content"
+              title={snapshot?.scheduleName ?? "schedule"}
+              headerless
+              scroll="clip"
+            >
+              <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col">
+                  {snapshot ? (
+                    <MasterTable
+                      rows={snapshot.rows}
+                      columns={gridColumns}
+                      rowKey={(row) => String(row.rowNumber)}
+                      gutter={(row) => {
+                        const owed = snapshot.columns.filter(
+                          (column) =>
+                            cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                            null,
+                        ).length;
+                        return owed > 0
+                          ? {
+                              count: owed,
+                              tone: "caution" as const,
+                              title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                            }
+                          : null;
+                      }}
+                      scopeLabel="schedule rows"
+                      searchPlaceholder="find in cells"
+                      filters={<OutcomeStrip busy={busy} failure={failure} />}
+                      actions={
+                        <ActionButton
+                          label="re-read"
+                          busy={busy === "refresh"}
+                          disabled={!snapshot || busy != null}
+                          reason={`Read “${snapshot.scheduleName}” from Revit again — replaces this snapshot; proposals and staged cells stay.`}
+                          onClick={() => runCommand("refresh", { scheduleId: snapshot.scheduleId })}
+                        />
                       }
-                    : null;
-                }}
-                scopeLabel="schedule rows"
-                searchPlaceholder="find in cells"
-                activeKey={activeRow}
-                empty={
-                  <EmptyState
-                    story="scope"
-                    exit="re-read the schedule, or pick another from the rail"
-                  >
-                    this schedule has no rows
-                  </EmptyState>
-                }
-              />
-            ) : (
-              <div className="grid h-full place-items-center p-6">
-                {hydrated ? (
-                  <EmptyState
-                    story="scope"
-                    exit="pick one from the rail (type to filter, ↑/↓ then Enter), or ask pea to open one"
-                  >
-                    no schedule open
-                  </EmptyState>
-                ) : (
-                  <OutcomeLine kind="busy" label="connecting to the workbench" />
-                )}
-              </div>
-            )}
-          </div>
+                      activeKey={activeRow}
+                      empty={
+                        <EmptyState
+                          story="scope"
+                          exit="re-read the schedule, or pick another from the rail"
+                        >
+                          this schedule has no rows
+                        </EmptyState>
+                      }
+                    />
+                  ) : (
+                    <div className="grid h-full place-items-center p-6">
+                      {hydrated ? (
+                        <EmptyState
+                          story="scope"
+                          exit="pick one from the rail (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                        >
+                          no schedule open
+                        </EmptyState>
+                      ) : (
+                        <OutcomeLine kind="busy" label="connecting to the workbench" />
+                      )}
+                    </div>
+                  )}
+                </div>
 
-          {pending.length > 0 && snapshot && (
-            <PendingStrip
-              pending={pending}
-              proposalCount={proposalCount}
-              stagedCount={stagedCount}
-              columnHeader={columnHeader}
-              currentText={currentText}
-              stageValue={stageValue}
-              deny={deny}
-              undo={undo}
-              locate={(key) => setActiveRow(String(splitScheduleCellKey(key).rowNumber))}
-            />
-          )}
-        </section>
-      </div>
-    </main>
+                {pending.length > 0 && snapshot && (
+                  <PendingStrip
+                    pending={pending}
+                    proposalCount={proposalCount}
+                    stagedCount={stagedCount}
+                    columnHeader={columnHeader}
+                    currentText={currentText}
+                    stageValue={stageValue}
+                    deny={deny}
+                    undo={undo}
+                    locate={(key) => setActiveRow(String(splitScheduleCellKey(key).rowNumber))}
+                  />
+                )}
+              </section>
+            </Pane>
+          }
+        />
+      </SurfaceCell>
+    </Surface>
   );
 }

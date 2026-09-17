@@ -38,6 +38,7 @@ export function AtlasVisual() {
       <Pane
         id="plan"
         kind="visual"
+        title="plan"
         headerSurface="recess"
         shortcuts={scopeShortcuts}
         toolbar={

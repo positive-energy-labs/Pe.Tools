@@ -14,6 +14,19 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-16, Chat's composer head shows actual turn state such as ready, running, waiting for the user, or failed. Threads, Trace and World remain view modes; Chat does not invent selectable workflow stages.
+
+- 2026-09-16, Shared rails are 24px. Tables have one artifact header for title, search, modes and actions, with an optional deliberate filter row. The composer has its own halo and keyboard-help region rather than highlighting the whole transcript pane.
+
+- 2026-09-16, Adopt unification lineup A: page-ground panes in the shared gutter root with the composer in flow. The user rejected overlay B and supplied a screenshot of table cells painting over its composer. Gutter and halo colors remain to be refined; shared rails are 24px.
+- 2026-09-16, Large tool results may load their full content on expand, provided the original result remains available. Receipts cannot replace transcript results because many tool calls have no receipt; use the transcript's authoritative result source.
+
+- 2026-09-16, Switching Chat threads retains each thread's unsent text and attachments without adding a separate persistence source. Evaluate React 19.2 Activity as the native retention boundary. Selecting an unloaded thread shows explicit loading for that thread inside a stable shell; the thread sidebar remains populated. Evaluate Suspense at pane/workspace boundaries as part of the shared design, not only a Chat repair.
+
+- 2026-09-16, The unification review follows systemic causes across the repo; commits after `fb5643d6a15b9470273e55c3ad926850d99d6f99` are evidence, not scope limits. Prefer deeper shared fixes and less code over accumulating local repairs. Record all findings in the owning feature.
+- 2026-09-16, Chat's Situation stays on the composer because targeting context must remain beside approvals and proposals. Its default head stays one header high; the thread sidebar must project the same route-owned selection exposed in the sentence.
+- 2026-09-16, Pane separation uses a shared gutter including the viewport perimeter, with room for the focus/help halo and resize handle. The suggested 8px gutter and 6px halo are provisional visual tuning values. Intermediate route breakage is allowed while restoring consistent height and responsive layout contracts.
+- 2026-09-16, Two concurrent Fable 5.1 low partners lead surface and runtime design. Both may delegate through Herdr to Opus/Sol low and Terra high swarms, never to more Fables. The runtime review measures Chrome CSS/layout/paint/render costs alongside transport and lifecycle. Meaningful design ambiguity returns to the user. See `UNIFICATION.md` for the active review brief.
 - 2026-09-16, `--gutter`, `--halo`, `--rail-h`, and `--halo-ink` own shared surface spacing and focus color.
 - 2026-09-16, `Rail` is the one head band. `ArtifactFrame` owns its rail through `head` and `headTrail` slots.
 - 2026-09-16, active `Pane` focus uses an outline in the gutter.

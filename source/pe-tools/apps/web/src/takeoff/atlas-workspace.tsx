@@ -14,7 +14,6 @@ export function AtlasWorkspace() {
   const { geometry, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
-      className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t"
       headRail={headRail}
       readoutBand={
         geometry?.state === "failed" ? (

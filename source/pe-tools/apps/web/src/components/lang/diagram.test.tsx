@@ -17,6 +17,7 @@ vi.mock("beautiful-mermaid", async (importOriginal) => {
 
 import { Code } from "#/components/lang/code";
 import { diagramColors, diagramKind, sanitizeSvg, stripStyles } from "#/components/lang/diagram";
+import { renderMermaidSVG } from "beautiful-mermaid";
 
 afterEach(cleanup);
 
@@ -58,6 +59,15 @@ test("only the diagram types the renderer supports are drawn", () => {
 });
 
 const FLOW = "flowchart LR\n  AHU --> Main --> VAV";
+
+test("generated diagrams keep theme fonts without requesting Google Fonts", () => {
+  for (const source of [FLOW, "classDiagram\n  class AHU {\n    +start()\n  }"]) {
+    const svg = sanitizeSvg(renderMermaidSVG(source, diagramColors()));
+    expect(svg).not.toContain("fonts.googleapis.com");
+    expect(svg).toContain("font-family: var(--font-body), system-ui, sans-serif");
+    expect(svg).not.toContain("font-family: 'var(--font-body)'");
+  }
+});
 
 test("a mermaid block draws by default, toggles to its source, and copies the source", async () => {
   const writeText = vi.fn(async () => undefined);
