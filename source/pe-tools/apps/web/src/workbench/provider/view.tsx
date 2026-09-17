@@ -14,7 +14,6 @@ import { previousOf, useHostStatus } from "#/readings";
 import { appAtomRegistry } from "#/route";
 import { useRouteOwner } from "#/route";
 import { createChatPageStore } from "../store";
-import { CurrentThreadViewOwner } from "../thread-view";
 import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
@@ -94,10 +93,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   });
   const { pending: threadPending, error: streamFault, invalidate, displayKnown } = stream;
   const chat = demo ?? stream.chat;
-  const bodyAtom = useMemo(
-    () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
-    [demo, stream.bodyAtom],
-  );
+  const bodyAtom = useMemo(() => {
+    if (!demo) return stream.bodyAtom;
+    const { display: _display, ...body } = demo;
+    return Atom.make(AsyncResult.success(body));
+  }, [demo, stream.bodyAtom]);
   const loading = demo ? false : chatLoading(hostStatus, threadPending);
 
   const status = selectRunStatus(chat);
@@ -179,14 +179,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const deleteThread = useCallback(
     async (threadId: string) => {
-      if (!session) return;
+      if (!session) return false;
       try {
         await session.deleteThread(threadId);
         setThreads((previous) => previous.filter((item) => item.id !== threadId));
         if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
         else await refreshThreads();
+        return true;
       } catch (caught) {
         setError(errorMessage(caught));
+        return false;
       }
     },
     [currentThreadId, gotoThread, refreshThreads, session],
@@ -264,6 +266,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [invalidate, session],
   );
 
+  const patchThreadView = useCallback(
+    (partial: { turn?: number }, replace = false) =>
+      navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
+    [navigate],
+  );
+
   const operationError =
     error ?? (hostStatus.state === "failed" ? hostStatus.message : streamFault?.message);
   const context = useMemo<WorkbenchContextValue>(
@@ -277,6 +285,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       threads,
       currentThreadId,
+      turn: search.turn,
       prompt: search.prompt,
       displayKnown,
       revit: info?.capabilities.revit,
@@ -290,6 +299,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      patchThreadView,
       resolveApproval,
       setModel,
       addApiKey,
@@ -303,6 +313,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       threads,
       currentThreadId,
+      search.turn,
       search.prompt,
       displayKnown,
       info,
@@ -311,21 +322,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       store,
       config,
       session,
+      patchThreadView,
     ],
   );
 
-  return (
-    <WorkbenchContext.Provider value={context}>
-      <CurrentThreadViewOwner
-        key={currentThreadId}
-        registry={appAtomRegistry}
-        turn={search.turn}
-        patch={(partial, replace = false) =>
-          navigate({ search: (previous) => ({ ...previous, ...partial }), replace })
-        }
-      >
-        {children}
-      </CurrentThreadViewOwner>
-    </WorkbenchContext.Provider>
-  );
+  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
 }

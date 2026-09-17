@@ -86,23 +86,20 @@ export type CurrentThreadView = ReturnType<typeof createCurrentThreadView>;
 const ThreadViewContext = createContext<CurrentThreadView | undefined>(undefined);
 
 export function CurrentThreadViewOwner({
+  threadKey,
   registry,
   turn,
   patch,
   children,
 }: {
+  /** Current selection identity. It resets transient view atoms without remounting persistent children. */
+  threadKey: string;
   registry: AtomRegistry.AtomRegistry;
   turn?: number;
   patch: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
   children: ReactNode;
 }) {
-  const view = useRouteOwner(() =>
-    createCurrentThreadView({
-      registry,
-      turn,
-      patch,
-    }),
-  );
+  const view = useRouteOwner(() => createCurrentThreadView({ registry, turn, patch }), threadKey);
   return <ThreadViewContext.Provider value={view}>{children}</ThreadViewContext.Provider>;
 }
 

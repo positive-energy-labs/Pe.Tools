@@ -6,13 +6,23 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { Cause, Effect } from "effect";
 import { useEffect, useMemo, useState } from "react";
-import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
+import {
+  emptyChatState,
+  isUserTurn,
+  type ChatDisplay,
+  type ChatState,
+  type ThreadBody,
+} from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
 
 const EMPTY = emptyChatState();
-const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY));
+const EMPTY_BODY: ThreadBody = (() => {
+  const { display: _display, ...body } = EMPTY;
+  return body;
+})();
+const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY_BODY));
 type LiveThread = {
   key: string | null;
   frame: ChatDisplay | null;
@@ -31,7 +41,7 @@ const bodyAtoms = Atom.family((key: string) => {
           signal,
         });
         if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
-        return response.json() as Promise<ChatState>;
+        return response.json() as Promise<ThreadBody>;
       },
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     }),
@@ -161,12 +171,13 @@ export function useThreadStream(options: {
   }, [invalidate, key, session]);
 
   const chat = useMemo<ChatState>(() => {
-    const stored = body._tag === "Success" ? body.value : EMPTY;
-    if (current.sent.length === 0 && current.frame === null) return stored;
+    if (body._tag !== "Success" && current.sent.length === 0 && current.frame === null)
+      return EMPTY;
+    const stored = body._tag === "Success" ? body.value : EMPTY_BODY;
     const known = new Set(stored.messages.map((message) => message.id));
     const unstored = current.sent.filter((message) => !known.has(message.id));
     const messages = unstored.length ? [...stored.messages, ...unstored] : stored.messages;
-    return { ...stored, messages, display: current.frame ?? stored.display };
+    return { ...stored, messages, display: current.frame ?? EMPTY.display };
   }, [body, current]);
   const error = useMemo(() => {
     if (body._tag !== "Failure") return current.fault;
@@ -181,7 +192,7 @@ export function useThreadStream(options: {
     // effect), and true again on every refetch over a thread already on screen.
     pending: threadId !== null && body._tag === "Initial" && body.waiting,
     error,
-    displayKnown: body._tag === "Success" || current.frame !== null,
+    displayKnown: current.frame !== null,
     invalidate,
     bodyAtom,
   };

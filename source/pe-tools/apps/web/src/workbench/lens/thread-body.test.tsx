@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { Effect } from "effect";
 import { Pane } from "#/components/lang/pane";
-import { emptyChatState } from "../chat-state";
+import { emptyChatState, type ThreadBody as ThreadWire } from "../chat-state";
 
 vi.mock("./view", () => ({ Lens: () => <div>thread transcript</div> }));
 
@@ -13,11 +13,13 @@ import { ThreadBody } from "./thread-body";
 afterEach(cleanup);
 
 test("a loading thread body leaves the sidebar and composer mounted", async () => {
-  let resolve!: (state: ReturnType<typeof emptyChatState>) => void;
+  const body = (): ThreadWire => {
+    const { display: _display, ...wire } = emptyChatState();
+    return wire;
+  };
+  let resolve!: (state: ThreadWire) => void;
   const bodyAtom = Atom.make(
-    Effect.promise(
-      () => new Promise<ReturnType<typeof emptyChatState>>((done) => (resolve = done)),
-    ),
+    Effect.promise(() => new Promise<ThreadWire>((done) => (resolve = done))),
   );
   render(
     <>
@@ -32,7 +34,7 @@ test("a loading thread body leaves the sidebar and composer mounted", async () =
   expect(screen.getByText("composer")).toBeTruthy();
   expect(screen.getByRole("status").textContent).toContain("loading thread");
 
-  resolve(emptyChatState());
+  resolve(body());
   expect(await screen.findByText("thread transcript")).toBeTruthy();
   expect(screen.getByText("thread sidebar")).toBeTruthy();
   expect(screen.getByText("composer")).toBeTruthy();

@@ -1,7 +1,7 @@
 import { useAtomSuspense } from "@effect/atom-react";
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import type { ChatState } from "../chat-state";
+import type { ChatState, ThreadBody } from "../chat-state";
 import type { Mode } from "../depth";
 import { Lens } from "./view";
 
@@ -12,7 +12,7 @@ export function ThreadBody({
   mode,
   sideOpen,
 }: {
-  bodyAtom: Atom.Atom<AsyncResult.AsyncResult<ChatState, Error>>;
+  bodyAtom: Atom.Atom<AsyncResult.AsyncResult<ThreadBody, Error>>;
   state: ChatState;
   mode: Mode;
   sideOpen: boolean;

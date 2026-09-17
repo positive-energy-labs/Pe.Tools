@@ -2,7 +2,7 @@
 import type { AgentControllerEvent, MastraDBMessage } from "@mastra/client-js";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { emptyChatState, selectApprovals, selectMessages } from "../chat-state";
+import { emptyChatState, selectApprovals, selectMessages, type ChatState } from "../chat-state";
 import { useThreadStream } from "./thread-stream";
 
 afterEach(() => {
@@ -33,9 +33,14 @@ const assistant = {
   content: { format: 2, parts: [{ type: "text", text: "Hi" }] },
 } as unknown as MastraDBMessage;
 
+const threadBody = (state: ChatState = emptyChatState()) => {
+  const { display: _display, ...body } = state;
+  return body;
+};
+
 test("a sent message stays listed while the first assistant block streams", async () => {
   // The host has not persisted the user row yet: every fetch answers the empty thread.
-  const fetches = vi.fn(async () => new Response(JSON.stringify(emptyChatState())));
+  const fetches = vi.fn(async () => new Response(JSON.stringify(threadBody())));
   vi.stubGlobal("fetch", fetches);
   let emit: (event: AgentControllerEvent) => void = () => {};
   const session = {
@@ -73,7 +78,7 @@ test("a sent message stays listed while the first assistant block streams", asyn
 test("the thread reports pending on every render until its body is here", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify(emptyChatState()))),
+    vi.fn(async () => new Response(JSON.stringify(threadBody()))),
   );
   const session = { subscribe: async () => ({ unsubscribe: () => {} }) };
   let noBody: unknown;
@@ -97,7 +102,7 @@ test("the thread reports pending on every render until its body is here", async 
 test("an unchanged ready body keeps its snapshot identity", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify(emptyChatState()))),
+    vi.fn(async () => new Response(JSON.stringify(threadBody()))),
   );
   const session = { subscribe: async () => ({ unsubscribe: () => {} }) };
   const { result, rerender } = renderHook(() =>
@@ -112,10 +117,38 @@ test("an unchanged ready body keeps its snapshot identity", async () => {
   expect(result.current.chat).toBe(ready);
 });
 
+test("a failed body recovers on retry and reconnect without changing thread", async () => {
+  let attempts = 0;
+  const fetches = vi.fn(async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("offline");
+    return new Response(JSON.stringify(threadBody()));
+  });
+  vi.stubGlobal("fetch", fetches);
+  let reconnect: () => void = () => {};
+  const session = {
+    subscribe: async (options: { onReconnect: () => void }) => {
+      reconnect = options.onReconnect;
+      return { unsubscribe: () => {} };
+    },
+  };
+  const { result } = renderHook(() =>
+    useThreadStream({
+      origin: "http://host",
+      thread: { id: "recovery-thread", session: session as never },
+    }),
+  );
+  await waitFor(() => expect(result.current.error?.message).toBe("offline"));
+  act(() => result.current.invalidate());
+  await waitFor(() => expect(result.current.error).toBeNull());
+  act(reconnect);
+  await waitFor(() => expect(fetches).toHaveBeenCalledTimes(3));
+});
+
 test("switching threads aborts A and never publishes A under B", async () => {
   let settleA!: (response: Response) => void;
   let signalA: AbortSignal | undefined;
-  const bodyB = { ...emptyChatState(), messages: [assistant] };
+  const bodyB = threadBody({ ...emptyChatState(), messages: [assistant] });
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
@@ -141,7 +174,9 @@ test("switching threads aborts A and never publishes A under B", async () => {
   );
   await waitFor(() => expect(signalA?.aborted).toBe(true));
   await act(async () =>
-    settleA(new Response(JSON.stringify({ ...emptyChatState(), messages: [userSignal] }))),
+    settleA(
+      new Response(JSON.stringify(threadBody({ ...emptyChatState(), messages: [userSignal] }))),
+    ),
   );
   expect(selectMessages(result.current.chat).map((message) => message.id)).toEqual(["a1"]);
 });
@@ -196,9 +231,41 @@ test("a live approval is available before its body, and A cannot leak into B", a
   );
 
   await act(async () =>
-    settleA(new Response(JSON.stringify({ ...emptyChatState(), messages: [userSignal] }))),
+    settleA(
+      new Response(JSON.stringify(threadBody({ ...emptyChatState(), messages: [userSignal] }))),
+    ),
   );
   expect(selectMessages(result.current.chat).some((message) => message.id === "u1")).toBe(false);
   expect(selectApprovals(result.current.chat.display)[0]?.toolCallId).toBe("approve-b");
-  await act(async () => settleB(new Response(JSON.stringify(emptyChatState()))));
+  await act(async () => settleB(new Response(JSON.stringify(threadBody()))));
+});
+
+test("a wire body does not make the display ready before its first stream frame", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(threadBody()))),
+  );
+  let emit: (event: AgentControllerEvent) => void = () => {};
+  const session = {
+    subscribe: async (options: { onEvent: (event: AgentControllerEvent) => void }) => {
+      emit = options.onEvent;
+      return { unsubscribe: () => {} };
+    },
+  };
+  const { result } = renderHook(() =>
+    useThreadStream({
+      origin: "http://host",
+      thread: { id: "wire-thread", session: session as never },
+    }),
+  );
+  await waitFor(() => expect(result.current.pending).toBe(false));
+  expect(result.current.chat.display).toEqual({});
+  expect(result.current.displayKnown).toBe(false);
+  act(() =>
+    emit({
+      type: "display_state_changed",
+      displayState: { isRunning: false },
+    } as AgentControllerEvent),
+  );
+  await waitFor(() => expect(result.current.displayKnown).toBe(true));
 });

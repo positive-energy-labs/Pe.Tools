@@ -1,9 +1,7 @@
-import { Activity, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
-import { ThreadComposer } from "#/chat/composer";
-import type { ChatHandle } from "#/chat/composer-head";
 import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
@@ -17,14 +15,14 @@ import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
 import { ComposerHead } from "#/chat/composer-head";
-import { RouteShell, keyMeta, useRoute } from "#/route";
+import { appAtomRegistry, RouteShell, keyMeta, useRoute } from "#/route";
 import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
-import type { ChatDraft } from "#/workbench/prompt";
-import { useCurrentThreadView } from "#/workbench/thread-view";
+import { CurrentThreadViewOwner, useCurrentThreadView } from "#/workbench/thread-view";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface as PageSurface, SurfaceCell } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
+import { ComposerBank } from "#/chat/composer-bank";
 
 /** Routes hostable as in-realm chat workspace panes.
  * Route names and titles come from the plugin registry — one registration per route. */
@@ -34,8 +32,22 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({ plugin }: { plugin?: ChatPluginRoute }) {
   return (
     <HotkeysProvider>
-      <ChatSurface plugin={plugin} />
+      <CurrentThreadChatSurface plugin={plugin} />
     </HotkeysProvider>
+  );
+}
+
+function CurrentThreadChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
+  const { currentThreadId, turn, patchThreadView } = useWorkbench();
+  return (
+    <CurrentThreadViewOwner
+      threadKey={currentThreadId}
+      registry={appAtomRegistry}
+      turn={turn}
+      patch={patchThreadView}
+    >
+      <ChatSurface plugin={plugin} />
+    </CurrentThreadViewOwner>
   );
 }
 
@@ -89,7 +101,10 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
   // head is the Situation, which needs the same handle the shell's chords run through.
   const handle = useRoute(manifest);
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
-  const handleDeleteThread = (id: string) => void deleteThread(id);
+  const [deletedThreadIds, setDeletedThreadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const handleDeleteThread = async (id: string) => {
+    if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
+  };
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
   const sideOpen = useAtomValue(store.atoms.sideOpen);
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
@@ -170,7 +185,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
       >
         <ComposerBank
           currentThreadId={currentThreadId}
-          threads={threads}
+          deletedThreadIds={deletedThreadIds}
           prompt={prompt}
           handle={handle}
           topBar={
@@ -313,50 +328,5 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
         onDelete={handleDeleteThread}
       />
     </main>
-  );
-}
-
-function ComposerBank({
-  currentThreadId,
-  threads,
-  prompt,
-  handle,
-  topBar,
-}: {
-  currentThreadId: string;
-  threads: { id: string }[];
-  prompt?: string;
-  handle: ChatHandle;
-  topBar: ReactNode;
-}) {
-  const [visited, setVisited] = useState(() => new Set([currentThreadId]));
-  const known = useMemo(
-    () => new Set([...threads.map(({ id }) => id), currentThreadId]),
-    [threads, currentThreadId],
-  );
-  useEffect(() => {
-    setVisited((previous) => {
-      const next = new Set([...previous, currentThreadId].filter((id) => known.has(id)));
-      return next.size === previous.size && [...next].every((id) => previous.has(id))
-        ? previous
-        : next;
-    });
-  }, [currentThreadId, known]);
-  const composerIds = useMemo(
-    () => [...new Set([...visited, currentThreadId])],
-    [visited, currentThreadId],
-  );
-  return (
-    <div className="pointer-events-auto">
-      {composerIds.map((threadId) => {
-        const initialDraft: ChatDraft | undefined =
-          threadId === currentThreadId && prompt ? { text: prompt, attachments: [] } : undefined;
-        return (
-          <Activity key={threadId} mode={threadId === currentThreadId ? "visible" : "hidden"}>
-            <ThreadComposer handle={handle} topBar={topBar} initialDraft={initialDraft} />
-          </Activity>
-        );
-      })}
-    </div>
   );
 }
