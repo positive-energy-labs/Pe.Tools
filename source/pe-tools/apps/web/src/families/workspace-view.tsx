@@ -1,4 +1,5 @@
 import { Workspace } from "#/components/anatomy";
+import { Pane } from "#/components/lang/pane";
 import { FamiliesMatrix } from "#/families/matrix";
 import { manifest } from "#/families/manifest";
 import { FamiliesReadoutBands } from "#/families/readout-bands";
@@ -126,7 +127,16 @@ export function FamiliesWorkspaceView() {
           <FamiliesReadoutBands />
         </>
       }
-      table={<FamiliesMatrix />}
+      table={
+        <Pane
+          kind="content"
+          title="families"
+          help="Families and types in the applied scope. Filter or open a row to inspect its authored family."
+          scroll="clip"
+        >
+          <FamiliesMatrix />
+        </Pane>
+      }
     />
   );
 }

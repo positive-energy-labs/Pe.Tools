@@ -176,7 +176,7 @@ export function FamilyWorkspaceView() {
   const { store, anatomyCollapsed, setAnatomyCollapsed } = useFamilyWorkspace();
   return (
     <Workspace
-      className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=content]_[data-slot=pane-header]]:boundary-t [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
+      className="[&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
       headRail={<RouteShell manifest={manifest} handle={store.handle} situation={<FamilyHead />} />}
       visual={<FamilyWorkspaceAnatomy />}
       table={<FamilyWorkspaceTable />}

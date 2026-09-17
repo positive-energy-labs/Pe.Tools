@@ -48,6 +48,7 @@ export function AtlasTable() {
       <Pane
         id="rooms"
         kind="content"
+        title="rooms"
         headerSurface="recess"
         scroll="clip"
         shortcuts={reviewShortcuts}
