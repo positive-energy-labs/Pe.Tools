@@ -17,6 +17,7 @@ import { Surface } from "#/components/lang/surface";
 import { defineRoute, isSpecOf, type MemberRef, type PodRow } from "#/route";
 import { RECEIPT_PATH, podHost, usePodList, type Receipt } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
+import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
 import {
   DEMO_PODS,
@@ -34,7 +35,11 @@ export const manifest = defineRoute({ key: "pods", name: "Pods", seeds: PODS_SEE
 const PRODUCT_ROUTES = [
   { to: "/schedules", def: scheduleSpec },
   { to: "/families", def: familiesSpec },
+  { to: "/family", def: familySpec },
 ] as const;
+
+/** The demo lane browses every product route's demo pod, so each deep link has a member to open. */
+const DEMO_BROWSE = [...DEMO_PODS, ...FAMILY_DEMO_PODS];
 
 // `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.
 const SEP = "|";
@@ -71,7 +76,7 @@ export function PodsRouteContent({
 }) {
   const [live, refresh] = usePodList(!demo);
   const pods: readonly PodRow[] = demo
-    ? DEMO_PODS
+    ? DEMO_BROWSE
     : live.state === "ready"
       ? (live.observation as PodRow[])
       : live.state === "stale"
