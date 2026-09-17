@@ -3,7 +3,7 @@ import { isSpecOf } from "#/route/manifest";
 import { useMemo, type ComponentProps } from "react";
 import { ActionReceipts } from "#/actions/receipt";
 import { useRoute } from "#/route/use-route";
-import { settingsManifest } from "#/settings/manifest";
+import { memberWorkManifest } from "#/route/spec-editor";
 import { Link } from "@tanstack/react-router";
 
 import { cellSummary, settingsRouteState } from "@pe/agent-contracts";
@@ -29,11 +29,7 @@ export function SettingsChatPlugin(props: RouteChatPluginProps) {
 }
 
 function FileSettingsChatPlugin(props: RouteChatPluginProps & { workspaceId: string }) {
-  const scope = useMemo(
-    () => ({ route: settingsRouteState.route, target: null, work: props.workspaceId }),
-    [props.workspaceId],
-  );
-  const manifest = useMemo(() => settingsManifest({ scope }), [scope]);
+  const manifest = useMemo(() => memberWorkManifest(), []);
   const route = useRoute(manifest, { work: props.workspaceId });
   if (!route.work.current || !route.work.doc) return null;
   return (
@@ -96,8 +92,13 @@ function SettingsReview({
             Open workspace
           </Link>
         ) : (
-          <Link className="ml-auto" to="/pods">
-            Open pods
+          <Link
+            className="ml-auto"
+            to="/pods"
+            search={{ pod: member?.pod, path: member?.path }}
+            title="The pods editor shows these proposals beside the member."
+          >
+            Open in pods
           </Link>
         )}
       </div>

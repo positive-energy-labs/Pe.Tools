@@ -5,14 +5,11 @@ import { manifest as family } from "#/routes/family";
 import { manifest as families } from "#/families/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
-import { settingsManifest } from "#/settings/manifest";
+import { memberWorkManifest } from "#/route/spec-editor";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
 test("browser semantic mutations project shared prose, actor, and target need", () => {
-  const settings = settingsManifest({
-    scope: { route: "pods", target: null, work: "test" },
-    member: { pod: "p", path: "settings/a.json" },
-  });
+  const settings = memberWorkManifest();
   const pairs = [
     [settings.actions!.save, "settings.write"],
     [family.actions!.build, "family.build"],

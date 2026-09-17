@@ -14,6 +14,7 @@ import {
   here,
   memberWork,
   settingsFieldDirectives,
+  settingsFieldPointer,
   settingsFieldSegments,
   settingsRouteState,
   settingsWorkSnapshot,
@@ -21,6 +22,7 @@ import {
   type FamilyDocument,
   type PodMember,
   type Reading,
+  type SettingsFieldState,
   type SettingsRouteDocument,
   type SettingsSnapshot,
   type WorkKey,
@@ -45,8 +47,45 @@ import {
 } from "#/route/family/manifest";
 import { documentAddress, previousOf, inventoryOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
-import { settingsManifest } from "#/settings/manifest";
-import { openMember } from "#/settings/host";
+import { openMember, useMemberWork } from "#/route/spec-editor";
+import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
+
+/**
+ * The demo lane's proposal lane on a family fixture: its first Length parameter staged, its
+ * second proposed by Pea. Real pointers of the fixture's bytes; the values are fixture.
+ */
+export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
+  const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })
+    .parameters;
+  const [staged, proposed] = Object.entries(parameters ?? {})
+    .filter(([, spec]) => spec.dataType === "Length")
+    .map(([name]) => settingsFieldPointer(["parameters", name, "value"]));
+  return {
+    ...(staged ? { [staged]: { proposal: null, staged: { value: "5in" } } } : {}),
+    ...(proposed
+      ? {
+          [proposed]: {
+            proposal: { value: "6in", by: "pea", note: "office standard", confidence: "low" },
+            staged: null,
+          },
+        }
+      : {}),
+  };
+}
+
+const demoWorkOf = (member: PodMember | null): SettingsRouteDocument | undefined => {
+  const raw = member
+    ? familyFixtures[
+        member.path
+          .split("/")
+          .at(-1)
+          ?.replace(/\.json$/, "") as AuthoredFamilyName
+      ]
+    : undefined;
+  return member && raw
+    ? { basis: { member, rawContent: raw, sha256: "demo" }, fields: familyDemoFields(raw) }
+    : undefined;
+};
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -220,11 +259,11 @@ export function useFamilyStore(options: {
     () => ({ route: settingsRouteState.route, target: null, work: work ?? "" }),
     [work],
   );
-  const settingsRoute = useMemo(
-    () => settingsManifest({ scope: fileKey, member: pageForMember ?? undefined }),
-    [fileKey, pageForMember],
+  const demoWork = useMemo(
+    () => (demo ? demoWorkOf(pageForMember) : undefined),
+    [demo, pageForMember],
   );
-  const settingsHandle = useRoute(settingsRoute, { work: demo ? undefined : work });
+  const settingsHandle = useMemberWork(pageForMember, demoWork);
   const settingsDoc = settingsHandle.work.doc as SettingsRouteDocument | null;
   const settingsRevision = settingsHandle.work.revision;
   const edits = useMemo(
@@ -235,18 +274,6 @@ export function useFamilyStore(options: {
   useEffect(() => {
     if (settingsRevision != null) edits.observe(settingsRevision);
   }, [edits, settingsRevision]);
-
-  // A member whose Work has no basis yet adopts the bytes just read.
-  useEffect(() => {
-    if (demo || !pageForMember || !settingsHandle.work.current || settingsDoc?.basis) return;
-    void settingsHandle.actions.open.run({ member: pageForMember });
-  }, [
-    demo,
-    pageForMember,
-    settingsHandle.work.current,
-    settingsDoc?.basis,
-    settingsHandle.actions.open,
-  ]);
 
   const profileObservation = previousOf(handle.readings.profile as Reading<SettingsSnapshot>);
   // Work is the edit basis; before it hydrates (and in the demo lane) the saved bytes stand in.
