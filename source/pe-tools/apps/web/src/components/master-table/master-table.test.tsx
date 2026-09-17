@@ -194,7 +194,16 @@ test("the table owns one rail, optional filters, and rail actions", () => {
   expect(screen.getByText("narrowed")).toBeTruthy();
 });
 
-test("the rail keeps lead facts and controls on one clipped line", () => {
+test("the rail truncates lead facts while scrolling focused controls into view", () => {
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollIntoView",
+  );
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
   const { container } = renderTable({
     summary: <span className="flex flex-wrap">facts</span>,
     modes: <Press>table mode</Press>,
@@ -203,11 +212,18 @@ test("the rail keeps lead facts and controls on one clipped line", () => {
   const rail = container.querySelector<HTMLElement>("[data-slot='rail']")!;
   const [lead, trail] = Array.from(rail.children) as HTMLElement[];
 
-  expect(rail.classList.contains("overflow-hidden")).toBe(true);
+  expect(rail.classList.contains("overflow-hidden")).toBe(false);
   expect(lead.classList.contains("whitespace-nowrap")).toBe(true);
   expect(lead.classList.contains("overflow-hidden")).toBe(true);
+  expect(trail.dataset.slot).toBe("rail-actions");
+  expect(trail.classList.contains("no-scrollbar")).toBe(true);
+  expect(trail.classList.contains("overflow-x-auto")).toBe(true);
   expect(trail.classList.contains("whitespace-nowrap")).toBe(true);
-  expect(trail.classList.contains("overflow-hidden")).toBe(true);
+  screen.getByRole("button", { name: "export" }).focus();
+  expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+  if (originalScrollIntoView)
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+  else delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
 test("grid keys move the roving cell focus and release Tab at the outer boundary", () => {
