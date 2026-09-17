@@ -16,7 +16,7 @@ export const pickListRecipe = tv({
  * PickList — the workbench's "choose one from many" rail body. A filter field over a
  * grouped, keyboard-navigable list: type to narrow, ↑/↓ to move, Enter to pick (the top
  * match when you haven't moved), Escape to clear. Groups render in insertion order as
- * small-caps sans section heads. Pair it with SidePane, which owns collapse/expand and
+ * small-caps sans section heads. Pair it with a `Pane` rail, which owns collapse/expand and
  * width — PickList never draws its own chrome.
  */
 export interface PickListItem {
