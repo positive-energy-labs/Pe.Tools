@@ -227,185 +227,183 @@ export function ParameterLinksWorkspace({
 
   return (
     <Surface>
-      <>
-        <AddressingBar
-          name="parameter links"
-          sentence={
-            <span className="flex items-center gap-2">
-              <span title="bound Revit document">{documentAddress}</span>
-              {/* The write's safety model lives ON the arming strip below (its one home) — this
+      <AddressingBar
+        name="parameter links"
+        sentence={
+          <span className="flex items-center gap-2">
+            <span title="bound Revit document">{documentAddress}</span>
+            {/* The write's safety model lives ON the arming strip below (its one home) — this
                 tip only orients. */}
-              <HelpTip>
-                Cross-element parameter links: pea and you co-edit one draft profile of link
-                definitions + assignments. Preview projects the draft's target writes; the arming
-                strip is where an apply is armed and committed.
-              </HelpTip>
-            </span>
-          }
-          facts={
-            <>
-              <FactChip
-                tone={connected ? "meta" : "caution"}
-                title={
-                  connected
-                    ? "route document and host bridge are connected"
-                    : "route document or host bridge is disconnected — commands will fail until it returns"
-                }
-              >
-                {connected ? "host · connected" : "host · disconnected"}
+            <HelpTip>
+              Cross-element parameter links: pea and you co-edit one draft profile of link
+              definitions + assignments. Preview projects the draft's target writes; the arming
+              strip is where an apply is armed and committed.
+            </HelpTip>
+          </span>
+        }
+        facts={
+          <>
+            <FactChip
+              tone={connected ? "meta" : "caution"}
+              title={
+                connected
+                  ? "route document and host bridge are connected"
+                  : "route document or host bridge is disconnected — commands will fail until it returns"
+              }
+            >
+              {connected ? "host · connected" : "host · disconnected"}
+            </FactChip>
+            {editing && (
+              <FactChip title="definitions · assignments in the profile being edited">
+                {editing.definitions.length} def · {editing.assignments.length} asn
               </FactChip>
-              {editing && (
-                <FactChip title="definitions · assignments in the profile being edited">
-                  {editing.definitions.length} def · {editing.assignments.length} asn
-                </FactChip>
-              )}
-              {saveConflict && (
-                <FactChip
-                  tone="caution"
-                  title="the shared document moved while you were editing — your edit is kept, not overwritten"
-                >
-                  save conflict
-                </FactChip>
-              )}
-              {hasUnsavedEdits && (
-                <FactChip
-                  tone="caution"
-                  title="local edits not yet saved to the shared document — save draft (or preview) persists them"
-                >
-                  unsaved edits
-                </FactChip>
-              )}
-              {draftDirty && (
-                <FactChip
-                  tone="caution"
-                  title="the shared draft differs from what Revit stored — apply reconciles them"
-                >
-                  draft ≠ stored
-                </FactChip>
-              )}
-              {peaActive && (
-                <FactChip tone="pea" title="pea is editing the shared document right now">
-                  pea · working
-                </FactChip>
-              )}
-            </>
-          }
-          // The page-blast verb slot is deliberately EMPTY: apply lives on the ArmingStrip in
-          // the draft column, because the gate's whole safety model (plan freshness · reason ·
-          // refusal) is the strip's payload and a second apply here would be a parallel path.
-        />
+            )}
+            {saveConflict && (
+              <FactChip
+                tone="caution"
+                title="the shared document moved while you were editing — your edit is kept, not overwritten"
+              >
+                save conflict
+              </FactChip>
+            )}
+            {hasUnsavedEdits && (
+              <FactChip
+                tone="caution"
+                title="local edits not yet saved to the shared document — save draft (or preview) persists them"
+              >
+                unsaved edits
+              </FactChip>
+            )}
+            {draftDirty && (
+              <FactChip
+                tone="caution"
+                title="the shared draft differs from what Revit stored — apply reconciles them"
+              >
+                draft ≠ stored
+              </FactChip>
+            )}
+            {peaActive && (
+              <FactChip tone="pea" title="pea is editing the shared document right now">
+                pea · working
+              </FactChip>
+            )}
+          </>
+        }
+        // The page-blast verb slot is deliberately EMPTY: apply lives on the ArmingStrip in
+        // the draft column, because the gate's whole safety model (plan freshness · reason ·
+        // refusal) is the strip's payload and a second apply here would be a parallel path.
+      />
 
-        <OutcomeStrip failure={route.failure} />
+      <OutcomeStrip failure={route.failure} />
 
-        <PaneSplit
-          axis="horizontal"
-          grow
-          resize={{
-            target: "end",
-            defaultSize: 520,
-            minSize: 340,
-            maxSize: 760,
-            persist: "pe.parameterLinks.evalPane",
-            collapse: {
-              collapsed: !rightOpen,
-              onCollapsedChange: (collapsed) => setRightOpen(!collapsed),
-              collapsedSize: 40,
-              collapseBelow: 170,
-            },
-          }}
-          start={
-            <Pane kind="content" title="profile" scroll="clip">
-              <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-                {route.work.revision === null ? (
-                  <OutcomeLine kind="busy" label="hydrating route state" />
-                ) : (
-                  <>
-                    <ActionGroup title="draft" radius="shared document · revit read">
-                      <ActionButton
-                        label="refresh"
-                        icon={RefreshCw}
-                        busy={busy === "refresh"}
-                        disabled={busy != null}
-                        onClick={() => void runRead("refresh")}
-                        reason="Re-read the stored profile, shared draft, and evaluation from the host"
-                      />
-                      <ActionButton
-                        tone="commit"
-                        label="save draft"
-                        icon={Save}
-                        disabled={busy != null || !editing || !hasUnsavedEdits}
-                        onClick={() => {
-                          if (editing) void saveDraft(editing);
-                        }}
-                        reason={
-                          hasUnsavedEdits
-                            ? "Write the local edits onto the shared document, where pea can see them"
-                            : "no unsaved local edits — the shared document already matches"
-                        }
-                      />
-                      <ActionButton
-                        label="preview"
-                        icon={Eye}
-                        busy={busy === "preview"}
-                        disabled={busy != null || !editing}
-                        onClick={() => void runRead("preview")}
-                        reason={
-                          editing
-                            ? "Evaluate the draft against Revit and project its target writes — writes nothing"
-                            : "no profile to preview — add a definition first"
-                        }
-                      />
-                    </ActionGroup>
-                    {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
+      <PaneSplit
+        axis="horizontal"
+        grow
+        resize={{
+          target: "end",
+          defaultSize: 520,
+          minSize: 340,
+          maxSize: 760,
+          persist: "pe.parameterLinks.evalPane",
+          collapse: {
+            collapsed: !rightOpen,
+            onCollapsedChange: (collapsed) => setRightOpen(!collapsed),
+            collapsedSize: 40,
+            collapseBelow: 170,
+          },
+        }}
+        start={
+          <Pane kind="content" title="profile" scroll="clip">
+            <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+              {route.work.revision === null ? (
+                <OutcomeLine kind="busy" label="hydrating route state" />
+              ) : (
+                <>
+                  <ActionGroup title="draft" radius="shared document · revit read">
+                    <ActionButton
+                      label="refresh"
+                      icon={RefreshCw}
+                      busy={busy === "refresh"}
+                      disabled={busy != null}
+                      onClick={() => void runRead("refresh")}
+                      reason="Re-read the stored profile, shared draft, and evaluation from the host"
+                    />
+                    <ActionButton
+                      tone="commit"
+                      label="save draft"
+                      icon={Save}
+                      disabled={busy != null || !editing || !hasUnsavedEdits}
+                      onClick={() => {
+                        if (editing) void saveDraft(editing);
+                      }}
+                      reason={
+                        hasUnsavedEdits
+                          ? "Write the local edits onto the shared document, where pea can see them"
+                          : "no unsaved local edits — the shared document already matches"
+                      }
+                    />
+                    <ActionButton
+                      label="preview"
+                      icon={Eye}
+                      busy={busy === "preview"}
+                      disabled={busy != null || !editing}
+                      onClick={() => void runRead("preview")}
+                      reason={
+                        editing
+                          ? "Evaluate the draft against Revit and project its target writes — writes nothing"
+                          : "no profile to preview — add a definition first"
+                      }
+                    />
+                  </ActionGroup>
+                  {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
                   (re-plan runs preview); arming =
                   the reason input is the last gate before the one commit. */}
-                    {editing != null ? (
-                      <ArmingStrip
-                        verb="apply"
-                        target={documentAddress}
-                        count={evaluation?.changedWriteCount ?? 0}
-                        planHash={profileHash(savedDraft)}
-                        reason={writeReason}
-                        onReasonChange={setWriteReason}
-                        state={armingState}
-                        onCommit={() => {
-                          if (busy == null) void runApply();
-                        }}
-                        onCancel={() => setWriteReason("")}
-                      />
-                    ) : null}
-                    <ProfileEditor
-                      profile={editing}
-                      disabled={busy != null || peaActive}
-                      fieldOptionsEnabled={fieldOptionsEnabled}
-                      onChange={onDraftChange}
+                  {editing != null ? (
+                    <ArmingStrip
+                      verb="apply"
+                      target={documentAddress}
+                      count={evaluation?.changedWriteCount ?? 0}
+                      planHash={profileHash(savedDraft)}
+                      reason={writeReason}
+                      onReasonChange={setWriteReason}
+                      state={armingState}
+                      onCommit={() => {
+                        if (busy == null) void runApply();
+                      }}
+                      onCancel={() => setWriteReason("")}
                     />
-                  </>
-                )}
+                  ) : null}
+                  <ProfileEditor
+                    profile={editing}
+                    disabled={busy != null || peaActive}
+                    fieldOptionsEnabled={fieldOptionsEnabled}
+                    onChange={onDraftChange}
+                  />
+                </>
+              )}
+            </div>
+          </Pane>
+        }
+        end={
+          <Pane
+            kind="flank"
+            title="evaluation"
+            side="right"
+            collapsed={!rightOpen}
+            onCollapsedChange={(collapsed) => setRightOpen(!collapsed)}
+          >
+            <div className="flex h-full flex-col gap-4 px-4 py-3">
+              <RuntimeStatusBar
+                status={status}
+                appliedWriteCount={reading?.appliedWriteCount ?? 0}
+              />
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <EvaluationView evaluation={evaluation} />
               </div>
-            </Pane>
-          }
-          end={
-            <Pane
-              kind="flank"
-              title="evaluation"
-              side="right"
-              collapsed={!rightOpen}
-              onCollapsedChange={(collapsed) => setRightOpen(!collapsed)}
-            >
-              <div className="flex h-full flex-col gap-4 px-4 py-3">
-                <RuntimeStatusBar
-                  status={status}
-                  appliedWriteCount={reading?.appliedWriteCount ?? 0}
-                />
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <EvaluationView evaluation={evaluation} />
-                </div>
-              </div>
-            </Pane>
-          }
-        />
-      </>
+            </div>
+          </Pane>
+        }
+      />
     </Surface>
   );
 }

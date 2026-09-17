@@ -307,61 +307,59 @@ export default function RunBrowser() {
 
   return (
     <Surface head={<RunBrowserHeader model={model} />}>
-      <>
-        <PaneSplit
-          axis="vertical"
-          resize={{
-            target: "start",
-            defaultSize: 360,
-            minSize: 180,
-            minOtherSize: 240,
-            persist: "pe-runs-combo-plan-h",
-            collapse: {
-              collapsed: !planOpen,
-              onCollapsedChange: (c) => setPlanOpen(!c),
-              collapsedSize: 33,
-              collapseBelow: 100,
-            },
-          }}
-          start={
-            <Pane
-              kind="visual"
-              title="plan"
-              meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
-              actions={
-                <Press
-                  type="button"
-                  tone="neutral"
-                  size="label"
-                  onClick={() => setPlanOpen((o) => !o)}
-                  title={
-                    planOpen
-                      ? "Collapse the plan dock (drag the divider to resize it)."
-                      : "Expand the plan dock."
-                  }
-                >
-                  {planOpen ? "▴ hide plan" : "▾ show plan"}
-                </Press>
-              }
-            >
-              {planOpen && (
-                <PlanDock
-                  curId={curId}
-                  prevId={prevId}
-                  underlay={underlay}
-                  focus={focus}
-                  levels={levels.map((l) => l.level)}
-                  level={planLevel}
-                  onPickLevel={pickLevel}
-                  highlight={highlight}
-                  onToggleZone={toggleZoneByName}
-                />
-              )}
-            </Pane>
-          }
-          end={sheetAndLedger}
-        />
-      </>
+      <PaneSplit
+        axis="vertical"
+        resize={{
+          target: "start",
+          defaultSize: 360,
+          minSize: 180,
+          minOtherSize: 240,
+          persist: "pe-runs-combo-plan-h",
+          collapse: {
+            collapsed: !planOpen,
+            onCollapsedChange: (c) => setPlanOpen(!c),
+            collapsedSize: 33,
+            collapseBelow: 100,
+          },
+        }}
+        start={
+          <Pane
+            kind="visual"
+            title="plan"
+            meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
+            actions={
+              <Press
+                type="button"
+                tone="neutral"
+                size="label"
+                onClick={() => setPlanOpen((o) => !o)}
+                title={
+                  planOpen
+                    ? "Collapse the plan dock (drag the divider to resize it)."
+                    : "Expand the plan dock."
+                }
+              >
+                {planOpen ? "▴ hide plan" : "▾ show plan"}
+              </Press>
+            }
+          >
+            {planOpen && (
+              <PlanDock
+                curId={curId}
+                prevId={prevId}
+                underlay={underlay}
+                focus={focus}
+                levels={levels.map((l) => l.level)}
+                level={planLevel}
+                onPickLevel={pickLevel}
+                highlight={highlight}
+                onToggleZone={toggleZoneByName}
+              />
+            )}
+          </Pane>
+        }
+        end={sheetAndLedger}
+      />
     </Surface>
   );
 }

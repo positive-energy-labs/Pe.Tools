@@ -58,102 +58,100 @@ function FamilyReviewProto() {
 
   return (
     <Surface>
-      <>
-        <Pane kind="content" title="family review" scroll="clip">
-          <header className="flex flex-col gap-1 px-3 py-2" style={{ borderColor: token("line") }}>
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span>FAMILY REVIEW</span>
-              <span>
-                {families.length} portable families · {board.length} family × type
-              </span>
-            </div>
-
-            {/* READS FROM — one run, one year, one lane, and a document named per family in the pane. */}
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span>reads from</span>
-              <FactChip
-                tone="caution"
-                dashed
-                title={`A checked-in copy of the run artifacts under .artifacts/runs/${RUN_SOURCE.run}/. A shipping board reads a run directory and says how old it is; this one is a fixture and says so.`}
-              >
-                {RUN_SOURCE.kind} · {RUN_SOURCE.run}
-              </FactChip>
-              <FactChip
-                tone="meta"
-                title={`Run date ${RUN_SOURCE.date}, Revit ${RUN_SOURCE.year}, ${RUN_SOURCE.lane} lane (a Revit process started for the run and killed after it). Suite: ${RUN_SOURCE.suite}.`}
-              >
-                {RUN_SOURCE.date} · {RUN_SOURCE.year} · {RUN_SOURCE.lane} lane
-              </FactChip>
-              <FactChip
-                tone="meta"
-                title="Both sides of every drawing come from the same run artifact: FamilyModelEvaluatorOracle.Predict and FamilyFoundryRuntimeProbe. The web is a projection, never a second predictor."
-              >
-                one renderer · two feeds
-              </FactChip>
-            </div>
-
-            {/* WRITES TO — nothing, and the two open questions that is standing in for. */}
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span>writes to</span>
-              <FactChip
-                tone="caution"
-                title="Where an edit or a verdict on this board would land: nowhere, by scope. The three unanswered questions behind that are stated in full beside the strip."
-              >
-                nothing
-              </FactChip>
-              <FactChip
-                tone="caution"
-                dashed
-                title="OPEN QUESTION for kaitpw — a verdict has no home in the repo yet. Stated in full beside the strip."
-              >
-                a verdict would go — open
-              </FactChip>
-              <FactChip
-                tone="caution"
-                dashed
-                title="OPEN QUESTION for kaitpw — an edit's destination is unruled. Stated in full beside the strip."
-              >
-                an edit would go — open
-              </FactChip>
-              {/* The strip's three claims in full; the chips above carry only the short fact. */}
-              <HelpTip>
-                <p>
-                  <b>nothing.</b> Not the family.json, not the document above, not any other
-                  document this json has been materialized into. A family.json may be materialized
-                  into many documents across many years and NOTHING here can sync them — that is out
-                  of scope by law, not by omission.
-                </p>
-                <p className="mt-1.5">
-                  <b>a verdict would go — OPEN QUESTION for kaitpw.</b> A verdict is a human fact
-                  about a family AT A RUN — not about the json, which outlives the run, and not
-                  about the document, which is one materialization of many. Nothing in the repo has
-                  a home for that fact yet, so this board keeps verdicts in memory for the length of
-                  a page view.
-                </p>
-                <p className="mt-1.5">
-                  <b>an edit would go — OPEN QUESTION for kaitpw.</b> An edit here changes the
-                  PORTABLE DOCUMENT, whose prior materializations this board cannot reach and must
-                  never appear to reach. Writing back to the family.json on disk is one answer;
-                  staging a change for the next materialization is another. Until one is ruled,
-                  edits stage in memory and go nowhere.
-                </p>
-              </HelpTip>
-              {staged > 0 ? (
-                <FactChip
-                  tone="caution"
-                  title={`${staged} unsaved edit(s) staged on claim cells. They are in memory only and have no destination — see the open question beside this chip. A page reload discards them.`}
-                >
-                  {staged} staged · unsaved
-                </FactChip>
-              ) : null}
-            </div>
-          </header>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-            <ReviewBoard board={board} verdicts={verdicts} edits={edits} />
+      <Pane kind="content" title="family review" scroll="clip">
+        <header className="flex flex-col gap-1 px-3 py-2" style={{ borderColor: token("line") }}>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span>FAMILY REVIEW</span>
+            <span>
+              {families.length} portable families · {board.length} family × type
+            </span>
           </div>
-        </Pane>
-      </>
+
+          {/* READS FROM — one run, one year, one lane, and a document named per family in the pane. */}
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span>reads from</span>
+            <FactChip
+              tone="caution"
+              dashed
+              title={`A checked-in copy of the run artifacts under .artifacts/runs/${RUN_SOURCE.run}/. A shipping board reads a run directory and says how old it is; this one is a fixture and says so.`}
+            >
+              {RUN_SOURCE.kind} · {RUN_SOURCE.run}
+            </FactChip>
+            <FactChip
+              tone="meta"
+              title={`Run date ${RUN_SOURCE.date}, Revit ${RUN_SOURCE.year}, ${RUN_SOURCE.lane} lane (a Revit process started for the run and killed after it). Suite: ${RUN_SOURCE.suite}.`}
+            >
+              {RUN_SOURCE.date} · {RUN_SOURCE.year} · {RUN_SOURCE.lane} lane
+            </FactChip>
+            <FactChip
+              tone="meta"
+              title="Both sides of every drawing come from the same run artifact: FamilyModelEvaluatorOracle.Predict and FamilyFoundryRuntimeProbe. The web is a projection, never a second predictor."
+            >
+              one renderer · two feeds
+            </FactChip>
+          </div>
+
+          {/* WRITES TO — nothing, and the two open questions that is standing in for. */}
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span>writes to</span>
+            <FactChip
+              tone="caution"
+              title="Where an edit or a verdict on this board would land: nowhere, by scope. The three unanswered questions behind that are stated in full beside the strip."
+            >
+              nothing
+            </FactChip>
+            <FactChip
+              tone="caution"
+              dashed
+              title="OPEN QUESTION for kaitpw — a verdict has no home in the repo yet. Stated in full beside the strip."
+            >
+              a verdict would go — open
+            </FactChip>
+            <FactChip
+              tone="caution"
+              dashed
+              title="OPEN QUESTION for kaitpw — an edit's destination is unruled. Stated in full beside the strip."
+            >
+              an edit would go — open
+            </FactChip>
+            {/* The strip's three claims in full; the chips above carry only the short fact. */}
+            <HelpTip>
+              <p>
+                <b>nothing.</b> Not the family.json, not the document above, not any other document
+                this json has been materialized into. A family.json may be materialized into many
+                documents across many years and NOTHING here can sync them — that is out of scope by
+                law, not by omission.
+              </p>
+              <p className="mt-1.5">
+                <b>a verdict would go — OPEN QUESTION for kaitpw.</b> A verdict is a human fact
+                about a family AT A RUN — not about the json, which outlives the run, and not about
+                the document, which is one materialization of many. Nothing in the repo has a home
+                for that fact yet, so this board keeps verdicts in memory for the length of a page
+                view.
+              </p>
+              <p className="mt-1.5">
+                <b>an edit would go — OPEN QUESTION for kaitpw.</b> An edit here changes the
+                PORTABLE DOCUMENT, whose prior materializations this board cannot reach and must
+                never appear to reach. Writing back to the family.json on disk is one answer;
+                staging a change for the next materialization is another. Until one is ruled, edits
+                stage in memory and go nowhere.
+              </p>
+            </HelpTip>
+            {staged > 0 ? (
+              <FactChip
+                tone="caution"
+                title={`${staged} unsaved edit(s) staged on claim cells. They are in memory only and have no destination — see the open question beside this chip. A page reload discards them.`}
+              >
+                {staged} staged · unsaved
+              </FactChip>
+            ) : null}
+          </div>
+        </header>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <ReviewBoard board={board} verdicts={verdicts} edits={edits} />
+        </div>
+      </Pane>
     </Surface>
   );
 }

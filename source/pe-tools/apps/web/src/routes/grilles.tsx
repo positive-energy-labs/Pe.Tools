@@ -171,51 +171,49 @@ function GrillesRoute() {
 
   return (
     <Surface>
-      <>
-        <header
-          className="flex flex-wrap items-baseline gap-2 px-3 py-2"
-          style={{ borderColor: token("line") }}
+      <header
+        className="flex flex-wrap items-baseline gap-2 px-3 py-2"
+        style={{ borderColor: token("line") }}
+      >
+        <span>wood floor grille</span>
+        <span>free area calculator</span>
+        <FactChip
+          tone="caution"
+          dashed
+          title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
         >
-          <span>wood floor grille</span>
-          <span>free area calculator</span>
-          <FactChip
-            tone="caution"
-            dashed
-            title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
-          >
-            xlsx rows · in memory · writes nowhere
-          </FactChip>
-        </header>
+          xlsx rows · in memory · writes nowhere
+        </FactChip>
+      </header>
 
-        <PaneWorkspace
-          grow
-          visual={drawing}
-          content={table}
-          inspector={chart}
-          resize={{
-            visual: {
-              defaultSize: 420,
-              minSize: 34,
-              collapse: {
-                collapsed: drawingCollapsed,
-                onCollapsedChange: setDrawingCollapsed,
-                collapsedSize: 34,
-                collapseBelow: 90,
-              },
+      <PaneWorkspace
+        grow
+        visual={drawing}
+        content={table}
+        inspector={chart}
+        resize={{
+          visual: {
+            defaultSize: 420,
+            minSize: 34,
+            collapse: {
+              collapsed: drawingCollapsed,
+              onCollapsedChange: setDrawingCollapsed,
+              collapsedSize: 34,
+              collapseBelow: 90,
             },
-            inspector: { defaultSize: 500, minSize: 420, minOtherSize: 560 },
-          }}
-        />
+          },
+          inspector: { defaultSize: 500, minSize: 420, minOtherSize: 560 },
+        }}
+      />
 
-        {exporting && (
-          <ExportSheet
-            rows={rows.filter((r) => picked.has(r.id))}
-            project={project}
-            onProject={setProject}
-            onClose={() => setExporting(false)}
-          />
-        )}
-      </>
+      {exporting && (
+        <ExportSheet
+          rows={rows.filter((r) => picked.has(r.id))}
+          project={project}
+          onProject={setProject}
+          onClose={() => setExporting(false)}
+        />
+      )}
     </Surface>
   );
 }
