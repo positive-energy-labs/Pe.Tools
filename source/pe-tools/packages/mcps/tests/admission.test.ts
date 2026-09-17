@@ -1,35 +1,18 @@
 import { expect, test } from "vite-plus/test";
-import type { Capability } from "@pe/agent-contracts";
 import { admissionDestination, runCapability } from "../src/shared/admission.ts";
 import { ScriptingTools } from "../src/shared/scripting.ts";
 
 /**
- * A fake host serving exactly two endpoints: the one capability catalog and `/actions`.
- * `/call` is not served at all, so any command that still tries raw mutation dispatch fails
- * loudly here — that is the w5-revit defect this file pins.
+ * A fake host serving exactly the two endpoints a mutation needs: the generated operation
+ * catalog and `/actions`. `/call` is left unrouted, so any surviving raw-mutation dispatch fails
+ * here — that is the w5-revit defect this file pins.
  */
-const row = (key: string, needs: string, mutates: boolean): Capability => ({
-  key,
-  kind: "op",
-  title: key,
-  description: key,
-  needs: needs as Capability["needs"],
-  mutates,
-  actor: "any",
-  input: {},
-  source: "test",
-  rank: 2,
-});
-
-const capabilities: Capability[] = [
-  row("op:scripting.workspace.bootstrap", "session", true),
-  row("op:scripting.execute", "session", true),
-  row("op:pod.import", "session", true),
-  row("op:pod.export", "session", true),
-  row("op:op.cancel", "session", true),
-  row("op:pod.list", "nothing", false),
-  row("op:host.shell.open", "nothing", true),
-  row("workflow:family.capture", "family-document", true),
+const operations = [
+  { key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
+  { key: "scripting.execute", intent: "Mutate", needs: "nothing" },
+  { key: "pod.import", intent: "Mutate", needs: "nothing" },
+  { key: "pod.export", intent: "Mutate", needs: "nothing" },
+  { key: "op.cancel", intent: "Mutate", needs: "nothing" },
 ];
 
 function fakeHost(options: { session?: string } = {}) {
@@ -37,20 +20,22 @@ function fakeHost(options: { session?: string } = {}) {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/pe/capabilities"))
-      return Response.json({
-        at: new Date(0).toISOString(),
-        ...(options.session === undefined ? {} : { bridgeSessionId: options.session }),
-        sessions: [],
-        sources: {},
-        capabilities,
-      });
+    if (url.endsWith("/ops")) return Response.json({ operations });
+    if (url.endsWith("/call")) {
+      const { key } = JSON.parse(String(init?.body)) as { key: string };
+      if (key !== "bridge.sessions.summary")
+        throw new Error(`fake host refuses raw dispatch of '${key}' on /call`);
+      return Response.json({ sessionId: options.session ?? null, openDocumentCount: 0 });
+    }
     if (url.endsWith("/actions") && init?.method === "POST") {
-      const { input, ...attempt } = JSON.parse(String(init.body)) as Record<string, unknown>;
-      submitted.push({ ...attempt, input });
+      const { input: request, ...attempt } = JSON.parse(String(init.body)) as Record<
+        string,
+        unknown
+      >;
+      submitted.push({ ...attempt, input: request });
       return Response.json({
         ...attempt,
-        request: input,
+        request,
         state: "succeeded",
         result: { ok: attempt.key },
         steps: [],
@@ -184,7 +169,7 @@ test("a mutation with no session, no actor, or no catalog row refuses before it 
     ).rejects.toThrow("initiating actor");
     await expect(
       runCapability("pod.nonesuch", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
-    ).rejects.toThrow("not in the capability catalog");
+    ).rejects.toThrow("not in the operation catalog");
     expect(host.submitted).toEqual([]);
   } finally {
     host.restore();
@@ -204,7 +189,7 @@ test("a document destination needs the exact open lifetime, never an active-docu
 test("a read key never enters admission; it stays on /call", async () => {
   const host = fakeHost({ session: "session-catalog" });
   try {
-    await expect(tools().listPods()).rejects.toThrow("/call");
+    await expect(tools().listPods()).rejects.toThrow("refuses raw dispatch of 'pod.list'");
     expect(host.submitted).toEqual([]);
   } finally {
     host.restore();

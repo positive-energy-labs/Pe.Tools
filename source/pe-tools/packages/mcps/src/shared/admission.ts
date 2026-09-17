@@ -3,18 +3,18 @@
  * mutates has exactly one road: build the exact `/actions` admission the host requires and
  * follow it to its receipt.
  *
- * Nothing here guesses. The one capability catalog says whether a key is an operation or a
- * workflow (`op:` vs `workflow:`), whether it mutates, and what lifetime it needs; the
- * destination falls out of `needs`. A key the catalog does not carry is a refusal, not a POST.
+ * Nothing here guesses. The catalogs say whether a key is an operation or a workflow, whether it
+ * mutates, and what lifetime it needs; the destination falls out of `needs`. A key no catalog
+ * carries is a refusal, not a POST.
  */
 import {
   actionAdmissionSchema,
-  capabilityCatalogSchema,
+  semanticActions,
   type ActionBases,
-  type Capability,
   type ExecutionTarget,
+  type SemanticActionKey,
 } from "@pe/agent-contracts";
-import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import { actionResult, submitAction } from "./takeoff-action-client.ts";
 
@@ -58,28 +58,52 @@ export function admissionDestination(
   };
 }
 
-/** The catalog row for a bare op/workflow key, plus the session the catalog answered from. */
-export async function readCapabilityRow(
+/**
+ * What the contract says about a key: its admission kind, the lifetime it needs, and whether it
+ * mutates. Three catalogs, in the order the host itself consults them
+ * (`apps/host/src/gateway-actions.ts:25`): the compiled host-local catalog, the compiled semantic
+ * action contract (every one of which is a `workflow`), then the connected session's generated
+ * operation catalog at `GET /ops`. A key none of them carries is a refusal, not a POST.
+ */
+export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
-): Promise<{ row: Capability; bridgeSessionId?: string }> {
-  const base = context.hostBaseUrl.replace(/\/$/, "");
-  const query = context.bridgeSessionId
-    ? `?${new URLSearchParams({ session: context.bridgeSessionId }).toString()}`
-    : "";
-  const response = await fetch(`${base}/pe/capabilities${query}`).catch((error: unknown) => {
-    throw new Error(`GET ${base}/pe/capabilities failed: ${String(error)}`);
-  });
-  if (!response.ok) throw new Error(`GET ${base}/pe/capabilities failed with ${response.status}.`);
-  const catalog = capabilityCatalogSchema.parse(await response.json());
-  const row = catalog.capabilities.find(
-    (candidate) => candidate.key === `op:${key}` || candidate.key === `workflow:${key}`,
-  );
-  if (!row)
+): Promise<{ kind: "operation" | "workflow"; needs: string; mutates: boolean }> {
+  const local = tsOnlyOperationCatalog.find((row) => row.key === key);
+  if (local) return { kind: "operation", needs: local.needs, mutates: local.intent !== "Read" };
+  if (Object.hasOwn(semanticActions, key))
+    return {
+      kind: "workflow",
+      needs: semanticActions[key as SemanticActionKey].needs,
+      mutates: true,
+    };
+  const definition = await caller(context).getOperation(key);
+  if (!definition)
     throw new Error(
-      `'${key}' is not in the capability catalog this host serves (${catalog.capabilities.length} rows). Run \`pea host operations search\`.`,
+      `'${key}' is not in the operation catalog this host serves (or the catalog is unreachable). Run \`pea host operations search\`.`,
     );
-  return { row, bridgeSessionId: context.bridgeSessionId ?? catalog.bridgeSessionId };
+  return {
+    kind: "operation",
+    needs: definition.needs,
+    mutates: definition.intent !== "Read",
+  };
+}
+
+const caller = (context: AdmissionContext) =>
+  new HostRpcCaller({
+    hostBaseUrl: context.hostBaseUrl,
+    bridgeSessionId: context.bridgeSessionId,
+    openDocumentId: context.openDocumentId,
+    timeoutMs: context.timeoutMs,
+  });
+
+/** The named session, or the one this host is connected to. Only asked when a key needs one. */
+async function resolveSession(context: AdmissionContext): Promise<string | undefined> {
+  if (context.bridgeSessionId) return context.bridgeSessionId;
+  const summary = await caller(context)
+    .call("bridge.sessions.summary")
+    .catch(() => undefined);
+  return summary?.sessionId ?? undefined;
 }
 
 /**
@@ -91,25 +115,22 @@ export async function runCapability(
   input: Record<string, unknown>,
   context: AdmissionContext,
 ): Promise<unknown> {
-  const { row, bridgeSessionId } = await readCapabilityRow(key, context);
-  if (!row.mutates)
-    return new HostRpcCaller({
-      hostBaseUrl: context.hostBaseUrl,
-      bridgeSessionId,
-      openDocumentId: context.openDocumentId,
-      timeoutMs: context.timeoutMs,
-      // A NoRequest op is called with no request; `{}` is a different body.
-    }).call(key as never, (Object.keys(input).length ? input : undefined) as never);
+  const intent = await readCapabilityIntent(key, context);
+  if (!intent.mutates)
+    // A NoRequest op is called with no request; `{}` is a different body.
+    return caller(context).call(
+      key as never,
+      (Object.keys(input).length ? input : undefined) as never,
+    );
   if (!context.actor)
     throw new Error(`'${key}' mutates; name the initiating actor (--actor human|agent).`);
   const admission = actionAdmissionSchema.parse({
     id: context.actionId ?? crypto.randomUUID(),
-    // `op:` and `workflow:` are the catalog's own words for the two admission kinds.
-    kind: row.key.startsWith("workflow:") ? "workflow" : "operation",
+    kind: intent.kind,
     key,
     actor: context.actor,
-    destination: admissionDestination(key, row.needs, {
-      bridgeSessionId,
+    destination: admissionDestination(key, intent.needs, {
+      bridgeSessionId: await resolveSession(context),
       openDocumentId: context.openDocumentId,
     }),
     input,
