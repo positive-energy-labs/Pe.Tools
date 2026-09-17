@@ -74,3 +74,67 @@ Whether an unsent new thread should keep its draft is a product decision. This c
 ## Not covered
 
 Full tool results loaded on expand (not in this diff); the design-system and pane-geometry commits (5596249, aa15cf4, 1f4fdc7); runtime behaviour (not executed).
+
+## Recheck at `23dd5ad` (including `fc073d7`), 2026-09-16
+
+**Proof lane: source only.** I read only committed code, `git diff 6533201 23dd5ad` plus `git show 23dd5ad:<path>`. Nothing was executed. Running the new `workbench/thread-view.test.tsx` would have meant running it in the dirty chat tree or installing a clean worktree; neither is committed-state evidence, and the time bound ruled out the second. No chat source was changed.
+
+| Finding | Verdict | Evidence at `23dd5ad` |
+|---|---|---|
+| F0: body has no `display` / false `displayKnown` | **Fixed** | `workbench/provider/thread-stream.ts`: the body is typed `ThreadBody` (the fetch cast and `EMPTY_BODY`). Without a body or live state, `chat` returns `EMPTY`. Otherwise `display` is `current.frame ?? EMPTY.display`, never taken from the body. `displayKnown` is `current.frame !== null`. The `view.tsx:122` send guard now waits for a real stream frame, and `selectApprovals` always receives a defined display. |
+| F1: keyed owner remounts the shell | **Fixed** | `view.tsx` no longer renders `CurrentThreadViewOwner`. `chat/chat-shell.tsx` `CurrentThreadChatSurface` renders it *without* a React `key` and passes `threadKey={currentThreadId}`. `workbench/thread-view.tsx` hands that to `useRouteOwner(create, threadKey)`, which replaces only the owner object. `ChatSurface`, the sidebar and `ComposerBank` stay mounted when the thread changes. |
+| F2: unsent new-thread draft pruned | **Fixed** (the retain decision was already settled) | `chat/composer-bank.tsx` no longer filters by the server `threads` list. It prunes only ids in `deletedThreadIds`, a set that `ChatSurface` adds to after `deleteThread` resolves `true`. A draft in an unsent new thread survives leaving the thread. |
+
+**`useRouteOwner` identity and StrictMode cleanup** (`route/use-route.ts:277-297`): **no finding.**
+- When the identity changes, render pushes the old owner onto `retiredRef` and creates the new one.
+- In the commit, the old effect's cleanup schedules a disposal of the old owner. The new effect's setup then cancels that timer and disposes the retired owner synchronously, so each owner is disposed exactly once.
+- Under StrictMode, the setup → cleanup → setup sequence cancels its own pending timer, so the live owner is not disposed.
+- A dev double render with the same identity reuses the owner already created.
+- One residual point, not a defect: `create()` runs during render, so a render that is thrown away before commit would still leave a new owner in `storeRef`. Nothing above `ChatSurface`'s own Suspense boundary suspends, so this path is not reachable today.
+
+### F3: opening or closing the plugin workspace remounts the chat column and loses all retained drafts (severity: high; source reading, not executed)
+
+- `chat/chat-shell.tsx` (the `fc073d7`/`23dd5ad` layout) builds `chatColumn` once. The column holds the transcript `Pane`/`ThreadBody` and the `ComposerBank`.
+- **Without a plugin,** `chatColumn` is passed directly as the outer `PaneSplit`'s `end`.
+- **With a plugin,** `end` is instead a nested `<PaneSplit … start={chatColumn}>`.
+- The column's parent element therefore changes type or position depending on `plugin`. React unmounts and remounts the column, including `ComposerBank`'s `visited` set and every `<Activity>` `ThreadComposer` `useState` draft.
+
+**Reproduction (from source):**
+1. Type in thread A.
+2. Visit thread B and type there.
+3. Open a plugin workspace (`?plugin=…`), or close one with the plugin pane's "Close workspace" button (`store.actions.setPlugin(undefined)`).
+4. Both drafts are gone. Only the current thread's composer comes back, empty unless a URL `prompt` seeds it.
+
+**Also affected:**
+- `deletedThreadIds` survives, because it lives in `ChatSurface`.
+- The transcript `Pane`'s Suspense/error boundary remounts too.
+
+**Suggested fix, not designed here:** keep `chatColumn` at the same tree position whether or not a plugin is open. For example, always render the nested split and collapse or omit its `end` pane.
+
+### Remaining defects at `23dd5ad`
+
+- **F3** (above) is the only concrete defect left in the reviewed scope.
+- **Not reviewed:** uncommitted polish, full tool results loaded on expand, and runtime behaviour.
+
+## Final disposition, F0–F3 (chat `1176706`, root `fe81172` + `6243b33`), 2026-09-16
+
+**Proof lane: source only.** I ran nothing. Root separately reports 69 combined tests passing; I did not reproduce that. The verdict covers only F0–F3. The shared-owner and composer-help work still in progress is out of scope.
+
+**Commit ancestry:**
+- `fe81172` is root's rebased equivalent of chat `1176706`. It has the same subject, and `1176706` is not its ancestor. I checked the relevant code in both commits.
+- `6243b33` is an ancestor of `fe81172`.
+
+| Finding | Final verdict | Evidence |
+|---|---|---|
+| F0: body has no `display` / false `displayKnown` | **Fixed** (from `23dd5ad`, unchanged since) | `workbench/provider/thread-stream.ts`: the body is typed `ThreadBody`, `display` comes only from the live frame, and `displayKnown = current.frame !== null`. |
+| F1: keyed owner remounts the shell | **Fixed** (from `23dd5ad`) | `chat/chat-shell.tsx` `CurrentThreadChatSurface` renders the owner without a React key and passes `threadKey`, which `useRouteOwner(create, threadKey)` uses to replace only the owner object. |
+| F2: unsent new-thread draft pruned | **Fixed** (from `23dd5ad`) | `chat/composer-bank.tsx` prunes only `deletedThreadIds`. |
+| F3: plugin open/close remounts the chat column | **Fixed** | See the three points below. |
+
+**F3 evidence:**
+- **The nested split is always mounted.** In `chat/chat-shell.tsx`, the outer `PaneSplit` `end` is now always the nested `PaneSplit`, with `start={chatColumn}`, `end={plugin ? <Pane …/> : null}` and `collapse.collapsed: !plugin || !pluginOpen` (`fe81172` lines 299–324). The column's parent chain no longer depends on `plugin`.
+- **The column keeps its React position in `PaneSplit` itself** (`components/lang/pane-resize.tsx` at `fe81172`). The children are always `[renderSide("start"), bothSides && resize && handle, renderSide("end")]`. The `false` handle slot keeps its place, so the start wrapper stays the first child whether or not the plugin exists.
+- **The empty plugin side is hidden.** `6243b33` hides the empty end wrapper (`child == null → "hidden"`), and while one side is absent it drops the gutter and the handle and uses a single track (`bothSides`). That is layout only; it does not change the column's React identity.
+- **Test coverage (read, not run):** `chat/composer-bank.test.tsx` "current view and plugin open-close retain A, B, and a new unsent X composer" (`1176706`) exercises this case.
+
+**Remaining defects in the reviewed scope (F0–F3): none.**
