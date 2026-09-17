@@ -271,7 +271,7 @@ test("split sides bound panes and direct artifacts as flex columns", () => {
 
 test("surface fills its parent without fixing to the viewport and keeps a scrolling head", () => {
   const { container } = render(
-    <Surface head={<div>head</div>} columns="minmax(0, 1fr)">
+    <Surface head={<div>head</div>}>
       <div>body</div>
     </Surface>,
   );
@@ -283,6 +283,9 @@ test("surface fills its parent without fixing to the viewport and keeps a scroll
   expect(surface.classList.contains("fixed")).toBe(false);
   expect(surface.classList.contains("h-dvh")).toBe(false);
   expect(surface.classList.contains("size-full")).toBe(true);
+  expect(surface.classList.contains("flex")).toBe(true);
+  expect(surface.classList.contains("flex-col")).toBe(true);
+  expect(surface.style.padding).toBe("var(--gutter)");
 });
 
 test("a missing persisted size starts at the declared default", () => {

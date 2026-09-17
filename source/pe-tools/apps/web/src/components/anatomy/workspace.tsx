@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 
 import { PaneWorkspace } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { cn } from "#/lib/utils";
 
 export interface WorkspaceProps {
@@ -32,8 +32,8 @@ export function Workspace({
   // owns that scroll boundary and the common gutter; panes own their body scrolling.
   return (
     <div className={cn("h-full", className)}>
-      <Surface head={headRail} columns="minmax(0, 1fr)">
-        <SurfaceCell>
+      <Surface head={headRail}>
+        <>
           {readoutBand != null && (
             <div data-slot="readout-band" className="shrink-0 px-2 py-1.5">
               {readoutBand}
@@ -51,7 +51,7 @@ export function Workspace({
               inspector={sidePanel}
             />
           )}
-        </SurfaceCell>
+        </>
       </Surface>
     </div>
   );

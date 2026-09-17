@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneWorkspace } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
 import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";
@@ -170,8 +170,8 @@ function GrillesRoute() {
   );
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <header
           className="flex flex-wrap items-baseline gap-2 px-3 py-2"
           style={{ borderColor: token("line") }}
@@ -215,7 +215,7 @@ function GrillesRoute() {
             onClose={() => setExporting(false)}
           />
         )}
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

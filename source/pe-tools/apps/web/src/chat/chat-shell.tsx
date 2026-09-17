@@ -20,7 +20,7 @@ import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
 import { CurrentThreadViewOwner, useCurrentThreadView } from "#/workbench/thread-view";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface as PageSurface, SurfaceCell } from "#/components/lang/surface";
+import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 
@@ -175,7 +175,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
               caution: false,
             };
   const chatColumn = (
-    <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
+    <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
       <div className="min-h-0 min-w-0 flex-1">
         <Pane
           kind="content"
@@ -218,8 +218,8 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
           no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
           none of its own. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
-        <PageSurface columns="minmax(0, 1fr)">
-          <SurfaceCell>
+        <PageSurface>
+          <>
             <PaneSplit
               axis="horizontal"
               grow
@@ -315,7 +315,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                 />
               }
             />
-          </SurfaceCell>
+          </>
         </PageSurface>
       </RouteShell>
 

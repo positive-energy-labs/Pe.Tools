@@ -10,7 +10,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
 import { PickList } from "#/components/lang/pick-list";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/readings";
 import { RouteShell, appAtomRegistry, defineRoute } from "#/route";
@@ -160,8 +160,8 @@ function DataTablesWorkspace({
         : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <AddressingBar
           name="data tables"
           sentence={
@@ -286,7 +286,7 @@ function DataTablesWorkspace({
             </Pane>
           }
         />
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }
