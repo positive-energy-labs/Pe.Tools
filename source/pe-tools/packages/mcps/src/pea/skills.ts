@@ -1,8 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, platform } from "node:os";
 import path from "node:path";
 import { productIdentity } from "@pe/host-contracts/contracts";
+import { userDocumentsPath } from "@pe/host-contracts/product-paths";
 
 export interface BundledPeaSkill {
   name: string;
@@ -350,8 +349,6 @@ export const retiredPeaSkillNames: readonly string[] = [
 
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
-const peaDocumentsRootEnvVar = "PE_TOOLS_DOCUMENTS_ROOT";
-let cachedDocumentsPath: string | null = null;
 
 export interface PeaProductHomeOptions {
   productHomePath?: string;
@@ -361,7 +358,7 @@ export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): 
   return path.resolve(
     readEnvPath(options.productHomePath) ??
       readEnvPath(process.env[peaProductHomeEnvVar]) ??
-      path.join(resolveUserDocumentsPath(), productIdentity.productName),
+      path.join(userDocumentsPath(), productIdentity.productName),
   );
 }
 
@@ -372,8 +369,6 @@ export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}
 export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
   return [resolvePeaStandardSkillsRoot(options)];
 }
-
-export const peaSkillPaths = resolvePeaSkillPaths();
 
 export interface MaterializedPeaSkill {
   name: string;
@@ -412,46 +407,6 @@ export async function materializeBundledPeaSkills(
 async function readExisting(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-function resolveUserDocumentsPath(): string {
-  const override = readEnvPath(process.env[peaDocumentsRootEnvVar]);
-  if (override) return override;
-  if (cachedDocumentsPath) return cachedDocumentsPath;
-
-  cachedDocumentsPath = readPlatformDocumentsPath();
-  return cachedDocumentsPath;
-}
-
-function readPlatformDocumentsPath(): string {
-  if (platform() === "win32") {
-    const knownFolder = readWindowsDocumentsKnownFolder();
-    if (knownFolder) return knownFolder;
-  }
-
-  return process.env.USERPROFILE
-    ? path.join(process.env.USERPROFILE, "Documents")
-    : path.join(homedir(), "Documents");
-}
-
-function readWindowsDocumentsKnownFolder(): string | null {
-  try {
-    const output = execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "[Environment]::GetFolderPath('MyDocuments')",
-      ],
-      { encoding: "utf8", timeout: 1_000, windowsHide: true },
-    ).trim();
-    return output || null;
   } catch {
     return null;
   }

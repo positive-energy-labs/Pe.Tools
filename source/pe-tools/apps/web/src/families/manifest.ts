@@ -48,10 +48,10 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     capture: "families.capture",
     apply: "families.apply",
     captureInput: (ctx) => ({ familyIds: ctx.page.selection.map(Number) }),
-    // `families.confirm` plans the page's member over the Work's scope; apply sends the included hashes.
+    // `families.plan` plans the page's member over the Work's scope; apply sends the included hashes.
     plan: {
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
-        { confirm: "families.confirm", apply: "families.apply" },
+        { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
         (work) => ({
           excludedIds: work.excludedIds,
@@ -61,7 +61,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       // Held-back rows are authored Work; the sheet toggles them there.
       excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
     },
-    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then confirm a saved spec's plan and apply exactly the families it changes.",
+    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then plan a saved spec and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<

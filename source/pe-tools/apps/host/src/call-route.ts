@@ -43,7 +43,13 @@ import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
 import { boundedPayload, capture } from "@pe/runtime";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
+import {
+  RevitBridge,
+  BridgeError,
+  CANCEL_OPERATION_KEY,
+  NoRevitSession,
+  type BridgeSessionView,
+} from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
   getBridgeSessionSummary,
@@ -519,7 +525,7 @@ export function makeCallRoute(
       ),
     ),
   );
-  const controls = ["recover", "resume"].map((choice) =>
+  const controls = ["recover", "resume", "cancel"].map((choice) =>
     HttpRouter.add("POST", `/actions/${choice}`, (req) =>
       RevitBridge.use((bridge) =>
         Effect.tryPromise({
@@ -546,6 +552,17 @@ export function makeCallRoute(
               if (required && required !== "any" && required !== body.actor)
                 throw Error("Control actor is not eligible for the original admission");
             }
+            if (choice === "cancel")
+              return Response.jsonUnsafe(
+                await owner().cancel(body.id, (requestId) =>
+                  Effect.runPromise(
+                    bridge
+                      .invoke(CANCEL_OPERATION_KEY, { requestId })
+                      .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<unknown>,
+                  ),
+                ),
+                { status: 202 },
+              );
             if (choice === "recover") {
               const original = (await owner().list(undefined, body.id))[0];
               return Response.jsonUnsafe(

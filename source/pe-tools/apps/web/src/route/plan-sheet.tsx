@@ -22,8 +22,9 @@ export function PlanSheetView({
   excluded,
   included,
   toggle,
-  confirm,
+  apply,
   cancel,
+  stop,
   replan,
   refusal,
   busy,
@@ -34,16 +35,18 @@ export function PlanSheetView({
   included: readonly PlanEntry[];
   /** Absent = rows cannot be held back. */
   toggle?: (id: string) => void;
-  confirm: () => void;
+  apply: () => void;
   cancel: () => void;
+  /** Stop the apply that is running now. Absent = this sheet has no running verb to stop. */
+  stop?: { readonly label: string; readonly run: () => void };
   replan: () => void;
-  /** Why confirm is refused, in the operator's words; null = it can run. */
+  /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
   busy: boolean;
 }) {
   const head = (
     <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
-      <Tag>confirm</Tag>
+      <Tag>plan</Tag>
       {sheet ? (
         <FactChip
           tone={included.length ? "caution" : "meta"}
@@ -53,12 +56,21 @@ export function PlanSheetView({
         </FactChip>
       ) : null}
       <span className="ml-auto flex items-center gap-1.5">
-        <ActionButton
-          label="cancel"
-          disabled={busy}
-          reason="Close the sheet; nothing has been written."
-          onClick={cancel}
-        />
+        {/* While apply runs, the sheet's escape is the real one: stop the op inside Revit. */}
+        {busy && stop ? (
+          <ActionButton
+            label={stop.label}
+            reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+            onClick={stop.run}
+          />
+        ) : (
+          <ActionButton
+            label="cancel"
+            disabled={busy}
+            reason="Close the sheet; nothing has been written."
+            onClick={cancel}
+          />
+        )}
         <ActionButton
           label="re-plan"
           disabled={busy}
@@ -74,7 +86,7 @@ export function PlanSheetView({
             refusal ??
             `Write the ${plural(included.length, "included row")} to Revit, exactly as planned.`
           }
-          onClick={confirm}
+          onClick={apply}
         />
       </span>
     </div>

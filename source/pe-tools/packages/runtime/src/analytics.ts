@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { userDocumentsPath } from "@pe/host-contracts/product-paths";
 
 /**
  * PostHog usage analytics for the internal beta: prompts, tool calls, host ops,
@@ -138,35 +138,8 @@ function installedManifestPath(): string {
   return join(localAppData, "Positive Energy", "Pe.Tools", "product.payloads.json");
 }
 
-// Mirrors apps/host/src/product-paths.ts (Documents may be OneDrive-redirected on
-// coworkers' machines, so the known-folder lookup matters). Kept local: runtime
-// cannot import host code.
+// The one Documents resolver lives in @pe/host-contracts/product-paths; Documents may be
+// OneDrive-redirected, and a second copy here is a second answer.
 function preferencesPath(): string {
   return join(userDocumentsPath(), "Pe.Tools", "preferences.json");
-}
-
-function userDocumentsPath(): string {
-  const override = process.env.PE_TOOLS_DOCUMENTS_ROOT?.trim();
-  if (override) return override;
-  if (process.platform === "win32") {
-    try {
-      const output = execFileSync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          "[Environment]::GetFolderPath('MyDocuments')",
-        ],
-        { encoding: "utf8", timeout: 1_000, windowsHide: true },
-      ).trim();
-      if (output) return output;
-    } catch {
-      /* fall through */
-    }
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
-  return join(home, "Documents");
 }

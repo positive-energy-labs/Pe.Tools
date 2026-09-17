@@ -12,6 +12,11 @@
       "import": "./src/contracts/index.ts",
       "default": "./src/contracts/index.ts"
     },
+    "./product-paths": {
+      "types": "./src/product-paths.ts",
+      "import": "./src/product-paths.ts",
+      "default": "./src/product-paths.ts"
+    },
     "./operation-types": {
       "types": "./src/operation-types.ts",
       "import": "./src/operation-types.ts",

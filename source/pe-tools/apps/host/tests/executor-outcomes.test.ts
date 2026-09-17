@@ -23,7 +23,8 @@ test.each([
   ["AbandonedStillRunning", 423, "unknown"],
   ["RefusedQueueUnresponsive", 423, "failed"],
   ["CancelledBeforeDispatch", 499, "failed"],
-  ["CancelledCooperatively", 499, "unknown"],
+  // 499 without notDispatched settles CANCELLED: the op answered, it just answered "stopped".
+  ["CancelledCooperatively", 499, "cancelled"],
   ["RefusedQueueDisposed", 503, "failed"],
   ["TimedOut", 504, "unknown"],
   ["FutureNativeOutcome", 400, "unknown"],
@@ -105,13 +106,19 @@ test.each([
                 );
               const row = yield* Effect.promise(() => owner.wait(original.id));
               // Carrier initialization is a known earlier external effect. A later conclusive refusal is incomplete.
-              expect(row.state).toBe(expected === "failed" ? "incomplete" : "unknown");
+              expect(row.state).toBe(
+                expected === "failed"
+                  ? "incomplete"
+                  : expected === "cancelled"
+                    ? "cancelled"
+                    : "unknown",
+              );
               expect(row.steps.at(-1)).toMatchObject({
                 id: sent.request!.requestId,
                 state: expected,
                 status,
               });
-              if (code && code !== "dropped-reply")
+              if (code && code !== "dropped-reply" && expected !== "cancelled")
                 expect(row.steps.at(-1)).toMatchObject({
                   nativeOutcome: code,
                   issues: [{ code, instancePath: "$" }],

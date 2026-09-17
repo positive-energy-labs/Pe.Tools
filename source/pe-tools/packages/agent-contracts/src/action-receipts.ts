@@ -38,6 +38,11 @@ export const actionStepSchema = z.discriminatedUnion("state", [
     .extend({ state: z.literal("failed"), ...executionFailure, notDispatched: z.literal(true) })
     .strict(),
   stepIntent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
+  // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
+  // no recovery read. Unknown means nobody knows; failed-notDispatched means it never ran.
+  stepIntent
+    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
+    .strict(),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
 const actionAttempt = z.object({
@@ -77,6 +82,9 @@ export const actionReceiptSchema = z.discriminatedUnion("state", [
       result: z.unknown(),
     })
     .strict(),
+  actionAttempt
+    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() })
+    .strict(),
 ]);
 export const actionStatusSchema = z.discriminatedUnion("state", [
   actionAttempt
@@ -94,6 +102,9 @@ export const actionStatusSchema = z.discriminatedUnion("state", [
   actionAttempt
     .omit({ steps: true, preparation: true, recovery: true })
     .extend({ state: z.literal("incomplete"), error: z.string(), status: z.number() }),
+  actionAttempt
+    .omit({ steps: true, preparation: true, recovery: true })
+    .extend({ state: z.literal("cancelled"), error: z.string(), status: z.number() }),
 ]);
 export type ActionReceipt = z.infer<typeof actionReceiptSchema>;
 export type ActionStatus = z.infer<typeof actionStatusSchema>;

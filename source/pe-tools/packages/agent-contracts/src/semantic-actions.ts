@@ -136,6 +136,16 @@ export const actionControls = {
     description:
       "Explicitly authorize remaining effects of a recovered original action. Completed effects never repeat.",
   },
+  "action.cancel": {
+    says: "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
+    dirties: ["receipts"],
+    needs: "nothing",
+    actor: "any",
+    input: z.object({ id: z.string().min(1) }),
+    mutates: true,
+    description:
+      "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
+  },
 } as const;
 export type ActionControlKey = keyof typeof actionControls;
 

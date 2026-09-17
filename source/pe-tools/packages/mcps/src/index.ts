@@ -13,7 +13,6 @@ export {
   peaProductHomeEnvVar,
   peaProductToolMetadata,
   peaProductTools,
-  peaSkillPaths,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
