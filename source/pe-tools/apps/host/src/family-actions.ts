@@ -6,15 +6,13 @@ import {
   actionAdmissionSchema,
   familyActions,
   familyReads,
+  familiesCaptureEvidenceSchema,
   familiesRouteState,
-  familiesBasis,
   familiesIncluded,
-  familiesPlanReadingSchema,
   memberWork,
   parameterLinksRouteState,
   parameterLinksBasis,
   parameterLinksReadingSchema,
-  sameAddress,
   settingsCandidate,
   settingsRouteState,
   nativeProcessSchema,
@@ -46,14 +44,7 @@ import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
-import {
-  composedSpec,
-  podFolder,
-  readMember,
-  saveMember,
-  writeMember,
-  type PodContext,
-} from "./settings.ts";
+import { composedSpec, podFolder, saveMember, writeMember, type PodContext } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
 
@@ -129,6 +120,17 @@ export const podContext = (
     : {}),
 });
 
+/** The document each workflow runs against: a family, any document (build), or a project. */
+const documentKind = (key: FamilyActionKey): boolean | "project" =>
+  key === "family.capture" || key === "family.confirm" || key === "family.apply"
+    ? true
+    : key === "family.build"
+      ? false
+      : "project";
+
+const diagnosticLine = (d: { code: string; path: string; message: string }) =>
+  `${d.code} · ${d.path} — ${d.message}`;
+
 /** A new member path in the route's pod; frozen at preparation so a resume writes the same one. */
 export const capturePath = (entity: string, name: string, at = new Date()) =>
   `settings/${entity}/${name.replace(/[^\w.-]+/g, "-")}-${at.toISOString().replace(/[:.]/g, "-")}.json`;
@@ -196,8 +198,11 @@ type Prepared =
       process: NativeProcess;
       nativeKey: string;
       input: unknown;
-      /** A plan request is the confirmation sheet: it reads, returns, and mutates nothing. */
-      confirm?: true;
+      /**
+       * A plan request is the confirmation sheet: it reads, returns, and mutates nothing. A
+       * `scope` of null is one family document, which plans exactly one family.
+       */
+      confirm?: { scope: readonly string[] | null; excludedIds: readonly number[] };
     }
   | {
       kind: "capture";
@@ -268,13 +273,7 @@ export async function admitFamilyAction(
           },
         };
       }
-      const family = key === "family.capture" || key === "family.apply";
-      const { session, process } = await lifetime(
-        bridge,
-        target!,
-        family || (key === "family.build" ? false : "project"),
-        deps,
-      );
+      const { session, process } = await lifetime(bridge, target!, documentKind(key), deps);
       if (key === "family.capture" || key === "families.capture") {
         const input = admission.input as { pod: string; path?: string; familyIds?: number[] };
         await runPods(deps, podFolder(input.pod, pods));
@@ -288,10 +287,10 @@ export async function admitFamilyAction(
           at: new Date().toISOString(),
         };
       }
-      if (key === "family.apply") {
+      if (key === "family.confirm" || key === "family.apply") {
         const input = familyActions[key].input.parse(admission.input);
         const specJson = await familySpec(deps, input.source, pods);
-        return input.planHash
+        return "planHash" in input
           ? {
               kind: "native",
               process,
@@ -303,56 +302,51 @@ export async function admitFamilyAction(
               process,
               nativeKey: "family.plan",
               input: { specJson },
-              confirm: true,
+              confirm: { scope: null, excludedIds: [] },
             };
       }
-      if (key === "families.apply" || key === "parameter-links.apply") {
+      if (key === "families.confirm") {
+        const input = familyActions[key].input.parse(admission.input);
+        // The scope is authored Work; the plan is a result and never lands there.
+        const base = admission.bases.work;
+        const view = base && work ? await work.read(base.key, familiesRouteState.route) : null;
+        if (!view || view.revision !== base!.revision)
+          throw refused("Current reviewed Families Work is required");
+        const { scope } = familiesRouteState.schema.parse(view.doc);
+        if (!scope) throw refused("Author a scope before planning");
+        return {
+          kind: "native",
+          process,
+          nativeKey: "families.plan",
+          input: {
+            specJson: await familySpec(deps, input.source, pods),
+            ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+          },
+          confirm: { scope: scope.familyNames, excludedIds: input.excludedIds },
+        };
+      }
+      if (key === "families.apply") {
+        const input = familyActions[key].input.parse(admission.input);
+        if (!Object.keys(input.expectedPlanHashes).length)
+          throw refused("No included family has changes to apply");
+        // The saved bytes must still be the ones confirmed; the engine gates each family's hash.
+        return {
+          kind: "native",
+          process,
+          nativeKey: "families.apply",
+          input: { ...input, specJson: await familySpec(deps, input.source, pods) },
+        };
+      }
+      if (key === "parameter-links.apply") {
         const base = admission.bases.work;
         if (!base || !work) throw refused("Reviewed Work is required");
-        const route = key === "families.apply" ? "families" : "parameter-links";
-        const view = await work.read(base.key, route);
+        const view = await work.read(base.key, "parameter-links");
         if (!view || view.revision !== base.revision)
           throw refused("Work changed after review; review the current basis again");
         const at = addressSchema.safeParse(
           session.state?.openDocuments.find((d) => d.openId === target!.openId)?.address,
         ).data;
         if (!at) throw refused("The admitted document has no resolvable address");
-        if (key === "families.apply") {
-          const input = familyActions[key].input.parse(admission.input);
-          const document = familiesRouteState.schema.parse(view.doc);
-          const capture = await captures.family(input.planId);
-          if (
-            capture.reading.kind !== "families-plan" ||
-            capture.provenance.kind !== "live" ||
-            canonicalRouteInput(capture.provenance.target) !== canonicalRouteInput(target)
-          )
-            throw refused("The reviewed plan is not live evidence for the selected lifetime");
-          const plan = familiesPlanReadingSchema.parse(capture.reading.value);
-          // Staleness is a basis mismatch, never a cleared field: the reading still exists.
-          if (plan.basis !== familiesBasis(document))
-            throw refused("The authored spec or scope changed after the plan; plan again");
-          if (!sameAddress(plan.reading.at, at))
-            throw refused("The plan was read against another document");
-          const included = familiesIncluded(plan, document.excludedIds);
-          if (canonicalRouteInput(included) !== canonicalRouteInput(input.expectedPlanHashes))
-            throw refused("The reviewed family plans or exclusions changed");
-          if (!Object.keys(included).length)
-            throw refused("No included family has changes to apply");
-          const specJson = await familySpec(deps, plan.source, pods);
-          if (digest(specJson) !== plan.composedDigest)
-            throw refused("The reviewed spec composition changed after the plan; plan again");
-          return {
-            kind: "native",
-            process,
-            nativeKey: "families.apply",
-            input: {
-              specJson,
-              expectedPlanHashes: included,
-              source: plan.source,
-              ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
-            },
-          };
-        }
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
         if (!document.draft) throw refused("Author a draft profile before applying");
@@ -404,16 +398,7 @@ export async function admitFamilyAction(
       const prepared = execution.prepared as Prepared;
       const native = (nativeKey: string, input: unknown, process: NativeProcess) =>
         execution.step("native", nativeKey, input, async (id) => {
-          await current(
-            bridge,
-            target!,
-            key === "family.capture" || key === "family.apply"
-              ? true
-              : key === "family.build"
-                ? false
-                : "project",
-            nativeProcessSchema.parse(process),
-          );
+          await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
           return invoke(bridge, target!, nativeKey, input, id);
         });
       if (prepared.kind === "capture") {
@@ -452,8 +437,18 @@ export async function admitFamilyAction(
             )) as PodMemberWritten,
           );
         }
-        if (prepared.nativeKey === "families.capture") return { executionContext: target, members };
-        // The captured member plus what the capture saw: coverage and the unmodeled ledger.
+        // The captured members plus what the capture saw: coverage and the unmodeled ledger.
+        if (prepared.nativeKey === "families.capture") {
+          const { families, diagnostics } = captured as FamiliesCapture.Res.Response;
+          return {
+            executionContext: target,
+            members,
+            evidence: familiesCaptureEvidenceSchema.parse({
+              diagnostics,
+              families: families.map(({ modelJson: _, ...family }) => family),
+            }),
+          };
+        }
         return {
           executionContext: target,
           member: members[0],
@@ -463,14 +458,26 @@ export async function admitFamilyAction(
       if (prepared.kind === "native") {
         const result = await native(prepared.nativeKey, prepared.input, prepared.process);
         if (prepared.confirm) {
-          // The confirmation sheet: one family document plans exactly one family, or it refuses.
-          const planned = result as FamilyPlan.Res.Response;
+          const { scope, excludedIds } = prepared.confirm;
+          const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
+          if (scope) {
+            if (planned.diagnostics.length)
+              throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
+            // The engine plans every loaded family; authored family names are the only scope
+            // narrowing this contract can honestly claim. Placement scope is not a native filter.
+            const plan = planned.families.filter((entry) => scope.includes(entry.familyName));
+            return {
+              executionContext: target,
+              plan,
+              included: familiesIncluded({ entries: plan }, excludedIds),
+            };
+          }
+          // One family document plans exactly one family, or it refuses.
           const plan = planned.families[0];
           if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)
             throw refused(
-              [...planned.diagnostics, ...(plan?.refusals ?? [])]
-                .map((d) => `${d.code} · ${d.path} — ${d.message}`)
-                .join(" · ") || "Expected one family plan",
+              [...planned.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
+                "Expected one family plan",
             );
           return { executionContext: target, plan };
         }
@@ -570,7 +577,7 @@ export async function readFamily(
     };
   } else {
     const target = documentRefSchema.parse(raw.target);
-    // The Families and Parameter Links routes read a project document, not a family document.
+    // Parameter Links reads a project document, not a family document.
     const original = await current(bridge, target, "project");
     const fence = async () => {
       const next = await current(bridge, target, "project");
@@ -588,74 +595,32 @@ export async function readFamily(
       return result;
     };
     if (!deps.workspace) throw refused("Route Work is unavailable");
-    const view = await deps.workspace.read(
-      scope,
-      key === "families.plan" ? "families" : "parameter-links",
-    );
+    const view = await deps.workspace.read(scope, "parameter-links");
     if (!view) throw refused("Author this route's Work before reading it");
-    if (key === "families.plan") {
-      const document = familiesRouteState.schema.parse(view.doc);
-      if (!document.spec || !document.scope)
-        throw refused("Pick a spec member and a scope before planning");
-      const pods = podContext(deps, bridge, target);
-      const saved = await runPods(deps, readMember(document.spec, pods));
-      const source: PodMemberSource = { ...document.spec, sha256: saved.sha256 };
-      const specJson = await familySpec(deps, source, pods);
-      const result = (await native("families.plan", {
-        specJson,
-        ...(document.executionOptions ? { executionOptions: document.executionOptions } : {}),
-      })) as FamiliesPlan.Res.Response;
-      if (result.diagnostics.length)
-        throw refused(
-          result.diagnostics.map((d) => `${d.code} · ${d.path} — ${d.message}`).join(" · "),
-        );
-      // The engine plans every loaded family; authored family names are the only scope
-      // narrowing this contract can honestly claim. Placement scope is not a native filter.
-      const allowed = new Set(document.scope.familyNames);
-      reading = {
-        kind: "families-plan",
-        value: familiesPlanReadingSchema.parse({
-          basis: familiesBasis(document),
-          workRevision: view.revision,
-          reading: {
-            at: addressSchema.parse(
-              original.state?.openDocuments.find((d) => d.openId === target.openId)?.address,
-            ),
-            version: saved.sha256,
-            observedAt: new Date().toISOString(),
-          },
-          source,
-          composedDigest: digest(specJson),
-          entries: result.families.filter((entry) => allowed.has(entry.familyName)),
-          executionOptions: document.executionOptions,
-        }),
-      };
-    } else {
-      const document = parameterLinksRouteState.schema.parse(view.doc);
-      const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
-      if (evaluate && !document.draft) throw refused("Author a draft profile before evaluating it");
-      const data = evaluate
-        ? await native("revit.apply.parameter-links", {
-            profile: document.draft,
-            previewOnly: true,
-            reconcile: false,
-          })
-        : await native("revit.detail.parameter-links", { includeEvaluation: false });
-      reading = {
-        kind: "parameter-links",
-        value: parameterLinksReadingSchema.parse({
-          ...(data as object),
-          basis: parameterLinksBasis(document),
-          workRevision: view.revision,
-          evaluated: evaluate,
-          // What Revit holds arrives as `profile`; `stored` names it for what it is.
-          stored: (data as { profile?: unknown }).profile ?? null,
-          // A stored-profile read observes Revit, never the authored draft: it carries no
-          // evaluation, so it can never arm an apply of a draft it did not evaluate.
-          evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
-        }),
-      };
-    }
+    const document = parameterLinksRouteState.schema.parse(view.doc);
+    const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
+    if (evaluate && !document.draft) throw refused("Author a draft profile before evaluating it");
+    const data = evaluate
+      ? await native("revit.apply.parameter-links", {
+          profile: document.draft,
+          previewOnly: true,
+          reconcile: false,
+        })
+      : await native("revit.detail.parameter-links", { includeEvaluation: false });
+    reading = {
+      kind: "parameter-links",
+      value: parameterLinksReadingSchema.parse({
+        ...(data as object),
+        basis: parameterLinksBasis(document),
+        workRevision: view.revision,
+        evaluated: evaluate,
+        // What Revit holds arrives as `profile`; `stored` names it for what it is.
+        stored: (data as { profile?: unknown }).profile ?? null,
+        // A stored-profile read observes Revit, never the authored draft: it carries no
+        // evaluation, so it can never arm an apply of a draft it did not evaluate.
+        evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
+      }),
+    };
     await fence();
     provenance = { kind: "live", target };
   }

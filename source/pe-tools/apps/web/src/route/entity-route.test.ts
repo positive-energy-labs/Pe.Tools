@@ -84,7 +84,9 @@ function ctx(page: Partial<EntityPage>) {
 const planless = entityRoute(base).actions!;
 const planned = entityRoute({
   ...base,
-  plan: admissionPlan("family.apply", (plan) => row((plan as { planHash: string }).planHash)),
+  plan: admissionPlan({ confirm: "family.confirm", apply: "family.apply" }, (plan) =>
+    row((plan as { planHash: string }).planHash),
+  ),
 }).actions!;
 const none = undefined as never;
 
@@ -96,7 +98,7 @@ test("capture is the host workflow into the chosen pod; the page lands on the ne
     result: { member: { pod: "p", path: "settings/family/x.json", sha256: "n" } },
   });
   await planless.capture.run(c as never, none);
-  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p" }, ref);
+  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p" }, ref, undefined);
   expect(state.page.path).toBe("settings/family/x.json");
 });
 
@@ -114,7 +116,7 @@ test("a selection route refuses capture until audit rows are picked, and clears 
     result: { members: [{ pod: "p", path: "settings/x/7.json" }] },
   });
   await actions.capture.run(c as never, none);
-  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p", ids: ["7", "9"] }, ref);
+  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p", ids: ["7", "9"] }, ref, undefined);
   expect(state.page).toMatchObject({ path: "settings/x/7.json", selection: [] });
 });
 
@@ -129,23 +131,59 @@ test("apply refuses unsaved or foreign members; without a plan it applies the sa
   const { c } = ctx({ pod: "p", path: "settings/a.json" });
   run.mockReset().mockResolvedValue({ state: "succeeded", result: {} });
   await planless.apply.run(c as never, none);
-  expect(run.mock.calls).toEqual([["family.apply", { source }, ref]]);
+  expect(run.mock.calls).toEqual([["family.apply", { source }, ref, undefined]]);
 });
 
-test("with a plan, apply opens the sheet and changes nothing; confirm applies that hash", async () => {
+test("with a plan, apply confirms and opens the sheet; confirm applies that hash", async () => {
   const { c, state } = ctx({ pod: "p", path: "settings/a.json" });
   expect(planned.confirm.ready(c as never, none)).toBe("plan first");
   run
     .mockReset()
     .mockResolvedValueOnce({ state: "succeeded", result: { plan: { planHash: "ph" } } });
   await planned.apply.run(c as never, none);
-  expect(run.mock.calls).toEqual([["family.apply", { source }, ref]]);
+  expect(run.mock.calls).toEqual([["family.confirm", { source }, ref, undefined]]);
   expect(state.page.confirming).toBe(true);
   expect(state.page.sheet?.entries.map((entry) => entry.planHash)).toEqual(["ph"]);
   expect(planned.confirm.ready(c as never, none)).toBeNull();
   run.mockResolvedValueOnce({ state: "succeeded", result: {} });
   await planned.confirm.run(c as never, none);
-  expect(run.mock.calls[1]).toEqual(["family.apply", { source, planHash: "ph" }, ref]);
+  expect(run.mock.calls[1]).toEqual(["family.apply", { source, planHash: "ph" }, ref, undefined]);
+  expect(state.page).toMatchObject({ confirming: false, sheet: null });
+});
+
+test("a many-row confirm applies one hash per included row, with the route's authored Work", async () => {
+  const each = entityRoute({
+    ...base,
+    plan: admissionPlan<{ excludedIds: number[] }, string, object>(
+      { confirm: "families.confirm", apply: "families.apply" },
+      (plan) => row((plan as { planHash: string }).planHash),
+      (work) => ({ excludedIds: work.excludedIds, executionOptions: { singleTransaction: true } }),
+    ),
+  }).actions!;
+  const { c, state } = ctx({ pod: "p", path: "settings/a.json" });
+  const work = { key: { route: "things" }, doc: { excludedIds: [2] }, revision: 3 };
+  Object.assign(c, { work });
+  run.mockReset().mockResolvedValueOnce({
+    state: "succeeded",
+    result: { plan: [{ planHash: "a" }, { planHash: "b" }], included: { a: "a", b: "b" } },
+  });
+  await each.apply.run(c as never, none);
+  const options = { singleTransaction: true };
+  expect(run.mock.calls[0]).toEqual([
+    "families.confirm",
+    { source, excludedIds: [2], executionOptions: options },
+    ref,
+    { work: { key: work.key, revision: 3 } },
+  ]);
+  expect(state.page.sheet).toMatchObject({ each: true });
+  run.mockResolvedValueOnce({ state: "succeeded", result: {} });
+  await each.confirm.run(c as never, none);
+  expect(run.mock.calls[1]).toEqual([
+    "families.apply",
+    { source, executionOptions: options, expectedPlanHashes: { a: "a", b: "b" } },
+    ref,
+    undefined,
+  ]);
   expect(state.page).toMatchObject({ confirming: false, sheet: null });
 });
 
@@ -154,22 +192,31 @@ test("confirm sends only included rows and refuses when nothing is left", async 
   const actions = entityRoute({
     ...base,
     plan: {
-      read: async () => null,
-      sheet: () => ({ id: "plan-1", entries: [row("a"), row("b"), row("c", "nothing to apply")] }),
+      read: async () => ({ entries: [] }),
       excluded: () => ["b"],
       confirm,
     },
   }).actions!;
-  const { c } = ctx({ pod: "p", path: "settings/a.json", confirming: true });
+  const { c } = ctx({
+    pod: "p",
+    path: "settings/a.json",
+    confirming: true,
+    sheet: { entries: [row("a"), row("b"), row("c", "nothing to apply")] },
+  });
   await actions.confirm.run(c as never, none);
   expect(confirm.mock.calls[0]![2]).toEqual([row("a")]);
   const flagged = entityRoute({
     ...base,
-    plan: { read: async () => null, sheet: () => ({ entries: [row("c", "refused")] }), confirm },
+    plan: { read: async () => ({ entries: [] }), confirm },
   }).actions!;
   expect(
     flagged.confirm.ready(
-      ctx({ pod: "p", path: "settings/a.json", confirming: true }).c as never,
+      ctx({
+        pod: "p",
+        path: "settings/a.json",
+        confirming: true,
+        sheet: { entries: [row("c", "refused")] },
+      }).c as never,
       none,
     ),
   ).toMatch(/no included row/);

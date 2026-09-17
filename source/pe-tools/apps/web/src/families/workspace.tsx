@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
+import type { FfReceipt } from "@pe/agent-contracts";
 
 import type { Verdict } from "#/components/master-table/model";
 import type { FamiliesStore } from "#/families/store";
@@ -14,12 +14,10 @@ import {
 import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
-import { familyFlag } from "#/host/familyfoundry";
+import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
-
-type FfFamilyPlan = FfPlanEntry;
 
 /** The placement filter's vocabulary, and what each choice MEANS for the audit. */
 function useFamiliesWorkspaceModel(
@@ -164,8 +162,8 @@ function useFamiliesWorkspaceModel(
   const totalFamilies = families.length;
 
   const planByFamilyId = useMemo(() => {
-    const map = new Map<number, FfFamilyPlan>();
-    for (const entry of plan?.entries ?? []) map.set(entry.familyId, entry);
+    const map = new Map<number, PlanEntry>();
+    for (const entry of plan?.entries ?? []) map.set(Number(entry.id), entry);
     return map;
   }, [plan]);
   const receiptByFamilyId = useMemo(() => {
@@ -209,7 +207,7 @@ function useFamiliesWorkspaceModel(
             note: "in scope, but the planned spec does not claim this family",
           };
         }
-        const flag = familyFlag(entry);
+        const flag = entry.flag;
         // Not a warning about the model and not a refusal — a verdict with nothing behind it.
         if (flag) return { word: "no actions", tone: "mute", note: flag };
         return excludedIds.has(familyId)
@@ -225,7 +223,7 @@ function useFamiliesWorkspaceModel(
                  and a state dot wearing it would spend the one filled blue on a readout. */
               word: "included",
               tone: "caution",
-              note: `${entry.changes.length + entry.runEffects.length} action(s) queued`,
+              note: `${entry.actions} action(s) queued`,
             };
       },
     [plan, planByFamilyId, receiptByFamilyId, excludedIds],
@@ -272,7 +270,7 @@ function useFamiliesWorkspaceModel(
   const includedPlanned = useMemo(
     () =>
       (plan?.entries ?? []).filter(
-        (entry) => !excludedIds.has(entry.familyId) && familyFlag(entry) === null,
+        (entry) => !excludedIds.has(Number(entry.id)) && entry.flag === null,
       ),
     [plan, excludedIds],
   );
