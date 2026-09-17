@@ -52,7 +52,11 @@ test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => 
   );
 
   act(() => screen.getByRole("button", { name: "Room row" }).focus());
-  expect(container.querySelector("[data-slot='pane']")?.getAttribute("data-active")).toBe("true");
+  const pane = container.querySelector<HTMLElement>("[data-slot='pane']")!;
+  expect(pane.dataset.active).toBe("true");
+  expect(pane.style.outline).toBe("2px solid var(--pe-ink-mute)");
+  expect(pane.style.outlineOffset).toBe("2px");
+  expect(pane.classList.contains("z-sticky")).toBe(true);
   expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("true");
 
   fireEvent.keyDown(screen.getByRole("button", { name: "Room row" }), {
@@ -69,6 +73,7 @@ test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => 
   expect(run).toHaveBeenCalledOnce();
 
   await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(pane.style.outline).toBe("1px solid var(--pe-line-2)");
   expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("false");
   expect(screen.getByRole("button", { name: "Show rooms keyboard shortcuts" })).toBeTruthy();
 });
