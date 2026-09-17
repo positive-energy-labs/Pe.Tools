@@ -265,11 +265,12 @@ test("pane headers default on and require an explicit headerless opt-out", () =>
   expect(view.container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
 
   view.rerender(
-    <Pane kind="content" headerless>
+    <Pane kind="content" title="room table" headerless>
       body
     </Pane>,
   );
   expect(view.container.querySelector("[data-slot='pane-header']")).toBeNull();
+  expect(screen.getByRole("region", { name: "room table" })).toBeTruthy();
 });
 
 test("workspace gutters appear only beside present outer panes and do not clip pane outlines", () => {
