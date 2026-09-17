@@ -6,6 +6,7 @@
 - 2026-09-16, `PartsBoundary` is local to `workbench/moments.tsx` and cannot serve `Pane`. `Pane` needs a small local boundary. A consumer that changes its rendered target must pass that target identity through `boundaryKey`; the native React key remounts the boundary. Retry resets the current target only.
 - 2026-09-16, `Rail.edge` is the one correction to its minimal contract. `ArtifactFrame.foot` needs `top` to preserve its separator; headers retain the default bottom edge.
 - 2026-09-16, `RootComponent` owns the route viewport. `Surface` uses parent-relative `size-full`; `PaneSplit` always reserves `var(--gutter)` and leaves pane outlines unclipped.
+- 2026-09-16, `Rail` owns `ActionChrome`. Every rail slot keeps disabled commit refusals in the button title, including `ArtifactFrame.headTrail`.
 
 ## Landed
 
@@ -16,7 +17,7 @@
 
 ## Proof
 
-- PROVEN[deterministic]: `vp test src/components/lang/pane.test.tsx src/components/lang/code.test.tsx src/workbench/prose.test.tsx src/components/master-table/master-table.test.tsx` passed 39 tests. New behavior coverage: one rail/no halo, collapsed flank hotkeys, suspension, retry, target-key recovery, default header opt-out, Surface parent fill, fixed and resizable split gutters, outer gutter geometry, footer edge, header filters, and rail actions.
+- PROVEN[deterministic]: `vp test src/components/lang/pane.test.tsx src/components/lang/code.test.tsx src/workbench/prose.test.tsx src/components/master-table/master-table.test.tsx` passed 40 tests. New behavior coverage: one rail/no halo, collapsed flank hotkeys, suspension, retry, target-key recovery, default header opt-out, Surface parent fill, fixed and resizable split gutters, outer gutter geometry, footer edge, header filters, rail actions, and disabled commits in `ArtifactFrame.headTrail`.
 - PROVEN[deterministic]: `vp run @pe/repo-guards#test` passed 93 tests with no baseline changes.
 - FALSIFIED[compile]: `vp check` reports `src/family/workspace-doc-pane.tsx:282` because it passes `headerSurface="artifact"`; `Pane.headerSurface` is now `page | recess`. This consumer must migrate to `recess` or own a different surface composition.
 - PROVEN[deterministic, baseline `527048f`]: `scripts/fixture-census.test.ts` and both `src/schedule-grid/seams.test.tsx` failures predate L0. Root ran the exact files against production-equivalent `main1406e70` (docs-only after `527048f`): 3 failed, 4 passed. The failures match exactly: fixture census expected 0 canonical fixtures but received 1; schedule receipt resolution is blocked by the missing `captures/schedules/837acb27a0b40e690b5a8435ad905d4395ea5b103577e2ca4985d461cfafc682.json`; and the apply queue sees `stale-revision` after the document moves to `r2`.

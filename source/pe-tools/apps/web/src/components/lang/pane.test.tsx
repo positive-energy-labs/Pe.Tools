@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 
@@ -312,6 +313,29 @@ test("artifact feet keep their top separator", () => {
   expect(rails).toHaveLength(2);
   expect(rails[1]?.classList.contains("hairline-t")).toBe(true);
   expect(rails[1]?.classList.contains("hairline-b")).toBe(false);
+});
+
+test("artifact rail keeps disabled commit refusals in the button title", () => {
+  const reason = "Resolve validation errors before committing.";
+  render(
+    <ArtifactFrame
+      head="table"
+      headTrail={
+        <ActionButton
+          tone="commit"
+          label="Commit"
+          reason={reason}
+          disabled
+          onClick={() => undefined}
+        />
+      }
+    >
+      body
+    </ArtifactFrame>,
+  );
+
+  expect(screen.getByRole("button", { name: "Commit" }).getAttribute("title")).toBe(reason);
+  expect(screen.queryByText(reason)).toBeNull();
 });
 
 test("a collapsed flank keeps its shortcut registration and hides its body", () => {

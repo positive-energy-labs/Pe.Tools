@@ -16,7 +16,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { HelpTip } from "#/components/lang/help";
 import { keyMeta } from "#/route/keys";
-import { ActionChrome } from "#/components/lang/action-button";
 import { Press } from "#/components/lang/press";
 import { tv, type VariantProps } from "#/lib/tv";
 
@@ -321,8 +320,7 @@ export function Pane({
                 trail={
                   actions != null ? (
                     <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
-                      {/* A header is chrome: a verb's refusal hovers, it does not wrap (see `ActionChrome`). */}
-                      <ActionChrome value>{actions}</ActionChrome>
+                      {actions}
                     </div>
                   ) : undefined
                 }
