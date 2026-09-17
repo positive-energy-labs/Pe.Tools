@@ -463,7 +463,8 @@ export function SpecEditor({
             <SchemaToFieldRender
               schema={form.schema}
               // The member's own URL from pod.list: a draft's $schema may be relative to its file.
-              schemaUrl={schema ?? ""}
+              // The demo lane has no host to answer remote options, so it asks for none.
+              schemaUrl={fixture ? "" : (schema ?? "")}
               baselineValues={baseline.baseline}
               values={form.parsedRaw}
               onChange={(path, value) =>
