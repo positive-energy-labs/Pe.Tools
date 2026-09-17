@@ -369,6 +369,8 @@ test("live /family: capture, confirm, apply files a run receipt", async () => {
     return receiptOnPods(page, pod, path, "family.apply");
   });
   expect(shown).toContain("succeeded");
+  // The capture filed a run of its own on this member: that run holds the unmodeled facts.
+  expect(shown).toContain("family.capture");
   expect(workflows).toEqual(["family.capture", "family.confirm", "family.apply"]);
 }, 180_000);
 

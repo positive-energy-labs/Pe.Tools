@@ -103,6 +103,8 @@
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
+import { Link } from "@tanstack/react-router";
+
 import { ActionButton } from "#/components/lang/action-button";
 import { Code, stringify } from "#/components/lang/code";
 import { FactChip } from "#/components/lang/chip";
@@ -207,8 +209,15 @@ function CaptureEvidence() {
             {section}: {state}
           </FactChip>
         ))}
+        {/* The facts themselves are the run's `unmodeled.json`, never the member (law 12). */}
         <FactChip tone={evidence.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
-          {noun(evidence.unmodeledCount, "unmodeled fact")}
+          {evidence.run ? (
+            <Link to="/pods" search={{ pod: member.pod, path: `${evidence.run}/unmodeled.json` }}>
+              {noun(evidence.unmodeledCount, "unmodeled fact")}
+            </Link>
+          ) : (
+            noun(evidence.unmodeledCount, "unmodeled fact")
+          )}
         </FactChip>
         <span className="face-mono text-ink-mute">{evidence.reading.observedAt}</span>
       </div>
