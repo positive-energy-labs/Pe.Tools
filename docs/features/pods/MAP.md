@@ -106,6 +106,8 @@ Not cast: the protoui round (table beside draft, `/families` row click into `/fa
 
 - 2026-09-17, user verdict: "commit everything first and then migrate aggressively. outputs can be deleted." The Documents migration ran with `-Apply`. The Documents repo holds snapshot `3a39717` before and `cfb9f38` after. Result: 21 pods and 546 files under `Pods/`; `preferences.json`; APS credentials written to the runtime `state/aps-auth/credentials.json`; every `output/`, `bin/`, `obj/`, the generated schemas, and `settings/Global/settings.json` deleted; `_archive-2026-09-17/` holds `inline-scripts`, four `takeoff*` folders, `tmp`, `temp_audit_run`, and one intent file, indexed by its `README.md`. Lane: artifact (every `pod.json` parses with an id; sampled `@local` references resolve). UNPROVEN: the host and Revit reading the migrated tree; the user proves that in the palette tests. The 26 findings stand in `reports/migration-plan.md`.
 
+- 2026-09-17, user verdict: "a sibling member in the run output folder makes sense." Capture writes the engine's `unmodeled` list as a file in the capture's run folder under `output/<runId>/`, beside the receipt. The captured member holds only what the engine can apply. This settles wave 5 candidate 1.
+
 ### Wave 5 candidates (none cast; from `reports/w4-revit.md` defect numbers)
 
 1. Capture then confirm on real families: captured `unmodeled` entries make the member fail its own composition (defect 3). Needs a ruling: capture files `unmodeled` as evidence outside the member, or the validator treats it as advisory.
