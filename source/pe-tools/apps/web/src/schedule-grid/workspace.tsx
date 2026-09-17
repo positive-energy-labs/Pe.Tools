@@ -16,7 +16,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import { PickList } from "#/components/lang/pick-list";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
 import { PendingStrip } from "#/schedule-grid/pending-strip";
@@ -115,8 +115,8 @@ export function ScheduleGridWorkspace({
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <AddressingBar
           name="schedules"
           sentence={
@@ -336,7 +336,7 @@ export function ScheduleGridWorkspace({
             </Pane>
           }
         />
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

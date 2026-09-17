@@ -4,7 +4,7 @@ import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { fb } from "../feedback/staging";
 import { NoteInput } from "../feedback/verbs";
 import { Tray, TrayCollapsed } from "../feedback/tray";
@@ -306,8 +306,8 @@ export default function RunBrowser() {
   );
 
   return (
-    <Surface head={<RunBrowserHeader model={model} />} columns="minmax(0, 1fr)">
-      <SurfaceCell>
+    <Surface head={<RunBrowserHeader model={model} />}>
+      <>
         <PaneSplit
           axis="vertical"
           resize={{
@@ -361,7 +361,7 @@ export default function RunBrowser() {
           }
           end={sheetAndLedger}
         />
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

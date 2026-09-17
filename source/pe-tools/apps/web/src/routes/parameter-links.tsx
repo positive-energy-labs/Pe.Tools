@@ -13,7 +13,7 @@ import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton, ActionGroup } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -226,8 +226,8 @@ export function ParameterLinksWorkspace({
         };
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <AddressingBar
           name="parameter links"
           sentence={
@@ -405,7 +405,7 @@ export function ParameterLinksWorkspace({
             </Pane>
           }
         />
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

@@ -9,7 +9,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
 import type {
   FactKey,
@@ -239,8 +239,8 @@ export function VariantE() {
   const bodLens = <VariantBodLens factCell={factCell} />;
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <Pane kind="content" title="parameter table" scroll="clip">
           <AddressingBar
             name="param tables"
@@ -399,7 +399,7 @@ export function VariantE() {
             </ArtifactFrame>
           </div>
         </Pane>
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

@@ -12,7 +12,7 @@
 
 - One coherent foundation commit: tokens, `Rail`, `ArtifactFrame` slots, `Code`, `Section`, `Pane`, `Surface`, `MasterTable`, specimens, and behavior tests.
 - `ArtifactFrame` has one rail. `head` supplies lead content and `headTrail` supplies actions. `MasterTable` supplies those slots and never nests `Rail`.
-- `SurfaceHandle` re-exports `PaneResizeHandle`. No wrapper was added.
+- `PaneSplit` owns resize handles. `Surface` owns only the shared perimeter and optional scroll-away head.
 - Net diff before commit: +561/-138 lines.
 
 ## Proof
@@ -37,3 +37,4 @@
 - 2026-09-16, `Rail` remains 24px high. Lead text truncates, while actions remain accessible through a no-scrollbar horizontal scroller that reveals keyboard focus. Takeoffs moves its field mode button to `MasterTable.modes`; its summary holds facts only and its existing pane help/shortcuts hold keyboard instructions.
 - Owed consumer migration: `grilles/sheet.tsx` still passes its `+ profile` `Press` through `MasterTable.summary`. Move it to `MasterTable.actions` in the Grilles lane; this follow-up did not alter that route.
 - 2026-09-16, production census found no `SidePane` import or JSX caller. Deleted `components/lang/side-pane.tsx` (172 LOC), its `UiLayoutSpecimens` block (19 LOC), its `recipe-grid.test.tsx` registration (2 LOC), and the dead `AnnotationVariant` member (1 LOC). `PickList` now names `Pane`; `Pane`, `PaneSplit`, and `PaneWorkspace` specimens cover the shared layout contract.
+- 2026-09-16, `Surface` now has direct flex-column children and one `var(--gutter)` padding owner. The 13 production single-cell callers no longer use `columns`, `rows`, or `SurfaceCell`; the specimen uses `PaneSplit` for a split. This cutover is +62/-101 source LOC. `chatColumn` declares `grid-cols-[minmax(0,1fr)]`, so its 386px width does not create a 550px implicit column.

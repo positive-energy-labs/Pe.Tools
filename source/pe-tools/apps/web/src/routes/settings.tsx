@@ -30,7 +30,7 @@ import { schemaFormModel } from "#/settings-panes/schema-form";
 import { FileWorkspace, fileSearch } from "#/settings/file-workspace";
 import { settingsManifest, type SettingsHandle } from "#/settings/manifest";
 import { Pane } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 
 type Handle = SettingsHandle;
 
@@ -129,8 +129,8 @@ function SettingsWorkspace({ handle }: { handle: SettingsHandle }) {
   );
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <RouteShell manifest={routeManifest} handle={handle} aside={aside} />
         <Pane kind="content" title="settings files">
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
@@ -242,7 +242,7 @@ function SettingsWorkspace({ handle }: { handle: SettingsHandle }) {
             </div>
           </div>
         </Pane>
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

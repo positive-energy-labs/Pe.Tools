@@ -6,7 +6,7 @@ import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { SAMPLE_DOC } from "#/grounded-doc/sample";
@@ -43,8 +43,8 @@ function DocLabRoute() {
       : null;
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <Pane kind="content" title="document" scroll="clip">
           <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ function DocLabRoute() {
             }
           />
         </Pane>
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

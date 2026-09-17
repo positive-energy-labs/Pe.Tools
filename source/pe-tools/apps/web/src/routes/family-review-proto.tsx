@@ -30,7 +30,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Pane } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { RUN_SOURCE, loadBoard } from "#/family-review/proto/board";
 import { ReviewBoard, boardCases, useEdits, useVerdicts } from "#/family-review/proto/review-board";
 
@@ -57,8 +57,8 @@ function FamilyReviewProto() {
   const staged = Object.keys(edits.book).length;
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <Pane kind="content" title="family review" scroll="clip">
           <header className="flex flex-col gap-1 px-3 py-2" style={{ borderColor: token("line") }}>
             <div className="flex flex-wrap items-baseline gap-2">
@@ -153,7 +153,7 @@ function FamilyReviewProto() {
             <ReviewBoard board={board} verdicts={verdicts} edits={edits} />
           </div>
         </Pane>
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }

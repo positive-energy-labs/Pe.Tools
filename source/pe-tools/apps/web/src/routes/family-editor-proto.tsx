@@ -9,7 +9,7 @@ import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
-import { Surface, SurfaceCell } from "#/components/lang/surface";
+import { Surface } from "#/components/lang/surface";
 import { ParadigmD } from "#/family-review/proto-editor/composed";
 import { TypeBand, useEditor } from "#/family-review/proto-editor/shell";
 
@@ -32,8 +32,8 @@ function FamilyEditorProto() {
   const editor = useEditor();
 
   return (
-    <Surface columns="minmax(0,1fr)">
-      <SurfaceCell>
+    <Surface>
+      <>
         <Pane kind="content" title="family editor" scroll="clip">
           <header
             className="flex flex-wrap items-baseline gap-2 px-3 py-2"
@@ -65,7 +65,7 @@ function FamilyEditorProto() {
 
           <ParadigmD editor={editor} />
         </Pane>
-      </SurfaceCell>
+      </>
     </Surface>
   );
 }
