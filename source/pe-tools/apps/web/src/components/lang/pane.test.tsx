@@ -5,11 +5,36 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/lang/pane";
+import { Rail } from "#/components/lang/rail";
 import { Surface } from "#/components/lang/surface";
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+test("a focused Rail lead control scrolls into view without changing the 24px Rail", () => {
+  const scrollIntoView = vi.fn();
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  try {
+    const { container } = render(<Rail lead={<button type="button">long selector</button>} />);
+    fireEvent.focus(screen.getByRole("button", { name: "long selector" }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(
+      container.querySelector("[data-slot='rail-lead']")?.classList.contains("overflow-x-auto"),
+    ).toBe(true);
+    expect(container.querySelector("[data-slot='rail']")?.classList.contains("h-(--rail-h)")).toBe(
+      true,
+    );
+  } finally {
+    if (original) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  }
 });
 
 test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => {

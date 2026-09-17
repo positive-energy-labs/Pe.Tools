@@ -15,4 +15,4 @@
 ## Corrected narrow verdict
 
 - 2026-09-16, FALSIFIED[artifact, `chat-ready-720.json`]: the document target was the top hit target. The earlier overlap claim was stale.
-- 2026-09-16, PROVEN[artifact, `chat-minwidth.json`]: Chat's 386px column generated a 550px implicit grid track. Root owns `chat-shell` grid correction. `ComposerHead` owns the sentence scroller so its thread and document pickers remain reachable after that correction.
+- 2026-09-16, PROVEN[artifact, `chat-minwidth.json`]: Chat's 386px column generated a 550px implicit grid track. Root owns `chat-shell` grid correction. `Rail` owns the sentence scroller so its thread and document pickers remain reachable after that correction.

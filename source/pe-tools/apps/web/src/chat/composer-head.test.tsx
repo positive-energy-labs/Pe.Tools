@@ -83,7 +83,9 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
     ),
   );
   expect(targetPick).toHaveBeenCalledWith("document-a");
-  expect(screen.getByTestId("composer-sentence").className).toContain("overflow-x-auto");
+  expect(view.container.querySelector("[data-slot='rail-lead']")?.className).toContain(
+    "overflow-x-auto",
+  );
   expect(view.container.querySelectorAll("[data-slot='rail']")).toHaveLength(1);
   expect(view.container.querySelector("[data-slot='rail']")?.className).toContain("h-(--rail-h)");
   expect(screen.getByTestId("composer-status").textContent).toBe("failed");
