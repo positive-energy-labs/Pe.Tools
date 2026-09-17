@@ -93,3 +93,37 @@ test("the thread reports pending on every render until its body is here", async 
   await waitFor(() => expect(renders.at(-1)?.body).toBe(true));
   expect(renders.filter((render) => !render.body && !render.pending)).toEqual([]);
 });
+
+test("switching threads aborts A and never publishes A under B", async () => {
+  let settleA!: (response: Response) => void;
+  let signalA: AbortSignal | undefined;
+  const bodyB = { ...emptyChatState(), messages: [assistant] };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith("/thread-a")) {
+        signalA = init?.signal ?? undefined;
+        return new Promise<Response>((resolve) => {
+          settleA = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify(bodyB)));
+    }),
+  );
+  const session = { subscribe: async () => ({ unsubscribe: () => {} }) };
+  const { result, rerender } = renderHook(
+    ({ id }) =>
+      useThreadStream({ origin: "http://host", thread: { id, session: session as never } }),
+    { initialProps: { id: "thread-a" } },
+  );
+  await waitFor(() => expect(signalA).toBeDefined());
+  rerender({ id: "thread-b" });
+  await waitFor(() =>
+    expect(selectMessages(result.current.chat).map((message) => message.id)).toEqual(["a1"]),
+  );
+  await waitFor(() => expect(signalA?.aborted).toBe(true));
+  await act(async () =>
+    settleA(new Response(JSON.stringify({ ...emptyChatState(), messages: [userSignal] }))),
+  );
+  expect(selectMessages(result.current.chat).map((message) => message.id)).toEqual(["a1"]);
+});

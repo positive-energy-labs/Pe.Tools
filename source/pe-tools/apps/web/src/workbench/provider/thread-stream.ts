@@ -1,13 +1,37 @@
-import { previousOf, useHostCall } from "#/readings";
+import { previousOf } from "#/readings";
 import type { Reading } from "@pe/agent-contracts";
 import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { Cause, Effect } from "effect";
+import { useEffect, useMemo, useState } from "react";
 import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
 
 const EMPTY = emptyChatState();
+const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY));
+
+const bodyAtoms = Atom.family((key: string) => {
+  const [origin, threadId] = JSON.parse(key) as [string, string];
+  return Atom.make(
+    Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId)}`, {
+          signal,
+        });
+        if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
+        return response.json() as Promise<ChatState>;
+      },
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    }),
+  ).pipe(Atom.autoDispose);
+});
+
+export const threadBodyAtom = (origin: string, threadId: string) =>
+  bodyAtoms(JSON.stringify([origin, threadId]));
 
 const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
   "message_end",
@@ -38,15 +62,11 @@ export function useThreadStream(options: {
   const { origin, thread } = options;
   const threadId = thread?.id ?? null;
   const session = thread?.session;
-  const query = useHostCall(
-    async (): Promise<ChatState> => {
-      const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId ?? "")}`);
-      if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
-      return response.json() as Promise<ChatState>;
-    },
+  const bodyAtom = useMemo(
+    () => (threadId === null ? emptyBodyAtom : threadBodyAtom(origin, threadId)),
     [origin, threadId],
-    threadId !== null,
   );
+  const body = useAtomValue(bodyAtom);
   // The stream is the only source of display: the server opens every attach with a snapshot
   // frame, so no fetch ever competes with it and no clock is needed.
   const [frame, setFrame] = useState<ChatDisplay | null>(null);
@@ -67,11 +87,8 @@ export function useThreadStream(options: {
   // can never land after a newer one. It closes over `refresh` ALONE — `query` is a fresh object
   // every render, and an `invalidate` that changed identity per render tore the SSE subscription
   // down and reopened it on every render, dropping whatever `message_end` fired in the gap.
-  const refresh = query.refresh;
-  const invalidate = useCallback(async () => {
-    refresh();
-  }, [refresh]);
-  const hydrated = query.data !== undefined;
+  const invalidate = useAtomRefresh(bodyAtom);
+  const hydrated = body._tag === "Success";
 
   useEffect(() => {
     if (!session || !hydrated) return;
@@ -97,7 +114,7 @@ export function useThreadStream(options: {
             : (previous ?? new Error("Run failed.")),
         );
       }
-      if (invalidatingEvents.has(event.type)) void invalidate();
+      if (invalidatingEvents.has(event.type)) invalidate();
     };
 
     let unsubscribe: (() => void) | undefined;
@@ -105,7 +122,7 @@ export function useThreadStream(options: {
       .subscribe({
         onEvent: accept,
         reconnect: true,
-        onReconnect: () => void invalidate(),
+        onReconnect: () => invalidate(),
         onError: (error) => {
           if (!stopped) setStreamFault(error instanceof Error ? error : new Error(String(error)));
         },
@@ -125,20 +142,21 @@ export function useThreadStream(options: {
   }, [invalidate, hydrated, session, threadId]);
 
   const chat = useMemo<ChatState>(() => {
-    if (!query.data) return EMPTY;
-    const stored = new Set(query.data.messages.map((message) => message.id));
+    if (body._tag !== "Success") return EMPTY;
+    const stored = new Set(body.value.messages.map((message) => message.id));
     const unstored = sent.filter((message) => !stored.has(message.id));
-    const messages = unstored.length ? [...query.data.messages, ...unstored] : query.data.messages;
-    return { ...query.data, messages, display: frame ?? {} };
-  }, [query.data, frame, sent]);
+    const messages = unstored.length ? [...body.value.messages, ...unstored] : body.value.messages;
+    return { ...body.value, messages, display: frame ?? {} };
+  }, [body, frame, sent]);
 
   return {
     chat,
     // Pending exactly while a named thread has no body and no failure. Not `query.isPending`:
     // that is false on the first render after the thread appears (the fetch starts in an
     // effect), and true again on every refetch over a thread already on screen.
-    pending: threadId !== null && !hydrated && query.error === undefined,
-    error: query.error ?? streamFault,
+    pending: threadId !== null && body._tag === "Initial" && body.waiting,
+    error: body._tag === "Failure" ? Cause.squash(body.cause) : streamFault,
     invalidate,
+    bodyAtom,
   };
 }
