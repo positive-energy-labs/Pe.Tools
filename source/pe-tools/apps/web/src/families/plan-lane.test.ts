@@ -1,74 +1,107 @@
 import { expect, test, vi } from "vite-plus/test";
 
 const client = vi.hoisted(() => ({
-  runSemanticAction: vi.fn(async () => ({ state: "succeeded", result: {} })),
-  readFamilyCapture: vi.fn(async () => ({})),
-  actionResult: (row: unknown) => row,
+  runSemanticAction: vi.fn(async (..._args: unknown[]) => ({
+    state: "succeeded",
+    result: {} as Record<string, unknown>,
+  })),
 }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => client);
 
 import { FAMILIES_SEEDS } from "./seeds";
-import { familiesSheetOf, familiesSpec, manifest } from "./manifest";
+import { familiesSpec, manifest } from "./manifest";
+import { captureEvidenceOf } from "./store";
 
 const seed = FAMILIES_SEEDS.apply as unknown as {
-  work: { spec: { pod: string; path: string }; excludedIds: number[] };
-  readings: { families: unknown; pods: unknown };
-  page: { pod: string; path: string };
+  work: { excludedIds: number[] };
+  readings: { pods: unknown };
+  page: { pod: string; path: string; sheet: { entries: unknown[] } };
 };
 const ref = { session: "s", openId: "o" };
-const page = {
-  stage: "apply",
-  pod: seed.page.pod,
-  path: seed.page.path,
-  selection: [],
-  confirming: true,
-  sheet: null,
-  draft: { placement: "AllLoaded", categories: [], families: [] },
-};
-const view = (over: Partial<typeof page> = {}, doc: unknown = seed.work) => ({
+const source = { pod: seed.page.pod, path: seed.page.path, sha256: "8".repeat(64) };
+const view = (page: Record<string, unknown> = {}) => ({
   target: { kind: "document", ref },
-  work: { key: { route: "families", target: null }, doc, revision: 4 },
-  readings: {
-    families: { state: "ready", observation: seed.readings.families },
-    pods: { state: "ready", observation: seed.readings.pods },
+  work: { key: { route: "families", target: null }, doc: seed.work, revision: 4 },
+  readings: { pods: { state: "ready", observation: seed.readings.pods } },
+  page: {
+    stage: "apply",
+    pod: seed.page.pod,
+    path: seed.page.path,
+    selection: [],
+    confirming: false,
+    sheet: null,
+    draft: { placement: "AllLoaded", categories: [], families: [] },
+    ...page,
   },
-  page: { ...page, ...over },
   write: vi.fn(async () => null),
   setPage: vi.fn(),
 });
 
-test("the sheet is the plan for the page's spec, and nothing for another spec", () => {
-  const sheet = familiesSheetOf(view() as never);
-  expect(sheet?.entries.map((entry) => [entry.id, entry.flag])).toEqual([
-    ["3101", null],
-    ["3102", null],
-    ["3103", expect.stringContaining("no mapping source")],
-  ]);
-  expect(familiesSheetOf(view({ path: "settings/families/other.json" }) as never)).toBeNull();
-});
-
-test("plan makes the page's spec the Work's spec before the host reads the plan", async () => {
-  const ctx = view({ path: "settings/families/other.json" });
-  await familiesSpec.plan!.read(ctx as never, {
-    pod: page.pod,
-    path: "settings/families/other.json",
-    sha256: "a".repeat(64),
-  });
-  expect(ctx.write).toHaveBeenCalledWith([
-    { path: ["spec"], value: { pod: page.pod, path: "settings/families/other.json" } },
-    { path: ["excludedIds"], value: [] },
-  ]);
-  expect(client.readFamilyCapture).toHaveBeenCalledWith("families.plan", {}, ctx.work.key, ref);
-});
-
-test("confirm applies the plan id with exactly the included hashes, against the reviewed revision", async () => {
+test("plan confirms the page's member against the reviewed Work, and writes no Work", async () => {
   const ctx = view();
-  expect(manifest.actions!.confirm.ready(ctx as never, undefined as never)).toBeNull();
-  await manifest.actions!.confirm.run(ctx as never, undefined as never);
-  expect(client.runSemanticAction).toHaveBeenCalledWith(
-    "families.apply",
-    { planId: "9".repeat(64), expectedPlanHashes: { "3101": "plan-3101" } },
+  const plan = [{ familyId: 3101, familyName: "A", planHash: "p", changes: [], runEffects: ["x"] }];
+  client.runSemanticAction.mockResolvedValueOnce({
+    state: "succeeded",
+    result: {
+      plan: plan.map((row) => ({ ...row, refusals: [], warnings: [] })),
+      included: { "3101": "p" },
+    },
+  });
+  await manifest.actions!.apply.run(ctx as never, undefined as never);
+  expect(client.runSemanticAction).toHaveBeenLastCalledWith(
+    "families.confirm",
+    { source, excludedIds: [3102] },
     ref,
     { work: { key: ctx.work.key, revision: 4 } },
   );
+  expect(ctx.write).not.toHaveBeenCalled();
+  expect(ctx.setPage).toHaveBeenCalledWith({
+    confirming: true,
+    sheet: { entries: [expect.objectContaining({ id: "3101", planHash: "p" })], each: true },
+  });
+});
+
+test("held-back rows are the Work's exclusions", () => {
+  expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
+});
+
+test("confirm applies the source with exactly the included hashes", async () => {
+  const ctx = view({ confirming: true, sheet: seed.page.sheet });
+  expect(manifest.actions!.confirm.ready(ctx as never, undefined as never)).toBeNull();
+  await manifest.actions!.confirm.run(ctx as never, undefined as never);
+  expect(client.runSemanticAction).toHaveBeenLastCalledWith(
+    "families.apply",
+    { source, expectedPlanHashes: { "3101": "plan-3101" } },
+    ref,
+    undefined,
+  );
+});
+
+test("capture evidence is read off the capture's own receipt, failures included", () => {
+  const result = {
+    members: [{ pod: "p", path: "settings/families/a.json", sha256: "a".repeat(64) }],
+    evidence: {
+      diagnostics: [],
+      families: [
+        {
+          familyId: 1,
+          familyName: "A",
+          success: true,
+          coverage: { types: "Full" },
+          unmodeledCount: 2,
+          issues: [],
+        },
+        { familyId: 2, success: false, error: "cannot open" },
+      ],
+    },
+  };
+  const captured = captureEvidenceOf([{ id: "c", result }], "c");
+  expect(
+    captured?.evidence.families.map((f) => [f.familyId, f.unmodeledCount, f.error ?? null]),
+  ).toEqual([
+    [1, 2, null],
+    [2, 0, "cannot open"],
+  ]);
+  expect(captureEvidenceOf([{ id: "c", result: { member: {} } }], "c")).toBeNull();
+  expect(captureEvidenceOf(undefined, "c")).toBeNull();
 });

@@ -129,13 +129,12 @@ export const demoSeedSchema = z.discriminatedUnion("route", [
     /** File-free: the profile the demo plans against is supplied as parsed JSON, never a path. */
     readings: z.object({
       profile: z.record(z.string(), z.unknown()),
+      /** Where the profile lands in the demo pod: the page's member. */
+      member: podMemberSchema,
       families: z.array(z.string()).min(1),
-      preparePlan: z.boolean().optional(),
     }),
     page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
-    scenario: z
-      .enum(["success", "plan-refusal", "stale-basis", "native-unknown"])
-      .default("success"),
+    scenario: z.enum(["success", "plan-refusal", "native-unknown"]).default("success"),
   }),
   z.object({
     ...common,

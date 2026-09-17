@@ -9,7 +9,7 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import type { ReactNode } from "react";
 import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
-import { semanticActions, type SemanticActionKey } from "@pe/agent-contracts";
+import { semanticActions, type ActionBases, type SemanticActionKey } from "@pe/agent-contracts";
 import type {
   ExecutionTarget,
   Reading,
@@ -153,10 +153,11 @@ export interface PlanEntry {
   warnings: readonly string[];
 }
 
-/** The plan apply confirms (dogma law 9). `id` names a stored plan reading when there is one. */
+/** The plan apply confirms (dogma law 9), as its confirm workflow returned it. */
 export interface PlanSheet {
-  id?: string;
   entries: readonly PlanEntry[];
+  /** Apply sends one hash per included row (`expectedPlanHashes`); absent = the one `planHash`. */
+  each?: true;
 }
 
 export interface EntityPage {
@@ -168,7 +169,7 @@ export interface EntityPage {
   selection: string[];
   /** The confirmation sheet is open. Page, never URL. */
   confirming: boolean;
-  /** The sheet a plan read returned, for plans that are results rather than Readings. */
+  /** The sheet the plan read returned. */
   sheet: PlanSheet | null;
 }
 
@@ -203,16 +204,14 @@ export interface MemberSource extends MemberRef {
 }
 
 /**
- * Apply as a confirmation (dogma law 9): `read` plans the saved spec, the sheet shows the plan,
- * `confirm` applies exactly the included rows' hashes. A plan that lands in a Reading is projected
- * by `sheet`; a plan that is a result is returned by `read` and held on the page.
+ * Apply as a confirmation (dogma law 9): `read` plans the saved spec and returns the sheet, the
+ * page holds it, and `confirm` applies exactly the included rows' hashes.
  */
 export interface ApplyPlan<W, R extends string, P> {
   read: (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
     source: MemberSource,
-  ) => Promise<PlanSheet | null>;
-  sheet?: (view: EntityView<W, R, P>) => PlanSheet | null;
+  ) => Promise<PlanSheet>;
   /** Rows held back from apply; the route holds them where its host checks them. */
   excluded?: (view: EntityView<W, R, P>) => readonly string[];
   confirm: (
@@ -281,8 +280,9 @@ export const workflow = async (
   key: SemanticActionKey,
   input: Record<string, unknown>,
   ctx: { target: ExecutionTarget },
+  bases?: ActionBases,
 ): Promise<Record<string, unknown>> => {
-  const action = await runSemanticAction(key, input, documentOf(ctx));
+  const action = await runSemanticAction(key, input, documentOf(ctx), bases);
   if (action.state !== "succeeded")
     throw Error(
       "error" in action && action.error ? String(action.error) : `${key} ${action.state}`,
@@ -291,20 +291,49 @@ export const workflow = async (
 };
 
 /**
- * The plan lane for a workflow whose first admission (no `planHash`) returns `{ plan }` and whose
- * second applies that hash (`family.apply`). `entry` projects the returned plan onto a sheet row.
+ * The plan lane for a confirm/apply workflow pair (dogma law 14): `confirm` returns `{ plan }` and
+ * mutates nothing, `apply` requires the hashes it returned. A `plan` array (with `included`) is one
+ * row per subject and applies `expectedPlanHashes`; a single plan applies its `planHash`.
+ * `authored` is what the route's Work adds to both; with it, confirm reads against that revision.
  */
 export const admissionPlan = <W, R extends string, P>(
-  key: SemanticActionKey,
-  entry: (plan: unknown) => PlanEntry,
-): ApplyPlan<W, R, P> => ({
-  read: async (ctx, source) => ({
-    entries: [entry((await workflow(key, { source }, ctx)).plan)],
-  }),
-  confirm: async (ctx, _sheet, included, source) => {
-    await workflow(key, { source, planHash: included[0]!.planHash }, ctx);
-  },
-});
+  keys: { confirm: SemanticActionKey; apply: SemanticActionKey },
+  row: (plan: unknown) => PlanEntry,
+  authored?: (work: W) => { executionOptions?: unknown } & Record<string, unknown>,
+): ApplyPlan<W, R, P> => {
+  const workOf = (
+    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+  ): { input: { executionOptions?: unknown }; bases?: ActionBases } => {
+    if (!authored) return { input: {} };
+    const { doc, key, revision } = ctx.work;
+    if (!doc || revision === null) throw Error("author the route's Work first");
+    return { input: authored(doc), bases: { work: { key: key as WorkKey, revision } } };
+  };
+  return {
+    read: async (ctx, source) => {
+      const { input, bases } = workOf(ctx);
+      const result = await workflow(keys.confirm, { source, ...input }, ctx, bases);
+      return {
+        entries: [result.plan].flat().map(row),
+        ...(result.included ? { each: true as const } : {}),
+      };
+    },
+    confirm: async (ctx, sheet, included, source) => {
+      const { executionOptions } = workOf(ctx).input;
+      await workflow(
+        keys.apply,
+        {
+          source,
+          ...(executionOptions ? { executionOptions } : {}),
+          ...(sheet.each
+            ? { expectedPlanHashes: Object.fromEntries(included.map((r) => [r.id, r.planHash])) }
+            : { planHash: included[0]!.planHash }),
+        },
+        ctx,
+      );
+    },
+  };
+};
 
 const podsOf = (view: Viewed) => {
   const reading = view.readings.pods;
@@ -322,7 +351,7 @@ export function sheetOf<W, R extends string, P>(
   def: EntityRouteDef<W, R, P>,
   view: EntityView<W, R, P>,
 ): { sheet: PlanSheet; excluded: ReadonlySet<string>; included: readonly PlanEntry[] } | null {
-  const sheet = def.plan?.sheet?.(view) ?? view.page.sheet;
+  const sheet = view.page.sheet;
   if (!sheet) return null;
   const excluded = new Set(def.plan?.excluded?.(view) ?? []);
   return {

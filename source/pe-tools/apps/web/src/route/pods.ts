@@ -1,7 +1,6 @@
 /**
- * The web's one reach into the pod folder: the host-local `pod.*` ops. The host owns member I/O so
- * the web works offline; these calls hand it an address (`{ pod, path }`) and get bytes or
- * diagnostics back. Writes are mutations, so they are admitted to the host action journal.
+ * The route layer's pod port: the host-local `pod.*` ops. Reads come from `host/pods.ts` and the
+ * pod list is a Reading; writes are mutations, so they are admitted to the host action journal.
  */
 import { useCallback, useEffect, useState } from "react";
 import { actionAdmissionSchema, type Reading } from "@pe/agent-contracts";
@@ -11,7 +10,7 @@ import type {
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
 
-import { callHostRpc } from "#/host/client";
+import { composeMember, listPods, readMember } from "#/host/pods";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./manifest";
 
@@ -41,15 +40,14 @@ async function admitHost(key: "pod.member.write" | "pod.member.save", input: obj
 }
 
 export const podHost = {
-  list: async (): Promise<PodRow[]> => [...(await callHostRpc("pod.list")).pods],
-  read: (ref: MemberRef) => callHostRpc("pod.member.read", ref),
+  list: (): Promise<PodRow[]> => listPods(),
+  read: readMember,
   /** Create a new member; refuses an existing path. */
   write: (ref: MemberRef, content: string) => admitHost("pod.member.write", { ...ref, content }),
   /** Overwrite the member only if it still holds the bytes the editor read. */
   save: (ref: MemberRef, content: string, expectedSha256: string) =>
     admitHost("pod.member.save", { ...ref, content, expectedSha256 }),
-  compose: (ref: MemberRef, content?: string) =>
-    callHostRpc("pod.member.compose", { ...ref, ...(content === undefined ? {} : { content }) }),
+  compose: composeMember,
 };
 
 /** `pod.list` as a Reading, for an entity route to hand `useRoute` as its `pods`. */

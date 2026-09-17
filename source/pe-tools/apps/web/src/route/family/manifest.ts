@@ -94,8 +94,10 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   needs: "document",
   // The audit edits a member in every stage, so the Situation offers the spec picker throughout.
   specPicker: "always",
-  // The first `family.apply` admission returns one family plan; the second applies its hash.
-  plan: admissionPlan("family.apply", (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan))),
+  // `family.confirm` returns one family plan and changes nothing; `family.apply` applies its hash.
+  plan: admissionPlan({ confirm: "family.confirm", apply: "family.apply" }, (plan) =>
+    ffPlanRow(ffPlanEntrySchema.parse(plan)),
+  ),
   docs: "Audit one family model beside its Revit family: capture the open family into a pod, edit the saved model, plan and apply it, or build it to an .rfa.",
 };
 
@@ -110,15 +112,11 @@ const onTarget = (row: ActionStatus, target: { session: string; openId: string }
 const statusesOf = (statuses: unknown) =>
   statuses ? actionStatusSchema.array().parse(statuses) : [];
 
-/** The latest successful apply (a `family.apply` with a plan hash) to this exact document lifetime. */
+/** The latest successful apply to this exact document lifetime. */
 export const latestApplyStatus = (statuses: unknown, target: { session: string; openId: string }) =>
   latestOf(
     statusesOf(statuses).filter(
-      (row) =>
-        row.key === "family.apply" &&
-        row.state === "succeeded" &&
-        typeof row.request.planHash === "string" &&
-        onTarget(row, target),
+      (row) => row.key === "family.apply" && row.state === "succeeded" && onTarget(row, target),
     ),
   );
 
@@ -263,7 +261,7 @@ const familySeed = (
   },
 });
 
-/** The plan the apply seed confirms: what the first `family.apply` admission would return. */
+/** The plan the apply seed confirms: what `family.confirm` would return. */
 const DEMO_PLAN = ffPlanRow({
   familyId: 7001,
   familyName: "grd",

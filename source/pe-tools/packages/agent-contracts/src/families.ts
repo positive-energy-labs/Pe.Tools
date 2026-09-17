@@ -1,9 +1,6 @@
 import { z } from "zod";
 
 import type { RouteStateSpec } from "./route-state.ts";
-import { canonicalRouteInput } from "./route-doc.ts";
-import { observationSchema } from "./reading.ts";
-import { podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -48,6 +45,23 @@ export const ffReceiptSchema = z.object({
 });
 export type FfReceipt = z.infer<typeof ffReceiptSchema>;
 
+/** What `families.capture` saw, per family, beside the members it filed; a failure files nothing. */
+export const familiesCaptureEvidenceSchema = z.object({
+  diagnostics: z.array(diagnosticSchema),
+  families: z.array(
+    z.object({
+      familyId: z.number(),
+      familyName: z.string().nullish(),
+      success: z.boolean(),
+      coverage: z.record(z.string(), z.string()).default({}),
+      unmodeledCount: z.number().default(0),
+      issues: z.array(revitDataIssueSchema).default([]),
+      error: z.string().nullish(),
+    }),
+  ),
+});
+export type FamiliesCaptureEvidence = z.infer<typeof familiesCaptureEvidenceSchema>;
+
 export const familyExecutionOptionsSchema = z
   .object({
     singleTransaction: z.boolean().optional(),
@@ -66,44 +80,20 @@ const appliedScopeSchema = z.object({
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 
 /**
- * The Families route document is authored Work and nothing else. Native plans, receipts and
- * every other host reading live with the host owners that produce them; this document holds
- * only what a human or pea typed.
+ * The Families route document is authored Work and nothing else. The spec is the page's member
+ * (one address, sent as `source`); plans and receipts are results. This document holds only the
+ * scope and what a human or pea held back.
  */
 const familiesDocumentSchema = z.object({
-  spec: podMemberSchema.nullable().default(null),
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-/**
- * The exact authored basis a plan was read against. Exclusions are deliberately excluded:
- * excluding a family narrows an existing plan, it does not invalidate the native reading.
- */
-export const familiesBasis = (work: FamiliesRouteDocument): string =>
-  canonicalRouteInput({
-    spec: work.spec,
-    scope: work.scope,
-    executionOptions: work.executionOptions ?? null,
-  });
-
-/** A host reading, stored by the capture owner. It never lands in the document above. */
-export const familiesPlanReadingSchema = z.object({
-  basis: z.string().min(1),
-  workRevision: z.number().int().nonnegative(),
-  reading: observationSchema,
-  source: podMemberSourceSchema,
-  composedDigest: z.string().min(1),
-  entries: z.array(ffPlanEntrySchema),
-  executionOptions: familyExecutionOptionsSchema.optional(),
-});
-export type FamiliesPlanReading = z.infer<typeof familiesPlanReadingSchema>;
-
 /** The included plan hashes an apply must reproduce exactly. Server and client share this. */
 export const familiesIncluded = (
-  plan: Pick<FamiliesPlanReading, "entries">,
+  plan: { entries: readonly FfPlanEntry[] },
   excludedIds: readonly number[],
 ): Record<string, string> =>
   Object.fromEntries(
@@ -120,10 +110,10 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: pick a spec member and scope, read a native plan, exclude, apply.",
+  description: "Family Foundry: author a scope, confirm a spec member's plan, exclude, apply.",
   schema: familiesDocumentSchema,
-  agentWriteMask: [["spec"], ["scope"], ["excludedIds"], ["executionOptions"]],
-  // Reading a plan is `family.plan`-style host read; applying it is the `families.apply`
-  // semantic action. Neither is a route command, so neither can write into authored Work.
+  agentWriteMask: [["scope"], ["excludedIds"], ["executionOptions"]],
+  // Confirming and applying are the `families.confirm` and `families.apply` workflows. Neither is
+  // a route command, so neither can write into authored Work.
   commands: {},
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

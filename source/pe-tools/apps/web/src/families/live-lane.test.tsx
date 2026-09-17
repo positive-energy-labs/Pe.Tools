@@ -17,7 +17,6 @@ import {
   familiesRouteState,
   readingKey,
   type ReadingRequest,
-  type WorkKey,
 } from "@pe/agent-contracts";
 
 let hostCalls: string[] = [];
@@ -56,7 +55,6 @@ const applyStatus = actionStatusSchema.parse({
   publication: { state: "unrequested" },
   state: "succeeded",
 });
-let familyReadingScopes: WorkKey[] = [];
 let receiptRequests: Extract<ReadingRequest, { kind: "receipts" }>[] = [];
 
 /** The one wire, answered from the test: inventory and Work land, the capture streams never do. */
@@ -70,7 +68,6 @@ class WireSource {
       this.timers.push(setTimeout(() => this.onmessage?.({ data: JSON.stringify(frame) }), delay));
     for (const request of keys) {
       const key = readingKey(request);
-      if (request.kind === "family-readings") familyReadingScopes.push(request.work);
       if (request.kind === "receipts") {
         receiptRequests.push(request);
         if (!request.id) send(0, { kind: "snapshot", key, value: [applyStatus] });
@@ -108,7 +105,6 @@ let errors: string[] = [];
 beforeEach(() => {
   errors = [];
   hostCalls = [];
-  familyReadingScopes = [];
   receiptRequests = [];
   window.history.replaceState({}, "", `/families?target=${SESSION}`);
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -131,7 +127,6 @@ test("the families live lane mounts without an update-depth loop", async () => {
   await new Promise((resolve) => setTimeout(resolve, 400));
   const depth = errors.filter((line) => /Maximum update depth/.test(line));
   expect(depth, depth.join("\n")).toEqual([]);
-  expect(familyReadingScopes).toContainEqual({ route: "families", target: ADDRESS });
   expect(receiptRequests).toContainEqual({
     kind: "receipts",
     target: { session: SESSION, openId: OPEN_ID },
