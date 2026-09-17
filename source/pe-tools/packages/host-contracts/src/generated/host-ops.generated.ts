@@ -58,6 +58,355 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod. */
+export namespace FamiliesApply {
+  export namespace Req {
+    /**
+     * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.
+     */
+    export interface Request {
+      specJson: string;
+      expectedPlanHashes: {
+        [k: string]: string;
+      };
+      source: PodMemberSource;
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     */
+    export interface PodMemberSource {
+      pod: string;
+      path: string;
+      sha256: string;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
+      /**
+       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
+       */
+      captureDependencyGraph?: boolean;
+    }
+  }
+  export namespace Res {
+    /**
+     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running.
+     */
+    export interface Response {
+      receipts: FamilyFoundryApplyReceipt[];
+      diagnostics: FamilyFoundryDiagnostic[];
+      receiptPath?: null | string;
+    }
+    /**
+     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
+     */
+    export interface FamilyFoundryApplyReceipt {
+      familyId: number;
+      familyName?: null | string;
+      success: boolean;
+      converged: boolean;
+      error?: null | string;
+      planHash?: null | string;
+      residue: FamilyFoundryChangeData[];
+      errors: string[];
+      artifactDirectory?: null | string;
+      observedParametersDigest?: null | string;
+    }
+    /**
+     * One change the reconciler would make: section + key is the address, kind is the verb.
+     */
+    export interface FamilyFoundryChangeData {
+      section: string;
+      key: string;
+      kind: string;
+      mappedFrom?: null | string;
+    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
+/** Open selected loaded families read-only and capture each as a family.json spec with coverage. */
+export namespace FamiliesCapture {
+  export namespace Req {
+    /**
+     * Capture loaded families read-only as family.json.
+     */
+    export interface Request {
+      familyIds: number[];
+    }
+  }
+  export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      families: FamilyFoundryFamilyModelData[];
+      diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface FamilyFoundryFamilyModelData {
+      familyId: number;
+      familyName?: null | string;
+      success: boolean;
+      modelJson?: null | string;
+      coverage: {
+        [k: string]: string;
+      };
+      unmodeledCount: number;
+      issues: RevitDataIssue[];
+      error?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
+/** Diff an inline family spec against each loaded family it selects (or one explicit family) and return the plan per family with a deterministic hash. */
+export namespace FamiliesPlan {
+  export namespace Req {
+    /**
+     * Plan a spec against the loaded families it selects, or one explicit loaded family.
+     */
+    export interface Request {
+      specJson: string;
+      familyId?: number | null;
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
+      /**
+       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
+       */
+      captureDependencyGraph?: boolean;
+    }
+  }
+  export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      families: FamilyFoundryFamilyPlanData[];
+      diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface FamilyFoundryFamilyPlanData {
+      familyId: number;
+      familyName: string;
+      planHash: string;
+      changes: FamilyFoundryChangeData[];
+      runEffects: string[];
+      refusals: FamilyFoundryDiagnostic[];
+      warnings: RevitDataIssue[];
+    }
+    /**
+     * One change the reconciler would make: section + key is the address, kind is the verb.
+     */
+    export interface FamilyFoundryChangeData {
+      section: string;
+      key: string;
+      kind: string;
+      mappedFrom?: null | string;
+    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+  }
+}
+
+/** Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod. */
+export namespace FamilyApply {
+  export namespace Req {
+    /**
+     * Apply a saved spec to the active family document; `planHash` from family.plan gates drift. The document is not saved.
+     */
+    export interface Request {
+      specJson: string;
+      planHash: string;
+      source: PodMemberSource;
+      executionOptions?: null | ExecutionOptions;
+    }
+    /**
+     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     */
+    export interface PodMemberSource {
+      pod: string;
+      path: string;
+      sha256: string;
+    }
+    /**
+     * Serializable execution behavior authored beside a Family Foundry profile.
+     */
+    export interface ExecutionOptions {
+      /**
+       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
+       */
+      singleTransaction?: boolean;
+      /**
+       * Batch consecutive type operations.
+       */
+      optimizeTypeOperations?: boolean;
+      /**
+       * Enable an optional processor snapshot pipeline when the caller supplies one.
+       */
+      enableCollectors?: boolean;
+      /**
+       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
+       */
+      suppressWarnings?: boolean;
+      /**
+       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
+       */
+      captureDependencyGraph?: boolean;
+    }
+  }
+  export namespace Res {
+    /**
+     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running.
+     */
+    export interface Response {
+      receipts: FamilyFoundryApplyReceipt[];
+      diagnostics: FamilyFoundryDiagnostic[];
+      receiptPath?: null | string;
+    }
+    /**
+     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
+     */
+    export interface FamilyFoundryApplyReceipt {
+      familyId: number;
+      familyName?: null | string;
+      success: boolean;
+      converged: boolean;
+      error?: null | string;
+      planHash?: null | string;
+      residue: FamilyFoundryChangeData[];
+      errors: string[];
+      artifactDirectory?: null | string;
+      observedParametersDigest?: null | string;
+    }
+    /**
+     * One change the reconciler would make: section + key is the address, kind is the verb.
+     */
+    export interface FamilyFoundryChangeData {
+      section: string;
+      key: string;
+      kind: string;
+      mappedFrom?: null | string;
+    }
+    /**
+     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
+     */
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
+/** Capture the active Revit family document as a family.json spec, with per-section coverage and the unmodeled ledger. */
+export namespace FamilyCapture {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      reading: Reading;
+      familyName: string;
+      modelJson: string;
+      unmodeledCount: number;
+      coverage: {
+        [k: string]: string;
+      };
+      issues: RevitDataIssue[];
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+  }
+}
+
 /** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
 export namespace FamilyEditorApply {
   export namespace Req {
@@ -168,123 +517,14 @@ export namespace FamilyEditorSnapshot {
   }
 }
 
-/** Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back. */
-export namespace FamilyTemporaryAcquire {
+/** Diff an inline family spec (`{ select, patch, run }`) against the active family document and return the plan with a deterministic hash. */
+export namespace FamilyPlan {
   export namespace Req {
     /**
-     * Caller retains this UUID before submission; reuse it to recover, never open twice.
+     * Plan a spec (`{ select, patch, run }` JSON) against the active family document.
      */
     export interface Request {
-      acquisitionId: string;
-      familyId: number;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      acquisitionId: string;
-      status: string;
-      document?: null | TemporaryDocumentRef;
-      recoveryId: string;
-      detail?: null | string;
-      recordedOpenId?: null | string;
-      recordedStatus?: null | string;
-    }
-    export interface TemporaryDocumentRef {
-      session: string;
-      openId: string;
-    }
-  }
-}
-
-/** Reconcile the current family document or explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family. */
-export namespace FamilyfoundryApply {
-  export namespace Req {
-    /**
-     * Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.
-     */
-    export interface Request {
-      patchJson: string;
-      expectedPlanHashes: {
-        [k: string]: string;
-      };
-      executionOptions?: null | ExecutionOptions;
-    }
-    /**
-     * Serializable execution behavior authored beside a Family Foundry profile.
-     */
-    export interface ExecutionOptions {
-      /**
-       * Bundle lowered native operations into one edit transaction inside the whole-family rollback group.
-       */
-      singleTransaction?: boolean;
-      /**
-       * Batch consecutive type operations.
-       */
-      optimizeTypeOperations?: boolean;
-      /**
-       * Enable an optional processor snapshot pipeline when the caller supplies one.
-       */
-      enableCollectors?: boolean;
-      /**
-       * Suppress non-fatal Revit warnings while retaining commit diagnostics.
-       */
-      suppressWarnings?: boolean;
-      /**
-       * Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default.
-       */
-      captureDependencyGraph?: boolean;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      receipts: FamilyFoundryApplyReceipt[];
-      diagnostics: FamilyFoundryDiagnostic[];
-    }
-    /**
-     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
-     */
-    export interface FamilyFoundryApplyReceipt {
-      familyId: number;
-      familyName?: null | string;
-      success: boolean;
-      converged: boolean;
-      error?: null | string;
-      planHash?: null | string;
-      residue: FamilyFoundryChangeData[];
-      errors: string[];
-      artifactDirectory?: null | string;
-      observedParametersDigest?: null | string;
-    }
-    /**
-     * One change the reconciler would make: section + key is the address, kind is the verb.
-     */
-    export interface FamilyFoundryChangeData {
-      section: string;
-      key: string;
-      kind: string;
-      mappedFrom?: null | string;
-    }
-    /**
-     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
-     */
-    export interface FamilyFoundryDiagnostic {
-      code: string;
-      path: string;
-      message: string;
-      suggestion?: null | string;
-    }
-  }
-}
-
-/** Diff an inline family patch (`{ select, patch, run }`) against the current family document or each loaded family it selects and return the plan per family with a deterministic hash. */
-export namespace FamilyfoundryPlan {
-  export namespace Req {
-    /**
-     * Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.
-     */
-    export interface Request {
-      patchJson: string;
-      familyId?: number | null;
+      specJson: string;
       executionOptions?: null | ExecutionOptions;
     }
     /**
@@ -358,51 +598,30 @@ export namespace FamilyfoundryPlan {
   }
 }
 
-/** Open selected loaded families read-only and capture each as family.json with coverage. */
-export namespace FamilyfoundryProject {
+/** Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back. */
+export namespace FamilyTemporaryAcquire {
   export namespace Req {
     /**
-     * Capture loaded families read-only as family.json.
+     * Caller retains this UUID before submission; reuse it to recover, never open twice.
      */
     export interface Request {
-      familyIds: number[];
+      acquisitionId: string;
+      familyId: number;
     }
   }
   export namespace Res {
-    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-
     export interface Response {
-      families: FamilyFoundryFamilyModelData[];
-      diagnostics: FamilyFoundryDiagnostic[];
+      acquisitionId: string;
+      status: string;
+      document?: null | TemporaryDocumentRef;
+      recoveryId: string;
+      detail?: null | string;
+      recordedOpenId?: null | string;
+      recordedStatus?: null | string;
     }
-    export interface FamilyFoundryFamilyModelData {
-      familyId: number;
-      familyName?: null | string;
-      success: boolean;
-      modelJson?: null | string;
-      coverage: {
-        [k: string]: string;
-      };
-      unmodeledCount: number;
-      issues: RevitDataIssue[];
-      error?: null | string;
-    }
-    export interface RevitDataIssue {
-      code: string;
-      severity: RevitDataIssueSeverity;
-      message: string;
-      familyName?: null | string;
-      typeName?: null | string;
-      parameterName?: null | string;
-    }
-    /**
-     * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
-     */
-    export interface FamilyFoundryDiagnostic {
-      code: string;
-      path: string;
-      message: string;
-      suggestion?: null | string;
+    export interface TemporaryDocumentRef {
+      session: string;
+      openId: string;
     }
   }
 }
@@ -487,6 +706,9 @@ export namespace PodList {
     export interface Response {
       pods: PodData[];
     }
+    /**
+     * An installed pod. Id, name, and version are null when pod.json is invalid; diagnostics cover manifest and entrypoints only.
+     */
     export interface PodData {
       id?: null | string;
       name?: null | string;
@@ -3380,40 +3602,6 @@ export namespace RevitDetailElements {
   }
 }
 
-/** Capture the active Revit family document as portable family.json, with per-section coverage and the unmodeled ledger. */
-export namespace RevitDetailFamilyModel {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      reading: Reading;
-      familyName: string;
-      modelJson: string;
-      unmodeledCount: number;
-      coverage: {
-        [k: string]: string;
-      };
-      issues: RevitDataIssue[];
-    }
-    export interface Reading {
-      at: string;
-      version?: null | string;
-      observedAt: string;
-    }
-    export interface RevitDataIssue {
-      code: string;
-      severity: RevitDataIssueSeverity;
-      message: string;
-      familyName?: null | string;
-      typeName?: null | string;
-      parameterName?: null | string;
-    }
-  }
-}
-
 /** Read the model-owned parameter-link profile and preview every proposed target write and issue. */
 export namespace RevitDetailParameterLinks {
   export namespace Req {
@@ -4788,6 +4976,61 @@ export namespace RevitResolveReferences {
   }
 }
 
+/** Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule. */
+export namespace ScheduleApply {
+  export namespace Req {
+    /**
+     * Create a new schedule from a saved spec. Apply never edits an existing schedule.
+     */
+    export interface Request {
+      specJson: string;
+      source: PodMemberSource;
+    }
+    /**
+     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     */
+    export interface PodMemberSource {
+      pod: string;
+      path: string;
+      sha256: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      scheduleId: number;
+      scheduleName: string;
+      appliedFieldCount: number;
+      skipped: string[];
+      warnings: string[];
+      receiptPath: string;
+    }
+  }
+}
+
+/** Capture one schedule's definition (fields, sort/group, filters, header groups, view template) as a schedule spec. Never captures cell values. */
+export namespace ScheduleCapture {
+  export namespace Req {
+    /**
+     * Capture one schedule's definition (never its cell values) as a spec.
+     */
+    export interface Request {
+      scheduleId: number;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      reading: Reading;
+      scheduleName: string;
+      specJson: string;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
+    }
+  }
+}
+
 /** Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted. */
 export namespace ScriptingCancel {
   export namespace Req {
@@ -4863,6 +5106,9 @@ export namespace ScriptingExecute {
       contentType: string;
       sizeBytes: number;
     }
+    /**
+     * One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.
+     */
     export interface PodReceipt {
       podId: string;
       memberPath: string;
@@ -5330,13 +5576,16 @@ export namespace TakeoffsSnapshot {
 export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
+  "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
+  "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
+  "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
+  "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
+  "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
-  "familyfoundry.apply": { request: FamilyfoundryApply.Req.Request; response: FamilyfoundryApply.Res.Response };
-  "familyfoundry.plan": { request: FamilyfoundryPlan.Req.Request; response: FamilyfoundryPlan.Res.Response };
-  "familyfoundry.project": { request: FamilyfoundryProject.Req.Request; response: FamilyfoundryProject.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "pod.export": { request: PodExport.Req.Request; response: PodExport.Res.Response };
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
@@ -5371,7 +5620,6 @@ export interface HostOps {
   "revit.detail.data-tables": { request: RevitDetailDataTables.Req.Request; response: RevitDetailDataTables.Res.Response };
   "revit.detail.electrical-panel-schedules": { request: RevitDetailElectricalPanelSchedules.Req.Request; response: RevitDetailElectricalPanelSchedules.Res.Response };
   "revit.detail.elements": { request: RevitDetailElements.Req.Request; response: RevitDetailElements.Res.Response };
-  "revit.detail.family-model": { request: RevitDetailFamilyModel.Req.Request; response: RevitDetailFamilyModel.Res.Response };
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
@@ -5382,6 +5630,8 @@ export interface HostOps {
   "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
+  "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
+  "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
   "scripting.cancel": { request: ScriptingCancel.Req.Request; response: ScriptingCancel.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
@@ -5402,13 +5652,16 @@ export interface HostOps {
 export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
+  "families.apply",
+  "families.capture",
+  "families.plan",
+  "family.apply",
+  "family.capture",
   "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
+  "family.plan",
   "family.temporary.acquire",
-  "familyfoundry.apply",
-  "familyfoundry.plan",
-  "familyfoundry.project",
   "host.ops.catalog",
   "pod.export",
   "pod.import",
@@ -5443,7 +5696,6 @@ export const hostOpKeys = [
   "revit.detail.data-tables",
   "revit.detail.electrical-panel-schedules",
   "revit.detail.elements",
-  "revit.detail.family-model",
   "revit.detail.parameter-links",
   "revit.detail.schedules",
   "revit.detail.sheets",
@@ -5454,6 +5706,8 @@ export const hostOpKeys = [
   "revit.matrix.schedule-coverage",
   "revit.matrix.schedule-profiles",
   "revit.resolve.references",
+  "schedule.apply",
+  "schedule.capture",
   "scripting.cancel",
   "scripting.execute",
   "scripting.workspace.bootstrap",

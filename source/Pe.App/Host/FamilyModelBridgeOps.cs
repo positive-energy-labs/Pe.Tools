@@ -1,7 +1,5 @@
 using Autodesk.Revit.DB;
-using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.Operations;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
@@ -11,24 +9,9 @@ using System.IO;
 namespace Pe.App.Host;
 
 internal static class FamilyModelBridgeOps {
-    [Op("revit.detail.family-model", Does = "Capture the active Revit family document as portable family.json, with per-section coverage and the unmodeled ledger.", Title = "Capture Family Model", Finds = ["family-model", "family-json", "capture", "roundtrip", "family-foundry"], Cost = OpCost.Bounded)]
-    private static Task<FamilyModelCaptureData> Capture(FamilyModelCaptureRequest _, FamilyDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => CaptureActiveFamily(document.Value), cancellationToken);
-
     [Op("revit.apply.family-model", Does = "Build a Revit family from portable family.json by reconciling a fresh template document, save it to an explicit .rfa path, and report the receipt residue.", Title = "Build Family Model", Finds = ["family-model", "family-json", "build", "reconcile", "family-foundry"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyModelBuildData> Build(FamilyModelBuildRequest request, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => BuildFamily(request), cancellationToken);
-
-    private static FamilyModelCaptureData CaptureActiveFamily(Document document) {
-        var model = document.CaptureFamilyModel();
-        return new FamilyModelCaptureData(
-            DocumentReading.Here(document),
-            model.Family.Name,
-            FamilyModelJson.Serialize(model),
-            model.Unmodeled.Count,
-            model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()),
-            model.CaptureIssues);
-    }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {
         if (string.IsNullOrWhiteSpace(request.ModelJson))

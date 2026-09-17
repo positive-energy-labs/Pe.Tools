@@ -2,9 +2,9 @@ using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public sealed record FamilyModelCaptureRequest;
+public sealed record FamilyCaptureRequest;
 
-public sealed record FamilyModelCaptureData(
+public sealed record FamilyCaptureData(
     Reading Reading,
     string FamilyName,
     string ModelJson,
