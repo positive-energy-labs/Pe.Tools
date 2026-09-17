@@ -6,6 +6,7 @@ import type {
   Session,
   WireDisplayState,
 } from "@mastra/core/agent-controller";
+import { Buffer } from "node:buffer";
 import {
   threadAccess,
   type DeferredToolResultRef,
@@ -66,28 +67,32 @@ export function projectThreadMessages(messages: ThreadMessage[]): {
   messages: ThreadMessage[];
   deferredResults: DeferredToolResultRef[];
 } {
-  const projected = structuredClone(messages);
   const deferredResults: DeferredToolResultRef[] = [];
-  for (const message of projected) {
-    for (const part of message.content.parts) {
-      if (part.type !== "tool-invocation") continue;
+  const projected = messages.map((message) => {
+    let changed = false;
+    const parts = message.content.parts.map((part) => {
+      if (part.type !== "tool-invocation") return part;
       const invocation = part.toolInvocation;
-      if (invocation.state !== "result" || invocation.isError === true) continue;
+      if (invocation.state !== "result" || invocation.isError === true) return part;
       const result = invocation.result;
-      if (isValidationFailure(result)) continue;
+      if (isValidationFailure(result)) return part;
       const json = JSON.stringify(result);
-      if (json === undefined) continue;
-      const byteSize = new TextEncoder().encode(json).byteLength;
-      if (byteSize <= DEFERRED_TOOL_RESULT_BYTES) continue;
+      if (json === undefined) return part;
+      const byteSize = Buffer.byteLength(json, "utf8");
+      if (byteSize <= DEFERRED_TOOL_RESULT_BYTES) return part;
       deferredResults.push({
         messageId: message.id,
         toolCallId: invocation.toolCallId,
         byteSize,
         summary: summarizeResult(result),
       });
-      delete invocation.result;
-    }
-  }
+      const projectedInvocation = { ...invocation };
+      delete projectedInvocation.result;
+      changed = true;
+      return { ...part, toolInvocation: projectedInvocation };
+    });
+    return changed ? { ...message, content: { ...message.content, parts } } : message;
+  });
   return { messages: projected, deferredResults };
 }
 
