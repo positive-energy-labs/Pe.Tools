@@ -19,12 +19,20 @@ describe("fixture census", () => {
       canonicalReviewUrl: "/parameter-links",
       fixtureKind: "live-route",
     });
+    expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
+      "/data-tables",
+      "/ops",
+      "/parameter-links",
+      "/runs",
+      "/schedule-grid",
+    ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
       canonicalReviewUrl: "/lab",
       fixtureKind: "prototype-fixture",
     });
-    expect(census.missingCanonicalFixtures).toBe(0);
+    expect(census.missingReviewUrls).toEqual([]);
+    expect(census.missingCanonicalFixtures).toBe(5);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
@@ -78,6 +86,7 @@ describe("fixture census", () => {
       fixtureKind: "missing",
     });
     expect(census.discoveredApiRoutes).toEqual(["/api/example"]);
+    expect(census.missingReviewUrls).toHaveLength(1);
     expect(census.missingCanonicalFixtures).toBe(1);
   });
 });

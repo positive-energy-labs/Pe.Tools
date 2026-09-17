@@ -18,7 +18,7 @@ const canonicalFixtures: Record<
   "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
-  "/runs": { canonicalReviewUrl: "/runs", fixtureKind: "inherent-static" },
+  "/runs": { canonicalReviewUrl: "/runs", fixtureKind: "live-route" },
   "/schedule-grid": { canonicalReviewUrl: "/schedule-grid", fixtureKind: "live-route" },
   "/settings": { canonicalReviewUrl: "/settings?demo=save", fixtureKind: "demo-fixture" },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
@@ -58,12 +58,20 @@ export function censusFromRouteTree(routeTree: string) {
       fixtureKind: "missing",
     }),
   }));
+  const missingReviewUrls = classifiedMaintainedRoutes.filter(
+    ({ fixtureKind }) => fixtureKind === "missing",
+  );
+  const nonFixtureLiveRoutes = classifiedMaintainedRoutes.filter(
+    ({ fixtureKind }) => fixtureKind === "live-route",
+  );
 
   return {
     schemaVersion: 1,
     discoveredRenderedRoutes,
     discoveredApiRoutes,
     classifiedMaintainedRoutes,
+    missingReviewUrls,
+    nonFixtureLiveRoutes,
     classifiedPrototypeRoutes: prototypeRoutes.map((route) => ({
       route,
       canonicalReviewUrl: route,
@@ -74,9 +82,7 @@ export function censusFromRouteTree(routeTree: string) {
       canonicalReviewUrl: route,
       fixtureKind: "design-system-specimen",
     })),
-    missingCanonicalFixtures: classifiedMaintainedRoutes.filter(
-      ({ fixtureKind }) => fixtureKind === "missing",
-    ).length,
+    missingCanonicalFixtures: missingReviewUrls.length + nonFixtureLiveRoutes.length,
   };
 }
 
