@@ -703,9 +703,14 @@ export function useHostCall<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled, nonce]);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
-  const visible = state.generation === generation ? state : { pending: enabled, generation };
+  const visible =
+    enabled && state.generation === generation
+      ? state
+      : { data: undefined, error: undefined, pending: enabled };
   return {
-    ...visible,
+    data: visible.data,
+    error: visible.error,
+    pending: visible.pending,
     isPending: visible.pending,
     isLoading: visible.pending,
     isSuccess: !visible.pending && visible.error === undefined && visible.data !== undefined,

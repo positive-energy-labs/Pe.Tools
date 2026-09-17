@@ -10,8 +10,8 @@ test("dependency changes hide old data synchronously while refresh retains same-
   const load = (identity: string, signal: AbortSignal) =>
     new Promise<string>((resolve) => requests.push({ identity, signal, resolve }));
 
-  function Probe({ identity }: { identity: string }) {
-    const query = useHostCall((signal) => load(identity, signal), [identity]);
+  function Probe({ identity, enabled = true }: { identity: string; enabled?: boolean }) {
+    const query = useHostCall((signal) => load(identity, signal), [identity], enabled);
     return (
       <div>
         <span>{query.data ?? (query.pending ? "loading" : "empty")}</span>
@@ -41,4 +41,12 @@ test("dependency changes hide old data synchronously while refresh retains same-
   expect(view.container.textContent).not.toContain("late-A");
   await act(async () => requests[2].resolve("result-B"));
   expect(view.container.textContent).toContain("result-B");
+
+  fireEvent.click(view.getByText("refresh"));
+  await waitFor(() => expect(requests).toHaveLength(4));
+  expect(view.container.textContent).toContain("result-B");
+  view.rerender(<Probe identity="B" enabled={false} />);
+  expect(view.container.textContent).toContain("empty");
+  expect(view.container.textContent).not.toContain("result-B");
+  await waitFor(() => expect(requests[3].signal.aborted).toBe(true));
 });
