@@ -105,7 +105,7 @@ export function useFamiliesColumns({
         key: "pick",
         label: "pick",
         title:
-          "Picked families feed the projection verb, which reads them back out of the model as profile JSON. Picking changes nothing in Revit — Esc clears the whole set.",
+          "Picked families are what capture files into the pod, one spec member each. Picking changes nothing in Revit — Esc clears the whole set.",
         /* Wide enough for its own facet trigger — a facet column narrower than its picker clips
            the word "any" and reads as a rendering bug. */
         width: "w-16",
@@ -116,8 +116,8 @@ export function useFamiliesColumns({
             type="button"
             title={
               pickedIds.has(row.familyId)
-                ? `Drop ${row.familyName} from the projection set — the plan and the apply lane are untouched either way.`
-                : `Add ${row.familyName} to the projection set, so "project → profile" reads its parameters back out as profile JSON.`
+                ? `Drop ${row.familyName} from the capture set — the plan and the apply lane are untouched either way.`
+                : `Add ${row.familyName} to the capture set, so capture files it into the pod as a spec member.`
             }
             onClick={() =>
               setPickedIds((prev) => {

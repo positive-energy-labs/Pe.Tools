@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeSearch } from "#/route";
+import { entitySearch, routeSearch, type EntitySearch } from "#/route";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { schedulesManifest } from "#/route/schedules/manifest";
 
@@ -9,8 +9,9 @@ export const manifest = schedulesManifest();
 
 export const schedulesSearch = (
   search: Record<string, unknown>,
-): ReturnType<typeof routeSearch> & { thread?: string } => ({
+): ReturnType<typeof routeSearch> & EntitySearch & { thread?: string } => ({
   ...routeSearch(search),
+  ...entitySearch(search),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
 });
@@ -21,6 +22,6 @@ export const Route = createFileRoute("/schedules")({
 });
 
 function SchedulesRoute() {
-  const { target } = Route.useSearch();
-  return <LiveScheduleGridWorkspace framed target={target ?? null} />;
+  const { target, stage, pod, path } = Route.useSearch();
+  return <LiveScheduleGridWorkspace framed target={target ?? null} entry={{ stage, pod, path }} />;
 }

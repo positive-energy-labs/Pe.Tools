@@ -1,21 +1,45 @@
 /**
  * The entity route body: the Situation selects the target and the pod, the audit is the page,
- * and capture/apply open the spec editor beside it. `/family`, `/families` and `/schedules` are
- * definitions (`entityRoute`), not implementations.
+ * and capture/apply open the spec editor beside it; a planned apply opens the confirmation sheet
+ * above the editor. `/family`, `/families` and `/schedules` are definitions (`entityRoute`), not
+ * implementations. Stage, pod and path live in the URL so `/pods` can deep-link a spec.
  */
 import { useEffect, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
-import { isSpecOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
+import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
 import { Picker } from "./picker";
+import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
 import { Situation, SituationCell, useDocumentLadder } from "./situation";
 import type { RouteHandle } from "./use-route";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
+
+/** Page → URL. Defaults stay out of the address so a bare route URL stays bare. */
+function useEntityUrl(page: EntityPage, enabled: boolean) {
+  const navigate = useNavigate();
+  const { stage, pod, path } = page;
+  useEffect(() => {
+    if (!enabled) return;
+    void navigate({
+      to: ".",
+      search: (previous: Record<string, unknown>) => ({
+        ...previous,
+        stage: stage === "audit" ? undefined : stage,
+        pod: pod || undefined,
+        path: path || undefined,
+      }),
+      replace: true,
+    } as never);
+  }, [enabled, navigate, stage, pod, path]);
+}
+
+const NOTHING_HELD: ReadonlySet<string> = new Set();
 
 export function EntityRouteView({
   def,
@@ -23,6 +47,11 @@ export function EntityRouteView({
   refreshPods,
   fixture,
   facts,
+  subject,
+  band,
+  health,
+  hold,
+  url = true,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -31,16 +60,32 @@ export function EntityRouteView({
   fixture?: DemoSpec;
   /** Ledger lines the audit adds to the Situation. */
   facts?: readonly (readonly [string, ReactNode])[];
+  /** What the sentence says after the stage word; defaults to the entity noun. */
+  subject?: ReactNode;
+  /** Route content under the Situation's verb row. */
+  band?: ReactNode;
+  /** The audit's complaint for the chain lamp; null = healthy. */
+  health?: string | null;
+  /** Hold a sheet row back from apply (or put it back); absent = rows cannot be held. */
+  hold?: (id: string) => void;
+  /** False inside a page that owns its own URL (a chat pane). */
+  url?: boolean;
   /** The audit. */
   children: ReactNode;
 }) {
   const [page, setPage] = handle.page;
+  useEntityUrl(page, url);
   const ladder = useDocumentLadder(handle);
   const pods = (previousOf(handle.readings.pods) as readonly PodRow[] | undefined) ?? [];
   const pod = pods.find((row) => row.id === page.pod) ?? null;
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];
   const member = pod?.members.find((row) => row.path === page.path);
   const outcome = handle.outcome;
+  const confirming = Boolean(def.plan && page.confirming);
+  const view = confirming
+    ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
+    : null;
+  const closed = { confirming: false, sheet: null };
 
   // A capture or apply files bytes in the pod; the list is the only thing that must re-read.
   useEffect(() => {
@@ -62,7 +107,7 @@ export function EntityRouteView({
                 ? handle.readings.pods.message
                 : "reading pods…",
             picked: (id) => id === page.pod,
-            pick: (id) => setPage({ pod: id, path: "" }),
+            pick: (id) => setPage({ pod: id, path: "", ...closed }),
           },
           ...(page.stage === "apply"
             ? [
@@ -73,7 +118,7 @@ export function EntityRouteView({
                   options: pod ? specs.map((row) => ({ id: row.path, label: row.path })) : null,
                   note: pod ? `no ${def.entity} specs in this pod` : "choose a pod first",
                   picked: (id: string) => id === page.path,
-                  pick: (id: string) => setPage({ path: id }),
+                  pick: (id: string) => setPage({ path: id, ...closed }),
                 },
               ]
             : []),
@@ -88,11 +133,14 @@ export function EntityRouteView({
         <Situation
           handle={handle}
           target={{ session: ladder.sessionWord, document: ladder.docWord }}
-          commit={page.stage === "apply" ? "apply" : undefined}
+          health={health}
+          commit={page.stage !== "apply" ? undefined : confirming ? "confirm" : "apply"}
+          band={band}
           sentence={
             <>
-              {def.entity} in <Picker levels={ladder.levels} disabled={handle.busy !== null} />,
-              filed to {podCell}.
+              {subject ?? def.entity}
+              {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
+              <Picker levels={ladder.levels} disabled={handle.busy !== null} />, filed to {podCell}.
             </>
           }
           ledger={[
@@ -106,16 +154,29 @@ export function EntityRouteView({
       <PaneSplit
         axis="horizontal"
         grow
-        resize={{
-          target: "end",
-          defaultSize: 480,
-          minSize: 320,
-          persist: `${def.key}:spec`,
-        }}
+        resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
           page.stage === "audit" ? null : (
-            <Pane kind="inspector" title="spec" meta={def.entity} side="right">
+            <Pane
+              kind="inspector"
+              title={confirming ? "confirm" : "spec"}
+              meta={def.entity}
+              side="right"
+            >
+              {confirming ? (
+                <PlanSheetView
+                  sheet={view?.sheet ?? null}
+                  excluded={view?.excluded ?? NOTHING_HELD}
+                  included={view?.included ?? []}
+                  toggle={hold}
+                  confirm={() => void handle.actions.confirm.run()}
+                  cancel={() => setPage(closed)}
+                  replan={() => void handle.actions.apply.run()}
+                  refusal={handle.actions.confirm.refusal}
+                  busy={handle.busy !== null}
+                />
+              ) : null}
               <SpecEditor
                 member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
                 // A just-captured member is this route's spec before the pod list re-reads.
@@ -123,7 +184,7 @@ export function EntityRouteView({
                 fixture={fixture}
                 onSaved={(ref) => {
                   refreshPods();
-                  setPage({ pod: ref.pod, path: ref.path });
+                  setPage({ pod: ref.pod, path: ref.path, ...closed });
                 }}
               />
             </Pane>

@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { previousOf } from "#/readings";
-import { refuse, useRoute } from "#/route";
+import { refuse, useRoute, type EntitySearch } from "#/route";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
 import { usePodList } from "#/route/pods";
@@ -29,6 +29,7 @@ export function LiveScheduleGridWorkspace({
   render,
   framed,
   target: chosen = null,
+  entry,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
@@ -36,6 +37,8 @@ export function LiveScheduleGridWorkspace({
   framed?: boolean;
   /** The route's `?target`, used until a schedule reading names its own document. */
   target?: string | null;
+  /** The route's URL page state (stage, pod, path), read once at mount. */
+  entry?: EntitySearch;
 }) {
   const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
@@ -43,7 +46,10 @@ export function LiveScheduleGridWorkspace({
   const [pods, refreshPods] = usePodList(!demo);
   const handle = useRoute(manifest, {
     provided: { pods },
-    page: { workspaceId: workspaceId ?? "" },
+    page: {
+      ...(workspaceId === undefined ? {} : { workspaceId }),
+      ...Object.fromEntries(Object.entries(entry ?? {}).filter(([, value]) => value)),
+    },
     // The reading's document wins once a schedule is read; before that the Situation's pick does.
     target: (page) => (page.target ? JSON.stringify({ kind: "open", ref: page.target }) : chosen),
     work: (page, target) => (target ? page.workspaceId || undefined : undefined),

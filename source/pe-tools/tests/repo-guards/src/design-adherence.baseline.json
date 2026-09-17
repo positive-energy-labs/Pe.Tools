@@ -4,13 +4,15 @@
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
-      "families": 2,
+      "families": 1,
       "family-review": 3,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
       "parameter-links": 1,
-      "runs": 2
+      "route": 1,
+      "runs": 2,
+      "workbench": 1
     }
   },
   "localChrome": {
@@ -42,25 +44,24 @@
     }
   },
   "opacityDim": {
-    "total": 20,
+    "total": 19,
     "byArea": {
       "components": 16,
-      "families": 1,
       "family": 2,
       "route": 1
     }
   },
   "longTitle": {
-    "total": 56,
+    "total": 52,
     "byArea": {
       "components": 4,
-      "families": 10,
+      "families": 6,
       "family": 17,
       "family-review": 6,
       "grounded-doc": 1,
+      "route": 1,
       "routes": 8,
       "runs": 5,
-      "schedule-grid": 1,
       "takeoff": 3,
       "workbench": 1
     }
@@ -69,7 +70,7 @@
     "total": 3,
     "byArea": {
       "instances": 1,
-      "ops": 1,
+      "lab": 1,
       "runs": 1
     }
   },
@@ -82,7 +83,8 @@
       "family-review": 25,
       "grilles": 4,
       "host": 3,
-      "ops": 22,
+      "lab": 8,
+      "ops": 14,
       "param-tables": 5,
       "routes": 4,
       "runs": 27,

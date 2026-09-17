@@ -16,6 +16,7 @@ import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { defineRoute, isSpecOf, type MemberRef, type PodRow } from "#/route";
 import { RECEIPT_PATH, podHost, usePodList, type Receipt } from "#/route/pods";
+import { familiesSpec } from "#/families/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
 import {
   DEMO_PODS,
@@ -29,8 +30,11 @@ import { SpecEditor } from "#/route/spec-editor";
 
 export const manifest = defineRoute({ key: "pods", name: "Pods", seeds: PODS_SEEDS });
 
-/** Every entity route definition; `/family` and `/families` join in wave 2. */
-const PRODUCT_ROUTES = [{ to: "/schedules", def: scheduleSpec }] as const;
+/** Every entity route definition; `/family` joins when it is on the kernel. */
+const PRODUCT_ROUTES = [
+  { to: "/schedules", def: scheduleSpec },
+  { to: "/families", def: familiesSpec },
+] as const;
 
 // `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.
 const SEP = "|";
@@ -109,7 +113,20 @@ export function PodsRouteContent({
               </FactChip>
             ) : null}
             {product ? (
-              <Link to={product.to} title={`Open ${product.def.name}; apply happens there.`}>
+              <Link
+                to={product.to}
+                // The spec opens selected in the product route's apply stage; the demo lane keeps
+                // its seed so the link lands on a rendered route.
+                search={
+                  {
+                    stage: "apply",
+                    pod: row!.id,
+                    path: member!.path,
+                    ...(demo ? { demo: "apply" } : {}),
+                  } as never
+                }
+                title={`Open this spec in ${product.def.name}; apply happens there.`}
+              >
                 open in {product.def.name}
               </Link>
             ) : null}

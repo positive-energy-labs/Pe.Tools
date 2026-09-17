@@ -1,6 +1,6 @@
 /**
  * A route declares itself once: its Work schema, its Readings, its Page, its actions, its views.
- * Nothing here renders and nothing here holds React state â€” `useRoute` runs a manifest and
+ * Nothing here renders and nothing here holds React state — `useRoute` runs a manifest and
  * `RouteShell` draws it. The fable calls this type `Route`; every `routes/*.tsx` already exports a
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
@@ -109,7 +109,7 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   docs?: ReactNode;
 }
 
-/** Identity, for inference only. Exactly one `manifest` per route module (fable Â§8). */
+/** Identity, for inference only. Exactly one `manifest` per route module (fable §8). */
 export const defineRoute = <W, const R extends string, P, const A extends string>(
   m: RouteManifest<W, R, P, A>,
 ): RouteManifest<W, R, P, A> => m;
@@ -123,7 +123,7 @@ export const emptyManifest = (
   name,
 });
 
-/* â”€â”€ The entity route kernel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── The entity route kernel ─────────────────────────────────────────────────── */
 
 /** A pod member's address, everywhere (dogma law 11). */
 export interface MemberRef {
@@ -135,44 +135,114 @@ export interface MemberRef {
 export type PodRow = PodList["pods"][number];
 
 export type EntityStage = "audit" | "capture" | "apply";
-export type EntityAction = "capture" | "apply";
+export type EntityAction = "capture" | "apply" | "confirm";
 /** The Reading every entity route shares: the installed pods, provided by the route's owner. */
 export type EntityReading = "pods";
+
+/** One row of the confirmation sheet: what apply would do to one subject. */
+export interface PlanEntry {
+  id: string;
+  name: string;
+  planHash: string;
+  /** Concrete edits the plan compiled. */
+  actions: number;
+  /** Where the edits came from, as the plan reported it. */
+  detail: string;
+  /** Why this row cannot be applied (a refusal, or nothing to do); null = applicable. */
+  flag: string | null;
+  warnings: readonly string[];
+}
+
+/** The plan apply confirms (dogma law 9). `id` names a stored plan reading when there is one. */
+export interface PlanSheet {
+  id?: string;
+  entries: readonly PlanEntry[];
+}
 
 export interface EntityPage {
   stage: EntityStage;
   /** The member the editor holds; capture lands here, apply reads it. Empty = none. */
   pod: string;
   path: string;
+  /** Audit rows picked for capture when the target kind is `selection`. */
+  selection: string[];
+  /** The confirmation sheet is open. Page, never URL. */
+  confirming: boolean;
+  /** The sheet a plan read returned, for plans that are results rather than Readings. */
+  sheet: PlanSheet | null;
 }
 
 export const entityPage = z.object({
   stage: z.enum(["audit", "capture", "apply"]).default("audit"),
   pod: z.string().default(""),
   path: z.string().default(""),
+  selection: z.array(z.string()).default([]),
+  confirming: z.boolean().default(false),
+  sheet: z.custom<PlanSheet>().nullable().default(null),
 });
+
+/** The URL half of the entity page: every entity route's search carries stage, pod and path. */
+export type EntitySearch = Partial<Pick<EntityPage, "stage" | "pod" | "path">>;
+
+export const entitySearch = (search: Record<string, unknown>): EntitySearch => ({
+  ...(search.stage === "audit" || search.stage === "capture" || search.stage === "apply"
+    ? { stage: search.stage }
+    : {}),
+  ...(typeof search.pod === "string" && search.pod ? { pod: search.pod } : {}),
+  ...(typeof search.path === "string" && search.path ? { path: search.path } : {}),
+});
+
+/** What a plan lane reads to draw its sheet: the handle's view, with no host reach. */
+export type EntityView<W, R extends string, P> = Pick<
+  Ctx<W, R | EntityReading, P & EntityPage>,
+  "work" | "readings" | "page"
+>;
+
+export interface MemberSource extends MemberRef {
+  sha256: string;
+}
+
+/**
+ * Apply as a confirmation (dogma law 9): `read` plans the saved spec, the sheet shows the plan,
+ * `confirm` applies exactly the included rows' hashes. A plan that lands in a Reading is projected
+ * by `sheet`; a plan that is a result is returned by `read` and held on the page.
+ */
+export interface ApplyPlan<W, R extends string, P> {
+  read: (
+    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+    source: MemberSource,
+  ) => Promise<PlanSheet | null>;
+  sheet?: (view: EntityView<W, R, P>) => PlanSheet | null;
+  /** Rows held back from apply; the route holds them where its host checks them. */
+  excluded?: (view: EntityView<W, R, P>) => readonly string[];
+  confirm: (
+    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+    sheet: PlanSheet,
+    included: readonly PlanEntry[],
+    source: MemberSource,
+  ) => Promise<void>;
+}
 
 /** An entity route, declared once: `/family`, `/families`, `/schedules` differ only here. */
 export interface EntityRouteDef<W, R extends string, P> {
   key: string;
   name: string;
-  /** The noun a captured member is filed under: `settings/<entity>/â€¦`. */
+  /** The noun a captured member is filed under: `settings/<entity>/…`. */
   entity: string;
-  /** `selection` = the document plus the audit rows the route has picked. */
+  /** `selection` = the document plus the audit rows the route has picked (`page.selection`). */
   target: "document" | "selection";
   /** The spec's `$schema` path (`/schemas/settings/…`); the only thing that says a member is this route's. */
   schema: string;
-  /** The host workflow that captures into the route's pod and returns the new member. */
+  /** The host workflow that captures into the route's pod and returns the new member(s). */
   capture: SemanticActionKey;
-  /**
-   * The host workflow that applies a saved spec. With `confirm`, the first admission (no
-   * `planHash`) returns the plan as the confirmation sheet and the second applies that hash
-   * (dogma law 9).
-   */
+  /** The host workflow that applies a saved spec in one step, when there is no plan. */
   apply: SemanticActionKey;
-  confirm?: boolean;
-  /** What capture needs beyond the target, read off the audit; a string refuses. */
-  captureInput?: (ctx: Ctx<W, R, P & EntityPage>) => Record<string, unknown> | string;
+  /** Present = apply is a confirmation over this plan. */
+  plan?: ApplyPlan<W, R, P>;
+  /** What capture needs beyond the pod, read off the audit; a string refuses. */
+  captureInput?: (
+    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+  ) => Record<string, unknown> | string;
   docs?: ReactNode;
 }
 
@@ -187,17 +257,18 @@ export const isSpecOf = (schema: string | null | undefined, path: string) => {
 };
 
 type EntityCtx = Ctx<unknown, string, EntityPage>;
+type Viewed = { page: EntityPage; readings: Readonly<Record<string, Reading<unknown>>> };
 
-const documentOf = (ctx: EntityCtx) => {
+const documentOf = (ctx: { target: ExecutionTarget }) => {
   if (ctx.target.kind !== "document") throw Error("pick a document");
   return ctx.target.ref;
 };
 
 /** A host workflow's result, or its refusal as an error. */
-const workflow = async (
+export const workflow = async (
   key: SemanticActionKey,
   input: Record<string, unknown>,
-  ctx: EntityCtx,
+  ctx: { target: ExecutionTarget },
 ): Promise<Record<string, unknown>> => {
   const action = await runSemanticAction(key, input, documentOf(ctx));
   if (action.state !== "succeeded")
@@ -207,72 +278,137 @@ const workflow = async (
   return (action as unknown as { result: Record<string, unknown> }).result;
 };
 
-const podsOf = (ctx: EntityCtx) => {
-  const reading = ctx.readings.pods;
+/**
+ * The plan lane for a workflow whose first admission (no `planHash`) returns `{ plan }` and whose
+ * second applies that hash (`family.apply`). `entry` projects the returned plan onto a sheet row.
+ */
+export const admissionPlan = <W, R extends string, P>(
+  key: SemanticActionKey,
+  entry: (plan: unknown) => PlanEntry,
+): ApplyPlan<W, R, P> => ({
+  read: async (ctx, source) => ({
+    entries: [entry((await workflow(key, { source }, ctx)).plan)],
+  }),
+  confirm: async (ctx, _sheet, included, source) => {
+    await workflow(key, { source, planHash: included[0]!.planHash }, ctx);
+  },
+});
+
+const podsOf = (view: Viewed) => {
+  const reading = view.readings.pods;
   return reading?.state === "ready" ? (reading.observation as readonly PodRow[]) : [];
 };
 
+/** The saved member the page names, if the pod list holds it. */
+export const memberOf = (view: Viewed) =>
+  podsOf(view)
+    .find((row) => row.id === view.page.pod)
+    ?.members.find((row) => row.path === view.page.path);
+
+/** The sheet the route draws, and which of its rows apply would send. */
+export function sheetOf<W, R extends string, P>(
+  def: EntityRouteDef<W, R, P>,
+  view: EntityView<W, R, P>,
+): { sheet: PlanSheet; excluded: ReadonlySet<string>; included: readonly PlanEntry[] } | null {
+  const sheet = def.plan?.sheet?.(view) ?? view.page.sheet;
+  if (!sheet) return null;
+  const excluded = new Set(def.plan?.excluded?.(view) ?? []);
+  return {
+    sheet,
+    excluded,
+    included: sheet.entries.filter((entry) => !entry.flag && !excluded.has(entry.id)),
+  };
+}
+
 /**
  * The one entity route. Stages are audit, capture, apply; the audit's own Work, Readings and
- * verbs (a grid's `push`) ride in `audit` and keep their names.
+ * verbs (a grid's `push`) ride in `audit` and keep their names. With a plan lane, `apply` plans
+ * and opens the sheet and `confirm` applies; without one, `apply` applies.
  */
 export function entityRoute<W, const R extends string, P extends object, const A extends string>(
   def: EntityRouteDef<W, R, P>,
   audit: Pick<RouteManifest<W, R, P, A>, "work" | "readings" | "page" | "actions" | "seeds"> = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
-  const actions: Record<EntityAction, RouteAction<unknown, string, EntityPage, never>> = {
-    capture: {
-      label: `capture ${def.entity}`,
-      says: `reads the ${def.entity} from Revit into a new member of the chosen pod`,
-      needs: "project",
-      actor: "any",
-      stage: "capture",
-      input: z.void() as unknown as z.ZodType<never>,
-      dirties: ["pods"],
-      ready: (ctx) => {
-        if (!ctx.page.pod) return "choose the pod the capture lands in";
-        const extra = def.captureInput?.(ctx as never);
-        return typeof extra === "string" ? extra : null;
-      },
-      run: async (ctx) => {
-        const extra = def.captureInput?.(ctx as never);
-        if (typeof extra === "string") throw Error(extra);
-        // The host captures and files the new member; the page lands on what it wrote.
-        const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
-        const members = (result.members ?? [result.member]) as MemberRef[];
-        if (members[0]) ctx.setPage({ path: members[0].path });
-      },
+  const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
+  const sheetView = (ctx: EntityCtx) => sheetOf(def as never, ctx as never);
+  const sourceOf = (ctx: EntityCtx): MemberSource => {
+    const member = memberOf(ctx);
+    if (!member) throw Error("save the spec before applying");
+    return { pod: ctx.page.pod, path: ctx.page.path, sha256: member.sha256 };
+  };
+  const capture: RouteAction<unknown, string, EntityPage, never> = {
+    label: `capture ${def.entity}`,
+    says: `reads the ${def.entity} from Revit into new members of the chosen pod`,
+    needs: "project",
+    actor: "any",
+    stage: "capture",
+    input: z.void() as unknown as z.ZodType<never>,
+    dirties: ["pods"],
+    count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
+    ready: (ctx) => {
+      if (!ctx.page.pod) return "choose the pod the capture lands in";
+      if (def.target === "selection" && !ctx.page.selection.length)
+        return "pick rows in the audit first";
+      const extra = def.captureInput?.(ctx as never);
+      return typeof extra === "string" ? extra : null;
     },
-    apply: {
-      label: `apply ${def.entity}`,
-      says: `writes the saved ${def.entity} spec to Revit and files a run receipt in its pod`,
-      needs: "project",
-      actor: "human",
-      stage: "apply",
-      input: z.void() as unknown as z.ZodType<never>,
-      dirties: ["pods"],
-      ready: (ctx) => {
-        if (!ctx.page.pod || !ctx.page.path) return "open a saved spec first";
-        const pod = podsOf(ctx).find((row) => row.id === ctx.page.pod);
-        const member = pod?.members.find((row) => row.path === ctx.page.path);
-        if (!member) return "save the spec before applying";
-        return isSpecOf(member.schema, def.schema)
-          ? null
-          : `the member is not a ${def.entity} spec`;
-      },
-      run: async (ctx) => {
-        const { pod, path } = ctx.page;
-        const member = podsOf(ctx)
-          .find((row) => row.id === pod)
-          ?.members.find((row) => row.path === path);
-        if (!member) throw Error("save the spec before applying");
+    run: async (ctx) => {
+      const extra = def.captureInput?.(ctx as never);
+      if (typeof extra === "string") throw Error(extra);
+      // The host captures and files the new members; the page lands on the first it wrote.
+      const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
+      const members = (result.members ?? [result.member]) as MemberRef[];
+      if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
+    },
+  };
+  const apply: RouteAction<unknown, string, EntityPage, never> = {
+    label: plan ? "plan" : `apply ${def.entity}`,
+    // Without a plan this verb is the apply workflow, so its facts are the contract's.
+    ...(plan
+      ? {
+          says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+          needs: "project" as const,
+          actor: "any" as const,
+        }
+      : semanticActionFacts(def.apply)),
+    stage: "apply",
+    input: z.void() as unknown as z.ZodType<never>,
+    dirties: ["pods"],
+    ready: (ctx) => {
+      if (!ctx.page.pod || !ctx.page.path) return "open a saved spec first";
+      const member = memberOf(ctx);
+      if (!member) return "save the spec before applying";
+      return isSpecOf(member.schema, def.schema) ? null : `the member is not a ${def.entity} spec`;
+    },
+    run: async (ctx) => {
+      const source = sourceOf(ctx);
+      if (!plan) {
         // The host composes the saved bytes, refuses if they moved, and files the run receipt.
-        const source = { pod, path, sha256: member.sha256 };
-        const plan = def.confirm
-          ? ((await workflow(def.apply, { source }, ctx)).plan as { planHash: string })
-          : null;
-        await workflow(def.apply, { source, ...(plan ? { planHash: plan.planHash } : {}) }, ctx);
-      },
+        await workflow(def.apply, { source }, ctx);
+        return;
+      }
+      const sheet = await plan.read(ctx as never, source);
+      ctx.setPage({ confirming: true, sheet });
+    },
+  };
+  const confirm: RouteAction<unknown, string, EntityPage, never> = {
+    label: `apply ${def.entity}`,
+    ...semanticActionFacts(def.apply),
+    stage: "apply",
+    input: z.void() as unknown as z.ZodType<never>,
+    dirties: ["pods"],
+    count: (ctx) => sheetView(ctx)?.included.length || null,
+    ready: (ctx) => {
+      if (!ctx.page.confirming) return "plan first";
+      const view = sheetView(ctx);
+      if (!view) return "the plan no longer describes this spec; plan again";
+      return view.included.length ? null : "no included row has changes to apply";
+    },
+    run: async (ctx) => {
+      const view = sheetView(ctx);
+      if (!plan || !view) throw Error("plan first");
+      await plan.confirm(ctx as never, view.sheet, view.included, sourceOf(ctx));
+      ctx.setPage({ confirming: false, sheet: null });
     },
   };
   return defineRoute({
@@ -294,7 +430,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
       P & EntityPage
     >,
-    actions: { ...audit.actions, ...actions } as never,
+    actions: { ...audit.actions, capture, apply, ...(plan ? { confirm } : {}) } as never,
     seeds: audit.seeds as never,
   });
 }

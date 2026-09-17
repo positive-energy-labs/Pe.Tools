@@ -2,162 +2,23 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
-import { Press } from "#/components/lang/press";
-import { diagnosticLine, warningLine } from "#/host/familyfoundry";
-import { familyFlag, provenanceSummary } from "#/families/plan";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
-import { Code } from "#/components/lang/code";
 
 /**
- * THE TWO READOUT TABLES, on the ruled idiom (2026-08-31, `MasterTable` draws SEPARATE borders).
- * A row is `--item-h` and every rule is drawn by the CELL, because a collapsed border belongs to
- * the table and does not travel with its cell. Neither of these is a `MasterTable`: they are
- * fixed-shape readouts inside a 176px band that already carries its own label and chips, and a
- * `MasterTable` would bring a second search box, scope label and summary row into it. Porting the
- * decision queue when it grows sort/filter/facet needs is recorded as owed.
+ * THE RECEIPTS TABLE, on the ruled idiom (2026-08-31): rows at `--item-h`, every rule drawn by
+ * the CELL. It is a fixed-shape readout, not a `MasterTable`, which would bring a second search
+ * box and summary row into the band. The plan's rows live on the kernel's confirmation sheet.
  */
 const QUEUE_ROW = "h-(--item-h)";
 const QUEUE_CELL = "hairline-b px-(--item-pad-x) align-middle";
 
-export function FamiliesReadoutBands() {
-  const { fixture, store, plan, outsideProfile, excludedIds, applyData, projection } =
-    useFamiliesWorkspace();
+/** What the last apply actually did, per family, as the op reported it. */
+export function FamiliesReceiptsBand() {
+  const { store, applyData } = useFamiliesWorkspace();
   return (
     <>
-      {plan && (
-        <div className="hairline-b max-h-44 overflow-auto px-2 py-1.5">
-          <div
-            className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 py-0.5"
-            data-surface="page"
-          >
-            <SectionLabel>
-              <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
-                decision queue
-              </span>
-            </SectionLabel>
-          </div>
-          {plan.entries.flatMap((entry) =>
-            entry.warnings.map((warning) => (
-              <OutcomeLine
-                key={`${entry.familyId}:${warning.code}:${warning.message}`}
-                kind="advisory"
-                label={`${entry.familyName} · ${warning.code}`}
-                says={warningLine(warning)}
-              />
-            )),
-          )}
-          {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
-              `--item-h`, tier type. This queue was the last table in the app drawn the old way —
-              `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
-              directly above the 20px families matrix on the same page. A collapsed border belongs
-              to the TABLE, so every rule here is drawn by the CELL instead (`hairline-b`), which
-              is the same move `MasterTable` made and the reason its rules survive a sticky cell. */}
-          <table className="mt-0.5 w-full table-fixed border-separate border-spacing-0 t-small">
-            <thead className="t-small face-mono t-upper text-ink-mute">
-              <tr className={QUEUE_ROW}>
-                <th className={cn(QUEUE_CELL, "w-8 font-normal")}>
-                  <span className="sr-only">include</span>
-                </th>
-                <th className={cn(QUEUE_CELL, "w-56 text-left font-normal")}>family</th>
-                <th className={cn(QUEUE_CELL, "w-20 text-left font-normal")}>actions</th>
-                <th className={cn(QUEUE_CELL, "text-left font-normal")}>profile source</th>
-                <th className={cn(QUEUE_CELL, "w-80 text-left font-normal")}>exception</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plan.entries.map((entry) => {
-                const flag = familyFlag(entry);
-                const excluded = excludedIds.has(entry.familyId);
-                return (
-                  <tr
-                    key={entry.familyId}
-                    className={cn(QUEUE_ROW, (flag !== null || excluded) && "text-ink-mute")}
-                  >
-                    <td className={cn(QUEUE_CELL, "w-8 text-center")}>
-                      <Press
-                        type="button"
-                        disabled={flag !== null}
-                        title={
-                          flag
-                            ? `${flag}. There is nothing to include, so this row cannot be ticked.`
-                            : excluded
-                              ? `${entry.familyName} is held back — apply will skip it. Click to put its ${entry.changes.length + entry.runEffects.length} action(s) back in.`
-                              : `${entry.familyName} is in: apply will run its ${entry.changes.length + entry.runEffects.length} action(s) against the model. Click to hold it back without re-planning.`
-                        }
-                        onClick={() => void store.actions.exclude(entry.familyId)}
-                        tone="quiet"
-                        size="value"
-                        state={flag !== null ? "disabled" : excluded ? "rest" : "selected"}
-                      >
-                        {flag !== null ? "✕" : excluded ? "□" : "▪"}
-                      </Press>
-                    </td>
-                    <td className={cn(QUEUE_CELL, "face-mono w-56 truncate")}>
-                      {entry.familyName}
-                    </td>
-                    <td
-                      className={cn(QUEUE_CELL, "face-mono w-20 truncate")}
-                      title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
-                    >
-                      {entry.changes.length + entry.runEffects.length} action
-                      {entry.changes.length + entry.runEffects.length === 1 ? "" : "s"}
-                    </td>
-                    <td
-                      className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
-                      title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
-                    >
-                      {provenanceSummary(entry)}
-                    </td>
-                    {/* A family the plan compiled nothing for is a verdict with nothing behind
-                        it, not a warning about the model: quiet ink, off the meaning band. */}
-                    <td
-                      className={cn(QUEUE_CELL, "t-small face-mono w-80 truncate text-ink-mute")}
-                      title={flag ?? ""}
-                    >
-                      {flag ?? ""}
-                    </td>
-                  </tr>
-                );
-              })}
-              {outsideProfile.map((family) => (
-                <tr key={`outside-${family.familyId}`} className={cn(QUEUE_ROW, "opacity-60")}>
-                  <td className={cn(QUEUE_CELL, "w-8 text-center")}>
-                    <span className="face-mono text-ink-2">✕</span>
-                  </td>
-                  <td className={cn(QUEUE_CELL, "face-mono w-56 truncate text-ink-mute")}>
-                    {family.familyName}
-                  </td>
-                  <td className={cn(QUEUE_CELL, "face-mono w-20 text-ink-mute")}>—</td>
-                  <td
-                    className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-mute")}
-                    colSpan={2}
-                  >
-                    in scope, but the bound profile does not claim this family
-                  </td>
-                </tr>
-              ))}
-              {plan.entries.length === 0 && outsideProfile.length === 0 && (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="py-1">
-                      <EmptyState
-                        story="scope"
-                        exit="widen the categories above, or bind a profile that covers this project"
-                      >
-                        no family in this scope is claimed by the bound profile — the plan compiled
-                        cleanly and matched nothing
-                      </EmptyState>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
         <div className="hairline-b max-h-48 overflow-auto px-4 py-2">
@@ -246,81 +107,6 @@ export function FamiliesReadoutBands() {
           </table>
         </div>
       )}
-
-      {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
-      {projection && (
-        <details className="hairline-b px-4 py-2" open={fixture ? true : undefined}>
-          <summary className="cursor-pointer">
-            <SectionLabel>
-              <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
-                projected profiles
-              </span>
-            </SectionLabel>
-            <span className="ml-2">
-              <FactChip title="How many picked families the projection read back out of the model.">
-                {projection.families.length} famil
-                {projection.families.length === 1 ? "y" : "ies"}
-              </FactChip>
-            </span>
-          </summary>
-          {projection.families.length === 0 && projection.diagnostics.length === 0 && (
-            <div className="mt-1">
-              <EmptyState
-                story="scope"
-                exit="re-pick families in the table's pick column and run it again"
-              >
-                nothing projected — the picked set read back empty
-              </EmptyState>
-            </div>
-          )}
-          {/* Projection is read-only and blocks nothing, which is exactly what the outcome
-              lane's `advisory` means — "a dry run blocks nothing". */}
-          {projection.diagnostics.map((diagnostic) => (
-            <div key={`${diagnostic.code}:${diagnostic.path}`} className="mt-1">
-              <OutcomeLine
-                kind="advisory"
-                label={diagnosticLine(diagnostic)}
-                says={diagnostic.suggestion ?? undefined}
-              />
-            </div>
-          ))}
-          {projection.families.map((entry) => (
-            <div key={entry.familyId} className="mt-2">
-              <div className="flex items-center gap-2">
-                <span className="t-small t-upper">{entry.familyName ?? entry.familyId}</span>
-                <span className="t-small text-ink-2">
-                  {Object.keys(entry.coverage).length
-                    ? `coverage ${Object.entries(entry.coverage)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join(" / ")} / ${entry.unmodeledCount} unmodeled`
-                    : "coverage not captured / unmodeled not captured"}
-                </span>
-                {entry.modelJson && (
-                  <ActionButton
-                    label="copy"
-                    onClick={() => void navigator.clipboard.writeText(entry.modelJson ?? "")}
-                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."
-                  />
-                )}
-                {!entry.success && (
-                  <OutcomeLine
-                    kind="error"
-                    label="projection failed"
-                    says={entry.error ?? "no reason reported"}
-                  />
-                )}
-              </div>
-              {entry.modelJson && (
-                <div className="mt-1">
-                  <Code code={entry.modelJson} lang="json" title="model json" />
-                </div>
-              )}
-            </div>
-          ))}
-        </details>
-      )}
-
-      {/* ── THE table: everything currently in scope ─────────────────────────────────────── */}
     </>
   );
 }

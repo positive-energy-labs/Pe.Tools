@@ -10,9 +10,11 @@ import type { Receipt } from "./pods";
 import type { DemoSpec } from "./spec-editor";
 
 const SCHEDULE_SCHEMA = "http://localhost:5150/schemas/settings/CmdScheduleManager/schedules.json";
-const hash = (n: number) => String(n).repeat(64).slice(0, 64);
+const FAMILIES_SCHEMA = "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json";
+export const hash = (n: number) => String(n).repeat(64).slice(0, 64);
 
 export const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";
+export const DEMO_FAMILIES_SPEC_PATH = "settings/families/Mech equipment standard.json";
 export const DEMO_RECEIPT_PATH = "output/2026-09-12T14-02-11Z/receipt.json";
 
 export const DEMO_PODS: readonly PodRow[] = [
@@ -24,6 +26,7 @@ export const DEMO_PODS: readonly PodRow[] = [
     entrypoints: [],
     members: [
       { path: DEMO_SPEC_PATH, sha256: hash(2), schema: SCHEDULE_SCHEMA },
+      { path: DEMO_FAMILIES_SPEC_PATH, sha256: hash(8), schema: FAMILIES_SCHEMA },
       { path: "settings/_fields/Header.json", sha256: hash(3), schema: null },
       { path: "settings/_fields/IU Perf Heat.json", sha256: hash(4), schema: null },
       { path: DEMO_RECEIPT_PATH, sha256: hash(5), schema: null },

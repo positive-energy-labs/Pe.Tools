@@ -3,8 +3,6 @@ import { useEffect, useMemo } from "react";
 import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 
 import type { Verdict } from "#/components/master-table/model";
-import { memberOfKey } from "#/host/familyfoundry";
-import { openMember } from "#/settings/host";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
 import {
@@ -14,17 +12,15 @@ import {
   type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
-import { useHostCall, HOST_QUERY_KEY, useLoadedFamiliesMatrixQuery } from "#/readings";
+import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
 import { familyFlag } from "#/families/plan";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
+import { DEMO_FAMILIES } from "#/families/seeds";
 
 type FfFamilyPlan = FfPlanEntry;
-/** Profile library reads are one document-open each; cap the fan-out and say so when it bites. */
-const PROFILE_READ_LIMIT = 40;
-/** A parameter is "common" when it appears on this share of the families in scope. */
 
 /** The placement filter's vocabulary, and what each choice MEANS for the audit. */
 function useFamiliesWorkspaceModel(
@@ -43,13 +39,11 @@ function useFamiliesWorkspaceModel(
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = store.applied;
-  const profilePath = store.profilePath;
   const plan = store.plan;
   const excludedIds = new Set(store.excludedIds);
   const pickedIds = store.pickedIds;
   const setPickedIds = store.actions.setPickedIds;
   const applyData = store.applyData;
-  const projection = store.projection;
   const showUncommon = store.showUncommon;
   const setShowUncommon = store.actions.setShowUncommon;
   const tableState = store.table;
@@ -57,7 +51,6 @@ function useFamiliesWorkspaceModel(
   const busy = busyState?.key ?? null;
   const categoryFeed = store.feeds.category;
   const familyFeed = store.feeds.family;
-  const profileFeed = store.feeds.profile;
 
   const fixture = fixtureFamilies !== undefined;
   // The resolved target came from this inventory subject. Requiring its current observation keeps
@@ -102,34 +95,6 @@ function useFamiliesWorkspaceModel(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
   );
-
-  // ── profile library: the store feeds paths; document.open validates each entry ───────────────
-  const allProfilePaths = useMemo(
-    () => (profileFeed.options ?? []).map((option) => option.id),
-    [profileFeed.options],
-  );
-  const profilePaths = useMemo(
-    () => allProfilePaths.slice(0, PROFILE_READ_LIMIT),
-    [allProfilePaths],
-  );
-  // The profile library is ONE Reading of many documents, not one query per path.
-  const profileLibrary = useHostCall(
-    () =>
-      Promise.all(
-        profilePaths.map((key) =>
-          openMember(memberOfKey(key)).then(
-            (data) => ({ data, error: undefined as unknown }),
-            (error: unknown) => ({ data: undefined, error }),
-          ),
-        ),
-      ),
-    [...HOST_QUERY_KEY, "pod.member.compose", profilePaths.join("|")],
-    !fixture,
-  );
-  const profileDocs = profileLibrary.data ?? [];
-
-  const selectedProfileIndex = profilePath ? profilePaths.indexOf(profilePath) : -1;
-  const selectedProfileQuery = selectedProfileIndex >= 0 ? profileDocs[selectedProfileIndex] : null;
 
   /* Esc drops the table's selection — the one piece of route state a stray click can build up.
      It is deliberately ONE step and never touches scope, plan, or exclusions: those are
@@ -240,10 +205,10 @@ function useFamiliesWorkspaceModel(
         }
         if (!entry) {
           return {
-            word: "outside profile",
+            word: "outside spec",
             tone: "mute",
             dim: true,
-            note: "in scope, but the bound profile does not claim this family",
+            note: "in scope, but the planned spec does not claim this family",
           };
         }
         const flag = familyFlag(entry);
@@ -299,7 +264,7 @@ function useFamiliesWorkspaceModel(
     picked:
       pickedIds.size > 0
         ? {
-            label: `projection · ${pickedIds.size} picked · esc`,
+            label: `capture · ${pickedIds.size} picked · esc`,
             onClear: () => setPickedIds(new Set()),
           }
         : null,
@@ -313,8 +278,6 @@ function useFamiliesWorkspaceModel(
       ),
     [plan, excludedIds],
   );
-
-  const runProject = () => void store.actions.project();
 
   const matrixIssue = matrix.error
     ? toHostIssue(matrix.error, "Couldn't load the matrix")
@@ -341,32 +304,23 @@ function useFamiliesWorkspaceModel(
     setDraftCategories,
     setPickedFamilies,
     applied,
-    profilePath,
     plan,
     excludedIds,
     pickedIds,
     setPickedIds,
     applyData,
-    projection,
     showUncommon,
     setShowUncommon,
     tableState,
     busy,
     categoryFeed,
     familyFeed,
-    profileFeed,
-    status,
     connected,
     categories,
     draftFamilyNames,
     matrixRequest,
     matrix,
     families,
-    allProfilePaths,
-    profilePaths,
-    profileDocs,
-    selectedProfileIndex,
-    selectedProfileQuery,
     rows,
     params,
     totalFamilies,
@@ -377,7 +331,6 @@ function useFamiliesWorkspaceModel(
     uncommonCount,
     chips,
     includedPlanned,
-    runProject,
     matrixIssue,
     totalTypes,
     outsideProfile,
@@ -386,17 +339,11 @@ function useFamiliesWorkspaceModel(
 
 export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel>;
 
-export function FamiliesWorkspace({
-  store,
-  fixtureFamilies,
-}: {
-  store: FamiliesStore;
-  fixtureFamilies?: readonly FamilySnapshotRecord[];
-}) {
-  const model = useFamiliesWorkspaceModel(store, fixtureFamilies);
+export function FamiliesWorkspace({ store, url }: { store: FamiliesStore; url?: boolean }) {
+  const model = useFamiliesWorkspaceModel(store, store.demo ? DEMO_FAMILIES : undefined);
   return (
     <FamiliesWorkspaceProvider value={model}>
-      <FamiliesWorkspaceView />
+      <FamiliesWorkspaceView url={url} />
     </FamiliesWorkspaceProvider>
   );
 }

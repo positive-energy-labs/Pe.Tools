@@ -28,7 +28,6 @@ const PLACEMENT_NOTES: Record<LoadedFamilyPlacement, string> = {
 export function FamiliesFilterBand() {
   const {
     fixture,
-    selectedProfileQuery,
     placement,
     setPlacement,
     draftCategories,
@@ -42,16 +41,6 @@ export function FamiliesFilterBand() {
   } = useFamiliesWorkspace();
   return (
     <>
-      {selectedProfileQuery?.error && (
-        <div className="px-4 py-1.5">
-          <OutcomeLine
-            kind="error"
-            label="profile read failed"
-            says={(selectedProfileQuery.error as Error).message}
-          />
-        </div>
-      )}
-
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>

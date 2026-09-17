@@ -1,49 +1,48 @@
 /**
- * The Families route, declared once. Work is the authored profile/scope document; the two seeds
- * are plain authored Work and an empty capture stream — no store, no host.
+ * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
+ * authored scope; capture files one spec member per picked family; apply plans the saved spec over
+ * the scope and confirms on the sheet. Work holds what the host checks at apply: the spec, the
+ * scope, and the rows a person held back.
  */
 import { z } from "zod";
 import {
+  canonicalRouteInput,
   familiesBasis,
-  familiesIncluded,
   familiesPlanReadingSchema,
   familiesRouteState,
   familyCaptureSchema,
   type FamiliesRouteDocument,
-  type Seed,
   type WorkKey,
 } from "@pe/agent-contracts";
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
+import { FF_SPEC_SCHEMA, warningLine } from "#/host/familyfoundry";
+import { previousOf } from "#/readings";
 import {
-  defineRoute,
-  semanticActionFacts,
+  entityRoute,
   semanticActionInput,
   type Ctx as RouteCtx,
+  type EntityPage,
+  type EntityReading,
+  type EntityRouteDef,
+  type EntityView,
+  type PlanSheet,
 } from "#/route";
-import { previousOf } from "#/readings";
 
 import type { FamiliesDraft } from "./host";
-import { familyFlag } from "./plan";
+import { familyFlag, provenanceSummary } from "./plan";
+import { FAMILIES_SEEDS } from "./seeds";
 import {
   actionResult,
   readFamilyCapture,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-type FamiliesStage = "scope" | "review";
-
 export interface FamiliesPage {
-  /** The Situation's first word: scoping the profile, or reviewing its plan. */
-  stage: FamiliesStage;
-  view: "matrix" | "plan";
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
   draft: FamiliesDraft;
 }
 
 export const familiesPageSchema = z.object({
-  stage: z.enum(["scope", "review"]).default("scope"),
-  view: z.enum(["matrix", "plan"]).default("matrix"),
   draft: z
     .object({
       placement: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).default("AllLoaded"),
@@ -55,7 +54,12 @@ export const familiesPageSchema = z.object({
 
 export type FamiliesReadingKey = "families" | "receipts" | "inventory";
 
-type Ctx = RouteCtx<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>;
+type Ctx = RouteCtx<
+  FamiliesRouteDocument,
+  FamiliesReadingKey | EntityReading,
+  FamiliesPage & EntityPage
+>;
+type View = EntityView<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>;
 
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
@@ -71,35 +75,40 @@ export function latestPlanOf(rows: unknown) {
     : null;
 }
 
-/** Why Apply is refused, or null. A saved plan is stale purely because its basis moved. */
-export function applyRefusalOf(
-  doc: FamiliesRouteDocument | null,
-  saved: { value: { basis: string } } | null,
-  plan: { entries: readonly { familyId: number }[] } | null,
-  excludedIds: readonly number[],
-): string | null {
-  if (saved && doc && saved.value.basis !== familiesBasis(doc))
-    return "The profile or scope changed after this plan. Plan again.";
-  if (!plan) return "plan first";
-  return plan.entries.some(
-    (entry) => !excludedIds.includes(entry.familyId) && !familyFlag(entry as never),
-  )
-    ? null
-    : "No included family has changes to apply.";
+const sameMember = (a: { pod: string; path: string } | null | undefined, page: EntityPage) =>
+  a?.pod === page.pod && a.path === page.path;
+
+/**
+ * The plan that still describes the authored basis for the page's member, as sheet rows. A plan
+ * is stale purely because its basis moved; a stale plan draws no sheet.
+ */
+export function familiesPlanOf(view: View) {
+  const doc = view.work.doc;
+  const latest = latestPlanOf(previousOf(view.readings.families));
+  return doc &&
+    latest &&
+    latest.value.basis === familiesBasis(doc) &&
+    sameMember(doc.spec, view.page)
+    ? latest
+    : null;
 }
 
-/** The plan that still describes the authored basis, with what it would include. */
-const planOf = (ctx: Ctx) => {
-  const latest = latestPlanOf(previousOf(ctx.readings.families));
-  const doc = ctx.work.doc;
-  const plan = doc && latest && latest.value.basis === familiesBasis(doc) ? latest.value : null;
-  const excluded = doc?.excludedIds ?? [];
-  const included = plan
-    ? plan.entries.filter(
-        (entry) => !excluded.includes(entry.familyId) && familyFlag(entry) === null,
-      )
-    : [];
-  return { latest, plan, included };
+export const familiesSheetOf = (view: View): PlanSheet | null => {
+  const latest = familiesPlanOf(view);
+  return latest
+    ? {
+        id: latest.id,
+        entries: latest.value.entries.map((entry) => ({
+          id: String(entry.familyId),
+          name: entry.familyName,
+          planHash: entry.planHash,
+          actions: entry.changes.length + entry.runEffects.length,
+          detail: provenanceSummary(entry),
+          flag: familyFlag(entry),
+          warnings: entry.warnings.map((warning) => `${warning.code} · ${warningLine(warning)}`),
+        })),
+      }
+    : null;
 };
 
 const targetOf = (ctx: Ctx) => {
@@ -107,64 +116,78 @@ const targetOf = (ctx: Ctx) => {
   return ctx.target.ref;
 };
 
-const workOf = (ctx: Ctx) => {
-  if (!ctx.work.doc || ctx.work.revision === null)
-    throw Error("Current authored Families Work is required");
-  return { key: ctx.work.key, revision: ctx.work.revision };
-};
+/* ── The definition ────────────────────────────────────────────────────────── */
 
-/**
- * A seed must leave the route in a state where its own action is runnable: both actions refuse
- * without a profile, so the seeded Work names one. The `families` Reading is the family-readings
- * CAPTURE stream (`host/demo-client.ts:99` parses it with `familyCaptureSchema.array()`), not the
- * authored snapshot rows it used to hold — those rows are not captures and threw on mount.
- */
-const seededWork: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  spec: { pod: "demo", path: "settings/families/review.json" },
-});
-const emptyInventory = { sessions: [] } satisfies {
-  sessions: readonly BridgeSessionListEntry[];
-};
+export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage> =
+  {
+    key: "families",
+    name: "Families",
+    entity: "families",
+    target: "selection",
+    schema: FF_SPEC_SCHEMA,
+    capture: "families.capture",
+    apply: "families.apply",
+    captureInput: (ctx) => ({ familyIds: ctx.page.selection.map(Number) }),
+    plan: {
+      // The host plans the Work's spec over the Work's scope, so the page's member becomes Work first.
+      read: async (ctx, source) => {
+        const doc = ctx.work.doc;
+        if (!doc) throw Error("Current authored Families Work is required");
+        const spec = { pod: source.pod, path: source.path };
+        if (canonicalRouteInput(doc.spec) !== canonicalRouteInput(spec))
+          await ctx.write([
+            { path: ["spec"], value: spec },
+            { path: ["excludedIds"], value: [] },
+          ]);
+        await readFamilyCapture("families.plan", {}, ctx.work.key as WorkKey, targetOf(ctx));
+        return null;
+      },
+      sheet: familiesSheetOf,
+      excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
+      confirm: async (ctx, sheet, included) => {
+        if (!sheet.id || ctx.work.revision === null)
+          throw Error("A current reviewed Families plan is required");
+        actionResult(
+          await runSemanticAction(
+            "families.apply",
+            semanticActionInput("families.apply", {
+              planId: sheet.id,
+              expectedPlanHashes: Object.fromEntries(included.map((row) => [row.id, row.planHash])),
+            }),
+            targetOf(ctx),
+            { work: { key: ctx.work.key, revision: ctx.work.revision } },
+          ),
+        );
+      },
+    },
+    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then plan a saved spec and confirm exactly which families it changes.",
+  };
 
-const seed = (
-  title: string,
-  stage: FamiliesStage,
-  view: FamiliesPage["view"],
-): Seed<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage> => ({
-  title,
-  work: seededWork,
-  readings: { families: [], receipts: [], inventory: emptyInventory },
-  page: { stage, view, draft: familiesPageSchema.parse({}).draft },
-});
-
-export const manifest = defineRoute({
-  key: "families",
-  name: "Families",
-  docs: "Set the project family scope, apply it as audited Work, then review the plan before changing the selected families.",
-  needs: "project",
+export const manifest = entityRoute<
+  FamiliesRouteDocument,
+  FamiliesReadingKey,
+  FamiliesPage,
+  "scope"
+>(familiesSpec, {
   work: familiesRouteState,
   readings: {
     families: (_page: FamiliesPage, work: WorkKey) => ({ kind: "family-readings", work }),
     receipts: { kind: "receipts", target: { session: "", openId: "" } },
     inventory: { kind: "inventory" },
   } as never,
-  page: familiesPageSchema,
-  stages: [
-    { key: "scope", word: "Scoping" },
-    { key: "review", word: "Reviewing" },
-  ],
+  page: familiesPageSchema as never,
   actions: {
     scope: {
       label: "apply scope",
       says: "Write the drafted categories, families and placement as the audited scope.",
       needs: "project",
       actor: "any",
-      input: z.void(),
+      input: z.void() as never,
       dirties: ["families"],
-      stage: "scope",
-      count: (ctx: Ctx) => ctx.page.draft.categories.length || null,
-      ready: (ctx: Ctx) => (ctx.page.draft.categories.length ? null : "Pick a category first"),
-      run: async (ctx: Ctx) => {
+      stage: "audit",
+      count: (ctx) => ctx.page.draft.categories.length || null,
+      ready: (ctx) => (ctx.page.draft.categories.length ? null : "Pick a category first"),
+      run: async (ctx) => {
         const { categories, families, placement } = ctx.page.draft;
         await ctx.write([
           {
@@ -178,54 +201,6 @@ export const manifest = defineRoute({
         ]);
       },
     },
-    plan: {
-      label: "plan",
-      says: "Read a native plan for the authored profile and scope.",
-      needs: "project",
-      actor: "any",
-      input: z.void(),
-      dirties: ["families"],
-      requires: { work: true },
-      count: (ctx: Ctx) => ctx.work.doc?.scope?.familyNames.length ?? null,
-      ready: (ctx: Ctx) => (ctx.work.doc?.spec ? null : "Choose a spec"),
-      run: async (ctx: Ctx) => {
-        await readFamilyCapture("families.plan", {}, workOf(ctx).key, targetOf(ctx));
-      },
-    },
-    apply: {
-      label: "apply",
-      ...semanticActionFacts("families.apply"),
-      input: z.void(),
-      dirties: ["families", "receipts"],
-      requires: { work: true, readings: ["families"] },
-      stage: "review",
-      count: (ctx: Ctx) => planOf(ctx).included.length || null,
-      ready: (ctx: Ctx) => {
-        const doc = ctx.work.doc;
-        if (!doc?.spec) return "Choose a spec";
-        const { latest, plan } = planOf(ctx);
-        return applyRefusalOf(doc, latest, plan, doc.excludedIds);
-      },
-      run: async (ctx: Ctx) => {
-        const { latest, plan } = planOf(ctx);
-        const doc = ctx.work.doc;
-        if (!latest || !plan || !doc) throw Error("A current reviewed Families plan is required");
-        actionResult(
-          await runSemanticAction(
-            "families.apply",
-            semanticActionInput("families.apply", {
-              planId: latest.id,
-              expectedPlanHashes: familiesIncluded(plan, doc.excludedIds),
-            }),
-            targetOf(ctx),
-            { work: workOf(ctx) },
-          ),
-        );
-      },
-    },
-  } as never,
-  seeds: {
-    plan: seed("Families review — a profile is named, no plan read yet", "scope", "matrix"),
-    apply: seed("Families review — a profile is named, the plan view is open", "review", "plan"),
-  } as never,
+  },
+  seeds: FAMILIES_SEEDS as never,
 });
