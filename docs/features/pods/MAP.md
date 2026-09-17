@@ -25,6 +25,8 @@ LEDGER    docs/features/pods/LEDGER.md (verdicts), this map (waves), .artifacts/
 - 2026-09-16: `pod.member.write` and `pod.member.save` stay two ops (host had one op with an optional `expectedSha256`). Two states in one op is the guard the type can remove.
 - 2026-09-16: Capture on `/family` must keep showing coverage and unmodeled facts after it files the member (law 12). The capture workflow returns the member address plus the capture evidence, and the route shows the evidence beside the new member.
 - 2026-09-16: `pea script import` keeps its local folder choice (`--folder`), per law 12; the earlier "stay out unless a workflow needs them" ruling is withdrawn for import.
+- 2026-09-17: Pod reads stay in `host/` with no Reading. The host serves no pod resource owner and no route needs live pod invalidation; the unserved `member` Reading kind in `agent-contracts/src/reading.ts:79` is Owed for deletion at sweep.
+- 2026-09-17: `FamilyProfileConverter.cs` stays until the user rules. The relay asked; no answer arrived before wave 4 was cast. Purge keeps features, and the 50 legacy profile members depend on it.
 
 ## Waves
 
@@ -84,6 +86,17 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 - Absent ruling: `/families` applies both `FamilyFoundry/patches` and `FamilyFoundry/models` members, because capture files models and the family edge converts by `$schema`. `EntityRouteDef.schema` takes a list. Without this, capture on `/families` cannot feed apply on `/families`.
 - w3-demo grafted at merge of `123f356`: live loops assert the admitted workflow sequence (`*.capture`, `*.confirm`, `*.apply`), `/families` applies the member it captured, `EntityRouteDef.schema` takes a list, dev proxy forwards `/schedules/readings`; scenario 22 of 22, host 151, web 407, repo guards 93 of 93.
 - Wave 3 closed. NUMBER 39 (unchanged; all engine-internal `.family.json` or a test of a removed field). Secondary LOC 20,359. Whole crusade against main: 283 files, +10,384 / -16,808. Revit lane UNPROVEN on every route; that is wave 4 with a controlled `pe-revit` session.
+
+### Wave 4 (cast 2026-09-17)
+
+| Builder | Seam | Line | Branch |
+|---|---|---|---|
+| w4-apply | `expectedPlanHashes` on both applies, `each` flag deleted, plan sheet header, demo owner leftovers | fresh (cn-host retired) | crusade/w4-apply |
+| w4-save | one save path per member in the spec editor; reviewer out of `workbench` | fresh | crusade/w4-save |
+| w4-red | census then fix of the four standing failures; session ladder on `/schedules` | fresh | crusade/w4-red |
+| w4-revit | session lane: one capture, edit, apply loop per route and both palettes; edits no product code | fresh | crusade/w4-revit |
+
+Not cast: the protoui round (table beside draft, `/families` row click into `/family`) waits for the user's route feedback.
 
 Wave 3 items from the critic, for reference:
 
