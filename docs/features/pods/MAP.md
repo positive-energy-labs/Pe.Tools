@@ -118,6 +118,8 @@ Not cast: the protoui round (table beside draft, `/families` row click into `/fa
 - 2026-09-17, user verdicts, grill round 2: (1) Revised. The spec keeps a `select`, because a palette run has no good way to pick families first and a project template has none placed. An explicit target wins over it; `select` is the default scope when the caller passes none. The engine receives the resolved family ids either way, never a post-filter. (4) Adopted: the spec editor holds an explicit, never implicit, never stored "options from" document. Product routes fill it from the route target, read-only. `/pods` starts it empty. The Situation head keeps meaning "what this route acts on".
 - 2026-09-17, commander reading, UNPROVEN (source only, not run): the bridge read loop handles one request at a time and awaits its response before it reads the next frame (`Pe.Revit.Global/Services/Host/BridgeAgent.cs:211,275`). A `scripting.cancel` frame sent while a script runs on the same socket is therefore not read until the script ends. No test covers mid-run cancel. Progress and cancel for engine ops depend on fixing this first.
 
+- 2026-09-17, user verdict: "1-3 only. i feel like 4 is not worth the headache now." The bridge read loop keeps reading while an op runs; a general cancel by request id replaces the script-only path; engines check the token between families. Progress frames are not built. Cancel in the middle of one family is never built.
+
 ### Wave 5 candidates (none cast; from `reports/w4-revit.md` defect numbers)
 
 1. Capture then confirm on real families: captured `unmodeled` entries make the member fail its own composition (defect 3). Needs a ruling: capture files `unmodeled` as evidence outside the member, or the validator treats it as advisory.
