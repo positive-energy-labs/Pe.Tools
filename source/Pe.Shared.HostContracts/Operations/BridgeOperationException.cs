@@ -1,4 +1,4 @@
-using Pe.Shared.HostContracts.SettingsStorage;
+﻿using Pe.Shared.HostContracts.SettingsStorage;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -15,6 +15,8 @@ public static class BridgeOperationExceptions {
     public const int BadRequestStatusCode = 400;
     public const int ConflictStatusCode = 409;
     public const int UnexpectedStatusCode = 500;
+    /// <summary>The op ran and was stopped on request — a verdict of its own, never a fault.</summary>
+    public const int CancelledStatusCode = 499;
 
     public static BridgeOperationException BadRequest(
         string message,

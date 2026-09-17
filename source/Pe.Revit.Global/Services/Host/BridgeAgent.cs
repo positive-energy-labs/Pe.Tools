@@ -34,6 +34,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly SettingsRuntimeRegistry _moduleRegistry;
     private readonly BridgeTransportSession _transportSession;
     private readonly ClientWebSocket _webSocket;
+    private readonly BridgeRequestPump _pump;
     private readonly Task _readLoop;
 
     private readonly JsonSerializerSettings _serializerSettings = new() {
@@ -77,17 +78,6 @@ internal sealed class BridgeAgent : IDisposable {
             () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)
         );
-        var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
-        var boundOps = OpRegistry.Bind(
-            requestService,
-            this._revitDataRequestService,
-            this._scriptingMessageHandler
-        );
-        Log.Information(
-            "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
-            discoveredOps,
-            boundOps
-        );
         this._webSocket = new ClientWebSocket();
         var connectStopwatch = Stopwatch.StartNew();
         Log.Information("Host bridge agent connecting WebSocket: BridgeUri={BridgeUri}", bridgeOptions.BridgeUri);
@@ -100,6 +90,28 @@ internal sealed class BridgeAgent : IDisposable {
         this._transportSession = new BridgeTransportSession(
             this._webSocket,
             this._serializerSettings
+        );
+        this._pump = new BridgeRequestPump(
+            this._transportSession,
+            this.HandleRequestAsync,
+            (message, exception) => {
+                if (exception == null)
+                    Log.Debug(message);
+                else
+                    Log.Error(exception, message);
+            }
+        );
+        var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
+        var boundOps = OpRegistry.Bind(
+            requestService,
+            this._revitDataRequestService,
+            this._scriptingMessageHandler,
+            this._pump
+        );
+        Log.Information(
+            "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
+            discoveredOps,
+            boundOps
         );
         this._documentNotifier = new BridgeDocumentNotifier(
             Global.Services.Document.DocumentTrackerAccessor.Current
@@ -197,19 +209,7 @@ internal sealed class BridgeAgent : IDisposable {
     private async Task RunReadLoopAsync(CancellationToken cancellationToken) {
         Log.Information("Host bridge read loop entered.");
         try {
-            while (!cancellationToken.IsCancellationRequested && this._transportSession.IsConnected) {
-                var frame = await this._transportSession.ReadAsync(cancellationToken).ConfigureAwait(false);
-                if (frame == null)
-                    break;
-                if (frame?.Request == null || frame.Kind != BridgeFrameKind.Request) {
-                    Log.Debug("Host bridge read loop ignored frame: Kind={Kind}", frame?.Kind);
-                    continue;
-                }
-
-                Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
-                    frame.Request.OperationKey, frame.Request.RequestId);
-                await this.HandleRequestAsync(frame.Request, cancellationToken).ConfigureAwait(false);
-            }
+            await this._pump.RunAsync(cancellationToken).ConfigureAwait(false);
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
             // Expected on shutdown.
         } catch (ObjectDisposedException) when (this._disposed || cancellationToken.IsCancellationRequested) {
@@ -228,6 +228,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
+        Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
+            request.OperationKey, request.RequestId);
         var startedAt = Stopwatch.GetTimestamp();
         var requestBytes = Encoding.UTF8.GetByteCount(request.PayloadJson);
         // Begin before dispatch and before any response frame: the receipt is what makes this
@@ -327,6 +329,19 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
+        } catch (OperationCanceledException) {
+            // The pump owns the token, so the pump answers the cancelled frame. Here we only
+            // stamp the verdict `op result` reads, then let it through.
+            var message = $"Operation '{request.OperationKey}' was cancelled.";
+            Log.Information(
+                "Host bridge request cancelled: OperationKey={OperationKey}, RequestId={RequestId}",
+                request.OperationKey,
+                request.RequestId
+            );
+            CompleteOpReceipt(receipt, "cancelled", JsonConvert.SerializeObject(
+                new { error = message, statusCode = BridgeOperationExceptions.CancelledStatusCode },
+                this._serializerSettings));
+            throw;
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -434,7 +449,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private static (string Verdict, int StatusCode) RevitTaskOutcomeResponse(RevitTaskOutcome outcome) => outcome switch {
-        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively => ("cancelled", 499),
+        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively
+            => ("cancelled", BridgeOperationExceptions.CancelledStatusCode),
         RevitTaskOutcome.TimedOut => ("timed-out", 504),
         RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423),
         RevitTaskOutcome.RefusedQueueUnresponsive => ("rejected", 423),

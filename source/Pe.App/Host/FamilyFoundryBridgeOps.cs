@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
@@ -44,15 +44,18 @@ internal static class FamilyFoundryBridgeOps {
 
     [Op("families.plan", Does = "Diff an inline family spec against each loaded family it selects (or one explicit family) and return the plan per family with a deterministic hash.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
     private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyId, request.ExecutionOptions), cancellationToken);
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyId, request.ExecutionOptions, cancellationToken), cancellationToken);
 
     [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
+        PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, cancellationToken: cancellationToken)), cancellationToken);
 
     [Op("family.build", Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template, save it to an explicit .rfa path, and write the run receipt into the source pod.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyBuildData> BuildFamily(FamilyBuildRequest request, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => BuildWithReceipt(RevitUiSession.CurrentUIApplication.Application, request)), cancellationToken);
+
+    /// <summary>A cancelled apply is its own outcome — finished families keep their receipts.</summary>
+    private const string CancelledCode = "Cancelled";
 
     private static T RefuseStaleSource<T>(Func<T> apply) {
         try { return apply(); }
@@ -103,11 +106,12 @@ internal static class FamilyFoundryBridgeOps {
 
     /// <summary>The one apply edge: bridge ops and palettes both land here, and both leave a run in the source pod.</summary>
     internal static FamilyFoundryApplyData ApplyWithReceipt(string operation, string specJson, PodMemberSource source,
-        IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null) {
+        IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null,
+        CancellationToken cancellationToken = default) {
         var podFolder = PodMembers.VerifiedFolder(source);
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
-            var data = ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts);
+            var data = ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, cancellationToken);
             var relative = data with { Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList() };
             var outputs = (Directory.Exists(artifacts) ? Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories) : [])
                 .Select(file => (name: RunPath(artifacts, file), bytes: File.ReadAllBytes(file)))
@@ -115,7 +119,8 @@ internal static class FamilyFoundryBridgeOps {
                 .ToList();
             var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
-                    data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
+                    data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
+                        : data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
                     [],
                     data.Diagnostics.Count == 0 ? null : string.Join("; ", data.Diagnostics.Select(d => d.Message))),
                 outputs);
@@ -131,7 +136,8 @@ internal static class FamilyFoundryBridgeOps {
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
     private static string RunPath(string artifacts, string path) => path[(artifacts.Length + 1)..].Replace(Path.DirectorySeparatorChar.ToString(), "--");
 
-    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, long? familyId = null, ExecutionOptions? executionOptions = null) {
+    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, long? familyId = null, ExecutionOptions? executionOptions = null,
+        CancellationToken cancellationToken = default) {
         var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
         executionOptions ??= new ExecutionOptions();
@@ -145,6 +151,8 @@ internal static class FamilyFoundryBridgeOps {
             return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", familyId is { } x ? $"Element id {x} is not a loaded family." : "The spec selects no loaded family.")]);
 
         return new FamilyFoundryPlanData(families.Select(family => {
+            // A cancelled plan returns nothing: the confirmation sheet is only worth reading whole.
+            cancellationToken.ThrowIfCancellationRequested();
             try { return WithFamilyDocument(document, family, (famDoc, editDiagnostics) => {
             var current = famDoc.CaptureFamilyModel();
             var warnings = CaptureIssues(current, family, editDiagnostics);
@@ -168,7 +176,7 @@ internal static class FamilyFoundryBridgeOps {
 
     /// <summary>Run the spec against explicit families, writing engine artifacts under <paramref name="artifactDirectory" />.</summary>
     internal static FamilyFoundryApplyData ApplyFamilies(string specJson, IReadOnlyDictionary<long, string> expectedPlanHashes, Document document,
-        ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave, string artifactDirectory) {
+        ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave, string artifactDirectory, CancellationToken cancellationToken = default) {
         var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryApplyData([], diagnostics);
         executionOptions ??= new ExecutionOptions();
@@ -177,7 +185,15 @@ internal static class FamilyFoundryBridgeOps {
 
         var runOutput = OutputStorage.ExactDir(artifactDirectory);
         var receipts = new List<FamilyFoundryApplyReceipt>();
+        var notStarted = new List<long>();
         foreach (var (familyId, expectedHash) in expectedPlanHashes) {
+            // Cancel lands between families and never inside one family's edit: a half-edited
+            // family is a worse outcome than a long one.
+            if (cancellationToken.IsCancellationRequested) {
+                notStarted.Add(familyId);
+                continue;
+            }
+
             var family = document.IsFamilyDocument
                 ? document.OwnerFamily.Id.Value() == familyId ? document.OwnerFamily : null
                 : document.GetElement(familyId.ToElementId()) as Family;
@@ -203,7 +219,10 @@ internal static class FamilyFoundryBridgeOps {
                 receipts.Add(Failed(familyId, familyName, exception.Message));
             }
         }
-        return new FamilyFoundryApplyData(receipts, []);
+        return new FamilyFoundryApplyData(receipts, notStarted.Count == 0 ? [] : [
+            new FamilyFoundryDiagnostic(CancelledCode, "$.expectedPlanHashes",
+                $"Cancelled after {receipts.Count} of {expectedPlanHashes.Count} families. Not started: {string.Join(", ", notStarted)}.")
+        ]);
     }
 
     internal static FamiliesCaptureData CaptureFamilies(IReadOnlyList<long> familyIds, Document document) {

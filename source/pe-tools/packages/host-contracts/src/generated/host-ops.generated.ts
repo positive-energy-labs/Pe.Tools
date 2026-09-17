@@ -815,6 +815,25 @@ export namespace HostOpsCatalog {
   }
 }
 
+/** Signal cooperative cancellation to one in-flight bridge request, named by the requestId it was sent under. The operation stops at its next checkpoint and answers with a cancelled outcome; work already committed inside Revit is not undone, and an operation that never checks its token cannot be interrupted. */
+export namespace OpCancel {
+  export namespace Req {
+    /**
+     * Cancel one in-flight bridge request by the id the caller sent it under.
+     */
+    export interface Request {
+      requestId: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      cancelled: boolean;
+      requestId: string;
+      message: string;
+    }
+  }
+}
+
 /** Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes. */
 export namespace PodExport {
   export namespace Req {
@@ -4858,22 +4877,6 @@ export namespace ScheduleCapture {
   }
 }
 
-/** Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted. */
-export namespace ScriptingCancel {
-  export namespace Req {
-    export interface Request {
-      executionId?: null | string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      canceled: boolean;
-      executionId?: null | string;
-      message: string;
-    }
-  }
-}
-
 /** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
 export namespace ScriptingExecute {
   export namespace Req {
@@ -5394,6 +5397,7 @@ export interface HostOps {
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
+  "op.cancel": { request: OpCancel.Req.Request; response: OpCancel.Res.Response };
   "pod.export": { request: PodExport.Req.Request; response: PodExport.Res.Response };
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
@@ -5434,7 +5438,6 @@ export interface HostOps {
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
-  "scripting.cancel": { request: ScriptingCancel.Req.Request; response: ScriptingCancel.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
@@ -5466,6 +5469,7 @@ export const hostOpKeys = [
   "family.plan",
   "family.temporary.acquire",
   "host.ops.catalog",
+  "op.cancel",
   "pod.export",
   "pod.import",
   "pod.member.compose",
@@ -5506,7 +5510,6 @@ export const hostOpKeys = [
   "revit.resolve.references",
   "schedule.apply",
   "schedule.capture",
-  "scripting.cancel",
   "scripting.execute",
   "scripting.workspace.bootstrap",
   "settings.field-options",

@@ -1,4 +1,4 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
@@ -101,10 +101,9 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     ) {
         var executionId = Guid.NewGuid().ToString("N");
         var timeoutSeconds = NormalizeTimeoutSeconds(request.TimeoutSeconds);
-        using var cancelSource = new CancellationTokenSource();
         using var timeoutSource = new CancellationTokenSource();
+        // The request's own token is the cancel path: op.cancel <requestId> fires it.
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
-            cancelSource.Token,
             timeoutSource.Token,
             cancellationToken
         );
@@ -118,7 +117,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             "execute script",
             () => {
                 lock (this._sync)
-                    this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow, cancelSource);
+                    this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow);
                 // The timeout clock starts when the script actually starts, not while it waits in line.
                 timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
                 var stopwatch = Stopwatch.StartNew();
@@ -142,34 +141,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             },
             cancellationToken
         ).ConfigureAwait(false);
-    }
-
-    [Op("scripting.cancel", Does = "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted.", Title = "Cancel Revit Script", Finds = ["script", "cancel", "stop", "timeout", "revit"], Tier = OpTier.Expert)]
-    public Task<ScriptCancelData> CancelAsync(
-        ScriptCancelRequest request,
-        CancellationToken cancellationToken
-    ) {
-        // Never enqueued: the whole point is reaching a script that is hogging the execution slot.
-        lock (this._sync) {
-            var running = this._runningExecution;
-            if (running == null)
-                return Task.FromResult(new ScriptCancelData(false, null, "No script execution is currently running."));
-
-            if (!string.IsNullOrWhiteSpace(request.ExecutionId)
-                && !string.Equals(request.ExecutionId, running.ExecutionId, StringComparison.OrdinalIgnoreCase))
-                return Task.FromResult(new ScriptCancelData(
-                    false,
-                    running.ExecutionId,
-                    $"Execution '{request.ExecutionId}' is not running; the current execution is '{running.ExecutionId}'."
-                ));
-
-            running.CancelSource.Cancel();
-            return Task.FromResult(new ScriptCancelData(
-                true,
-                running.ExecutionId,
-                $"Cancellation signalled to execution '{running.ExecutionId}'. The script stops at its next cooperative checkpoint (ct / ThrowIfCancelled)."
-            ));
-        }
     }
 
     [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
@@ -248,7 +219,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
                 : (int)(DateTimeOffset.UtcNow - running.StartedUtc).TotalSeconds;
             return running == null
                 ? $"Revit scripting is busy with another request; waited {AdmissionWaitSeconds}s for it to finish. Retry shortly."
-                : $"Revit scripting is busy: execution '{running.ExecutionId}' has been running for {runningSeconds}s; waited {AdmissionWaitSeconds}s for it to finish. Cancel it with scripting.cancel or retry.";
+                : $"Revit scripting is busy: execution '{running.ExecutionId}' has been running for {runningSeconds}s; waited {AdmissionWaitSeconds}s for it to finish. Cancel it with op.cancel on that execution's requestId, or retry.";
         }
     }
 
@@ -267,10 +238,10 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     private static int NormalizeTimeoutSeconds(int timeoutSeconds) =>
         timeoutSeconds <= 0 ? DefaultTimeoutSeconds : Math.Min(timeoutSeconds, MaxTimeoutSeconds);
 
+    /// <summary>Busy-message diagnostics only; cancellation lives in the bridge pump's in-flight table.</summary>
     private sealed record RunningExecution(
         string ExecutionId,
-        DateTimeOffset StartedUtc,
-        CancellationTokenSource CancelSource
+        DateTimeOffset StartedUtc
     );
 
     private sealed class PendingRequest(

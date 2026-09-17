@@ -1,4 +1,4 @@
-using Pe.Shared.Product;
+﻿using Pe.Shared.Product;
 
 namespace Pe.Revit.Scripting.Bootstrap;
 
@@ -240,7 +240,7 @@ internal static class ScriptFileTemplates {
                     return;
                 }
 
-                // Check ct in loops so timeouts and scripting.cancel can interrupt long work.
+                // Check ct in loops so timeouts and op.cancel can interrupt long work.
                 ThrowIfCancelled();
 
                 // Result(...) returns structured JSON to the caller; Artifacts writes durable files.

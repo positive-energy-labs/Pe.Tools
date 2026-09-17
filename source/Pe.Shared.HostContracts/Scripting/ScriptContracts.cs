@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Scripting;
@@ -69,16 +69,6 @@ public record PodReceipt(
     string Outcome,
     List<string> Outputs,
     string? Reason
-);
-
-public record ScriptCancelRequest(
-    string? ExecutionId = null
-);
-
-public record ScriptCancelData(
-    bool Canceled,
-    string? ExecutionId,
-    string Message
 );
 
 public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);

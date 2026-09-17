@@ -64,7 +64,7 @@ export class PeaCliCommands {
         "pea script bootstrap",
         "pea script list",
         "pea script execute --source-path src\\SampleScript.cs",
-        "pea script cancel",
+        "pea script cancel --request-id <id>",
         "pea script export --pod panel-audit --output .\\panel-audit.zip",
         "pea script import --archive .\\panel-audit.zip",
       ].join("\n"),
@@ -318,25 +318,25 @@ export class PeaCliCommands {
     return define({
       name: "cancel",
       description:
-        "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint.",
+        "Signal cooperative cancellation to one in-flight bridge request, named by its requestId. The operation stops at its next ct / ThrowIfCancelled checkpoint.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
         actor: commonArgs.actor,
         actionId: commonArgs.actionId,
-        executionId: {
+        requestId: {
           type: "string",
-          description: "Optional execution id guard; omit to cancel the current execution.",
+          description: "The requestId the in-flight operation was sent under.",
         },
       },
       toKebab: true,
       run: async (ctx) => {
-        const result = await this.createScriptingTools(ctx.values).cancel({
-          executionId: firstNonBlank(ctx.values.executionId),
-        });
-        console.log(`canceled  ${result.canceled}`);
-        if (result.executionId) console.log(`execution ${result.executionId}`);
+        const requestId = firstNonBlank(ctx.values.requestId);
+        if (requestId == null) throw new Error("--request-id is required.");
+        const result = await this.createScriptingTools(ctx.values).cancel({ requestId });
+        console.log(`cancelled ${result.cancelled}`);
+        console.log(`request   ${result.requestId}`);
         console.log(result.message);
       },
     });
