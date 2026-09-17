@@ -282,6 +282,7 @@ export function FamilyWorkspaceTable() {
   const tablePane = (
     <Pane
       kind="content"
+      flush
       scroll="clip"
       headerless
       // The type's own NAME is the title while drilled in — a pane whose title still said

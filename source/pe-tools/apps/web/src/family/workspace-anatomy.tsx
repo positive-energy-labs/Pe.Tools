@@ -20,6 +20,7 @@ export function FamilyWorkspaceAnatomy() {
   return (
     <Pane
       kind="visual"
+      flush
       headerSurface="recess"
       title="anatomy"
       meta={anatomyCollapsed ? "collapsed" : stageType}

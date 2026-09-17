@@ -279,6 +279,7 @@ export function FamilyWorkspaceDocPane() {
   const docPane = (
     <Pane
       kind="inspector"
+      flush
       headerSurface="recess"
       // The spec region below is the pane's ONE scroller; the pane body only clips. Two scrollers
       // in one sidebar stack two bars (scrollbar law, 2026-08-31).

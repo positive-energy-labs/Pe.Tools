@@ -28,6 +28,7 @@ export function AtlasNavigation() {
       <Pane
         id="zones"
         kind="navigation"
+        flush
         title="zones"
         meta={`${world.zones.length} declared`}
         shortcuts={scopeShortcuts}

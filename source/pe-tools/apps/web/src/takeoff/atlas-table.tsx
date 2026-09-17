@@ -48,6 +48,7 @@ export function AtlasTable() {
       <Pane
         id="rooms"
         kind="content"
+        flush
         title="rooms"
         help="Rooms in the current scope. Filter, select, or review the visible rows. Focus this pane for j/k movement and a/d decisions."
         headerless
