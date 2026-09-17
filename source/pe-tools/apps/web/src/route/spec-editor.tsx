@@ -32,7 +32,14 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
-import { useHostStatus } from "#/readings";
+import type { RemoteOptionsHook } from "#/lib/schema-to-field-render/shared";
+import {
+  inventoryOf,
+  previousOf,
+  useFieldOptionsQuery,
+  useHostStatus,
+  useInventory,
+} from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
 import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 import {
@@ -41,6 +48,7 @@ import {
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { defineRoute, semanticActionFacts, type MemberRef } from "./manifest";
+import { Picker } from "./picker";
 import { podHost, type Composed } from "./pods";
 import { useRoute, type RouteHandle } from "./use-route";
 
@@ -261,6 +269,73 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
   );
 }
 
+/** The document a field asks for its options. Explicit, never implicit, never stored. */
+export interface OptionsFrom {
+  session: string;
+  openId: string;
+}
+
+/**
+ * THE OPTIONS-FROM SLOT (user verdict, grill round 2). A field's remote options are read from one
+ * named Revit document and nothing else: no active-document fallback, no borrowing the Situation's
+ * target by accident. A product route pins it to what the route acts on; `/pods` starts it empty
+ * and the person picks a session, then a document. Empty means schema-only options, and the head
+ * says so.
+ */
+function useOptionsFrom(pinned: OptionsFrom | null | undefined, enabled: boolean) {
+  const [chosen, choose] = useState<OptionsFrom | null>(null);
+  const [session, chooseSession] = useState<string | null>(null);
+  const owned = pinned === undefined;
+  const from = owned ? chosen : pinned;
+  const inventory = useInventory(owned && enabled);
+  const sessions = inventoryOf(previousOf(inventory)?.sessions ?? []);
+  const open = sessions.find(
+    (item) => item.sessionId === (session ?? from?.session),
+  )?.openDocuments;
+  const useRemoteOptions: RemoteOptionsHook = (request, wanted) =>
+    useFieldOptionsQuery(request, {
+      enabled: wanted && Boolean(from),
+      bridgeSessionId: from?.session,
+      openDocumentId: from?.openId,
+    });
+  const word = from
+    ? (open?.find((item) => item.openId === from.openId)?.title ?? from.openId)
+    : null;
+  return {
+    useRemoteOptions,
+    word,
+    owned,
+    levels: [
+      {
+        key: "session",
+        label:
+          sessions.find((item) => item.sessionId === (session ?? from?.session))?.sessionId ?? null,
+        placeholder: "choose a session",
+        options: sessions.map((item) => ({
+          id: item.sessionId,
+          label: item.sdkSessionId ?? item.sessionId,
+          sub: `${item.openDocumentCount} open`,
+        })),
+        note: inventory.state === "failed" ? inventory.message : "no Revit answers the host",
+        picked: (id: string) => id === (session ?? from?.session),
+        pick: (id: string) => (chooseSession(id), choose(null)),
+      },
+      {
+        key: "document",
+        label: word,
+        placeholder: "choose a document",
+        options: open ? open.map((item) => ({ id: item.openId, label: item.title })) : null,
+        note: (session ?? from?.session) ? "nothing open here" : "choose a session first",
+        picked: (id: string) => id === from?.openId,
+        pick: (id: string) => {
+          const chosenSession = session ?? from?.session;
+          if (chosenSession) choose({ session: chosenSession, openId: id });
+        },
+      },
+    ],
+  };
+}
+
 type Mode = "form" | "raw";
 
 const parse = (raw: string): { value?: Record<string, unknown>; error?: string } => {
@@ -296,17 +371,24 @@ export function SpecEditor({
   member,
   schema,
   fixture,
+  optionsFrom,
   onSaved,
 }: {
   member: MemberRef | null;
   /** The member's `$schema`; null = plain data, no library validates it. */
   schema: string | null;
   fixture?: DemoSpec;
+  /**
+   * The document field options are read from, pinned read-only by the route that owns the target.
+   * Omit it and the editor owns the slot: it starts empty and the person picks (`/pods`).
+   */
+  optionsFrom?: OptionsFrom | null;
   onSaved?: (ref: MemberRef) => void;
 }) {
   const status = useHostStatus(!fixture);
   const session =
     !fixture && status.state === "ready" && status.observation.bridgeIsConnected === true;
+  const options = useOptionsFrom(fixture ? null : optionsFrom, !fixture);
   const [basis, setBasis] = useState<string | null>(fixture?.content ?? null);
   const [basisSha, setBasisSha] = useState<string | null>(null);
   /** What the person typed since the last read; null = the draft is the Work's or the disk's. */
@@ -462,6 +544,26 @@ export function SpecEditor({
             >
               {session ? "semantic" : "schema only"}
             </FactChip>
+            {options.owned ? (
+              <span
+                className="t-small"
+                title="The document this form reads field options from. With none chosen the form offers the schema's own options only."
+              >
+                options from <Picker levels={options.levels} />
+              </span>
+            ) : (
+              <FactChip
+                tone={options.word ? "meta" : "caution"}
+                dashed={!options.word}
+                title={
+                  options.word
+                    ? "Field options are read from the document this route acts on."
+                    : "No document: the form offers the schema's own options only."
+                }
+              >
+                {options.word ? `options from ${options.word}` : "schema options only"}
+              </FactChip>
+            )}
             <Switcher
               ariaLabel="editor mode"
               value={shown}
@@ -514,6 +616,7 @@ export function SpecEditor({
               // The demo lane has no host to answer remote options, so it asks for none.
               schemaUrl={fixture ? "" : (schema ?? "")}
               baselineValues={baseline.baseline}
+              useRemoteOptions={options.useRemoteOptions}
               values={form.parsedRaw}
               onChange={(path, value) =>
                 setDraft(JSON.stringify(setAt(form.parsedRaw, path, value), null, 2))

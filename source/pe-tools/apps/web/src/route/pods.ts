@@ -10,6 +10,7 @@ import type {
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
 
+import { callHostDynamic } from "#/host/client";
 import { composeMember, listPods, readMember } from "#/host/pods";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./manifest";
@@ -41,6 +42,10 @@ async function admitHost(key: "pod.member.write" | "pod.member.save", input: obj
 
 export const podHost = {
   list: (): Promise<PodRow[]> => listPods(),
+  /** Every run filed in the pod, newest first; `path` narrows to one member's runs. */
+  runs: async (pod: string, path?: string): Promise<readonly Run[]> => [
+    ...((await callHostDynamic("pod.runs", { pod, ...(path ? { path } : {}) })) as PodRuns).runs,
+  ],
   read: readMember,
   /** Create a new member; refuses an existing path. */
   write: (ref: MemberRef, content: string) => admitHost("pod.member.write", { ...ref, content }),
@@ -88,6 +93,23 @@ export interface Receipt {
   outcome: string;
   outputs?: readonly string[];
   reason?: string | null;
+}
+
+/**
+ * SHIM: `pod.runs` as `reports/w6-engine.md` names it, until w6-engine's host op reaches
+ * `host-ops.generated.ts`. At graft, delete these two types and the `callHostDynamic` above:
+ * `podHost.runs` becomes `callHostRpc("pod.runs", { pod, path })` and answers the same shape.
+ */
+export interface Run {
+  runId: string;
+  /** Pod-relative; `pod.member.read` reads it, and siblings by `output/<runId>/<name>`. */
+  receiptPath: string;
+  /** null exactly when the run folder holds no readable receipt; `error` says why. */
+  receipt: Receipt | null;
+  error: string | null;
+}
+interface PodRuns {
+  runs: readonly Run[];
 }
 
 export const RECEIPT_PATH = /^output\/([^/]+)\/receipt\.json$/;

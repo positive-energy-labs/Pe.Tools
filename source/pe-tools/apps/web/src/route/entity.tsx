@@ -92,6 +92,11 @@ export function EntityRouteView({
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
   const closed = { confirming: false, sheet: null };
+  // Field options come from the document this route acts on, read-only (user verdict, grill 2).
+  const optionsFrom =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
 
   // A capture or apply files bytes in the pod; the list is the only thing that must re-read.
   useEffect(() => {
@@ -195,6 +200,7 @@ export function EntityRouteView({
                   member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
                 }
                 fixture={fixture}
+                optionsFrom={optionsFrom}
                 onSaved={(ref) => {
                   refreshPods();
                   setPage({ pod: ref.pod, path: ref.path, ...closed });
