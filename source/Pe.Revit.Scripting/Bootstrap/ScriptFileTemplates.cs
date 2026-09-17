@@ -24,62 +24,137 @@ internal static class ScriptFileTemplates {
         "Pe.Shared.RevitData.Schedules"
     ];
 
-    public static string CreateProductReadme() =>
+    public static string CreateRootReadme() =>
         $$"""
         # Pe.Tools
 
-        This folder is the user-authored Pe.Tools content home.
-
-        ## Folders
+        This folder is the Pe.Tools content home: your preferences and your pods.
 
         - `{{ProductPathNames.PreferencesFileName}}` - product-wide user preferences.
-        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/` - portable authored settings, scripts, assets, and output.
+        - `{{ProductPathNames.PodsDirectoryName}}/<folder>/` - one pod: `{{ProductPathNames.PodManifestFileName}}` plus any of `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/`, `{{ProductPathNames.SettingsDirectoryName}}/`, `{{ProductPathNames.AssetsDirectoryName}}/`, `{{ProductPathNames.OutputDirectoryName}}/`.
 
-        Runtime state, logs, caches, and installed binaries live under Local AppData, not this folder.
+        Runtime state, logs, caches, credentials, and installed binaries live under Local AppData, not this folder.
+
+        `{{ProductPathNames.AgentInstructionsFileName}}` beside this file is the guide. Bootstrap rewrites it every time, so keep your own notes here instead.
         """;
 
-    public static string CreateProductAgents() =>
+    public static string CreateRootAgents() =>
         $$"""
-        # Pe.Tools User Content
+        # Pe.Tools
 
         ## Scope
 
-        Agent guidance for the Pe.Tools user-authored content home.
+        Agent guidance for the Pe.Tools content home: product preferences and every installed pod. Runtime state, logs, caches, credentials, and installed binaries live under Local AppData, not here.
 
-        ## Purpose
+        ## What a pod is
 
-        This folder holds product preferences and portable Pods. Runtime state, logs, caches, credentials, and installed binaries live elsewhere.
+        A pod is one folder under `{{ProductPathNames.PodsDirectoryName}}/<folder>/` holding `{{ProductPathNames.PodManifestFileName}}`, and any of:
 
-        ## Entry Points
+        - `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/` - C# scripts.
+        - `{{ProductPathNames.SettingsDirectoryName}}/` - JSON members and fragments.
+        - `{{ProductPathNames.AssetsDirectoryName}}/` - files a member or a script reads.
+        - `{{ProductPathNames.OutputDirectoryName}}/` - one folder per run; never published.
 
-        - `{{ProductPathNames.PreferencesFileName}}` - product-wide preferences.
-        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/settings/` - authored typed JSON.
-        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/src/` - authored scripts.
-        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/assets/` - shipped assets.
-        - `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/output/` - useful generated output.
+        Nothing else is a pod. Every file in a pod is a **member**, addressed everywhere as `{ pod: <id>, path: <relative path> }`.
 
-        ## Notes
+        ## Identity
 
-        - Prefer pod-relative script execution from `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/src/` for durable work.
-        - Keep reusable settings and their source dependencies inside the same pod.
+        Three facts, and no others:
+
+        - the folder name is an address, never identity. Rename it freely.
+        - the manifest `id` is the lineage. `@<id>/<path>` resolves to the installed pod with that id; two installed pods sharing an id fail and name both folders.
+        - each member's SHA-256 is derived from its bytes and is never stored.
+
+        `version` is a human label. Nothing resolves against it.
+
+        ## What a member is for
+
+        `$schema` is the only thing that says what a JSON member is for. A filename suffix selects nothing. A member with no `$schema` is plain data, and no library validates it. A member whose `$schema` an engine applies is a **spec**.
+
+        ## Composition
+
+        `$include` and `$preset` compose one member at a time, at the moment it is used:
+
+        - `@local/<path>` resolves inside the same pod.
+        - `@<id>/<path>` resolves to the installed pod whose manifest `id` matches.
+
+        There are no hash pins. Export vendors every foreign fragment into `{{ProductPathNames.SettingsDirectoryName}}/_vendor/<id>/<path>` and rewrites the reference to `@local/_vendor/...`, so an archive composes from its own bytes. Import writes one `imported.json` (archive sha256, locator, date) as provenance; nothing validates it and nothing gates on it.
+
+        Preparation gates `{{ProductPathNames.PodManifestFileName}}` structure and entrypoint source only. Members validate one at a time, when used, so a bad member never hides its siblings.
+
+        ## Entrypoints are buttons
+
+        Every entrypoint declared in `{{ProductPathNames.PodManifestFileName}}` is a button on the Scripts tab of Revit's Do palette, with two actions: run safe (document changes discarded) and run full (kept). The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit, and it runs in-process on the Revit lane even when Pea is closed and the host is disconnected.
+
+        The entrypoint `name` and `description` are the button's label and subtitle; the pod `name` is the filter pill. Write all three for the practitioner who presses the button. An entrypoint with no `name` shows its raw id, and a pod whose `{{ProductPathNames.PodManifestFileName}}` fails validation shows no buttons at all.
+
+        ## Output and receipts
+
+        Every apply and every entrypoint run writes `{{ProductPathNames.OutputDirectoryName}}/<runId>/` inside the pod it acted from: `receipt.json` - pod id, member path, member sha256, op id, plan hash, outcome, output references - with the run's own files beside it. Capture writes its evidence there too, so the captured member holds only what an engine can apply.
+
+        Output is never published. Export and archive leave it behind.
+
+        `{{ProductPathNames.PodsDirectoryName}}/{{ScriptingWorkspaceLayout.DefaultWorkspaceKey}}/{{ProductPathNames.OutputDirectoryName}}/` is the one exception: it keeps inline snippet traces under `inline/`, and the runs of scripts that came from no pod.
+
+        ## Where to work
+
+        | To do this | Go here |
+        | --- | --- |
+        | browse pods, edit a member, read its runs | the `/pods` route |
+        | capture, edit, and apply one family | the `/family` route |
+        | the same across loaded families | the `/families` route |
+        | capture and apply a schedule, push cell values | the `/schedules` route |
+        | run an entrypoint from a terminal or a non-Pea agent | `pea script execute --source-path src/YourScript.cs` |
+        | run an entrypoint inside Revit | the Do palette, Scripts tab |
+        | follow a workflow Pea already knows | `.agents/skills/` beside this file |
+
+        `/pods` performs no Revit action. It browses, edits, runs entrypoints, and links to the product route that does.
+
+        ## What a script may reference
+
+        A script compiles and runs against exactly three sources:
+
+        - the framework assemblies already loaded in the Revit process - `System*`, `Microsoft*`, `mscorlib`, `netstandard`, `WindowsBase`, `PresentationCore`, `PresentationFramework`. These are automatic.
+        - every `<Reference>` and `<PackageReference>` in the pod's `{{ScriptingWorkspaceLayout.ProjectFileName}}`. Bootstrap seeds it with the scripting runtime, its `Pe.Revit*` siblings, `Pe.Shared.HostContracts`, `Pe.Shared.Product`, `Pe.Shared.RevitData`, `Newtonsoft.Json`, `RevitAPI`, and `RevitAPIUI`.
+        - NuGet packages already present in the local package cache. A package that is not installed is a resolve error, not a download.
+
+        Any other assembly Revit has loaded is reachable, but not automatically: add a `<Reference>` naming it, with a `<HintPath>` to its dll, in `{{ScriptingWorkspaceLayout.ProjectFileName}}`. At run time the resolver prefers the copy Revit already has loaded over the file on disk unless the disk build differs, so what the script compiles against and what it runs against are the same build.
+
+        ## Bootstrap
+
+        Bootstrap runs when Pe.Tools creates or refreshes a pod. It is the only writer of the files below.
+
+        In this folder:
+
+        - `{{ProductPathNames.AgentInstructionsFileName}}` (this file) is **rewritten** whenever it differs from the shipped text. Edits here do not survive.
+        - `{{ProductPathNames.ReadmeFileName}}` is created only when missing.
+
+        In the pod:
+
+        - `{{ProductPathNames.AgentInstructionsFileName}}`, `{{ProductPathNames.ReadmeFileName}}`, and `.vscode/settings.json` are created only when missing.
+        - `{{ProductPathNames.PodManifestFileName}}` and `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/{{ScriptingWorkspaceLayout.SampleScriptFileName}}` are created only when missing, and only for a pod bootstrapped with the sample.
+        - the `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/`, `{{ProductPathNames.SettingsDirectoryName}}/`, `{{ProductPathNames.AssetsDirectoryName}}/`, `{{ProductPathNames.OutputDirectoryName}}/`, and `.vscode/` folders are created when missing.
+        - `{{ScriptingWorkspaceLayout.ProjectFileName}}` is **rewritten** every time, preserving what you wrote: a `<Reference>` without `<Private>false</Private>` is yours and survives, machine entries are re-derived, and your `HintPath` wins a name collision.
+
+        `.vscode/` and `{{ScriptingWorkspaceLayout.ProjectFileName}}` exist for editing and IntelliSense on a pod with scripts. Delete either one - nothing refuses a pod without them, and the next bootstrap puts them back.
         """;
 
-    public static string CreateReadme() =>
-        """
+    public static string CreatePodReadme() =>
+        $$"""
         # Pe Revit Scripting
 
-        This workspace is a Pod generated by Pe.Tools for Revit script authoring.
+        This pod was generated by Pe.Tools for Revit script authoring.
 
         Supported execution:
 
-        - pod entrypoint scripts under `src/`, declared in `pod.json`
-        - inline snippets, saved visibly in the product `inline-scripts/` folder
+        - pod entrypoint scripts under `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/`, declared in `{{ProductPathNames.PodManifestFileName}}`
+        - inline snippets, saved visibly under `{{ProductPathNames.PodsDirectoryName}}/{{ScriptingWorkspaceLayout.DefaultWorkspaceKey}}/{{ProductPathNames.OutputDirectoryName}}/inline/`
         - synchronous execution through the Pe.Tools Revit bridge
 
         Authoring contract:
 
-        - Put durable scripts under `src/` as normal C# files and declare each runnable one in `pod.json` under `entrypoints`.
-        - Every declared entrypoint is a button on the Scripts tab of Revit's Do palette, with a safe action (changes discarded) and a full action (changes kept). Its `name` and `description` are the button label and subtitle, so write them for whoever presses the button. A pod whose `pod.json` fails validation shows no buttons at all.
+        - Put durable scripts under `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/` as normal C# files and declare each runnable one in `{{ProductPathNames.PodManifestFileName}}` under `entrypoints`.
+        - Every declared entrypoint is a button on the Scripts tab of Revit's Do palette, with a safe action (changes discarded) and a full action (changes kept). Its `name` and `description` are the button label and subtitle, so write them for whoever presses the button. A pod whose `{{ProductPathNames.PodManifestFileName}}` fails validation shows no buttons at all.
         - Outside the palette, run an entrypoint with `pea script execute --source-path src/MyScript.cs`.
         - Each entrypoint source file must contain exactly one non-abstract `PeScriptContainer`; helper `src/**/*.cs` files compile alongside but are not runnable.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
@@ -88,93 +163,48 @@ internal static class ScriptFileTemplates {
         - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. `ReadOnly` controls document transaction behavior only.
         - Long-running scripts should check `ct` (or call `ThrowIfCancelled()`) inside loops so cancellation and the execution timeout can interrupt them.
         - Use `Result(...)` once per run to return structured JSON to the caller; `WriteLine(...)` for short human-readable output; `Artifacts.WriteJson/WriteCsv/WriteText(...)` for durable files.
-        - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
+        - Add local DLL refs and `PackageReference` items in `{{ScriptingWorkspaceLayout.ProjectFileName}}`.
         - Use host/agent tools outside the script to discover operation shapes; scripts should do direct bounded Revit API work.
 
-        Non-goals for this workspace:
+        Non-goals for this pod:
 
-        - arbitrary local file execution outside the workspace
+        - arbitrary local file execution outside the pod
         - compiled DLL/package payload execution
         - async scripting sessions
         """;
 
-    public static string CreateJoinGuide() =>
-        """
-        # Revit Script Orientation
-
-        Scripts execute inside Revit through the Pe.Tools bridge.
-
-        Use this file as orientation only. Prefer the live tool schemas, generated operation metadata, compiler diagnostics, and runtime results over memorized workflows.
-
-        ## Surfaces
-
-        - Direct Revit API access is available inside this Revit-hosted script for bounded document work and API gaps.
-        - `Artifacts` writes durable CSV/JSON/text output under product output.
-
-        ## Boundaries
-
-        - Current script execution runs inside Revit through one bridge request; a second request waits up to 30s for the slot, then fails with a busy error.
-        - `ReadOnly` is the default permission mode: the script runs inside a rollback guard, so any document changes are discarded and reported as a warning.
-        - Scripts are trusted in-process C# inside Revit; `ReadOnly` is a document rollback guarantee, not machine isolation.
-        - `WriteTransaction` is explicit and host-owned: one transaction, committed on success, rolled back if the script throws.
-        - `NoTransaction` is explicit and unguarded: the script or called library owns any transaction boundaries and rollback behavior.
-        - Executions have a cooperative timeout (default 600s) and can be cancelled with `scripting.cancel`; scripts that never check `ct` cannot be interrupted.
-        - Keep terminal output small; use `Result(...)` for structured data and artifacts for broad rows, tables, or evidence.
-        """;
-
-    public static string CreateAgents() =>
+    public static string CreatePodAgents() =>
         $$"""
-        # Revit Scripting Workspace
+        # Pod
 
         ## Scope
 
-        Agent guidance for a generated scripting workspace under product `{{ProductPathNames.PodsDirectoryName}}/<local-folder>/`.
+        Agent guidance local to this one pod. What a pod is, identity, `$schema`, composition, entrypoints as buttons, where output and receipts land, and which files bootstrap owns are all in `../../{{ProductPathNames.AgentInstructionsFileName}}`. Read that first.
 
-        ## Purpose
+        ## Entry points
 
-        This workspace exists for small Revit-side C# scripts that execute through Pe.Tools scripting.
+        - `{{ProductPathNames.PodManifestFileName}}` - this pod's `id`, `name`, `version`, and `entrypoints`.
+        - `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/` - scripts. Declare a runnable one in `{{ProductPathNames.PodManifestFileName}}` before expecting a button.
+        - `{{ProductPathNames.SettingsDirectoryName}}/` - JSON members; each one's `$schema` says what it is for.
+        - `{{ProductPathNames.AssetsDirectoryName}}/` - files members and scripts read.
+        - `{{ProductPathNames.OutputDirectoryName}}/<runId>/` - one run, its `receipt.json`, and its files.
+        - `{{ScriptingWorkspaceLayout.ProjectFileName}}` - your DLL and package references; editing support only.
 
-        ## Entry Points
+        ## Authoring a script here
 
-        - `pod.json` - pod manifest declaring runnable entrypoints.
-        - `PeScripts.csproj` - preserved DLL and package references.
-        - `src/` - workspace scripts.
-        - `src/SampleScript.cs` - minimal executable example.
-        - `.vscode/settings.json` - generated editor hint.
-        - `README.md` - human-facing bootstrap notes.
-        - `JOIN_GUIDE.md` - Revit script orientation.
-
-        ## Pod identity and ownership
-
-        - Local folder / workspaceKey locates this copy; it may be renamed independently of pod.json id.
-        - Manifest id names the lineage; `@<id>/path` references resolve to the one installed pod with that id. Each member's SHA-256 identifies its exact content. Human version is a label.
-        - Pods may contain typed JSON settings and assets without scripts. Libraries own operations and semantic validation; JSON files do not declare executable actions.
-        - `$schema` alone says what a JSON member is for. `$include` and `$preset` compose one member at a time when it is used.
-        - Export vendors consumed foreign fragments under `settings/_vendor/<id>/` so the archive composes from its own bytes. Import writes `imported.json` as provenance only.
-        - Adopt updates explicitly. APS remains authoritative and is fetched only by operations using its resources.
-        - Write useful output files with Artifacts. Share the run folder with its receipt; output is excluded from publication.
-
-        ## Contract
-
-        - Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable.
-        - EVERY DECLARED ENTRYPOINT IS A BUTTON in Revit's Do palette, on the Scripts tab, with two actions: run safe (document changes discarded) and run full (kept). The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit, and it runs in-process on the Revit lane even when Pea is closed and the host is disconnected.
-        - The entrypoint `name` and `description` in `pod.json` are the button label and its subtitle; the pod `name` is the filter pill. Write all three for the practitioner who presses the button. An entrypoint with no `name` shows its raw id, and a pod whose `pod.json` fails validation does not appear on the tab at all.
-        - Add new scripts to `pod.json` under `entrypoints` first. Outside the palette, run an entrypoint with `pea script execute --source-path src/YourScript.cs` (the terminal and non-Pea agents use this).
-        - Each entrypoint source file must resolve to exactly one non-abstract `PeScriptContainer`; helper `src` files are compiled but are not entrypoints.
-        - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
-        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
-        - Use `Result(...)` once per run for structured JSON results, `WriteLine(...)` for short diagnostics, and `Artifacts` for durable output.
-        - Check `ct` (or call `ThrowIfCancelled()`) inside loops so timeouts and scripting.cancel can interrupt the script.
-        - Add supported references through `PeScripts.csproj`.
-        - Re-run workspace bootstrap after Revit version changes or missing generated references.
+        - Exactly one non-abstract `PeScriptContainer` per entrypoint file. Other `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/**/*.cs` files compile alongside and are not runnable.
+        - Inside `Execute()`: `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, `Notify(...)`.
+        - `Result(...)` once per run for structured JSON, `WriteLine(...)` for short diagnostics, `Artifacts` for durable files.
+        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. `WriteTransaction` opens one host-owned transaction. `NoTransaction` leaves transaction boundaries to the script or the library it calls.
+        - Check `ct` (or call `ThrowIfCancelled()`) inside loops; a script that never checks cannot be interrupted by the timeout or by cancel.
+        - Scripts are trusted in-process C# inside Revit, not an OS sandbox. `ReadOnly` is a document guarantee, not machine isolation.
+        - Add references in `{{ScriptingWorkspaceLayout.ProjectFileName}}`, and re-run bootstrap after a Revit version change or a missing generated reference.
+        - Use host and agent tools outside the script to discover operation shapes; keep the script itself on direct, bounded Revit API work.
 
         ## Notes
 
-        - Inline snippets are traceable probes, not the primary durable authoring surface.
-        - `ReadOnly` (default) runs inside a rollback guard: document changes are discarded and reported as a warning; use `WriteTransaction` for one host-owned transaction, or `NoTransaction` for script/library-owned transaction boundaries.
-        - The generated project preserves supported user references across bootstrap regeneration.
-        - Use host/agent tools outside the script to discover operation shapes; keep scripts focused on direct Revit API work.
-        - This workspace runs inside Revit through the Pe.Tools bridge; runtime behavior depends on the loaded Revit-side assemblies.
+        - Inline snippets are traceable probes, not the durable authoring surface here.
+        - Runtime behaviour depends on the Revit-side assemblies actually loaded in the session.
         """;
 
     public static string CreateVscodeSettings() =>
@@ -194,7 +224,7 @@ internal static class ScriptFileTemplates {
         // Scripts tab of Revit's Do palette (run safe / run full). Its pod.json name and
         // description are that button's label and subtitle.
         //
-        // Outside the palette, run it from this workspace root:
+        // Outside the palette, run it from this pod's root:
         // pea script execute --source-path src/SampleScript.cs
         // Keep exactly one non-abstract PeScriptContainer per entrypoint file.
 

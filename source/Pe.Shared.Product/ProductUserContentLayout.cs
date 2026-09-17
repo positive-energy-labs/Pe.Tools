@@ -39,8 +39,6 @@ public sealed record ProductUserContentLayout(
 public sealed record ProductInlineScriptsContentLayout(string RootPath);
 
 public sealed record ProductOutputContentLayout(string RootPath) {
-    public string GlobalOutputPath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
-
     public string ResolveModuleOutputPath(string module) =>
         ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, module, nameof(module));
 }

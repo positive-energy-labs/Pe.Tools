@@ -11,10 +11,6 @@ public sealed class GlobalStorage {
         ProductRuntimeLayout.ForCurrentUser().State.GlobalStatePath
     );
 
-    public OutputStorage Output() => OutputStorage.ExactDir(
-        ProductUserContentLayout.ForCurrentUser().Output.GlobalOutputPath
-    );
-
     public GlobalLogStorage Log() => new(ProductRuntimeLayout.ForCurrentUser().Logs.RootPath);
 
     public ManagedLogFile RevitAppLog() => this.Log().RevitAppLog();

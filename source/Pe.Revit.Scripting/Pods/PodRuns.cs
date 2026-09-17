@@ -11,10 +11,20 @@ public static class PodRuns {
         ContractResolver = new CamelCasePropertyNamesContractResolver()
     };
 
-    /// <summary>Writes the outputs and the receipt; returns the receipt's full path. Output names are appended to `receipt.Outputs`.</summary>
-    public static string WriteReceipt(string podFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) {
+    /// <summary>A new empty run folder in the pod, for a caller that must write its output before the receipt exists.</summary>
+    public static string NewRunFolder(string podFolder) {
         var runId = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}";
         var runFolder = Path.Combine(podFolder, "output", runId);
+        _ = Directory.CreateDirectory(runFolder);
+        return runFolder;
+    }
+
+    /// <summary>Writes the outputs and the receipt; returns the receipt's full path. Output names are appended to `receipt.Outputs`.</summary>
+    public static string WriteReceipt(string podFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) =>
+        WriteReceiptIn(NewRunFolder(podFolder), receipt, outputs);
+
+    /// <summary>The same, into a run folder <see cref="NewRunFolder" /> already handed out.</summary>
+    public static string WriteReceiptIn(string runFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) {
         _ = Directory.CreateDirectory(runFolder);
         var written = new List<string>();
         foreach (var (name, bytes) in outputs) {

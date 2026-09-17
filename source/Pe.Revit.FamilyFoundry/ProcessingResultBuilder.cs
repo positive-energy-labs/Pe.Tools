@@ -19,8 +19,6 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private object _profilePayload = new { };
     private Func<FamilyProcessingContext, (FamilyPlan? Plan, FamilyReceipt? Receipt)>? _reconcile;
 
-    public ProcessingResultBuilder(ModuleStorage storage) : this(storage.Output().TimestampedSubDir()) { }
-
     public string RunOutputPath => this._runOutput.DirectoryPath;
 
     private static string GetDescription(ParameterSnapshot param) =>
