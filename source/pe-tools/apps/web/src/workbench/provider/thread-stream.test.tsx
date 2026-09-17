@@ -2,7 +2,7 @@
 import type { AgentControllerEvent, MastraDBMessage } from "@mastra/client-js";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { emptyChatState, selectMessages } from "../chat-state";
+import { emptyChatState, selectApprovals, selectMessages } from "../chat-state";
 import { useThreadStream } from "./thread-stream";
 
 afterEach(() => {
@@ -126,4 +126,61 @@ test("switching threads aborts A and never publishes A under B", async () => {
     settleA(new Response(JSON.stringify({ ...emptyChatState(), messages: [userSignal] }))),
   );
   expect(selectMessages(result.current.chat).map((message) => message.id)).toEqual(["a1"]);
+});
+
+test("a live approval is available before its body, and A cannot leak into B", async () => {
+  let settleA!: (response: Response) => void;
+  let settleB!: (response: Response) => void;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      (url: string) =>
+        new Promise<Response>((resolve) => {
+          if (url.endsWith("/delayed-thread-a")) settleA = resolve;
+          else settleB = resolve;
+        }),
+    ),
+  );
+  const listeners: ((event: AgentControllerEvent) => void)[] = [];
+  const session = {
+    subscribe: async (options: { onEvent: (event: AgentControllerEvent) => void }) => {
+      listeners.push(options.onEvent);
+      return { unsubscribe: () => {} };
+    },
+  };
+  const approval = (id: string) =>
+    ({
+      type: "display_state_changed",
+      displayState: {
+        isRunning: true,
+        pendingApproval: { toolCallId: id, toolName: "write" },
+      },
+    }) as unknown as AgentControllerEvent;
+  const { result, rerender } = renderHook(
+    ({ id }) =>
+      useThreadStream({ origin: "http://host", thread: { id, session: session as never } }),
+    { initialProps: { id: "delayed-thread-a" } },
+  );
+  await waitFor(() => expect(listeners).toHaveLength(1));
+  act(() => listeners[0]!(approval("approve-a")));
+  await waitFor(() =>
+    expect(selectApprovals(result.current.chat.display)[0]?.toolCallId).toBe("approve-a"),
+  );
+  expect(result.current.displayKnown).toBe(true);
+
+  rerender({ id: "delayed-thread-b" });
+  await waitFor(() => expect(listeners).toHaveLength(2));
+  expect(result.current.displayKnown).toBe(false);
+  expect(selectApprovals(result.current.chat.display)).toEqual([]);
+  act(() => listeners[1]!(approval("approve-b")));
+  await waitFor(() =>
+    expect(selectApprovals(result.current.chat.display)[0]?.toolCallId).toBe("approve-b"),
+  );
+
+  await act(async () =>
+    settleA(new Response(JSON.stringify({ ...emptyChatState(), messages: [userSignal] }))),
+  );
+  expect(selectMessages(result.current.chat).some((message) => message.id === "u1")).toBe(false);
+  expect(selectApprovals(result.current.chat.display)[0]?.toolCallId).toBe("approve-b");
+  await act(async () => settleB(new Response(JSON.stringify(emptyChatState()))));
 });

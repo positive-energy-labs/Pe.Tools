@@ -18,6 +18,8 @@ export interface ChatRouteDeps {
   thread: string;
   session?: ChatActionService;
   display?: ChatState["display"];
+  /** A body or stream frame must establish the gate before an empty display can mean idle. */
+  displayKnown?: boolean;
   /**
    * The provider's send, when the surface has one: it runs the same `CHAT_ACTIONS.send` and then
    * re-reads a thread whose stream was still pending. Absent (static registration, seeds), the
@@ -63,6 +65,7 @@ export const chatManifest = (
         // parsed on the press, so the route holds no second draft.
         ready: (_ctx, input) => {
           if (!context.session) return "Session is not ready";
+          if (!deps.displayKnown) return "Thread state is loading";
           if (context.display.isRunning || selectApprovals(context.display).length)
             return "Pea is working";
           return input ? CHAT_ACTIONS.send.ready(context, input as PromptInput) : null;

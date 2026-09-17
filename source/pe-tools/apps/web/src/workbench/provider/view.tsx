@@ -90,7 +90,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     origin: config.origin,
     thread: session ? { id: currentThreadId, session } : null,
   });
-  const { pending: threadPending, error: streamFault, invalidate } = stream;
+  const { pending: threadPending, error: streamFault, invalidate, displayKnown } = stream;
   const chat = demo ?? stream.chat;
   const loading = demo ? false : chatLoading(hostStatus, threadPending);
 
@@ -113,6 +113,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const prompt = text.trim();
       if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
       if (!session) throw Error("Session is not ready");
+      if (!displayKnown) throw Error("Thread state is loading");
       try {
         setError(undefined);
         // The host admits the turn under the thread's Scope; the browser names no target.
@@ -120,13 +121,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
         if (refusal) throw Error(refusal);
         await CHAT_ACTIONS.send.run(context, { text, attachments });
-        if (threadPending) await invalidate();
+        if (threadPending) invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
         throw caught;
       }
     },
-    [invalidate, session, store, threadPending, chat.display],
+    [displayKnown, invalidate, session, store, threadPending, chat.display],
   );
 
   const cancel = useCallback(() => {
@@ -223,7 +224,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         },
       );
       if (!response.ok) throw new Error(`credentials ${response.status}`);
-      await invalidate();
+      invalidate();
     },
     [config.origin, invalidate],
   );
@@ -249,7 +250,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             category as ToolCategory,
             policy as PermissionPolicy,
           );
-        await invalidate();
+        invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
@@ -270,6 +271,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       threads,
       currentThreadId,
       prompt: search.prompt,
+      displayKnown,
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
       isRunning,
@@ -294,6 +296,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       threads,
       currentThreadId,
       search.prompt,
+      displayKnown,
       info,
       isRunning,
       operationError,

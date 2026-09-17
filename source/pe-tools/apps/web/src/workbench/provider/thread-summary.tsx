@@ -36,6 +36,8 @@ export interface WorkbenchContextValue {
   threads: StoredThreadSummary[];
   currentThreadId: string;
   prompt?: string;
+  /** A fetched body or live display frame has established this thread's send gate. */
+  displayKnown: boolean;
   revit?: boolean;
   world?: PeaSessionDescriptor;
   isRunning: boolean;
