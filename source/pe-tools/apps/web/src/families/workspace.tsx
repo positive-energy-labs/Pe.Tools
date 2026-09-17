@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 
@@ -15,7 +14,7 @@ import {
 import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
-import { familyFlag } from "#/families/plan";
+import { familyFlag } from "#/host/familyfoundry";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
@@ -27,7 +26,6 @@ function useFamiliesWorkspaceModel(
   store: FamiliesStore,
   fixtureFamilies?: readonly FamilySnapshotRecord[],
 ) {
-  const navigate = useNavigate();
   const target = store.target;
   const scope = store.documentScope;
   const draft = store.draft;
@@ -293,7 +291,6 @@ function useFamiliesWorkspaceModel(
   return {
     store,
     fixture,
-    navigate,
     target,
     scope,
     draft,

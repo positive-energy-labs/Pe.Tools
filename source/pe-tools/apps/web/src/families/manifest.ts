@@ -15,7 +15,7 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 
-import { FF_SPEC_SCHEMA, warningLine } from "#/host/familyfoundry";
+import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { previousOf } from "#/readings";
 import {
   entityRoute,
@@ -29,7 +29,6 @@ import {
 } from "#/route";
 
 import type { FamiliesDraft } from "./host";
-import { familyFlag, provenanceSummary } from "./plan";
 import { FAMILIES_SEEDS } from "./seeds";
 import {
   actionResult,
@@ -98,15 +97,7 @@ export const familiesSheetOf = (view: View): PlanSheet | null => {
   return latest
     ? {
         id: latest.id,
-        entries: latest.value.entries.map((entry) => ({
-          id: String(entry.familyId),
-          name: entry.familyName,
-          planHash: entry.planHash,
-          actions: entry.changes.length + entry.runEffects.length,
-          detail: provenanceSummary(entry),
-          flag: familyFlag(entry),
-          warnings: entry.warnings.map((warning) => `${warning.code} · ${warningLine(warning)}`),
-        })),
+        entries: latest.value.entries.map(ffPlanRow),
       }
     : null;
 };

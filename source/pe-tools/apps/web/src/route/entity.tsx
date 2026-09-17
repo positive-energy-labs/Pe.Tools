@@ -109,7 +109,7 @@ export function EntityRouteView({
             picked: (id) => id === page.pod,
             pick: (id) => setPage({ pod: id, path: "", ...closed }),
           },
-          ...(page.stage === "apply"
+          ...(page.stage === "apply" || def.specPicker === "always"
             ? [
                 {
                   key: "spec",

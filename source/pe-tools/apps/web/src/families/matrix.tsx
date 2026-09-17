@@ -6,7 +6,6 @@ export function FamiliesMatrix() {
   const {
     store,
     fixture,
-    navigate,
     rows,
     columns,
     tableState,
@@ -84,15 +83,10 @@ export function FamiliesMatrix() {
             </EmptyState>
           )
         }
-        /* The existing editor operation activates a scratch family copy; capture that returned document. */
+        /* Opens a scratch copy of the family in Revit's family editor. That copy is not a pod
+           member, so there is nothing to address on /family until it is captured there. */
         onRowClick={(row) => {
-          void store.actions
-            .openFamily(row.familyId)
-            .then((opened) => {
-              const path = (opened as { savedPath?: string | null }).savedPath;
-              if (path) void navigate({ to: "/family", search: { file: path } });
-            })
-            .catch(() => undefined);
+          void store.actions.openFamily(row.familyId).catch(() => undefined);
         }}
       />
     </>

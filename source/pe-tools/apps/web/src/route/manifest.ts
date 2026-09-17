@@ -239,6 +239,18 @@ export interface EntityRouteDef<W, R extends string, P> {
   apply: SemanticActionKey;
   /** Present = apply is a confirmation over this plan. */
   plan?: ApplyPlan<W, R, P>;
+  /**
+   * What the route needs bound before it reads anything; default `project`. The verbs need what
+   * their host workflow's contract says (`family.apply` needs a family document).
+   */
+  needs?: RouteManifest<W, R, P, never>["needs"];
+  /** Where the Situation offers the spec picker; default `apply`. `always` = the audit edits a member. */
+  specPicker?: "always" | "apply";
+  /** What the route does with the capture workflow's whole result (evidence beside the new member). */
+  onCaptured?: (
+    result: Record<string, unknown>,
+    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+  ) => void;
   /** What capture needs beyond the pod, read off the audit; a string refuses. */
   captureInput?: (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
@@ -339,9 +351,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const capture: RouteAction<unknown, string, EntityPage, never> = {
     label: `capture ${def.entity}`,
     says: `reads the ${def.entity} from Revit into new members of the chosen pod`,
-    needs: "project",
     actor: "any",
     stage: "capture",
+    needs: semanticActionFacts(def.capture).needs,
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
     count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
@@ -359,6 +371,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
       const members = (result.members ?? [result.member]) as MemberRef[];
       if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
+      def.onCaptured?.(result, ctx as never);
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {
@@ -367,7 +380,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     ...(plan
       ? {
           says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
-          needs: "project" as const,
+          needs: semanticActionFacts(def.apply).needs,
           actor: "any" as const,
         }
       : semanticActionFacts(def.apply)),
@@ -415,7 +428,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     key: def.key,
     name: def.name,
     docs: def.docs,
-    needs: "project",
+    needs: def.needs ?? "project",
     stages: [
       { key: "audit", word: "Auditing" },
       { key: "capture", word: "Capturing" },

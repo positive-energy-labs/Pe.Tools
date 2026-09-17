@@ -189,3 +189,14 @@ test("the URL carries stage, pod and path, and nothing malformed", () => {
   });
   expect(entitySearch({ stage: "nope", pod: "", path: 3 })).toEqual({});
 });
+
+test("verbs need what their workflow contract needs; the route needs what the definition says", () => {
+  // `family.capture` and `family.apply` need a family document.
+  expect([planless.capture.needs, planless.apply.needs, planned.apply.needs]).toEqual([
+    "family",
+    "family",
+    "family",
+  ]);
+  expect(entityRoute(base).needs).toBe("project");
+  expect(entityRoute({ ...base, needs: "document" }).needs).toBe("document");
+});

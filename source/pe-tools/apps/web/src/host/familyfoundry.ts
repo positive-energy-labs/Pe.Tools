@@ -1,4 +1,6 @@
-import type { PodMember } from "@pe/agent-contracts";
+import type { FfPlanEntry, PodMember } from "@pe/agent-contracts";
+
+import type { PlanEntry } from "#/route/manifest";
 import type { FamiliesCapture, FamiliesPlan } from "@pe/host-contracts/generated";
 
 export type FfProjectData = FamiliesCapture.Res.Response;
@@ -24,3 +26,36 @@ export function warningLine(warning: FamiliesPlan.Res.RevitDataIssue): string {
     .join(" / ");
   return `${subject ? `${subject} — ` : ""}${warning.message}`;
 }
+
+/** Which layers of the spec decided this family's edits, as the plan reported them. */
+export function provenanceSummary(plan: FfPlanEntry): string {
+  return (
+    [
+      ...plan.changes.map(
+        (change) =>
+          `${change.section}.${change.key}: ${change.kind}${change.mappedFrom ? ` from ${change.mappedFrom}` : ""}`,
+      ),
+      ...plan.runEffects,
+    ].join(" · ") || "no changes"
+  );
+}
+
+/** Why a family plan cannot be applied: its refusals, or nothing to do. null = applicable. */
+export function familyFlag(entry: FfPlanEntry): string | null {
+  return entry.refusals.length
+    ? entry.refusals.map((issue) => `${issue.code}: ${issue.message}`).join(" · ")
+    : entry.changes.length + entry.runEffects.length === 0
+      ? "nothing to apply"
+      : null;
+}
+
+/** One Family Foundry plan (from `families.plan` or `family.apply`'s first admission) as a sheet row. */
+export const ffPlanRow = (entry: FfPlanEntry): PlanEntry => ({
+  id: String(entry.familyId),
+  name: entry.familyName,
+  planHash: entry.planHash,
+  actions: entry.changes.length + entry.runEffects.length,
+  detail: provenanceSummary(entry),
+  flag: familyFlag(entry),
+  warnings: entry.warnings.map((warning) => `${warning.code} · ${warningLine(warning)}`),
+});
