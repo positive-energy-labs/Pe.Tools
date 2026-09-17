@@ -981,9 +981,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     chosen: target,
     work: workHandle,
     readings,
-    inventory: seededReadings
-      ? (seededReadings.inventory ?? { state: "absent" })
-      : inventoryResult,
+    inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
     page: [page, setPage] as const,
     actions,
     busy,
