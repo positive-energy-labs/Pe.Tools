@@ -1068,7 +1068,7 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/pane",
   "#/components/lang/pick-list",
   "#/components/lang/select",
-  "#/components/lang/side-pane",
+  "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",
   "#/components/lang/value-diff",
@@ -1215,11 +1215,11 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("rawTextSize", scan(FILES, re));
   });
 
-  it("rawButton — <button> outside components/lang", () => {
+  it("rawButton — <button> outside components/lang in maintained product source", () => {
     assertZero(
       "rawButton",
       scan(
-        FILES.filter((f) => isTsx(f) && !inLang(f)),
+        FILES.filter((f) => isTsx(f) && !f.rel.endsWith(".test.tsx") && !inLang(f)),
         /<button\b/g,
       ),
     );

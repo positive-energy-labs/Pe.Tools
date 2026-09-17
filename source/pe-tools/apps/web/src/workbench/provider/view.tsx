@@ -18,6 +18,7 @@ import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
+import { saveApiKey } from "./host";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
@@ -230,15 +231,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const addApiKey = useCallback(
     async (provider: string, apiKey: string) => {
-      const response = await fetch(
-        `${config.origin}/pe/credentials/${encodeURIComponent(provider)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ apiKey }),
-        },
-      );
-      if (!response.ok) throw new Error(`credentials ${response.status}`);
+      await saveApiKey(config.origin, provider, apiKey);
       invalidate();
     },
     [config.origin, invalidate],

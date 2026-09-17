@@ -5,16 +5,23 @@ import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
 import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
+import { Kbd } from "#/components/lang/kbd";
 import { ActionButton } from "#/components/lang/action-button";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
-import { RecipeGrid, type GridVariantProps } from "./recipe-grid";
+import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
 
 const noop = () => {};
 
 export function LangWorkflowSpecimens() {
   return (
     <>
+      <SpecimenFrame name="Kbd" importPath="#/components/lang/kbd">
+        <div className="flex items-center gap-2">
+          <Kbd>⌘K</Kbd>
+          <Kbd mute>Esc</Kbd>
+        </div>
+      </SpecimenFrame>
       <RecipeGrid
         name="AddressingBar"
         importPath="#/components/lang/addressing-bar"
