@@ -216,6 +216,13 @@ test("a null split side retains wrappers without a gutter or handle", () => {
   expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
   expect(split.querySelector("[role='separator']")).toBeNull();
   expect(wrappers.map((wrapper) => wrapper.style.gridColumn)).toEqual(["1", "1"]);
+  expect(wrappers[0]?.classList.contains("hidden")).toBe(false);
+  expect(wrappers[1]?.classList.contains("hidden")).toBe(true);
+  fireEvent.pointerDown(screen.getByText("composer"));
+  expect(
+    (screen.getByText("composer").closest("[data-slot='pane']") as HTMLElement | null)?.dataset
+      .active,
+  ).toBe("true");
 
   view.rerender(
     <PaneSplit
@@ -228,6 +235,13 @@ test("a null split side retains wrappers without a gutter or handle", () => {
   const next = Array.from(split.children) as HTMLElement[];
   expect(next).toEqual(wrappers);
   expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(next[0]?.classList.contains("hidden")).toBe(true);
+  expect(next[1]?.classList.contains("hidden")).toBe(false);
+  fireEvent.pointerDown(screen.getByText("plugin"));
+  expect(
+    (screen.getByText("plugin").closest("[data-slot='pane']") as HTMLElement | null)?.dataset
+      .active,
+  ).toBe("true");
   expect(screen.getByText("plugin")).toBeTruthy();
 });
 

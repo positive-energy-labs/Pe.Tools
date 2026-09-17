@@ -297,7 +297,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const renderSide = (side: "start" | "end", child: ReactNode) => {
     return (
       <div
-        className="flex min-h-0 min-w-0 flex-col overflow-visible"
+        className={child == null ? "hidden" : "flex min-h-0 min-w-0 flex-col overflow-visible"}
         style={
           horizontal
             ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }
