@@ -44,6 +44,8 @@ export interface WorkbenchContextValue {
   prompt?: string;
   /** A fetched body or live display frame has established this thread's send gate. */
   displayKnown: boolean;
+  turnFailure: Error | null;
+  turnFailed: boolean;
   revit?: boolean;
   world?: PeaSessionDescriptor;
   isRunning: boolean;

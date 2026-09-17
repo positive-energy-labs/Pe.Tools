@@ -28,9 +28,17 @@ type LiveThread = {
   frame: ChatDisplay | null;
   sent: MastraDBMessage[];
   fault: Error | null;
+  turnFailure: Error | null;
+  turnFailed: boolean;
 };
 
-const emptyLive = () => ({ frame: null, sent: [] as MastraDBMessage[], fault: null });
+const emptyLive = () => ({
+  frame: null,
+  sent: [] as MastraDBMessage[],
+  fault: null,
+  turnFailure: null,
+  turnFailed: false,
+});
 
 const bodyAtoms = Atom.family((key: string) => {
   const [origin, threadId] = JSON.parse(key) as [string, string];
@@ -115,7 +123,13 @@ export function useThreadStream(options: {
         setLive((previous) =>
           previous.key !== key
             ? previous
-            : { ...previous, frame, fault: frame.isRunning ? null : previous.fault },
+            : {
+                ...previous,
+                frame,
+                fault: frame.isRunning ? null : previous.fault,
+                turnFailure: frame.isRunning ? null : previous.turnFailure,
+                turnFailed: frame.isRunning ? false : previous.turnFailed,
+              },
         );
       }
       if (event.type === "error" || (event.type === "agent_end" && event.reason === "error")) {
@@ -124,12 +138,13 @@ export function useThreadStream(options: {
             ? previous
             : {
                 ...previous,
-                fault:
+                turnFailure:
                   event.type === "error"
                     ? event.error instanceof Error
                       ? event.error
                       : new Error(String(event.error))
-                    : (previous.fault ?? new Error("Run failed.")),
+                    : previous.turnFailure,
+                turnFailed: true,
               },
         );
       }
@@ -193,6 +208,8 @@ export function useThreadStream(options: {
     pending: threadId !== null && body._tag === "Initial" && body.waiting,
     error,
     displayKnown: current.frame !== null,
+    turnFailure: current.turnFailure,
+    turnFailed: current.turnFailed,
     invalidate,
     bodyAtom,
   };

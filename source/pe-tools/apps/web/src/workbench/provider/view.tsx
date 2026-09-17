@@ -91,7 +91,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     origin: config.origin,
     thread: session ? { id: currentThreadId, session } : null,
   });
-  const { pending: threadPending, error: streamFault, invalidate, displayKnown } = stream;
+  const {
+    pending: threadPending,
+    error: streamFault,
+    invalidate,
+    displayKnown,
+    turnFailure,
+    turnFailed,
+  } = stream;
   const chat = demo ?? stream.chat;
   const bodyAtom = useMemo(() => {
     if (!demo) return stream.bodyAtom;
@@ -288,6 +295,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       turn: search.turn,
       prompt: search.prompt,
       displayKnown,
+      turnFailure,
+      turnFailed,
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
       isRunning,
@@ -316,6 +325,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       search.turn,
       search.prompt,
       displayKnown,
+      turnFailure,
+      turnFailed,
       info,
       isRunning,
       operationError,

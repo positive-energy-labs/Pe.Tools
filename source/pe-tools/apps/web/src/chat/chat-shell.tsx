@@ -8,7 +8,7 @@ import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
-import { selectBreakdown } from "#/workbench/chat-state";
+import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
 import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
 import { Press } from "#/components/lang/press";
 import { X } from "lucide-react";
@@ -57,11 +57,12 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
     chat,
     bodyAtom,
     loading,
-    error,
     threads,
     currentThreadId,
     prompt,
     displayKnown,
+    turnFailure,
+    turnFailed,
     session,
     operationError,
     sendPrompt,
@@ -155,10 +156,24 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
     })),
   ]);
 
-  const statusText = loading ? "Loading thread state" : (error ?? operationError);
-  const status = statusText
-    ? { text: statusText, caution: Boolean(error || operationError) }
-    : undefined;
+  const runStatus = selectRunStatus(chat);
+  const status = operationError
+    ? { text: operationError, caution: true }
+    : turnFailure
+      ? { text: turnFailure.message, caution: true }
+      : turnFailed
+        ? { text: "failed", caution: true }
+        : !displayKnown
+          ? { text: loading ? "loading thread state" : "connecting", caution: false }
+          : {
+              text:
+                runStatus === "waiting"
+                  ? "waiting for you"
+                  : runStatus === "running"
+                    ? "running"
+                    : "ready",
+              caution: false,
+            };
   const chatColumn = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="min-h-0 min-w-0 flex-1">

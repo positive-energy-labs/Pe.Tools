@@ -269,3 +269,29 @@ test("a wire body does not make the display ready before its first stream frame"
   );
   await waitFor(() => expect(result.current.displayKnown).toBe(true));
 });
+
+test("a failed turn keeps its server detail separate from body and connection faults", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(threadBody()))),
+  );
+  let emit: (event: AgentControllerEvent) => void = () => {};
+  const session = {
+    subscribe: async (options: { onEvent: (event: AgentControllerEvent) => void }) => {
+      emit = options.onEvent;
+      return { unsubscribe: () => {} };
+    },
+  };
+  const { result } = renderHook(() =>
+    useThreadStream({
+      origin: "http://host",
+      thread: { id: "failed-turn", session: session as never },
+    }),
+  );
+  await waitFor(() => expect(result.current.pending).toBe(false));
+  act(() => emit({ type: "error", error: new Error("target refused") } as AgentControllerEvent));
+  await waitFor(() => expect(result.current.turnFailure?.message).toBe("target refused"));
+  expect(result.current.error).toBeNull();
+  act(() => emit({ type: "agent_end", reason: "error" } as AgentControllerEvent));
+  expect(result.current.turnFailed).toBe(true);
+});

@@ -10,6 +10,7 @@ import {
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
+import { Kbd } from "#/components/lang/kbd";
 import { threadRowRecipe } from "./appearance";
 
 /** Status dot shared by the sidebar list + palette. */
@@ -152,9 +153,7 @@ export function ThreadList({
           <Search className="size-3.5" />
           <span className="flex-1 text-left">Search all threads</span>
           {rest > 0 ? <span className="face-mono text-ink-2">+{rest}</span> : null}
-          <kbd className="hairline-x-faint hairline-y-faint rounded-sm px-1 py-0.5 t-small face-mono text-ink-2">
-            ⌘K
-          </kbd>
+          <Kbd mute>⌘K</Kbd>
         </Press>
       </div>
     </div>
@@ -201,9 +200,7 @@ export function ThreadPalette({
         >
           <Plus className="size-3.5" />
           <span className="flex-1">New thread</span>
-          <kbd className="hairline-x-faint hairline-y-faint rounded-sm px-1.5 py-0.5 t-small face-mono text-ink-2">
-            ⌘K
-          </kbd>
+          <Kbd mute>⌘K</Kbd>
         </CommandItem>
         <CommandGroup heading="Recent">
           {threads.map((thread) => {
