@@ -7,7 +7,14 @@ test("new and fork are route verbs with refusals", async () => {
   const newThread = vi.fn();
   const forkThread = vi.fn(async () => undefined);
   const session = {} as never;
-  const live = chatManifest({ thread: "t1", session, hasMessages: true, newThread, forkThread });
+  const live = chatManifest({
+    thread: "t1",
+    session,
+    displayKnown: true,
+    hasMessages: true,
+    newThread,
+    forkThread,
+  });
   expect(live.actions?.new.ready(ctx, undefined as never)).toBe(null);
   expect(live.actions?.fork.ready(ctx, undefined as never)).toBe(null);
   await live.actions?.new.run(ctx, undefined as never);
@@ -25,4 +32,14 @@ test("new and fork are route verbs with refusals", async () => {
   expect(offline.actions?.fork.ready(ctx, undefined as never)).toBe("Session is not ready");
   const staticRoute = chatManifest({ thread: "" });
   expect(staticRoute.actions?.new.ready(ctx, undefined as never)).toBe("Chat is not ready");
+});
+
+test("send remains refused until the current thread establishes its display gate", () => {
+  const session = {} as never;
+  const pending = chatManifest({ thread: "t1", session, displayKnown: false });
+  expect(pending.actions?.send.ready(ctx, { text: "hello" } as never)).toBe(
+    "Thread state is loading",
+  );
+  const ready = chatManifest({ thread: "t1", session, displayKnown: true });
+  expect(ready.actions?.send.ready(ctx, { text: "hello" } as never)).toBe(null);
 });

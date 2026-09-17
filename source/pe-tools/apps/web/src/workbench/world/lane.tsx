@@ -5,7 +5,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
 import { token } from "#/lib/token";
-import { useWorkbench } from "../provider";
+import { useCurrentThreadView } from "../thread-view";
 import {
   blastOf,
   BLAST_LABEL,
@@ -42,9 +42,9 @@ export function SessionStrip({
   cache: CacheView;
   sendNumber?: number;
 }) {
-  const { store } = useWorkbench();
-  const { density, diff, open, openItems } = useAtomValue(store.atoms.world);
-  const setWorld = store.actions.setWorld;
+  const view = useCurrentThreadView();
+  const { density, diff, open, openItems } = useAtomValue(view.atoms.world);
+  const setWorld = view.actions.setWorld;
   const inspect = density === "inspect";
   const layers = orderedLayers(breakdown);
   const used = layers.reduce((sum, layer) => sum + layer.tokens, 0) || 1;

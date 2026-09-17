@@ -13,10 +13,13 @@ import {
 import { previousOf, useHostStatus } from "#/readings";
 import { appAtomRegistry } from "#/route";
 import { useRouteOwner } from "#/route";
-import { createChatPageStore, type WorkbenchAttachment } from "../store";
+import { createChatPageStore } from "../store";
+import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import {
   errorMessage,
@@ -88,8 +91,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     origin: config.origin,
     thread: session ? { id: currentThreadId, session } : null,
   });
-  const { pending: threadPending, error: streamFault, invalidate } = stream;
+  const {
+    pending: threadPending,
+    error: streamFault,
+    invalidate,
+    displayKnown,
+    turnFailure,
+    turnFailed,
+  } = stream;
   const chat = demo ?? stream.chat;
+  const bodyAtom = useMemo(() => {
+    if (!demo) return stream.bodyAtom;
+    const { display: _display, ...body } = demo;
+    return Atom.make(AsyncResult.success(body));
+  }, [demo, stream.bodyAtom]);
   const loading = demo ? false : chatLoading(hostStatus, threadPending);
 
   const status = selectRunStatus(chat);
@@ -111,11 +126,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const prompt = text.trim();
       if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
       if (!session) throw Error("Session is not ready");
-      const sentDraft = store.registry.get(store.atoms.draft);
-      const ownsDraft =
-        sentDraft.text.trim() === prompt &&
-        (attachments === sentDraft.attachments ||
-          (!attachments && sentDraft.attachments.length === 0));
+      if (!displayKnown) throw Error("Thread state is loading");
       try {
         setError(undefined);
         // The host admits the turn under the thread's Scope; the browser names no target.
@@ -123,14 +134,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
         if (refusal) throw Error(refusal);
         await CHAT_ACTIONS.send.run(context, { text, attachments });
-        if (ownsDraft) store.actions.clearDraftIfUnchanged(sentDraft);
-        if (threadPending) await invalidate();
+        if (threadPending) invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
         throw caught;
       }
     },
-    [invalidate, session, store, threadPending, chat.display],
+    [displayKnown, invalidate, session, store, threadPending, chat.display],
   );
 
   const cancel = useCallback(() => {
@@ -176,14 +186,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const deleteThread = useCallback(
     async (threadId: string) => {
-      if (!session) return;
+      if (!session) return false;
       try {
         await session.deleteThread(threadId);
         setThreads((previous) => previous.filter((item) => item.id !== threadId));
         if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
         else await refreshThreads();
+        return true;
       } catch (caught) {
         setError(errorMessage(caught));
+        return false;
       }
     },
     [currentThreadId, gotoThread, refreshThreads, session],
@@ -227,7 +239,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         },
       );
       if (!response.ok) throw new Error(`credentials ${response.status}`);
-      await invalidate();
+      invalidate();
     },
     [config.origin, invalidate],
   );
@@ -253,12 +265,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             category as ToolCategory,
             policy as PermissionPolicy,
           );
-        await invalidate();
+        invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
     [invalidate, session],
+  );
+
+  const patchThreadView = useCallback(
+    (partial: { turn?: number }, replace = false) =>
+      navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
+    [navigate],
   );
 
   const operationError =
@@ -269,10 +287,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       config,
       session,
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
       currentThreadId,
+      turn: search.turn,
+      prompt: search.prompt,
+      displayKnown,
+      turnFailure,
+      turnFailed,
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
       isRunning,
@@ -284,6 +308,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      patchThreadView,
       resolveApproval,
       setModel,
       addApiKey,
@@ -292,16 +317,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
       currentThreadId,
+      search.turn,
+      search.prompt,
+      displayKnown,
+      turnFailure,
+      turnFailed,
       info,
       isRunning,
       operationError,
       store,
       config,
       session,
+      patchThreadView,
     ],
   );
 

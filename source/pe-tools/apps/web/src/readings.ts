@@ -24,7 +24,7 @@ import {
 } from "@pe/agent-contracts";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { useAtomValue } from "@effect/atom-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { computeBridgeSessionId } from "@pe/host-contracts/contracts";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import type {
@@ -248,6 +248,11 @@ export function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
   const previous = previousOf(reading);
   switch (frame.kind) {
     case "snapshot":
+      if (
+        reading.state === "ready" &&
+        JSON.stringify(reading.observation) === JSON.stringify(frame.value)
+      )
+        return reading;
       return { state: "ready", observation: frame.value as T };
     case "failure":
       return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };
@@ -667,36 +672,61 @@ export function useHostCall<T>(
   deps: readonly unknown[],
   enabled = true,
 ) {
-  const [state, setState] = useState<{ data?: T; error?: Error; pending: boolean }>({
-    pending: enabled,
-  });
+  const identity = useRef({ deps: [...deps], generation: 0 });
+  if (!sameDeps(identity.current.deps, deps)) {
+    identity.current = { deps: [...deps], generation: identity.current.generation + 1 };
+  }
+  const generation = identity.current.generation;
+  const [state, setState] = useState<{
+    data?: T;
+    error?: Error;
+    pending: boolean;
+    generation: number;
+  }>({ pending: enabled, generation });
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
     if (!enabled) {
-      setState({ pending: false });
+      setState({ pending: false, generation });
       return;
     }
     const controller = new AbortController();
-    setState((current) => ({ ...current, pending: true }));
+    setState((current) =>
+      current.generation === generation
+        ? { ...current, pending: true }
+        : { pending: true, generation },
+    );
     void run(controller.signal).then(
       (data) => {
-        if (!controller.signal.aborted) setState({ data, pending: false });
+        if (!controller.signal.aborted) setState({ data, pending: false, generation });
       },
       (error: unknown) => {
-        if (!controller.signal.aborted) setState({ error: Error(String(error)), pending: false });
+        if (!controller.signal.aborted)
+          setState({ error: Error(String(error)), pending: false, generation });
       },
     );
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled, nonce]);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  const visible =
+    enabled && state.generation === generation
+      ? state
+      : { data: undefined, error: undefined, pending: enabled };
   return {
-    ...state,
-    isPending: state.pending,
-    isLoading: state.pending,
-    isSuccess: !state.pending && state.error === undefined && state.data !== undefined,
+    data: visible.data,
+    error: visible.error,
+    pending: visible.pending,
+    isPending: visible.pending,
+    isLoading: visible.pending,
+    isSuccess: !visible.pending && visible.error === undefined && visible.data !== undefined,
     refresh,
   };
+}
+
+function sameDeps(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return (
+    left.length === right.length && left.every((value, index) => Object.is(value, right[index]))
+  );
 }
 
 /**

@@ -8,12 +8,14 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import { Paperclip, X } from "lucide-react";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
-import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
+import { useWorkbench } from "#/workbench/provider";
+import { EMPTY_CHAT_DRAFT, type ChatDraft, type WorkbenchAttachment } from "#/workbench/prompt";
 import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -33,20 +35,24 @@ interface SlashCommand {
 export function Composer({
   handle,
   topBar,
+  draft,
+  setDraft,
 }: {
   /** The route handle; Enter runs its Send verb scoped to this draft, the head draws the same. */
   handle: ChatHandle;
   /** Rendered flush at the top edge of the box — the composer head and the budget bar. */
   topBar?: ReactNode;
+  draft: ChatDraft;
+  setDraft: Dispatch<SetStateAction<ChatDraft>>;
 }) {
-  const { store, chat } = useWorkbench();
+  const { chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
-  const liveDraft = useAtomValue(store.atoms.draft);
-  const draft = liveDraft;
   const { text, attachments } = draft;
-  const send = useSend(handle, draft);
+  const send = useSend(handle, draft, (sent) =>
+    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current)),
+  );
   const setText = (value: string) => {
-    store.actions.setDraft((previous) => ({ ...previous, text: value }));
+    setDraft((previous) => ({ ...previous, text: value }));
   };
   const setAttachments = (
     value: WorkbenchAttachment[] | ((previous: WorkbenchAttachment[]) => WorkbenchAttachment[]),
@@ -55,7 +61,7 @@ export function Composer({
       ...previous,
       attachments: typeof value === "function" ? value(previous.attachments) : value,
     });
-    store.actions.setDraft(update);
+    setDraft(update);
   };
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -67,16 +73,6 @@ export function Composer({
     const next = await Promise.all(admitted.map(readAttachment));
     setAttachments((previous) => [...previous, ...next]);
   };
-  // A thumbnail's object URL lives exactly as long as its chip: removed or sent, it is revoked.
-  // ponytail: an unmount with image chips still in the draft leaks their URLs until the page
-  // unloads (the draft atom outlives the composer and still points at them). It matters only if
-  // many large drafts are abandoned in one long session; revoke from the store if that shows up.
-  const previews = useRef(new Set<string>());
-  useEffect(() => {
-    const live = new Set(attachments.flatMap((attachment) => attachment.preview ?? []));
-    for (const url of previews.current) if (!live.has(url)) URL.revokeObjectURL(url);
-    previews.current = live;
-  }, [attachments]);
   // A file dropped anywhere else must not navigate the tab to it.
   useEffect(() => {
     const guard = (event: DragEvent) => {
@@ -312,13 +308,25 @@ function AttachmentChip({
   const name = attachment.name ?? "attachment";
   return (
     <span
-      className={base({ class: attachment.preview ? "h-auto py-[3px]" : undefined })}
+      className={base({
+        class:
+          attachment.data && attachment.mimeType?.startsWith("image/")
+            ? "h-auto py-[3px]"
+            : undefined,
+      })}
       data-surface="artifact"
       title={`${name} is attached to the next message`}
     >
-      {attachment.preview ? <Thumbnail src={attachment.preview} name={name} fit="chip" /> : null}
+      {attachment.data && attachment.mimeType?.startsWith("image/") ? (
+        <Thumbnail
+          src={`data:${attachment.mimeType};base64,${attachment.data}`}
+          name={name}
+          fit="chip"
+        />
+      ) : null}
       <span className={label()}>{name}</span>
-      {!attachment.preview && attachment.size !== undefined ? (
+      {!(attachment.data && attachment.mimeType?.startsWith("image/")) &&
+      attachment.size !== undefined ? (
         <span className={count()}>{formatBytes(attachment.size)}</span>
       ) : null}
       <Press type="button" tone="quiet" title={`Remove ${name}`} onClick={onRemove}>
@@ -372,8 +380,20 @@ async function readAttachment(file: File): Promise<WorkbenchAttachment> {
     mimeType: file.type || "application/octet-stream",
     size: file.size,
     data: base64FromBuffer(await file.arrayBuffer()),
-    ...(file.type.startsWith("image/") ? { preview: URL.createObjectURL(file) } : {}),
   };
+}
+
+export function ThreadComposer({
+  handle,
+  topBar,
+  initialDraft = EMPTY_CHAT_DRAFT,
+}: {
+  handle: ChatHandle;
+  topBar?: ReactNode;
+  initialDraft?: ChatDraft;
+}) {
+  const [draft, setDraft] = useState(initialDraft);
+  return <Composer handle={handle} topBar={topBar} draft={draft} setDraft={setDraft} />;
 }
 
 function base64FromBuffer(buffer: ArrayBuffer): string {

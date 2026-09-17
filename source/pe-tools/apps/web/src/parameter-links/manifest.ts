@@ -51,6 +51,7 @@ export const manifest = defineRoute<
 >({
   key: "parameter-links",
   name: "Parameter Links",
+  docs: "Refresh the bound project's parameter links, preview the proposed changes, then apply the reviewed plan.",
   needs: "project",
   work: parameterLinksRouteState,
   readings: {

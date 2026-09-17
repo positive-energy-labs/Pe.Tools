@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { readingKey } from "@pe/agent-contracts";
-import { PeReadings } from "./readings.ts";
+import { readingKey, type Reading } from "@pe/agent-contracts";
+import { advance, PeReadings } from "./readings.ts";
 
 type Fake = {
   url: string;
@@ -69,5 +69,32 @@ describe("PeReadings topology swap", () => {
     await flush();
     expect(streams[0]!.closed).toBe(true);
     expect(seen).toEqual(["stale", "stale"]);
+  });
+});
+
+describe("advance snapshot identity", () => {
+  const value = { sessions: [{ id: "one", connected: true }], revision: 3 };
+  const ready: Reading<typeof value> = { state: "ready", observation: value };
+  const frame = (next: unknown) => ({ kind: "snapshot", key: "inventory", value: next }) as never;
+
+  it("keeps a ready wrapper for an unchanged JSON-wire snapshot", () => {
+    expect(advance(ready, frame(structuredClone(value)))).toBe(ready);
+  });
+
+  it("returns a new ready wrapper when the snapshot changes", () => {
+    const next = advance(ready, frame({ ...value, revision: 4 }));
+    expect(next).not.toBe(ready);
+    expect(next).toEqual({ state: "ready", observation: { ...value, revision: 4 } });
+  });
+
+  it("restores ready after stale or failed state even when evidence is equal", () => {
+    const stale = advance(ready, { kind: "gap", key: "inventory" } as never);
+    const failed = advance(ready, { kind: "failure", key: "inventory", error: "offline" } as never);
+    const afterStale = advance(stale, frame(structuredClone(value)));
+    const afterFailure = advance(failed, frame(structuredClone(value)));
+    expect(afterStale).toEqual({ state: "ready", observation: value });
+    expect(afterFailure).toEqual({ state: "ready", observation: value });
+    expect(afterStale).not.toBe(stale);
+    expect(afterFailure).not.toBe(failed);
   });
 });

@@ -288,6 +288,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
   defineRoute({
     key: "family",
     name: "Family",
+    docs: "Open the saved family profile, review the exact build target, then build and reconcile the resulting family evidence.",
     needs: "document",
     readings: {
       family: (_page: FamilyPage, work: WorkKey) => {

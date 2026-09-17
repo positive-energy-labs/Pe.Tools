@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } 
 import { useAtomValue } from "@effect/atom-react";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
+import { useCurrentThreadView } from "../thread-view";
 import { useThreadScope } from "#/chat/scope";
 import { selectBreakdown, selectMessages } from "../chat-state";
 import {
@@ -85,18 +86,18 @@ export function useLensModel({
 
   const focalToolRef = useRef<string | null>(null);
 
-  const { store } = useWorkbench();
+  const view = useCurrentThreadView();
 
-  const inspectKey = useAtomValue(store.atoms.lensInspectKey);
+  const inspectKey = useAtomValue(view.atoms.lensInspectKey);
 
-  const setInspectKey = store.actions.setLensInspectKey;
+  const setInspectKey = view.actions.setLensInspectKey;
 
   // The position intent lives in the store (`lensIntent`); follow is derived from it. The store
   // is per thread (WorkbenchProvider is keyed on it), so nothing here resets on a thread switch.
-  const intent = useCallback(() => store.registry.get(store.atoms.lensIntent), [store]);
-  const setIntent = store.actions.setLensIntent;
+  const intent = useCallback(() => view.registry.get(view.atoms.lensIntent), [view]);
+  const setIntent = view.actions.setLensIntent;
 
-  const following = useAtomValue(store.atoms.lensFollowing);
+  const following = useAtomValue(view.atoms.lensFollowing);
 
   const scrollTopRef = useRef(0);
 

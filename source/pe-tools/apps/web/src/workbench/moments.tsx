@@ -11,9 +11,12 @@ import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
 import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
+import { useCurrentThreadView } from "./thread-view";
 import {
   readRecord,
   readString,
+  formatBytes,
+  toolImages,
   toolOutputForDisplay,
   type Approval,
   type ChatMessage,
@@ -29,6 +32,7 @@ import { PressContent } from "#/components/anatomy/press-content";
 import { FactChip } from "#/components/lang/chip";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "#/lib/use-copy";
+import { deferredResultSummary, useDeferredToolResult } from "./deferred-result";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -287,17 +291,20 @@ function succeededDiagram(call: ToolCall): DiagramSpec | undefined {
 }
 
 function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval }) {
-  const { resolveApproval, store } = useWorkbench();
-  const pinKey = useAtomValue(store.atoms.lensPinKey);
+  const { resolveApproval } = useWorkbench();
+  const view = useCurrentThreadView();
+  const pinKey = useAtomValue(view.atoms.lensPinKey);
   // One gesture, two lanes: clicking a marker opens its I/O here AND pins it in the trace lane's
   // inspect window, so the inspection survives the pointer leaving and the transcript scrolling.
   const key = `tool:${call.id}`;
   const open = pinKey === key;
+  const deferred = useDeferredToolResult(call, open);
   const running = call.status === "in_progress";
   const diagram = succeededDiagram(call);
   const failed = call.status === "failed";
   const tone = failed ? "failed" : running ? "active" : "";
-  const result = failed ? (call.result ?? call.error) : call.result;
+  const result = failed ? (call.result ?? call.error) : deferred.result;
+  const images = deferred.ref ? toolImages(result) : call.images;
   // What the run actually touched: the Scope revision it was admitted under and the session and
   // document the host resolved to. Read from the result, so it is evidence, not intent.
   const ran = readRecord(result);
@@ -320,11 +327,11 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
             ? "Close this call (unpins the trace lane)"
             : "Open this call's input and output, and pin it in the trace lane"
         }
-        onClick={() => store.actions.setLensPinKey(open ? null : key)}
+        onClick={() => view.actions.setLensPinKey(open ? null : key)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            store.actions.setLensPinKey(open ? null : key);
+            view.actions.setLensPinKey(open ? null : key);
           }
         }}
         className={tone}
@@ -349,14 +356,19 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           {failed ? "err" : running ? "run" : "ok"}
         </span>
       </div>
+      {deferred.ref ? (
+        <span className="t-small text-ink-2" data-testid="deferred-result-summary">
+          {deferredResultSummary(deferred.ref.summary)} Â· {formatBytes(deferred.ref.byteSize)}
+        </span>
+      ) : null}
       {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
       {diagram ? (
         <Code code={toMermaid(diagram)} lang="mermaid" title={diagram.title ?? "diagram"} />
       ) : null}
       {/* What the call captured, visible without opening it and while it still runs. */}
-      {call.images.length > 0 ? (
+      {images.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
-          {call.images.map((src, index) => (
+          {images.map((src, index) => (
             <Thumbnail key={index} src={src} name={`${toolTitle(call.title)} image ${index + 1}`} />
           ))}
         </div>
@@ -364,7 +376,16 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
       {open ? (
         <div {...annotation("tool-body")}>
           <Code code={stringify(call.args)} lang="json" title="in" />
-          {result === undefined ? null : failed ? (
+          {deferred.pending ? (
+            <div className="t-prose text-ink-2">Loading full resultâ€¦</div>
+          ) : deferred.error ? (
+            <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
+              <span>{deferred.error.message}</span>
+              <Press type="button" tone="quiet" size="caption" onClick={deferred.retry}>
+                retry
+              </Press>
+            </div>
+          ) : result === undefined ? null : failed ? (
             <Code
               code={stringify(toolOutputForDisplay(result))}
               lang="json"
@@ -377,13 +398,15 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           )}
         </div>
       ) : null}
-      <RouteChatPluginView
-        toolCallId={call.id}
-        toolName={call.title}
-        args={call.args}
-        sessionState={result}
-        running={running}
-      />
+      {!deferred.ref || result !== undefined ? (
+        <RouteChatPluginView
+          toolCallId={call.id}
+          toolName={call.title}
+          args={call.args}
+          sessionState={result}
+          running={running}
+        />
+      ) : null}
       {/* Allow/refuse lives in the composer head's proposals band (`chat/composer-head.tsx`);
           a question still answers here, beside what it asks about. */}
       {question ? (

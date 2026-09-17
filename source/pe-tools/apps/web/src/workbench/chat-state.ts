@@ -33,6 +33,8 @@ export type ChatState = ThreadViewState<
   PermissionRules | undefined,
   PeInspect
 > & { display: ChatDisplay };
+/** `/pe/thread` is the durable body only; display state arrives solely over the stream. */
+export type ThreadBody = Omit<ChatState, "display">;
 export type AccessLevel = ChatState["access"];
 
 /**

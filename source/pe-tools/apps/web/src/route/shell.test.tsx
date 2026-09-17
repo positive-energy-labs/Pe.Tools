@@ -56,9 +56,9 @@ test("an action that refuses says why instead of running", async () => {
     },
   });
   render(await wrap(<RouteShell manifest={manifest as never} live={false} />));
-  expect(screen.getByRole("button", { name: /commit/ }).getAttribute("title")).toBe(
-    "nothing is staged",
-  );
+  const button = screen.getByRole("button", { name: /commit/ });
+  expect(button.getAttribute("title")).toBe("nothing is staged · Mod+Enter");
+  expect(button.textContent).not.toContain("Mod+Enter");
 });
 
 test("the shell runs the supplied workspace handle and shares its outcome and Page", async () => {

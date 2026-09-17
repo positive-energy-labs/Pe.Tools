@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
 import { readRecord, readString, shortId, type Approval, type ChatState } from "../chat-state";
-import { type WorkbenchAttachment } from "../store";
+import { type WorkbenchAttachment } from "../prompt";
 import type {
   MessageFile,
   SessionClient,

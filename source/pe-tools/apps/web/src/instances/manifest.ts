@@ -39,6 +39,7 @@ const READINGS = {
 export const instancesManifest = defineRoute({
   key: "instances",
   name: "Instances",
+  docs: "Refresh the SDK census to inspect available sessions, installed years, diagnostics and recent documents before starting or recovering a session.",
   work: instancesRouteState,
   readings: READINGS,
   actions: {

@@ -15,6 +15,7 @@ import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { HelpTip } from "#/components/lang/help";
+import { Kbd } from "#/components/lang/kbd";
 import { keyMeta } from "#/route/keys";
 import { Press } from "#/components/lang/press";
 import { tv, type VariantProps } from "#/lib/tv";
@@ -371,12 +372,9 @@ export function Pane({
                         data-enabled={enabled}
                         className={enabled ? "contents" : "contents text-ink-mute"}
                       >
-                        <kbd
-                          data-surface="recess"
-                          className="face-mono t-small min-w-7 border border-line-2 px-1.5 py-0.5 text-center"
-                        >
+                        <Kbd mute={!enabled}>
                           {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
-                        </kbd>
+                        </Kbd>
                         <span className="whitespace-nowrap">
                           {shortcut.label}
                           {shortcut.refusal ? (

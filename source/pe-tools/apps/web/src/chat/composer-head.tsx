@@ -5,7 +5,6 @@
  * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
  * reject have one location and the stream stays a record.
  */
-import { useAtomValue } from "@effect/atom-react";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
 
@@ -25,7 +24,8 @@ import {
   toolTarget,
   type ChatState,
 } from "#/workbench/chat-state";
-import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
+import { useWorkbench } from "#/workbench/provider";
+import type { ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
@@ -35,21 +35,21 @@ export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActio
  */
 export function useSend(
   handle: ChatHandle,
-  draftOverride?: { text: string; attachments: WorkbenchAttachment[] },
+  draft: ChatDraft,
+  onSent?: (sent: ChatDraft) => void,
 ): ActionHandle {
-  const { store } = useWorkbench();
-  const liveDraft = useAtomValue(store.atoms.draft);
-  const draft = draftOverride ?? liveDraft;
   const send = handle.actions.send;
   const empty = !draft.text.trim() && draft.attachments.length === 0;
   return {
     ...send,
     refusal: send.refusal ?? (empty ? "Enter a prompt or attachment" : null),
     run: async () => {
-      return send.run({
+      const result = await send.run({
         text: draft.text.trim(),
         attachments: draft.attachments.length ? draft.attachments : undefined,
       });
+      if (!result) onSent?.(draft);
+      return result;
     },
   };
 }

@@ -140,6 +140,7 @@ const seed = (
 export const manifest = defineRoute({
   key: "families",
   name: "Families",
+  docs: "Set the project family scope, apply it as audited Work, then review the plan before changing the selected families.",
   needs: "project",
   work: familiesRouteState,
   readings: {

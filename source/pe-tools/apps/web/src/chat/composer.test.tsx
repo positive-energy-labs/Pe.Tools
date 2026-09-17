@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { RegistryContext } from "@effect/atom-react";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { Activity, useState } from "react";
 import { emptyChatState } from "#/workbench/chat-state";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -11,8 +10,7 @@ vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }))
 vi.mock("#/chat/control-chips", () => ({ ControlChips: () => null }));
 vi.mock("#/components/master-table/cells", () => ({ StateDot: () => null }));
 
-import { Composer } from "./composer";
-import { createChatPageStore } from "#/workbench/store";
+import { ThreadComposer } from "./composer";
 
 afterEach(() => {
   cleanup();
@@ -39,69 +37,50 @@ const newAction = {
 };
 
 function mount({ skills = [] as { name: string; description: string }[] } = {}) {
-  const registry = AtomRegistry.make();
-  const store = createChatPageStore({
-    registry,
-    search: { mode: "threads", patch: async () => undefined },
-  });
   workbench.value = {
-    store,
     chat: { ...emptyChatState(), inspect: { skills } },
     sendPrompt: vi.fn(async () => undefined),
     cancel: vi.fn(),
     isRunning: false,
   };
   const view = render(
-    <RegistryContext.Provider value={registry}>
-      <Composer
-        handle={
-          {
-            actions: {
-              send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
-              new: newAction,
-              fork: {
-                label: "fork",
-                says: "clones this thread",
-                refusal: "No thread to fork",
-                count: null,
-                run: vi.fn(),
-              },
+    <ThreadComposer
+      handle={
+        {
+          actions: {
+            send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+            new: newAction,
+            fork: {
+              label: "fork",
+              says: "clones this thread",
+              refusal: "No thread to fork",
+              count: null,
+              run: vi.fn(),
             },
-            outcome: null,
-            busy: null,
-          } as never
-        }
-      />
-    </RegistryContext.Provider>,
+          },
+          outcome: null,
+          busy: null,
+        } as never
+      }
+    />,
   );
-  const attachments = () => registry.get(store.atoms.draft).attachments;
-  return { ...view, store, registry, attachments };
+  const attachments = () =>
+    Array.from(view.container.querySelectorAll("[title$='is attached to the next message']")).map(
+      (chip) => chip.getAttribute("title")?.replace(" is attached to the next message", ""),
+    );
+  return { ...view, attachments };
 }
 
 const png = (name = "shot.png", bytes = 8) =>
   new File([new Uint8Array(bytes)], name, { type: "image/png" });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-function stubObjectUrls() {
-  let next = 0;
-  const revoked: string[] = [];
-  vi.stubGlobal(
-    "URL",
-    Object.assign(URL, {
-      createObjectURL: vi.fn(() => `blob:preview-${next++}`),
-      revokeObjectURL: vi.fn((url: string) => void revoked.push(url)),
-    }),
-  );
-  return revoked;
-}
-
 test("pasting an image adds it as an attachment; pasting text stays text", async () => {
-  stubObjectUrls();
   const lane = mount();
   const box = screen.getByRole("textbox");
   fireEvent.paste(box, { clipboardData: { files: [png()], types: ["Files"], getData: () => "" } });
   await settle();
-  expect(lane.attachments().map((a) => a.name)).toEqual(["shot.png"]);
+  expect(lane.attachments()).toEqual(["shot.png"]);
 
   const plain = fireEvent.paste(box, {
     clipboardData: { files: [], types: ["text/plain"], getData: () => "hello" },
@@ -112,7 +91,6 @@ test("pasting an image adds it as an attachment; pasting text stays text", async
 });
 
 test("dropping files on the composer adds them and shows a drop state while dragging", async () => {
-  stubObjectUrls();
   const lane = mount();
   const zone = lane.container.querySelector<HTMLElement>("[data-drop-zone]")!;
   expect(zone).toBeTruthy();
@@ -123,15 +101,14 @@ test("dropping files on the composer adds them and shows a drop state while drag
   fireEvent.drop(zone, { dataTransfer: transfer });
   await settle();
   expect(zone.dataset.surface).toBe("artifact");
-  expect(lane.attachments().map((a) => a.name)).toEqual(["a.png"]);
+  expect(lane.attachments()).toEqual(["a.png"]);
 
   // A file dropped elsewhere on the page must not navigate the tab to it.
   const outside = fireEvent.drop(document.body, { dataTransfer: transfer });
   expect(outside).toBe(false);
 });
 
-test("an image chip shows a thumbnail that is revoked when the chip is removed", async () => {
-  const revoked = stubObjectUrls();
+test("an image chip renders held bytes and needs no object URL cleanup", async () => {
   const lane = mount();
   fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: {
@@ -141,18 +118,18 @@ test("an image chip shows a thumbnail that is revoked when the chip is removed",
     },
   });
   await settle();
-  const thumb = lane.container.querySelector<HTMLImageElement>("img[src='blob:preview-0']");
+  const thumb = lane.container.querySelector<HTMLImageElement>(
+    "img[src^='data:image/png;base64,']",
+  );
   expect(thumb).toBeTruthy();
   expect(screen.getByText("spec.pdf")).toBeTruthy();
   expect(screen.getByText("2.0 KB")).toBeTruthy();
   fireEvent.click(screen.getByTitle("Remove shot.png"));
   await settle();
-  expect(revoked).toEqual(["blob:preview-0"]);
-  expect(lane.attachments().map((a) => a.name)).toEqual(["spec.pdf"]);
+  expect(lane.attachments()).toEqual(["spec.pdf"]);
 });
 
 test("a file over the limit is refused with one caution line naming it", async () => {
-  stubObjectUrls();
   const lane = mount();
   fireEvent.paste(screen.getByRole("textbox"), {
     clipboardData: {
@@ -166,7 +143,7 @@ test("a file over the limit is refused with one caution line naming it", async (
     },
   });
   await settle();
-  expect(lane.attachments().map((a) => a.name)).toEqual(["ok.png"]);
+  expect(lane.attachments()).toEqual(["ok.png"]);
   const line = lane.container.querySelector("[data-tone='caution']");
   expect(line?.textContent).toContain("huge.png");
   expect(line?.textContent).toContain("5 MB");
@@ -195,4 +172,68 @@ test("new and fork sit in the control row as route actions, refusals shown the s
   fireEvent.click(fresh);
   expect(newAction.run).toHaveBeenCalledOnce();
   lane.unmount();
+});
+
+test("Activity retains each visited thread draft without sharing it", () => {
+  function Bank() {
+    const [active, setActive] = useState("A");
+    return (
+      <>
+        <button onClick={() => setActive("A")}>thread A</button>
+        <button onClick={() => setActive("B")}>thread B</button>
+        {(["A", "B"] as const).map((thread) => (
+          <Activity key={thread} mode={active === thread ? "visible" : "hidden"}>
+            <ThreadComposer
+              handle={
+                {
+                  actions: {
+                    send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+                    new: newAction,
+                    fork: { ...newAction, label: "fork" },
+                  },
+                } as never
+              }
+            />
+          </Activity>
+        ))}
+      </>
+    );
+  }
+  workbench.value = { chat: emptyChatState(), isRunning: false };
+  render(<Bank />);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "draft A" } });
+  fireEvent.click(screen.getByRole("button", { name: "thread B" }));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "draft B" } });
+  fireEvent.click(screen.getByRole("button", { name: "thread A" }));
+  expect(screen.getByRole<HTMLInputElement>("textbox").value).toBe("draft A");
+});
+
+test("a late send clears only its exact submitted draft", async () => {
+  let settleSend!: (result: null) => void;
+  const run = vi.fn(
+    () =>
+      new Promise<null>((resolve) => {
+        settleSend = resolve;
+      }),
+  );
+  workbench.value = { chat: emptyChatState(), isRunning: false };
+  render(
+    <ThreadComposer
+      handle={
+        {
+          actions: {
+            send: { label: "send", says: "", refusal: null, count: null, run },
+            new: newAction,
+            fork: { ...newAction, label: "fork" },
+          },
+        } as never
+      }
+    />,
+  );
+  const box = screen.getByRole("textbox");
+  fireEvent.change(box, { target: { value: "sent" } });
+  fireEvent.click(screen.getByRole("button", { name: "send" }));
+  fireEvent.change(box, { target: { value: "later edit" } });
+  await act(async () => settleSend(null));
+  expect((box as HTMLTextAreaElement).value).toBe("later edit");
 });

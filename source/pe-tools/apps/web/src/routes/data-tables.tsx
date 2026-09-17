@@ -13,7 +13,7 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface, SurfaceCell } from "#/components/lang/surface";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/readings";
-import { RouteShell, appAtomRegistry, emptyManifest } from "#/route";
+import { RouteShell, appAtomRegistry, defineRoute } from "#/route";
 import { createRouteOwner, refuse } from "#/route";
 import { useRouteOwner } from "#/route";
 import { DraftEditor } from "#/data-tables/draft-editor";
@@ -27,8 +27,11 @@ import { DraftEditor } from "#/data-tables/draft-editor";
  */
 export const dataTablesSearch = (_search: Record<string, unknown>) => ({});
 
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("data-tables", "Data Tables");
+export const manifest = defineRoute({
+  key: "data-tables",
+  name: "Data Tables",
+  docs: "Create or select a data table, edit its columns and rows, then apply the staged definition to Revit.",
+});
 
 function RouteShelledDataTablesFileRoute() {
   return (

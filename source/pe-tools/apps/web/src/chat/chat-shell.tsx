@@ -1,24 +1,28 @@
-import { useEffect, useMemo, useRef } from "react";
-import { useAtomValue } from "@effect/atom-react";
+import { useEffect, useMemo, useState } from "react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
-import { Composer } from "#/chat/composer";
 import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
-import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
-import { selectBreakdown } from "#/workbench/chat-state";
+import { SessionStrip } from "#/workbench/world";
+import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
+import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
 import { Press } from "#/components/lang/press";
-import { SidePane } from "#/components/lang/side-pane";
 import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
 import { ComposerHead } from "#/chat/composer-head";
-import { RouteShell, keyMeta, useRoute } from "#/route";
+import { appAtomRegistry, RouteShell, keyMeta, useRoute } from "#/route";
 import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
+import { CurrentThreadViewOwner, useCurrentThreadView } from "#/workbench/thread-view";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface as PageSurface, SurfaceCell } from "#/components/lang/surface";
+import { ThreadBody } from "#/workbench/lens/thread-body";
+import { ComposerBank } from "#/chat/composer-bank";
 
 /** Routes hostable as in-realm chat workspace panes.
  * Route names and titles come from the plugin registry — one registration per route. */
@@ -28,19 +32,37 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({ plugin }: { plugin?: ChatPluginRoute }) {
   return (
     <HotkeysProvider>
-      <Surface plugin={plugin} />
+      <CurrentThreadChatSurface plugin={plugin} />
     </HotkeysProvider>
   );
 }
 
-function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
+function CurrentThreadChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
+  const { currentThreadId, turn, patchThreadView } = useWorkbench();
+  return (
+    <CurrentThreadViewOwner
+      threadKey={currentThreadId}
+      registry={appAtomRegistry}
+      turn={turn}
+      patch={patchThreadView}
+    >
+      <ChatSurface plugin={plugin} />
+    </CurrentThreadViewOwner>
+  );
+}
+
+function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
   const {
     store,
     chat,
+    bodyAtom,
     loading,
-    error,
     threads,
     currentThreadId,
+    prompt,
+    displayKnown,
+    turnFailure,
+    turnFailed,
     session,
     operationError,
     sendPrompt,
@@ -58,6 +80,7 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
       chatManifest({
         thread: currentThreadId ?? "",
         display: chat.display,
+        displayKnown,
         session,
         send: (input) => sendPrompt(input.text, input.attachments),
         hasMessages: chat.messages.length > 0,
@@ -67,6 +90,7 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     [
       currentThreadId,
       chat.display,
+      displayKnown,
       chat.messages.length,
       session,
       sendPrompt,
@@ -78,20 +102,19 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
   // head is the Situation, which needs the same handle the shell's chords run through.
   const handle = useRoute(manifest);
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
-  const handleDeleteThread = (id: string) => void deleteThread(id);
+  const [deletedThreadIds, setDeletedThreadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const handleDeleteThread = async (id: string) => {
+    if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
+  };
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
-  // The side lane is a SidePane (rendered inside the Lens grid) that owns its own width, drag,
-  // collapse, and persistence (storageKey "pe.sideWidth").
   const sideOpen = useAtomValue(store.atoms.sideOpen);
-  // The plugin workspace is a right SidePane. Only ONE flank may be expanded at a time:
-  // opening either pane collapses the other to its 40px rail (nothing is unmounted).
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   // A tool call clicked open in the transcript owns the trace lane's inspect window until unpinned.
-  const pinKey = useAtomValue(store.atoms.lensPinKey);
+  const view = useCurrentThreadView();
+  const pinKey = useAtomValue(view.atoms.lensPinKey);
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
-  // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
@@ -102,21 +125,9 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     [chat.messages],
   );
   const cache = useCacheView(breakdown, userTurns);
-
-  // The composer floats over the chat lane; publish its live height as --composer-h so the chat
-  // can pad its tail by exactly the input box (which grows as the textarea expands).
-  const mainRef = useRef<HTMLElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const main = mainRef.current;
-    const box = composerRef.current;
-    if (!main || !box) return;
-    const apply = () => main.style.setProperty("--composer-h", `${box.offsetHeight}px`);
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, []);
+  const traceCells = useMemo(() => buildTraceCells(chat), [chat]);
+  const traceCell = traceCells.find((cell) => cell.key === pinKey) ?? null;
+  const retryBody = useAtomRefresh(bodyAtom);
 
   useHotkeys([
     // Surface chords, not manifest actions: they move Page state and never refuse. Tagged so the
@@ -145,97 +156,179 @@ function Surface({ plugin }: { plugin?: ChatPluginRoute }) {
     })),
   ]);
 
-  const statusText = loading ? "Loading thread state" : (error ?? operationError);
-  const status = statusText
-    ? { text: statusText, caution: Boolean(error || operationError) }
-    : undefined;
+  const runStatus = selectRunStatus(chat);
+  const status = operationError
+    ? { text: operationError, caution: true }
+    : turnFailure
+      ? { text: turnFailure.message, caution: true }
+      : turnFailed
+        ? { text: "failed", caution: true }
+        : !displayKnown
+          ? { text: loading ? "loading thread state" : "connecting", caution: false }
+          : {
+              text:
+                runStatus === "waiting"
+                  ? "waiting for you"
+                  : runStatus === "running"
+                    ? "running"
+                    : "ready",
+              caution: false,
+            };
+  const chatColumn = (
+    <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
+      <div className="min-h-0 min-w-0 flex-1">
+        <Pane
+          kind="content"
+          scroll="clip"
+          id="transcript"
+          title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
+          boundaryKey={currentThreadId}
+          onRetry={retryBody}
+        >
+          <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
+        </Pane>
+      </div>
+      <Pane
+        kind="content"
+        scroll="visible"
+        id="composer"
+        title="composer"
+        help="Drafts stay with their visited thread until sent or deleted."
+        headerSurface="recess"
+        boundary={false}
+        headerless
+      >
+        <ComposerBank
+          currentThreadId={currentThreadId}
+          deletedThreadIds={deletedThreadIds}
+          prompt={prompt}
+          handle={handle}
+          topBar={
+            <>
+              <ComposerHead handle={handle} status={status} />
+              <ContextRibbon
+                breakdown={breakdown}
+                cache={cache}
+                onOpenWorld={() => setMode("world")}
+              />
+            </>
+          }
+        />
+      </Pane>
+    </div>
+  );
 
   return (
     <main
-      ref={mainRef}
       data-chat="surface"
       data-mode={mode}
       data-plugin={plugin}
-      data-surface="page"
-      className="fixed inset-0 font-sans text-ink"
+      className="size-full min-h-0 min-w-0 font-sans text-ink"
     >
       {/* The route shell owns the chords and the remaining-height conversation column. Chat has
           no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
           none of its own. */}
-      <div className="h-full px-5">
-        <RouteShell manifest={manifest} handle={handle} situation={<></>}>
-          <div className="relative flex min-h-0 min-w-0 flex-1">
-            <div className="relative min-h-0 min-w-0 flex-1">
-              <Lens
-                state={chat}
-                mode={mode}
-                sideOpen={sideOpen}
-                onSideOpenChange={store.actions.setSideOpen}
-                pinKey={pinKey}
-                onPinChange={store.actions.setLensPinKey}
-                sideHead={<ModeDial mode={mode} setMode={setMode} />}
-                threadList={
-                  <ThreadList
-                    threads={threads}
-                    currentThreadId={currentThreadId}
-                    onSelect={openThread}
-                    onNew={newThread}
-                    onRename={handleRenameThread}
-                    onDelete={handleDeleteThread}
-                    onSearch={() => store.actions.setPaletteOpen(true)}
-                  />
-                }
-              />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
-                <div className="pe-composer-lane">
-                  <div ref={composerRef} className="pointer-events-auto">
-                    <Composer
-                      handle={handle}
-                      topBar={
-                        <>
-                          <ComposerHead handle={handle} status={status} />
-                          <ContextRibbon
-                            breakdown={breakdown}
-                            cache={cache}
-                            onOpenWorld={() => setMode("world")}
-                          />
-                        </>
-                      }
+      <RouteShell manifest={manifest} handle={handle} situation={<></>}>
+        <PageSurface columns="minmax(0, 1fr)">
+          <SurfaceCell>
+            <PaneSplit
+              axis="horizontal"
+              grow
+              resize={{
+                target: "start",
+                defaultSize: 300,
+                minSize: 240,
+                persist: "pe.sideWidth",
+                collapse: { collapsed: !sideOpen, collapsedSize: 40 },
+              }}
+              start={
+                <Pane
+                  kind="flank"
+                  id="threads"
+                  title="threads"
+                  meta={threads.length}
+                  actions={<ModeDial mode={mode} setMode={setMode} />}
+                  collapsed={!sideOpen}
+                  onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
+                >
+                  {mode === "threads" ? (
+                    <ThreadList
+                      threads={threads}
+                      currentThreadId={currentThreadId}
+                      onSelect={openThread}
+                      onNew={newThread}
+                      onRename={handleRenameThread}
+                      onDelete={handleDeleteThread}
+                      onSearch={() => store.actions.setPaletteOpen(true)}
                     />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {plugin ? (
-              <SidePane
-                side="right"
-                storageKey="pe.pluginWidth"
-                open={pluginOpen}
-                onOpenChange={store.actions.setPluginOpen}
-                minWidth={480}
-                defaultWidth={640}
-                header={
-                  <div className="flex items-center justify-between">
-                    <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
-                    <Press
-                      tone="neutral"
-                      size="icon"
-                      title="Close workspace"
-                      onClick={() => store.actions.setPlugin(undefined)}
-                    >
-                      <X />
-                    </Press>
-                  </div>
-                }
-              >
-                {/* The pane resolves its route document from the active rvt Address. */}
-                {PluginPane ? <PluginPane store={store} /> : null}
-              </SidePane>
-            ) : null}
-          </div>
-        </RouteShell>
-      </div>
+                  ) : mode === "trace" ? (
+                    <div data-annotation="trace-frame">
+                      <div data-annotation="trace-pin">
+                        {traceCells.map((cell) => (
+                          <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
+                        ))}
+                      </div>
+                      {traceCell ? (
+                        <div data-annotation="inspect" data-pinned>
+                          <Press
+                            tone="quiet"
+                            size="caption"
+                            title="Unpin this call"
+                            onClick={() => view.actions.setLensPinKey(null)}
+                          >
+                            unpin
+                          </Press>
+                          <ToolCellBody call={traceCell.call} />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                  )}
+                </Pane>
+              }
+              end={
+                <PaneSplit
+                  axis="horizontal"
+                  grow
+                  resize={{
+                    target: "end",
+                    defaultSize: 640,
+                    minSize: 480,
+                    persist: "pe.pluginWidth",
+                    collapse: { collapsed: !plugin || !pluginOpen, collapsedSize: 40 },
+                  }}
+                  start={chatColumn}
+                  end={
+                    plugin ? (
+                      <Pane
+                        kind="flank"
+                        side="right"
+                        id="plugin"
+                        title={chatPluginTitle(plugin)}
+                        collapsed={!pluginOpen}
+                        onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
+                        actions={
+                          <Press
+                            tone="quiet"
+                            size="icon"
+                            title="Close workspace"
+                            onClick={() => store.actions.setPlugin(undefined)}
+                          >
+                            <X />
+                          </Press>
+                        }
+                      >
+                        {PluginPane ? <PluginPane store={store} /> : null}
+                      </Pane>
+                    ) : null
+                  }
+                />
+              }
+            />
+          </SurfaceCell>
+        </PageSurface>
+      </RouteShell>
 
       <ThreadPalette
         threads={threads}
