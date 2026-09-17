@@ -64,6 +64,9 @@ public static class FamilyModelValidator {
         foreach (var (k, v) in m.RefPlanes) normals[k] = v.Normal;
         var planes = new HashSet<string>(normals.Keys, StringComparer.Ordinal);
         var lines = new HashSet<string>(m.RefLines.Keys, StringComparer.Ordinal);
+        // A formula resolves against declared parameters plus the family's built-in parameters, which the
+        // template owns and the document only names (`Length`, `Width`, `Default Elevation`, …).
+        var nameable = new HashSet<string>(m.Parameters.Keys.Concat(m.BuiltIns), StringComparer.Ordinal);
 
         foreach (var (name, p) in m.Parameters) {
             var path = $"$.parameters.{name}";
@@ -74,8 +77,8 @@ public static class FamilyModelValidator {
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
             if (p.Value is { } v && p.DataType is { } dt) CheckValue(v, dt, $"{path}.value", d);
             if (p.Formula is { } f)
-                foreach (var tok in FormulaNames(f).Where(t => !m.Parameters.ContainsKey(t)))
-                    d.Add(new(FamilyModelDiagnosticCodes.FormulaUnknownName, $"{path}.formula", $"'{tok}' is not a declared parameter. Nearest: {Nearest(tok, m.Parameters.Keys)}"));
+                foreach (var tok in FormulaNames(f).Where(t => !nameable.Contains(t)))
+                    d.Add(new(FamilyModelDiagnosticCodes.FormulaUnknownName, $"{path}.formula", $"'{tok}' is neither a declared parameter nor a declared built-in. Nearest: {Nearest(tok, nameable)}"));
         }
         foreach (var (type, cells) in m.Types)
         foreach (var (name, v) in cells) {

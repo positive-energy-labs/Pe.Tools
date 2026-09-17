@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Mechanical;
+﻿using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using DataStorage = Autodesk.Revit.DB.ExtensibleStorage.DataStorage;
 using Pe.Revit.Extensions.FamDocument;
@@ -113,6 +113,7 @@ internal sealed class FamilyModelCapturer {
                 Placement = placement
             },
             Parameters = projected.Parameters,
+            BuiltIns = projected.BuiltIns,
             Types = projected.Types,
             Datums = datums,
             RefPlanes = refPlanes,
@@ -129,6 +130,8 @@ internal sealed class FamilyModelCapturer {
             Unmodeled = this._un,
             CaptureIssues = this._issues
         };
+        // What the executable model cannot express leaves the member and becomes a fact of the run.
+        model.Unmodeled.AddRange(FamilyModelPrune.RefLinesWithoutTwoPlanes(model));
         var incomplete = this._un.Select(fact => fact.Path.Split('.').ElementAtOrDefault(1))
             .OfType<string>().ToHashSet(StringComparer.Ordinal);
         foreach (var section in FamilyModel.SectionNames)

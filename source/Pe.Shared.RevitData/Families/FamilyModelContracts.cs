@@ -89,6 +89,16 @@ public sealed class FamilyModel {
     public Dictionary<string, FamilyModelParameter> Parameters { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    ///     The family's built-in family parameters, by exact Revit name, in the order Revit reports them.
+    ///     The engine never creates or deletes one — the template owns them — but a formula may name one
+    ///     (`Length` on a line-based family, `Width` on a door), so the document must declare the vocabulary
+    ///     its own formulas resolve against. Capture censuses the document; an author lists only what a
+    ///     formula names. An unlisted name in a formula stays a `formula-unknown-name` refusal.
+    /// </summary>
+    [JsonProperty("builtIns")]
+    public List<string> BuiltIns { get; init; } = [];
+
+    /// <summary>
     ///     Family type name → (exact parameter name → per-type value). Per-type OBJECTS: empty and uniform
     ///     types stay visible. The first in document order is the preview type. A canonical `family.json`
     ///     carries no deletion tombstones; patch semantics belong to <see cref="FamilyPatch" />.
@@ -863,6 +873,7 @@ public enum UnmodeledReason {
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     FormulaNameNotDeclared,
+    RefLineStartNotTwoPlanes,        // the start is fixed by `on` crossed with two planes; capture found other than two
     ParameterMetadataUnreadable,
     ParameterValueUnreadable,        // a type row the capture produced no cell for; the value lane cannot claim to have read it
     LookupTableUnreadable,
