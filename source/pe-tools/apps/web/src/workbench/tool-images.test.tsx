@@ -13,6 +13,7 @@ import {
   type ChatState,
 } from "./chat-state";
 import { createChatPageStore } from "./store";
+import { CurrentThreadViewOwner } from "./thread-view";
 
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
@@ -106,7 +107,9 @@ function mount(state: ChatState) {
   workbench.value = { store, resolveApproval: vi.fn() };
   return render(
     <RegistryContext.Provider value={registry}>
-      <Moments messages={selectMessages(state)} register={() => {}} />
+      <CurrentThreadViewOwner threadKey="t1" registry={registry} patch={async () => undefined}>
+        <Moments messages={selectMessages(state)} register={() => {}} />
+      </CurrentThreadViewOwner>
     </RegistryContext.Provider>,
   );
 }

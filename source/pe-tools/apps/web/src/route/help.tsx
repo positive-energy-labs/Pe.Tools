@@ -107,7 +107,7 @@ function Chart({
   const right = regions.filter((r) => !left.includes(r));
 
   return (
-    <div ref={mid} className="relative min-h-0 flex-1">
+    <div ref={mid} className="relative size-full min-h-0 min-w-[808px]">
       {size
         ? (() => {
             const mapW = Math.max(200, Math.min(size.w - 2 * (CARD_W + 64), 640));
@@ -216,7 +216,9 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
         )}
       </div>
       {layout ? (
-        <Chart regions={layout.regions} frame={layout.frame} byRegion={byRegion} />
+        <div className="min-h-0 flex-1 overflow-x-auto">
+          <Chart regions={layout.regions} frame={layout.frame} byRegion={byRegion} />
+        </div>
       ) : (
         <div className="flex flex-1 items-center justify-center t-small text-ink-mute">
           this route draws no panes to explain

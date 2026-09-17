@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { selectMessages, selectToolCalls } from "./chat-state";
 import { createChatPageStore } from "./store";
+import { CurrentThreadViewOwner } from "./thread-view";
 
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
@@ -31,7 +32,9 @@ test("the seed's succeeded diagram call draws under its marker; the failed one d
   workbench.value = { store, resolveApproval: vi.fn() };
   const { container } = render(
     <RegistryContext.Provider value={registry}>
-      <Moments messages={selectMessages(state)} register={() => {}} />
+      <CurrentThreadViewOwner threadKey="t1" registry={registry} patch={async () => undefined}>
+        <Moments messages={selectMessages(state)} register={() => {}} />
+      </CurrentThreadViewOwner>
     </RegistryContext.Provider>,
   );
   const ok = container.querySelector<HTMLElement>("[data-tool-id='diagram-ok']")!;

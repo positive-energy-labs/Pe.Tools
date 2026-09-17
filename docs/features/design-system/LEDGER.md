@@ -14,6 +14,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-16, Narrow tutorials retain the spatial pane map with horizontal scrolling; do not replace it with a stacked list.
+- 2026-09-16, Preserve the scroll-away route head. The workspace fills the viewport after the head scrolls away; its initial bottom extending below the viewport is intentional.
+
 - 2026-09-16, Chat's composer head shows actual turn state such as ready, running, waiting for the user, or failed. Threads, Trace and World remain view modes; Chat does not invent selectable workflow stages.
 
 - 2026-09-16, Shared rails are 24px. Tables have one artifact header for title, search, modes and actions, with an optional deliberate filter row. The composer has its own halo and keyboard-help region rather than highlighting the whole transcript pane.

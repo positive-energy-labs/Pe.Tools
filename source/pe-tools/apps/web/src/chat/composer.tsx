@@ -14,6 +14,7 @@ import {
 import { Paperclip, X } from "lucide-react";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
+import { Pane, type PaneShortcut } from "#/components/lang/pane";
 import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft, type WorkbenchAttachment } from "#/workbench/prompt";
 import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
@@ -64,6 +65,7 @@ export function Composer({
     setDraft(update);
   };
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [dragging, setDragging] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const addFiles = async (list: ArrayLike<File>) => {
@@ -117,12 +119,37 @@ export function Composer({
     void send.run();
   };
 
+  const paneOwnsFocus = () =>
+    document.activeElement === formRef.current?.closest<HTMLElement>("[data-slot='pane']");
+  const beginSlashCommand = () => {
+    if (!paneOwnsFocus()) return;
+    if (!text) setText("/");
+    formRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  };
+  const shortcuts: PaneShortcut[] = [
+    {
+      hotkey: "Enter",
+      label: "send message",
+      says: "Sends this draft. Shift+Enter adds a line.",
+      callback: () => {
+        if (paneOwnsFocus()) sendCurrent();
+      },
+    },
+    {
+      hotkey: "/",
+      label: "skill commands",
+      says: "Starts the composer skill menu from an empty draft.",
+      callback: beginSlashCommand,
+    },
+  ];
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     sendCurrent();
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (showMenu) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -157,143 +184,158 @@ export function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="relative w-full">
-      {showMenu ? (
-        <div
-          id={menuId}
-          role="listbox"
-          aria-label="Commands"
-          className={cn(
-            "hairline-x-faint hairline-y-faint absolute bottom-full mb-2 w-full overflow-hidden rounded-sm",
-            "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
-          )}
-          data-surface="artifact"
-        >
-          {visibleMatches.map((command, index) => (
-            <Press
-              key={command.name}
-              id={`${menuId}-${index}`}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={index === activeIndex}
-              state={index === activeIndex ? "selected" : "rest"}
-              onMouseEnter={() => setActiveCommand(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => pick(command)}
-            >
-              <PressContent geometry="baseline">
-                {/* a slash command is a machine identifier — mono */}
-                <span className="face-mono text-ink">/{command.name}</span>
-                <span className="truncate t-small t-upper">{command.description}</span>
-              </PressContent>
-            </Press>
-          ))}
-        </div>
-      ) : null}
-
-      {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
-          input reads as a place you write rather than a strip the transcript ran into. */}
-      {/* Files dropped anywhere on the box attach; while a file drag is over it, the box takes
-          the recess ground. */}
-      <div
-        className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
-        data-surface={dragging ? "recess" : "artifact"}
-        data-drop-zone=""
-        onDragEnter={onDragOver}
-        onDragOver={onDragOver}
-        onDragLeave={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-        }}
-        onDrop={(event) => {
-          if (!carriesFiles(event)) return;
-          event.preventDefault();
-          setDragging(false);
-          void addFiles(event.dataTransfer.files);
-        }}
-      >
-        {topBar}
-
-        {attachments.length > 0 ? (
-          <div className="flex flex-wrap items-end gap-1.5 px-3 pt-3">
-            {attachments.map((attachment, index) => (
-              <AttachmentChip
-                key={index}
-                attachment={attachment}
-                onRemove={() =>
-                  setAttachments((previous) => previous.filter((_, position) => position !== index))
-                }
-              />
+    <Pane
+      kind="content"
+      scroll="visible"
+      id="composer"
+      title="composer"
+      help="Drafts stay with their visited thread until sent or deleted."
+      headerSurface="recess"
+      boundary={false}
+      headerless
+      shortcuts={shortcuts}
+    >
+      <form ref={formRef} onSubmit={submit} className="relative w-full">
+        {showMenu ? (
+          <div
+            id={menuId}
+            role="listbox"
+            aria-label="Commands"
+            className={cn(
+              "hairline-x-faint hairline-y-faint absolute bottom-full mb-2 w-full overflow-hidden rounded-sm",
+              "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
+            )}
+            data-surface="artifact"
+          >
+            {visibleMatches.map((command, index) => (
+              <Press
+                key={command.name}
+                id={`${menuId}-${index}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === activeIndex}
+                state={index === activeIndex ? "selected" : "rest"}
+                onMouseEnter={() => setActiveCommand(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => pick(command)}
+              >
+                <PressContent geometry="baseline">
+                  {/* a slash command is a machine identifier — mono */}
+                  <span className="face-mono text-ink">/{command.name}</span>
+                  <span className="truncate t-small t-upper">{command.description}</span>
+                </PressContent>
+              </Press>
             ))}
           </div>
         ) : null}
-        {refusal ? (
-          <div className="px-3 pt-2 t-small" data-tone="caution">
-            {refusal}
-          </div>
-        ) : null}
 
-        <div className="p-2 px-2 py-1.5">
-          <Textarea
-            name="input"
-            aria-label="Message"
-            aria-autocomplete="list"
-            aria-haspopup="listbox"
-            aria-expanded={showMenu}
-            aria-controls={showMenu ? menuId : undefined}
-            aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
-            size="compact"
-            surface="embedded"
-            placeholder="Ask Pea…  ( / for skills )"
-            rows={1}
-            autoFocus
-            value={text}
-            onChange={(event) => {
-              setText(event.currentTarget.value);
-              setActiveCommand(0);
-              setMenuDismissed(false);
-            }}
-            onKeyDown={onKeyDown}
-            onPaste={(event) => {
-              const files = event.clipboardData.files;
-              if (files.length === 0) return;
-              event.preventDefault();
-              void addFiles(files);
-            }}
-          />
-          {/* Control row: attachments + session controls (model/access), then Send — the same
+        {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
+          input reads as a place you write rather than a strip the transcript ran into. */}
+        {/* Files dropped anywhere on the box attach; while a file drag is over it, the box takes
+          the recess ground. */}
+        <div
+          className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
+          data-surface={dragging ? "recess" : "artifact"}
+          data-drop-zone=""
+          onDragEnter={onDragOver}
+          onDragOver={onDragOver}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+              setDragging(false);
+          }}
+          onDrop={(event) => {
+            if (!carriesFiles(event)) return;
+            event.preventDefault();
+            setDragging(false);
+            void addFiles(event.dataTransfer.files);
+          }}
+        >
+          {topBar}
+
+          {attachments.length > 0 ? (
+            <div className="flex flex-wrap items-end gap-1.5 px-3 pt-3">
+              {attachments.map((attachment, index) => (
+                <AttachmentChip
+                  key={index}
+                  attachment={attachment}
+                  onRemove={() =>
+                    setAttachments((previous) =>
+                      previous.filter((_, position) => position !== index),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          ) : null}
+          {refusal ? (
+            <div className="px-3 pt-2 t-small" data-tone="caution">
+              {refusal}
+            </div>
+          ) : null}
+
+          <div className="p-2 px-2 py-1.5">
+            <Textarea
+              name="input"
+              aria-label="Message"
+              aria-autocomplete="list"
+              aria-haspopup="listbox"
+              aria-expanded={showMenu}
+              aria-controls={showMenu ? menuId : undefined}
+              aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
+              size="compact"
+              surface="embedded"
+              placeholder="Ask Pea…  ( / for skills )"
+              rows={1}
+              autoFocus
+              value={text}
+              onChange={(event) => {
+                setText(event.currentTarget.value);
+                setActiveCommand(0);
+                setMenuDismissed(false);
+              }}
+              onKeyDown={onKeyDown}
+              onPaste={(event) => {
+                const files = event.clipboardData.files;
+                if (files.length === 0) return;
+                event.preventDefault();
+                void addFiles(files);
+              }}
+            />
+            {/* Control row: attachments + session controls (model/access), then Send — the same
               manifest verb Enter runs, with the Situation's flag (moved here from the head,
               2026-09-14: a composer's send belongs beside its text). */}
-          <div className="flex items-center gap-1.5 pt-1">
-            <Press
-              tone="quiet"
-              size="icon"
-              title="Attach files"
-              onClick={() => fileRef.current?.click()}
-            >
-              <Paperclip className="size-4" />
-            </Press>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => void onFiles(event.currentTarget.files)}
-            />
-            {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
-            <SituationAction handle={handle} name="new" action={handle.actions.new} />
-            <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
-            <ControlChips />
-            <span className="ml-auto flex items-center gap-1.5">
-              {isRunning ? (
-                <SituationAction handle={handle} name="cancel" action={handle.actions.cancel} />
-              ) : null}
-              <SituationAction handle={handle} name="send" action={send} commit />
-            </span>
+            <div className="flex items-center gap-1.5 pt-1">
+              <Press
+                tone="quiet"
+                size="icon"
+                title="Attach files"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Paperclip className="size-4" />
+              </Press>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => void onFiles(event.currentTarget.files)}
+              />
+              {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
+              <SituationAction handle={handle} name="new" action={handle.actions.new} />
+              <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
+              <ControlChips />
+              <span className="ml-auto flex items-center gap-1.5">
+                {isRunning ? (
+                  <SituationAction handle={handle} name="cancel" action={handle.actions.cancel} />
+                ) : null}
+                <SituationAction handle={handle} name="send" action={send} commit />
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </form>
+      </form>
+    </Pane>
   );
 }
 
