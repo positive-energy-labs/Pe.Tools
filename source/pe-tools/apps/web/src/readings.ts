@@ -248,6 +248,11 @@ export function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
   const previous = previousOf(reading);
   switch (frame.kind) {
     case "snapshot":
+      if (
+        reading.state === "ready" &&
+        JSON.stringify(reading.observation) === JSON.stringify(frame.value)
+      )
+        return reading;
       return { state: "ready", observation: frame.value as T };
     case "failure":
       return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };

@@ -89,3 +89,9 @@ Safe root follow-up: after the matching HTTP UI lands, measure the SSE frames fo
 The shared hook now compares the complete dependency tuple with `Object.is` and tags state with a dependency generation. A new tuple masks old data synchronously and clears it when its effect begins. `refresh()` keeps the same generation, so same-identity data remains visible during revalidation. Abort cleanup remains intact; a late completion from the prior generation cannot become visible. The focused hook test proves loaded A, retained A during A refresh, an empty/loading first B render, aborted and invisible late A, then B.
 
 The generation is private bookkeeping and is not returned from `useHostCall`. Disabling a call also masks prior data synchronously, then effect cleanup aborts any same-identity refresh. The public return remains `data`, `error`, `pending`, `isPending`, `isLoading`, `isSuccess`, and `refresh`. SSE result deferral remains a measured root follow-up, not part of this implementation.
+
+## Measured reading heartbeat correction
+
+`advance` formerly allocated a new `{ state: "ready" }` wrapper for every snapshot, including JSON-wire snapshots equal to the current ready observation. That changed atom identity and notified consumers on unchanged heartbeats. The sibling runtime spike tested a narrow `JSON.stringify` comparison; the repo has no exported shared deep-equality primitive, only private JSON comparisons in schema and Parameter Links code. The production correction therefore uses the same native minimum directly at `advance`.
+
+Only a currently `ready` reading can retain identity. A changed snapshot allocates a new ready wrapper. An equal snapshot after `gap`, `stale`, or `failure` also allocates a ready wrapper, so freshness recovery is never suppressed. Focused tests prove unchanged-ready identity, changed-snapshot replacement, and equal-snapshot recovery from both gap and failure. No comparator framework or SSE change was added.
