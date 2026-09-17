@@ -200,6 +200,30 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
   ).toBe("216px var(--gutter) minmax(0, 1fr)");
 });
 
+test("split sides bound panes and direct artifacts as flex columns", () => {
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">table pane</Pane>}
+      end={
+        <ArtifactFrame className="flex min-h-0 flex-1 flex-col" head="table">
+          table artifact
+        </ArtifactFrame>
+      }
+    />,
+  );
+  const split = container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  const [paneSide, artifactSide] = Array.from(split.children) as HTMLElement[];
+
+  for (const side of [paneSide, artifactSide]) {
+    expect(side.classList.contains("flex")).toBe(true);
+    expect(side.classList.contains("flex-col")).toBe(true);
+    expect(side.classList.contains("min-h-0")).toBe(true);
+  }
+  expect(paneSide.firstElementChild?.classList.contains("size-full")).toBe(true);
+  expect(artifactSide.firstElementChild?.classList.contains("flex-1")).toBe(true);
+});
+
 test("surface fills its parent without fixing to the viewport and keeps a scrolling head", () => {
   const { container } = render(
     <Surface head={<div>head</div>} columns="minmax(0, 1fr)">

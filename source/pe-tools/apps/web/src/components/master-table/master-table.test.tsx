@@ -194,6 +194,22 @@ test("the table owns one rail, optional filters, and rail actions", () => {
   expect(screen.getByText("narrowed")).toBeTruthy();
 });
 
+test("the rail keeps lead facts and controls on one clipped line", () => {
+  const { container } = renderTable({
+    summary: <span className="flex flex-wrap">facts</span>,
+    modes: <Press>table mode</Press>,
+    actions: <Press>export</Press>,
+  });
+  const rail = container.querySelector<HTMLElement>("[data-slot='rail']")!;
+  const [lead, trail] = Array.from(rail.children) as HTMLElement[];
+
+  expect(rail.classList.contains("overflow-hidden")).toBe(true);
+  expect(lead.classList.contains("whitespace-nowrap")).toBe(true);
+  expect(lead.classList.contains("overflow-hidden")).toBe(true);
+  expect(trail.classList.contains("whitespace-nowrap")).toBe(true);
+  expect(trail.classList.contains("overflow-hidden")).toBe(true);
+});
+
 test("grid keys move the roving cell focus and release Tab at the outer boundary", () => {
   renderTable();
   const cells = screen.getAllByRole("gridcell");
