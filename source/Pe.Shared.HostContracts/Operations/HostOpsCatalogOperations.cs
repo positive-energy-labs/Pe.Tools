@@ -17,6 +17,6 @@ internal static class HostOpsCatalogOperations {
             .Select(HostOpsCatalogEntry.FromOp)
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
-        return Task.FromResult(new HostOpsCatalogData(operations));
+        return Task.FromResult(new HostOpsCatalogData(operations, HostOpsCatalogData.ReadConstants()));
     }
 }

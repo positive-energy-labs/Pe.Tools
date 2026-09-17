@@ -190,7 +190,9 @@ export function EntityRouteView({
               <SpecEditor
                 member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
                 // A just-captured member is this route's spec before the pod list re-reads.
-                schema={member ? member.schema : new URL(def.schema, location.origin).href}
+                schema={
+                  member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
+                }
                 fixture={fixture}
                 onSaved={(ref) => {
                   refreshPods();

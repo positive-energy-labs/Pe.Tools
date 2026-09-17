@@ -7,8 +7,8 @@ public sealed record NormalizedPodSource(ScriptSourceSet SourceSet, PodManifest 
 
 /// <summary>Decodes captured authored inputs only. References and explicit script file reads remain runtime inputs.</summary>
 public static class ScriptPodSourceNormalizer {
-    public const int MaxFiles = 200;
-    public const int MaxFileBytes = 512 * 1024;
+    private const int MaxFiles = ScriptPodSourceBounds.MaxFileCount;
+    private const int MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
     public const int MaxSourceBytes = 2 * 1024 * 1024;
 
     public static NormalizedPodSource Normalize(ScriptPodSourceBundle bundle, string workspaceKey, string sourcePath) {

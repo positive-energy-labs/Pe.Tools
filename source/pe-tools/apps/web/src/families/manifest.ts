@@ -1,40 +1,22 @@
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
- * authored scope; capture files one spec member per picked family; apply plans the saved spec over
- * the scope and confirms on the sheet. Work holds what the host checks at apply: the spec, the
- * scope, and the rows a person held back.
+ * authored scope; capture files one spec member per picked family; apply confirms the page's
+ * member over the scope and applies the sheet's included hashes. Work holds the scope and the
+ * rows a person held back; the spec is the page's member and nothing else.
  */
 import { z } from "zod";
 import {
-  canonicalRouteInput,
-  familiesBasis,
-  familiesPlanReadingSchema,
   familiesRouteState,
-  familyCaptureSchema,
+  ffPlanEntrySchema,
   type FamiliesRouteDocument,
-  type WorkKey,
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
-import { previousOf } from "#/readings";
-import {
-  entityRoute,
-  semanticActionInput,
-  type Ctx as RouteCtx,
-  type EntityPage,
-  type EntityReading,
-  type EntityRouteDef,
-  type EntityView,
-  type PlanSheet,
-} from "#/route";
+import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
+import { admissionPlan, entityRoute, type EntityPage, type EntityRouteDef } from "#/route";
 
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import {
-  actionResult,
-  readFamilyCapture,
-  runSemanticAction,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
@@ -51,61 +33,7 @@ export const familiesPageSchema = z.object({
     .default({ placement: "AllLoaded", categories: [], families: [] }),
 });
 
-export type FamiliesReadingKey = "families" | "receipts" | "inventory";
-
-type Ctx = RouteCtx<
-  FamiliesRouteDocument,
-  FamiliesReadingKey | EntityReading,
-  FamiliesPage & EntityPage
->;
-type View = EntityView<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>;
-
-/* ── Pure projections ──────────────────────────────────────────────────────── */
-
-/** The newest `families-plan` capture in the family-readings stream, with its capture id. */
-export function latestPlanOf(rows: unknown) {
-  if (!rows) return null;
-  const row = familyCaptureSchema
-    .array()
-    .parse(rows)
-    .find((capture) => capture.reading.kind === "families-plan");
-  return row && row.reading.kind === "families-plan"
-    ? { id: row.id, value: familiesPlanReadingSchema.parse(row.reading.value) }
-    : null;
-}
-
-const sameMember = (a: { pod: string; path: string } | null | undefined, page: EntityPage) =>
-  a?.pod === page.pod && a.path === page.path;
-
-/**
- * The plan that still describes the authored basis for the page's member, as sheet rows. A plan
- * is stale purely because its basis moved; a stale plan draws no sheet.
- */
-export function familiesPlanOf(view: View) {
-  const doc = view.work.doc;
-  const latest = latestPlanOf(previousOf(view.readings.families));
-  return doc &&
-    latest &&
-    latest.value.basis === familiesBasis(doc) &&
-    sameMember(doc.spec, view.page)
-    ? latest
-    : null;
-}
-
-export const familiesSheetOf = (view: View): PlanSheet | null => {
-  const latest = familiesPlanOf(view);
-  return latest
-    ? {
-        id: latest.id,
-        entries: latest.value.entries.map(ffPlanRow),
-      }
-    : null;
-};
-
-const targetOf = (ctx: Ctx) => {
-  if (ctx.target.kind !== "document") throw Error("An open project document is required");
-  return ctx.target.ref;
-};
+export type FamiliesReadingKey = "receipts" | "inventory";
 
 /* ── The definition ────────────────────────────────────────────────────────── */
 
@@ -115,43 +43,25 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     name: "Families",
     entity: "families",
     target: "selection",
-    schema: FF_SPEC_SCHEMA,
+    // A patch spec, or a captured family model (the engine converts a model by `$schema`).
+    schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     capture: "families.capture",
     apply: "families.apply",
     captureInput: (ctx) => ({ familyIds: ctx.page.selection.map(Number) }),
+    // `families.confirm` plans the page's member over the Work's scope; apply sends the included hashes.
     plan: {
-      // The host plans the Work's spec over the Work's scope, so the page's member becomes Work first.
-      read: async (ctx, source) => {
-        const doc = ctx.work.doc;
-        if (!doc) throw Error("Current authored Families Work is required");
-        const spec = { pod: source.pod, path: source.path };
-        if (canonicalRouteInput(doc.spec) !== canonicalRouteInput(spec))
-          await ctx.write([
-            { path: ["spec"], value: spec },
-            { path: ["excludedIds"], value: [] },
-          ]);
-        await readFamilyCapture("families.plan", {}, ctx.work.key as WorkKey, targetOf(ctx));
-        return null;
-      },
-      sheet: familiesSheetOf,
+      ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
+        { confirm: "families.confirm", apply: "families.apply" },
+        (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
+        (work) => ({
+          excludedIds: work.excludedIds,
+          ...(work.executionOptions ? { executionOptions: work.executionOptions } : {}),
+        }),
+      ),
+      // Held-back rows are authored Work; the sheet toggles them there.
       excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
-      confirm: async (ctx, sheet, included) => {
-        if (!sheet.id || ctx.work.revision === null)
-          throw Error("A current reviewed Families plan is required");
-        actionResult(
-          await runSemanticAction(
-            "families.apply",
-            semanticActionInput("families.apply", {
-              planId: sheet.id,
-              expectedPlanHashes: Object.fromEntries(included.map((row) => [row.id, row.planHash])),
-            }),
-            targetOf(ctx),
-            { work: { key: ctx.work.key, revision: ctx.work.revision } },
-          ),
-        );
-      },
     },
-    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then plan a saved spec and confirm exactly which families it changes.",
+    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then confirm a saved spec's plan and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<
@@ -162,7 +72,6 @@ export const manifest = entityRoute<
 >(familiesSpec, {
   work: familiesRouteState,
   readings: {
-    families: (_page: FamiliesPage, work: WorkKey) => ({ kind: "family-readings", work }),
     receipts: { kind: "receipts", target: { session: "", openId: "" } },
     inventory: { kind: "inventory" },
   } as never,
@@ -174,12 +83,14 @@ export const manifest = entityRoute<
       needs: "project",
       actor: "any",
       input: z.void() as never,
-      dirties: ["families"],
+      dirties: [],
       stage: "audit",
       count: (ctx) => ctx.page.draft.categories.length || null,
       ready: (ctx) => (ctx.page.draft.categories.length ? null : "Pick a category first"),
       run: async (ctx) => {
         const { categories, families, placement } = ctx.page.draft;
+        // A plan confirmed over another scope no longer describes what apply would touch.
+        (ctx.setPage as (next: Partial<EntityPage>) => void)({ confirming: false, sheet: null });
         await ctx.write([
           {
             path: ["scope"],

@@ -73,11 +73,8 @@ public sealed class ScriptPodArchiveService(
         var folder = pods.ResolveFolder(request.Pod);
         var diagnostics = new List<ScriptDiagnostic>();
         var files = ScriptPodPreparationService.Capture(folder, diagnostics);
-        var preparation = ScriptPodPreparationService.Prepare(folder);
-        if (!preparation.Success)
-            throw new InvalidDataException($"Pod '{request.Pod}' is not exportable: " + string.Join("; ", preparation.Diagnostics
-                .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
-                .Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}")));
+        if (ScriptPodPreparationService.Prepare(folder) is RefusedPod refused)
+            throw new InvalidDataException($"Pod '{request.Pod}' is not exportable: {refused.Reason}");
 
         _ = files.Remove(ScriptPodPreparationService.ImportedFileName);
         if (files.TryGetValue("PeScripts.csproj", out var project))

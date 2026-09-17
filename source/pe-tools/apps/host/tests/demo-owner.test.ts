@@ -234,7 +234,7 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
         await f.fetch("/actions", {
           id: `${f.owner.id}:${suffix}`,
           kind: "workflow",
-          key: "family.apply",
+          key: planHash ? "family.apply" : "family.confirm",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
           input: { source, ...(planHash ? { planHash } : {}) },
@@ -246,6 +246,8 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
   };
   const confirm = await apply("confirm");
   expect(confirm.state).toBe("succeeded");
+  // Confirming is its own workflow: it plans, and nothing in it can mutate.
+  expect(confirm.steps.map((step) => step.key)).toEqual(["family.plan"]);
   const planHash = (confirm as { result: { plan: { planHash: string } } }).result.plan.planHash;
   expect(planHash).toMatch(/^[a-f0-9]{64}$/);
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");

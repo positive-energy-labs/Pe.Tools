@@ -21,12 +21,11 @@
     }
   },
   "hostBelowRoute": {
-    "total": 11,
+    "total": 10,
     "byArea": {
       "chat": 1,
-      "families": 1,
       "grounded-doc": 1,
-      "ops": 2,
+      "lab": 2,
       "(root)": 1,
       "runs": 2,
       "takeoff": 1,

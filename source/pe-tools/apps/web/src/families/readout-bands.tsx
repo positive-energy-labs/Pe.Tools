@@ -110,3 +110,65 @@ export function FamiliesReceiptsBand() {
     </>
   );
 }
+
+/** What the latest capture saw, per family, beside the members it filed (as `/family` shows it). */
+export function FamiliesCaptureBand() {
+  const { store } = useFamiliesWorkspace();
+  const captured = store.captured;
+  if (!captured) return null;
+  const { members, evidence } = captured;
+  return (
+    <section aria-label="capture evidence" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
+      <SectionLabel>
+        captured {members.length} of {evidence.families.length} families into{" "}
+        {members[0]?.pod ?? "the pod"}
+      </SectionLabel>
+      {evidence.diagnostics.map((issue) => (
+        <OutcomeLine
+          key={`${issue.code}:${issue.path}`}
+          kind="error"
+          label={issue.code}
+          says={issue.message}
+        />
+      ))}
+      {evidence.families.map((family) => (
+        <div key={family.familyId} className="flex flex-col gap-0.5">
+          <div className="flex flex-wrap items-baseline gap-2 t-small">
+            <span className="face-mono w-56 truncate text-ink-2">
+              {family.familyName ?? `element ${family.familyId}`}
+            </span>
+            {family.success ? (
+              <>
+                {Object.entries(family.coverage).map(([section, state]) => (
+                  <FactChip
+                    key={section}
+                    tone={state === "Full" ? "done" : "caution"}
+                    title={section}
+                  >
+                    {section}: {state}
+                  </FactChip>
+                ))}
+                <FactChip tone={family.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
+                  {family.unmodeledCount} unmodeled
+                </FactChip>
+              </>
+            ) : (
+              <FactChip tone="alarm" title="nothing was filed for this family">
+                failed
+              </FactChip>
+            )}
+          </div>
+          {family.error ? <OutcomeLine kind="error" label="capture" says={family.error} /> : null}
+          {family.issues.map((issue, index) => (
+            <OutcomeLine
+              key={index}
+              kind={issue.severity === "Error" ? "error" : "advisory"}
+              label={issue.code}
+              says={issue.message}
+            />
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}

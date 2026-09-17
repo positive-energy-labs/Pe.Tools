@@ -1,12 +1,10 @@
 /**
  * The Families demo world. Everything here is fixture: three loaded families, one spec member in
- * the demo pod, and a plan reading for that spec over that scope. `?demo=<action>` mounts one seed
+ * the demo pod, and the plan `families.confirm` would return for that spec over that scope. `?demo=<action>` mounts one seed
  * through `useRoute`; the matrix rows are handed to the workspace because the matrix is a host
  * query, not a Reading a seed can carry.
  */
 import {
-  address,
-  familiesBasis,
   familiesRouteState,
   type FamiliesRouteDocument,
   type FfPlanEntry,
@@ -14,14 +12,14 @@ import {
 } from "@pe/agent-contracts";
 
 import type { FamilySnapshotRecord, FamilyParameterSnapshot } from "#/host/loaded-families-view";
+import { ffPlanRow } from "#/host/familyfoundry";
 import type { EntityPage, EntityReading } from "#/route";
 import type { DemoSpec } from "#/route/spec-editor";
-import { DEMO_FAMILIES_SPEC_PATH, DEMO_PODS, hash } from "#/route/seeds";
+import { DEMO_FAMILIES_SPEC_PATH, DEMO_PODS } from "#/route/seeds";
 
 import type { FamiliesPage, FamiliesReadingKey } from "./manifest";
 
 const POD = DEMO_PODS[0]!;
-const MEMBER = { pod: POD.id, path: DEMO_FAMILIES_SPEC_PATH };
 const TARGET = { session: "demo", openId: "demo-project" };
 
 const param = (name: string, values: Record<string, string | null>): FamilyParameterSnapshot => ({
@@ -97,38 +95,17 @@ const entry = (
 });
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  spec: MEMBER,
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
   excludedIds: [3102],
 });
 
-const plan = {
-  id: hash(9),
-  key: { route: "families", target: "C:/Projects/Demo/Mech.rvt" },
-  capturedAt: "2026-09-16T12:00:00Z",
-  provenance: { kind: "live", target: TARGET },
-  reading: {
-    kind: "families-plan",
-    value: {
-      basis: familiesBasis(work),
-      workRevision: 3,
-      reading: {
-        at: address("C:/Projects/Demo/Mech.rvt"),
-        version: null,
-        observedAt: "2026-09-16T12:00:00Z",
-      },
-      source: { ...MEMBER, sha256: hash(8) },
-      composedDigest: "demo-digest",
-      entries: [
-        entry(3101, "Fan Coil Unit - Ducted", 3),
-        entry(3102, "Heat Pump - Split", 1),
-        entry(3103, "Air Handler", 0, [
-          { code: "FF-MAP-001", path: "$.patch.parameters[0]", message: "no mapping source" },
-        ]),
-      ],
-    },
-  },
-};
+const plan = [
+  entry(3101, "Fan Coil Unit - Ducted", 3),
+  entry(3102, "Heat Pump - Split", 1),
+  entry(3103, "Air Handler", 0, [
+    { code: "FF-MAP-001", path: "$.patch.parameters[0]", message: "no mapping source" },
+  ]),
+];
 
 type FamiliesSeed = Seed<
   FamiliesRouteDocument,
@@ -141,7 +118,6 @@ const seed = (title: string, page: Partial<EntityPage>, readings = {}): Families
   target: { kind: "document", ref: TARGET },
   work,
   readings: {
-    families: [plan],
     receipts: [],
     inventory: { sessions: [] },
     pods: DEMO_PODS,
@@ -160,5 +136,6 @@ export const FAMILIES_SEEDS = {
     stage: "apply",
     path: DEMO_FAMILIES_SPEC_PATH,
     confirming: true,
+    sheet: { entries: plan.map(ffPlanRow), each: true },
   }),
 };

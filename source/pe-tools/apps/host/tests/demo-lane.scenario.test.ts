@@ -299,15 +299,23 @@ async function receiptOnPods(page: Page, pod: string, path: string, operation: s
   return body.innerText();
 }
 
+/** Runs one loop; returns what `/pods` showed and the workflow keys the page admitted, in order. */
 async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
   const page = await browser!.newPage();
   const errors: string[] = [];
+  const workflows: string[] = [];
   page.on("pageerror", (error: { message: string }) => errors.push(`page error: ${error.message}`));
+  page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
+    if (request.method() !== "POST" || !/\/demo\/instances\/[^/]+\/actions$/.test(request.url()))
+      return;
+    const admission = request.postDataJSON() as { kind: string; key: string };
+    if (admission.kind === "workflow") workflows.push(admission.key);
+  });
   try {
     const shown = await loop(page);
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, `${name}.png`), fullPage: true });
     expect(errors, `${name} threw`).toEqual([]);
-    return shown;
+    return { shown, workflows };
   } catch (error) {
     if (SCRATCH) {
       await page.screenshot({ path: join(SCRATCH, `${name}-failed.png`), fullPage: true });
@@ -320,7 +328,7 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
 }
 
 test("live /schedules: capture then apply files a run receipt", async () => {
-  const shown = await liveLoop("schedules", async (page) => {
+  const { shown, workflows } = await liveLoop("schedules", async (page) => {
     const pod = await openLive(page, "/schedules", "demo=push&live=1");
     await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await page
@@ -335,10 +343,11 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("succeeded");
+  expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
 }, 180_000);
 
 test("live /family: capture, confirm, apply files a run receipt", async () => {
-  const shown = await liveLoop("family", async (page) => {
+  const { shown, workflows } = await liveLoop("family", async (page) => {
     const pod = await openLive(page, "/family", "demo=capture&live=1");
     await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await run(page, "capture family");
@@ -350,25 +359,23 @@ test("live /family: capture, confirm, apply files a run receipt", async () => {
     return receiptOnPods(page, pod, path, "family.apply");
   });
   expect(shown).toContain("succeeded");
+  expect(workflows).toEqual(["family.capture", "family.confirm", "family.apply"]);
 }, 180_000);
 
 test("live /families: capture, confirm, apply files a run receipt", async () => {
-  const shown = await liveLoop("families", async (page) => {
+  const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");
     await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await page.getByTitle(/^Add Fan Coil Unit - Ducted to the capture set/).click();
     await run(page, "capture families");
-    await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
-    // The captured member is a family model; the families spec the owner seeded is what applies.
-    const spec = "settings/families/mech-standard.json";
-    await page.goto(
-      `${baseUrl}/families?demo=capture&live=1&target=${pod}&stage=apply&pod=${pod}&path=${encodeURIComponent(spec)}`,
-      { waitUntil: "domcontentloaded" },
-    );
+    const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
+    // The captured family model is itself a families spec: apply it.
+    await pick(page, /^Capturing/, /^Applying/);
     await run(page, "plan");
     await run(page, "apply families");
     await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
-    return receiptOnPods(page, pod, spec, "families.apply");
+    return receiptOnPods(page, pod, path, "families.apply");
   });
   expect(shown).toContain("succeeded");
+  expect(workflows).toEqual(["families.capture", "families.confirm", "families.apply"]);
 }, 180_000);

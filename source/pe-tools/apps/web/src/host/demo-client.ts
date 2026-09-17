@@ -66,7 +66,6 @@ const projectSeed = (): DemoSeed => ({
     key: { route: "families", target: null },
     revision: 0,
     candidate: {
-      spec: { pod: "demo", path: "settings/families/mech-standard.json" },
       scope: {
         categoryNames: ["Mechanical Equipment"],
         familyNames: FAMILIES,
@@ -77,6 +76,7 @@ const projectSeed = (): DemoSeed => ({
   },
   readings: {
     profile: { $schema: schemaUrl("FamilyFoundry/patches.json"), patch: { types: {} } },
+    member: { pod: "demo", path: "settings/families/mech-standard.json" },
     families: FAMILIES,
   },
   page: { armed: false },

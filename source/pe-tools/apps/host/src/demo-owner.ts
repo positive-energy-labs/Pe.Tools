@@ -162,10 +162,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     // Seed pod ids are citations; every member lands in this instance's own pod.
     const local = (member: { path: string }) => ({ pod: id, path: member.path });
     const files = originalFiles.map((file) => ({ ...file, member: local(file.member) }));
-    // The families profile is supplied JSON; it becomes the member the authored Work names.
-    if (seed.route === "families" && seed.work.candidate.spec)
+    // The families profile is supplied JSON; it becomes the member the page confirms.
+    if (seed.route === "families")
       files.push({
-        member: local(seed.work.candidate.spec),
+        member: local(seed.readings.member),
         rawContent: JSON.stringify(seed.readings.profile),
       });
     await settings.ensurePod(id);
@@ -195,9 +195,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               sha256: opened!.sha256,
             },
           }
-        : seed.route === "families" && seed.work.candidate.spec
-          ? { ...seed.work.candidate, spec: local(seed.work.candidate.spec) }
-          : seed.work.candidate;
+        : seed.work.candidate;
     const initial = await work.apply(
       scope,
       route,
@@ -623,10 +621,6 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         }),
     } as unknown as RevitBridge["Service"];
     // Preparation may materialize a fresh read, never an imported action or receipt.
-    if (seed.route === "families" && seed.readings.preparePlan)
-      await readFamily({ key: "families.plan", scope, target, input: {} }, captures, bridge, {
-        workspace: work,
-      });
     if (seed.route === "parameter-links" && seed.readings.prepareEvaluation)
       await readFamily(
         { key: "parameter-links.read", scope, target, input: { evaluate: true } },
@@ -904,11 +898,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           );
       }
       if (url.pathname === "/family/readings" && request.method === "POST") {
-        const body = (await request.clone().json()) as { key: string; scope?: WorkKey };
-        if (
-          body.key !== "family.saved" &&
-          !(body.key === "families.plan" && body.scope && localScope(body.scope))
-        )
+        const body = (await request.clone().json()) as { key: string };
+        if (body.key !== "family.saved")
           return json({ error: "Unsupported or nonlocal Family reading" }, 409);
       }
       // The browser's Work writes (`/pe/route-state/<route>/<apply|command>`), fenced to this owner.

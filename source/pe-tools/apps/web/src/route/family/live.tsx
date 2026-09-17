@@ -5,7 +5,7 @@ import type { EntityPage } from "#/route";
 import { EntityRouteView } from "#/route/entity";
 import { usePodList } from "#/route/pods";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
-import { useFamilyStore } from "#/family/store";
+import { familyDemoFields, useFamilyStore } from "#/family/store";
 import { FamilyWorkspace, familyFacts } from "#/family/workspace";
 import { familySpec } from "./manifest";
 
@@ -47,7 +47,11 @@ export function FamilyRouteView({
       refreshPods={refreshPods}
       fixture={
         demo && familyFixtures[name]
-          ? { content: familyFixtures[name], schema: DEMO_SCHEMA }
+          ? {
+              content: familyFixtures[name],
+              schema: DEMO_SCHEMA,
+              fields: familyDemoFields(familyFixtures[name]),
+            }
           : undefined
       }
       facts={familyFacts(store)}

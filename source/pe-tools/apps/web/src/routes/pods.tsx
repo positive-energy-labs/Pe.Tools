@@ -35,8 +35,9 @@ export const manifest = defineRoute({ key: "pods", name: "Pods", seeds: PODS_SEE
 /** Every entity route definition; `/family` joins when it is on the kernel. */
 const PRODUCT_ROUTES = [
   { to: "/schedules", def: scheduleSpec },
-  { to: "/families", def: familiesSpec },
+  // A family model is both routes' spec; the single-family route is its first home.
   { to: "/family", def: familySpec },
+  { to: "/families", def: familiesSpec },
 ] as const;
 
 /** The demo lane browses every product route's demo pod, so each deep link has a member to open. */

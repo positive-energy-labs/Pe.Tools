@@ -19,7 +19,7 @@ import { useRouteOwner } from "#/route";
 import { DraftEditor } from "#/data-tables/draft-editor";
 
 /**
- * /data-tables — author synthetic data tables (revit.apply.schedule table lane).
+ * /data-tables — author synthetic data tables (data-table.apply).
  * Rail lists existing tables (revit.detail.data-tables); the editor drafts name,
  * columns (heading + Text/Number kind), and rows (stable key + cell values), then
  * upserts in one apply. Missing rows are pruned on apply, so deleting a row here
@@ -89,7 +89,7 @@ function LiveDataTablesRoute() {
       isFetching={detail.pending}
       onRefetch={async () => detail.refresh()}
       onApply={async (draft) => {
-        const result = await callHostRpc("revit.apply.schedule", {
+        const result = await callHostRpc("data-table.apply", {
           table: {
             name: draft.name,
             columns: draft.columns,

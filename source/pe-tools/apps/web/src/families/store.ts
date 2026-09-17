@@ -3,20 +3,24 @@
  *
  * The owner, the registry, the Target resolution, busy, refusals and the host caller all live in
  * `useRoute` now; the Work doc, the Readings and the two applies live in `families/manifest.ts`.
- * What is left here is what only Families knows: which plan reading still describes the authored
- * basis, what the last apply receipt said, and which picker is open. Plain values, no atoms.
+ * What is left here is what only Families knows: what the last capture saw, what the last apply
+ * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
   diagnosticSchema,
+  familiesCaptureEvidenceSchema,
   ffReceiptSchema,
+  podMemberSourceSchema,
+  type ActionStatus,
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
@@ -24,7 +28,7 @@ import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
-import { familiesPlanOf, manifest, type FamiliesPage } from "#/families/manifest";
+import { manifest, type FamiliesPage } from "#/families/manifest";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
@@ -73,14 +77,29 @@ const asFeed = (call: {
 
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
-const latestApplyStatusOf = (statuses: unknown) =>
+const latestStatusOf = (statuses: unknown, key: ActionStatus["key"]) =>
   statuses
     ? (actionStatusSchema
         .array()
         .parse(statuses)
-        .filter((entry) => entry.key === "families.apply" && entry.state === "succeeded")
+        .filter((entry) => entry.key === key && entry.state === "succeeded")
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null)
     : null;
+const latestApplyStatusOf = (statuses: unknown) => latestStatusOf(statuses, "families.apply");
+
+/**
+ * What the last capture saw, from its original receipt: the members it filed and, per family,
+ * coverage, unmodeled facts and failures. Null when the receipt is not a finished capture.
+ */
+export function captureEvidenceOf(receipts: unknown, id: string) {
+  const row = (receipts as { id: string; result?: unknown }[] | undefined)?.find(
+    (entry) => entry.id === id,
+  );
+  const result = z
+    .object({ members: z.array(podMemberSourceSchema), evidence: familiesCaptureEvidenceSchema })
+    .safeParse(row?.result);
+  return result.success ? result.data : null;
+}
 
 /** The last succeeded `families.apply` receipt, projected. Never Work: the receipt is the record. */
 export function applyDataOf(statuses: unknown, receipts: unknown) {
@@ -161,17 +180,8 @@ export function useFamiliesStore(
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
-  // The Work's spec is the one the host planned; the page opens it when nothing else is open.
-  useEffect(() => {
-    if (doc?.spec && !page.path) setPage({ pod: doc.spec.pod, path: doc.spec.path });
-  }, [doc?.spec, page.path, setPage]);
-  const familyReadings = handle.readings.families as Reading<unknown>;
-  const plan = useMemo(
-    () =>
-      familiesPlanOf({ work: handle.work, readings: handle.readings, page } as never)?.value ??
-      null,
-    [familyReadings, doc, page.pod, page.path],
-  );
+  // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
+  const plan = page.sheet;
   const receipts = handle.readings.receipts as Reading<unknown>;
   const receiptStatuses = previousOf(receipts);
   const applyStatus = useMemo(() => latestApplyStatusOf(receiptStatuses), [receiptStatuses]);
@@ -181,6 +191,17 @@ export function useFamiliesStore(
   const applyData = useMemo(() => {
     return applyDataOf(receiptStatuses, previousOf(applyReceipt));
   }, [receiptStatuses, applyReceipt]);
+  const captureStatus = useMemo(
+    () => latestStatusOf(receiptStatuses, "families.capture"),
+    [receiptStatuses],
+  );
+  const captureReceipt = useReading(
+    !handle.demo && captureStatus ? { kind: "receipts", id: captureStatus.id } : null,
+  );
+  const captured = useMemo(
+    () => (captureStatus ? captureEvidenceOf(previousOf(captureReceipt), captureStatus.id) : null),
+    [captureStatus, captureReceipt],
+  );
 
   const categoryCall = useHostCall(
     () => host.categories(documentTarget!),
@@ -247,6 +268,7 @@ export function useFamiliesStore(
     applied,
     plan,
     applyData,
+    captured,
     draft,
     pickedIds,
     demo,

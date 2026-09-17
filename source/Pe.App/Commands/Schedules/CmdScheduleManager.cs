@@ -49,11 +49,11 @@ public class CmdScheduleManager : IExternalCommand {
 
             // Collect items for both tabs
             var createItems = PodMembers.List(ScheduleManagerSettingsRegistration.Profiles)
-                .Select(member => new ScheduleListItem(member))
+                .Select(entry => new ScheduleListItem(entry.Pod, entry.Member))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();
             var batchItems = PodMembers.List(ScheduleManagerSettingsRegistration.Batch)
-                .Select(member => new BatchScheduleListItem(member))
+                .Select(entry => new BatchScheduleListItem(entry.Pod, entry.Member))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();
 
@@ -163,7 +163,7 @@ public class CmdScheduleManager : IExternalCommand {
     }
 
     private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem) {
-        var profile = profileItem.Member.Load<SharedScheduleProfile>().Spec;
+        var profile = profileItem.Member.Load<SharedScheduleProfile>(profileItem.Pod).Spec;
 
         // Serialize profile to JSON
         var profileJson = JsonConvert.SerializeObject(
@@ -271,7 +271,7 @@ public class CmdScheduleManager : IExternalCommand {
         ScheduleCreationResult result;
         string receiptPath;
         try {
-            var (spec, _, source) = ctx.SelectedProfile.Member.Load<SharedScheduleProfile>();
+            var (spec, _, source) = ctx.SelectedProfile.Member.Load<SharedScheduleProfile>(ctx.SelectedProfile.Pod);
             scheduleProfile = spec;
             var applied = ScheduleBridgeOps.ApplySpec(ctx.Doc, spec, source);
             result = applied.Result;
@@ -360,7 +360,7 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        var profile = context.SelectedProfile.Member.Load<SharedScheduleProfile>().Spec;
+        var profile = context.SelectedProfile.Member.Load<SharedScheduleProfile>(context.SelectedProfile.Pod).Spec;
 
         // Get families of the schedule's category
         var category = CategoryNamesValueDomain.TryFindCategoryByName(context.Doc, profile.CategoryName);
@@ -428,7 +428,7 @@ public class CmdScheduleManager : IExternalCommand {
 
             foreach (var member in batchItem.Schedules()) {
                 try {
-                    var (spec, _, source) = member.Load<SharedScheduleProfile>();
+                    var (spec, _, source) = member.Load<SharedScheduleProfile>(batchItem.Pod);
                     var applied = ScheduleBridgeOps.ApplySpec(context.Doc, spec, source);
                     results.Add((member.Path, true, string.Empty));
                     createdSchedules.Add(applied.Result.ScheduleName);
@@ -456,7 +456,7 @@ public class CmdScheduleManager : IExternalCommand {
                     $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
             }
 
-            var runs = receipts.Count > 0 ? Path.GetDirectoryName(Path.GetDirectoryName(receipts[0])!)! : batchItem.Member.PodFolder;
+            var runs = receipts.Count > 0 ? Path.GetDirectoryName(Path.GetDirectoryName(receipts[0])!)! : batchItem.Pod.Folder;
             balloon.Show(() => FileUtils.OpenInDefaultApp(runs), "Open Runs Folder");
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
