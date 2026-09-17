@@ -1,8 +1,7 @@
 import { useState } from "react";
 
-import { Pane, PaneSplit, PaneWorkspace, paneRecipe } from "#/components/lang/pane";
+import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
-import { paneWorkspaceRecipe } from "#/components/lang/pane-workspace";
 import { PickList, pickListRecipe } from "#/components/lang/pick-list";
 import { Switch, switchRecipe } from "#/components/lang/switch";
 import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
@@ -49,20 +48,6 @@ export function UiLayoutSpecimens() {
               grow={props.grow as boolean}
               start={<span>start</span>}
               end={<span>end</span>}
-            />
-          </div>
-        )}
-      />
-      <RecipeGrid
-        name="PaneWorkspace"
-        importPath="#/components/lang/pane-workspace"
-        recipe={paneWorkspaceRecipe}
-        render={(props) => (
-          <div className="h-32 w-96">
-            <PaneWorkspace
-              grow={props.grow as boolean}
-              visual={<span>visual</span>}
-              content={<span>content</span>}
             />
           </div>
         )}

@@ -276,6 +276,48 @@ const maskTemplateExpressions = (text: string): string =>
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
 describe("design guard — maintained surface hard zeros", () => {
+  it("keeps workspace DOM slots in their foundation owners", () => {
+    const owners = {
+      surface: "components/lang/surface.tsx",
+      "pane-split": "components/lang/pane-resize.tsx",
+      pane: "components/lang/pane.tsx",
+      "pane-header": "components/lang/pane.tsx",
+      "pane-body": "components/lang/pane.tsx",
+      rail: "components/lang/rail.tsx",
+      "rail-lead": "components/lang/rail.tsx",
+      "rail-actions": "components/lang/rail.tsx",
+    } as const;
+    const source = FILES.filter(
+      (file) => file.rel.endsWith(".tsx") && !file.rel.endsWith(".test.tsx"),
+    );
+    const offences: string[] = [];
+
+    for (const file of source) {
+      for (const match of file.text.matchAll(/(?<!\[)data-slot=["']([^"']+)["']/g)) {
+        const owner = owners[match[1] as keyof typeof owners];
+        if (owner && file.rel !== owner)
+          offences.push(`${file.rel}: ${match[1]} belongs to ${owner}`);
+      }
+    }
+    expect(offences).toEqual([]);
+    for (const [slot, owner] of Object.entries(owners)) {
+      expect(
+        source.find((file) => file.rel === owner)?.text,
+        `${owner} must emit ${slot}`,
+      ).toContain(`data-slot="${slot}"`);
+    }
+
+    const surface = source.find((file) => file.rel === owners.surface)?.text ?? "";
+    for (const contract of ["size-full", "min-h-0", "min-w-0", 'padding: "var(--gutter)"'])
+      expect(surface).toContain(contract);
+    expect(surface).not.toMatch(/\bfixed\b|\bh-dvh\b/);
+
+    const split = source.find((file) => file.rel === owners["pane-split"])?.text ?? "";
+    expect(split).toContain("var(--gutter)");
+    expect(split).not.toMatch(/base:\s*["'][^"']*overflow-hidden/);
+    expect(scan(source, /\bPaneWorkspace\b|components\/anatomy\/workspace/g)).toEqual([]);
+  });
+
   it("no dead shim token is consumed (the alias shim reads zero lines, forever)", () => {
     const re =
       /var\(--(?:st-|act-|cat-|pe-blue|pe-green|paper|mist|basalt|slate|lens-ink-2|clay|kiln|lichen|fail|user|pea-tint|pea-line|line-soft)/g;

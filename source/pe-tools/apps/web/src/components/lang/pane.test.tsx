@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { ActionButton } from "#/components/lang/action-button";
-import { Pane, PaneSplit, PaneWorkspace } from "#/components/lang/pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Rail } from "#/components/lang/rail";
 import { Surface } from "#/components/lang/surface";
 
@@ -168,24 +168,6 @@ test("the actions slot renders caller JSX in the header", () => {
   expect(selected).toBe("export");
 });
 
-test("workspace resize is opt-in and keyboard accessible", () => {
-  const { container } = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      resize={{ visual: { defaultSize: 340, minSize: 140, maxSize: 720 } }}
-    />,
-  );
-  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
-
-  expect(workspace.dataset.surface).toBe("recess");
-  expect(workspace.style.gridTemplateRows).toBe("340px var(--gutter) minmax(0, 1fr)");
-  fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), {
-    key: "ArrowDown",
-  });
-  expect(workspace.style.gridTemplateRows).toBe("356px var(--gutter) minmax(0, 1fr)");
-});
-
 test("split panes reserve a gutter and keep keyboard resizing", () => {
   const { container } = render(
     <PaneSplit
@@ -324,57 +306,6 @@ test("surface fills its parent without fixing to the viewport and keeps a scroll
   expect(surface.style.padding).toBe("var(--gutter)");
 });
 
-test("a missing persisted size starts at the declared default", () => {
-  const { container } = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      resize={{
-        visual: {
-          defaultSize: 374,
-          minSize: 174,
-          persist: "test.plan-height",
-        },
-      }}
-    />,
-  );
-  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
-
-  expect(workspace.style.gridTemplateRows).toBe("374px var(--gutter) minmax(0, 1fr)");
-});
-
-test("controlled collapse and inspector span are reflected by the workspace", () => {
-  const view = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      inspector={<div>details</div>}
-      inspectorSpan="visual"
-      resize={{
-        visual: {
-          defaultSize: 340,
-          minSize: 140,
-          collapse: { collapsed: true, collapsedSize: 34 },
-        },
-      }}
-    />,
-  );
-  const workspace = view.container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
-
-  expect(workspace.style.gridTemplateRows).toBe("34px var(--gutter) minmax(0, 1fr)");
-  expect(workspace.dataset.inspectorSpan).toBe("visual");
-
-  view.rerender(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      inspector={<div>details</div>}
-      inspectorSpan="full"
-    />,
-  );
-  expect(workspace.dataset.inspectorSpan).toBe("full");
-});
-
 test("a pane header owns one rail and no halo node", () => {
   const { container } = render(
     <Pane kind="content" title="rooms">
@@ -412,35 +343,6 @@ test("pane body defaults to the shared inset and flush opts out", () => {
   );
   expect(body.classList.contains("p-0")).toBe(true);
   expect(body.classList.contains("p-(--gutter)")).toBe(false);
-});
-
-test("workspace gutters appear only beside present outer panes and do not clip pane outlines", () => {
-  const { container, rerender } = render(
-    <PaneWorkspace
-      visual={<Pane kind="visual">plan</Pane>}
-      content={<Pane kind="content">table</Pane>}
-    />,
-  );
-  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
-  expect(workspace.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
-  expect(workspace.classList.contains("overflow-hidden")).toBe(false);
-  const visual = container.querySelector<HTMLElement>("[data-kind='visual']")!;
-  expect(visual.parentElement?.classList.contains("overflow-hidden")).toBe(false);
-  expect(
-    visual.querySelector("[data-slot='pane-body']")?.classList.contains("overflow-hidden"),
-  ).toBe(true);
-
-  rerender(
-    <PaneWorkspace
-      navigation={<Pane kind="navigation">nav</Pane>}
-      visual={<Pane kind="visual">plan</Pane>}
-      content={<Pane kind="content">table</Pane>}
-      inspector={<Pane kind="inspector">inspect</Pane>}
-    />,
-  );
-  expect(workspace.style.gridTemplateColumns).toBe(
-    "288px var(--gutter) minmax(0, 1fr) var(--gutter) 320px",
-  );
 });
 
 test("artifact feet keep their top separator", () => {

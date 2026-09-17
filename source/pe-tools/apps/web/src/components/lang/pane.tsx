@@ -34,7 +34,7 @@ export type PaneShortcut = UseHotkeyDefinition & {
 
 export const paneRecipe = tv({
   slots: {
-    root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-visible outline-none",
+    root: "relative flex size-full min-h-0 min-w-0 flex-col overflow-visible",
     // A pane body is a COLUMN, so a call site that docks a region under a scroller does not need
     // a second scroller to get one (annotation round, 2026-08-31 — two stacked bars in the right
     // sidebar were a pane body scrolling around a child that also scrolled).
@@ -175,15 +175,12 @@ export function Pane({
   const { root, body } = paneRecipe({ kind, scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [active, setActive] = useState(false);
   const [cardVisible, setCardVisible] = useState(false);
   const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, tabLeft: 0 });
 
   const revealShortcuts = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
     setCardVisible(true);
-    timerRef.current = setTimeout(() => setCardVisible(false), 4000);
   }, []);
 
   // Every pane key is a registration with the shared meta, so the help page can hang it off this
@@ -205,12 +202,11 @@ export function Pane({
   }));
   useHotkeys(bound, { target: rootRef });
 
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    if (!cardVisible) return;
+    const timer = setTimeout(() => setCardVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [cardVisible]);
 
   useLayoutEffect(() => {
     if (!active || shortcuts.length === 0) return;
@@ -223,7 +219,7 @@ export function Pane({
       setCardPosition({
         top: Math.max(8, Math.min(window.innerHeight - height - 8, rect.top + 4)),
         left: rightFits ? rect.right + 7 : Math.max(8, rect.left - width - 7),
-        tabLeft: rightFits ? rect.right + 1 : Math.max(2, rect.left - 9),
+        tabLeft: rightFits ? rect.right + 1 : Math.max(2, rect.left - 7),
       });
     };
     place();
@@ -246,7 +242,6 @@ export function Pane({
 
   const deactivate = (event: FocusEvent<HTMLElement>) => {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
     setActive(false);
     setCardVisible(false);
   };
@@ -396,12 +391,13 @@ export function Pane({
                 aria-label={`Show ${id ?? kind} keyboard shortcuts`}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={revealShortcuts}
+                title={`${id ?? kind} keyboard shortcuts`}
                 style={{ top: Math.max(8, cardPosition.top + 4), left: cardPosition.tabLeft }}
-                className={`face-mono t-small fixed z-popup border border-line-2 px-1 py-2 text-ink [writing-mode:vertical-rl] ${
+                className={`fixed z-popup h-8 w-1.5 border border-line-2 p-0 ${
                   cardVisible ? "hidden" : "block"
                 }`}
               >
-                ? keys
+                <span className="sr-only">keys</span>
               </button>
             </>,
             document.body,
@@ -413,5 +409,3 @@ export function Pane({
 
 export { PaneSplit } from "./pane-resize";
 export type { PaneCollapseSpec, PaneSizeSpec, PaneSplitProps } from "./pane-resize";
-export { PaneWorkspace } from "./pane-workspace";
-export type { PaneWorkspaceProps } from "./pane-workspace";

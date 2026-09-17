@@ -24,7 +24,6 @@ import { inputRecipe } from "#/components/lang/input";
 import { labelRecipe } from "#/components/lang/label";
 import { paneRecipe } from "#/components/lang/pane";
 import { paneSplitRecipe } from "#/components/lang/pane-resize";
-import { paneWorkspaceRecipe } from "#/components/lang/pane-workspace";
 import { switchRecipe } from "#/components/lang/switch";
 import { textareaRecipe } from "#/components/lang/textarea";
 import { valueDiffRecipe } from "#/components/lang/value-diff";
@@ -58,7 +57,6 @@ const RECIPES = {
   labelRecipe,
   paneRecipe,
   paneSplitRecipe,
-  paneWorkspaceRecipe,
   switchRecipe,
   textareaRecipe,
   valueDiffRecipe,
