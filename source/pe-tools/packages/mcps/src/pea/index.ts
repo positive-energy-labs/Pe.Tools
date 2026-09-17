@@ -28,7 +28,6 @@ export {
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,
-  peaSkillPaths,
   peaProductHomeEnvVar,
   peaStandardSkillsRoot,
 } from "./skills.ts";

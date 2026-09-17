@@ -3,8 +3,8 @@ import {
   canonicalRouteInput,
   type ActionReceipt,
 } from "@pe/agent-contracts";
-import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { submitAction, readAction, type DetachedAction } from "./takeoff-action-client.ts";
+import { admissionDestination } from "./admission.ts";
 import { Effect } from "effect";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
 export type ResolvedTarget = { session: string | null; document: string | null };
@@ -188,19 +188,10 @@ export class HostRpcCaller {
     if (prior || operation?.intent === "Mutate") {
       const actor = this.options.actor;
       if (!actor) throw Error("Mutation caller must supply its initiating actor");
+      // One destination builder: the host recomputes this from `needs` and compares it exactly.
       const destination =
         prior?.destination ??
-        (isTsOnlyOperationKey(key)
-          ? { kind: "host" as const }
-          : operation?.needs === "nothing"
-            ? { kind: "session" as const, session: this.options.bridgeSessionId! }
-            : {
-                kind: "document" as const,
-                ref: {
-                  session: this.options.bridgeSessionId!,
-                  openId: this.options.openDocumentId!,
-                },
-              });
+        admissionDestination(key, operation?.needs ?? "document", this.options);
       const admission = actionAdmissionSchema.parse({
         id: this.options.requestId ?? crypto.randomUUID(),
         kind: "operation",

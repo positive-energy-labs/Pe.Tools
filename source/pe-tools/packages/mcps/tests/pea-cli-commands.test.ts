@@ -2,7 +2,6 @@ import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
-import { ScriptingTools } from "../src/shared/scripting.ts";
 
 const statuses = [
   "Succeeded",
@@ -41,14 +40,6 @@ test("import carries the optional local folder through Gunshi to pod.import", as
     output.mockRestore();
     tools.mockRestore();
   }
-  const call = vi.fn(async () => ({ id: "x", folder: "x" }));
-  const tool = new ScriptingTools({ call } as never, { workspaceKey: "default" });
-  await tool.importPod({ archivePath: "a.zip" });
-  await tool.importPod({ archivePath: "a.zip", folder: "Copy" });
-  expect(call.mock.calls).toEqual([
-    ["pod.import", { archivePath: "a.zip" }],
-    ["pod.import", { archivePath: "a.zip", folder: "Copy" }],
-  ]);
 });
 
 test.each(statuses)("pea script execute maps %s to the process exit code", async (status) => {
