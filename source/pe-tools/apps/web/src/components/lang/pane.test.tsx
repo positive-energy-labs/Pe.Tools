@@ -167,6 +167,19 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
   expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) minmax(0, 1fr)");
   expect(split.querySelector("[role='separator']")).toBeNull();
   expect(split.classList.contains("overflow-hidden")).toBe(false);
+  expect((split.children[0] as HTMLElement).style.gridColumn).toBe("1");
+  expect((split.children[1] as HTMLElement).style.gridColumn).toBe("3");
+
+  const vertical = render(
+    <PaneSplit
+      axis="vertical"
+      start={<Pane kind="content">top</Pane>}
+      end={<Pane kind="content">bottom</Pane>}
+    />,
+  );
+  const verticalSplit = vertical.container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  expect((verticalSplit.children[0] as HTMLElement).style.gridRow).toBe("1");
+  expect((verticalSplit.children[1] as HTMLElement).style.gridRow).toBe("3");
 
   const resizable = render(
     <PaneSplit
@@ -176,7 +189,11 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
       resize={{ target: "start", defaultSize: 200, minSize: 120 }}
     />,
   );
-  fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), { key: "ArrowRight" });
+  const handle = screen.getByRole("separator", { name: "Resize pane" });
+  expect(handle.parentElement?.style.gridColumn).toBe("2");
+  expect(handle.parentElement?.style.gridRow).toBe("1");
+  expect(handle.parentElement?.classList.contains("size-full")).toBe(true);
+  fireEvent.keyDown(handle, { key: "ArrowRight" });
   expect(
     resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.style
       .gridTemplateColumns,

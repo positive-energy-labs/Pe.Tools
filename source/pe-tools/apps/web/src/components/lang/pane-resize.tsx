@@ -275,9 +275,6 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const state = usePaneSize(resize ?? NO_RESIZE);
   const horizontal = axis === "horizontal";
   const target = resize?.target ?? "start";
-  const targetStyle: CSSProperties = horizontal
-    ? { width: state.renderedSize }
-    : { height: state.renderedSize };
   const tracks =
     resize == null
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
@@ -296,9 +293,15 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   usePaneFit(rootRef, (rect) => state.fit(horizontal ? rect.width : rect.height));
 
   const renderSide = (side: "start" | "end", child: ReactNode) => {
-    const sized = resize != null && side === target;
     return (
-      <div className="min-h-0 min-w-0 overflow-visible" style={sized ? targetStyle : undefined}>
+      <div
+        className="min-h-0 min-w-0 overflow-visible"
+        style={
+          horizontal
+            ? { gridColumn: side === "start" ? 1 : 3, gridRow: 1 }
+            : { gridColumn: 1, gridRow: side === "start" ? 1 : 3 }
+        }
+      >
         {child}
       </div>
     );
@@ -314,7 +317,10 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
     >
       {renderSide("start", start)}
       {resize && (
-        <div style={horizontal ? { gridColumn: 2 } : { gridRow: 2 }}>
+        <div
+          className="size-full min-h-0 min-w-0"
+          style={horizontal ? { gridColumn: 2, gridRow: 1 } : { gridColumn: 1, gridRow: 2 }}
+        >
           <PaneResizeHandle
             axis={axis}
             value={state.renderedSize}
