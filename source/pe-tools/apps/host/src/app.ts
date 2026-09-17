@@ -8,7 +8,7 @@ import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
-import { settingsLibrary } from "./settings.ts";
+import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { callRoute } from "./call-route.ts";
@@ -38,11 +38,14 @@ const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const schemaUrl = new URL(req.url, `http://${req.headers.host ?? "127.0.0.1"}`).href;
-    const library = settingsLibrary(schemaUrl);
-    if (!library)
+    if (!isSettingsSchemaUrl(schemaUrl))
       return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     const result = yield* Effect.result(
-      bridge.invoke("settings.schema", library, (yield* bridge.snapshot(undefined)).sessionId),
+      bridge.invoke(
+        "settings.schema",
+        { schemaUrl },
+        (yield* bridge.snapshot(undefined)).sessionId,
+      ),
     );
     if (result._tag === "Failure")
       return Response.jsonUnsafe(

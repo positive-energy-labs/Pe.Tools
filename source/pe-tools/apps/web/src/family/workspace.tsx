@@ -112,7 +112,7 @@ import { ActionButton } from "#/components/lang/action-button";
  *                  OF it. Refuses in the host's own words when no family document is active in
  *                  Revit. It moves nothing into the profile — `capture all` does that, under the
  *                  overlay, once there is a reading to move.
- *   build .rfa     `route:family` `build_evidence` → `revit.apply.family-model`. A WRITE, and the
+ *   build .rfa     `route:family` `build_evidence` → `family.build`. A WRITE, and the
  *                  only one that leaves both the page and the document: it re-opens the SAVED
  *                  family.json host-side and materializes a timestamped .rfa. Because it reads the
  *                  file rather than the table, it is armed rather than pressed — the ceremony, its

@@ -84,7 +84,6 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
             title: s.activeDocumentTitle ?? null,
           }
         : null,
-    availableModules: s?.availableModules ?? [],
     bridgeIsConnected: bridge.connected,
     openDocumentCount: s?.openDocuments.length ?? 0,
     processId: bridge.processId ?? null,

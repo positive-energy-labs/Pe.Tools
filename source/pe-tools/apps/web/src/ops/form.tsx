@@ -89,8 +89,8 @@ export function OpForm({
   return (
     <SchemaToFieldRender
       schema={schema}
-      // ponytail: the settings renderer keys its option requests by module; an op has none.
-      moduleKey="ops"
+      // An op request has no `$schema`; its options come from the injected Revit answerer.
+      schemaUrl=""
       baselineValues={{}}
       values={values}
       onChange={(path, value) => onChange(setPath(values, path.split("."), value) as FormValues)}

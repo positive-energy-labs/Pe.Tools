@@ -472,7 +472,7 @@ const GEOMETRY: GeomConstituent[] = [
 
 export const FAMILY_SPEC: FamilySpecModel = {
   profile: {
-    path: "mechanical/fan-coil-fc42.family.json",
+    path: "mechanical/fan-coil-fc42.json",
     familyName: "PE Fan Coil FC42",
     category: "Mechanical Equipment",
     template: "Generic Model",

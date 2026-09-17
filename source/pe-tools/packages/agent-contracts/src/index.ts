@@ -9,7 +9,7 @@ export * from "./takeoffs.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
 export * from "./schedule-actions.ts";
-export * from "./schedule-grid.ts";
+export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
 export * from "./thread.ts";
 export * from "./target.ts";

@@ -15,8 +15,8 @@ import type {
 } from "@pe/host-contracts/operation-types";
 import type {
   PodMemberCompose,
-  SettingsDocumentSemanticValidation,
   SettingsSchema,
+  SettingsValidate,
 } from "@pe/host-contracts/generated";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -175,7 +175,7 @@ export const composeMember = Effect.fnUntraced(function* (
     } satisfies PodMemberComposeResponse;
   }
   const schemaUrl = isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
-  const library = schemaUrl ? settingsLibrary(schemaUrl) : null;
+  const library = schemaUrl && isSettingsSchemaUrl(schemaUrl) ? schemaUrl : null;
   const diagnostics: MemberIssue[] = [];
   let composed: unknown = value;
   let dependencies: PodMemberComposeResponse["dependencies"] = [];
@@ -207,8 +207,11 @@ export const composeMember = Effect.fnUntraced(function* (
   const schemaJson =
     request.schemaJson ??
     (library && ctx.invokeBridge
-      ? ((yield* ctx.invokeBridge("settings.schema", library)) as SettingsSchema.Res.Response)
-          .schemaJson
+      ? (
+          (yield* ctx.invokeBridge("settings.schema", {
+            schemaUrl: library,
+          })) as SettingsSchema.Res.Response
+        ).schemaJson
       : undefined);
   const schemaValidation: PodMemberComposeResponse["schemaValidation"] = !schemaUrl
     ? "no-schema"
@@ -219,12 +222,11 @@ export const composeMember = Effect.fnUntraced(function* (
         : validateStructure(schemaJson, composed, diagnostics);
   let semanticValidation: PodMemberComposeResponse["semanticValidation"] = "not-run";
   if (schemaValidation === "passed" && library && ctx.invokeBridge) {
-    const semantic = (yield* ctx.invokeBridge("settings.document.semantic-validation", {
-      ...library,
-      relativePath: request.path,
+    const semantic = (yield* ctx.invokeBridge("settings.validate", {
+      schemaUrl: library,
       rawContent: content,
       composedContent: `${JSON.stringify(composed, null, 2)}\n`,
-    })) as SettingsDocumentSemanticValidation.Res.Response;
+    })) as SettingsValidate.Res.Response;
     diagnostics.push(
       ...semantic.issues.map((i) => bridgeIssue({ ...i, path: i.instancePath || "$" })),
     );
@@ -434,17 +436,14 @@ function issue(code: string, message: string, severity: MemberIssue["severity"] 
 }
 
 /**
- * The C# settings libraries are still keyed by module and root, and their `$schema` URLs name both:
- * `/schemas/settings/<module>/<root>.json`. The URL is the member's only identity claim; this reads it.
+ * A `$schema` URL a C# settings library serves: `/schemas/settings/<library>/<root>.json`. The URL is the
+ * member's only identity claim and the bridge resolves it as-is.
  */
-export function settingsLibrary(schemaUrl: string): { moduleKey: string; rootKey: string } | null {
+export function isSettingsSchemaUrl(schemaUrl: string): boolean {
   try {
-    const match = /\/schemas\/settings\/([^/]+)\/([^/]+)\.json$/.exec(new URL(schemaUrl).pathname);
-    return match
-      ? { moduleKey: decodeURIComponent(match[1]!), rootKey: decodeURIComponent(match[2]!) }
-      : null;
+    return /\/schemas\/settings\/[^/]+\/[^/]+\.json$/.test(new URL(schemaUrl).pathname);
   } catch {
-    return null;
+    return false;
   }
 }
 

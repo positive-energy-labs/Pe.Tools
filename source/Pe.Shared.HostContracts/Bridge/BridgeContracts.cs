@@ -44,8 +44,7 @@ public sealed record BridgeStateSnapshot(
     long ActiveDocumentObservedAtUnixMs,
     string? SharedParametersFilename,
     List<BridgeDocumentSnapshot> OpenDocuments,
-    List<HostRuntimeAssemblyData> RuntimeAssemblies,
-    List<HostModuleDescriptor> AvailableModules
+    List<HostRuntimeAssemblyData> RuntimeAssemblies
 );
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to it.

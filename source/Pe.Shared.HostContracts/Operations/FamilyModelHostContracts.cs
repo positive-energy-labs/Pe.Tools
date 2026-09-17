@@ -13,18 +13,21 @@ public sealed record FamilyCaptureData(
     IReadOnlyList<RevitDataIssue> Issues
 );
 
-public sealed record FamilyModelBuildRequest(
-    string ModelJson,
+/// <summary>Build a new family from a saved family model spec on its header's template; nested models resolve from `modelDirectory`.</summary>
+public sealed record FamilyBuildRequest(
+    string SpecJson,
     string OutputPath,
+    PodMemberSource Source,
     string? ModelDirectory = null,
     bool Overwrite = false
 );
 
-public sealed record FamilyModelBuildData(
+public sealed record FamilyBuildData(
     Reading Reading,
     string FamilyName,
     string OutputPath,
     string TemplatePath,
     bool Converged,
-    int ResidueCount
+    int ResidueCount,
+    string ReceiptPath
 );
