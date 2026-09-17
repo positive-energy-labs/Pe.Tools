@@ -14,6 +14,8 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-16, Use the prototype A `tone=line` treatment: a thin focused-pane outline, stronger while keyboard help is open. The halo must paint above the gray gutter on every edge, including the right; gutter siblings must not cover it.
+
 - 2026-09-16, Narrow tutorials retain the spatial pane map with horizontal scrolling; do not replace it with a stacked list.
 - 2026-09-16, Preserve the scroll-away route head. The workspace fills the viewport after the head scrolls away; its initial bottom extending below the viewport is intentional.
 
