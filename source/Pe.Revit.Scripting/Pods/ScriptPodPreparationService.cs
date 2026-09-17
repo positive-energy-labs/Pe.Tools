@@ -13,14 +13,30 @@ namespace Pe.Revit.Scripting.Pods;
 /// <summary>One file in a pod. `Schema` is the member's `$schema` when it parses as a JSON object that declares one.</summary>
 public sealed record PodMember(string Path, string Sha256, string? Schema);
 
-/// <summary>A pod gated on manifest structure and entrypoint source only. Members are listed, never validated here.</summary>
-public sealed record PodPreparation(
+/// <summary>A pod gated on manifest structure and entrypoint source only. Members are listed either way, never validated here.</summary>
+public abstract record PodPreparation(
     string Folder,
-    PodManifest? Manifest,
     IReadOnlyList<PodMember> Members,
     IReadOnlyList<ScriptDiagnostic> Diagnostics
-) {
-    public bool Success => this.Manifest is not null && this.Diagnostics.All(diagnostic => diagnostic.Severity != ScriptDiagnosticSeverity.Error);
+);
+
+/// <summary>Manifest and entrypoints passed; any diagnostics are warnings.</summary>
+public sealed record PreparedPod(
+    string Folder,
+    PodManifest Manifest,
+    IReadOnlyList<PodMember> Members,
+    IReadOnlyList<ScriptDiagnostic> Diagnostics
+) : PodPreparation(Folder, Members, Diagnostics);
+
+/// <summary>The manifest or an entrypoint failed; the error diagnostics say which.</summary>
+public sealed record RefusedPod(
+    string Folder,
+    IReadOnlyList<PodMember> Members,
+    IReadOnlyList<ScriptDiagnostic> Diagnostics
+) : PodPreparation(Folder, Members, Diagnostics) {
+    public string Reason => string.Join("; ", this.Diagnostics
+        .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
+        .Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}"));
 }
 
 /// <summary>One member composed on request: its composed JSON (null on error), its own diagnostics, and consumed fragments.</summary>
@@ -37,10 +53,10 @@ public sealed record PodMemberComposition(
 public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     public const string Stage = "pod";
     public const string ImportedFileName = "imported.json";
-    private const long MaxFileBytes = 512 * 1024;
-    private const long MaxTotalBytes = 4 * 1024 * 1024;
-    private const int MaxFileCount = 200;
-    private const int MaxDirectoryCount = 256;
+    private const long MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
+    private const long MaxTotalBytes = ScriptPodSourceBounds.MaxTotalBytes;
+    private const int MaxFileCount = ScriptPodSourceBounds.MaxFileCount;
+    private const int MaxDirectoryCount = ScriptPodSourceBounds.MaxDirectoryCount;
     private static readonly string[] RootFiles = ["pod.json", "PeScripts.csproj", ImportedFileName];
     private static readonly string[] MemberDirectories = ["src", "settings", "assets"];
 
@@ -81,12 +97,12 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             .ToList();
         if (!files.TryGetValue("pod.json", out var manifestBytes)) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, "Pod has no pod.json.", "pod.json"));
-            return new PodPreparation(folder, null, members, diagnostics);
+            return new RefusedPod(folder, members, diagnostics);
         }
         var manifest = PodManifestValidator.ValidateJson(Encoding.UTF8.GetString(manifestBytes));
         diagnostics.AddRange(manifest.Diagnostics);
         if (manifest.Manifest is null)
-            return new PodPreparation(folder, null, members, diagnostics);
+            return new RefusedPod(folder, members, diagnostics);
 
         foreach (var entrypoint in manifest.Manifest.Entrypoints) {
             if (!files.TryGetValue(entrypoint.SourcePath, out var source)) {
@@ -98,7 +114,9 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             if (types.Count != 1)
                 diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.Id}' must declare exactly one non-abstract PeScriptContainer; found {types.Count}.", entrypoint.SourcePath));
         }
-        return new PodPreparation(folder, manifest.Manifest, members, diagnostics);
+        return diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
+            ? new RefusedPod(folder, members, diagnostics)
+            : new PreparedPod(folder, manifest.Manifest, members, diagnostics);
     }
 
     /// <summary>The one installed pod folder whose manifest id matches. Zero or several matches fail and name the folders.</summary>

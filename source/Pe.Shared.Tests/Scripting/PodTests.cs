@@ -49,7 +49,7 @@ public sealed class PodTests {
         var pod = ScriptPodPreparationService.Prepare(folder);
 
         Assert.Multiple(() => {
-            Assert.That(pod.Success, Is.True, string.Join("; ", pod.Diagnostics.Select(d => d.Message)));
+            Assert.That(pod, Is.TypeOf<PreparedPod>(), string.Join("; ", pod.Diagnostics.Select(d => d.Message)));
             Assert.That(pod.Members.Select(member => member.Path),
                 Is.EqualTo(new[] { "pod.json", "settings/broken.json", "settings/good.json", "settings/plain.json" }));
             Assert.That(pod.Members.Single(member => member.Path == "settings/good.json").Schema, Is.EqualTo("https://pe.tools/schemas/family.json"));
@@ -68,7 +68,7 @@ public sealed class PodTests {
 
         var pod = ScriptPodPreparationService.Prepare(folder);
 
-        Assert.That(pod.Success, Is.False);
+        Assert.That(pod, Is.TypeOf<RefusedPod>());
         Assert.That(pod.Diagnostics.Select(diagnostic => diagnostic.Source), Is.SupersetOf(new[] { "src/Missing.cs", "src/Two.cs" }));
     }
 
@@ -200,7 +200,7 @@ public sealed class PodTests {
         for (var index = 0; index < 200; index++)
             File.WriteAllText(Path.Combine(folder, "assets", $"{index:D3}.txt"), string.Empty);
 
-        Assert.That(ScriptPodPreparationService.Prepare(folder).Success, Is.False);
+        Assert.That(ScriptPodPreparationService.Prepare(folder), Is.TypeOf<RefusedPod>());
     }
 
     private static ScriptPodArchiveService Archive(ScriptPodPreparationService pods) {

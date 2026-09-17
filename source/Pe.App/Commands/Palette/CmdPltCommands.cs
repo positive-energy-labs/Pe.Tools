@@ -145,8 +145,8 @@ public class CmdPltCommands : IExternalCommand {
     /// </summary>
     private static IEnumerable<IPaletteListItem> BuildPodScriptItems() =>
         new ScriptPodPreparationService().List()
-            .Where(pod => pod.Success)
-            .SelectMany(pod => pod.Manifest!.Entrypoints.Select(entrypoint => (IPaletteListItem)new PodScriptTaskItem {
+            .OfType<PreparedPod>()
+            .SelectMany(pod => pod.Manifest.Entrypoints.Select(entrypoint => (IPaletteListItem)new PodScriptTaskItem {
                 WorkspaceKey = System.IO.Path.GetFileName(pod.Folder),
                 PodName = pod.Manifest.Name,
                 Entrypoint = entrypoint

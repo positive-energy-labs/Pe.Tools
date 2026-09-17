@@ -66,14 +66,12 @@ public class CmdFFManager : IExternalCommand {
 
     /// <summary>Builds into the source pod's `output/` beside its runs, from the member's own folder for nested models.</summary>
     private static void Build(FoundryContext ctx) {
-        var member = ctx.SelectedProfile!.Member;
-        var (model, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>();
-        var spec = Newtonsoft.Json.Linq.JObject.Parse(composed);
-        _ = spec.Remove("$schema");
-        var outputPath = Path.Combine(member.PodFolder, "output", $"{model.Family.Name}-{DateTime.Now:yyyyMMdd-HHmmss}.rfa");
+        var (pod, member) = (ctx.SelectedProfile!.Pod, ctx.SelectedProfile.Member);
+        var (model, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>(pod);
+        var outputPath = Path.Combine(pod.Folder, "output", $"{model.Family.Name}-{DateTime.Now:yyyyMMdd-HHmmss}.rfa");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         var built = FamilyFoundryBridgeOps.BuildWithReceipt(ctx.UiDoc.Application.Application,
-            new FamilyBuildRequest(spec.ToString(), outputPath, source, Path.GetDirectoryName(member.FullPath)));
+            new FamilyBuildRequest(composed, outputPath, source, Path.GetDirectoryName(member.FullPath(pod))));
         new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
             $"Built {built.FamilyName} from {Path.GetFileName(built.TemplatePath)} → {built.OutputPath}. Converged: {built.Converged}, residue {built.ResidueCount}.\nReceipt: {built.ReceiptPath}").Show();
     }

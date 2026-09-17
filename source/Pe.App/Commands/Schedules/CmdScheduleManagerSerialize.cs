@@ -52,7 +52,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
             // One capture action per installed pod: capture always writes a new member into the chosen pod.
             var captureActions = PodMembers.Pods().Select(pod => new PaletteAction<ScheduleSerializePaletteItem> {
-                Name = $"Capture into {pod.Manifest!.Name}", Execute = item => HandleCapture(pod.Manifest!.Id, item)
+                Name = $"Capture into {pod.Manifest.Name}", Execute = item => HandleCapture(pod.Manifest.Id, item)
             }).ToArray();
             if (captureActions.Length == 0)
                 throw new InvalidOperationException("No installed pod to capture into.");

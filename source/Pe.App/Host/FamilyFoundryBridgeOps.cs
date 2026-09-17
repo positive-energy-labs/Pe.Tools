@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
 using Pe.Revit;
 using Pe.Revit.Extensions.ProjDocument;
@@ -16,6 +17,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Modules;
 using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
 using System.IO;
 
@@ -235,10 +237,21 @@ internal static class FamilyFoundryBridgeOps {
                 $"EditFamily for '{family.Name}': {diagnostic.Message}", FamilyName: family.Name))
             .Concat(model.CaptureIssues).ToList();
 
+    /// <summary>
+    ///     The spec as authored: a family patch, or a family model member (its `$schema` says which). A model
+    ///     applies as a patch with no selector, so the one conversion happens here, never in the engine.
+    /// </summary>
     private static (FamilyPatch? Patch, IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics) ParseSpec(string? json) {
         if (string.IsNullOrWhiteSpace(json))
-            return (null, [new FamilyFoundryDiagnostic("SpecJsonRequired", "$.specJson", "specJson is required: { select, patch, run }.")]);
-        try { return (FamilyPatch.Parse(json!), []); }
+            return (null, [new FamilyFoundryDiagnostic("SpecJsonRequired", "$.specJson", "specJson is required: a family patch or family model member.")]);
+        try {
+            var spec = JObject.Parse(json!);
+            if ((string?)spec["$schema"] is { } schema && schema.EndsWith(SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.Root), StringComparison.OrdinalIgnoreCase)) {
+                _ = spec.Remove("$schema");
+                return (FamilyPatch.Parse(new JObject { ["patch"] = spec }.ToString()), []);
+            }
+            return (FamilyPatch.Parse(json!), []);
+        }
         catch (JsonException exception) {
             return (null, [new FamilyFoundryDiagnostic("InvalidSpecJson", "$.specJson", exception.Message, "The spec follows the family.json schema; omission = unchanged, null = delete, {} = ensure.")]);
         }

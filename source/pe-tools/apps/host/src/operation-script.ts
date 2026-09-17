@@ -1,7 +1,7 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import type { ScriptingExecute } from "@pe/host-contracts/generated";
+import { scriptPodSourceBounds, type ScriptingExecute } from "@pe/host-contracts/generated";
 import { productUserContentRootPath } from "./product-paths.ts";
 
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
@@ -38,7 +38,8 @@ export async function capturePod(
   let directories = 0;
   let bytes = 0;
   const walk = async (relative: string): Promise<void> => {
-    if (++directories > 256) throw Error("Pod directory limit exceeded");
+    if (++directories > scriptPodSourceBounds.maxDirectoryCount)
+      throw Error("Pod directory limit exceeded");
     const absolute = relative ? join(directory, relative) : directory;
     for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
       a.name.localeCompare(b.name),
@@ -58,12 +59,14 @@ export async function capturePod(
       )
         continue;
       const info = await lstat(join(directory, path));
-      if (!info.isFile() || info.size > 512 * 1024)
+      if (!info.isFile() || info.size > scriptPodSourceBounds.maxFileBytes)
         throw Error(`Pod input must be a bounded regular file: ${path}`);
       const content = await readFile(join(directory, path));
-      if ((bytes += content.length) > 4 * 1024 * 1024) throw Error("Pod capture exceeds 4 MiB");
+      if ((bytes += content.length) > scriptPodSourceBounds.maxTotalBytes)
+        throw Error(`Pod capture exceeds ${scriptPodSourceBounds.maxTotalBytes} bytes`);
       files.push({ path, bytesBase64: content.toString("base64") });
-      if (files.length > 200) throw Error("Pod capture exceeds 200 files");
+      if (files.length > scriptPodSourceBounds.maxFileCount)
+        throw Error(`Pod capture exceeds ${scriptPodSourceBounds.maxFileCount} files`);
     }
   };
   await walk("");

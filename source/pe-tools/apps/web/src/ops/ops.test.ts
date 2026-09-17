@@ -5,7 +5,7 @@ import { opNeeds, opsRefusal, type HostOperationCatalogEntry } from "./manifest"
 import { runOp } from "./run";
 
 const bridgeMutation = {
-  key: "revit.apply.schedule",
+  key: "data-table.apply",
   intent: "Mutate",
   needs: "document",
 } as HostOperationCatalogEntry;

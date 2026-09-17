@@ -444,12 +444,13 @@ public sealed class RevitScriptExecutionService(
                 );
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
-                var bundle = request.SourceBundle ?? CapturePodSource(workspaceRoot);
-                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle);
-                if (!preparation.Success)
-                    throw new ArgumentException(string.Join("; ", preparation.Diagnostics
-                        .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
-                        .Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}")), PodManifestValidator.DiagnosticStage);
+                var bundle = request.SourceBundle
+                             ?? throw new ArgumentException("A pod execution requires the host-captured sourceBundle.", nameof(request.SourceBundle));
+                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle) switch {
+                    PreparedPod prepared => prepared,
+                    RefusedPod refused => throw new ArgumentException(refused.Reason, PodManifestValidator.DiagnosticStage),
+                    _ => throw new InvalidOperationException("Pod preparation is prepared or refused.")
+                };
                 var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
@@ -614,14 +615,6 @@ public sealed class RevitScriptExecutionService(
         ScriptWorkspaceExecutionMode.Pod => "Pod mode:",
         _ => "Script mode:"
     };
-
-    internal static ScriptPodSourceBundle CapturePodSource(string workspaceRoot) {
-        var diagnostics = new List<ScriptDiagnostic>();
-        var files = ScriptPodPreparationService.Capture(workspaceRoot, diagnostics);
-        if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
-            throw new IOException(string.Join("; ", diagnostics.Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}")));
-        return new ScriptPodSourceBundle(files.Select(file => new ScriptPodSourceFile(file.Key, Convert.ToBase64String(file.Value))).ToList());
-    }
 
     private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {
         if (document is not null && (!document.IsValidObject ||

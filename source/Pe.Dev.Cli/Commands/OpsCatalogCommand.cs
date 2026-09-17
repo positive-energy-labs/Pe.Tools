@@ -44,7 +44,7 @@ internal static class OpsCatalogCommand {
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
         var json = JsonConvert.SerializeObject(
-            new HostOpsCatalogData(operations),
+            new HostOpsCatalogData(operations, HostOpsCatalogData.ReadConstants()),
             Formatting.Indented,
             JsonSettings
         );

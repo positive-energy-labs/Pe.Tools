@@ -4,6 +4,115 @@
 // Drift gate: pnpm --filter @pe/host-contracts codegen:check  (offline, deterministic)
 // Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>
 
+/** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
+export namespace DataTableApply {
+  export namespace Req {
+    /**
+     * Contracts for synthetic data tables: key schedules on a dummy category whose rows are
+     * abstract key elements populated from a fixed shared-parameter column pool. Rows carry a
+     * stable key (the Revit key name) and real element handles, so cells stay addressable by
+     * parameter-links and external UIs while remaining freely editable in Revit's schedule editor.
+     *
+     */
+    export type DataTableColumnKind = "Text" | "Number";
+
+    /**
+     * Upsert one synthetic data table. Authored element schedules apply through `schedule.apply`.
+     */
+    export interface Request {
+      table?: DataTableSpec;
+      /**
+       * Optionally place the resulting schedule on a sheet.
+       */
+      placement?: null | ScheduleSheetPlacementSpec;
+      /**
+       * Run every step in a transaction that is rolled back. Returned handles are discarded ids.
+       */
+      dryRun?: boolean;
+    }
+    export interface DataTableSpec {
+      name: string;
+      columns?: DataTableColumnSpec[];
+      rows?: DataTableRowSpec[];
+      /**
+       * Show the key column in the rendered table. Hidden by default.
+       */
+      showKeyColumn?: boolean;
+      /**
+       * Delete existing rows whose key is absent from Rows.
+       */
+      pruneMissingRows?: boolean;
+    }
+    export interface DataTableColumnSpec {
+      heading: string;
+      kind?: DataTableColumnKind;
+      /**
+       * Sheet column width in feet. Null keeps the Revit default.
+       */
+      columnWidth?: null | number;
+    }
+    export interface DataTableRowSpec {
+      key: string;
+      /**
+       * Cell values aligned to the table's column order. Numbers are invariant-culture strings.
+       * Null clears the cell; a shorter list leaves trailing cells untouched.
+       *
+       */
+      values?: (null | string)[];
+    }
+    export interface ScheduleSheetPlacementSpec {
+      sheet: string;
+      /**
+       * Placement origin on the sheet in feet. Defaults to (1, 1).
+       */
+      originX?: null | number;
+      originY?: null | number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Contracts for synthetic data tables: key schedules on a dummy category whose rows are
+     * abstract key elements populated from a fixed shared-parameter column pool. Rows carry a
+     * stable key (the Revit key name) and real element handles, so cells stay addressable by
+     * parameter-links and external UIs while remaining freely editable in Revit's schedule editor.
+     *
+     */
+    export type DataTableColumnKind = "Text" | "Number";
+
+    export interface Response {
+      dryRun: boolean;
+      table?: null | DataTableHandle;
+      placement?: null | DataTablePlacementHandle;
+      warnings: string[];
+    }
+    export interface DataTableHandle {
+      name: string;
+      scheduleId: number;
+      scheduleUniqueId: string;
+      columns: DataTableColumnHandle[];
+      rows: DataTableRowHandle[];
+      placements: DataTablePlacementHandle[];
+    }
+    export interface DataTableColumnHandle {
+      heading: string;
+      kind: DataTableColumnKind;
+      parameterName: string;
+      sharedParameterGuid: string;
+    }
+    export interface DataTableRowHandle {
+      key: string;
+      elementId: number;
+      uniqueId: string;
+      values: (null | string)[];
+    }
+    export interface DataTablePlacementHandle {
+      sheetId: number;
+      sheetNumber: string;
+      sheetName: string;
+    }
+  }
+}
+
 /** Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back. */
 export namespace DocumentTemporaryRelease {
   export namespace Req {
@@ -672,8 +781,16 @@ export namespace HostOpsCatalog {
     export interface Request {}
   }
   export namespace Res {
+    /**
+     * The op catalog plus the contract constants typegen emits as `export const`s.
+     */
     export interface Response {
       operations: HostOpsCatalogEntry[];
+      constants: {
+        [k: string]: {
+          [k: string]: unknown;
+        };
+      };
     }
     export interface HostOpsCatalogEntry {
       key: string;
@@ -1000,115 +1117,6 @@ export namespace RevitApplyParametersServiceCacheRefresh {
       parameterCount: number;
       jsonPath: string;
       additionalFormatPaths: string[];
-    }
-  }
-}
-
-/** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
-export namespace RevitApplySchedule {
-  export namespace Req {
-    /**
-     * Contracts for synthetic data tables: key schedules on a dummy category whose rows are
-     * abstract key elements populated from a fixed shared-parameter column pool. Rows carry a
-     * stable key (the Revit key name) and real element handles, so cells stay addressable by
-     * parameter-links and external UIs while remaining freely editable in Revit's schedule editor.
-     *
-     */
-    export type DataTableColumnKind = "Text" | "Number";
-
-    /**
-     * Upsert one synthetic data table. Authored element schedules apply through `schedule.apply`.
-     */
-    export interface Request {
-      table?: DataTableSpec;
-      /**
-       * Optionally place the resulting schedule on a sheet.
-       */
-      placement?: null | ScheduleSheetPlacementSpec;
-      /**
-       * Run every step in a transaction that is rolled back. Returned handles are discarded ids.
-       */
-      dryRun?: boolean;
-    }
-    export interface DataTableSpec {
-      name: string;
-      columns?: DataTableColumnSpec[];
-      rows?: DataTableRowSpec[];
-      /**
-       * Show the key column in the rendered table. Hidden by default.
-       */
-      showKeyColumn?: boolean;
-      /**
-       * Delete existing rows whose key is absent from Rows.
-       */
-      pruneMissingRows?: boolean;
-    }
-    export interface DataTableColumnSpec {
-      heading: string;
-      kind?: DataTableColumnKind;
-      /**
-       * Sheet column width in feet. Null keeps the Revit default.
-       */
-      columnWidth?: null | number;
-    }
-    export interface DataTableRowSpec {
-      key: string;
-      /**
-       * Cell values aligned to the table's column order. Numbers are invariant-culture strings.
-       * Null clears the cell; a shorter list leaves trailing cells untouched.
-       *
-       */
-      values?: (null | string)[];
-    }
-    export interface ScheduleSheetPlacementSpec {
-      sheet: string;
-      /**
-       * Placement origin on the sheet in feet. Defaults to (1, 1).
-       */
-      originX?: null | number;
-      originY?: null | number;
-    }
-  }
-  export namespace Res {
-    /**
-     * Contracts for synthetic data tables: key schedules on a dummy category whose rows are
-     * abstract key elements populated from a fixed shared-parameter column pool. Rows carry a
-     * stable key (the Revit key name) and real element handles, so cells stay addressable by
-     * parameter-links and external UIs while remaining freely editable in Revit's schedule editor.
-     *
-     */
-    export type DataTableColumnKind = "Text" | "Number";
-
-    export interface Response {
-      dryRun: boolean;
-      table?: null | DataTableHandle;
-      placement?: null | DataTablePlacementHandle;
-      warnings: string[];
-    }
-    export interface DataTableHandle {
-      name: string;
-      scheduleId: number;
-      scheduleUniqueId: string;
-      columns: DataTableColumnHandle[];
-      rows: DataTableRowHandle[];
-      placements: DataTablePlacementHandle[];
-    }
-    export interface DataTableColumnHandle {
-      heading: string;
-      kind: DataTableColumnKind;
-      parameterName: string;
-      sharedParameterGuid: string;
-    }
-    export interface DataTableRowHandle {
-      key: string;
-      elementId: number;
-      uniqueId: string;
-      values: (null | string)[];
-    }
-    export interface DataTablePlacementHandle {
-      sheetId: number;
-      sheetNumber: string;
-      sheetName: string;
     }
   }
 }
@@ -5361,8 +5369,17 @@ export namespace TakeoffsSnapshot {
   }
 }
 
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const scriptPodSourceBounds = {
+  "maxFileBytes": 524288,
+  "maxTotalBytes": 4194304,
+  "maxFileCount": 200,
+  "maxDirectoryCount": 256
+} as const;
+
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
+  "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
@@ -5384,7 +5401,6 @@ export interface HostOps {
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
-  "revit.apply.schedule": { request: RevitApplySchedule.Req.Request; response: RevitApplySchedule.Res.Response };
   "revit.catalog.concept-evidence": { request: RevitCatalogConceptEvidence.Req.Request; response: RevitCatalogConceptEvidence.Res.Response };
   "revit.catalog.electrical-circuits": { request: RevitCatalogElectricalCircuits.Req.Request; response: RevitCatalogElectricalCircuits.Res.Response };
   "revit.catalog.electrical-load-classifications": { request: RevitCatalogElectricalLoadClassifications.Req.Request; response: RevitCatalogElectricalLoadClassifications.Res.Response };
@@ -5435,6 +5451,7 @@ export interface HostOps {
 
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
 export const hostOpKeys = [
+  "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
   "families.apply",
@@ -5456,7 +5473,6 @@ export const hostOpKeys = [
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
-  "revit.apply.schedule",
   "revit.catalog.concept-evidence",
   "revit.catalog.electrical-circuits",
   "revit.catalog.electrical-load-classifications",

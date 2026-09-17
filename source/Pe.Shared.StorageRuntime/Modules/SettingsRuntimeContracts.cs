@@ -1,27 +1,11 @@
 using Pe.Shared.StorageRuntime.Documents;
-using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Shared.StorageRuntime.Modules;
 
-public enum SettingsModuleHostScope {
-    Host,
-    Session,
-    ActiveDocument
-}
-
-public enum SettingsModuleActiveDocumentKind {
-    Any,
-    ProjectOnly,
-    FamilyOnly
-}
-
+/// <summary>A settings library: its module name and the roots its `$schema` URLs name.</summary>
 public sealed record StructuralSettingsModuleDescriptor(
     string ModuleKey,
-    string DefaultRootKey,
-    IReadOnlyList<SettingsRootDescriptor> Roots,
-    SettingsStorageModuleOptions StorageOptions,
-    SettingsModuleHostScope HostScope,
-    SettingsModuleActiveDocumentKind ActiveDocumentKind
+    IReadOnlyList<SettingsRootDescriptor> Roots
 );
 
 public interface ISettingsRootBinding {
@@ -43,11 +27,4 @@ public sealed class SettingsRootBinding<TSettings>(
         : root;
 
     public Type SettingsType => typeof(TSettings);
-}
-
-public static class SettingsStorageProfiles {
-    public static SettingsStorageModuleOptions SharedAuthoring { get; } = new(
-        ["_shared", .. SettingsDirectiveRootCatalog.IncludeRoots],
-        SettingsDirectiveRootCatalog.PresetRoots
-    );
 }
