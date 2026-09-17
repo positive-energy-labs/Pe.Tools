@@ -121,7 +121,7 @@ export const nativeReceiptFailureSchema = z.object({
 /** Receipt discovery is a selected subject, never an inferred active document or all-history view. */
 export const actionListFilterSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("instances"), workspaceId: z.string().min(1) }),
-  z.strictObject({ kind: z.literal("schedule-grid"), workspaceId: z.string().min(1) }),
+  z.strictObject({ kind: z.literal("schedules"), workspaceId: z.string().min(1) }),
   z.strictObject({ kind: z.literal("family-file"), workspaceId: z.string().min(1) }),
   z.strictObject({ kind: z.literal("file"), workspaceId: z.string().min(1) }),
   z.strictObject({

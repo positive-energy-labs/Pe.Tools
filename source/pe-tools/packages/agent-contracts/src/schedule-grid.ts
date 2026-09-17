@@ -1,5 +1,5 @@
 /**
- * /schedule-grid document — collaborative state for editing schedule cells.
+ * /schedules document — collaborative state for editing schedule cells.
  *
  * Fourth trichotomy instance: the snapshot mirrors one rendered Revit schedule
  * (columns × rows with cell binding handles from revit.detail.schedules
@@ -91,7 +91,7 @@ export const scheduleGridDocumentSchema = z.object({
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 export const scheduleGridRouteState = {
-  route: "schedule-grid",
+  route: "schedules",
   title: "Schedule Grid",
   description:
     "Review schedule cell edits. Read op:schedule-grid.snapshot for the subject Work address and binding basis; only humans apply.",
