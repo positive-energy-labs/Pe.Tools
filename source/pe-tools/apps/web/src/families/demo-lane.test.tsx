@@ -49,8 +49,10 @@ test("the families demo lane mounts without an update-depth loop", async () => {
     history: createMemoryHistory({ initialEntries: ["/families?demo=plan"] }),
   });
   await router.load();
-  render(<RouterProvider router={router} />);
+  const { container } = render(<RouterProvider router={router} />);
   expect(await screen.findByRole("heading", { name: "Families" })).toBeTruthy();
+  expect(await screen.findByText("families in scope")).toBeTruthy();
+  expect(container.querySelectorAll("[data-slot='pane-header']")).toHaveLength(0);
   await new Promise((resolve) => setTimeout(resolve, 200));
   const depth = errors.filter((line) => /Maximum update depth/.test(line));
   expect(depth, depth.join("\n")).toEqual([]);

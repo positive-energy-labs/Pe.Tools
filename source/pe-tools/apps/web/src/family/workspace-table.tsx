@@ -70,6 +70,81 @@ export function FamilyWorkspaceTable() {
           : { kind: "param", id: row.name },
     );
 
+  const tableModes = !drillType ? (
+    <Switcher
+      ariaLabel="value overlay"
+      value={overlay}
+      onChange={setOverlay}
+      options={(["draft", "live", "saved"] as const).map((choice) => ({
+        value: choice,
+        label: OVERLAY_LABEL[choice],
+        title: OVERLAY_TITLE[choice],
+      }))}
+    />
+  ) : undefined;
+
+  const tableActions = drillType ? (
+    <>
+      <ActionButton
+        label="all types"
+        tone="nav"
+        direction="back"
+        onClick={() => setDrillType(null)}
+        reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
+      />
+      <ActionButton
+        label={`capture ${drillType}`}
+        disabled={driftCells.every((cell) => cell.typeName !== drillType)}
+        onClick={() => captureAll([drillType])}
+        reason={
+          driftCells.some((cell) => cell.typeName === drillType)
+            ? `Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`
+            : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
+        }
+      />
+    </>
+  ) : (
+    <>
+      <ActionButton
+        label="capture all"
+        disabled={overlay !== "live" || driftCells.length === 0}
+        onClick={() => captureAll(world.typeNames)}
+        reason={
+          overlay !== "live"
+            ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."
+            : driftCells.length === 0
+              ? "Nothing is drifting anywhere, so there is nothing to pull back. Capture only ever moves values the two sides disagree about."
+              : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
+        }
+      />
+      <ActionButton
+        label="capture live"
+        busy={capturing}
+        disabled={lane.document == null || capturing || captureRefusal != null}
+        onClick={() => void store.actions.capture().catch(() => undefined)}
+        reason={
+          captureRefusal ??
+          (lane.document == null
+            ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
+            : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there.")
+        }
+      />
+      <ActionButton
+        label={BUILD_ACTION}
+        tone="commit"
+        busy={building}
+        disabled={lane.document == null || building || prepareBuildRefusal != null}
+        onClick={store.actions.armBuild}
+        reason={
+          prepareBuildRefusal ??
+          (lane.document == null
+            ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
+            : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this arms the ceremony above the table — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`)
+        }
+      />
+    </>
+  );
+
   const crossType = (
     <MasterTable
       rows={rows}
@@ -93,6 +168,8 @@ export function FamilyWorkspaceTable() {
       rowClassName={rowTint}
       tableState={tableState}
       onTableStateChange={setTableState}
+      modes={tableModes}
+      actions={tableActions}
       summary={
         <span className="inline-flex flex-wrap items-center gap-1">
           <span className="t-small face-mono text-ink-2">
@@ -175,6 +252,7 @@ export function FamilyWorkspaceTable() {
       rowClassName={rowTint}
       tableState={drillState}
       onTableStateChange={setDrillState}
+      actions={tableActions}
       summary={
         <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
           {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
@@ -204,12 +282,11 @@ export function FamilyWorkspaceTable() {
   const tablePane = (
     <Pane
       kind="content"
-      headerSurface="recess"
       scroll="clip"
+      headerless
       // The type's own NAME is the title while drilled in — a pane whose title still said
       // "parameters × types" would be claiming to show something it is not.
       title={drillType ?? "parameters × types"}
-      // The header keeps the mode WORD; what the mode means is orientation and hovers.
       meta={
         drillType
           ? "one type"
@@ -227,86 +304,6 @@ export function FamilyWorkspaceTable() {
             : overlay === "saved"
               ? "SAVED OVERLAY — what is on disk, read-only. Caution marks what a save would overwrite."
               : "Every type side by side — the spread across types is the audit."
-      }
-      actions={
-        drillType ? (
-          <>
-            <ActionButton
-              label="all types"
-              tone="nav"
-              direction="back"
-              onClick={() => setDrillType(null)}
-              reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
-            />
-            <ActionButton
-              label={`capture ${drillType}`}
-              disabled={driftCells.every((cell) => cell.typeName !== drillType)}
-              onClick={() => captureAll([drillType])}
-              reason={
-                driftCells.some((cell) => cell.typeName === drillType)
-                  ? `Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`
-                  : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
-              }
-            />
-          </>
-        ) : (
-          <>
-            {/* THE OVERLAY SWITCH — the pseudo-dimension, as three exclusive readings of the same
-                cells. It is deliberately the leftmost control in the pane, because it governs what
-                every value below it means, and deliberately NOT in the URL. */}
-            <Switcher
-              ariaLabel="value overlay"
-              value={overlay}
-              onChange={setOverlay}
-              options={(["draft", "live", "saved"] as const).map((choice) => ({
-                value: choice,
-                label: OVERLAY_LABEL[choice],
-                title: OVERLAY_TITLE[choice],
-              }))}
-            />
-            {/* A BULK VERB IS DISABLED UNLESS YOU CAN SEE ITS FAR SIDE (SURFACE-PHILOSOPHY §2). */}
-            <ActionButton
-              label="capture all"
-              disabled={overlay !== "live" || driftCells.length === 0}
-              onClick={() => captureAll(world.typeNames)}
-              reason={
-                overlay !== "live"
-                  ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."
-                  : driftCells.length === 0
-                    ? "Nothing is drifting anywhere, so there is nothing to pull back. Capture only ever moves values the two sides disagree about."
-                    : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
-              }
-            />
-            {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
-                changes what you are looking at, capture all moves the draft, and these two leave
-                the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
-            <ActionButton
-              label="capture live"
-              busy={capturing}
-              disabled={lane.document == null || capturing || captureRefusal != null}
-              onClick={() => void store.actions.capture().catch(() => undefined)}
-              reason={
-                captureRefusal ??
-                (lane.document == null
-                  ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
-                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there.")
-              }
-            />
-            <ActionButton
-              label={BUILD_ACTION}
-              tone="commit"
-              busy={building}
-              disabled={lane.document == null || building || prepareBuildRefusal != null}
-              onClick={store.actions.armBuild}
-              reason={
-                prepareBuildRefusal ??
-                (lane.document == null
-                  ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
-                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`)
-              }
-            />
-          </>
-        )
       }
     >
       {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is

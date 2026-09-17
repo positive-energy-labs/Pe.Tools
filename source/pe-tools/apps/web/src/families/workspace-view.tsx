@@ -133,6 +133,7 @@ export function FamiliesWorkspaceView() {
           title="families"
           help="Families and types in the applied scope. Filter or open a row to inspect its authored family."
           scroll="clip"
+          headerless
         >
           <FamiliesMatrix />
         </Pane>

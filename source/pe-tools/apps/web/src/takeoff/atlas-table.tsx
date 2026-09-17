@@ -49,7 +49,8 @@ export function AtlasTable() {
         id="rooms"
         kind="content"
         title="rooms"
-        headerSurface="recess"
+        help="Rooms in the current scope. Filter, select, or review the visible rows."
+        headerless
         scroll="clip"
         shortcuts={reviewShortcuts}
       >
