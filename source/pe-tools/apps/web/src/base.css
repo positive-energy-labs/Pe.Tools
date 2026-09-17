@@ -49,9 +49,7 @@
   --item-h: 1.25rem;
   --control-h: 1.5rem;
   --gutter: 8px;
-  --halo: 6px;
   --rail-h: 24px;
-  --halo-ink: var(--pe-line-2);
   --item-pad-x: 0.125rem;
   /* The second inset role, and the only one: a cell whose BODY carries a mark (pea's corner
      fold, the unsaved square) must leave the mark room. Everything else is --item-pad-x

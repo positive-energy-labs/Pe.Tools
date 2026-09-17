@@ -273,10 +273,12 @@ export function Pane({
         );
         if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
       }}
-      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} transition-[outline-color] duration-control motion-reduce:transition-none`}
+      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky" : ""} transition-[outline-color] duration-control motion-reduce:transition-none`}
       style={{
-        outline: `var(--halo) solid ${active ? "var(--halo-ink)" : "transparent"}`,
-        outlineOffset: 0,
+        outline: `${cardVisible ? 2 : 1}px solid ${
+          cardVisible ? "var(--pe-ink-mute)" : active ? "var(--pe-line-2)" : "transparent"
+        }`,
+        outlineOffset: 2,
       }}
     >
       {collapsedFlank ? (
