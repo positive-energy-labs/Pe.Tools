@@ -131,8 +131,8 @@ function SettingsWorkspace({ handle }: { handle: SettingsHandle }) {
   return (
     <Surface>
       <RouteShell manifest={routeManifest} handle={handle} aside={aside} />
-      <Pane kind="content" title="settings files">
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
+      <Pane kind="content" title="settings files" flush>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl space-y-1.5">
             {handle.failure ? (
               <OutcomeLine

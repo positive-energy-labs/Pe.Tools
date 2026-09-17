@@ -267,8 +267,8 @@ function DataTablesWorkspace({
           </Pane>
         }
         end={
-          <Pane kind="content" title={draft?.name ?? "table"} scroll="clip">
-            <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3">
+          <Pane kind="content" title={draft?.name ?? "table"} scroll="clip" flush>
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
               {draft ? (
                 <DraftEditor draft={draft} setDraft={setDraft} />
               ) : (

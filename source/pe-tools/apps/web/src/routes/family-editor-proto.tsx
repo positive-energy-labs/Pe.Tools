@@ -33,7 +33,7 @@ function FamilyEditorProto() {
 
   return (
     <Surface>
-      <Pane kind="content" title="family editor" scroll="clip">
+      <Pane kind="content" title="family editor" scroll="clip" flush>
         <header
           className="flex flex-wrap items-baseline gap-2 px-3 py-2"
           style={{ borderColor: token("line") }}

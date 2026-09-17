@@ -61,36 +61,48 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="p-8">
-        <OutcomeLine kind="error" label="run pool unavailable" says={error} />
-      </div>
+      <Surface>
+        <Pane kind="content" title="runs">
+          <OutcomeLine kind="error" label="run pool unavailable" says={error} />
+        </Pane>
+      </Surface>
     );
   }
 
   if (!runs) {
-    return <div className="p-8 text-ink-2">loading run pool…</div>;
+    return (
+      <Surface>
+        <Pane kind="content" title="runs">
+          <span className="text-ink-2">loading run pool…</span>
+        </Pane>
+      </Surface>
+    );
   }
 
   if (runs.length === 0 || !curId) {
     return (
-      <div className="mx-auto flex max-w-xl flex-col gap-2 p-8">
-        <EmptyState story="scope" exit="publish a Partition capture to fill the pool">
-          No runs captured yet
-        </EmptyState>
-        <p className="t-small t-upper text-ink-2">
-          Publish a completed capture with{" "}
-          <code>python eval/rhvac/partition-run.py CAPTURE --label LABEL --zone-name ZONE</code>,
-          then reload.
-        </p>
-        {pool && (
-          <p
-            className="t-small face-mono break-all text-ink-2"
-            title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
-          >
-            pool {pool}
-          </p>
-        )}
-      </div>
+      <Surface>
+        <Pane kind="content" title="runs">
+          <div className="mx-auto flex max-w-xl flex-col gap-2">
+            <EmptyState story="scope" exit="publish a Partition capture to fill the pool">
+              No runs captured yet
+            </EmptyState>
+            <p className="t-small t-upper text-ink-2">
+              Publish a completed capture with{" "}
+              <code>python eval/rhvac/partition-run.py CAPTURE --label LABEL --zone-name ZONE</code>
+              , then reload.
+            </p>
+            {pool && (
+              <p
+                className="t-small face-mono break-all text-ink-2"
+                title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
+              >
+                pool {pool}
+              </p>
+            )}
+          </div>
+        </Pane>
+      </Surface>
     );
   }
 
@@ -326,6 +338,7 @@ export default function RunBrowser() {
           <Pane
             kind="visual"
             title="plan"
+            flush
             meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
             actions={
               <Press

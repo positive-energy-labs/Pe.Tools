@@ -58,7 +58,7 @@ function FamilyReviewProto() {
 
   return (
     <Surface>
-      <Pane kind="content" title="family review" scroll="clip">
+      <Pane kind="content" title="family review" scroll="clip" flush>
         <header className="flex flex-col gap-1 px-3 py-2" style={{ borderColor: token("line") }}>
           <div className="flex flex-wrap items-baseline gap-2">
             <span>FAMILY REVIEW</span>

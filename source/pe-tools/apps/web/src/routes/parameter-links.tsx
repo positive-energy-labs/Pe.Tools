@@ -313,8 +313,8 @@ export function ParameterLinksWorkspace({
           },
         }}
         start={
-          <Pane kind="content" title="profile" scroll="clip">
-            <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+          <Pane kind="content" title="profile" scroll="clip" flush>
+            <div className="min-w-0 flex-1 overflow-y-auto">
               {route.work.revision === null ? (
                 <OutcomeLine kind="busy" label="hydrating route state" />
               ) : (
@@ -389,10 +389,11 @@ export function ParameterLinksWorkspace({
             kind="flank"
             title="evaluation"
             side="right"
+            flush
             collapsed={!rightOpen}
             onCollapsedChange={(collapsed) => setRightOpen(!collapsed)}
           >
-            <div className="flex h-full flex-col gap-4 px-4 py-3">
+            <div className="flex h-full flex-col gap-4">
               <RuntimeStatusBar
                 status={status}
                 appliedWriteCount={reading?.appliedWriteCount ?? 0}

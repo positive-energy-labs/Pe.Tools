@@ -44,7 +44,7 @@ function DocLabRoute() {
 
   return (
     <Surface>
-      <Pane kind="content" title="document" scroll="clip">
+      <Pane kind="content" title="document" scroll="clip" flush>
         <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <h1>Doc Lab</h1>

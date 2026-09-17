@@ -240,7 +240,7 @@ export function VariantE() {
 
   return (
     <Surface>
-      <Pane kind="content" title="parameter table" scroll="clip">
+      <Pane kind="content" title="parameter table" scroll="clip" flush>
         <AddressingBar
           name="param tables"
           sentence={
@@ -308,7 +308,7 @@ export function VariantE() {
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
+        <div className="flex min-h-0 flex-1 flex-col">
           <ArtifactFrame
             head={
               <span className="flex w-full items-center gap-3">
