@@ -9,9 +9,17 @@ import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-c
 import { Check, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
+import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
 import { Picker } from "#/route/picker";
-import { ChainLamp, Cluster, Ledger, PageLog, useDocumentLadder } from "#/route/situation";
+import {
+  ChainLamp,
+  Cluster,
+  Ledger,
+  PageLog,
+  SituationCell,
+  useDocumentLadder,
+} from "#/route/situation";
 import type { ActionHandle, RouteHandle } from "#/route/use-route";
 import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
@@ -80,7 +88,7 @@ export function ComposerHead({
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean };
 }) {
-  const { currentThreadId, threads, chat, resolveApproval } = useWorkbench();
+  const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
   const inventory = targetInventory(
@@ -125,70 +133,97 @@ export function ComposerHead({
   // "Do" alone says nothing about what is being asked for. The proposal row names the capability
   // key and the target the call would run against, read off the call itself in the stream.
   const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
-  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? currentThreadId;
+  const selectedThread = threads.find((item) => item.id === currentThreadId);
+  const threadOptions = selectedThread
+    ? threads
+    : [{ id: currentThreadId, title: currentThreadId, updatedAt: "" }, ...threads];
+  const threadLabel = selectedThread?.title ?? currentThreadId;
   return (
-    <section
-      aria-label="Situation"
-      className="hairline-b flex min-w-0 flex-col gap-1 px-3 pt-2 pb-1"
-      data-testid="composer-head"
-    >
-      <div className="flex min-w-0 items-center justify-between gap-4">
-        <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
-          <b>Pea</b> on{" "}
-          <Picker
-            levels={levels}
-            caution={Boolean(health)}
-            disabled={targetDisabled}
-            title={
-              ladder.sessionWord
-                ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-                : "choose a session and a document; Chat runs without one, Revit operations do not"
+    <section aria-label="Situation" className="flex min-w-0 flex-col" data-testid="composer-head">
+      <Rail
+        ground="recess"
+        lead={
+          <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
+            <b>Pea</b> in{" "}
+            <SituationCell io="rw">
+              <Picker
+                levels={[
+                  {
+                    key: "thread",
+                    label: threadLabel,
+                    placeholder: "choose a thread",
+                    options: threadOptions.map((thread) => ({
+                      id: thread.id,
+                      label: thread.title,
+                      sub: thread.updatedAt || undefined,
+                    })),
+                    picked: (id) => id === currentThreadId,
+                    pick: openThread,
+                  },
+                ]}
+                title="choose the active chat thread"
+              />
+            </SituationCell>{" "}
+            on{" "}
+            <SituationCell io="rw" empty={!head.defaultTarget}>
+              <Picker
+                levels={levels}
+                caution={Boolean(health)}
+                disabled={targetDisabled}
+                title={
+                  ladder.sessionWord
+                    ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+                    : "choose a session and a document; Chat runs without one, Revit operations do not"
+                }
+              />
+            </SituationCell>
+            {head.refusal ? (
+              <span className="ml-3 t-small" data-tone="caution">
+                {head.refusal}
+              </span>
+            ) : null}
+            {status ? (
+              <span
+                aria-live="polite"
+                className="ml-3 t-small t-upper"
+                data-tone={status.caution ? "caution" : undefined}
+                data-testid="composer-status"
+              >
+                {status.text}
+              </span>
+            ) : null}
+          </p>
+        }
+        trail={
+          <Cluster
+            handle={handle}
+            lamp={
+              <ChainLamp
+                handle={handle}
+                health={health}
+                session={ladder.sessionWord}
+                document={ladder.docWord}
+              />
+            }
+            state={
+              <>
+                <Ledger
+                  rows={[
+                    ["thread", threadLabel],
+                    [
+                      "target",
+                      head.defaultTarget
+                        ? `r${head.revision}${head.stale ? " · stale" : ""}`
+                        : "none · Chat runs; Revit operations need a document",
+                    ],
+                  ]}
+                />
+                <PageLog entries={handle.log} />
+              </>
             }
           />
-          {head.refusal ? (
-            <span className="ml-3 t-small" data-tone="caution">
-              {head.refusal}
-            </span>
-          ) : null}
-          {status ? (
-            <span
-              aria-live="polite"
-              className="ml-3 t-small t-upper"
-              data-tone={status.caution ? "caution" : undefined}
-              data-testid="composer-status"
-            >
-              {status.text}
-            </span>
-          ) : null}
-        </p>
-        <Cluster
-          handle={handle}
-          lamp={
-            <ChainLamp
-              handle={handle}
-              health={health}
-              session={ladder.sessionWord}
-              document={ladder.docWord}
-            />
-          }
-          state={
-            <>
-              <Ledger
-                rows={[
-                  ["thread", threadLabel],
-                  [
-                    "target",
-                    head.defaultTarget
-                      ? `r${head.revision}${head.stale ? " · stale" : ""}`
-                      : "none · Chat runs; Revit operations need a document",
-                  ],
-                ]}
-              />
-              <PageLog entries={handle.log} />
-            </>
-          }
-        />
-      </div>
+        }
+      />
       {approvals.length ? (
         <div
           aria-label="Pea proposals"
