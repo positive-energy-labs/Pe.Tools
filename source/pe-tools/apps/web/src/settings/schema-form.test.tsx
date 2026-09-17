@@ -5,7 +5,7 @@
  * The seed lane claims two things a route cannot cheaply assert about itself: that
  * the seed's real captured schema and its real captured document produce a form model at all,
  * and that the model actually drives `SchemaToFieldRender` into schema-shaped fields. Both are
- * pinned below against the SAME inputs the route mounts through `?demo=` — `SETTINGS_SEED_SCHEMA` and the seed
+ * pinned below against the SAME inputs the route mounts through `?demo=` — `SCHEDULE_SEED_SCHEMA` and the seed
  * snapshot's `rawContent` — so a schema re-capture or a renderer regression fails here instead of
  * on someone's screen.
  *
@@ -21,14 +21,14 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
-import { SETTINGS_SEED_RAW, SETTINGS_SEED_SCHEMA } from "#/settings/seeds";
-import { schemaFormModel } from "#/settings-panes/schema-form";
+import { SCHEDULE_SEED_RAW, SCHEDULE_SEED_SCHEMA } from "#/route/seeds";
+import { schemaFormModel } from "#/settings/schema-form";
 
-const RAW = SETTINGS_SEED_RAW;
+const RAW = SCHEDULE_SEED_RAW;
 
 describe("the seed lane's schema→form derivation", () => {
   it("form-generates the captured ScheduleProfile document with no host", () => {
-    const model = schemaFormModel(RAW, SETTINGS_SEED_SCHEMA);
+    const model = schemaFormModel(RAW, SCHEDULE_SEED_SCHEMA);
     expect(model).not.toBeNull();
     // The document's own authored values survive the defaults layer — the baseline is the file
     // plus defaults, never the defaults alone.
@@ -38,15 +38,15 @@ describe("the seed lane's schema→form derivation", () => {
 
   it("refuses rather than generating an empty form", () => {
     expect(schemaFormModel(RAW, null)).toBeNull();
-    expect(schemaFormModel("{ not json", SETTINGS_SEED_SCHEMA)).toBeNull();
+    expect(schemaFormModel("{ not json", SCHEDULE_SEED_SCHEMA)).toBeNull();
     // A JSON array parses fine and is still not a form: the route falls back to the pointer
     // reviewer instead of rendering a form with no fields.
-    expect(schemaFormModel("[1,2]", SETTINGS_SEED_SCHEMA)).toBeNull();
+    expect(schemaFormModel("[1,2]", SCHEDULE_SEED_SCHEMA)).toBeNull();
   });
 });
 
 function Harness({ changed = false }: { changed?: boolean }) {
-  const model = schemaFormModel(RAW, SETTINGS_SEED_SCHEMA);
+  const model = schemaFormModel(RAW, SCHEDULE_SEED_SCHEMA);
   if (!model) return <p>no form model</p>;
   return (
     <SchemaToFieldRender

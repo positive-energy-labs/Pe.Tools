@@ -1,9 +1,12 @@
 /**
  * The entity routes' demo world: one pod and one run. The schedule member's bytes and schema are
- * the settings seed captured live on 2026-08-17; the pod, its folder, hashes and the receipt are
- * fixture.
+ * captured live on 2026-08-17 (`seed-schedule-*.ts`); the pod, its folder, hashes, the receipt
+ * and the Pea proposal lane on the schedule member are fixture, on real pointers of those bytes.
  */
-import { SETTINGS_SEED_RAW, SETTINGS_SEED_SCHEMA } from "#/settings/seeds";
+import type { SettingsFieldState } from "@pe/agent-contracts";
+
+import { SCHEDULE_SEED_BYTES } from "./seed-schedule-content";
+import { SCHEDULE_SEED_CAPTURED_SCHEMA } from "./seed-schedule-schema";
 
 import type { PodRow } from "./manifest";
 import type { Receipt } from "./pods";
@@ -62,7 +65,39 @@ export const DEMO_RECEIPT: Receipt = {
   reason: null,
 };
 
-export const DEMO_SPEC: DemoSpec = { content: SETTINGS_SEED_RAW, schema: SETTINGS_SEED_SCHEMA };
+/** The captured schema names a fragment no demo pod holds; the seed drops that one example. */
+export const SCHEDULE_SEED_SCHEMA = SCHEDULE_SEED_CAPTURED_SCHEMA.replace(
+  ',\r\n                  "@global/_fields/my-fragment"',
+  "",
+);
+export const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
+
+/**
+ * One of each thing a reviewer must see on the schedule member: an open Pea proposal (note and
+ * confidence), a staged value, and a staged value long enough to trip the column-header budget.
+ */
+const SCHEDULE_SEED_FIELDS: Record<string, SettingsFieldState> = {
+  "/ViewTemplateName": {
+    proposal: {
+      value: "Schedule - PE Standard v2",
+      by: "pea",
+      note: "office template register lists v2 as current for performance schedules",
+      confidence: "high",
+    },
+    staged: null,
+  },
+  "/IsItemized": { proposal: null, staged: { value: false } },
+  "/Fields/1/ColumnHeaderOverride": {
+    proposal: null,
+    staged: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
+  },
+};
+
+export const DEMO_SPEC: DemoSpec = {
+  content: SCHEDULE_SEED_RAW,
+  schema: SCHEDULE_SEED_SCHEMA,
+  fields: SCHEDULE_SEED_FIELDS,
+};
 
 /** `/pods?demo=browse`: the demo pods, the schedule spec open, its run beside it. */
 export const PODS_SEEDS = {
