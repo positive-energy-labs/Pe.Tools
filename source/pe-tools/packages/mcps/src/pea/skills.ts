@@ -178,7 +178,7 @@ A member's $schema URL is the only thing that says what it is for: /schemas/sett
 
 APS Parameters Service is the sole authority for shared parameter definitions. Retrieve current definitions only when the selected library operation consumes them. The library validates compatibility; storage validates portable structure. An unrelated member's unavailable service must not block this operation. No bundled or cached authority fallback.
 
-Every apply writes output/<run>/receipt.json in its pod: pod id, member path, member SHA-256, op id, plan hash, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
+Every apply and every entrypoint run writes output/<runId>/receipt.json in the pod it acted from: pod id, member path, member SHA-256, op id, plan hash, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; they land in that same run folder, and return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
 
 ## Every entrypoint is a button
 
