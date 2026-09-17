@@ -225,7 +225,7 @@ const demoSeed = (title: string, page: Record<string, unknown>) => ({
     basis: { captureId: DEMO_CAPTURE },
     cells: { "3::1": { proposal: null, staged: { value: "R-454B" } } },
   },
-  readings: { catalog: DEMO_CATALOG, work: DEMO_READING, pods: DEMO_PODS },
+  readings: { catalog: DEMO_CATALOG, work: DEMO_READING, saved: DEMO_READING, pods: DEMO_PODS },
   page: { workspaceId: "demo-schedule", captureId: DEMO_CAPTURE, target: DEMO_TARGET, ...page },
 });
 
