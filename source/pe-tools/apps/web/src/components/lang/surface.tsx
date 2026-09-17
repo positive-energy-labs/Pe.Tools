@@ -20,7 +20,12 @@ export function Surface({
     gridTemplateRows: rows,
   } satisfies CSSProperties;
   const body = (
-    <div data-slot="surface" data-surface="page" className="fixed inset-0 grid" style={grid}>
+    <div
+      data-slot="surface"
+      data-surface="page"
+      className="grid size-full min-h-0 min-w-0"
+      style={grid}
+    >
       {children}
     </div>
   );
@@ -28,9 +33,14 @@ export function Surface({
   return head == null ? (
     body
   ) : (
-    <main className="no-scrollbar h-dvh overflow-y-auto">
+    <main className="no-scrollbar size-full min-h-0 min-w-0 overflow-y-auto">
       {head}
-      <div data-slot="surface" data-surface="page" className="sticky top-0 h-dvh grid" style={grid}>
+      <div
+        data-slot="surface"
+        data-surface="page"
+        className="sticky top-0 grid size-full min-h-0 min-w-0"
+        style={grid}
+      >
         {children}
       </div>
     </main>

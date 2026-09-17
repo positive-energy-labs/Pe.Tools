@@ -56,9 +56,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 export function RootComponent() {
   return (
-    <>
+    <div className="h-dvh min-h-0 min-w-0">
       <Outlet />
-    </>
+    </div>
   );
 }
 
