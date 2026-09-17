@@ -62,6 +62,14 @@ export function usePodList(enabled = true): [Reading<unknown>, () => void] {
   useEffect(() => {
     if (!enabled) return;
     let live = true;
+    // A re-read keeps what it last saw, through the read and through a failure: a route asking
+    // "is this member saved?" gets the same answer mid-refresh that it got before it.
+    const kept = (prev: Reading<unknown>) =>
+      prev.state === "ready"
+        ? prev.observation
+        : prev.state === "absent"
+          ? undefined
+          : prev.previous;
     setReading((prev) =>
       prev.state === "ready"
         ? { state: "stale", previous: prev.observation, reason: "dirtied" }
@@ -71,10 +79,11 @@ export function usePodList(enabled = true): [Reading<unknown>, () => void] {
       (pods) => live && setReading({ state: "ready", observation: pods }),
       (error: unknown) =>
         live &&
-        setReading({
+        setReading((prev) => ({
           state: "failed",
           message: error instanceof Error ? error.message : String(error),
-        }),
+          previous: kept(prev),
+        })),
     );
     return () => {
       live = false;

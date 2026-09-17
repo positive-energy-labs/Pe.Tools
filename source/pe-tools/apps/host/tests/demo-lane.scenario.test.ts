@@ -6,7 +6,7 @@
  *   this proves render and parity: the head renders, every verb is disabled with that sentence,
  *   nothing throws and nothing is POSTed. Seeds are enumerated from the manifests themselves.
  * - Live: `?demo=<seed>&live=1` routes the page's host traffic to a simulated demo owner, so one
- *   capture → (confirm →) apply loop per product route runs end to end and `/pods` shows its receipt.
+ *   capture → (plan →) apply loop per product route runs end to end and `/pods` shows its receipt.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -338,7 +338,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     await run(page, "apply schedule");
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("apply ran");
+      .toContain("apply schedule ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("succeeded");
