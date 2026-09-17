@@ -267,6 +267,7 @@ export function Pane({
       data-pane-id={id}
       data-has-shortcuts={shortcuts.length > 0 || undefined}
       data-active={active}
+      data-help-visible={cardVisible || undefined}
       data-surface={kind === "visual" ? "artifact" : "page"}
       aria-label={typeof title === "string" ? title : undefined}
       tabIndex={-1}
@@ -279,13 +280,7 @@ export function Pane({
         );
         if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
       }}
-      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky" : ""} transition-[outline-color] duration-control motion-reduce:transition-none`}
-      style={{
-        outline: `${cardVisible ? 2 : 1}px solid ${
-          cardVisible ? "var(--pe-ink-mute)" : active ? "var(--pe-line-2)" : "transparent"
-        }`,
-        outlineOffset: 2,
-      }}
+      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky outline outline-line-2" : "outline outline-transparent"} ${cardVisible ? "outline-2 outline-ink-mute" : ""} outline-offset-2 transition-[outline-color] duration-control motion-reduce:transition-none`}
     >
       {collapsedFlank ? (
         <div className="flex min-h-0 flex-1 flex-col items-center gap-2 py-2">
