@@ -36,7 +36,6 @@ public sealed class ScriptWorkspaceBootstrapService(
         var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
         var agentsPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.AgentsFileName);
         var readmePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ReadmeFileName);
-        var joinGuidePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.JoinGuideFileName);
         var vscodeSettingsPath = Path.Combine(vscodeDirectory, "settings.json");
 
         _ = Directory.CreateDirectory(productHomePath);
@@ -60,14 +59,13 @@ public sealed class ScriptWorkspaceBootstrapService(
         if (!preserveProject)
             WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
 
-        EnsureFile(productAgentsPath, ScriptFileTemplates.CreateProductAgents(), generatedFiles);
-        EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);
-        // AGENTS.md is host-owned agent guidance, not user prose: rewrite it so an existing
-        // workspace picks up corrected guidance on the next bootstrap. README/JOIN_GUIDE stay
-        // create-once because a user may edit them.
-        WriteIfChanged(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
-        EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
-        EnsureFile(joinGuidePath, ScriptFileTemplates.CreateJoinGuide(), generatedFiles);
+        // The root AGENTS.md is the one high-level guide and the only file rewritten: an existing
+        // tree picks corrected guidance up on the next bootstrap. Everything else is create-once,
+        // because a pod's own AGENTS.md and both READMEs are the user's to edit.
+        WriteIfChanged(productAgentsPath, ScriptFileTemplates.CreateRootAgents(), generatedFiles);
+        EnsureFile(productReadmePath, ScriptFileTemplates.CreateRootReadme(), generatedFiles);
+        EnsureFile(agentsPath, ScriptFileTemplates.CreatePodAgents(), generatedFiles);
+        EnsureFile(readmePath, ScriptFileTemplates.CreatePodReadme(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
         if (createSampleScript) {
             EnsureFile(sampleScriptPath, ScriptFileTemplates.CreateSampleScript(), generatedFiles);

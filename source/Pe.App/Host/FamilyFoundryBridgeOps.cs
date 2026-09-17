@@ -62,7 +62,8 @@ internal static class FamilyFoundryBridgeOps {
     }
 
     /// <summary>The one build edge: bridge op and palette both land here, and both leave a run in the source pod.</summary>
-    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request) {
+    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request,
+        string? runFolder = null) {
         var outputPath = ResolvePath(request.OutputPath, nameof(request.OutputPath));
         if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
             throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
@@ -72,15 +73,16 @@ internal static class FamilyFoundryBridgeOps {
         if (parsed.Value == null || parsed.Diagnostics.Count != 0)
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
         var podFolder = PodMembers.VerifiedFolder(request.Source);
+        var run = runFolder ?? PodRuns.NewRunFolder(podFolder);
         var source = request.Source;
         try {
             var (receipt, templatePath, reading) = FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, request.Overwrite,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory)));
-            var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
+            var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
                 receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), []);
             return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
-            _ = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), []);
+            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), []);
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
