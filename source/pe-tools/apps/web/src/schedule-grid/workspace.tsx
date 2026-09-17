@@ -254,7 +254,12 @@ export function ScheduleGridWorkspace({
             </Pane>
           }
           end={
-            <Pane kind="content" title={snapshot?.scheduleName ?? "schedule"} scroll="clip">
+            <Pane
+              kind="content"
+              title={snapshot?.scheduleName ?? "schedule"}
+              headerless
+              scroll="clip"
+            >
               <section className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="flex min-h-0 flex-1 flex-col">
                   {snapshot ? (
