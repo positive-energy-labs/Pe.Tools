@@ -14,6 +14,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+- 2026-09-17, Normalize production routes onto the closed `Surface` -> `PaneLayout` -> `Pane` -> artifact grammar. `Surface` owns the viewport and 8px perimeter; `PaneLayout` owns recessed 8px gutters and resizing; `Pane` owns the 24px rail, focus/help outline and standard 8px body inset; an explicit `flush` mode lets edge-owning artifacts fill the pane. Delete competing layout owners and target a net-negative total diff, including guards.
+- 2026-09-17, Run the normalization as one frozen foundation followed by disjoint Terra route waves and one serial Chrome-agent proof lane. Temporary layout regressions are allowed during the cutover, but the merged result must expose no relevant abnormality in deterministic, static, DOM, interaction or visual verification.
+
 - 2026-09-16, Use the prototype A `tone=line` treatment: a thin focused-pane outline, stronger while keyboard help is open. The halo must paint above the gray gutter on every edge, including the right; gutter siblings must not cover it.
 
 - 2026-09-16, Narrow tutorials retain the spatial pane map with horizontal scrolling; do not replace it with a stacked list.
