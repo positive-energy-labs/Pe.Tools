@@ -23,14 +23,16 @@ vi.mock("./composer", () => ({
 }));
 
 import { ComposerBank } from "./composer-bank";
+import { PaneSplit } from "#/components/lang/pane";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
 
 afterEach(cleanup);
 
-test("current view resets without evicting A, B, or a new unsent X composer", () => {
+test("current view and plugin open-close retain A, B, and a new unsent X composer", () => {
   const registry = AtomRegistry.make();
   function Shell() {
     const [thread, setThread] = useState("a");
+    const [plugin, setPlugin] = useState(false);
     return (
       <>
         {["a", "b", "x"].map((id) => (
@@ -38,17 +40,33 @@ test("current view resets without evicting A, B, or a new unsent X composer", ()
             {id}
           </button>
         ))}
+        <button type="button" onClick={() => setPlugin((open) => !open)}>
+          {plugin ? "close workspace" : "open workspace"}
+        </button>
         <CurrentThreadViewOwner
           threadKey={thread}
           registry={registry}
           patch={async () => undefined}
         >
-          <ComposerBank
-            currentThreadId={thread}
-            deletedThreadIds={new Set()}
-            prompt={thread === "x" ? "new X" : undefined}
-            handle={{} as never}
-            topBar={null}
+          <PaneSplit
+            axis="horizontal"
+            grow
+            resize={{
+              target: "end",
+              defaultSize: 640,
+              minSize: 480,
+              collapse: { collapsed: !plugin, collapsedSize: 40 },
+            }}
+            start={
+              <ComposerBank
+                currentThreadId={thread}
+                deletedThreadIds={new Set()}
+                prompt={thread === "x" ? "new X" : undefined}
+                handle={{} as never}
+                topBar={null}
+              />
+            }
+            end={plugin ? <aside aria-label="workspace" /> : null}
           />
         </CurrentThreadViewOwner>
       </>
@@ -58,6 +76,10 @@ test("current view resets without evicting A, B, or a new unsent X composer", ()
   render(<Shell />);
   const draft = () => screen.getByRole("textbox", { name: "draft" }) as HTMLTextAreaElement;
   fireEvent.change(draft(), { target: { value: "draft A" } });
+  fireEvent.click(screen.getByRole("button", { name: "open workspace" }));
+  expect(draft().value).toBe("draft A");
+  fireEvent.click(screen.getByRole("button", { name: "close workspace" }));
+  expect(draft().value).toBe("draft A");
   fireEvent.click(screen.getByRole("button", { name: "x" }));
   expect(draft().value).toBe("new X");
   fireEvent.change(draft(), { target: { value: "draft X" } });

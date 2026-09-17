@@ -175,7 +175,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
               caution: false,
             };
   const chatColumn = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
       <div className="min-h-0 min-w-0 flex-1">
         <Pane
           kind="content"
@@ -223,7 +223,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
       data-chat="surface"
       data-mode={mode}
       data-plugin={plugin}
-      className="h-dvh font-sans text-ink"
+      className="size-full min-h-0 min-w-0 font-sans text-ink"
     >
       {/* The route shell owns the chords and the remaining-height conversation column. Chat has
           no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
@@ -288,19 +288,19 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                 </Pane>
               }
               end={
-                plugin ? (
-                  <PaneSplit
-                    axis="horizontal"
-                    grow
-                    resize={{
-                      target: "end",
-                      defaultSize: 640,
-                      minSize: 480,
-                      persist: "pe.pluginWidth",
-                      collapse: { collapsed: !pluginOpen, collapsedSize: 40 },
-                    }}
-                    start={chatColumn}
-                    end={
+                <PaneSplit
+                  axis="horizontal"
+                  grow
+                  resize={{
+                    target: "end",
+                    defaultSize: 640,
+                    minSize: 480,
+                    persist: "pe.pluginWidth",
+                    collapse: { collapsed: !plugin || !pluginOpen, collapsedSize: 40 },
+                  }}
+                  start={chatColumn}
+                  end={
+                    plugin ? (
                       <Pane
                         kind="flank"
                         side="right"
@@ -321,11 +321,9 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                       >
                         {PluginPane ? <PluginPane store={store} /> : null}
                       </Pane>
-                    }
-                  />
-                ) : (
-                  chatColumn
-                )
+                    ) : null
+                  }
+                />
               }
             />
           </SurfaceCell>
