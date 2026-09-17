@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Pane, PaneWorkspace } from "#/components/lang/pane";
+import { Pane, PaneSplit, PaneWorkspace } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 
 afterEach(() => {
   cleanup();
@@ -150,6 +151,51 @@ test("workspace resize is opt-in and keyboard accessible", () => {
     key: "ArrowDown",
   });
   expect(workspace.style.gridTemplateRows).toBe("356px var(--gutter) minmax(0, 1fr)");
+});
+
+test("split panes reserve a gutter and keep keyboard resizing", () => {
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">left</Pane>}
+      end={<Pane kind="content">right</Pane>}
+    />,
+  );
+  const split = container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) minmax(0, 1fr)");
+  expect(split.querySelector("[role='separator']")).toBeNull();
+  expect(split.classList.contains("overflow-hidden")).toBe(false);
+
+  const resizable = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">left</Pane>}
+      end={<Pane kind="content">right</Pane>}
+      resize={{ target: "start", defaultSize: 200, minSize: 120 }}
+    />,
+  );
+  fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), { key: "ArrowRight" });
+  expect(
+    resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.style
+      .gridTemplateColumns,
+  ).toBe("216px var(--gutter) minmax(0, 1fr)");
+});
+
+test("surface fills its parent without fixing to the viewport and keeps a scrolling head", () => {
+  const { container } = render(
+    <Surface head={<div>head</div>} columns="minmax(0, 1fr)">
+      <div>body</div>
+    </Surface>,
+  );
+  const scroller = container.querySelector("main")!;
+  const surface = container.querySelector<HTMLElement>("[data-slot='surface']")!;
+
+  expect(scroller.classList.contains("size-full")).toBe(true);
+  expect(scroller.classList.contains("overflow-y-auto")).toBe(true);
+  expect(surface.classList.contains("fixed")).toBe(false);
+  expect(surface.classList.contains("h-dvh")).toBe(false);
+  expect(surface.classList.contains("size-full")).toBe(true);
 });
 
 test("a missing persisted size starts at the declared default", () => {

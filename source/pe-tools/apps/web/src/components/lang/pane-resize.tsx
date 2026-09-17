@@ -262,9 +262,9 @@ export interface PaneSplitProps {
 const NO_RESIZE: PaneSizeSpec = { defaultSize: 0, minSize: 0 };
 
 export const paneSplitRecipe = tv({
-  base: "flex size-full min-h-0 min-w-0 overflow-hidden",
+  base: "grid size-full min-h-0 min-w-0 overflow-visible",
   variants: {
-    axis: { horizontal: "flex-row", vertical: "flex-col" },
+    axis: { horizontal: "", vertical: "" },
     grow: { true: "min-h-0 flex-1" },
   },
 });
@@ -278,6 +278,15 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const targetStyle: CSSProperties = horizontal
     ? { width: state.renderedSize }
     : { height: state.renderedSize };
+  const tracks =
+    resize == null
+      ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
+      : target === "start"
+        ? `${state.renderedSize}px var(--gutter) minmax(0, 1fr)`
+        : `minmax(0, 1fr) var(--gutter) ${state.renderedSize}px`;
+  const gridStyle: CSSProperties = horizontal
+    ? { gridTemplateColumns: tracks }
+    : { gridTemplateRows: tracks };
 
   const measuredContainer = () => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -289,18 +298,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const renderSide = (side: "start" | "end", child: ReactNode) => {
     const sized = resize != null && side === target;
     return (
-      <div
-        className={[
-          "min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible",
-          sized ? "shrink-0" : "flex-1",
-          // A fixed split has no handle to draw the seam — the end side carries the hairline.
-          resize == null && side === "end" && (horizontal ? "border-l" : "border-t"),
-          resize == null && side === "end" && "border-line",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={sized ? targetStyle : undefined}
-      >
+      <div className="min-h-0 min-w-0 overflow-visible" style={sized ? targetStyle : undefined}>
         {child}
       </div>
     );
@@ -312,20 +310,23 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
       data-slot="pane-split"
       data-axis={axis}
       className={paneSplitRecipe({ axis, grow })}
+      style={gridStyle}
     >
       {renderSide("start", start)}
       {resize && (
-        <PaneResizeHandle
-          axis={axis}
-          value={state.renderedSize}
-          startValue={state.collapsed ? resize.minSize : state.size}
-          min={resize.minSize}
-          max={resize.maxSize}
-          growth={target === "start" ? 1 : -1}
-          containerSize={measuredContainer}
-          onResize={state.resizeTo}
-          onReset={state.reset}
-        />
+        <div style={horizontal ? { gridColumn: 2 } : { gridRow: 2 }}>
+          <PaneResizeHandle
+            axis={axis}
+            value={state.renderedSize}
+            startValue={state.collapsed ? resize.minSize : state.size}
+            min={resize.minSize}
+            max={resize.maxSize}
+            growth={target === "start" ? 1 : -1}
+            containerSize={measuredContainer}
+            onResize={state.resizeTo}
+            onReset={state.reset}
+          />
+        </div>
       )}
       {renderSide("end", end)}
     </div>
