@@ -78,14 +78,15 @@ internal static class FamilyFoundryBridgeOps {
         var podFolder = PodMembers.VerifiedFolder(request.Source);
         var run = runFolder ?? PodRuns.NewRunFolder(podFolder);
         var source = request.Source;
+        var handled = new List<(bool IsError, string Message)>();
         try {
-            var (receipt, templatePath, reading) = FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, request.Overwrite,
-                request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory)));
+            var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, request.Overwrite,
+                request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
             var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
-                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), []);
+                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), EngineEdge.WarningsOutput(handled));
             return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
-            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), []);
+            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), EngineEdge.WarningsOutput(handled));
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
@@ -109,20 +110,23 @@ internal static class FamilyFoundryBridgeOps {
         IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null,
         CancellationToken cancellationToken = default) {
         var podFolder = PodMembers.VerifiedFolder(source);
+        EngineEdge.RequireReachableCentral(document);
+        var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
-            var data = ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, cancellationToken);
+            var data = EngineEdge.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, cancellationToken));
             var relative = data with { Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList() };
             var outputs = (Directory.Exists(artifacts) ? Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories) : [])
                 .Select(file => (name: RunPath(artifacts, file), bytes: File.ReadAllBytes(file)))
                 .Append((name: "apply.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(relative, Formatting.Indented))))
+                .Concat(EngineEdge.WarningsOutput(handled))
                 .ToList();
             var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
                     data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
                         : data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
                     [],
-                    data.Diagnostics.Count == 0 ? null : string.Join("; ", data.Diagnostics.Select(d => d.Message))),
+                    Reason(data)),
                 outputs);
             return relative with {
                 ReceiptPath = receiptPath,
@@ -131,6 +135,19 @@ internal static class FamilyFoundryBridgeOps {
         } finally {
             if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
         }
+    }
+
+    /// <summary>
+    ///     Why the run failed, in the receipt itself (w4-revit defect 18: the receipt read `reason: null`
+    ///     while `apply.json` held the error). Op-level diagnostics first, then each family's own failure.
+    /// </summary>
+    private static string? Reason(FamilyFoundryApplyData data) {
+        var reasons = data.Diagnostics.Select(d => d.Message)
+            .Concat(data.Receipts.Where(r => !r.Success).Select(r =>
+                $"{r.FamilyName ?? r.FamilyId.ToString(System.Globalization.CultureInfo.InvariantCulture)}: " +
+                string.Join("; ", new[] { r.Error }.Concat(r.Errors).OfType<string>().Where(m => m.Length > 0).DefaultIfEmpty("failed with no message"))))
+            .ToList();
+        return reasons.Count == 0 ? null : string.Join(" | ", reasons);
     }
 
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
@@ -244,11 +261,15 @@ internal static class FamilyFoundryBridgeOps {
         }).ToList(), []);
     }
 
-    /// <summary>Read the explicitly targeted family document, or an independent copy of the exact project-loaded family.</summary>
+    /// <summary>
+    ///     Read the explicitly targeted family document, or an independent copy of the exact project-loaded
+    ///     family. The engine edge owns the dialog lane here; `ReadFamilyCopy` owns the failures lane.
+    /// </summary>
     private static T WithFamilyDocument<T>(Document project, Family family,
         Func<Document, IReadOnlyList<(bool IsError, string Message)>, T> read) {
+        EngineEdge.RequireReachableCentral(project);
         var diagnostics = new List<(bool IsError, string Message)>();
-        return project.ReadFamilyCopy(family, famDoc => read(famDoc.Document, diagnostics), diagnostics);
+        return EngineEdge.NoModal(diagnostics, () => project.ReadFamilyCopy(family, famDoc => read(famDoc.Document, diagnostics), diagnostics));
     }
 
     private static IReadOnlyList<RevitDataIssue> CaptureIssues(FamilyModel model, Family family,
