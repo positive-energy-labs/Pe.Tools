@@ -234,7 +234,8 @@ export function useDocumentLadder(
   },
 ) {
   const [, choose] = useChooseTarget();
-  const inventory = handle.readings.inventory ?? { state: "absent" };
+  // The kernel's own inventory: a route need not declare an `inventory` Reading to show sessions.
+  const inventory = handle.inventory;
   const observed = previousOf(inventory) as
     | { sessions?: readonly BridgeSessionListEntry[] }
     | undefined;

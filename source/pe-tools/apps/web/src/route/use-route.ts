@@ -486,6 +486,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
+  /** The bridge inventory the resolution reads; a seed's `inventory` reading when seeded. */
+  readonly inventory: Reading<unknown>;
   readonly page: readonly [P, (next: Partial<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
@@ -979,6 +981,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     chosen: target,
     work: workHandle,
     readings,
+    inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
     page: [page, setPage] as const,
     actions,
     busy,

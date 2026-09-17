@@ -118,6 +118,7 @@ function browser(observe: ResourceObserver) {
   const sources: Array<{
     url: string;
     closed: boolean;
+    onopen: EventSource["onopen"];
     onmessage: EventSource["onmessage"];
     onerror: EventSource["onerror"];
     close(): void;
@@ -131,6 +132,7 @@ function browser(observe: ResourceObserver) {
       const source = {
         url,
         closed: false,
+        onopen: null as EventSource["onopen"],
         onmessage: null as EventSource["onmessage"],
         onerror: null as EventSource["onerror"],
         close() {

@@ -330,6 +330,10 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
 test("live /schedules: capture then apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("schedules", async (page) => {
     const pod = await openLive(page, "/schedules", "demo=push&live=1");
+    // The Situation's ladder names the resolved target, not "choose a session".
+    await expect
+      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
+      .toContain("Auditing schedule in Isolated demo (simulated)");
     await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await page
       .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
