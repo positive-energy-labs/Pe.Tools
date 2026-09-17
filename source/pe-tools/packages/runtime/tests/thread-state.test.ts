@@ -37,7 +37,8 @@ const invocation = (
 
 test("large successful results become top-level refs without mutating transcript storage", () => {
   const result = { rows: ["é".repeat(DEFERRED_TOOL_RESULT_BYTES)] };
-  const stored = [invocation("message-1", "call-1", result)];
+  const unchanged = invocation("message-2", "call-2", { small: true });
+  const stored = [invocation("message-1", "call-1", result), unchanged];
   const projected = projectThreadMessages(stored);
 
   expect(projected.deferredResults).toEqual([
@@ -50,6 +51,8 @@ test("large successful results become top-level refs without mutating transcript
   ]);
   expect(projected.messages[0].content.parts[0]).not.toHaveProperty("toolInvocation.result");
   expect(stored[0].content.parts[0]).toHaveProperty("toolInvocation.result", result);
+  expect(projected.messages[0]).not.toBe(stored[0]);
+  expect(projected.messages[1]).toBe(unchanged);
 });
 
 test("threshold results and failures stay inline", () => {

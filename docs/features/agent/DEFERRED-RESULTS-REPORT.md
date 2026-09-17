@@ -48,16 +48,16 @@ export interface ToolResultResponse {
 
 `ThreadViewState` now has optional top-level `deferredResults: DeferredToolResultRef[]`. For every terminal successful invocation whose serialized `result` exceeds 64 KiB, the HTTP projection omits `toolInvocation.result` and appends one ref. The containing response supplies thread identity; each ref supplies exact `messageId` plus `toolCallId`. No sentinel or extension is added to Mastra's third-party invocation type. `keys` contains at most the first eight own keys; counts and UTF-8 `byteSize` come from `JSON.stringify(result)`. Inline results retain their existing shape and gain no wrapper.
 
-Calls whose invocation state is not `result`, whose `isError` is true, or whose result is the Mastra validation rejection `{ error: true, ... }` remain inline. This preserves stored failure/error meaning. Approval state remains in live display state. Per root's simplification, successful large results are projected uniformly: there is no tool-name, route, artifact, proposal, or image whitelist. The web will fetch the original before rendering expanded result-dependent content. No stored message is rewritten: `readThreadState` clones only the HTTP projection.
+Calls whose invocation state is not `result`, whose `isError` is true, or whose result is the Mastra validation rejection `{ error: true, ... }` remain inline. This preserves stored failure/error meaning. Approval state remains in live display state. Per root's simplification, successful large results are projected uniformly: there is no tool-name, route, artifact, proposal, or image whitelist. The web will fetch the original before rendering expanded result-dependent content. No stored message is rewritten: the projection reuses every unchanged message and part, and copies only the message/content/parts/invocation chain whose result it removes.
 
 `GET /pe/thread/:threadId/tool-result/:messageId/:toolCallId` sits beside the existing thread route. It calls `queryThreadMessages({ threadId })`, matches the exact message and call, and returns `ToolResultResponse` with the untouched original result. It returns 404 when no result exists and 409 when the same call ID occurs more than once in that message. The route opens the same scoped session as `GET /pe/thread/:threadId`; it creates no receipt and reads no second persistence source.
 
 ## Owned implementation
 
 - `packages/agent-contracts/src/thread.ts`: typed top-level metadata and endpoint response.
-- `packages/runtime/src/thread-state.ts`: pure transcript projection plus exact-result lookup over `queryThreadMessages`.
+- `packages/runtime/src/thread-state.ts`: copy-on-elision transcript projection, UTF-8 sizing through `Buffer.byteLength`, and exact-result lookup over `queryThreadMessages`.
 - `packages/runtime/src/agent-controller-web.ts`: one GET route using the lookup.
-- `packages/runtime/tests/thread-state.test.ts`: threshold and UTF-8 size, object/array summaries, unchanged failures, original storage immutability, exact cross-message identity, missing result, duplicate refusal, and HTTP projection/original-result round trip.
+- `packages/runtime/tests/thread-state.test.ts`: threshold and UTF-8 size, object/array summaries, unchanged failures, original storage immutability, structural sharing for unchanged messages, exact cross-message identity, missing result, duplicate refusal, and HTTP projection/original-result round trip.
 
 No web edit, stream change, new dependency, result persistence, receipt coupling, or generic message-storage abstraction was added.
 
