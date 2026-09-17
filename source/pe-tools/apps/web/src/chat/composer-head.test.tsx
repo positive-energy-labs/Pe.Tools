@@ -70,7 +70,7 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
       handle={
         { demo: true, readings: { head: {}, inventory: {} }, log: [{ label: "sent" }] } as never
       }
-      status={{ text: "waiting for you", caution: false }}
+      status={{ text: "failed", caution: true, detail: "the host connection ended" }}
     />,
   );
 
@@ -86,7 +86,8 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
   expect(screen.getByTestId("composer-sentence").className).toContain("overflow-x-auto");
   expect(view.container.querySelectorAll("[data-slot='rail']")).toHaveLength(1);
   expect(view.container.querySelector("[data-slot='rail']")?.className).toContain("h-(--rail-h)");
-  expect(screen.getByTestId("composer-status").textContent).toBe("waiting for you");
+  expect(screen.getByTestId("composer-status").textContent).toBe("failed");
+  expect(screen.getByRole("alert").textContent).toBe("the host connection ended");
   expect(screen.getByLabelText("Pea proposals").textContent).toContain("waiting on you");
   expect(screen.getByTestId("page-log").textContent).toBe("sent");
 });
