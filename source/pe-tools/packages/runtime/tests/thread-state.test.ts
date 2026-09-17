@@ -3,7 +3,7 @@ import type { MastraCompositeStore } from "@mastra/core/storage";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createDeterministicRuntime } from "../src/testing.ts";
 import {
@@ -140,6 +140,14 @@ test("the HTTP endpoint returns the original deferred result", async () => {
     });
 
     const app = await buildAgentControllerApp({ runtime, label: "pea" });
+    const createSession = vi.spyOn(runtime.controller, "createSession");
+    const missing = await app.fetch(
+      new Request("http://local/pe/thread/missing/tool-result/message/call"),
+    );
+    expect(missing.status).toBe(404);
+    expect(createSession).not.toHaveBeenCalled();
+    createSession.mockRestore();
+
     const thread = await app.fetch(new Request(`http://local/pe/thread/${threadId}`));
     const body = (await thread.json()) as {
       messages: ThreadMessage[];
