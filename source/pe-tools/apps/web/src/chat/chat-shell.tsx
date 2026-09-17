@@ -22,9 +22,8 @@ import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
 import type { ChatDraft } from "#/workbench/prompt";
 import { useCurrentThreadView } from "#/workbench/thread-view";
-import { Pane } from "#/components/lang/pane";
-import { Surface as PageSurface, SurfaceCell, SurfaceHandle } from "#/components/lang/surface";
-import { usePaneSize } from "#/components/lang/pane-resize";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface as PageSurface, SurfaceCell } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 
 /** Routes hostable as in-realm chat workspace panes.
@@ -101,18 +100,6 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
-  const sideSize = usePaneSize({
-    defaultSize: 300,
-    minSize: 240,
-    persist: "pe.sideWidth",
-    collapse: { collapsed: !sideOpen, collapsedSize: 40 },
-  });
-  const pluginSize = usePaneSize({
-    defaultSize: 640,
-    minSize: 480,
-    persist: "pe.pluginWidth",
-    collapse: { collapsed: !pluginOpen, collapsedSize: 40 },
-  });
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
@@ -157,6 +144,49 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
   const status = statusText
     ? { text: statusText, caution: Boolean(error || operationError) }
     : undefined;
+  const chatColumn = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="min-h-0 min-w-0 flex-1">
+        <Pane
+          kind="content"
+          scroll="clip"
+          id="transcript"
+          title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
+          boundaryKey={currentThreadId}
+          onRetry={retryBody}
+        >
+          <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
+        </Pane>
+      </div>
+      <Pane
+        kind="content"
+        scroll="visible"
+        id="composer"
+        title="composer"
+        help="Drafts stay with their visited thread until sent or deleted."
+        headerSurface="recess"
+        boundary={false}
+        headerless
+      >
+        <ComposerBank
+          currentThreadId={currentThreadId}
+          threads={threads}
+          prompt={prompt}
+          handle={handle}
+          topBar={
+            <>
+              <ComposerHead handle={handle} status={status} />
+              <ContextRibbon
+                breakdown={breakdown}
+                cache={cache}
+                onOpenWorld={() => setMode("world")}
+              />
+            </>
+          }
+        />
+      </Pane>
+    </div>
+  );
 
   return (
     <main
@@ -169,126 +199,106 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
           no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
           none of its own. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
-        <PageSurface
-          columns={`${sideSize.renderedSize}px var(--gutter) minmax(0,1fr)${plugin ? ` var(--gutter) ${pluginSize.renderedSize}px` : ""}`}
-        >
-          <Pane
-            kind="flank"
-            id="threads"
-            title="threads"
-            meta={threads.length}
-            actions={<ModeDial mode={mode} setMode={setMode} />}
-            collapsed={!sideOpen}
-            onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
-          >
-            {mode === "threads" ? (
-              <ThreadList
-                threads={threads}
-                currentThreadId={currentThreadId}
-                onSelect={openThread}
-                onNew={newThread}
-                onRename={handleRenameThread}
-                onDelete={handleDeleteThread}
-                onSearch={() => store.actions.setPaletteOpen(true)}
-              />
-            ) : mode === "trace" ? (
-              <div data-annotation="trace-frame">
-                <div data-annotation="trace-pin">
-                  {traceCells.map((cell) => (
-                    <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
-                  ))}
-                </div>
-                {traceCell ? (
-                  <div data-annotation="inspect" data-pinned>
-                    <Press
-                      tone="quiet"
-                      size="caption"
-                      title="Unpin this call"
-                      onClick={() => view.actions.setLensPinKey(null)}
-                    >
-                      unpin
-                    </Press>
-                    <ToolCellBody call={traceCell.call} />
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-            )}
-          </Pane>
-          <SurfaceHandle
-            axis="horizontal"
-            value={sideSize.renderedSize}
-            startValue={sideSize.size}
-            min={240}
-            growth={1}
-            containerSize={() => undefined}
-            onResize={sideSize.resizeTo}
-            onReset={sideSize.reset}
-          />
+        <PageSurface columns="minmax(0, 1fr)">
           <SurfaceCell>
-            <Pane
-              kind="content"
-              id="transcript"
-              title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
-              boundaryKey={currentThreadId}
-              onRetry={retryBody}
-            >
-              <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
-            </Pane>
-            <Pane kind="content" id="composer" headerSurface="recess" boundary={false} headerless>
-              <ComposerBank
-                currentThreadId={currentThreadId}
-                threads={threads}
-                prompt={prompt}
-                handle={handle}
-                topBar={
-                  <>
-                    <ComposerHead handle={handle} status={status} />
-                    <ContextRibbon
-                      breakdown={breakdown}
-                      cache={cache}
-                      onOpenWorld={() => setMode("world")}
+            <PaneSplit
+              axis="horizontal"
+              grow
+              resize={{
+                target: "start",
+                defaultSize: 300,
+                minSize: 240,
+                persist: "pe.sideWidth",
+                collapse: { collapsed: !sideOpen, collapsedSize: 40 },
+              }}
+              start={
+                <Pane
+                  kind="flank"
+                  id="threads"
+                  title="threads"
+                  meta={threads.length}
+                  actions={<ModeDial mode={mode} setMode={setMode} />}
+                  collapsed={!sideOpen}
+                  onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
+                >
+                  {mode === "threads" ? (
+                    <ThreadList
+                      threads={threads}
+                      currentThreadId={currentThreadId}
+                      onSelect={openThread}
+                      onNew={newThread}
+                      onRename={handleRenameThread}
+                      onDelete={handleDeleteThread}
+                      onSearch={() => store.actions.setPaletteOpen(true)}
                     />
-                  </>
-                }
-              />
-            </Pane>
+                  ) : mode === "trace" ? (
+                    <div data-annotation="trace-frame">
+                      <div data-annotation="trace-pin">
+                        {traceCells.map((cell) => (
+                          <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
+                        ))}
+                      </div>
+                      {traceCell ? (
+                        <div data-annotation="inspect" data-pinned>
+                          <Press
+                            tone="quiet"
+                            size="caption"
+                            title="Unpin this call"
+                            onClick={() => view.actions.setLensPinKey(null)}
+                          >
+                            unpin
+                          </Press>
+                          <ToolCellBody call={traceCell.call} />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                  )}
+                </Pane>
+              }
+              end={
+                plugin ? (
+                  <PaneSplit
+                    axis="horizontal"
+                    grow
+                    resize={{
+                      target: "end",
+                      defaultSize: 640,
+                      minSize: 480,
+                      persist: "pe.pluginWidth",
+                      collapse: { collapsed: !pluginOpen, collapsedSize: 40 },
+                    }}
+                    start={chatColumn}
+                    end={
+                      <Pane
+                        kind="flank"
+                        side="right"
+                        id="plugin"
+                        title={chatPluginTitle(plugin)}
+                        collapsed={!pluginOpen}
+                        onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
+                        actions={
+                          <Press
+                            tone="quiet"
+                            size="icon"
+                            title="Close workspace"
+                            onClick={() => store.actions.setPlugin(undefined)}
+                          >
+                            <X />
+                          </Press>
+                        }
+                      >
+                        {PluginPane ? <PluginPane store={store} /> : null}
+                      </Pane>
+                    }
+                  />
+                ) : (
+                  chatColumn
+                )
+              }
+            />
           </SurfaceCell>
-          {plugin ? (
-            <>
-              <SurfaceHandle
-                axis="horizontal"
-                value={pluginSize.renderedSize}
-                startValue={pluginSize.size}
-                min={480}
-                growth={-1}
-                containerSize={() => undefined}
-                onResize={pluginSize.resizeTo}
-                onReset={pluginSize.reset}
-              />
-              <Pane
-                kind="flank"
-                side="right"
-                id="plugin"
-                title={chatPluginTitle(plugin)}
-                collapsed={!pluginOpen}
-                onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
-                actions={
-                  <Press
-                    tone="quiet"
-                    size="icon"
-                    title="Close workspace"
-                    onClick={() => store.actions.setPlugin(undefined)}
-                  >
-                    <X />
-                  </Press>
-                }
-              >
-                {PluginPane ? <PluginPane store={store} /> : null}
-              </Pane>
-            </>
-          ) : null}
         </PageSurface>
       </RouteShell>
 
