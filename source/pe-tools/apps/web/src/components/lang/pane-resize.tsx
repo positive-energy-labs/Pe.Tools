@@ -164,7 +164,7 @@ interface PaneResizeHandleProps {
 
 const paneResizeHandleRecipe = tv({
   slots: {
-    root: "veil group z-raised flex touch-none items-center justify-center outline-none",
+    root: "veil group flex touch-none items-center justify-center outline-none",
     bar: "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
   },
   variants: {

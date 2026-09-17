@@ -198,6 +198,8 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
   expect(handle.parentElement?.style.gridColumn).toBe("2");
   expect(handle.parentElement?.style.gridRow).toBe("1");
   expect(handle.parentElement?.classList.contains("size-full")).toBe(true);
+  expect(handle.classList.contains("w-(--gutter)")).toBe(true);
+  expect(handle.classList.contains("z-raised")).toBe(false);
   fireEvent.keyDown(handle, { key: "ArrowRight" });
   expect(
     resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.style
