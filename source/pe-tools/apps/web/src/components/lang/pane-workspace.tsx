@@ -79,6 +79,7 @@ export function PaneWorkspace({
       ref={rootRef}
       data-slot="pane-workspace"
       data-inspector-span={inspectorSpan}
+      data-surface="recess"
       className={paneWorkspaceRecipe({ grow })}
       style={style}
     >

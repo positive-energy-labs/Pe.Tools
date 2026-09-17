@@ -314,6 +314,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
       ref={rootRef}
       data-slot="pane-split"
       data-axis={axis}
+      data-surface="recess"
       className={paneSplitRecipe({ axis, grow })}
       style={gridStyle}
     >
