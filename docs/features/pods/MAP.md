@@ -23,6 +23,7 @@ LEDGER    docs/features/pods/LEDGER.md (verdicts), this map (waves), .artifacts/
 - 2026-09-16: `pod.member.write` stays create-only for capture. Editing a saved member in place is a feature the old `/settings` had, so the contract gains `pod.member.save` (pod, path, content, expectedSha256) that overwrites only when the sha matches and returns the new sha. Wave 2 adds it in pod-core, host, and the spec editor; "save as new" stays as a second affordance.
 - 2026-09-16: Two builders implemented `pod.list`, `pod.member.read`, `pod.member.write`: pod-core as bridge ops, host as host-local ops. Ruling per the earlier narrowing: the host-local ops are canonical (they work offline); the three C# bridge ops are deleted and the C# library keeps the functions for palettes in-proc. The bridge keeps `pod.member.compose`, `pod.export`, `pod.import`.
 - 2026-09-16: `pod.member.write` and `pod.member.save` stay two ops (host had one op with an optional `expectedSha256`). Two states in one op is the guard the type can remove.
+- 2026-09-16: Capture on `/family` must keep showing coverage and unmodeled facts after it files the member (law 12). The capture workflow returns the member address plus the capture evidence, and the route shows the evidence beside the new member.
 
 ## Waves
 
