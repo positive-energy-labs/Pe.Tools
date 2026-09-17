@@ -1,6 +1,6 @@
 /**
  * The Families demo world. Everything here is fixture: three loaded families, one spec member in
- * the demo pod, and the plan `families.confirm` would return for that spec over that scope. `?demo=<action>` mounts one seed
+ * the demo pod, and the plan `families.plan` would return for that spec over that scope. `?demo=<action>` mounts one seed
  * through `useRoute`; the matrix rows are handed to the workspace because the matrix is a host
  * query, not a Reading a seed can carry.
  */

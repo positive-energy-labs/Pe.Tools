@@ -246,7 +246,7 @@ test("demo Family capture files a new member and returns what the capture saw", 
   });
 });
 
-test("demo Family apply confirms a plan, applies that exact hash, and refuses changed bytes", async () => {
+test("demo Family plan returns a hash, apply sends that exact hash, and changed bytes refuse", async () => {
   const seed = family();
   if (seed.route !== "family") throw Error("Family seed expected");
   seed.work.candidate.fields = {};
@@ -259,7 +259,7 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
         await f.fetch("/actions", {
           id: `${f.owner.id}:${suffix}`,
           kind: "workflow",
-          key: planHash ? "family.apply" : "family.confirm",
+          key: planHash ? "family.apply" : "family.plan",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
           input: { source, ...(planHash ? { expectedPlanHashes: { "1": planHash } } : {}) },
@@ -269,13 +269,13 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
     ).toBeLessThan(300);
     return f.owner.journal.wait(`${f.owner.id}:${suffix}`);
   };
-  const confirm = await apply("confirm");
-  expect(confirm.state).toBe("succeeded");
-  // Confirming is its own workflow: it plans, and nothing in it can mutate.
-  expect(confirm.steps.map((step) => step.key)).toEqual(["family.plan"]);
-  const planHash = (confirm as { result: { plan: { planHash: string } } }).result.plan.planHash;
+  const planned = await apply("planned");
+  expect(planned.state).toBe("succeeded");
+  // Planning is its own workflow: it reads, and nothing in it can mutate.
+  expect(planned.steps.map((step) => step.key)).toEqual(["family.plan"]);
+  const planHash = (planned as { result: { plan: { planHash: string } } }).result.plan.planHash;
   expect(planHash).toMatch(/^[a-f0-9]{64}$/);
-  expect((confirm as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
+  expect((planned as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
   const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");

@@ -49,7 +49,7 @@ export function familyFlag(entry: FfPlanEntry): string | null {
       : null;
 }
 
-/** One Family Foundry plan (from `families.confirm` or `family.confirm`) as a sheet row. */
+/** One Family Foundry plan (from `families.plan` or `family.plan`) as a sheet row. */
 export const ffPlanRow = (entry: FfPlanEntry): PlanEntry => ({
   id: String(entry.familyId),
   name: entry.familyName,

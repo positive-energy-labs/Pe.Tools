@@ -22,7 +22,7 @@ export function PlanSheetView({
   excluded,
   included,
   toggle,
-  confirm,
+  apply,
   cancel,
   replan,
   refusal,
@@ -34,16 +34,16 @@ export function PlanSheetView({
   included: readonly PlanEntry[];
   /** Absent = rows cannot be held back. */
   toggle?: (id: string) => void;
-  confirm: () => void;
+  apply: () => void;
   cancel: () => void;
   replan: () => void;
-  /** Why confirm is refused, in the operator's words; null = it can run. */
+  /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
   busy: boolean;
 }) {
   const head = (
     <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
-      <Tag>confirm</Tag>
+      <Tag>plan</Tag>
       {sheet ? (
         <FactChip
           tone={included.length ? "caution" : "meta"}
@@ -74,7 +74,7 @@ export function PlanSheetView({
             refusal ??
             `Write the ${plural(included.length, "included row")} to Revit, exactly as planned.`
           }
-          onClick={confirm}
+          onClick={apply}
         />
       </span>
     </div>

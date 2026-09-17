@@ -144,7 +144,8 @@ export function EntityRouteView({
           handle={handle}
           target={{ session: ladder.sessionWord, document: ladder.docWord }}
           health={health}
-          commit={page.stage !== "apply" ? undefined : confirming ? "confirm" : "apply"}
+          // The commit verb is the next step, wherever the route stands.
+          commit={confirming || !def.plan ? "apply" : "plan"}
           band={band}
           sentence={
             <>
@@ -170,7 +171,7 @@ export function EntityRouteView({
           page.stage === "audit" ? null : (
             <Pane
               kind="inspector"
-              title={confirming ? "confirm" : "spec"}
+              title={confirming ? "plan" : "spec"}
               meta={def.entity}
               side="right"
             >
@@ -180,10 +181,10 @@ export function EntityRouteView({
                   excluded={view?.excluded ?? NOTHING_HELD}
                   included={view?.included ?? []}
                   toggle={hold}
-                  confirm={() => void handle.actions.confirm.run()}
+                  apply={() => void handle.actions.apply.run()}
                   cancel={() => setPage(closed)}
-                  replan={() => void handle.actions.apply.run()}
-                  refusal={handle.actions.confirm.refusal}
+                  replan={() => void handle.actions.plan.run()}
+                  refusal={handle.actions.apply.refusal}
                   busy={handle.busy !== null}
                 />
               ) : null}
