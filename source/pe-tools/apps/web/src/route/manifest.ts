@@ -439,6 +439,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
       if (!ctx.page.confirming) return "plan first";
       const view = sheetView(ctx);
       if (!view) return "the plan no longer describes this spec; plan again";
+      // Apply sends the saved sha; a pod list mid-refresh has not re-proven it yet.
+      if (!memberOf(ctx)) return "save the spec before applying";
       return view.included.length ? null : "no included row has changes to apply";
     },
     run: async (ctx) => {
