@@ -94,7 +94,7 @@ internal static class ScriptFileTemplates {
 
         Output is never published. Export and archive leave it behind.
 
-        `{{ProductPathNames.PodsDirectoryName}}/{{ScriptingWorkspaceLayout.DefaultWorkspaceKey}}/{{ProductPathNames.OutputDirectoryName}}/` is the one exception: it keeps inline snippet traces under `inline/`, and the runs of scripts that came from no pod.
+        `{{ProductPathNames.PodsDirectoryName}}/{{ScriptingWorkspaceLayout.DefaultWorkspaceKey}}/{{ProductPathNames.OutputDirectoryName}}/` is the one exception. It holds what no pod owns: inline snippet traces under `inline/`, the runs of scripts that came from no pod, and the files the pod-less Do palette tasks write for you to open.
 
         ## Where to work
 

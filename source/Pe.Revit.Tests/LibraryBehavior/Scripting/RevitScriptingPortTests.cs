@@ -28,9 +28,11 @@ public sealed class RevitScriptingPortTests {
                     SourceBundle: bundle), workspaceKey);
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), string.Join("; ", result.Diagnostics.Select(d => d.Message)));
             var output = result.Artifacts.Single(artifact => artifact.Name == "result.json");
-            var receipt = result.Artifacts.Single(artifact => artifact.Name == "pod-receipt.json");
+            var receipt = result.Artifacts.Single(artifact => artifact.Name == "receipt.json");
             Assert.That(File.ReadAllText(output.FullPath), Does.Contain("pod-output"));
             Assert.That(Path.GetDirectoryName(output.FullPath), Is.EqualTo(Path.GetDirectoryName(receipt.FullPath)));
+            // The run is output/<runId>/ in this pod, the same shape every apply writes.
+            Assert.That(Path.GetDirectoryName(Path.GetDirectoryName(receipt.FullPath)), Is.EqualTo(Path.Combine(root, "output")));
             Assert.That(File.ReadAllText(receipt.FullPath), Does.Contain("output-proof-lineage").And.Contain("src/Main.cs").And.Contain("scripting.execute"));
         } finally {
             if (Directory.Exists(root)) Directory.Delete(root, true);

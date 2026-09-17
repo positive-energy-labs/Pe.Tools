@@ -106,8 +106,12 @@ public sealed class RevitScriptExecutionService(
 
             var plan = planResult.Plan;
             outputSink.Attribution = plan.Attribution;
-            outputSink.Artifacts = new ScriptArtifactWriter(plan.ExecutionId, outputRoot:
-                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod ? Path.Combine(plan.WorkspaceRoot, "output") : null);
+            // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
+            // in the default pod beside the inline traces.
+            outputSink.Artifacts = new ScriptArtifactWriter(
+                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
+                    ? plan.WorkspaceRoot
+                    : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
