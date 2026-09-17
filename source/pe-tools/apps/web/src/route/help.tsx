@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-hotkeys";
 import { Keyboard } from "lucide-react";
 
+import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
 import { readKeyMeta, type KeyMeta } from "./keys";
 
@@ -57,26 +58,13 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
   };
 };
 
-function Key({ mute, children }: { mute?: boolean; children: ReactNode }) {
-  return (
-    <kbd
-      data-surface="recess"
-      className={`face-mono t-small inline-flex min-w-7 shrink-0 items-center justify-center border px-1 py-0.5 ${
-        mute ? "border-line text-ink-mute" : "border-line-2 text-ink"
-      }`}
-    >
-      {children}
-    </kbd>
-  );
-}
-
 function Rows({ keys }: { keys: readonly Bound[] }) {
   return (
     <dl className="grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small">
       {keys.map((k) => (
         <Fragment key={`${k.hotkey}:${k.name}`}>
           <dt>
-            <Key mute={Boolean(k.refusal)}>{k.hotkey}</Key>
+            <Kbd mute={Boolean(k.refusal)}>{k.hotkey}</Kbd>
           </dt>
           <dd
             className={k.refusal ? "text-ink-mute" : "text-ink"}
@@ -108,8 +96,9 @@ function Chart({
       if (rect) setSize({ w: rect.width, h: rect.height });
     };
     measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (mid.current) observer?.observe(mid.current);
+    return () => observer?.disconnect();
   }, []);
 
   const left = regions.filter(
@@ -233,7 +222,7 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
           this route draws no panes to explain
         </div>
       )}
-      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8">{docs}</div> : null}
+      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
     </div>
   );
 }

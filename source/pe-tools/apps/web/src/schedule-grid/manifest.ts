@@ -52,6 +52,7 @@ export const scheduleGridManifest = () =>
   defineRoute<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage, ScheduleGridAction>({
     key: "schedule-grid",
     name: "Schedule Grid",
+    docs: "Read the project schedule catalog, select a schedule to stage its grid, then review and push the approved edits to Revit.",
     work: scheduleGridRouteState,
     needs: "project",
     readings: {

@@ -12,6 +12,7 @@ import {
 export const manifest = defineRoute({
   key: "takeoffs",
   name: "Takeoffs",
+  docs: "Choose a project input, adopt its zones, then audit and synchronize the resulting takeoff readings before using them downstream.",
   needs: "project",
   work: takeoffsRouteState,
   readings: {

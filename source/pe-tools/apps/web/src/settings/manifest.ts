@@ -79,6 +79,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
   return defineRoute({
     key: "settings",
     name: "Settings",
+    docs: "Open a settings file as the edit basis, make the needed changes, then save the reviewed document back to disk.",
     // File-driven: a settings document is read from disk, never from an open Revit model.
     work: settingsRouteState,
     readings: {

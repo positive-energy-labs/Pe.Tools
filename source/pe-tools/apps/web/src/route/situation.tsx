@@ -23,6 +23,7 @@ import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types"
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip } from "#/components/lang/chip";
+import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
@@ -341,7 +342,7 @@ export function SituationAction({
             state={stopped ? "disabled" : "rest"}
             aria-disabled={stopped}
             data-tone={refusedNow ? "caution" : undefined}
-            title={action.refusal ?? action.says}
+            title={`${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`}
             onClick={() => void action.run()}
             style={{ fontWeight: commit ? 600 : undefined }}
           >
@@ -514,7 +515,7 @@ function ActionBoard({
               ) : (
                 "—"
               )}
-              {action.chord ? <kbd className="face-mono text-ink-2">{action.chord}</kbd> : null}
+              {action.chord ? <Kbd>{action.chord}</Kbd> : null}
             </span>
           </Fragment>
         );
