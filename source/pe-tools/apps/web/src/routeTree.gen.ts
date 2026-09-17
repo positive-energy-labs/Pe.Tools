@@ -16,8 +16,6 @@ import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
-import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
 import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as LabRouteImport } from "./routes/lab";
@@ -70,16 +68,6 @@ const FamiliesRoute = FamiliesRouteImport.update({
 const FamilyRoute = FamilyRouteImport.update({
   id: "/family",
   path: "/family",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
-  id: "/family-editor-proto",
-  path: "/family-editor-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
-  id: "/family-review-proto",
-  path: "/family-review-proto",
   getParentRoute: () => rootRouteImport,
 } as any);
 const GrillesRoute = GrillesRouteImport.update({
@@ -182,8 +170,6 @@ export interface FileRoutesByFullPath {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
@@ -211,8 +197,6 @@ export interface FileRoutesByTo {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
@@ -241,8 +225,6 @@ export interface FileRoutesById {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
@@ -272,8 +254,6 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
@@ -301,8 +281,6 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
@@ -330,8 +308,6 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
@@ -360,8 +336,6 @@ export interface RootRouteChildren {
   DocLabRoute: typeof DocLabRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
-  FamilyEditorProtoRoute: typeof FamilyEditorProtoRoute;
-  FamilyReviewProtoRoute: typeof FamilyReviewProtoRoute;
   GrillesRoute: typeof GrillesRoute;
   InstancesRoute: typeof InstancesRoute;
   LabRoute: typeof LabRoute;
@@ -430,20 +404,6 @@ declare module "@tanstack/react-router" {
       path: "/family";
       fullPath: "/family";
       preLoaderRoute: typeof FamilyRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-editor-proto": {
-      id: "/family-editor-proto";
-      path: "/family-editor-proto";
-      fullPath: "/family-editor-proto";
-      preLoaderRoute: typeof FamilyEditorProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-review-proto": {
-      id: "/family-review-proto";
-      path: "/family-review-proto";
-      fullPath: "/family-review-proto";
-      preLoaderRoute: typeof FamilyReviewProtoRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/grilles": {
@@ -594,8 +554,6 @@ const rootRouteChildren: RootRouteChildren = {
   DocLabRoute: DocLabRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
-  FamilyEditorProtoRoute: FamilyEditorProtoRoute,
-  FamilyReviewProtoRoute: FamilyReviewProtoRoute,
   GrillesRoute: GrillesRoute,
   InstancesRoute: InstancesRoute,
   LabRoute: LabRoute,

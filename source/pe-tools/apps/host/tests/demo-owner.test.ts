@@ -190,6 +190,37 @@ test("typed seed codec preserves dates/maps/sets and unknown original evidence; 
   expect(f.owner.at).not.toBe(seed.seedAddress);
 });
 
+test("demo Family capture files a new member and returns what the capture saw", async () => {
+  const f = await setup();
+  const response = await f.fetch("/actions", {
+    id: `${f.owner.id}:capture`,
+    kind: "workflow",
+    key: "family.capture",
+    actor: "agent",
+    destination: { kind: "document", ref: f.owner.target },
+    input: { pod: f.owner.member!.pod },
+    bases: {},
+  });
+  expect(response.status).toBeLessThan(300);
+  const row = await f.owner.journal.wait(`${f.owner.id}:capture`);
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  const result = (
+    row as {
+      result: {
+        member: { pod: string; path: string; sha256: string };
+        evidence: { coverage: Record<string, string>; unmodeledCount: number; origin: string };
+      };
+    }
+  ).result;
+  expect(result.member.path).toMatch(/^settings\/family\/Simulated-demo-family-.*\.json$/);
+  expect(result.evidence).toMatchObject({ origin: "capture", unmodeledCount: 0 });
+  expect(result.evidence.coverage.simulation).toBeTruthy();
+  const written = JSON.parse(
+    await readFile(await f.owner.settings.memberPath(result.member), "utf8"),
+  );
+  expect(written.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+});
+
 test("demo Family apply confirms a plan, applies that exact hash, and refuses changed bytes", async () => {
   const seed = family();
   if (seed.route !== "family") throw Error("Family seed expected");

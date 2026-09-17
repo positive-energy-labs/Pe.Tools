@@ -52,8 +52,6 @@ export interface SettingsRouteDeps {
   scope: WorkKey;
   /** The member the Readings are OF. Absent = the seed address, so the demo lane still reads. */
   member?: PodMember;
-  /** Picking a member is navigation, not a write: the shell hands the route its navigator. */
-  selectFile?: (member: PodMember) => Promise<void>;
 }
 
 const page = z.object({
@@ -104,7 +102,6 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
             (ctx.page?.pod && ctx.page.filePath
               ? { pod: ctx.page.pod, path: ctx.page.filePath }
               : member);
-          if (deps.selectFile) return deps.selectFile(next);
           return ctx.command("open", { member: next });
         },
       },

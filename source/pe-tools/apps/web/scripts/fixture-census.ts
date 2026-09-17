@@ -13,7 +13,7 @@ const canonicalFixtures: Record<
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=plan", fixtureKind: "demo-fixture" },
-  "/family": { canonicalReviewUrl: "/family?demo=plan", fixtureKind: "demo-fixture" },
+  "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
   "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
