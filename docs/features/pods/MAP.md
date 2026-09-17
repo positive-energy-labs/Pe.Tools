@@ -108,6 +108,8 @@ Not cast: the protoui round (table beside draft, `/families` row click into `/fa
 
 - 2026-09-17, user verdict: "a sibling member in the run output folder makes sense." Capture writes the engine's `unmodeled` list as a file in the capture's run folder under `output/<runId>/`, beside the receipt. The captured member holds only what the engine can apply. This settles wave 5 candidate 1.
 
+- 2026-09-17, user verdicts on bootstrap: (1) Only the root `AGENTS.md` is rewritten on every bootstrap; it holds the high-level concepts, pointers to workflows, tools, and approaches, and it describes what bootstrap generates and when. The pod `AGENTS.md` and both `README.md` files are created only when missing. (2) `JOIN_GUIDE.md` is deleted; its intended point, that a script may use every assembly Revit has loaded, moves into the root `AGENTS.md`. (3) One output convention: module and global output go to the acting pod's run folder with a receipt. (4) `.pea` moves to Local AppData. (5) `.vscode/` and `PeScripts.csproj` belong to a pod with scripts; bootstrap creates them by default, a user may delete them, and no dedicated op is added.
+
 ### Wave 5 candidates (none cast; from `reports/w4-revit.md` defect numbers)
 
 1. Capture then confirm on real families: captured `unmodeled` entries make the member fail its own composition (defect 3). Needs a ruling: capture files `unmodeled` as evidence outside the member, or the validator treats it as advisory.
