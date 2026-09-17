@@ -1,47 +1,106 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
+using Pe.App.Pods;
 using Pe.Revit;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Operations;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime;
+using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
 using System.IO;
 
 namespace Pe.App.Host;
 
-/// <summary>Plan and apply a patch to the current family or loaded families; capture loaded families.</summary>
+/// <summary>`family.*` acts on the active family document; `families.*` on loaded families in a project.</summary>
 internal static class FamilyFoundryBridgeOps {
-    [Op("familyfoundry.plan", Does = "Diff an inline family patch (`{ select, patch, run }`) against the current family document or each loaded family it selects and return the plan per family with a deterministic hash.", Title = "Plan Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive)]
-    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, RevitDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => PlanFamilies(request, document.Value), cancellationToken);
+    [Op("family.capture", Does = "Capture the active Revit family document as a family.json spec, with per-section coverage and the unmodeled ledger.", Title = "Capture Family", Finds = ["family", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Bounded)]
+    private static Task<FamilyCaptureData> CaptureFamily(FamilyCaptureRequest _, FamilyDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => CaptureActiveFamily(document.Value), cancellationToken);
 
-    [Op("familyfoundry.apply", Does = "Reconcile the current family document or explicit loaded families to an inline family patch, refusing plan drift, and return a receipt with residue per family.", Title = "Apply Family Patch", Finds = ["family-foundry", "familyfoundry", "patch", "apply", "plan-hash", "receipt", "reconcile"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, RevitDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ApplyFamilies(request, document.Value), cancellationToken);
+    [Op("family.plan", Does = "Diff an inline family spec (`{ select, patch, run }`) against the active family document and return the plan with a deterministic hash.", Title = "Plan Family", Finds = ["family", "spec", "plan", "plan-hash", "reconcile"], Cost = OpCost.Expensive)]
+    private static Task<FamilyFoundryPlanData> PlanFamily(FamilyPlanRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, null, request.ExecutionOptions), cancellationToken);
 
-    [Op("familyfoundry.project", Does = "Open selected loaded families read-only and capture each as family.json with coverage.", Title = "Capture Loaded Families", Finds = ["family-foundry", "familyfoundry", "capture", "family-json", "project"], Cost = OpCost.Expensive)]
-    private static Task<FamilyFoundryProjectData> Project(FamilyFoundryProjectRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ProjectFamilies(request, document.Value), cancellationToken);
+    [Op("family.apply", Does = "Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
+            new Dictionary<long, string> { [document.Value.OwnerFamily.Id.Value()] = request.PlanHash }, document.Value, request.ExecutionOptions)), cancellationToken);
 
-    internal static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request, Document document) {
-        var (patch, diagnostics) = ParsePatch(request.PatchJson);
+    [Op("families.capture", Does = "Open selected loaded families read-only and capture each as a family.json spec with coverage.", Title = "Capture Loaded Families", Finds = ["families", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Expensive)]
+    private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => CaptureFamilies(request.FamilyIds, document.Value), cancellationToken);
+
+    [Op("families.plan", Does = "Diff an inline family spec against each loaded family it selects (or one explicit family) and return the plan per family with a deterministic hash.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
+    private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyId, request.ExecutionOptions), cancellationToken);
+
+    [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
+
+    private static T RefuseStaleSource<T>(Func<T> apply) {
+        try { return apply(); }
+        catch (Exception exception) when (exception is InvalidDataException or DirectoryNotFoundException or FileNotFoundException) {
+            throw BridgeOperationExceptions.Conflict(exception.Message);
+        }
+    }
+
+    internal static FamilyCaptureData CaptureActiveFamily(Document document) {
+        var model = document.CaptureFamilyModel();
+        return new FamilyCaptureData(DocumentReading.Here(document), model.Family.Name, FamilyModelJson.Serialize(model),
+            model.Unmodeled.Count, model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()), model.CaptureIssues);
+    }
+
+    /// <summary>The one apply edge: bridge ops and palettes both land here, and both leave a run in the source pod.</summary>
+    internal static FamilyFoundryApplyData ApplyWithReceipt(string operation, string specJson, PodMemberSource source,
+        IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null) {
+        var podFolder = PodMembers.VerifiedFolder(source);
+        var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
+        try {
+            var data = ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts);
+            var relative = data with { Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList() };
+            var outputs = (Directory.Exists(artifacts) ? Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories) : [])
+                .Select(file => (name: RunPath(artifacts, file), bytes: File.ReadAllBytes(file)))
+                .Append((name: "apply.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(relative, Formatting.Indented))))
+                .ToList();
+            var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
+                    data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
+                    data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
+                    outputs.Select(o => o.name).ToList(),
+                    data.Diagnostics.Count == 0 ? null : string.Join("; ", data.Diagnostics.Select(d => d.Message))),
+                outputs);
+            var runDir = Path.GetDirectoryName(receiptPath)!;
+            return relative with {
+                ReceiptPath = receiptPath,
+                Receipts = relative.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? Path.Combine(runDir, dir) : null }).ToList()
+            };
+        } finally {
+            if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
+        }
+    }
+
+    private static string RunPath(string artifacts, string path) => "artifacts/" + path[(artifacts.Length + 1)..].Replace('\\', '/');
+
+    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, long? familyId = null, ExecutionOptions? executionOptions = null) {
+        var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
-        var executionOptions = request.ExecutionOptions ?? new ExecutionOptions();
+        executionOptions ??= new ExecutionOptions();
 
         var families = document.IsFamilyDocument
-            ? request.FamilyId is null || request.FamilyId == document.OwnerFamily.Id.Value() ? new List<Family> { document.OwnerFamily } : []
-            : request.FamilyId is { } id
+            ? familyId is null || familyId == document.OwnerFamily.Id.Value() ? new List<Family> { document.OwnerFamily } : []
+            : familyId is { } id
             ? document.GetElement(id.ToElementId()) is Family f ? [f] : []
             : document.FamiliesMatching(patch.Select);
         if (families.Count == 0)
-            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", request.FamilyId is { } x ? $"Element id {x} is not a loaded family." : "The patch selects no loaded family.")]);
+            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", familyId is { } x ? $"Element id {x} is not a loaded family." : "The spec selects no loaded family.")]);
 
         return new FamilyFoundryPlanData(families.Select(family => {
             try { return WithFamilyDocument(document, family, (famDoc, editDiagnostics) => {
@@ -65,16 +124,18 @@ internal static class FamilyFoundryBridgeOps {
         }).ToList(), []);
     }
 
-    internal static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request, Document document) {
-        var (patch, diagnostics) = ParsePatch(request.PatchJson);
+    /// <summary>Run the spec against explicit families, writing engine artifacts under <paramref name="artifactDirectory" />.</summary>
+    internal static FamilyFoundryApplyData ApplyFamilies(string specJson, IReadOnlyDictionary<long, string> expectedPlanHashes, Document document,
+        ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave, string artifactDirectory) {
+        var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryApplyData([], diagnostics);
-        var executionOptions = request.ExecutionOptions ?? new ExecutionOptions();
-        if (request.ExpectedPlanHashes is not { Count: > 0 })
-            return new FamilyFoundryApplyData([], [new FamilyFoundryDiagnostic("ExpectedPlanHashesRequired", "$.expectedPlanHashes", "Call familyfoundry.plan first and pass each family's planHash.")]);
+        executionOptions ??= new ExecutionOptions();
+        if (expectedPlanHashes is not { Count: > 0 })
+            return new FamilyFoundryApplyData([], [new FamilyFoundryDiagnostic("ExpectedPlanHashesRequired", "$.expectedPlanHashes", "Plan first and pass each family's planHash.")]);
 
-        var runOutput = StorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey).Output().TimestampedSubDir("host-apply");
+        var runOutput = OutputStorage.ExactDir(artifactDirectory);
         var receipts = new List<FamilyFoundryApplyReceipt>();
-        foreach (var (familyId, expectedHash) in request.ExpectedPlanHashes) {
+        foreach (var (familyId, expectedHash) in expectedPlanHashes) {
             var family = document.IsFamilyDocument
                 ? document.OwnerFamily.Id.Value() == familyId ? document.OwnerFamily : null
                 : document.GetElement(familyId.ToElementId()) as Family;
@@ -85,19 +146,17 @@ internal static class FamilyFoundryBridgeOps {
             var familyName = family.Name;
             try {
                 var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash, executionOptions: executionOptions);
-                var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-patch").WithReconcile(op);
+                var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-spec").WithReconcile(op);
                 using var processor = new OperationProcessor(document, executionOptions);
                 var (contexts, _) = processor.SelectFamilies(() => [family]).WithArtifactWriter(writer)
-                    .ProcessQueue(new OperationQueue().Add(op), null, runOutput.DirectoryPath, new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false });
+                    .ProcessQueue(new OperationQueue().Add(op), null, runOutput.DirectoryPath, loadAndSave ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false });
                 var context = contexts.Single();
                 var (logs, error) = context.OperationLogs;
                 var receipt = op.LastReceipt;
-                {
-                    var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                    receipts.Add(new FamilyFoundryApplyReceipt(context.LoadedFamilyId ?? familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
-                        receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
-                        receipt?.ObservedParametersDigest));
-                }
+                var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
+                receipts.Add(new FamilyFoundryApplyReceipt(context.LoadedFamilyId ?? familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                    receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
+                    receipt?.ObservedParametersDigest));
             } catch (Exception exception) {
                 receipts.Add(Failed(familyId, familyName, exception.Message));
             }
@@ -105,10 +164,10 @@ internal static class FamilyFoundryBridgeOps {
         return new FamilyFoundryApplyData(receipts, []);
     }
 
-    internal static FamilyFoundryProjectData ProjectFamilies(FamilyFoundryProjectRequest request, Document document) {
-        if (request.FamilyIds is not { Count: > 0 })
-            return new FamilyFoundryProjectData([], [new FamilyFoundryDiagnostic("FamilyIdsRequired", "$.familyIds", "At least one explicit family id is required.")]);
-        return new FamilyFoundryProjectData(request.FamilyIds.Distinct().Select(familyId => {
+    internal static FamiliesCaptureData CaptureFamilies(IReadOnlyList<long> familyIds, Document document) {
+        if (familyIds is not { Count: > 0 })
+            return new FamiliesCaptureData([], [new FamilyFoundryDiagnostic("FamilyIdsRequired", "$.familyIds", "At least one explicit family id is required.")]);
+        return new FamiliesCaptureData(familyIds.Distinct().Select(familyId => {
             if (document.GetElement(familyId.ToElementId()) is not Family family)
                 return new FamilyFoundryFamilyModelData(familyId, null, false, null, new Dictionary<string, string>(), 0, [], $"Element id {familyId} is not a loaded family.");
             try {
@@ -138,12 +197,12 @@ internal static class FamilyFoundryBridgeOps {
                 $"EditFamily for '{family.Name}': {diagnostic.Message}", FamilyName: family.Name))
             .Concat(model.CaptureIssues).ToList();
 
-    private static (FamilyPatch? Patch, IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics) ParsePatch(string? json) {
+    private static (FamilyPatch? Patch, IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics) ParseSpec(string? json) {
         if (string.IsNullOrWhiteSpace(json))
-            return (null, [new FamilyFoundryDiagnostic("PatchJsonRequired", "$.patchJson", "patchJson is required: { select, patch, run }.")]);
+            return (null, [new FamilyFoundryDiagnostic("SpecJsonRequired", "$.specJson", "specJson is required: { select, patch, run }.")]);
         try { return (FamilyPatch.Parse(json!), []); }
         catch (JsonException exception) {
-            return (null, [new FamilyFoundryDiagnostic("InvalidPatchJson", "$.patchJson", exception.Message, "The fragment follows the family.json schema; omission = unchanged, null = delete, {} = ensure.")]);
+            return (null, [new FamilyFoundryDiagnostic("InvalidSpecJson", "$.specJson", exception.Message, "The spec follows the family.json schema; omission = unchanged, null = delete, {} = ensure.")]);
         }
     }
 

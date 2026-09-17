@@ -40,13 +40,13 @@ public sealed class FamilyFoundryHostContractTests {
     }
 
     [Test]
-    public void Project_contract_round_trips_model_json_and_coverage() {
-        var data = new FamilyFoundryProjectData(
+    public void Families_capture_contract_round_trips_model_json_and_coverage() {
+        var data = new FamiliesCaptureData(
             [new FamilyFoundryFamilyModelData(12, "PE Box", true, "{}", new Dictionary<string, string> { ["parameters"] = "Read" }, 0,
                 [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")], null)],
             []);
 
-        var back = JsonConvert.DeserializeObject<FamilyFoundryProjectData>(JsonConvert.SerializeObject(data))!;
+        var back = JsonConvert.DeserializeObject<FamiliesCaptureData>(JsonConvert.SerializeObject(data))!;
         Assert.That(back.Families[0].Coverage["parameters"], Is.EqualTo("Read"));
         Assert.That(back.Families[0].Issues[0].Severity, Is.EqualTo(Pe.Shared.RevitData.RevitDataIssueSeverity.Warning));
     }

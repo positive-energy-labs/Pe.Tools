@@ -26,10 +26,10 @@ public sealed class ButtonRegistry {
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register(new ButtonRegistration<CmdScheduleManagerSerialize> {
-            Text = "Schedule Manager Serializer",
+            Text = "Schedule Capture",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
-            ToolTip = "Serialize schedules.",
+            ToolTip = "Capture a schedule definition as a new spec in a pod.",
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register(new ButtonRegistration<CmdFFManager> {

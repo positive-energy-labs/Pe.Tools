@@ -1,89 +1,34 @@
 using System.Windows.Media;
 using Newtonsoft.Json.Linq;
+using Pe.App.Pods;
 using Pe.Revit.Ui.Core;
-using Pe.Shared.StorageRuntime;
 using System.IO;
 using WpfColor = System.Windows.Media.Color;
-using Pe.App.Pods;
-using Pe.Revit.SettingsRuntime.Modules;
-using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.App.Commands.Schedules.Ui;
 
-/// <summary>
-///     Palette list item representing a Schedule profile JSON file.
-///     Displays metadata: filename, category, field count.
-/// </summary>
+/// <summary>A pod member whose `$schema` is a schedule spec. Displays filename, category, field count.</summary>
 public class ScheduleListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
-    private readonly string? _relativePath;
 
-    internal ScheduleListItem(PreparedPodSetting prepared) {
-        this.FilePath = prepared.FullSourcePath;
-        this._fileInfo = new FileInfo(this.FilePath);
-        this._relativePath = prepared.SourcePath;
-        this.Prepared = prepared;
-        this.CategoryName = ExtractCategoryNameFromContent(prepared.ComposedContent);
-        this.FieldCount = ExtractFieldCountFromContent(prepared.ComposedContent);
+    internal ScheduleListItem(PodMember member) {
+        this.Member = member;
+        this._fileInfo = new FileInfo(member.FullPath);
+        var content = PodMembers.ReadOrEmpty(member.FullPath);
+        this.CategoryName = (string?)content["CategoryName"] ?? string.Empty;
+        this.FieldCount = content["Fields"] is JArray fields ? fields.Count : 0;
     }
 
-    internal PreparedPodSetting Prepared { get; private set; }
-    internal PreparedPodSetting? AttemptSnapshot { get; private set; }
-
-    internal ScheduleProfile Load() {
-        this.AttemptSnapshot = null;
-        this.Prepared = this.Prepared.Refresh();
-        this.AttemptSnapshot = this.Prepared;
-        return ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(
-            this.Prepared.RawContent,
-            this.Prepared.ComposedContent,
-            $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
-    }
-
-    /// <summary> Full path to the schedule profile JSON file </summary>
-    public string FilePath { get; }
-
-    /// <summary> Number of fields in the schedule </summary>
+    internal PodMember Member { get; }
+    public string FilePath => this.Member.FullPath;
     public int FieldCount { get; }
-
-    /// <summary> The category name from the profile </summary>
     public string CategoryName { get; }
-
-    /// <summary> Last modified date for sorting </summary>
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
-    /// <summary> Profile filename without extension (or relative path if nested) </summary>
-    public string TextPrimary => this._relativePath != null
-        ? Path.ChangeExtension(this._relativePath, null)
-        : Path.GetFileNameWithoutExtension(this.FilePath);
-
-    /// <summary> Shows category name </summary>
-    public string TextSecondary => string.IsNullOrEmpty(this.CategoryName)
-        ? "Unknown Category"
-        : this.CategoryName;
-
-    /// <summary> Field count badge </summary>
+    public string TextPrimary => Path.ChangeExtension(this.Member.Path["settings/".Length..], null);
+    public string TextSecondary => string.IsNullOrEmpty(this.CategoryName) ? "Unknown Category" : this.CategoryName;
     public string TextPill => $"{this.FieldCount} fields";
-
     public Func<string> GetTextInfo => static () => string.Empty; // Tooltip disabled - info shown in preview panel
-
     public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
-
-    /// <summary>
-    ///     Extracts the CategoryName value from a schedule profile JSON file.
-    /// </summary>
-    private static string ExtractCategoryNameFromContent(string content) {
-        var jObject = JObject.Parse(content);
-        return (jObject.TryGetValue("CategoryName", out var token) ? token.Value<string>() : null) ?? string.Empty;
-    }
-
-    /// <summary>
-    ///     Extracts the field count from a schedule profile JSON file.
-    /// </summary>
-    private static int ExtractFieldCountFromContent(string content) {
-        var jObject = JObject.Parse(content);
-        return jObject.TryGetValue("Fields", out var fieldsToken) && fieldsToken is JArray fieldsArray ? fieldsArray.Count : 0;
-    }
-
 }

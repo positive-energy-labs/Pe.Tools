@@ -6,8 +6,11 @@ namespace Pe.Shared.HostContracts.Operations;
 /// <summary>Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.</summary>
 public sealed record FamilyFoundryDiagnostic(string Code, string Path, string Message, string? Suggestion = null);
 
-/// <summary>Plan a patch (`{ select, patch, run }` JSON) against the loaded families it selects, one explicit family, or the current family document. In a family document FamilyId is OwnerFamily.Id; a mismatching id is refused.</summary>
-public sealed record FamilyFoundryPlanRequest(string PatchJson, long? FamilyId = null, ExecutionOptions? ExecutionOptions = null);
+/// <summary>Plan a spec (`{ select, patch, run }` JSON) against the active family document.</summary>
+public sealed record FamilyPlanRequest(string SpecJson, ExecutionOptions? ExecutionOptions = null);
+
+/// <summary>Plan a spec against the loaded families it selects, or one explicit loaded family.</summary>
+public sealed record FamiliesPlanRequest(string SpecJson, long? FamilyId = null, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
 public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom);
@@ -27,8 +30,11 @@ public sealed record FamilyFoundryPlanData(
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
 );
 
-/// <summary>Apply the patch to explicit families; each family's `expectedPlanHash` from the plan call gates drift. In a family document only OwnerFamily.Id is accepted; the existing document is not saved.</summary>
-public sealed record FamilyFoundryApplyRequest(string PatchJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, ExecutionOptions? ExecutionOptions = null);
+/// <summary>Apply a saved spec to the active family document; `planHash` from family.plan gates drift. The document is not saved.</summary>
+public sealed record FamilyApplyRequest(string SpecJson, string PlanHash, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
+
+/// <summary>Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.</summary>
+public sealed record FamiliesApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.</summary>
 public sealed record FamilyFoundryApplyReceipt(
@@ -44,13 +50,15 @@ public sealed record FamilyFoundryApplyReceipt(
     string? ObservedParametersDigest = null
 );
 
+/// <summary>`receiptPath` is the pod run's receipt.json; null when the request was refused before running.</summary>
 public sealed record FamilyFoundryApplyData(
     IReadOnlyList<FamilyFoundryApplyReceipt> Receipts,
-    IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
+    IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics,
+    string? ReceiptPath = null
 );
 
 /// <summary>Capture loaded families read-only as family.json.</summary>
-public sealed record FamilyFoundryProjectRequest(IReadOnlyList<long> FamilyIds);
+public sealed record FamiliesCaptureRequest(IReadOnlyList<long> FamilyIds);
 
 public sealed record FamilyFoundryFamilyModelData(
     long FamilyId,
@@ -63,7 +71,7 @@ public sealed record FamilyFoundryFamilyModelData(
     string? Error
 );
 
-public sealed record FamilyFoundryProjectData(
+public sealed record FamiliesCaptureData(
     IReadOnlyList<FamilyFoundryFamilyModelData> Families,
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics
 );

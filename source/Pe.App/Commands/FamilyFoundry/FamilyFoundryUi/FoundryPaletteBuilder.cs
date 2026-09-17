@@ -1,7 +1,6 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData.Families;
@@ -12,7 +11,7 @@ using Pe.App.Pods;
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
-///     The foundry palette: lists every `*.family.json` and `*.patch.json` in the FamilyFoundry module, parses
+///     The foundry palette: lists every pod member whose `$schema` is a family model or patch, parses
 ///     the selection for the preview, and hands the command its actions. Commands decide what to do with a
 ///     model or a patch; the palette only reads.
 /// </summary>
@@ -26,14 +25,16 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
 
     public EphemeralWindow Build() {
         var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
-        var files = PreparedPodSettingsCatalog.List(".family.json", ".patch.json").Select(setting =>
-                new ProfileListItem(setting, setting.SourcePath.EndsWith(".patch.json", StringComparison.OrdinalIgnoreCase)
+        var files = PodMembers.List((FamilyModelSettingsRegistration.ModuleKey, FamilyModelSettingsRegistration.RootKey),
+                (FamilyModelSettingsRegistration.ModuleKey, FamilyModelSettingsRegistration.PatchRootKey))
+            .Select(member => new ProfileListItem(member,
+                member.Schema!.EndsWith($"/{FamilyModelSettingsRegistration.PatchRootKey}.json", StringComparison.OrdinalIgnoreCase)
                     ? FoundryFileKind.Patch
                     : FoundryFileKind.FamilyModel))
             .OrderByDescending(item => item.LastModified)
             .ToList();
         if (files.Count == 0)
-            throw new InvalidOperationException("No *.family.json or *.patch.json in a prepared pod.");
+            throw new InvalidOperationException("No pod member declares a family model or family patch $schema.");
 
         var context = new FoundryContext { Doc = doc, UiDoc = uiDoc, Storage = storage };
         var previewPanel = new ProfilePreviewPanel(async (item, ct) => {
@@ -62,17 +63,17 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
     }
 
     private static async Task<PreviewData> BuildPreview(ProfileListItem item, FoundryContext context, CancellationToken ct) {
-        var json = item.Prepared.RawContent;
+        var json = File.ReadAllText(item.FilePath);
         var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
             if (item.Kind == FoundryFileKind.Patch) {
-                var patch = ModuleSettingsStorage<FamilyPatch>.ReadPrepared(item.Prepared.RawContent, item.Prepared.ComposedContent, $"{item.Prepared.PodId}:{item.Prepared.SourcePath}");
+                var patch = item.Member.Load<FamilyPatch>().Spec;
                 var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
                     ? []
                     : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
                 return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-            var composed = ModuleSettingsStorage<FamilyModel>.ReadPrepared(item.Prepared.RawContent, item.Prepared.ComposedContent, $"{item.Prepared.PodId}:{item.Prepared.SourcePath}");
+            var composed = item.Member.Load<FamilyModel>().Spec;
             var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };
