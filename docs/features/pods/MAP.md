@@ -35,6 +35,8 @@ LEDGER    docs/features/pods/LEDGER.md (verdicts), this map (waves), .artifacts/
 
 Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stake.
 
+- w1-engines: ADOPT pending graft. Stake `crusade/w1-engines` at `aab3d11`, report `reports/w1-engines.md`. Six family ops and two schedule ops with one `ApplyWithReceipt` edge that refuses a stale member sha; palettes on pod members; compile lane green for `Pe.App`, tests, contracts; Revit UNPROVEN. Two authorized SHIM files (`PodRuns.cs`, `ScriptPodMemberCompose.cs`) reconcile against w1-pod-core at graft. Left for wave 2: delete the duplicate `revit.apply.schedule` profile lane (`RevitDataRequestService.cs:477`) and rule on `revit.apply.family-model`; `agent-contracts/src/family-actions.ts` executors; `scripts/familyfoundry-monthly-host-proof.mjs`.
+
 ### Wave 2 (planned)
 
 Graft wave 1; `/family` and `/families` onto the kernel; palettes proven against grafted ops; purge critic on the grafted tree; Documents migration run on the user's go.
