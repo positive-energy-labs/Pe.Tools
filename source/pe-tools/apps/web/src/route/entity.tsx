@@ -188,6 +188,11 @@ export function EntityRouteView({
                   toggle={hold}
                   apply={() => void handle.actions.apply.run()}
                   cancel={() => setPage(closed)}
+                  stop={{
+                    // `families.apply` checks its token between families, never inside one.
+                    label: def.key === "families" ? "stop after this family" : "stop",
+                    run: handle.stop,
+                  }}
                   replan={() => void handle.actions.plan.run()}
                   refusal={handle.actions.apply.refusal}
                   busy={handle.busy !== null}

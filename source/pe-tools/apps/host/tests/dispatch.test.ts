@@ -10,9 +10,10 @@ import type { BridgeResponse } from "@pe/host-contracts/contracts";
 import { BRIDGE_CONTRACT_VERSION } from "@pe/host-contracts/contracts";
 import {
   BridgeError,
-  completeBridgePending,
+  completeBridgeRequest,
   getBridgeRegistrationRejection,
-  reserveBridgePending,
+  trackBridgeRequest,
+  type BridgeRequest,
   type RevitBridge,
   type BridgeSessionView,
 } from "../src/bridge.ts";
@@ -24,9 +25,6 @@ import {
 } from "../src/aps-auth.ts";
 import { getBridgeSessionSummary, listBridgeSessions, openShellPath } from "../src/local-ops.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
-
-type BridgePendingRefValue =
-  Parameters<typeof reserveBridgePending>[0] extends Ref.Ref<infer T> ? T : never;
 
 function runDispatch<A, E>(
   effect: Effect.Effect<
@@ -124,31 +122,27 @@ test("aps auth defaults preserve C# token-store key shape", () => {
   );
 });
 
-test("bridge pending mailbox rejects concurrent reservations", async () => {
-  const error = await Effect.runPromise(
+test("the request table routes each response to the request that carries its id", async () => {
+  const [first, second, stale] = await Effect.runPromise(
     Effect.gen(function* () {
-      const pending = yield* Ref.make<BridgePendingRefValue>(null);
-      const first = yield* Deferred.make<BridgeResponse, BridgeError>();
-      const second = yield* Deferred.make<BridgeResponse, BridgeError>();
-      yield* reserveBridgePending(pending, "first.operation", "request-1", first);
-      return yield* Effect.flip(
-        reserveBridgePending(pending, "second.operation", "request-2", second),
-      );
-    }),
-  );
-
-  expect(error).toBeInstanceOf(BridgeError);
-  expect(error.statusCode).toBe(423);
-  expect(error.message).toContain("first.operation");
-});
-
-test("bridge pending mailbox ignores mismatched response ids", async () => {
-  const completed = await Effect.runPromise(
-    Effect.gen(function* () {
-      const pending = yield* Ref.make<BridgePendingRefValue>(null);
+      const requests = yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map());
       const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
-      yield* reserveBridgePending(pending, "first.operation", "request-1", reply);
-      return yield* completeBridgePending(pending, {
+      const other = yield* Deferred.make<BridgeResponse, BridgeError>();
+      // Two live at once is a VALID state now: the FIFO gate keeps ordinary ops serial, and
+      // `op.cancel` is dispatched beside the op it names.
+      yield* trackBridgeRequest(requests, {
+        operationKey: "first.operation",
+        requestId: "request-1",
+        reply,
+        phase: "dispatched",
+      });
+      yield* trackBridgeRequest(requests, {
+        operationKey: "op.cancel",
+        requestId: "request-2",
+        reply: other,
+        phase: "dispatched",
+      });
+      const answer = (requestId: string) => ({
         errorMessage: null,
         metrics: {
           requestBytes: 0,
@@ -159,12 +153,17 @@ test("bridge pending mailbox ignores mismatched response ids", async () => {
         },
         ok: true,
         payloadJson: "{}",
-        requestId: "stale-request",
+        requestId,
       });
+      return [
+        yield* completeBridgeRequest(requests, answer("request-1")),
+        yield* completeBridgeRequest(requests, answer("request-2")),
+        yield* completeBridgeRequest(requests, answer("stale-request")),
+      ] as const;
     }),
   );
 
-  expect(completed).toBe(false);
+  expect([first, second, stale]).toEqual([true, true, false]);
 });
 
 test("bridge session summary maps Revit state snapshot fields", async () => {

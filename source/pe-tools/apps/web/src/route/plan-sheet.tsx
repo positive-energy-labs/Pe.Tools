@@ -24,6 +24,7 @@ export function PlanSheetView({
   toggle,
   apply,
   cancel,
+  stop,
   replan,
   refusal,
   busy,
@@ -36,6 +37,8 @@ export function PlanSheetView({
   toggle?: (id: string) => void;
   apply: () => void;
   cancel: () => void;
+  /** Stop the apply that is running now. Absent = this sheet has no running verb to stop. */
+  stop?: { readonly label: string; readonly run: () => void };
   replan: () => void;
   /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
@@ -53,12 +56,21 @@ export function PlanSheetView({
         </FactChip>
       ) : null}
       <span className="ml-auto flex items-center gap-1.5">
-        <ActionButton
-          label="cancel"
-          disabled={busy}
-          reason="Close the sheet; nothing has been written."
-          onClick={cancel}
-        />
+        {/* While apply runs, the sheet's escape is the real one: stop the op inside Revit. */}
+        {busy && stop ? (
+          <ActionButton
+            label={stop.label}
+            reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+            onClick={stop.run}
+          />
+        ) : (
+          <ActionButton
+            label="cancel"
+            disabled={busy}
+            reason="Close the sheet; nothing has been written."
+            onClick={cancel}
+          />
+        )}
         <ActionButton
           label="re-plan"
           disabled={busy}
