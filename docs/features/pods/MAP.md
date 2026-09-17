@@ -82,6 +82,8 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 - w3-demo: ADOPT pending graft. Stake `crusade/w3-demo` at `4f646d1`, report `reports/w3-demo.md`. `?demo=<seed>&live=1` runs a route's real code against the host's simulated owner; three live loops (schedules capture-apply, family capture-confirm-apply, families capture-confirm-apply) each end with a run receipt shown on `/pods`; `demo-lane.scenario` 22 of 22 including the loops; host non-scenario 150 green; `chat-flow` and `chat-stale-hydration` confirmed failing on the base before this work, so they are not crusade regressions.
 - w3-engines, w3-editor, w3-host grafted at `0e93832`. w3-demo conflicts with w3-host in `demo-lane.scenario.test.ts` and `families/store.ts`, and semantically with the confirm/apply split; its author grafts.
 - Absent ruling: `/families` applies both `FamilyFoundry/patches` and `FamilyFoundry/models` members, because capture files models and the family edge converts by `$schema`. `EntityRouteDef.schema` takes a list. Without this, capture on `/families` cannot feed apply on `/families`.
+- w3-demo grafted at merge of `123f356`: live loops assert the admitted workflow sequence (`*.capture`, `*.confirm`, `*.apply`), `/families` applies the member it captured, `EntityRouteDef.schema` takes a list, dev proxy forwards `/schedules/readings`; scenario 22 of 22, host 151, web 407, repo guards 93 of 93.
+- Wave 3 closed. NUMBER 39 (unchanged; all engine-internal `.family.json` or a test of a removed field). Secondary LOC 20,359. Whole crusade against main: 283 files, +10,384 / -16,808. Revit lane UNPROVEN on every route; that is wave 4 with a controlled `pe-revit` session.
 
 Wave 3 items from the critic, for reference:
 
