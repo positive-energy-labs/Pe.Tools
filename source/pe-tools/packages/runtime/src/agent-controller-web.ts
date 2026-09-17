@@ -111,7 +111,6 @@ export async function buildAgentControllerApp(
   app.get("/pe/thread/:threadId/tool-result/:messageId/:toolCallId", async (c) => {
     const threadId = c.req.param("threadId");
     try {
-      await openSession(threadId);
       const result = await readToolResult(
         runtime,
         threadId,
