@@ -184,6 +184,16 @@ export function settingsFieldPointer(segments: string[]): string {
     .join("");
 }
 
+/** Whether every segment names an existing object property or array index. */
+const resolves = (root: unknown, segments: string[]) => {
+  let cursor = root;
+  for (const key of segments) {
+    if (cursor === null || typeof cursor !== "object" || !Object.hasOwn(cursor, key)) return false;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return cursor !== null && typeof cursor === "object";
+};
+
 /** One pure candidate builder for the command, Settings form and Family projection. */
 export function settingsCandidate(
   rawContent: string,
@@ -193,23 +203,30 @@ export function settingsCandidate(
   const edits = Object.entries(fields).filter(
     ([, field]) => field.staged || (includeProposals && field.proposal),
   );
-  if (!edits.length) return rawContent;
-  const raw = edits.find(([pointer]) => pointer === "");
-  if (raw) {
-    if (edits.length !== 1)
-      throw new Error(
-        "Review either raw text or structured edits; clear the other staged edits first.",
-      );
-    const edit = raw[1].staged ?? raw[1].proposal!;
-    if (edit.delete || typeof edit.value !== "string")
-      throw new Error("The root edit must contain exact raw text.");
-    return edit.value;
-  }
-  const root: unknown = JSON.parse(rawContent.replace(/^\uFEFF/, ""));
+  // A root edit is the person's raw text: it replaces the basis, and pointer edits apply on top.
+  const raw = edits.find(([pointer]) => pointer === "")?.[1];
+  const rootEdit = raw ? (raw.staged ?? raw.proposal!) : null;
+  if (rootEdit && (rootEdit.delete || typeof rootEdit.value !== "string"))
+    throw new Error("The root edit must contain exact raw text.");
+  const base = rootEdit ? (rootEdit.value as string) : rawContent;
+  const pointers = edits.filter(([pointer]) => pointer !== "");
+  if (!pointers.length) return base;
+  const parse = (text: string): unknown => JSON.parse(text.replace(/^\uFEFF/, ""));
+  const root = parse(base);
   if (root === null || typeof root !== "object" || Array.isArray(root))
     throw new Error("The authored JSON must be an object before fields can be edited.");
-  for (const [pointer, field] of edits) {
+  let basisRoot: unknown;
+  try {
+    basisRoot = rootEdit ? parse(rawContent) : root;
+  } catch {
+    basisRoot = undefined;
+  }
+  for (const [pointer, field] of pointers) {
     const segments = settingsFieldSegments(pointer);
+    // A staged field whose container the person's raw edit removed has nowhere to land.
+    const parent = segments.slice(0, -1);
+    if (rootEdit && resolves(basisRoot, parent) && !resolves(root, parent))
+      throw new Error(`Staged field ${pointer} no longer resolves in the edited draft.`);
     if (
       !segments.length ||
       segments.some((key) => ["__proto__", "constructor", "prototype"].includes(key))
