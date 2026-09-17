@@ -10,16 +10,10 @@ const statuses = [
   "Canceled",
 ] satisfies HostOpResponse<"scripting.execute">["status"][];
 
-test("independent import carries the local folder and explicit copy choice through Gunshi", async () => {
+test("import passes only the archive path through Gunshi", async () => {
   const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
   const scripting = {
-    importPod: vi.fn(async () => ({
-      status: "Succeeded",
-      workspaceKey: "Office Copy",
-      diagnostics: [],
-      generatedFiles: [],
-      importedFiles: [],
-    })),
+    importPod: vi.fn(async () => ({ pod: "pe-standards", folder: "pe-standards" })),
   };
   const tools = vi
     .spyOn(
@@ -30,16 +24,11 @@ test("independent import carries the local folder and explicit copy choice throu
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const command = commands.scriptCommand();
-    await cli(
-      ["import", "--archive", "example.zip", "--workspace", "Office Copy", "--independent"],
-      command,
-      { subCommands: command.subCommands },
-    );
-    expect(scripting.importPod).toHaveBeenCalledWith({
-      archivePath: "example.zip",
-      workspaceKey: "Office Copy",
-      independent: true,
+    await cli(["import", "--archive", "example.zip"], command, {
+      subCommands: command.subCommands,
     });
+    expect(scripting.importPod).toHaveBeenCalledWith({ archivePath: "example.zip" });
+    expect(output).toHaveBeenCalledWith("pod    pe-standards");
   } finally {
     output.mockRestore();
     tools.mockRestore();

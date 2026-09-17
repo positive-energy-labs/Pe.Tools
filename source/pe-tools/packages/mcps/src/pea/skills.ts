@@ -154,31 +154,31 @@ The user supplies intent and ideas; you handle the code. Nothing that does not c
 
 ## What a Pod is
 
-A Pod is one portable folder for editable source, reusable typed JSON settings, and assets. It may contain scripts, standards, or both. pod.json supplies identity and optional script entrypoints. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A workspace without pod.json cannot execute as a Pod.
+A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and any of src/ (scripts), settings/ (JSON members and fragments), assets/, and output/ (runs, never published). pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
 
-## Identity: five separate facts
+## Identity: three facts
 
-- Local folder / workspaceKey locates this copy. Renaming or moving it does not change manifest identity. Use the discovered local folder when executing; never derive it from the manifest id.
-- pod.json id names the lineage. Different local copies and versions can share it.
-- Content hash identifies exact execution content. The human version is a label, not an update policy or compatibility promise.
-- Parent records the exact ancestor release. A derivative keeps ancestry; it never pretends to be the unchanged ancestor.
-- Origin is a transport locator, such as a Git or registry address. It is not proof of authorship or content identity.
+- The folder path is an address. Renaming or moving it does not change identity. Use the discovered folder when executing; never derive it from the manifest id.
+- The pod.json id names the lineage. Different local copies and versions can share it.
+- Each member's SHA-256 identifies its exact bytes. It is derived on read, never stored. The human version is a label, not an update policy.
 
-Do not auto-adopt upstream updates. Resolve declared source dependencies by identity and exact hash; report conflicting local paths when selection is ambiguous.
+Address a member as { pod: <id>, path: <relative path> } everywhere.
 
-## Prepare, share, and adapt
+## Compose, share, and adapt
 
-Execution prepares one snapshot. Publication composes source-level $preset/$include references ahead of time and ships composed JSON plus authored source and consumed dependency source for inspection. There is no runtime standards stack. A verified release runs without installed authoring dependencies, even if an unrelated local copy is broken. Inspection source never executes as a fallback.
+$include and $preset compose members. @local/<path> resolves inside the same pod's settings/; @<id>/<path> resolves in the installed pod whose manifest id matches. Two pods with the same id fail and name both folders. There are no hash pins and no precomposed releases.
 
-For an independent editable copy, import with independent=true (CLI: pea script import --archive <file.zip> --workspace <local-folder> --independent). Composed settings become editable source; original settings remain under inspection/ancestor and the exact release becomes the parent. APS and code package dependencies are not flattened. Normal import preserves source composition; editing it requires its declared source dependencies again. Never edit composed files to bypass preparation.
+Publishing vendors: every foreign fragment a member consumes is copied to settings/_vendor/<id>/<path> and its reference is rewritten to @local/_vendor/<id>/<path>, so a published pod composes from its own bytes. Import extracts the archive unchanged and writes one imported.json (archive sha256, locator, date) that nothing validates or gates. Edit vendored copies only when you mean to diverge from the source pod.
 
-The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<local-folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
+Pod preparation gates only pod.json and entrypoint source. Members validate one at a time when used; one bad member never hides its siblings.
 
-For editor validation, a declared $schema URL under /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. The local Pod folder never selects a validator. JSON without a declared schema remains generic data; the consuming operation still owns validation before applying it. Directive previews require the native preparation service and report an explicit reason when it is unavailable.
+The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
+
+A member's $schema URL is the only thing that says what it is for: /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. Filenames and folders select nothing. JSON without $schema is plain data; the consuming operation still owns validation before applying it. Structural schema checks run offline in the host; composition previews and semantic checks need a Revit session and report that reason when none is attached.
 
 APS Parameters Service is the sole authority for shared parameter definitions. Retrieve current definitions only when the selected library operation consumes them. The library validates compatibility; storage validates portable structure. An unrelated member's unavailable service must not block this operation. No bundled or cached authority fallback.
 
-Each useful run produces files under its pod's output directory, with a receipt identifying the snapshot, selected member, actual operation, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
+Every apply writes output/<run>/receipt.json in its pod: pod id, member path, member SHA-256, op id, plan hash, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
 
 ## Every entrypoint is a button
 
@@ -207,20 +207,20 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "author-pe-settings",
     content: String.raw`---
 name: author-pe-settings
-description: Propose, validate, or debug a Pe settings document such as a Family Foundry profile. Use when the user edits profiles or settings, has the settings page open, a run produced diagnostics or artifacts to explain, or validation fails. You propose; the human stages and saves.
+description: Propose, validate, or debug a pod member such as a Family Foundry spec or schedule spec. Use when the user edits a spec or other pod JSON, has the Pods page open, a run produced diagnostics or a receipt to explain, or validation fails. You propose; the human stages and saves.
 ---
 
 # Author Pe Settings
 
-Settings documents are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
+Pod members are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
 
 ## Method
 
-1. Read the live route first (pe_read key=route:settings). It answers the document, its schema, the agent write mask, and the commands.
+1. Read the live route first (pe_read key=route:pods). It answers the bound member { pod, path }, its schema, the agent write mask, and the commands.
 2. Start from diagnostics and artifacts before proposing. Keep authored intent, generated output, and runtime proof distinct.
-3. Propose only inside the write mask (pe_do key=route:settings.propose), then pe_do key=route:settings.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
+3. Propose only inside the write mask (pe_do key=route:pods.propose), then pe_do key=route:pods.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
 4. Stop for review. Saving is human-only; do not refetch, splice, or write the file yourself while it is bound.
-5. Direct file editing is the fallback only when no route binds the document, and you say so before editing. Use host-reported paths and the available schemas, then validate through the host.
+5. Direct file editing is the fallback only when no route binds the member, and you say so before editing. Use host-reported member paths and the member's $schema, then validate through the host.
 
 When more than a sentence is needed, report the fields proposed, the validation result, diagnostics fixed or remaining, and what the user must stage or decide.
 `,

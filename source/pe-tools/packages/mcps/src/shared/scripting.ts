@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import z from "zod";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.js";
+import { callPodOp } from "./pod-ops.ts";
 
 // Defaults live in the C# request DTO (ExecuteRevitScriptRequest) — this layer passes values
 // through untouched so there is exactly one source of truth for scripting semantics.
@@ -63,26 +64,12 @@ export const scriptPodImportInputSchema = z.object({
   archivePath: z
     .string()
     .describe("Absolute or process-relative path to the Pod .zip archive to import."),
-  workspaceKey: z
-    .string()
-    .optional()
-    .describe(
-      "Optional local folder name, independent of pod identity. Omit to use the pod.json id.",
-    ),
-  independent: z
-    .boolean()
-    .optional()
-    .describe(
-      "Make editable independent settings from the release's composed JSON, retaining ancestry and original source for inspection.",
-    ),
 });
 
 export const scriptPodExportInputSchema = z.object({
-  workspaceKey: z
+  pod: z
     .string()
-    .optional()
-    .describe("Pod workspace slug to export. Defaults to the runtime workspace."),
-  archivePath: z.string().describe("Output path for the exported Pod .zip archive."),
+    .describe("Manifest id of the installed pod to export; foreign fragments are vendored."),
 });
 
 export type ScriptRuntimeContext = HostSessionScope & {
@@ -138,22 +125,15 @@ export class ScriptingTools {
   }
 
   listPods() {
-    return this.client.call("scripting.pod.list", {});
+    return callPodOp(this.client, "pod.list", {});
   }
 
   importPod(input: ScriptPodImportInput) {
-    return this.client.call("scripting.pod.import", {
-      archivePath: input.archivePath,
-      independent: input.independent ?? false,
-      ...(input.workspaceKey != null ? { workspaceKey: input.workspaceKey } : {}),
-    });
+    return callPodOp(this.client, "pod.import", { archivePath: input.archivePath });
   }
 
   exportPod(input: ScriptPodExportInput) {
-    return this.client.call("scripting.pod.export", {
-      workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
-      archivePath: input.archivePath,
-    });
+    return callPodOp(this.client, "pod.export", { pod: input.pod });
   }
 
   static fromContext(context: ScriptRuntimeContext): ScriptingTools {
