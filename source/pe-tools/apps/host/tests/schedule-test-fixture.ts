@@ -75,6 +75,7 @@ export async function setup() {
   let owner = new ActionJournal(join(dir, "actions.json"));
   const a = { session: "A", openId: "open-A" },
     b = { session: "B", openId: "open-B" };
+  const document = address(join(dir, "Same.rvt"));
   let reopened = false,
     lost = false,
     unknown = false,
@@ -102,7 +103,7 @@ export async function setup() {
         openDocuments: [
           {
             openId: reopened && target === b ? "reopened-B" : target.openId,
-            address: address("C:/Same.rvt"),
+            address: document,
             isFamilyDocument: false,
           },
         ],
