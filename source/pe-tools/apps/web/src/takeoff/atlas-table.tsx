@@ -49,7 +49,7 @@ export function AtlasTable() {
         id="rooms"
         kind="content"
         title="rooms"
-        help="Rooms in the current scope. Filter, select, or review the visible rows."
+        help="Rooms in the current scope. Filter, select, or review the visible rows. Focus this pane for j/k movement and a/d decisions."
         headerless
         scroll="clip"
         shortcuts={reviewShortcuts}
@@ -75,8 +75,8 @@ export function AtlasTable() {
               searchPlaceholder="room / type / zone…"
               chips={chips}
               summary={
-                <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="shrink-0 text-ink">
+                <>
+                  <span className="text-ink">
                     {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
                   </span>
                   {scopeCalls > 0 && (
@@ -87,24 +87,23 @@ export function AtlasTable() {
                       {scopeCalls} open call{scopeCalls === 1 ? "" : "s"}
                     </FactChip>
                   )}
-                  <span className="hairline-l shrink-0 pl-2">
-                    <Press
-                      type="button"
-                      onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
-                      title={
-                        fieldsMode === "panel"
-                          ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
-                          : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
-                      }
-                      tone="neutral"
-                      size="caption"
-                      frame="line"
-                    >
-                      fields · {fieldsMode}
-                    </Press>
-                  </span>
-                  <span>j/k move · a/d decide</span>
-                </span>
+                </>
+              }
+              modes={
+                <Press
+                  type="button"
+                  onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
+                  title={
+                    fieldsMode === "panel"
+                      ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
+                      : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
+                  }
+                  tone="neutral"
+                  size="caption"
+                  frame="line"
+                >
+                  fields · {fieldsMode}
+                </Press>
               }
               empty={
                 rows.length > 0 ? (
