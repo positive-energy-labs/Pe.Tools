@@ -11,6 +11,7 @@ using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime;
@@ -74,20 +75,20 @@ internal static class FamilyFoundryBridgeOps {
             var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
                     data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
-                    outputs.Select(o => o.name).ToList(),
+                    [],
                     data.Diagnostics.Count == 0 ? null : string.Join("; ", data.Diagnostics.Select(d => d.Message))),
                 outputs);
-            var runDir = Path.GetDirectoryName(receiptPath)!;
             return relative with {
                 ReceiptPath = receiptPath,
-                Receipts = relative.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? Path.Combine(runDir, dir) : null }).ToList()
+                Receipts = relative.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is null ? null : Path.GetDirectoryName(receiptPath) }).ToList()
             };
         } finally {
             if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
         }
     }
 
-    private static string RunPath(string artifacts, string path) => "artifacts/" + path[(artifacts.Length + 1)..].Replace('\\', '/');
+    /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
+    private static string RunPath(string artifacts, string path) => path[(artifacts.Length + 1)..].Replace(Path.DirectorySeparatorChar.ToString(), "--");
 
     internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, long? familyId = null, ExecutionOptions? executionOptions = null) {
         var (patch, diagnostics) = ParseSpec(specJson);

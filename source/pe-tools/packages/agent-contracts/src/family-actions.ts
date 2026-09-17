@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { documentRefSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
-import { settingsDocumentIdSchema } from "./settings.ts";
+import { podMemberSchema } from "./settings.ts";
 import {
   familiesPlanReadingSchema,
   familyExecutionOptionsSchema,
@@ -11,7 +11,7 @@ import { parameterLinksReadingSchema } from "./parameter-links.ts";
 
 export const familyPlanReadingSchema = z.object({
   target: documentRefSchema,
-  documentId: settingsDocumentIdSchema,
+  member: podMemberSchema,
   workspaceId: z.string().min(1),
   path: z.string().min(1),
   fileVersion: z.string().min(1),
@@ -43,13 +43,12 @@ export const familyActions = {
     says: "Save reviewed Settings Work or create exact raw bytes through the host conditional writer.",
     needs: "nothing",
     actor: "human",
-    dirties: ["settings"],
+    dirties: ["pods"],
     executors: ["settings.document.save"],
     description:
       "Save reviewed Settings Work or create exact raw bytes through the host conditional writer.",
     input: z.object({
-      path: z.string().min(1),
-      documentId: settingsDocumentIdSchema,
+      member: podMemberSchema,
       workspaceId: z.string().min(1),
       write: z.discriminatedUnion("kind", [
         z.object({ kind: z.literal("save"), versionToken: z.string().min(1) }),
@@ -102,7 +101,7 @@ export const familyActions = {
     description:
       "Build frozen composed saved JSON to an admitted output path. The target is execution context, not the new family.",
     input: z.object({
-      documentId: settingsDocumentIdSchema,
+      member: podMemberSchema,
       workspaceId: z.string().min(1),
       fileVersion: z.string().min(1),
       outputPath: z.string().optional(),
@@ -128,7 +127,7 @@ export const familyReads = {
     description:
       "Read a plan against an exact family lifetime and original saved JSON token, without changing Work.",
     input: z.object({
-      documentId: settingsDocumentIdSchema,
+      member: podMemberSchema,
       workspaceId: z.string().min(1),
       fileVersion: z.string().min(1),
       executionOptions: familyExecutionOptionsSchema.optional(),

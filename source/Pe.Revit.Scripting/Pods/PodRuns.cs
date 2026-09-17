@@ -1,31 +1,30 @@
-// SHIM: w1-pod-core owns this file
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Scripting.Pods;
 
-public sealed record PodReceipt(
-    string PodId,
-    string MemberPath,
-    string MemberSha256,
-    string Operation,
-    string? PlanHash,
-    string Outcome,
-    IReadOnlyList<string> Outputs,
-    string? Reason = null
-);
-
+/// <summary>One run per apply: `output/&lt;runId&gt;/receipt.json` plus its output files, inside the pod the apply came from.</summary>
 public static class PodRuns {
-    /// <summary>Create `output/&lt;runId&gt;/` in the pod, write the outputs and `receipt.json`, return the receipt path.</summary>
+    private static readonly JsonSerializerSettings Json = new() {
+        Formatting = Formatting.Indented,
+        ContractResolver = new CamelCasePropertyNamesContractResolver()
+    };
+
+    /// <summary>Writes the outputs and the receipt; returns the receipt's full path. Output names are appended to `receipt.Outputs`.</summary>
     public static string WriteReceipt(string podFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) {
-        var runDir = Path.Combine(podFolder, "output", $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}");
-        _ = Directory.CreateDirectory(runDir);
+        var runId = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}";
+        var runFolder = Path.Combine(podFolder, "output", runId);
+        _ = Directory.CreateDirectory(runFolder);
+        var written = new List<string>();
         foreach (var (name, bytes) in outputs) {
-            var path = Path.Combine(runDir, name);
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllBytes(path, bytes);
+            if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || name == "receipt.json")
+                throw new ArgumentException($"Run output name must be a plain file name other than receipt.json: '{name}'.", nameof(outputs));
+            File.WriteAllBytes(Path.Combine(runFolder, name), bytes);
+            written.Add(name);
         }
-        var receiptPath = Path.Combine(runDir, "receipt.json");
-        File.WriteAllText(receiptPath, JsonConvert.SerializeObject(receipt, Formatting.Indented));
-        return receiptPath;
+        var path = Path.Combine(runFolder, "receipt.json");
+        File.WriteAllText(path, JsonConvert.SerializeObject(receipt with { Outputs = [.. receipt.Outputs, .. written] }, Json));
+        return path;
     }
 }

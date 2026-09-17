@@ -7,6 +7,7 @@ using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.Scripting.Pods;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Revit;
 using Serilog.Events;
 using System.Diagnostics;
@@ -74,7 +75,7 @@ public class CmdFFManager : IExternalCommand {
         try {
             var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, Path.Combine(buildDir, fileName), overwrite: true);
             var receiptPath = PodRuns.WriteReceipt(podFolder,
-                new PodReceipt(source.Pod, source.Path, source.Sha256, "revit.apply.family-model", receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [fileName]),
+                new PodReceipt(source.Pod, source.Path, source.Sha256, "revit.apply.family-model", receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [], null),
                 [(fileName, File.ReadAllBytes(Path.Combine(buildDir, fileName)))]);
             new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
                 $"Built {model.Family.Name} from {Path.GetFileName(templatePath)}. Converged: {receipt.Converged}, residue {receipt.Residue.Count}.\nReceipt: {receiptPath}").Show();

@@ -36,16 +36,7 @@ public record ExecuteRevitScriptRequest(
 
 public record ScriptPodSourceFile(string Path, string BytesBase64);
 
-public record ScriptPodSourceBundle(
-    List<ScriptPodSourceFile> Files,
-    List<ScriptPodDependencyBundle> Dependencies
-);
-
-public record ScriptPodDependencyBundle(
-    string Id,
-    string ReleaseHash,
-    List<ScriptPodSourceFile> Files
-);
+public record ScriptPodSourceBundle(List<ScriptPodSourceFile> Files);
 
 public record ScriptArtifactData(
     string Name,
@@ -65,26 +56,20 @@ public record ExecuteRevitScriptData(
     string ExecutionId,
     List<ScriptArtifactData>? Artifacts = null,
     object? Data = null,
-    PodExecutionAttributionData? Attribution = null
+    PodReceipt? Attribution = null
 );
 
-public record PodExecutionAttributionData(
+/// <summary>One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.</summary>
+public record PodReceipt(
     string PodId,
-    string Version,
-    string SnapshotHash,
-    string? ReleaseHash,
-    string Member,
+    string MemberPath,
+    string MemberSha256,
     string Operation,
-    string RunId,
+    string? PlanHash,
     string Outcome,
-    List<ScriptOutputReferenceData> Outputs,
-    List<ObservedExternalRevisionData> ObservedExternalRevisions,
-    string? Reason = null
+    List<string> Outputs,
+    string? Reason
 );
-
-public record ScriptOutputReferenceData(string Kind, string Reference);
-
-public record ObservedExternalRevisionData(string Code, string ResourceId, string RevisionOrDigest);
 
 public record ScriptCancelRequest(
     string? ExecutionId = null
@@ -96,48 +81,44 @@ public record ScriptCancelData(
     string Message
 );
 
-public record ScriptPodImportRequest(
-    string ArchivePath,
-    string? WorkspaceKey = null,
-    bool Independent = false
-);
+public record PodListRequest();
 
-public record ScriptPodExportRequest(
-    string WorkspaceKey,
-    string ArchivePath
-);
+public record PodListData(List<PodData> Pods);
 
-public record ScriptPodListRequest();
-
-public record ScriptPodPrepareRequest(string WorkspaceKey, ScriptPodSourceBundle SourceBundle);
-
-public record ScriptPodPrepareData(
-    string? ContentHash,
-    Dictionary<string, string> ComposedSettings,
-    List<ScriptPodGateOutcomeData> Outcomes
-);
-
-public record ScriptPodListData(
-    string WorkspacesRootPath,
-    List<ScriptPodListItemData> Pods
-);
-
-public record ScriptPodListItemData(
-    string WorkspaceKey,
-    string WorkspaceRootPath,
-    bool IsValid,
-    ScriptPodManifestSummaryData? Manifest,
+/// <summary>An installed pod. Id, name, and version are null when pod.json is invalid; diagnostics cover manifest and entrypoints only.</summary>
+public record PodData(
+    string? Id,
+    string? Name,
+    string? Version,
+    string Folder,
+    List<ScriptPodEntrypointData> Entrypoints,
+    List<PodMemberData> Members,
     List<ScriptDiagnostic> Diagnostics
 );
 
-public record ScriptPodManifestSummaryData(
-    int SchemaVersion,
-    string Id,
-    string Name,
-    string Version,
-    string? Description,
-    List<ScriptPodEntrypointData> Entrypoints
-);
+public record PodMemberData(string Path, string Sha256, string? Schema);
+
+public record PodMemberReadRequest(string Pod, string Path);
+
+public record PodMemberReadData(string Content, string Sha256);
+
+public record PodMemberWriteRequest(string Pod, string Path, string Content);
+
+public record PodMemberWriteData(string Sha256);
+
+public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);
+
+public record PodMemberComposeData(string? Composed, List<ScriptDiagnostic> Diagnostics, List<PodDependencyData> Dependencies);
+
+public record PodDependencyData(string Id, string Path, string Sha256);
+
+public record PodExportRequest(string Pod, string ArchivePath);
+
+public record PodExportData(string ArchivePath, List<PodDependencyData> Vendored);
+
+public record PodImportRequest(string ArchivePath, string? Folder = null);
+
+public record PodImportData(string Id, string Folder);
 
 public record ScriptPodEntrypointData(
     string Id,
@@ -145,56 +126,6 @@ public record ScriptPodEntrypointData(
     string? Name = null,
     string? Description = null
 );
-
-public record ScriptPodImportData(
-    ScriptPodTransferStatus Status,
-    string? WorkspaceKey,
-    string? WorkspaceRootPath,
-    string ArchivePath,
-    ScriptPodManifestSummaryData? Manifest,
-    List<string> ArchiveEntries,
-    List<string> GeneratedFiles,
-    List<ScriptDiagnostic> Diagnostics,
-    ScriptPodReleaseData? Release = null
-);
-
-public record ScriptPodExportData(
-    ScriptPodTransferStatus Status,
-    string? WorkspaceKey,
-    string? WorkspaceRootPath,
-    string ArchivePath,
-    ScriptPodManifestSummaryData? Manifest,
-    List<string> ArchiveEntries,
-    List<ScriptDiagnostic> Diagnostics,
-    ScriptPodReleaseData? Release = null
-);
-
-public record ScriptPodReleaseData(
-    string PodId,
-    string Version,
-    string ContentHash,
-    ScriptPodReleaseReferenceData? Parent,
-    List<ScriptPodFileHashData> Files,
-    List<ScriptPodGateOutcomeData> Outcomes
-);
-
-public record ScriptPodReleaseReferenceData(string PodId, string ContentHash, string? Version);
-
-public record ScriptPodFileHashData(string Path, string Sha256);
-
-public record ScriptPodGateOutcomeData(
-    string Code,
-    string Location,
-    string Reason,
-    string? Remedy,
-    ScriptDiagnosticSeverity Severity
-);
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum ScriptPodTransferStatus {
-    Succeeded,
-    Rejected
-}
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptExecutionStatus {

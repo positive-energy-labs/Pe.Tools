@@ -658,6 +658,149 @@ export namespace HostOpsCatalog {
   }
 }
 
+/** Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes. */
+export namespace PodExport {
+  export namespace Req {
+    export interface Request {
+      pod: string;
+      archivePath: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      archivePath: string;
+      vendored: PodDependencyData[];
+    }
+    export interface PodDependencyData {
+      id: string;
+      path: string;
+      sha256: string;
+    }
+  }
+}
+
+/** Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date. */
+export namespace PodImport {
+  export namespace Req {
+    export interface Request {
+      archivePath: string;
+      folder?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      id: string;
+      folder: string;
+    }
+  }
+}
+
+/** List installed pods under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and every member with its SHA-256 and $schema. Diagnostics cover pod.json and entrypoint source only; members validate one at a time when used. */
+export namespace PodList {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      pods: PodData[];
+    }
+    /**
+     * An installed pod. Id, name, and version are null when pod.json is invalid; diagnostics cover manifest and entrypoints only.
+     */
+    export interface PodData {
+      id?: null | string;
+      name?: null | string;
+      version?: null | string;
+      folder: string;
+      entrypoints: ScriptPodEntrypointData[];
+      members: PodMemberData[];
+      diagnostics: ScriptDiagnostic[];
+    }
+    export interface ScriptPodEntrypointData {
+      id: string;
+      sourcePath: string;
+      name?: null | string;
+      description?: null | string;
+    }
+    export interface PodMemberData {
+      path: string;
+      sha256: string;
+      schema?: null | string;
+    }
+    export interface ScriptDiagnostic {
+      stage: string;
+      severity: ScriptDiagnosticSeverity;
+      message: string;
+      source?: null | string;
+    }
+  }
+}
+
+/** Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256. */
+export namespace PodMemberCompose {
+  export namespace Req {
+    export interface Request {
+      pod: string;
+      path: string;
+      content?: null | string;
+    }
+  }
+  export namespace Res {
+    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      composed?: null | string;
+      diagnostics: ScriptDiagnostic[];
+      dependencies: PodDependencyData[];
+    }
+    export interface ScriptDiagnostic {
+      stage: string;
+      severity: ScriptDiagnosticSeverity;
+      message: string;
+      source?: null | string;
+    }
+    export interface PodDependencyData {
+      id: string;
+      path: string;
+      sha256: string;
+    }
+  }
+}
+
+/** Read one pod member by pod id and pod-relative path; returns its text and SHA-256. */
+export namespace PodMemberRead {
+  export namespace Req {
+    export interface Request {
+      pod: string;
+      path: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      content: string;
+      sha256: string;
+    }
+  }
+}
+
+/** Create a new pod member at a pod-relative path under src/, settings/, or assets/. Refuses when the path already exists; returns the SHA-256 of the written bytes. */
+export namespace PodMemberWrite {
+  export namespace Req {
+    export interface Request {
+      pod: string;
+      path: string;
+      content: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      sha256: string;
+    }
+  }
+}
+
 /** Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post. */
 export namespace RevitApplyCommandExecute {
   export namespace Req {
@@ -4920,16 +5063,10 @@ export namespace ScriptingExecute {
     }
     export interface ScriptPodSourceBundle {
       files: ScriptPodSourceFile[];
-      dependencies: ScriptPodDependencyBundle[];
     }
     export interface ScriptPodSourceFile {
       path: string;
       bytesBase64: string;
-    }
-    export interface ScriptPodDependencyBundle {
-      id: string;
-      releaseHash: string;
-      files: ScriptPodSourceFile[];
     }
   }
   export namespace Res {
@@ -4954,7 +5091,7 @@ export namespace ScriptingExecute {
       executionId: string;
       artifacts?: ScriptArtifactData[] | null;
       data?: unknown;
-      attribution?: null | PodExecutionAttributionData;
+      attribution?: null | PodReceipt;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -4969,250 +5106,18 @@ export namespace ScriptingExecute {
       contentType: string;
       sizeBytes: number;
     }
-    export interface PodExecutionAttributionData {
+    /**
+     * One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.
+     */
+    export interface PodReceipt {
       podId: string;
-      version: string;
-      snapshotHash: string;
-      releaseHash?: null | string;
-      member: string;
+      memberPath: string;
+      memberSha256: string;
       operation: string;
-      runId: string;
+      planHash?: null | string;
       outcome: string;
-      outputs: ScriptOutputReferenceData[];
-      observedExternalRevisions: ObservedExternalRevisionData[];
+      outputs: string[];
       reason?: null | string;
-    }
-    export interface ScriptOutputReferenceData {
-      kind: string;
-      reference: string;
-    }
-    export interface ObservedExternalRevisionData {
-      code: string;
-      resourceId: string;
-      revisionOrDigest: string;
-    }
-  }
-}
-
-/** Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path. */
-export namespace ScriptingPodExport {
-  export namespace Req {
-    export interface Request {
-      workspaceKey: string;
-      archivePath: string;
-    }
-  }
-  export namespace Res {
-    export type ScriptPodTransferStatus = "Succeeded" | "Rejected";
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      status: ScriptPodTransferStatus;
-      workspaceKey?: null | string;
-      workspaceRootPath?: null | string;
-      archivePath: string;
-      manifest?: null | ScriptPodManifestSummaryData;
-      archiveEntries: string[];
-      diagnostics: ScriptDiagnostic[];
-      release?: null | ScriptPodReleaseData;
-    }
-    export interface ScriptPodManifestSummaryData {
-      schemaVersion: number;
-      id: string;
-      name: string;
-      version: string;
-      description?: null | string;
-      entrypoints: ScriptPodEntrypointData[];
-    }
-    export interface ScriptPodEntrypointData {
-      id: string;
-      sourcePath: string;
-      name?: null | string;
-      description?: null | string;
-    }
-    export interface ScriptDiagnostic {
-      stage: string;
-      severity: ScriptDiagnosticSeverity;
-      message: string;
-      source?: null | string;
-    }
-    export interface ScriptPodReleaseData {
-      podId: string;
-      version: string;
-      contentHash: string;
-      parent?: null | ScriptPodReleaseReferenceData;
-      files: ScriptPodFileHashData[];
-      outcomes: ScriptPodGateOutcomeData[];
-    }
-    export interface ScriptPodReleaseReferenceData {
-      podId: string;
-      contentHash: string;
-      version?: null | string;
-    }
-    export interface ScriptPodFileHashData {
-      path: string;
-      sha256: string;
-    }
-    export interface ScriptPodGateOutcomeData {
-      code: string;
-      location: string;
-      reason: string;
-      remedy?: null | string;
-      severity: ScriptDiagnosticSeverity;
-    }
-  }
-}
-
-/** Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new local folder under Documents/Pe.Tools/Pods. */
-export namespace ScriptingPodImport {
-  export namespace Req {
-    export interface Request {
-      archivePath: string;
-      workspaceKey?: null | string;
-      independent?: boolean;
-    }
-  }
-  export namespace Res {
-    export type ScriptPodTransferStatus = "Succeeded" | "Rejected";
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      status: ScriptPodTransferStatus;
-      workspaceKey?: null | string;
-      workspaceRootPath?: null | string;
-      archivePath: string;
-      manifest?: null | ScriptPodManifestSummaryData;
-      archiveEntries: string[];
-      generatedFiles: string[];
-      diagnostics: ScriptDiagnostic[];
-      release?: null | ScriptPodReleaseData;
-    }
-    export interface ScriptPodManifestSummaryData {
-      schemaVersion: number;
-      id: string;
-      name: string;
-      version: string;
-      description?: null | string;
-      entrypoints: ScriptPodEntrypointData[];
-    }
-    export interface ScriptPodEntrypointData {
-      id: string;
-      sourcePath: string;
-      name?: null | string;
-      description?: null | string;
-    }
-    export interface ScriptDiagnostic {
-      stage: string;
-      severity: ScriptDiagnosticSeverity;
-      message: string;
-      source?: null | string;
-    }
-    export interface ScriptPodReleaseData {
-      podId: string;
-      version: string;
-      contentHash: string;
-      parent?: null | ScriptPodReleaseReferenceData;
-      files: ScriptPodFileHashData[];
-      outcomes: ScriptPodGateOutcomeData[];
-    }
-    export interface ScriptPodReleaseReferenceData {
-      podId: string;
-      contentHash: string;
-      version?: null | string;
-    }
-    export interface ScriptPodFileHashData {
-      path: string;
-      sha256: string;
-    }
-    export interface ScriptPodGateOutcomeData {
-      code: string;
-      location: string;
-      reason: string;
-      remedy?: null | string;
-      severity: ScriptDiagnosticSeverity;
-    }
-  }
-}
-
-/** List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix. */
-export namespace ScriptingPodList {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      workspacesRootPath: string;
-      pods: ScriptPodListItemData[];
-    }
-    export interface ScriptPodListItemData {
-      workspaceKey: string;
-      workspaceRootPath: string;
-      isValid: boolean;
-      manifest?: null | ScriptPodManifestSummaryData;
-      diagnostics: ScriptDiagnostic[];
-    }
-    export interface ScriptPodManifestSummaryData {
-      schemaVersion: number;
-      id: string;
-      name: string;
-      version: string;
-      description?: null | string;
-      entrypoints: ScriptPodEntrypointData[];
-    }
-    export interface ScriptPodEntrypointData {
-      id: string;
-      sourcePath: string;
-      name?: null | string;
-      description?: null | string;
-    }
-    export interface ScriptDiagnostic {
-      stage: string;
-      severity: ScriptDiagnosticSeverity;
-      message: string;
-      source?: null | string;
-    }
-  }
-}
-
-/** Validate and compose one captured pod snapshot without executing scripts or resolving external services. Returns composed settings only when preparation succeeds, with gate reasons on every result. */
-export namespace ScriptingPodPrepare {
-  export namespace Req {
-    export interface Request {
-      workspaceKey: string;
-      sourceBundle: ScriptPodSourceBundle;
-    }
-    export interface ScriptPodSourceBundle {
-      files: ScriptPodSourceFile[];
-      dependencies: ScriptPodDependencyBundle[];
-    }
-    export interface ScriptPodSourceFile {
-      path: string;
-      bytesBase64: string;
-    }
-    export interface ScriptPodDependencyBundle {
-      id: string;
-      releaseHash: string;
-      files: ScriptPodSourceFile[];
-    }
-  }
-  export namespace Res {
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      contentHash?: null | string;
-      composedSettings: {
-        [k: string]: string;
-      };
-      outcomes: ScriptPodGateOutcomeData[];
-    }
-    export interface ScriptPodGateOutcomeData {
-      code: string;
-      location: string;
-      reason: string;
-      remedy?: null | string;
-      severity: ScriptDiagnosticSeverity;
     }
   }
 }
@@ -5682,6 +5587,12 @@ export interface HostOps {
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
+  "pod.export": { request: PodExport.Req.Request; response: PodExport.Res.Response };
+  "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
+  "pod.list": { request: PodList.Req.Request; response: PodList.Res.Response };
+  "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
+  "pod.member.read": { request: PodMemberRead.Req.Request; response: PodMemberRead.Res.Response };
+  "pod.member.write": { request: PodMemberWrite.Req.Request; response: PodMemberWrite.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.family-model": { request: RevitApplyFamilyModel.Req.Request; response: RevitApplyFamilyModel.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
@@ -5723,10 +5634,6 @@ export interface HostOps {
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
   "scripting.cancel": { request: ScriptingCancel.Req.Request; response: ScriptingCancel.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
-  "scripting.pod.export": { request: ScriptingPodExport.Req.Request; response: ScriptingPodExport.Res.Response };
-  "scripting.pod.import": { request: ScriptingPodImport.Req.Request; response: ScriptingPodImport.Res.Response };
-  "scripting.pod.list": { request: ScriptingPodList.Req.Request; response: ScriptingPodList.Res.Response };
-  "scripting.pod.prepare": { request: ScriptingPodPrepare.Req.Request; response: ScriptingPodPrepare.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
   "settings.document.semantic-validation": { request: SettingsDocumentSemanticValidation.Req.Request; response: SettingsDocumentSemanticValidation.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
@@ -5756,6 +5663,12 @@ export const hostOpKeys = [
   "family.plan",
   "family.temporary.acquire",
   "host.ops.catalog",
+  "pod.export",
+  "pod.import",
+  "pod.list",
+  "pod.member.compose",
+  "pod.member.read",
+  "pod.member.write",
   "revit.apply.command.execute",
   "revit.apply.family-model",
   "revit.apply.parameter-links",
@@ -5797,10 +5710,6 @@ export const hostOpKeys = [
   "schedule.capture",
   "scripting.cancel",
   "scripting.execute",
-  "scripting.pod.export",
-  "scripting.pod.import",
-  "scripting.pod.list",
-  "scripting.pod.prepare",
   "scripting.workspace.bootstrap",
   "settings.document.semantic-validation",
   "settings.field-options",

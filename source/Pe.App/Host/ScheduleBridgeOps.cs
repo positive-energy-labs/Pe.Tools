@@ -13,6 +13,7 @@ using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Scripting;
 using System.IO;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
@@ -68,7 +69,7 @@ internal static class ScheduleBridgeOps {
             .ToList();
         var resultJson = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ResultReport(result), Formatting.Indented));
         var receiptPath = PodRuns.WriteReceipt(podFolder,
-            new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", ["result.json", $"schedule:{result.Schedule.Id.Value()}"]),
+            new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [$"schedule:{result.Schedule.Id.Value()}"], null),
             [("result.json", resultJson)]);
         return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped, result.Warnings, receiptPath), result);
     }

@@ -42,29 +42,6 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Origin_and_parent_are_distinct_from_content_identity() {
-        var result = PodManifestValidator.ValidateJson(
-            """
-            {
-              "schemaVersion": 2,
-              "id": "connector-audit",
-              "name": "Connector Audit",
-              "version": "1.0.0",
-              "entrypoints": [
-                { "id": "main", "sourcePath": "src/Main.cs" }
-              ],
-              "origin": { "locator": "archive:connector-audit.pepod" },
-              "parent": { "id": "connector-audit", "releaseHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "0.9.0" }
-            }
-            """
-        );
-
-        Assert.That(result.Success, Is.True);
-        Assert.That(result.Manifest!.Origin!.Locator, Is.EqualTo("archive:connector-audit.pepod"));
-        Assert.That(result.Manifest.Parent!.Version, Is.EqualTo("0.9.0"));
-    }
-
-    [Test]
     public void Unknown_manifest_fields_are_rejected() {
         var result = PodManifestValidator.ValidateJson(
             """

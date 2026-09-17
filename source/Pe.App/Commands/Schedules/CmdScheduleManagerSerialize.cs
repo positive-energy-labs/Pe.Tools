@@ -7,6 +7,7 @@ using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
 using Pe.App.Host;
 using Pe.App.Pods;
+using Pe.Revit.Scripting.Pods;
 using System.IO;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
@@ -51,7 +52,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
             // One capture action per installed pod: capture always writes a new member into the chosen pod.
             var captureActions = PodMembers.Pods().Select(pod => new PaletteAction<ScheduleSerializePaletteItem> {
-                Name = $"Capture into {pod.Name}", Execute = item => HandleCapture(pod.Id, item)
+                Name = $"Capture into {pod.Manifest!.Name}", Execute = item => HandleCapture(pod.Manifest!.Id, item)
             }).ToArray();
             if (captureActions.Length == 0)
                 throw new InvalidOperationException("No installed pod to capture into.");
@@ -105,8 +106,9 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         try {
             var spec = ScheduleBridgeOps.CaptureSpec(item.Schedule);
             var path = $"settings/schedules/{string.Concat(item.Schedule.Name.Split(Path.GetInvalidFileNameChars()))}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
-            _ = PodMembers.Write(podId, path, spec);
-            var fullPath = Path.Combine(PodMembers.Folder(podId), path);
+            var pods = new ScriptPodPreparationService();
+            _ = pods.WriteMember(podId, path, spec);
+            var fullPath = Path.Combine(pods.ResolveFolder(podId), path);
             new Ballogger()
                 .Add(LogEventLevel.Information, new StackFrame(), $"Captured schedule '{item.Schedule.Name}' as {podId}:{path}")
                 .Show(() => FileUtils.OpenInDefaultApp(fullPath), "Open Member");

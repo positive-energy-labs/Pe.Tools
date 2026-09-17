@@ -23,7 +23,7 @@ export const specDocSchema = z.object({
 });
 export type SpecDoc = z.infer<typeof specDocSchema>;
 
-import { settingsDocumentIdSchema } from "./settings.ts";
+import { podMemberSchema } from "./settings.ts";
 import { observationSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
@@ -102,7 +102,7 @@ export const familyProjectionSchema = z.object({
   plan: z
     .object({
       captureId: z.string().optional(),
-      documentId: settingsDocumentIdSchema,
+      member: podMemberSchema,
       patchJson: z.string(),
       entry: ffPlanEntrySchema,
       executionOptions: familyExecutionOptionsSchema.optional(),

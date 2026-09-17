@@ -8,7 +8,7 @@ import { addressSchema, executionTargetSchema, type ExecutionTarget } from "./ta
 import { workKeySchema } from "./route-state.ts";
 import { familiesRouteState } from "./families.ts";
 import { parameterLinkProfileSchema, parameterLinksRouteState } from "./parameter-links.ts";
-import { settingsRouteState, settingsDocumentIdSchema } from "./settings.ts";
+import { settingsRouteState, podMemberSchema } from "./settings.ts";
 import {
   takeoffsRouteState,
   takeoffSnapshotSchema,
@@ -57,7 +57,7 @@ const common = {
   originalEvidence: z.unknown(),
 };
 const file = z.object({
-  documentId: settingsDocumentIdSchema.extend({ stableId: z.string().optional() }),
+  member: podMemberSchema,
   rawContent: z.string(),
 });
 export const demoSeedSchema = z.discriminatedUnion("route", [
