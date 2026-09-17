@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
+import type { PodOpResponse } from "../shared/pod-ops.ts";
 import { readCatalog } from "./capability-tools.ts";
 import {
   ScriptingTools,
@@ -344,7 +345,7 @@ export class PeaCliCommands {
     return define({
       name: "list",
       description:
-        "List scripting workspaces (pods) with their validated entrypoints. Invalid pods appear with diagnostics explaining what to fix.",
+        "List installed pods with their entrypoints. Pods with manifest or entrypoint problems appear with diagnostics explaining what to fix.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
@@ -382,7 +383,7 @@ export class PeaCliCommands {
   private scriptPodImportCommand() {
     return define({
       name: "import",
-      description: "Import a pod.json-backed scripting workspace from a Pod zip archive.",
+      description: "Import a Pod zip archive into Documents/Pe.Tools/Pods.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
@@ -390,25 +391,14 @@ export class PeaCliCommands {
         actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
-        workspace: {
-          type: "string",
-          description: "Optional local folder name. Omit to use the pod.json id.",
-        },
-        independent: {
-          type: "boolean",
-          description: "Make editable independent settings from the released composed JSON.",
-        },
       },
       toKebab: true,
       run: async (ctx) => {
         const archivePath = firstNonBlank(ctx.values.archive);
         if (!archivePath) throw new Error("Provide --archive <path.zip>.");
-        const result = await this.createScriptingTools(ctx.values).importPod({
-          archivePath,
-          workspaceKey: firstNonBlank(ctx.values.workspace),
-          independent: ctx.values.independent,
-        });
-        writeScriptPodImport(result);
+        const result = await this.createScriptingTools(ctx.values).importPod({ archivePath });
+        console.log(`pod    ${result.pod}`);
+        console.log(`folder ${result.folder}`);
       },
     });
   }
@@ -416,20 +406,22 @@ export class PeaCliCommands {
   private scriptPodExportCommand() {
     return define({
       name: "export",
-      description: "Export a pod.json-backed scripting workspace as a portable Pod zip archive.",
+      description:
+        "Export an installed pod as a portable zip archive with its foreign fragments vendored.",
       args: {
-        ...commonArgs,
-        output: { type: "string", description: "Output path for the Pod zip archive." },
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
+        pod: { type: "string", description: "Manifest id of the pod to export." },
       },
       toKebab: true,
       run: async (ctx) => {
-        const archivePath = firstNonBlank(ctx.values.output);
-        if (!archivePath) throw new Error("Provide --output <path.zip>.");
-        const result = await this.createScriptingTools(ctx.values).exportPod({
-          workspaceKey: ctx.values.workspace,
-          archivePath,
-        });
-        writeScriptPodExport(result);
+        const pod = firstNonBlank(ctx.values.pod);
+        if (!pod) throw new Error("Provide --pod <id>.");
+        const result = await this.createScriptingTools(ctx.values).exportPod({ pod });
+        console.log(`archive ${result.archivePath}`);
       },
     });
   }
@@ -546,36 +538,19 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`sample       ${result.sampleScriptPath}`);
 }
 
-function writeScriptPodList(result: HostOpResponse<"scripting.pod.list">) {
-  console.log(`workspaces ${result.workspacesRootPath}`);
-  for (const pod of result.pods ?? []) {
-    const label = pod.isValid ? (pod.manifest?.name ?? pod.workspaceKey) : "INVALID";
-    console.log(
-      `${pod.workspaceKey}  ${label}${pod.manifest?.version ? ` v${pod.manifest.version}` : ""}`,
-    );
-    for (const entrypoint of pod.manifest?.entrypoints ?? [])
+function writeScriptPodList(result: PodOpResponse<"pod.list">) {
+  for (const pod of result.pods) {
+    console.log(`${pod.id}  ${pod.name} v${pod.version}  ${pod.folder}`);
+    for (const entrypoint of pod.entrypoints)
       console.log(
         `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
       );
-    for (const diagnostic of pod.diagnostics ?? [])
-      console.error(`  ${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
+    for (const diagnostic of pod.diagnostics)
+      console.error(
+        `  ${diagnostic.severity ?? "error"} ${diagnostic.path ?? "pod.json"}: ${diagnostic.message}`,
+      );
   }
-  if (!result.pods?.length) console.log("(no workspaces found — run `pea script bootstrap`)");
-}
-
-function writeScriptPodImport(result: HostOpResponse<"scripting.pod.import">) {
-  console.log(`status    ${result.status}`);
-  console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
-  console.log(`root      ${result.workspaceRootPath ?? "unknown"}`);
-  console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
-}
-
-function writeScriptPodExport(result: HostOpResponse<"scripting.pod.export">) {
-  console.log(`status    ${result.status}`);
-  console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
-  console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
+  if (!result.pods.length) console.log("(no pods found — run `pea script bootstrap`)");
 }
 
 function parseOperationVerbosity(value: unknown): "compact" | "hints" | "full" {

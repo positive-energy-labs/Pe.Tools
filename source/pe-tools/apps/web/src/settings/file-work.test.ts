@@ -21,15 +21,15 @@ test("router navigation, back, and reload retain the selected file address", asy
   const root = createRootRoute();
   const route = createRoute({
     getParentRoute: () => root,
-    path: "/settings",
+    path: "/family",
     validateSearch: fileSearch,
   });
   const history = createMemoryHistory({
-    initialEntries: ["/settings?mode=file&module=FamilyFoundry&root=models&file=a.json"],
+    initialEntries: ["/family?mode=file&module=FamilyFoundry&root=models&file=a.json"],
   });
   const router = createRouter({ routeTree: root.addChildren([route]), history });
   await router.load();
-  await router.navigate({ to: "/settings", search: fileAddressSearch({}, id("b.json")) });
+  await router.navigate({ to: "/family", search: fileAddressSearch({}, id("b.json")) });
   expect(router.state.location.search).toMatchObject({ file: "b.json" });
   history.back();
   await router.load();

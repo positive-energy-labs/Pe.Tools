@@ -13,7 +13,7 @@ namespace Pe.App.Commands.Palette.TaskPalette;
 public sealed class PodScriptTaskItem : IPaletteListItem {
     public required string WorkspaceKey { get; init; }
     public required string PodName { get; init; }
-    public required ScriptPodEntrypointData Entrypoint { get; init; }
+    public required Pe.Shared.Scripting.Pods.PodEntrypoint Entrypoint { get; init; }
 
     public string Id => $"pod:{this.WorkspaceKey}:{this.Entrypoint.Id}";
 

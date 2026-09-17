@@ -3,7 +3,7 @@
  *
  * Third instance of the proposal → staged → committed trichotomy (after parameter-links
  * cells and parameter-links draft/preview/apply). Fields are addressed by RFC 6901
- * JSON Pointers into the settings document's parsed raw content (e.g.
+ * JSON Pointers into the member's parsed raw content (e.g.
  * "/revit/units/length") — pointer escaping means property names may contain periods
  * and slashes (spec-sheet values like "M.2 Depth" address cleanly).
  * Pea proposes field values; the human stages them; the human-only `settings.write` action
@@ -105,9 +105,9 @@ const settingsRouteDocumentSchema = z.object({
 export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;
 
 export const settingsRouteState = {
-  route: "settings",
-  title: "Settings",
-  description: "Review, validate, and save proposed changes to a typed settings document.",
+  route: "pods",
+  title: "Pods",
+  description: "Review, validate, and save proposed changes to one pod member.",
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
   commands: {

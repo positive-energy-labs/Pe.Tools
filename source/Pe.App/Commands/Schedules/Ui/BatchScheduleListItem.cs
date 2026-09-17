@@ -1,76 +1,38 @@
 using System.Windows.Media;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.SettingsRuntime.Modules;
+using Pe.App.Pods;
 using Pe.Revit.Ui.Core;
-using Pe.Shared.RevitData.Schedules;
-using Pe.Shared.StorageRuntime;
 using System.IO;
 using WpfColor = System.Windows.Media.Color;
-using Pe.App.Pods;
 
 namespace Pe.App.Commands.Schedules.Ui;
 
-/// <summary>
-///     Palette list item representing a batch schedule configuration.
-/// </summary>
+/// <summary>A pod member whose `$schema` is a schedule batch: a list of schedule members in the same pod.</summary>
 public class BatchScheduleListItem : IPaletteListItem {
     private readonly FileInfo _fileInfo;
-    private readonly string _relativePath;
 
-    internal BatchScheduleListItem(PreparedPodSetting prepared) {
-        this.FilePath = prepared.FullSourcePath;
-        this._fileInfo = new FileInfo(this.FilePath);
-        this._relativePath = prepared.SourcePath;
-        this.Prepared = prepared;
-        this.ScheduleCount = ExtractScheduleCountFromContent(prepared.ComposedContent);
+    internal BatchScheduleListItem(PodMember member) {
+        this.Member = member;
+        this._fileInfo = new FileInfo(member.FullPath);
+        this.ScheduleCount = PodMembers.ReadOrEmpty(member.FullPath)["ScheduleFiles"] is JArray files ? files.Count : 0;
     }
 
-    internal PreparedPodSetting Prepared { get; private set; }
-    internal PreparedPodSetting? AttemptSnapshot { get; private set; }
-
-    /// <summary> Full path to the batch configuration JSON file </summary>
-    public string FilePath { get; }
-
-    /// <summary> Number of schedules in the batch </summary>
+    internal PodMember Member { get; }
+    public string FilePath => this.Member.FullPath;
     public int ScheduleCount { get; }
-
-    /// <summary> Last modified date for sorting </summary>
     public DateTime LastModified => this._fileInfo.LastWriteTime;
-
-    /// <summary> Created date </summary>
     public DateTime CreatedDate => this._fileInfo.CreationTime;
 
-    /// <summary> Batch filename without extension (or relative path if nested) </summary>
-    public string TextPrimary => this._relativePath != null
-        ? Path.ChangeExtension(this._relativePath, null)
-        : Path.GetFileNameWithoutExtension(this.FilePath);
-
-    /// <summary> Shows "Batch" label </summary>
+    public string TextPrimary => Path.ChangeExtension(this.Member.Path["settings/".Length..], null);
     public string TextSecondary => "Batch Configuration";
-
-    /// <summary> Schedule count badge </summary>
     public string TextPill => $"{this.ScheduleCount} schedules";
-
     public Func<string> GetTextInfo => () => string.Empty;
-
     public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
 
-    /// <summary>
-    ///     Loads the batch settings from the file.
-    /// </summary>
-    public BatchScheduleSettings LoadBatchSettings() {
-        this.AttemptSnapshot = null;
-        this.Prepared = this.Prepared.Refresh();
-        this.AttemptSnapshot = this.Prepared;
-        return ModuleSettingsStorage<BatchScheduleSettings>.ReadPrepared(
-            this.Prepared.RawContent,
-            this.Prepared.ComposedContent,
-            $"{this.Prepared.PodId}:{this.Prepared.SourcePath}");
-    }
-
-    private static int ExtractScheduleCountFromContent(string content) {
-        var jObject = JObject.Parse(content);
-        return jObject.TryGetValue("ScheduleFiles", out var filesToken) && filesToken is JArray filesArray ? filesArray.Count : 0;
-    }
+    /// <summary>The schedule members this batch names, resolved inside its own pod.</summary>
+    internal IReadOnlyList<PodMember> Schedules() =>
+        this.Member.Load<Pe.Shared.RevitData.Schedules.BatchScheduleSettings>().Spec.ScheduleFiles
+            .Select(file => this.Member with { Path = "settings/" + file.Replace(Path.DirectorySeparatorChar, '/'), Schema = null })
+            .ToList();
 }

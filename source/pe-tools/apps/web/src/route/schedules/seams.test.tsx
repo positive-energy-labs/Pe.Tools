@@ -4,10 +4,10 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { appAtomRegistry, useRoute, type RouteHandle } from "#/route";
-import { setup } from "../../../host/tests/schedule-test-fixture";
+import { setup } from "../../../../host/tests/schedule-test-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import {
-  scheduleGridManifest,
+  schedulesManifest,
   type ScheduleGridAction,
   type ScheduleGridPage,
   type ScheduleGridReading,
@@ -229,7 +229,7 @@ test("the apply queue keeps an explicit expectedRevision explicit and does not p
     ScheduleGridAction
   >["work"];
   function Probe() {
-    work = useRoute(scheduleGridManifest(), { work: f.scope.work }).work;
+    work = useRoute(schedulesManifest(), { work: f.scope.work }).work;
     return <span>{String(work.revision)}</span>;
   }
   const mounted = render(

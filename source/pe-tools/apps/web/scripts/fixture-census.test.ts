@@ -7,7 +7,8 @@ import { CHAT_SEEDS } from "../src/chat/seeds";
 import { manifest as familiesManifest } from "../src/families/manifest";
 import { familyManifest } from "../src/family/manifest";
 import { INSTANCES_SEEDS } from "../src/instances/seeds";
-import { SETTINGS_SEEDS } from "../src/settings/seeds";
+import { PODS_SEEDS } from "../src/route/seeds";
+import { SCHEDULE_SEEDS } from "../src/route/schedules/manifest";
 import { takeoffSeeds } from "../src/takeoff/actions";
 import { censusFromRouteTree } from "./fixture-census";
 
@@ -32,7 +33,6 @@ describe("fixture census", () => {
       "/ops",
       "/parameter-links",
       "/runs",
-      "/schedule-grid",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
@@ -40,7 +40,7 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(5);
+    expect(census.missingCanonicalFixtures).toBe(4);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
@@ -51,7 +51,8 @@ describe("fixture census", () => {
       "/families": familiesManifest.seeds,
       "/family": familyManifest().seeds,
       "/instances": INSTANCES_SEEDS,
-      "/settings": SETTINGS_SEEDS,
+      "/pods": PODS_SEEDS,
+      "/schedules": SCHEDULE_SEEDS,
       "/takeoffs": takeoffSeeds,
     };
 

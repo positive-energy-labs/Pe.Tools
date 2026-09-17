@@ -70,12 +70,12 @@ const TOOLS = [
       "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
   },
   {
-    to: "/settings",
-    title: "Settings",
-    label: "Host pipeline",
+    to: "/pods",
+    title: "Pods",
+    label: "Pods",
     icon: Settings2,
     description:
-      "Schema-backed host settings — pea proposes field values, you review, stage, validate, and save.",
+      "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
   },
   {
     to: "/doc-lab",
@@ -101,12 +101,12 @@ const TOOLS = [
     description: "Call any host operation directly and inspect the raw response.",
   },
   {
-    to: "/schedule-grid",
-    title: "Schedule Grid",
+    to: "/schedules",
+    title: "Schedules",
     label: "Revit data",
     icon: LayoutGrid,
     description:
-      "Any Revit schedule as an editable grid — pea proposes cell values, you review, stage, and push them back to the document.",
+      "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
   },
   {
     to: "/data-tables",

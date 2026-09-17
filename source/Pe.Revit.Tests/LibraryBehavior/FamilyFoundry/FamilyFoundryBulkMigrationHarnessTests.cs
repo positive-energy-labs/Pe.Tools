@@ -1181,7 +1181,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                         plans.Add(pair);
                         try {
                             var plan = FamilyFoundryBridgeOps.PlanFamilies(
-                                new FamilyFoundryPlanRequest(JsonConvert.SerializeObject(conversion.Patch), family.Id.Value()), project);
+                                JsonConvert.SerializeObject(conversion.Patch), project, family.Id.Value());
                             pair["plan"] = JObject.FromObject(plan);
                             if (plan.Diagnostics.Count > 0 || plan.Families.Any(f => f.Refusals.Count > 0))
                                 failures.Add($"{source} -> {family.Name}: native plan diagnostics");

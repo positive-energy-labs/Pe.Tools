@@ -141,13 +141,13 @@ public class CmdPltCommands : IExternalCommand {
 
     /// <summary>
     ///     Every entrypoint of every valid pod becomes a palette item. Invalid pods are skipped
-    ///     here (the CLI/agent `scripting.pod.list` surface reports their diagnostics).
+    ///     here (the CLI/agent `pod.list` surface reports their diagnostics).
     /// </summary>
     private static IEnumerable<IPaletteListItem> BuildPodScriptItems() =>
-        ScriptPodCatalogService.List().Pods
-            .Where(pod => pod.IsValid && pod.Manifest is not null)
+        new ScriptPodPreparationService().List()
+            .Where(pod => pod.Success)
             .SelectMany(pod => pod.Manifest!.Entrypoints.Select(entrypoint => (IPaletteListItem)new PodScriptTaskItem {
-                WorkspaceKey = pod.WorkspaceKey,
+                WorkspaceKey = System.IO.Path.GetFileName(pod.Folder),
                 PodName = pod.Manifest.Name,
                 Entrypoint = entrypoint
             }));

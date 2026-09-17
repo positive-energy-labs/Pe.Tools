@@ -10,7 +10,10 @@ import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { previousOf } from "#/readings";
 import { refuse, useRoute } from "#/route";
 import { ActionReceiptView } from "#/actions/receipt";
-import { scheduleGridManifest, type ScheduleGridPage } from "./manifest";
+import { EntityRouteView } from "#/route/entity";
+import { usePodList } from "#/route/pods";
+import { DEMO_SPEC } from "#/route/seeds";
+import { scheduleSpec, schedulesManifest, type ScheduleGridPage } from "./manifest";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
@@ -24,15 +27,25 @@ const readingError = (reading: Reading<unknown>) =>
 export function LiveScheduleGridWorkspace({
   workspaceId,
   render,
+  framed,
+  target: chosen = null,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
+  /** `/schedules` draws the entity route around the grid; a chat pane draws the grid alone. */
+  framed?: boolean;
+  /** The route's `?target`, used until a schedule reading names its own document. */
+  target?: string | null;
 }) {
   const workbench = useContext(WorkbenchContext);
-  const manifest = useMemo(() => scheduleGridManifest(), []);
+  const manifest = useMemo(() => schedulesManifest(), []);
+  const demo = useMemo(() => new URLSearchParams(globalThis.location?.search).has("demo"), []);
+  const [pods, refreshPods] = usePodList(!demo);
   const handle = useRoute(manifest, {
+    provided: { pods },
     page: { workspaceId: workspaceId ?? "" },
-    target: (page) => (page.target ? JSON.stringify({ kind: "open", ref: page.target }) : null),
+    // The reading's document wins once a schedule is read; before that the Situation's pick does.
+    target: (page) => (page.target ? JSON.stringify({ kind: "open", ref: page.target }) : chosen),
     work: (page, target) => (target ? page.workspaceId || undefined : undefined),
   });
   const [page, setPage] = handle.page;
@@ -129,8 +142,8 @@ export function LiveScheduleGridWorkspace({
     blockedBecause,
   };
 
-  return (
-    <>
+  const audit = (
+    <div className="flex size-full min-h-0 min-w-0 flex-col">
       {(readingFailure || !target) && (
         <div role="status">
           {readingFailure ?? "Select an available document and session to read schedules"}
@@ -151,7 +164,18 @@ export function LiveScheduleGridWorkspace({
       )}
       <ScheduleReceipts workspaceId={page.workspaceId} receipts={receipts} />
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
-    </>
+    </div>
+  );
+  if (!framed) return audit;
+  return (
+    <EntityRouteView
+      def={scheduleSpec}
+      handle={handle as never}
+      refreshPods={refreshPods}
+      fixture={demo ? DEMO_SPEC : undefined}
+    >
+      {audit}
+    </EntityRouteView>
   );
 }
 

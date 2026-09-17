@@ -5,7 +5,10 @@ using Newtonsoft.Json;
 using Pe.App.Commands.Schedules.Ui;
 using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
-using Pe.Revit.SettingsRuntime.Json;
+using Pe.App.Host;
+using Pe.App.Pods;
+using Pe.Revit.Scripting.Pods;
+using System.IO;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
@@ -47,8 +50,14 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 return this.BuildSerializationPreview(serializeItem);
             });
 
-            // Create the palette
-            var window = PaletteFactory.Create("Schedule Serializer",
+            // One capture action per installed pod: capture always writes a new member into the chosen pod.
+            var captureActions = PodMembers.Pods().Select(pod => new PaletteAction<ScheduleSerializePaletteItem> {
+                Name = $"Capture into {pod.Manifest!.Name}", Execute = item => HandleCapture(pod.Manifest!.Id, item)
+            }).ToArray();
+            if (captureActions.Length == 0)
+                throw new InvalidOperationException("No installed pod to capture into.");
+
+            var window = PaletteFactory.Create("Schedule Capture",
                 new PaletteOptions<ScheduleSerializePaletteItem> {
                     Persistence = (Storage: storage, PersistenceKey: item => item.TextPrimary),
                     SidebarPanel = previewPanel,
@@ -56,9 +65,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                         new TabDefinition<ScheduleSerializePaletteItem>(
                             "All",
                             () => serializeItems,
-                            new PaletteAction<ScheduleSerializePaletteItem> {
-                                Name = "Serialize", Execute = item => this.HandleSerialize(storage, item)
-                            }
+                            captureActions
                         ) { FilterKeySelector = i => i.TextPill ?? string.Empty }
                     ]
                 });
@@ -73,11 +80,8 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
     private ScheduleSerializePreviewData BuildSerializationPreview(ScheduleSerializePaletteItem serializeItem) {
         try {
-            // Serialize the schedule to get the profile
             var profile = serializeItem.Schedule.CaptureAuthoredScheduleProfile();
-
-            // Serialize to JSON exactly as it would be saved
-            var profileJson = JsonConvert.SerializeObject(profile, RevitJsonFormatting.CreateRevitIndentedSettings());
+            var profileJson = ScheduleBridgeOps.CaptureSpec(serializeItem.Schedule);
 
             return new ScheduleSerializePreviewData {
                 ProfileName = profile.Name,
@@ -92,58 +96,25 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             return new ScheduleSerializePreviewData {
                 ProfileName = serializeItem.TextPrimary,
                 IsValid = false,
-                ErrorMessage = $"Serialization error: {ex.Message}",
+                ErrorMessage = $"Capture error: {ex.Message}",
                 ProfileJson = string.Empty
             };
         }
     }
 
-    private Task HandleSerialize(ModuleStorage storage, IPaletteListItem item) {
-        var serializeItem = (ScheduleSerializePaletteItem)item;
-
+    private static Task HandleCapture(string podId, ScheduleSerializePaletteItem item) {
         try {
-            var serializeOutputDir = storage.Output().SubDir("serialize");
-            var profile = serializeItem.Schedule.CaptureAuthoredScheduleProfile();
-
-            // Prepend timestamp to filename
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            var filename = serializeOutputDir.Json($"{timestamp}_{profile.Name}.json").Write(profile);
-
-            var balloon = new Ballogger();
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Serialized schedule '{serializeItem.Schedule.Name}' to {filename}");
-
-            // Report what was serialized
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Fields: {profile.Fields.Count} ({profile.Fields.Count(f => f.CalculatedType != null)} calculated)");
-
-            if (profile.SortGroup is { Count: > 0 }) {
-                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Sort/Group: {profile.SortGroup.Count}");
-            }
-
-            if (profile.Filters is { Count: > 0 }) {
-                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Filters: {profile.Filters.Count}");
-            }
-
-            var fields = profile.Fields ?? [];
-            var headerGroupCount = fields.Count(f => !string.IsNullOrEmpty(f.HeaderGroup));
-            if (headerGroupCount > 0) {
-                var uniqueGroups = fields
-                    .Where(f => !string.IsNullOrEmpty(f.HeaderGroup))
-                    .Select(f => f.HeaderGroup)
-                    .Distinct()
-                    .Count();
-                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Header Groups: {uniqueGroups} group(s) across {headerGroupCount} field(s)");
-            }
-
-            balloon.Show(() => FileUtils.OpenInDefaultApp(filename), "Open Output File");
+            var spec = ScheduleBridgeOps.CaptureSpec(item.Schedule);
+            var path = $"settings/schedules/{string.Concat(item.Schedule.Name.Split(Path.GetInvalidFileNameChars()))}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var pods = new ScriptPodPreparationService();
+            _ = pods.WriteMember(podId, path, spec);
+            var fullPath = Path.Combine(pods.ResolveFolder(podId), path);
+            new Ballogger()
+                .Add(LogEventLevel.Information, new StackFrame(), $"Captured schedule '{item.Schedule.Name}' as {podId}:{path}")
+                .Show(() => FileUtils.OpenInDefaultApp(fullPath), "Open Member");
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
         }
-
         return Task.CompletedTask;
     }
 }

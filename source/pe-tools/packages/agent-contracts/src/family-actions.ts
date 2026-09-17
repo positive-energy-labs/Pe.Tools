@@ -28,8 +28,8 @@ export const familyActions = {
     says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     needs: "nothing",
     actor: "human",
-    dirties: ["settings"],
-    executors: ["pod.member.write"],
+    dirties: ["pods"],
+    executors: ["pod.member.write", "pod.member.save"],
     description:
       "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     input: z.object({

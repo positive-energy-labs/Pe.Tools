@@ -19,7 +19,7 @@ export const scheduleActions = {
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
     needs: "project-document",
     actor: "human",
-    dirties: ["schedule-grid"],
+    dirties: ["schedules"],
     executors: ["revit.apply.parameter-values"],
     description:
       "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
@@ -60,12 +60,12 @@ export const scheduleReads = {
     input: z.object({}),
   },
   "schedule.grid.snapshot": {
-    says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedule-grid with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
+    says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedules with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
     dirties: [], // TODO(fold-1): name the Readings this action invalidates
     needs: "project-document",
     actor: "any",
     description:
-      "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedule-grid with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
+      "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedules with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
     input: z.object({
       scheduleId: z.number().int().optional(),
       scheduleName: z.string().optional(),

@@ -12,8 +12,8 @@ public static class ScriptPodSourceNormalizer {
     public const int MaxSourceBytes = 2 * 1024 * 1024;
 
     public static NormalizedPodSource Normalize(ScriptPodSourceBundle bundle, string workspaceKey, string sourcePath) {
-        if (bundle?.Files is null || bundle.Dependencies is null)
-            throw new ArgumentException("Pod source bundle requires captured files and dependencies.");
+        if (bundle?.Files is null)
+            throw new ArgumentException("Pod source bundle requires captured files.");
         var selected = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Pod entrypoint");
         var captured = bundle.Files.ToDictionary(file => file.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
         if (!captured.TryGetValue("pod.json", out var manifestFile))

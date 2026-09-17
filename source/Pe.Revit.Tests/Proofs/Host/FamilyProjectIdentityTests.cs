@@ -38,7 +38,7 @@ public sealed class FamilyProjectIdentityTests {
             project = RevitFamilyFixtureHarness.CreateProjectDocument(application);
             var family = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, project, path);
             var id = family.Id.Value();
-            var baseline = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([id]), project).Families.Single();
+            var baseline = FamilyFoundryBridgeOps.CaptureFamilies([id], project).Families.Single();
             Assert.That(baseline.Success, Is.True, baseline.Error);
             var snapshot = FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
             Assert.That(snapshot.IsPartial, Is.False);
@@ -52,16 +52,16 @@ public sealed class FamilyProjectIdentityTests {
             }
             Assert.That(editor.Title, Does.Contain(family.Name), "The old name-based lookup must collide.");
             var open = application.Documents.Cast<Document>().ToArray();
-            var plan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, id), project).Families.Single();
+            var plan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, id).Families.Single();
             Assert.That(plan.Refusals, Is.Empty);
             Assert.That(plan.Changes.Any(c => c.Key == parameterName), Is.True, "Project baseline is 3; the unsaved editor's 7 must not produce a no-op.");
-            var capture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([id]), project).Families.Single();
+            var capture = FamilyFoundryBridgeOps.CaptureFamilies([id], project).Families.Single();
             Assert.That(capture.Success, Is.True, capture.Error);
             Assert.That(capture.ModelJson, Is.EqualTo(baseline.ModelJson));
             var reread = FamilySnapshotExtractor.ExtractFromProjectFamily(project, family);
             Assert.That(reread.IsPartial, Is.False);
             Assert.That(reread.Parameters.Single(p => p.Definition.Identity.Name == parameterName).ValuesPerType["Standard"], Is.EqualTo(baselineValue));
-            var editorPlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch), editor).Families.Single();
+            var editorPlan = FamilyFoundryBridgeOps.PlanFamilies(patch, editor).Families.Single();
             Assert.That(editorPlan.Refusals, Is.Empty);
             Assert.That(editorPlan.Changes, Is.Empty, "Explicit family-document targeting must still read the editor's 7.");
             Assert.That(application.Documents.Cast<Document>(), Is.EquivalentTo(open), "Readers must close only their own EditFamily copies.");
@@ -75,7 +75,7 @@ public sealed class FamilyProjectIdentityTests {
             using (var tx = new Transaction(project, "Block EditFamily")) {
                 tx.Start();
                 var native = Assert.Throws<Autodesk.Revit.Exceptions.InvalidOperationException>(() => project.EditFamily(family));
-                var refused = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, id), project).Families.Single();
+                var refused = FamilyFoundryBridgeOps.PlanFamilies(patch, project, id).Families.Single();
                 Assert.That(refused.Refusals.Single().Code, Is.EqualTo("FamilyEditRefused"));
                 Assert.That(refused.Refusals.Single().Message, Is.EqualTo(native!.Message));
                 tx.RollBack();
@@ -83,13 +83,13 @@ public sealed class FamilyProjectIdentityTests {
 
             editor.Close(false);
             editor = null;
-            var applied = FamilyFoundryBridgeOps.ApplyFamilies(new FamilyFoundryApplyRequest(patch, new Dictionary<long, string> { [id] = plan.PlanHash }), project).Receipts.Single();
+            var applied = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [id] = plan.PlanHash }, project, null, null, Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply-test", Guid.NewGuid().ToString("N"))).Receipts.Single();
             Assert.That(applied.Success && applied.Converged, Is.True, applied.Error + string.Join(";", applied.Errors));
             Assert.That(applied.Residue, Is.Empty);
             var replacement = project.GetElement(applied.FamilyId.ToElementId()) as Family;
             Assert.That(replacement, Is.Not.Null, "Receipt must identify the committed replacement, not an invalid pre-load Family.");
             Assert.That(applied.FamilyName, Is.EqualTo("PE Identity"));
-            var repeat = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, applied.FamilyId), project).Families.Single();
+            var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, applied.FamilyId).Families.Single();
             Assert.That(repeat.Changes, Is.Empty);
             Assert.That(repeat.Refusals, Is.Empty);
         } finally {
@@ -115,11 +115,11 @@ public sealed class FamilyProjectIdentityTests {
             var family = families.Single(candidate => candidate.Name == familyName);
             var titleBlock = families.Single(candidate => candidate.Name == "PE - Title Block");
 
-            var generatorPlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
-            var generatorRepeat = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
-            var generatorCapture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([family.Id.Value()]), project).Families.Single();
-            var refusedPlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, titleBlock.Id.Value()), project).Families.Single();
-            var refusedCapture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([titleBlock.Id.Value()]), project).Families.Single();
+            var generatorPlan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, family.Id.Value()).Families.Single();
+            var generatorRepeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, family.Id.Value()).Families.Single();
+            var generatorCapture = FamilyFoundryBridgeOps.CaptureFamilies([family.Id.Value()], project).Families.Single();
+            var refusedPlan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, titleBlock.Id.Value()).Families.Single();
+            var refusedCapture = FamilyFoundryBridgeOps.CaptureFamilies([titleBlock.Id.Value()], project).Families.Single();
             var lostDimensionId = BuiltInFailures.DimensionFailures.SomeDimensionsLostOnPaste.Guid.ToString();
             var deletedElementsId = BuiltInFailures.EditingFailures.ElementsDeleted.Guid.ToString();
 
@@ -160,7 +160,7 @@ public sealed class FamilyProjectIdentityTests {
         var project = application.OpenDocumentFile(path);
         try {
             var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(candidate => candidate.Name == familyName);
-            var capture = FamilyFoundryBridgeOps.ProjectFamilies(new FamilyFoundryProjectRequest([family.Id.Value()]), project).Families.Single();
+            var capture = FamilyFoundryBridgeOps.CaptureFamilies([family.Id.Value()], project).Families.Single();
             Assert.That(capture.Success, Is.True, capture.Error);
             var parameter = JObject.Parse(capture.ModelJson!)["parameters"]!["Default Elevation"];
             Assert.That(parameter, Is.Not.Null, "The authored String parameter must not be dropped with the same-named built-in length parameter.");
@@ -168,17 +168,17 @@ public sealed class FamilyProjectIdentityTests {
             Assert.That(capture.Coverage["lookupTables"], Is.EqualTo("Partial"));
             Assert.That(capture.Coverage["parameters"], Is.EqualTo("Read"));
             var patch = """{"patch":{"parameters":{"FF Coverage Probe":{"dataType":"Number","value":7}}}}""";
-            var plan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            var plan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, family.Id.Value()).Families.Single();
             Assert.That(plan.Refusals, Is.Empty);
             Assert.That(plan.Changes.Single(change => change.Key == "FF Coverage Probe").Kind, Is.EqualTo("Add"));
             var tablePatch = """{"patch":{"lookupTables":{"Coverage Probe":{"csv":",Key##number##general,Value##number##general\nrow,1,2\n"}}}}""";
-            var tablePlan = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(tablePatch, family.Id.Value()), project).Families.Single();
+            var tablePlan = FamilyFoundryBridgeOps.PlanFamilies(tablePatch, project, family.Id.Value()).Families.Single();
             Assert.That(tablePlan.Changes.Single(change => change.Key == "Coverage Probe").Kind, Is.EqualTo("Unverifiable"));
-            var repeat = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, family.Id.Value()), project).Families.Single();
+            var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, family.Id.Value()).Families.Single();
             Assert.That(repeat.PlanHash, Is.EqualTo(plan.PlanHash), "Transient EditFamily reference GUIDs must not change the reviewed intent.");
-            var applied = FamilyFoundryBridgeOps.ApplyFamilies(new FamilyFoundryApplyRequest(patch, new Dictionary<long, string> { [family.Id.Value()] = plan.PlanHash }), project).Receipts.Single();
+            var applied = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [family.Id.Value()] = plan.PlanHash }, project, null, null, Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply-test", Guid.NewGuid().ToString("N"))).Receipts.Single();
             Assert.That(applied.Success && applied.Converged, Is.True, applied.Error);
-            var final = FamilyFoundryBridgeOps.PlanFamilies(new FamilyFoundryPlanRequest(patch, applied.FamilyId), project).Families.Single();
+            var final = FamilyFoundryBridgeOps.PlanFamilies(patch, project, applied.FamilyId).Families.Single();
             Assert.That(final.Changes, Is.Empty);
         } finally { project.Close(false); }
     }

@@ -1,10 +1,6 @@
-using System.Text;
 using Newtonsoft.Json.Linq;
-using Pe.App.Pods;
 using Pe.Revit.FamilyFoundry.Reconcile;
-using Pe.Revit.Scripting.Pods;
 using Pe.Shared.RevitData.Families;
-using Pe.Shared.Scripting.Pods;
 
 namespace Pe.Revit.Tests;
 
@@ -34,26 +30,6 @@ public sealed class PortablePodConsumerTests {
         var model = new FamilyModel { Parameters = [] };
         Assert.DoesNotThrow(() => source.Resolve(model, JObject.Parse("{\"parameters\":{}}")));
         Assert.That(source.ObservedParametersDigest, Is.Null);
-    }
-
-    [Test]
-    public void Batch_members_come_from_the_same_snapshot_and_missing_members_do_not_fall_back() {
-        var manifest = PodManifestValidator.ValidateJson("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1"}""").Manifest!;
-        var files = new Dictionary<string, PreparedPodFile> {
-            ["settings/batch.batch.json"] = new("settings/batch.batch.json", Encoding.UTF8.GetBytes("{}"), "file-a"),
-            ["settings/one.schedule.json"] = new("settings/one.schedule.json", Encoding.UTF8.GetBytes("{}"), "file-b")
-        };
-        var composed = new Dictionary<string, PodComposedDocument> {
-            ["composed/batch.batch.json"] = new("composed/batch.batch.json", "{}", []),
-            ["composed/one.schedule.json"] = new("composed/one.schedule.json", "{\"Name\":\"Original\"}", [])
-        };
-        var snapshot = new PreparedPod(manifest, "snapshot", files, composed, [], []) { ReleaseHash = "verified-release" };
-        var batch = PreparedPodSettingsCatalog.Project(snapshot, Path.GetTempPath(), [".batch.json"]).Single();
-        var member = batch.Member("settings/one.schedule.json");
-        Assert.That(member.Snapshot, Is.SameAs(snapshot));
-        Assert.That(member.ReleaseHash, Is.EqualTo("verified-release"));
-        Assert.That(member.ComposedContent, Does.Contain("Original"));
-        Assert.Throws<InvalidDataException>(() => batch.Member("settings/missing.schedule.json"));
     }
 
     [Test]
