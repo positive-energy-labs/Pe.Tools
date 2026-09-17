@@ -76,6 +76,8 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 | w3-engines | purge rows 7 to 9, data-table op name, `/pods` deep link from Revit, dead descriptor fields | cn-engines | crusade/w3-engines |
 | w3-demo | live demo lane so capture and apply get a browser proof; scenario suites | fresh agent on cn-pod-core | crusade/w3-demo |
 
+- w3-editor: ADOPT, graft held until wave 3 closes so the user's review server stays still. Stake `crusade/w3-editor` at `ed9edd0`, report `reports/w3-editor.md`. The Pea proposal lane lives in the spec editor (`useMemberWork`, `memberWorkManifest`, `ProposalLane`); `settings-panes` gone and `settings/` holds one primitive; `/pods` shows proposals on any member; web 405 tests; browser lane shows the lane on `/pods`, `/family?demo=build`, `/family?demo=apply`. Left: two save paths on one member (draft bytes via `pod.member.save`, staged fields via `settings.write`) that refuse each other until adopt; the reviewer component imported from `workbench` into a kernel file. Both are wave 4 or ledger Owed.
+
 Wave 3 items from the critic, for reference:
 
 - `families.capture` returns `{ members, evidence }` like `family.capture`, and `families.plan` takes `{ source }` so `/families` has one spec address instead of page plus Work. Owner: the host line.
