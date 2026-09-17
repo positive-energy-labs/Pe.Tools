@@ -39,14 +39,6 @@ export type Custody = SessionObservation extends infer Observation
 // Host/UI lane. The SDK calls the source payload `checkout`; only presentation calls it `dev`.
 export type Lane = HostLane;
 
-export const hostModuleDescriptorSchema = Schema.Struct({
-  activeDocumentKind: Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),
-  defaultRootKey: Schema.String,
-  moduleKey: Schema.String,
-  scope: Schema.Literals(["Host", "Session", "ActiveDocument"]),
-});
-export type HostModuleDescriptor = Schema.Schema.Type<typeof hostModuleDescriptorSchema>;
-
 export const hostRuntimeAssemblyDataSchema = Schema.Struct({
   informationalVersion: nullableString,
   location: nullableString,
@@ -109,7 +101,6 @@ export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentObservedAtUnixMs: Schema.Number,
   activeDocumentPath: nullableString,
   activeDocumentTitle: nullableString,
-  availableModules: Schema.Array(hostModuleDescriptorSchema),
   hasActiveDocument: Schema.Boolean,
   openDocuments: Schema.Array(bridgeDocumentSnapshotSchema),
   revitVersion: Schema.String,

@@ -20,4 +20,16 @@ public sealed class ProductPreferences {
         "The collection ID derived from an 'id' field returned by `parameters/v1/accounts/<accountId>/groups/<groupId>/collections`. If left empty, the first item of 'results' will be used."
     )]
     public string ParamServiceCollectionId { get; set; } = "";
+
+    [Description("Dev/override PostHog ingest settings for a checkout without an installed product manifest.")]
+    [Newtonsoft.Json.JsonProperty("posthog")]
+    public PostHogPreferences? PostHog { get; set; }
+}
+
+public sealed class PostHogPreferences {
+    [Description("Public write-only PostHog ingest key (phc_...).")]
+    public string ApiKey { get; set; } = "";
+
+    [Description("PostHog ingest host.")]
+    public string Host { get; set; } = "https://us.i.posthog.com";
 }

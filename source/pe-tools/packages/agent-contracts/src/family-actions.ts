@@ -98,7 +98,7 @@ export const familyActions = {
     needs: "document",
     actor: "human",
     dirties: ["family"],
-    executors: ["pod.member.compose", "revit.apply.family-model"],
+    executors: ["pod.member.compose", "family.build"],
     description:
       "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
     input: z.object({

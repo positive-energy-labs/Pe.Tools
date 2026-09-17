@@ -604,17 +604,10 @@ internal sealed class BridgeAgent : IDisposable {
                 document.IsFamilyDocument,
                 activeDocument != null && document.Matches(activeDocument)))
             .ToList();
-        var availableModules = this._moduleRegistry.GetModules()
-            .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
-            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
-            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-            .Select(SettingsModuleAvailability.CreateHostModuleDescriptor)
-            .ToList();
         var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(
-            "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
-            activeDocument?.Title,
-            availableModules.Count
+            "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}",
+            activeDocument?.Title
         );
         return new BridgeStateSnapshot(
             RevitUiSession.CurrentUIApplication.Application.VersionNumber,
@@ -632,8 +625,7 @@ internal sealed class BridgeAgent : IDisposable {
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             RevitUiSession.CurrentUIApplication.Application.SharedParametersFilename,
             documents,
-            runtimeAssemblies,
-            availableModules
+            runtimeAssemblies
         );
     }
 
@@ -703,58 +695,6 @@ internal sealed class BridgeAgent : IDisposable {
     }
 }
 
-internal static class SettingsModuleAvailability {
-    public static bool IsBridgeDiscoverable(StructuralSettingsModuleDescriptor module) =>
-        module.HostScope != SettingsModuleHostScope.Host;
-
-    public static bool IsAvailableForDocument(
-        StructuralSettingsModuleDescriptor module,
-        Autodesk.Revit.DB.Document? activeDocument
-    ) {
-        if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
-            return true;
-
-        if (activeDocument == null)
-            return false;
-
-        return module.ActiveDocumentKind switch {
-            SettingsModuleActiveDocumentKind.ProjectOnly => !activeDocument.IsFamilyDocument,
-            SettingsModuleActiveDocumentKind.FamilyOnly => activeDocument.IsFamilyDocument,
-            _ => true
-        };
-    }
-
-    public static HostModuleDescriptor CreateHostModuleDescriptor(StructuralSettingsModuleDescriptor module) =>
-        new(
-            module.ModuleKey,
-            module.DefaultRootKey,
-            module.HostScope switch {
-                SettingsModuleHostScope.Host => HostModuleScope.Host,
-                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
-                _ => HostModuleScope.Session
-            },
-            module.ActiveDocumentKind switch {
-                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
-                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
-                _ => HostModuleActiveDocumentKind.Any
-            }
-        );
-
-    public static SettingsModuleDescriptor CreateSettingsModuleDescriptor(StructuralSettingsModuleDescriptor module) {
-        var hostDescriptor = CreateHostModuleDescriptor(module);
-        return new SettingsModuleDescriptor(
-            module.ModuleKey,
-            module.DefaultRootKey,
-            module.Roots.Select(root => new SettingsRootDescriptor(root.RootKey, root.DisplayName)).ToList(),
-            new SettingsModuleStorageOptionsContract(
-                [.. module.StorageOptions.IncludeRoots],
-                [.. module.StorageOptions.PresetRoots]
-            ),
-            hostDescriptor.Scope,
-            hostDescriptor.ActiveDocumentKind
-        );
-    }
-}
 
 internal sealed record BridgeConnectionOptions(
     Uri BridgeUri,

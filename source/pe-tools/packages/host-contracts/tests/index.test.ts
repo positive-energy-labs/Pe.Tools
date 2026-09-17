@@ -134,7 +134,6 @@ test("keeps bridge session ids host-owned", () => {
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
       openDocuments: [],
       revitVersion: "2025",

@@ -191,14 +191,12 @@ test("with a session, the draft composes natively, then schema and semantic chec
   expect(calls.map(([key]) => key)).toEqual([
     "pod.member.compose",
     "settings.schema",
-    "settings.document.semantic-validation",
+    "settings.validate",
   ]);
   expect(calls[0]![1]).toEqual({ ...member, content: draft });
-  expect(calls[1]![1]).toEqual({ moduleKey: "FamilyFoundry", rootKey: "models" });
+  expect(calls[1]![1]).toEqual({ schemaUrl });
   expect(calls[2]![1]).toMatchObject({
-    moduleKey: "FamilyFoundry",
-    rootKey: "models",
-    relativePath: member.path,
+    schemaUrl,
     rawContent: draft,
   });
   expect(JSON.parse(result.composed!)).toEqual({ width: 3 });

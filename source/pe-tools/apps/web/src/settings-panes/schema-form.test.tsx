@@ -51,8 +51,7 @@ function Harness({ changed = false }: { changed?: boolean }) {
   return (
     <SchemaToFieldRender
       schema={model.schema}
-      moduleKey="CmdScheduleManager"
-      rootKey="schedules"
+      schemaUrl="/schemas/settings/CmdScheduleManager/schedules.json"
       baselineValues={model.baseline}
       values={changed ? { ...model.baseline, Name: "changed" } : model.baseline}
       onChange={() => undefined}

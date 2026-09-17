@@ -34,13 +34,13 @@ public interface ISettingsRootBinding<TSettings> : ISettingsRootBinding where TS
 
 public sealed class SettingsRootBinding<TSettings>(
     StructuralSettingsModuleDescriptor module,
-    string rootKey
+    string root
 ) : ISettingsRootBinding<TSettings> where TSettings : class {
     public StructuralSettingsModuleDescriptor Module { get; } = module ?? throw new ArgumentNullException(nameof(module));
 
-    public string RootKey { get; } = string.IsNullOrWhiteSpace(rootKey)
-        ? throw new ArgumentException("Root key is required.", nameof(rootKey))
-        : rootKey;
+    public string RootKey { get; } = string.IsNullOrWhiteSpace(root)
+        ? throw new ArgumentException("Root is required.", nameof(root))
+        : root;
 
     public Type SettingsType => typeof(TSettings);
 }

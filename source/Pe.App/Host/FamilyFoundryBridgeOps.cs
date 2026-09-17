@@ -4,6 +4,7 @@ using Pe.App.Pods;
 using Pe.Revit;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Extensions.FamDocument;
@@ -47,10 +48,46 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
 
+    [Op("family.build", Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template, save it to an explicit .rfa path, and write the run receipt into the source pod.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyBuildData> BuildFamily(FamilyBuildRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => BuildWithReceipt(RevitUiSession.CurrentUIApplication.Application, request)), cancellationToken);
+
     private static T RefuseStaleSource<T>(Func<T> apply) {
         try { return apply(); }
         catch (Exception exception) when (exception is InvalidDataException or DirectoryNotFoundException or FileNotFoundException) {
             throw BridgeOperationExceptions.Conflict(exception.Message);
+        }
+    }
+
+    /// <summary>The one build edge: bridge op and palette both land here, and both leave a run in the source pod.</summary>
+    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request) {
+        var outputPath = ResolvePath(request.OutputPath, nameof(request.OutputPath));
+        if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
+            throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
+        if (File.Exists(outputPath) && !request.Overwrite)
+            throw BridgeOperationExceptions.Conflict($"Output family already exists: '{outputPath}'. Set overwrite=true to replace it.");
+        var parsed = FamilyModelJson.Parse(request.SpecJson);
+        if (parsed.Value == null || parsed.Diagnostics.Count != 0)
+            throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
+        var podFolder = PodMembers.VerifiedFolder(request.Source);
+        var source = request.Source;
+        try {
+            var (receipt, templatePath, reading) = FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, request.Overwrite,
+                request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory)));
+            var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
+                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), []);
+            return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath);
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
+            _ = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), []);
+            throw BridgeOperationExceptions.BadRequest(exception.Message);
+        }
+    }
+
+    private static string ResolvePath(string? path, string field) {
+        if (string.IsNullOrWhiteSpace(path)) throw BridgeOperationExceptions.BadRequest($"{field} is required.");
+        try { return Path.GetFullPath(path); }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException) {
+            throw BridgeOperationExceptions.BadRequest($"{field} is invalid: {exception.Message}");
         }
     }
 

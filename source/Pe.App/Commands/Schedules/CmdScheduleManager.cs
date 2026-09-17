@@ -48,11 +48,11 @@ public class CmdScheduleManager : IExternalCommand {
             };
 
             // Collect items for both tabs
-            var createItems = PodMembers.List((ScheduleManagerSettingsRegistration.ModuleKey, ScheduleManagerSettingsRegistration.RootKeys.Schedules))
+            var createItems = PodMembers.List(ScheduleManagerSettingsRegistration.Profiles)
                 .Select(member => new ScheduleListItem(member))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();
-            var batchItems = PodMembers.List((ScheduleManagerSettingsRegistration.ModuleKey, ScheduleManagerSettingsRegistration.RootKeys.Batch))
+            var batchItems = PodMembers.List(ScheduleManagerSettingsRegistration.Batch)
                 .Select(member => new BatchScheduleListItem(member))
                 .OrderByDescending(item => item.LastModified)
                 .ToList();

@@ -410,7 +410,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 simulated: true,
                 proof: "No Revit mutation, RFA output, or run receipt",
               };
-            } else if (key === "revit.apply.family-model" && seed.route === "family") {
+            } else if (key === "family.build" && seed.route === "family") {
               if (seed.scenario === "native-unknown")
                 throw new BridgeError("Simulated lost native result", 503);
               const path = await assertDemoPath(root, (input as { outputPath: string }).outputPath);
@@ -419,6 +419,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 outputPath: path,
                 converged: true,
                 residueCount: 0,
+                receiptPath: null,
                 simulated: true,
                 proof: "No RFA was created",
               };

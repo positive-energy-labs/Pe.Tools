@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { scheduleGridSnapshotSchema } from "./schedule-grid.ts";
+import { scheduleGridSnapshotSchema } from "./schedule-grid-data.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({

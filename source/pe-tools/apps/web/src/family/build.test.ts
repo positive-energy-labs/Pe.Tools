@@ -32,7 +32,7 @@ import { useRoute } from "#/route";
 
 /** A live lane with a saved, valid, bound, unarmed document — the one state that may arm. */
 const CLEAN: BuildFacts = {
-  relativePath: "models/fcu.family.json",
+  relativePath: "models/fcu.json",
   versionToken: "7",
   validation: { isValid: true, issues: [] },
   unsavedCount: 0,
@@ -45,7 +45,7 @@ const codes = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refus
 const says = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refusal.says);
 
 const authoring = (current = true): FamilyAuthoringFacts => ({
-  relativePath: "refline.family.json",
+  relativePath: "refline.json",
   versionToken: "fixture-native-v1",
   validation: { isValid: true, issues: [] },
   unsavedCount: 0,
@@ -289,11 +289,9 @@ describe("buildRefusals — the ceremony's whole safety model", () => {
 
 describe("the arming preview — which family, from which document, to which .rfa", () => {
   it("names the source and the admitted action output pattern", () => {
-    expect(buildOutputPath("models/fcu.family.json")).toBe(
-      ".artifacts/tmp/family/<action-id-sha256>.rfa",
-    );
+    expect(buildOutputPath("models/fcu.json")).toBe(".artifacts/tmp/family/<action-id-sha256>.rfa");
     expect(buildTarget(CLEAN, "Fan Coil Unit")).toBe(
-      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
+      "Fan Coil Unit · models/fcu.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
     );
   });
 

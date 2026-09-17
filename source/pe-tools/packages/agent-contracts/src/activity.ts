@@ -72,7 +72,7 @@ export function deriveOpActivity(key: string): Activity {
   const family = key.split(".")[1] ?? key.split(".")[0];
   if (READ_OP_FAMILIES.has(family) || key.endsWith(".open") || key.endsWith(".validate"))
     return { verb: "looking", gerund: "looking at", target: tail };
-  // remaining families mutate: revit.apply.*, family.editor.apply, settings.document.save, aps.auth.*
+  // remaining families mutate: revit.apply.*, family.editor.apply, aps.auth.*
   return { verb: "editing", gerund: "editing", target: tail };
 }
 
