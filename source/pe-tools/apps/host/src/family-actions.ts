@@ -17,7 +17,6 @@ import {
   settingsRouteState,
   nativeProcessSchema,
   canonicalRouteInput,
-  addressSchema,
   documentRefSchema,
   workKeySchema,
   type FamilyActionKey,
@@ -266,7 +265,7 @@ export async function admitFamilyAction(
           },
         };
       }
-      const { session, process } = await lifetime(bridge, target!, documentKind(key), deps);
+      const { process } = await lifetime(bridge, target!, documentKind(key), deps);
       if (key === "family.capture" || key === "families.capture") {
         const input = admission.input as { pod: string; path?: string; familyIds?: number[] };
         await runPods(deps, podFolder(input.pod, pods));
@@ -281,14 +280,20 @@ export async function admitFamilyAction(
         };
       }
       if (key === "family.confirm" || key === "family.apply") {
-        const input = familyActions[key].input.parse(admission.input);
-        const specJson = await familySpec(deps, input.source, pods);
-        return "planHash" in input
+        const { source } = familyActions["family.confirm"].input.parse(admission.input);
+        const specJson = await familySpec(deps, source, pods);
+        return key === "family.apply"
           ? {
               kind: "native",
               process,
               nativeKey: "family.apply",
-              input: { specJson, planHash: input.planHash, source: input.source },
+              input: {
+                specJson,
+                planHash: Object.values(
+                  familyActions[key].input.parse(admission.input).expectedPlanHashes,
+                )[0]!,
+                source,
+              },
             }
           : {
               kind: "native",
@@ -336,10 +341,6 @@ export async function admitFamilyAction(
         const view = await work.read(base.key, "parameter-links");
         if (!view || view.revision !== base.revision)
           throw refused("Work changed after review; review the current basis again");
-        const at = addressSchema.safeParse(
-          session.state?.openDocuments.find((d) => d.openId === target!.openId)?.address,
-        ).data;
-        if (!at) throw refused("The admitted document has no resolvable address");
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
         if (!document.draft) throw refused("Author a draft profile before applying");
@@ -471,7 +472,11 @@ export async function admitFamilyAction(
               [...planned.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
                 "Expected one family plan",
             );
-          return { executionContext: target, plan };
+          return {
+            executionContext: target,
+            plan,
+            included: { [String(plan!.familyId)]: plan!.planHash },
+          };
         }
         return {
           executionContext: target,

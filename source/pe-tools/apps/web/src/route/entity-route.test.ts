@@ -147,12 +147,17 @@ test("with a plan, apply confirms and opens the sheet; confirm applies that hash
   expect(planned.confirm.ready(c as never, none)).toBeNull();
   run.mockResolvedValueOnce({ state: "succeeded", result: {} });
   await planned.confirm.run(c as never, none);
-  expect(run.mock.calls[1]).toEqual(["family.apply", { source, planHash: "ph" }, ref, undefined]);
+  expect(run.mock.calls[1]).toEqual([
+    "family.apply",
+    { source, expectedPlanHashes: { ph: "ph" } },
+    ref,
+    undefined,
+  ]);
   expect(state.page).toMatchObject({ confirming: false, sheet: null });
 });
 
 test("a many-row confirm applies one hash per included row, with the route's authored Work", async () => {
-  const each = entityRoute({
+  const many = entityRoute({
     ...base,
     plan: admissionPlan<{ excludedIds: number[] }, string, object>(
       { confirm: "families.confirm", apply: "families.apply" },
@@ -167,7 +172,7 @@ test("a many-row confirm applies one hash per included row, with the route's aut
     state: "succeeded",
     result: { plan: [{ planHash: "a" }, { planHash: "b" }], included: { a: "a", b: "b" } },
   });
-  await each.apply.run(c as never, none);
+  await many.apply.run(c as never, none);
   const options = { singleTransaction: true };
   expect(run.mock.calls[0]).toEqual([
     "families.confirm",
@@ -175,9 +180,9 @@ test("a many-row confirm applies one hash per included row, with the route's aut
     ref,
     { work: { key: work.key, revision: 3 } },
   ]);
-  expect(state.page.sheet).toMatchObject({ each: true });
+  expect(state.page.sheet?.entries).toHaveLength(2);
   run.mockResolvedValueOnce({ state: "succeeded", result: {} });
-  await each.confirm.run(c as never, none);
+  await many.confirm.run(c as never, none);
   expect(run.mock.calls[1]).toEqual([
     "families.apply",
     { source, executionOptions: options, expectedPlanHashes: { a: "a", b: "b" } },
@@ -204,7 +209,7 @@ test("confirm sends only included rows and refuses when nothing is left", async 
     sheet: { entries: [row("a"), row("b"), row("c", "nothing to apply")] },
   });
   await actions.confirm.run(c as never, none);
-  expect(confirm.mock.calls[0]![2]).toEqual([row("a")]);
+  expect(confirm.mock.calls[0]![1]).toEqual([row("a")]);
   const flagged = entityRoute({
     ...base,
     plan: { read: async () => ({ entries: [] }), confirm },

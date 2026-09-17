@@ -136,6 +136,6 @@ export const FAMILIES_SEEDS = {
     stage: "apply",
     path: DEMO_FAMILIES_SPEC_PATH,
     confirming: true,
-    sheet: { entries: plan.map(ffPlanRow), each: true },
+    sheet: { entries: plan.map(ffPlanRow) },
   }),
 };

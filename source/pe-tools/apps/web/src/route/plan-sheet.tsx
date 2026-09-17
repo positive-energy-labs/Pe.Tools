@@ -104,7 +104,9 @@ export function PlanSheetView({
             />
           )),
         )}
-        <table className="w-full table-fixed border-separate border-spacing-0 t-small">
+        {/* A fixed layout gives `source` only what the fixed columns leave; the floor keeps it a
+            column (the pane scrolls) instead of letting `exception` draw over it. */}
+        <table className="w-full min-w-160 table-fixed border-separate border-spacing-0 t-small">
           <thead className="t-small face-mono t-upper text-ink-mute">
             <tr className={ROW}>
               <th className={cn(CELL, "w-8 font-normal")}>

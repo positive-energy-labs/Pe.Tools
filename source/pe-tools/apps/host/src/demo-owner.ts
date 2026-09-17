@@ -452,7 +452,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               value = {
                 reading: { at, version: null, observedAt: new Date().toISOString() },
                 familyName: "Simulated demo family",
-                modelJson: nativeModel,
+                // The native engine captures a bare model; the host names what it is.
+                modelJson: JSON.stringify({ ...JSON.parse(nativeModel), $schema: undefined }),
                 unmodeledCount: 0,
                 coverage: { simulation: "Supplied demo model only; no native capture" },
                 issues: [],
@@ -745,6 +746,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       const allowed =
         request.kind === "inventory" ||
         request.kind === "world" ||
+        request.kind === "host-status" ||
         (request.kind === "work" && routes.has(request.route) && localScope(request)) ||
         (request.kind === "schedule-reading" &&
           (request.subject !== "catalog" || targetMatches(request.target!))) ||
@@ -805,6 +807,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         return resourceResponse(new Request(request, { signal: controller.signal }), observe);
       }
       if (url.pathname === "/description") return json(description);
+      // The lamp's read: this owner is the host, and its simulated session is the attached Revit.
+      if (url.pathname === "/host/status")
+        return json({
+          controllerId: id,
+          capabilities: { revit: true },
+          bridgeIsConnected: true,
+          simulated: true,
+        });
       if (url.pathname === "/work" && request.method === "GET")
         return json(await work.read(scope, route));
       if (url.pathname === "/work" && request.method === "PATCH") {

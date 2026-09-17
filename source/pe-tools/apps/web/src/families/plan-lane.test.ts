@@ -57,7 +57,7 @@ test("plan confirms the page's member against the reviewed Work, and writes no W
   expect(ctx.write).not.toHaveBeenCalled();
   expect(ctx.setPage).toHaveBeenCalledWith({
     confirming: true,
-    sheet: { entries: [expect.objectContaining({ id: "3101", planHash: "p" })], each: true },
+    sheet: { entries: [expect.objectContaining({ id: "3101", planHash: "p" })] },
   });
 });
 

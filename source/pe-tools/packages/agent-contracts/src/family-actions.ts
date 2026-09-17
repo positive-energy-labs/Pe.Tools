@@ -60,14 +60,20 @@ export const familyActions = {
     input: z.object({ source: podMemberSourceSchema }),
   },
   "family.apply": {
-    says: "Apply the exact family plan family.confirm returned, from the same saved spec bytes, and write a run receipt.",
+    says: "Apply the exact family plan family.confirm returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
     needs: "family-document",
     actor: "human",
     dirties: ["family", "pods"],
     executors: ["pod.member.compose", "family.apply"],
     description:
-      "Apply the exact family plan family.confirm returned, from the same saved spec bytes, and write a run receipt.",
-    input: z.object({ source: podMemberSourceSchema, planHash: z.string().min(1) }),
+      "Apply the exact family plan family.confirm returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
+    input: z.object({
+      source: podMemberSourceSchema,
+      // The families shape; a family document plans exactly one family.
+      expectedPlanHashes: z
+        .record(z.string(), z.string().min(1))
+        .refine((hashes) => Object.keys(hashes).length === 1, "Send exactly one family plan hash"),
+    }),
   },
   "families.capture": {
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
