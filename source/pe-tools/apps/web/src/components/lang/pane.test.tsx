@@ -200,6 +200,37 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
   ).toBe("216px var(--gutter) minmax(0, 1fr)");
 });
 
+test("a null split side retains wrappers without a gutter or handle", () => {
+  const view = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">composer</Pane>}
+      end={null}
+      resize={{ target: "end", defaultSize: 288, minSize: 240 }}
+    />,
+  );
+  const split = view.container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  const wrappers = Array.from(split.children) as HTMLElement[];
+
+  expect(wrappers).toHaveLength(2);
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(split.querySelector("[role='separator']")).toBeNull();
+  expect(wrappers.map((wrapper) => wrapper.style.gridColumn)).toEqual(["1", "1"]);
+
+  view.rerender(
+    <PaneSplit
+      axis="horizontal"
+      start={null}
+      end={<Pane kind="content">plugin</Pane>}
+      resize={{ target: "end", defaultSize: 288, minSize: 240 }}
+    />,
+  );
+  const next = Array.from(split.children) as HTMLElement[];
+  expect(next).toEqual(wrappers);
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(screen.getByText("plugin")).toBeTruthy();
+});
+
 test("split sides bound panes and direct artifacts as flex columns", () => {
   const { container } = render(
     <PaneSplit
