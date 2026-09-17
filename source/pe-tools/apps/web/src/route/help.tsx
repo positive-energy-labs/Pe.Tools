@@ -48,6 +48,7 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
       label:
         el.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
         el.querySelector('[data-slot="pane-header"] h2')?.textContent?.trim() ||
+        el.getAttribute("aria-label") ||
         el.dataset.paneId ||
         el.dataset.kind ||
         `pane ${index + 1}`,

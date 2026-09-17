@@ -262,6 +262,7 @@ export function Pane({
       data-has-shortcuts={shortcuts.length > 0 || undefined}
       data-active={active}
       data-surface={kind === "visual" ? "artifact" : "page"}
+      aria-label={typeof title === "string" ? title : undefined}
       tabIndex={-1}
       onFocusCapture={activate}
       onBlurCapture={deactivate}
