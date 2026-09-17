@@ -10,7 +10,7 @@ import type {
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
 
-import { composeMember, listPods, readMember } from "#/host/pods";
+import { composeMember, listPods, listRuns, readMember } from "#/host/pods";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./manifest";
 
@@ -48,6 +48,7 @@ export const podHost = {
   save: (ref: MemberRef, content: string, expectedSha256: string) =>
     admitHost("pod.member.save", { ...ref, content, expectedSha256 }),
   compose: composeMember,
+  runs: listRuns,
 };
 
 /** `pod.list` as a Reading, for an entity route to hand `useRoute` as its `pods`. */

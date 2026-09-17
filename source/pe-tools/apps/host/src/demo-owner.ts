@@ -494,7 +494,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 simulated: true,
               };
             } else if (key === "family.apply" && seed.route === "family") {
-              if (!simulatedPlan || (input as { planHash: string }).planHash !== simulatedPlan.hash)
+              const expected = Object.values(
+                (input as { expectedPlanHashes: Record<string, string> }).expectedPlanHashes,
+              );
+              if (!simulatedPlan || expected.length !== 1 || expected[0] !== simulatedPlan.hash)
                 throw unsupported("simulated native plan changed");
               const planned = JSON.parse(simulatedPlan.spec) as { patch?: unknown };
               nativeModel = planned.patch ? JSON.stringify(planned.patch) : simulatedPlan.spec;
@@ -652,6 +655,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       Effect.tryPromise({
         try: async () => {
           if (key === "pod.list") return settings.listPods();
+          if (key === "pod.runs")
+            return settings.listRuns(request as Parameters<typeof settings.listRuns>[0]);
           if (key === "pod.member.read")
             return settings.readMember(request as Parameters<typeof settings.readMember>[0]);
           if (key === "pod.member.compose")

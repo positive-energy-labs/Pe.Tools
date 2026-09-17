@@ -4,7 +4,7 @@
  * route its `$schema` names.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -283,33 +283,29 @@ export function PodsRouteContent({
   );
 }
 
-/** Receipts under the pod's `output/*`, filtered to the open member. */
+/** The pod's runs, narrowed to the open member. One `pod.runs` call, not one read per run. */
 function useReceipts(pod: PodRow | null, path: string | null, demo: boolean) {
   const [all, setAll] = useState<readonly (readonly [string, Receipt])[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
-  const runs = useMemo(
-    () => pod?.members.flatMap((m) => RECEIPT_PATH.exec(m.path)?.[1] ?? []) ?? [],
-    [pod],
-  );
   useEffect(() => {
     setFailure(null);
     if (demo) return setAll([[RECEIPT_PATH.exec(DEMO_RECEIPT_PATH)![1]!, DEMO_RECEIPT]]);
     if (!pod) return setAll([]);
     let live = true;
-    // ponytail: one read per run; a `pod.runs` op when pods carry hundreds of runs.
-    void Promise.all(
-      runs.map(async (run) => {
-        const { content } = await podHost.read({ pod: pod.id, path: `output/${run}/receipt.json` });
-        return [run, JSON.parse(content) as Receipt] as const;
-      }),
-    ).then(
-      (rows) => live && setAll(rows.sort(([a], [b]) => b.localeCompare(a))),
+    void podHost.runs(pod.id).then(
+      (rows) =>
+        live &&
+        setAll(
+          rows.flatMap((run) =>
+            run.receipt ? [[run.runId, run.receipt as Receipt] as const] : [],
+          ),
+        ),
       (error: unknown) =>
         live && setFailure(error instanceof Error ? error.message : String(error)),
     );
     return () => {
       live = false;
     };
-  }, [pod, runs, demo]);
+  }, [pod, demo]);
   return { failure, runs: all.filter(([, receipt]) => receipt.memberPath === path) };
 }

@@ -7,8 +7,16 @@ import type {
   PodMember,
   PodMemberComposeRequest,
   PodMemberWriteRequest,
+  PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
-import { composeMember, listPods, podFolder, readMember, writeMember } from "./settings.ts";
+import {
+  composeMember,
+  listPods,
+  listRuns,
+  podFolder,
+  readMember,
+  writeMember,
+} from "./settings.ts";
 
 /** Each existing path component must be owned; links are refused even when their target is local. */
 export async function assertDemoPath(root: string, path: string): Promise<string> {
@@ -87,6 +95,7 @@ export async function createDemoSettings(root: string) {
       );
     },
     listPods: () => run(listPods(ctx)),
+    listRuns: (request: PodRunsRequest) => run(listRuns(request, ctx)),
     async readMember(member: PodMember) {
       await memberPath(member);
       return run(readMember(member, ctx));

@@ -14,6 +14,7 @@ import { writeFileStringAtomic } from "../src/files/index.ts";
 import {
   composeMember,
   listPods,
+  listRuns,
   readMember,
   saveMember,
   writeMember,
@@ -54,7 +55,20 @@ test("pods list by manifest id; a bad member never hides its siblings; runs list
   await writeFile(file(), '{"$schema":"https://pe/schemas/settings/family.json","width":1}');
   await writeFile(join(root, "Renamed In Explorer", "settings", "broken.json"), "{ nope");
   await mkdir(join(root, "Renamed In Explorer", "output", "run-1"), { recursive: true });
-  await writeFile(join(root, "Renamed In Explorer", "output", "run-1", "receipt.json"), "{}");
+  await writeFile(
+    join(root, "Renamed In Explorer", "output", "run-1", "receipt.json"),
+    JSON.stringify({
+      podId: "sample",
+      memberPath: "settings/file.json",
+      memberSha256: "abc",
+      operation: "family.apply",
+      planHash: "p1",
+      outcome: "Succeeded",
+      outputs: ["apply.json"],
+      reason: null,
+    }),
+  );
+  await mkdir(join(root, "Renamed In Explorer", "output", "run-0"), { recursive: true });
   await mkdir(join(root, "Twin"), { recursive: true });
   await writeFile(join(root, "Twin", "pod.json"), JSON.stringify({ id: "sample" }));
   await mkdir(join(root, "Junk"), { recursive: true });
@@ -67,8 +81,8 @@ test("pods list by manifest id; a bad member never hides its siblings; runs list
     name: "Sample",
     entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
   });
+  // Members only: a run is not a member, and `pod.runs` is where runs answer.
   expect(sample.members).toEqual([
-    { path: "output/run-1/receipt.json", sha256: expect.any(String), schema: null },
     { path: "settings/broken.json", sha256: expect.any(String), schema: null },
     {
       path: "settings/file.json",
@@ -83,6 +97,45 @@ test("pods list by manifest id; a bad member never hides its siblings; runs list
     statusCode: 409,
     note: expect.stringContaining("Renamed In Explorer, Twin"),
   });
+});
+
+test("runs list newest first, by member, and a run with no receipt still says so", async () => {
+  await mkdir(join(root, "Runs", "output", "run-0"), { recursive: true });
+  await mkdir(join(root, "Runs", "output", "run-1"), { recursive: true });
+  await writeFile(join(root, "Runs", "pod.json"), JSON.stringify({ id: "runs" }));
+  await writeFile(
+    join(root, "Runs", "output", "run-1", "receipt.json"),
+    JSON.stringify({
+      podId: "runs",
+      memberPath: "settings/file.json",
+      memberSha256: "abc",
+      operation: "family.apply",
+      planHash: "p1",
+      outcome: "Succeeded",
+      outputs: ["apply.json"],
+      reason: null,
+    }),
+  );
+
+  const { runs } = await run(listRuns({ pod: "runs" }, ctx()));
+  expect(runs).toEqual([
+    {
+      runId: "run-1",
+      receiptPath: "output/run-1/receipt.json",
+      receipt: expect.objectContaining({ operation: "family.apply", outcome: "Succeeded" }),
+      error: null,
+    },
+    {
+      runId: "run-0",
+      receiptPath: "output/run-0/receipt.json",
+      receipt: null,
+      error: "The run folder holds no receipt.json.",
+    },
+  ]);
+  expect(
+    (await run(listRuns({ pod: "runs", path: "settings/file.json" }, ctx()))).runs,
+  ).toHaveLength(1);
+  expect((await run(listRuns({ pod: "runs", path: "other.json" }, ctx()))).runs).toEqual([]);
 });
 
 test("read returns exact bytes and their sha256; invalid UTF-8 refuses", async () => {

@@ -140,17 +140,14 @@ test("Build freezes original saved/composed basis and labels simulated outcome; 
   if (seed.route === "family") seed.work.candidate.fields = {};
   const f = await setup(seed);
   const opened = await f.owner.settings.readMember(f.owner.member!);
-  const build = (suffix: string, outputPath?: string) =>
+  const build = (suffix: string) =>
     f.fetch("/actions", {
       id: `${f.owner.id}:${suffix}`,
       kind: "workflow",
       key: "family.build",
       actor: "human",
       destination: { kind: "document", ref: f.owner.target },
-      input: {
-        source: { ...f.owner.member!, sha256: opened.sha256 },
-        ...(outputPath ? { outputPath } : {}),
-      },
+      input: { source: { ...f.owner.member!, sha256: opened.sha256 } },
       bases: {},
     });
   expect((await build("build")).status).toBeLessThan(300);
@@ -158,9 +155,9 @@ test("Build freezes original saved/composed basis and labels simulated outcome; 
   expect(row.state).toBe("succeeded");
   expect(JSON.stringify(row)).toContain("No RFA was created");
   expect(JSON.stringify(row)).toContain(opened.sha256);
-  await build("escape", join(f.parent, "production.rfa"));
-  const escaped = await f.owner.journal.wait(`${f.owner.id}:escape`);
-  expect(escaped.state).toBe("failed");
+  // A build names no path, so there is no path to escape with: the .rfa lands in the pod's own run.
+  expect(JSON.stringify(row)).toMatch(/output\/[^"]+\.rfa/);
+  expect(JSON.stringify(row)).not.toContain("production.rfa");
 });
 test("resolved links, pod members, request identity and dispose cannot cross root", async () => {
   const f = await setup();
