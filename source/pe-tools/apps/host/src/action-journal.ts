@@ -25,6 +25,8 @@ export type ActionExecution = {
   readonly prepared: unknown;
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
 };
+/** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
+const CANCELLED_STATUS = 499;
 type DispatchFailure =
   | Pick<
       Extract<ActionReceipt, { state: "failed" }>,
@@ -33,7 +35,8 @@ type DispatchFailure =
   | Pick<
       Extract<ActionReceipt, { state: "unknown" }>,
       "state" | "error" | "status" | "nativeOutcome" | "issues" | "evidence"
-    >;
+    >
+  | Pick<Extract<ActionReceipt, { state: "cancelled" }>, "state" | "error" | "status">;
 const failure = (error: unknown): DispatchFailure => {
   const problem = error as { message?: string; statusCode?: number } | null;
   const nativeOutcome = error instanceof BridgeError ? error.nativeOutcome : undefined;
@@ -56,7 +59,9 @@ const failure = (error: unknown): DispatchFailure => {
   };
   return notDispatched
     ? { ...detail, state: "failed", notDispatched: true }
-    : { ...detail, state: "unknown" };
+    : detail.status === CANCELLED_STATUS
+      ? { state: "cancelled", error: detail.error, status: detail.status }
+      : { ...detail, state: "unknown" };
 };
 
 const interruptedSteps = (steps: readonly ActionStep[]): ActionStep[] =>
@@ -332,6 +337,9 @@ export class ActionJournal {
                 notDispatched: true as const,
               };
             const failed = failure(error);
+            // A cancel is a settled answer, not an uncertainty: whatever the op finished before
+            // its checkpoint is already in its own receipts, and nothing here needs recovery.
+            if (failed.state === "cancelled") return { ...row, ...failed };
             if (
               (error instanceof ActionIncomplete || failed.state === "failed") &&
               row.steps.some((step) => step.state === "succeeded" && step.kind !== "publication") &&
@@ -392,6 +400,24 @@ export class ActionJournal {
       void completion.catch(() => undefined);
       return structuredClone(row);
     });
+  }
+  /**
+   * Signal the running action's in-flight bridge request. `signal` is given the step id, which IS
+   * the requestId the step was dispatched under, so the host can reach it past the session gate.
+   * Returns at once with the still-running row: the op settles `cancelled` at its own checkpoint.
+   */
+  async cancel(
+    id: string,
+    signal: (requestId: string) => Promise<unknown>,
+  ): Promise<ActionReceipt> {
+    const row = (await this.list(undefined, id))[0];
+    if (!row) throw Error(`Action '${id}' has no admitted receipt`);
+    if (row.state !== "running")
+      throw Error(`Action '${id}' is ${row.state}; only a running action can be cancelled`);
+    const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
+    if (!step) throw Error(`Action '${id}' has dispatched nothing to Revit yet`);
+    await signal(step.id);
+    return (await this.list(undefined, id))[0] ?? row;
   }
   async recover(
     id: string,
