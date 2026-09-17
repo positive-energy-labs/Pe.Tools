@@ -6,6 +6,7 @@
  * What is left here is what only Families knows: which plan reading still describes the authored
  * basis, what the last apply receipt said, and which picker is open. Plain values, no atoms.
  */
+import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useMemo, useState } from "react";
 import {
   actionReceiptSchema,
@@ -126,7 +127,7 @@ export function useFamiliesStore(
       }) as typeof manifest,
     [options.thread],
   );
-  const demo = useMemo(() => new URLSearchParams(globalThis.location?.search).has("demo"), []);
+  const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
   const handle = useRoute(routeManifest, {
     target: options.target ? (options.target as never) : null,

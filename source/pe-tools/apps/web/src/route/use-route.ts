@@ -4,6 +4,7 @@
  * a resolution, its Work, its Readings, its Page, and one handle per action. Public handles return
  * structured Refusals (`route/refusal.ts`).
  */
+import { frozenDemo } from "#/host/demo-client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   addressSchema,
@@ -535,11 +536,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     provided?: Partial<Record<R, Reading<unknown>>>;
   } = {},
 ): RouteHandle<W, R, P, A> {
-  const demo = useMemo(
-    () =>
-      typeof location === "undefined" ? null : new URLSearchParams(location.search).get("demo"),
-    [],
-  );
+  const demo = useMemo(frozenDemo, []);
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
   const owner = useRouteOwner(() =>
     createRouteOwner(

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 
+import { frozenDemo } from "#/host/demo-client";
 import type { EntityPage } from "#/route";
 import { EntityRouteView } from "#/route/entity";
 import { usePodList } from "#/route/pods";
@@ -27,7 +28,7 @@ export function FamilyRouteView({
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
 }) {
-  const demo = useMemo(() => new URLSearchParams(globalThis.location?.search).has("demo"), []);
+  const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
   const store = useFamilyStore({ target, thread, pods, initial });
   const captureReady = store.handle.actions.capture.refusal === null;

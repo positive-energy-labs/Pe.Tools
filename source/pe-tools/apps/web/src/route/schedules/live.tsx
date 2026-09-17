@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { frozenDemo } from "#/host/demo-client";
 import {
   scheduleCatalogSchema,
   scheduleReadingSchema,
@@ -42,7 +43,7 @@ export function LiveScheduleGridWorkspace({
 }) {
   const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
-  const demo = useMemo(() => new URLSearchParams(globalThis.location?.search).has("demo"), []);
+  const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
   const handle = useRoute(manifest, {
     provided: { pods },

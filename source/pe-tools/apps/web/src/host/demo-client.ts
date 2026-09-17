@@ -1,204 +1,201 @@
-import { releaseDemoAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { PeReadings } from "#/readings";
-import { mapReading, previousOf, readingAtom } from "#/readings";
-import { scopedHostRpc } from "./client";
-import {
-  address,
-  demoSeedSchema,
-  exportSeed,
-  demoExportWireSchema,
-  familiesRouteState,
-  familyCaptureSchema,
-  parameterLinksRouteState,
-  settingsRouteState,
-  takeoffsRouteState,
-  type DemoSeed,
-} from "@pe/agent-contracts";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import type {
-  RouteStatePatch,
-  RouteStateWriteResult,
-  WorkKey,
-  FamiliesRouteDocument,
-  ParameterLinksDocument,
-  SettingsRouteDocument,
-  TakeoffsRouteDocument,
-  DocumentRef,
-} from "@pe/agent-contracts";
-import { inspectAtomRegistry } from "#/state/atom-inspect";
-import { makeAtomRegistry, type Slice } from "#/route";
+/**
+ * The live demo lane. `?demo=<seed>&live=1` runs a route's real code against the host's simulated
+ * owner (`/demo/instances/<id>`): every host read and write the page makes is rewritten to that
+ * owner, so capture files a member into the instance's own pod and apply files a run receipt
+ * there. Without `live`, `?demo=<seed>` stays a frozen, read-only seed. The owner outlives a page
+ * load for the tab (sessionStorage), so `/pods?demo=…&live=1` browses what a route just wrote.
+ */
+import { address, exportSeed, type DemoSeed } from "@pe/agent-contracts";
 
-type DemoRouteDocument =
-  | SettingsRouteDocument
-  | TakeoffsRouteDocument
-  | FamiliesRouteDocument
-  | ParameterLinksDocument;
+const search = () =>
+  typeof location === "undefined" ? null : new URLSearchParams(location.search);
 
-export async function demoJson<T>(
-  base: string,
-  path: string,
-  body?: unknown,
-  method = body === undefined ? "GET" : "POST",
-): Promise<T> {
-  if (!/^\/demo\/instances(?:\/demo-[\w-]+)?$/.test(base))
-    throw Error("Demo-only endpoint required");
-  const response = await fetch(`${base}${path}`, {
-    method,
-    ...(body !== undefined
-      ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
-      : {}),
+/** The seed a page mounts frozen; null in the live lane and outside the demo lane. */
+export const frozenDemo = (): string | null => {
+  const params = search();
+  return params?.has("live") ? null : (params?.get("demo") ?? null);
+};
+
+/** The paths a page reaches the host on; everything else (documents, schemas) stays put. */
+const HOST_PATH =
+  /^\/(?:call|actions|family\/readings|schedules\/readings|pe\/resources|pe\/route-state\/)/;
+
+const schemaUrl = (path: string) => `${location.origin}/schemas/settings/${path}`;
+const common = {
+  version: 1,
+  namespace: "isolated-demo",
+  failure: { kind: "none" },
+  originalEvidence: null,
+} as const;
+const FAMILIES = ["Fan Coil Unit - Ducted", "Heat Pump - Split"];
+
+/** A family document holding one saved model; `/family` works here. */
+const familySeed = (): DemoSeed => ({
+  ...common,
+  route: "family",
+  seedAddress: address("C:/demo/live-family.rfa"),
+  work: {
+    key: { route: "family", target: null, work: "live" },
+    revision: 0,
+    candidate: { basis: null, fields: {} },
+  },
+  readings: {
+    captures: [],
+    files: [
+      {
+        member: { pod: "demo", path: "settings/family/box.json" },
+        rawContent: JSON.stringify({
+          $schema: schemaUrl("FamilyFoundry/models.json"),
+          family: { name: "Box", category: "Generic Models", template: "Generic Model" },
+          types: {},
+          parameters: {},
+        }),
+      },
+    ],
+  },
+  page: { inputBuffer: null, armed: false },
+  scenario: "success",
+});
+
+/** A project document with two loaded families, a scope, and one saved families spec. */
+const projectSeed = (): DemoSeed => ({
+  ...common,
+  route: "families",
+  seedAddress: address("C:/demo/live-project.rvt"),
+  work: {
+    key: { route: "families", target: null },
+    revision: 0,
+    candidate: {
+      spec: { pod: "demo", path: "settings/families/mech-standard.json" },
+      scope: {
+        categoryNames: ["Mechanical Equipment"],
+        familyNames: FAMILIES,
+        placementScope: "AllLoaded",
+      },
+      excludedIds: [],
+    },
+  },
+  readings: {
+    profile: { $schema: schemaUrl("FamilyFoundry/patches.json"), patch: { types: {} } },
+    families: FAMILIES,
+  },
+  page: { armed: false },
+  scenario: "success",
+});
+
+type Kind = "family" | "project";
+const stored = (kind: Kind | "last") => {
+  try {
+    return sessionStorage.getItem(`pe-demo-live:${kind}`);
+  } catch {
+    return null;
+  }
+};
+const store = (kind: Kind, base: string) => {
+  try {
+    sessionStorage.setItem(`pe-demo-live:${kind}`, base);
+    sessionStorage.setItem("pe-demo-live:last", base);
+  } catch {
+    /* the owner still serves this load */
+  }
+};
+
+async function createOwner(kind: Kind, fetchHost: typeof fetch) {
+  const response = await fetchHost("/demo/instances", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ seed: exportSeed(kind === "family" ? familySeed() : projectSeed()) }),
   });
-  if (!response.ok) throw Error(await response.text());
-  return response.json() as Promise<T>;
+  if (!response.ok) throw Error(`demo owner refused: ${await response.text()}`);
+  const owner = (await response.json()) as { id: string; base: string };
+  if (!/^\/demo\/instances\/demo-[\w-]+$/.test(owner.base)) throw Error("not a demo owner");
+  return owner.base;
 }
-export async function createDemoClient(seed: Exclude<DemoSeed, { route: "chat" }>) {
-  const owner = await demoJson<{
-    id: string;
-    base: string;
-    root: string;
-    r10Path: string;
-    target: DocumentRef;
-    at: string;
-    scope: WorkKey;
-  }>("/demo/instances", "", { seed: exportSeed(seed) });
-  if (!owner.base.startsWith(`/demo/instances/${owner.id}`))
-    throw Error("Invalid isolated owner endpoint");
-  const rpc = scopedHostRpc(owner.base);
-  const resources = new PeReadings(() =>
-    new URL(`${owner.base}/pe/resources`, window.location.href).toString(),
-  );
-  const registry = makeAtomRegistry();
-  const receipt = Atom.make<unknown>(null);
-  // One route per owner: the Work this owner serves is the seed's own route, never a default.
-  const spec =
-    seed.route === "family"
-      ? settingsRouteState
-      : seed.route === "families"
-        ? familiesRouteState
-        : seed.route === "parameter-links"
-          ? parameterLinksRouteState
-          : takeoffsRouteState;
-  const work = Atom.map(
-    readingAtom({ kind: "work", ...owner.scope, route: spec.route }, resources),
-    (reading) =>
-      mapReading(reading, (raw) => {
-        const value = raw as { doc: unknown; revision: number };
-        return {
-          doc: spec.schema.parse(value.doc),
-          revision: value.revision,
-        } satisfies Slice<DemoRouteDocument>;
-      }),
-  );
-  /**
-   * Host readings, from this owner's capture stream only. Exposed to the inspector beside Work and
-   * the receipt so a reading's schema, basis and cause are inspectable without a second system.
-   */
-  const readings = Atom.map(
-    readingAtom({ kind: "family-readings", work: owner.scope }, resources),
-    (reading) => mapReading(reading, (raw) => familyCaptureSchema.array().parse(raw)),
-  );
-  const releaseWork = registry.mount(work),
-    releaseReadings = registry.mount(readings),
-    releaseReceipt = registry.mount(receipt);
-  /**
-   * A Reading settles by observation, not by suspension: poll this owner's own atom until it
-   * carries a revision at or past the one the write reported. ponytail: 50ms poll, 30s ceiling —
-   * an isolated demo owner has exactly one writer, so there is nothing to contend with.
-   */
-  const settleWork = async (revision = 0) => {
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      const seen = previousOf(registry.get(work));
-      if (seen && (seen.revision ?? 0) >= revision) return;
-      if (Date.now() > deadline) throw Error(`demo work never reached revision ${revision}`);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+
+/**
+ * Route this page's host traffic to one owner. The owner admits only action ids it minted the
+ * prefix for (imported ids are never executable), so a request id gets the owner's prefix here.
+ */
+function install(owner: Promise<string>) {
+  const fetchHost = window.fetch.bind(window);
+  const Source = window.EventSource;
+  let known = "/demo/instances/pending";
+  void owner.then((base) => (known = base));
+  const rewrite = (url: URL, base: string) => new URL(`${base}${url.pathname}${url.search}`, url);
+  window.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    if (url.origin !== location.origin || !HOST_PATH.test(url.pathname)) return fetchHost(request);
+    const base = await owner;
+    const id = base.slice("/demo/instances/".length);
+    const own = (value: string) => (value.startsWith(`${id}:`) ? value : `${id}:${value}`);
+    const target = rewrite(url, base);
+    if (url.pathname.startsWith("/actions") && target.searchParams.has("id"))
+      target.searchParams.set("id", own(target.searchParams.get("id")!));
+    let body = request.method === "GET" || request.method === "HEAD" ? null : await request.text();
+    if (body && url.pathname.startsWith("/actions")) {
+      const admission = JSON.parse(body) as { id?: string };
+      if (admission.id) body = JSON.stringify({ ...admission, id: own(admission.id) });
+    }
+    return fetchHost(target, {
+      method: request.method,
+      headers: request.headers,
+      body,
+      signal: request.signal,
+    });
+  };
+  window.EventSource = class extends Source {
+    constructor(url: string | URL, init?: EventSourceInit) {
+      const parsed = new URL(url, location.href);
+      super(
+        parsed.origin === location.origin && HOST_PATH.test(parsed.pathname)
+          ? rewrite(parsed, known)
+          : parsed,
+        init,
+      );
     }
   };
-  try {
-    await settleWork();
-  } catch (error) {
-    releaseWork();
-    releaseReadings();
-    releaseReceipt();
-    registry.dispose();
-    resources.close();
-    await demoJson(owner.base, "", undefined, "DELETE");
-    throw error;
-  }
-  const inspector = inspectAtomRegistry(registry);
-  const releaseInspector = inspector.expose(owner.id, {
-    work: { candidate: work },
-    readings: { captures: readings },
-    operations: { receipt },
-  });
-  const refreshWork = async () => {
-    const current = (await demoJson(owner.base, "/work")) as {
-      revision: number;
-    };
-    await settleWork(current.revision);
-    inspector.notify();
-  };
-  const apply = async (patches: RouteStatePatch[], revision?: number) => {
-    const current = registry.get(work);
-    const result = await demoJson<RouteStateWriteResult>(
-      owner.base,
-      "/work",
-      {
-        patches,
-        revision: revision ?? previousOf(current)?.revision ?? undefined,
-      },
-      "PATCH",
-    );
-    await refreshWork();
-    return result;
-  };
-  return {
-    ...owner,
-    rpc,
-    resources,
-    at: address(owner.at),
-    registry,
-    work,
-    readings,
-    receipt,
-    inspector,
-    refreshWork,
-    apply,
-    async command(name: string, input: unknown, revision?: number) {
-      const current = registry.get(work);
-      const result = await demoJson<RouteStateWriteResult>(owner.base, "/work/command", {
-        name,
-        input,
-        id: `${owner.id}:${crypto.randomUUID()}`,
-        revision: revision ?? previousOf(current)?.revision ?? undefined,
-      });
-      await refreshWork();
-      return result;
-    },
-    newActionId: () => `${owner.id}:${crypto.randomUUID()}`,
-    record: (row: unknown) => {
-      registry.set(receipt, row);
-      inspector.notify();
-    },
-    async export(page: unknown) {
-      const exported = demoExportWireSchema.parse(await demoJson(owner.base, "/export"));
-      return exported.kind === "complete"
-        ? { ...exported, seed: demoSeedSchema.parse({ ...exported.seed, page }) }
-        : exported;
-    },
-    async dispose() {
-      releaseDemoAdmissions(owner.base);
-      releaseInspector();
-      releaseReceipt();
-      releaseReadings();
-      releaseWork();
-      registry.dispose();
-      // Retire this instance's transport before the instance: once closed it issues nothing
-      // further, so no read can be born after the owner is gone. close() fences and ignores
-      // frames from the torn-down connection — it does not drain them to listeners.
-      resources.close();
-      await demoJson(owner.base, "", undefined, "DELETE");
-    },
-  };
+  return fetchHost;
 }
-export type DemoClient = Awaited<ReturnType<typeof createDemoClient>>;
+
+/** Boot the lane once per page load, before any route reads the host. */
+function boot() {
+  const params = search();
+  if (typeof window === "undefined" || !params?.has("live") || !params.has("demo")) return;
+  const path = location.pathname;
+  const kind: Kind | "last" = /^\/family(?:\/|$)/.test(path)
+    ? "family"
+    : path.startsWith("/pods")
+      ? "last"
+      : "project";
+  const known = stored(kind);
+  let resolve!: (base: string) => void;
+  const owner = new Promise<string>((done) => (resolve = done));
+  const fetchHost = install(owner);
+  const retarget = (base: string) => {
+    const url = new URL(location.href);
+    url.searchParams.set("target", base.slice("/demo/instances/".length));
+    location.replace(url);
+  };
+  if (known && kind !== "last" && params.get("target") !== known.slice("/demo/instances/".length))
+    return retarget(known);
+  if (known) {
+    resolve(known);
+    // A host restart retires every owner; start over rather than talk to a dead one.
+    void fetchHost(`${known}/description`).then((response) => {
+      if (response.ok) return;
+      for (const key of ["family", "project", "last"])
+        sessionStorage.removeItem(`pe-demo-live:${key}`);
+      location.reload();
+    });
+    return;
+  }
+  void createOwner(kind === "last" ? "project" : kind, fetchHost).then((base) => {
+    store(kind === "last" ? "project" : kind, base);
+    // Bind the route to the owner's one session; the reload mounts every reading against it.
+    if (kind === "last") location.reload();
+    else retarget(base);
+  });
+}
+
+boot();

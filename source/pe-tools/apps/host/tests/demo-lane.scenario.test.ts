@@ -1,11 +1,12 @@
 /**
- * THE PROOF LANE. Every route manifest that declares `seeds`, every `[action, seed]` pair, in a
- * real browser against the real host: `?demo=<action>` mounts the seed in an isolated owner and
- * the head draws the seed's words. A seed is a READ-ONLY proof input — `useRoute` refuses every
- * action under `?demo=` ("frozen seed is read-only") — so this lane proves render and parity, not
- * execution: the Situation renders, every verb is disabled with that one sentence, nothing throws
- * and nothing is POSTed. Seeds are plain data, so this file enumerates them from the manifests
- * themselves — a new seed is a new test with no edit here.
+ * THE PROOF LANE, in a real browser against the real host. Two halves:
+ *
+ * - Frozen: every route manifest that declares `seeds`, every `[action, seed]` pair. `?demo=<action>`
+ *   mounts the seed read-only (`useRoute` refuses every action with "frozen seed is read-only"), so
+ *   this proves render and parity: the head renders, every verb is disabled with that sentence,
+ *   nothing throws and nothing is POSTed. Seeds are enumerated from the manifests themselves.
+ * - Live: `?demo=<seed>&live=1` routes the page's host traffic to a simulated demo owner, so one
+ *   capture → (confirm →) apply loop per product route runs end to end and `/pods` shows its receipt.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -58,10 +59,19 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
     manifest: (await load("/src/instances/manifest.ts")).instancesManifest as AnyManifest,
   },
   { path: "/takeoffs", manifest: (await load("/src/takeoff/manifest.ts")).manifest as AnyManifest },
-  { path: "/family", manifest: (await load("/src/family/manifest.ts")).manifest as AnyManifest },
+  {
+    path: "/family",
+    manifest: ((await load("/src/route/family/manifest.ts")).familyManifest as () => AnyManifest)(),
+  },
   {
     path: "/families",
     manifest: (await load("/src/families/manifest.ts")).manifest as AnyManifest,
+  },
+  {
+    path: "/schedules",
+    manifest: (
+      (await load("/src/route/schedules/manifest.ts")).schedulesManifest as () => AnyManifest
+    )(),
   },
 ];
 
@@ -186,13 +196,12 @@ for (const { path, manifest } of ROUTES)
         await page.goto(`${baseUrl}${path}?demo=${encodeURIComponent(action)}`, {
           waitUntil: "domcontentloaded",
         });
-        // 1. The head names the route: the shell's own landmark, which every route mounts
-        // whatever its body prints as a title.
-        await expect
-          .poll(() => page.getByRole("region", { name: `${manifest.name} route` }).count(), {
-            timeout: 30_000,
-          })
-          .toBeGreaterThan(0);
+        // 1. The head is drawn: the shell's own landmark, or the Situation an entity route
+        // draws in its place, whatever the body prints as a title.
+        const head = page
+          .getByRole("region", { name: `${manifest.name} route` })
+          .or(page.getByRole("region", { name: "Situation" }));
+        await expect.poll(() => head.count(), { timeout: 30_000 }).toBeGreaterThan(0);
         // 2. Where the route draws the shared Situation's verb row (the rest still wear the
         // shell head), its meter says the seeded Work revision: a seed IS the Work, so r0.
         const body = page.locator("body");
@@ -200,17 +209,26 @@ for (const { path, manifest } of ROUTES)
           await expect.poll(() => body.innerText(), { timeout: 15_000 }).toContain("r0");
         // 3. Every verb the head draws is disabled by the one sentence the primitive refuses a
         // seed with. Nothing here can run, so nothing here is clicked.
+        let checked = 0;
         for (const [name, spec] of Object.entries(manifest.actions)) {
-          const verb = page.getByRole("button", { name: new RegExp(`^${spec.label}`) }).first();
+          // A verb's name is its label and its count; body buttons may share the first word.
+          const verb = head
+            .first()
+            .getByRole("button", { name: new RegExp(`^${spec.label}(?: ?d+)?$`) })
+            .first();
           if ((await verb.count()) === 0) continue;
+          checked += 1;
           expect(
             await verb.getAttribute("aria-disabled"),
             `${manifest.key}.${name} is operable under a frozen seed`,
           ).toBe("true");
-          expect(await verb.getAttribute("title"), `${manifest.key}.${name} refusal sentence`).toBe(
-            "frozen seed is read-only",
-          );
+          // The title is the refusal, then the verb's chord when it has one.
+          expect(
+            await verb.getAttribute("title"),
+            `${manifest.key}.${name} refusal sentence`,
+          ).toMatch(/^frozen seed is read-only(?: · |$)/);
         }
+        expect(checked, `${manifest.key}.${action} drew no verb to check`).toBeGreaterThan(0);
         expect(errors, `${manifest.key}.${action} threw or logged`).toEqual([]);
         expect(posts, `${manifest.key}.${action} wrote under a frozen seed`).toEqual([]);
       } finally {
@@ -218,3 +236,139 @@ for (const { path, manifest } of ROUTES)
       }
     }, 120_000);
   }
+
+/**
+ * THE LIVE LANE. `?demo=<seed>&live=1` runs the route's real code against a simulated demo owner:
+ * capture files a new member into the owner's pod, apply files `output/<run>/receipt.json` there,
+ * and `/pods` shows that receipt for the member. One loop per product route.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: playwright-core is imported by URL, untyped here.
+type Page = any;
+
+const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;
+
+async function openLive(page: Page, path: string, query: string) {
+  await page.goto(`${baseUrl}${path}?${query}`, { waitUntil: "domcontentloaded" });
+  // The lane creates the owner, then reloads bound to its one session.
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("target"), { timeout: 30_000 })
+    .toMatch(/^demo-/);
+  return new URL(page.url()).searchParams.get("target")!;
+}
+
+const verb = (page: Page, label: string) =>
+  page.getByRole("button", { name: new RegExp(`^${label}`) }).first();
+
+async function run(page: Page, label: string) {
+  const button = verb(page, label);
+  await expect
+    .poll(
+      async () =>
+        `${await button.getAttribute("aria-disabled")} ${await button.getAttribute("title")}`,
+      {
+        timeout: 30_000,
+      },
+    )
+    .toMatch(/^false /);
+  await button.click();
+}
+
+/** Open a Situation picker by its current word and choose one option. */
+async function pick(page: Page, word: string | RegExp, option: string | RegExp) {
+  await page.getByRole("button", { name: word }).first().click();
+  await page.getByRole("button", { name: option }).first().click();
+}
+
+async function landed(page: Page, pattern: RegExp) {
+  await expect
+    .poll(() => decodeURIComponent(new URL(page.url()).searchParams.get("path") ?? ""), {
+      timeout: 30_000,
+    })
+    .toMatch(pattern);
+  return decodeURIComponent(new URL(page.url()).searchParams.get("path")!);
+}
+
+/** `/pods` for the member: the run receipt the apply filed, as the page draws it. */
+async function receiptOnPods(page: Page, pod: string, path: string, operation: string) {
+  await page.goto(
+    `${baseUrl}/pods?demo=browse&live=1&pod=${encodeURIComponent(pod)}&path=${encodeURIComponent(path)}`,
+    { waitUntil: "domcontentloaded" },
+  );
+  const body = page.locator("body");
+  await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(operation);
+  return body.innerText();
+}
+
+async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
+  const page = await browser!.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error: { message: string }) => errors.push(`page error: ${error.message}`));
+  try {
+    const shown = await loop(page);
+    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, `${name}.png`), fullPage: true });
+    expect(errors, `${name} threw`).toEqual([]);
+    return shown;
+  } catch (error) {
+    if (SCRATCH) {
+      await page.screenshot({ path: join(SCRATCH, `${name}-failed.png`), fullPage: true });
+      console.log(`${name} failed at ${page.url()}\n${await page.locator("body").innerText()}`);
+    }
+    throw error;
+  } finally {
+    await page.close();
+  }
+}
+
+test("live /schedules: capture then apply files a run receipt", async () => {
+  const shown = await liveLoop("schedules", async (page) => {
+    const pod = await openLive(page, "/schedules", "demo=push&live=1");
+    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await page
+      .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
+      .first()
+      .click();
+    await run(page, "capture schedule");
+    const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
+    await pick(page, /^Capturing/, /^Applying/);
+    await run(page, "apply schedule");
+    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    return receiptOnPods(page, pod, path, "schedule.apply");
+  });
+  expect(shown).toContain("succeeded");
+}, 180_000);
+
+test("live /family: capture, confirm, apply files a run receipt", async () => {
+  const shown = await liveLoop("family", async (page) => {
+    const pod = await openLive(page, "/family", "demo=capture&live=1");
+    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await run(page, "capture family");
+    const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
+    await pick(page, /^Capturing/, /^Applying/);
+    await run(page, "plan");
+    await run(page, "apply family");
+    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    return receiptOnPods(page, pod, path, "family.apply");
+  });
+  expect(shown).toContain("succeeded");
+}, 180_000);
+
+test("live /families: capture, confirm, apply files a run receipt", async () => {
+  const shown = await liveLoop("families", async (page) => {
+    const pod = await openLive(page, "/families", "demo=capture&live=1");
+    await page.goto(`${page.url()}&stage=capture&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await page.getByTitle(/^Add Fan Coil Unit - Ducted to the capture set/).click();
+    await run(page, "capture families");
+    await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
+    // The captured member is a family model; the families spec the owner seeded is what applies.
+    const spec = "settings/families/mech-standard.json";
+    await page.goto(
+      `${baseUrl}/families?demo=capture&live=1&target=${pod}&stage=apply&pod=${pod}&path=${encodeURIComponent(spec)}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await run(page, "plan");
+    await run(page, "apply families");
+    await expect.poll(() => page.locator("body").innerText(), { timeout: 30_000 }).toContain("ran");
+    return receiptOnPods(page, pod, spec, "families.apply");
+  });
+  expect(shown).toContain("succeeded");
+}, 180_000);

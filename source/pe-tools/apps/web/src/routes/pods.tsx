@@ -3,6 +3,7 @@
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
+import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
@@ -60,7 +61,8 @@ function PodsRoute() {
   const navigate = useNavigate();
   const select = (ref: MemberRef) =>
     void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }), replace: true });
-  return <PodsRouteContent {...search} select={select} />;
+  // The live demo lane browses the demo owner's pods through the live path.
+  return <PodsRouteContent {...search} demo={frozenDemo() ?? undefined} select={select} />;
 }
 
 export function PodsRouteContent({

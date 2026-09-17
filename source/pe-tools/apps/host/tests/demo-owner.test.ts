@@ -251,7 +251,17 @@ test("demo Family apply confirms a plan, applies that exact hash, and refuses ch
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
   const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");
-  expect(JSON.stringify(success)).toContain("No Revit mutation, RFA output, or run receipt");
+  // The simulated engine files the run in the source pod, as the real one does (law 10).
+  const { receiptPath } = (success as { result: { native: { receiptPath: string } } }).result
+    .native;
+  expect(JSON.parse(await readFile(receiptPath, "utf8"))).toMatchObject({
+    podId: source.pod,
+    memberPath: source.path,
+    memberSha256: source.sha256,
+    operation: "family.apply",
+    planHash,
+    outcome: "succeeded",
+  });
   await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
   const stale = await apply("stale-member", planHash);
   expect(stale.state).toBe("failed");

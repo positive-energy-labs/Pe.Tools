@@ -49,6 +49,7 @@ export function hostResourceObserver(
   journal: () => ActionJournal = hostActionJournal,
   captures: () => TakeoffCaptures = hostTakeoffCaptures,
   origin = "http://127.0.0.1",
+  read: (url: URL, init?: RequestInit) => Promise<Response> = fetch,
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();
   return (request, publish) => {
@@ -64,7 +65,7 @@ export function hostResourceObserver(
       const pump = () =>
         Promise.all(
           paths.map(async ([path, init]) => {
-            const response = await fetch(new URL(path, origin), {
+            const response = await read(new URL(path, origin), {
               ...init,
               signal: controller.signal,
             });
