@@ -45,7 +45,7 @@ internal static class ScheduleBridgeOps {
     /// <summary>The spec a capture writes: the authored profile plus the `$schema` that says what it is.</summary>
     internal static string CaptureSpec(ViewSchedule schedule) {
         var spec = JObject.Parse(JsonConvert.SerializeObject(schedule.CaptureAuthoredScheduleProfile(), RevitJsonFormatting.CreateRevitIndentedSettings()));
-        spec.AddFirst(new JProperty("$schema", PodMembers.SchemaUrl(ScheduleManagerSettingsRegistration.ModuleKey, ScheduleManagerSettingsRegistration.RootKeys.Schedules)));
+        spec.AddFirst(new JProperty("$schema", PodMembers.SchemaUrl(ScheduleManagerSettingsRegistration.Profiles)));
         return spec.ToString(Formatting.Indented);
     }
 

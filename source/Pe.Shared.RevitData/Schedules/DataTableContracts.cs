@@ -47,12 +47,9 @@ public record ScheduleSheetPlacementSpec(string Sheet) {
     public double? OriginY { get; init; }
 }
 
+/// <summary>Upsert one synthetic data table. Authored element schedules apply through `schedule.apply`.</summary>
 public record ScheduleApplyRequest {
-    /// <summary>Synthetic data-table lane. Exactly one of Table or Profile must be set.</summary>
-    public DataTableSpec? Table { get; init; }
-
-    /// <summary>Plain authored-schedule lane (create-only, from a schedule profile).</summary>
-    public ScheduleProfile? Profile { get; init; }
+    public DataTableSpec Table { get; init; } = null!;
 
     /// <summary>Optionally place the resulting schedule on a sheet.</summary>
     public ScheduleSheetPlacementSpec? Placement { get; init; }
@@ -80,15 +77,9 @@ public record DataTableHandle(string Name, long ScheduleId, string ScheduleUniqu
     public List<DataTablePlacementHandle> Placements { get; init; } = [];
 }
 
-public record ScheduleApplyProfileSummary(string ScheduleName, long ScheduleId, string ScheduleUniqueId) {
-    public List<string> AppliedFields { get; init; } = [];
-    public List<string> SkippedFields { get; init; } = [];
-}
-
 public record ScheduleApplyData {
     public bool DryRun { get; init; }
     public DataTableHandle? Table { get; init; }
-    public ScheduleApplyProfileSummary? Profile { get; init; }
     public DataTablePlacementHandle? Placement { get; init; }
     public List<string> Warnings { get; init; } = [];
 }

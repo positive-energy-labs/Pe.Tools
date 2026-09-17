@@ -57,7 +57,7 @@ function SchemaToFieldRenderContent({
   errors,
   useRemoteOptions,
 }: {
-  schemaUrl: string | null;
+  schemaUrl: string;
   schemaDocument: SchemaDocument;
   rootEntries: Array<[string, SchemaNodeRef]>;
   values: SettingsValues;

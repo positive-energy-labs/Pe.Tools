@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Shared.Product;
 using Serilog.Core;
 using Serilog.Events;
 using System.IO;
@@ -9,8 +10,8 @@ using System.Text;
 namespace Pe.App.Analytics;
 
 /// <summary>
-///     PostHog usage analytics for the internal beta. Configured via
-///     Documents\Pe.Tools\settings\Global\settings.json:
+///     PostHog usage analytics for the internal beta. The installed product manifest carries the key;
+///     a checkout without one reads Documents\Pe.Tools\preferences.json:
 ///     { "posthog": { "apiKey": "phc_...", "host": "https://us.i.posthog.com" } }
 ///     No key → every call is a no-op. The key is a public write-only ingest key.
 ///     Mirrors source/pe-tools/packages/runtime/src/analytics.ts (event shapes must match).
@@ -31,17 +32,13 @@ internal static class PostHogAnalytics {
     internal static void Initialize() {
         try {
             // Installed product manifest is AUTHORITATIVE (the key rides the release, so
-            // installed machines need zero settings seeding); Documents settings.json stays
-            // the dev/override fallback. Mirrors analytics.ts — resolution order must match.
+            // installed machines need zero seeding); preferences.json stays the dev/override
+            // fallback. Mirrors analytics.ts — resolution order must match.
             var manifest = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Positive Energy", "Pe.Tools", "product.payloads.json");
-            if (!TryAdopt(manifest, root => root["telemetry"]?["posthog"])) {
-                var settings = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "Pe.Tools", "settings", "Global", "settings.json");
-                TryAdopt(settings, root => root["posthog"]);
-            }
+            if (!TryAdopt(manifest, root => root["telemetry"]?["posthog"]))
+                TryAdopt(ProductUserContentLayout.ForCurrentUser().PreferencesPath, root => root["posthog"]);
         } catch {
             // Analytics must never affect startup.
         }

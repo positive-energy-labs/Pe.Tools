@@ -5,7 +5,8 @@ import { spawnSync } from "node:child_process";
 
 const args = parseArgs(process.argv.slice(2));
 if (args.help) {
-  console.log("node scripts/familyfoundry-monthly-host-proof.mjs --host <dev|url> --bridge-session-id <id> --document-path <disposable.rvt> --original-document-path <original.rvt> --artifact-dir <dir> [--repo-root <dir>] [--mode plan|apply-one --profile <source> --family-id <id>]");
+  console.log("node scripts/familyfoundry-monthly-host-proof.mjs --host <dev|url> --bridge-session-id <id> --document-path <disposable.rvt> --original-document-path <original.rvt> --artifact-dir <dir> [--repo-root <dir>] [--mode plan|apply-one --profile <source> --family-id <id> --pod <demo pod id>]");
+  console.log("apply-one files the converted spec as a new member of --pod (settings/monthly-proof/...) and applies from that member.");
   process.exit(0);
 }
 
@@ -22,7 +23,9 @@ if (!new Set(["plan", "apply-one"]).has(mode)) throw new Error(`Unknown --mode '
 if (mode === "apply-one") {
   required("profile");
   required("family-id");
+  required("pod");
 }
+const patchSchema = "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/patches.json";
 
 mkdirSync(join(output, "requests"), { recursive: true });
 mkdirSync(join(output, "responses"), { recursive: true });
@@ -67,7 +70,7 @@ for (const [index, profile] of converted.profiles.entries()) {
   else if (mode === "apply-one" && profile.source !== args.profile) row.skipped = "not-requested";
   else {
     try {
-      row.plan = hostCall(`${pad(index + 1)}-plan`, "familyfoundry.plan", { patchJson: profile.patchJson, executionOptions: profile.executionOptions }).response;
+      row.plan = hostCall(`${pad(index + 1)}-plan`, "families.plan", { specJson: profile.patchJson, executionOptions: profile.executionOptions }).response;
       row.patchSha256 = sha(profile.patchJson);
       row.selectedCount = row.plan.families?.length ?? 0;
     } catch (error) {
@@ -101,13 +104,15 @@ function applyOne(profiles) {
   const run = { source, requestedFamilyId: familyId, status: "starting" };
   evidence.applyOne = run;
   checkpoint();
-  run.before = hostCall("90-before", "familyfoundry.project", { familyIds: [familyId] }).response;
+  run.source = fileMember(converted);
+  checkpoint();
+  run.before = hostCall("90-before", "families.capture", { familyIds: [familyId] }).response;
   const beforeModel = capturedModel(run.before, familyId, "before");
   checkpoint();
 
   let applied;
   try {
-    applied = hostCall("91-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [familyId]: selected.planHash }, executionOptions: converted.executionOptions });
+    applied = hostCall("91-apply", "families.apply", { specJson: converted.patchJson, expectedPlanHashes: { [familyId]: selected.planHash }, source: run.source, executionOptions: converted.executionOptions });
   } catch (error) {
     run.status = "outcomeUnknown";
     run.error = String(error.stack ?? error);
@@ -127,7 +132,7 @@ function applyOne(profiles) {
   run.authoritativeFamilyId = receipt.familyId;
   checkpoint();
 
-  run.after = hostCall("92-after", "familyfoundry.project", { familyIds: [receipt.familyId] }).response;
+  run.after = hostCall("92-after", "families.capture", { familyIds: [receipt.familyId] }).response;
   const afterModel = capturedModel(run.after, receipt.familyId, "after");
   if (!receipt.success || !receipt.converged) {
     run.status = "failed";
@@ -136,7 +141,7 @@ function applyOne(profiles) {
     return;
   }
 
-  const noop = hostCall("93-noop-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: receipt.familyId, executionOptions: converted.executionOptions }).response;
+  const noop = hostCall("93-noop-plan", "families.plan", { specJson: converted.patchJson, familyId: receipt.familyId, executionOptions: converted.executionOptions }).response;
   run.noopPlan = noop;
   const family = exactPlan(noop, receipt.familyId, "post-apply");
   try {
@@ -150,7 +155,7 @@ function applyOne(profiles) {
   let repeated;
   let repeatReceipt;
   try {
-    repeated = hostCall("94-noop-apply", "familyfoundry.apply", { patchJson: converted.patchJson, expectedPlanHashes: { [receipt.familyId]: family.planHash }, executionOptions: converted.executionOptions }).response;
+    repeated = hostCall("94-noop-apply", "families.apply", { specJson: converted.patchJson, expectedPlanHashes: { [receipt.familyId]: family.planHash }, source: run.source, executionOptions: converted.executionOptions }).response;
     repeatReceipt = exactReceipt(repeated, "reapply", family.planHash, receipt.familyId);
   } catch (error) {
     run.status = "outcomeUnknown";
@@ -164,9 +169,9 @@ function applyOne(profiles) {
     checkpoint();
     return;
   }
-  run.final = hostCall("95-final", "familyfoundry.project", { familyIds: [repeatReceipt.familyId] }).response;
+  run.final = hostCall("95-final", "families.capture", { familyIds: [repeatReceipt.familyId] }).response;
   capturedModel(run.final, repeatReceipt.familyId, "final");
-  run.finalPlan = hostCall("96-final-plan", "familyfoundry.plan", { patchJson: converted.patchJson, familyId: repeatReceipt.familyId, executionOptions: converted.executionOptions }).response;
+  run.finalPlan = hostCall("96-final-plan", "families.plan", { specJson: converted.patchJson, familyId: repeatReceipt.familyId, executionOptions: converted.executionOptions }).response;
   const finalPlan = exactPlan(run.finalPlan, repeatReceipt.familyId, "final");
   try {
     requireNoop(finalPlan, "Final");
@@ -176,6 +181,15 @@ function applyOne(profiles) {
     run.error = String(error.stack ?? error);
   }
   checkpoint();
+}
+
+/** Apply requires saved content: the converted spec becomes a new member of the demo pod, and every apply names it. */
+function fileMember(converted) {
+  const path = `settings/monthly-proof/${converted.source.replace(/[^A-Za-z0-9._-]+/g, "-")}-${Date.now()}.json`;
+  const content = `${JSON.stringify({ $schema: patchSchema, ...JSON.parse(converted.patchJson) }, null, 2)}\n`;
+  const written = hostCall("89-member", "pod.member.write", { pod: args.pod, path, content }, { local: true }).response;
+  if (typeof written?.sha256 !== "string") fail(`pod.member.write returned no sha256 for ${args.pod}:${path}.`);
+  return { pod: args.pod, path, sha256: written.sha256 };
 }
 
 function convertProfiles() {
@@ -195,14 +209,14 @@ function convertProfiles() {
   return JSON.parse(stdoutText.slice(offset + marker.length).trim());
 }
 
-function hostCall(label, key, request) {
+function hostCall(label, key, request, { local = false } = {}) {
   const requestPath = join(output, "requests", `${label}.json`);
   writeJson(requestPath, request);
   const result = pea(["host", "operations", "call", "--host", host, "--bridge-session-id", session, "--key", key, "--request-file", requestPath, "--verbosity", "compact"], label);
   const envelope = parsePeaJson(result.stdout, label);
   writeJson(join(output, "responses", `${label}.json`), envelope);
   if (!envelope.ok) throw new Error(`${key}: ${envelope.message ?? "Host operation failed"}`);
-  if (envelope.resolvedTarget?.session !== resolvedSession)
+  if (!local && envelope.resolvedTarget?.session !== resolvedSession)
     throw new Error(`${key}: target mismatch; requested '${session}', resolved '${envelope.resolvedTarget?.session ?? "none"}'.`);
   return envelope;
 }

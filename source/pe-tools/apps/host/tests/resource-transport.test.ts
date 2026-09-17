@@ -429,7 +429,6 @@ test("real bridge public events use an ordered bounded World lane with a visible
           activeDocumentObservedAtUnixMs: 0,
           activeDocumentPath: null,
           activeDocumentTitle: null,
-          availableModules: [],
           hasActiveDocument: false,
           openDocuments: [],
           revitVersion: "2025",

@@ -60,7 +60,6 @@ export async function createDemoClient(seed: Exclude<DemoSeed, { route: "chat" }
     target: DocumentRef;
     at: string;
     scope: WorkKey;
-    documentId?: { moduleKey: string; rootKey: string; relativePath: string };
   }>("/demo/instances", "", { seed: exportSeed(seed) });
   if (!owner.base.startsWith(`/demo/instances/${owner.id}`))
     throw Error("Invalid isolated owner endpoint");

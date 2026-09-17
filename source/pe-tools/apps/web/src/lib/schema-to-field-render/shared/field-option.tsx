@@ -35,8 +35,7 @@ export interface SchemaToFieldRenderProps {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   schema: RenderSchemaNode;
-  /** The member's `$schema`; remote field options are keyed by it. Null = no remote options. */
-  schemaUrl: string | null;
+  schemaUrl: string;
   baselineValues: SettingsValues;
   validationResult?: SettingsValidationResult;
   useRemoteOptions?: RemoteOptionsHook;
@@ -79,7 +78,7 @@ export interface SchemaRenderContextValue {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, string[]>;
-  schemaUrl: string | null;
+  schemaUrl: string;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
   useRemoteOptions?: RemoteOptionsHook;
@@ -101,7 +100,7 @@ export function SchemaRenderProvider({
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, string[]>;
   schemaDocument: SchemaDocument;
-  schemaUrl: string | null;
+  schemaUrl: string;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
   useRemoteOptions?: RemoteOptionsHook;
   children: ReactNode;
@@ -116,7 +115,7 @@ export function SchemaRenderProvider({
       fieldChanges,
       useRemoteOptions,
     }),
-    [errors, fieldChanges, onChange, schemaUrl, schemaDocument, values, useRemoteOptions],
+    [errors, fieldChanges, onChange, schemaDocument, schemaUrl, values, useRemoteOptions],
   );
 
   return (

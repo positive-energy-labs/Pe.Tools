@@ -51,7 +51,6 @@ import {
   podFolder,
   readMember,
   saveMember,
-  settingsLibrary,
   writeMember,
   type PodContext,
 } from "./settings.ts";
@@ -98,8 +97,7 @@ const familyModelSchema = `${hostProcessIdentity.defaultHostBaseUrl}/schemas/set
  */
 const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) => {
   const { spec, schemaUrl } = await runPods(deps, composedSpec(source, pods));
-  const library = schemaUrl ? settingsLibrary(schemaUrl) : null;
-  if (library?.moduleKey !== "FamilyFoundry" || library.rootKey !== "models") return spec;
+  if (!schemaUrl?.endsWith("/schemas/settings/FamilyFoundry/models.json")) return spec;
   const { $schema: _, ...model } = JSON.parse(spec) as Record<string, unknown>;
   return JSON.stringify({ patch: model });
 };
@@ -387,9 +385,10 @@ export async function admitFamilyAction(
       return {
         kind: "native",
         process,
-        nativeKey: "revit.apply.family-model",
+        nativeKey: "family.build",
         input: {
-          modelJson: JSON.stringify(model),
+          specJson: JSON.stringify(model),
+          source: input.source,
           ...(deps.nativePaths
             ? await deps.nativePaths(input, admission.id, file)
             : {

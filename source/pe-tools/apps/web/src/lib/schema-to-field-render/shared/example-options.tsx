@@ -17,21 +17,6 @@ import {
   useSchemaRenderContext,
 } from "./field-option";
 
-/**
- * The field-options and parameter-catalog host ops are still keyed by the C# library's module and
- * root, which the `$schema` URL names as `/schemas/settings/<module>/<root>.json`. The URL is the
- * member's identity; this reads it. Empty keys disable the remote query.
- */
-// ponytail: URL segment parse; delete when the C# ops take the schema URL.
-export function schemaLibrary(schemaUrl: string | null): { moduleKey: string; rootKey: string } {
-  const match = /\/schemas\/settings\/([^/]+)\/([^/]+)\.json$/.exec(
-    schemaUrl ? new URL(schemaUrl, "http://host").pathname : "",
-  );
-  return match
-    ? { moduleKey: decodeURIComponent(match[1]!), rootKey: decodeURIComponent(match[2]!) }
-    : { moduleKey: "", rootKey: "" };
-}
-
 export function toLocalItemsFromExamples(values: unknown[]): FieldOptionItem[] {
   return toLocalItems(
     values.flatMap((value) => {
@@ -95,20 +80,18 @@ export function useFieldOptions({
   fieldPath: string;
 }) {
   const { schemaUrl, values: allValues, useRemoteOptions } = useSchemaRenderContext();
-  const library = useMemo(() => schemaLibrary(schemaUrl), [schemaUrl]);
   const useRemote = useRemoteOptions ?? useSettingsRemoteOptions;
   const effectiveProviderNode = providerNode ?? node;
   const requestPath = effectiveProviderNode.providerPath();
   const remoteSource = useMemo(() => effectiveProviderNode.optionSource(), [effectiveProviderNode]);
   const request = useMemo<FieldOptionsRequest>(() => {
     return {
-      moduleKey: library.moduleKey,
-      rootKey: library.rootKey,
+      schemaUrl,
       propertyPath: requestPath,
       sourceKey: remoteSource?.key ?? "",
       contextValues: buildContextValues(remoteSource?.dependsOn ?? [], fieldPath, allValues),
     };
-  }, [allValues, fieldPath, library, remoteSource, requestPath]);
+  }, [allValues, fieldPath, remoteSource, requestPath, schemaUrl]);
   const contextValues = request.contextValues ?? {};
   const dependencyStates = useMemo(
     () =>
@@ -124,7 +107,7 @@ export function useFieldOptions({
   const usesParameterCatalogDataset = resolver === "dataset" && dataset === "parametercatalog";
   const remoteQuery = useRemote(request, usesRemoteResolver);
   const parameterCatalogQuery = useParameterCatalogQuery(
-    { moduleKey: library.moduleKey, contextValues },
+    { contextValues },
     { enabled: usesParameterCatalogDataset },
   );
   const enumItems = useMemo(() => {

@@ -114,7 +114,7 @@ const SHOWCASE: FamilyModel = {
 };
 
 const world = () =>
-  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" }));
+  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" }));
 
 /** The page's own edit channel, condensed: clone the baseline and mutate it like a verb would. */
 function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
@@ -126,8 +126,8 @@ function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
 
 describe("projectFamilyModel — document → page world", () => {
   it("carries the family's identity onto the profile the sentence names", () => {
-    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" });
-    expect(proto.profile.path).toBe("showcase-spike.family.json");
+    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" });
+    expect(proto.profile.path).toBe("showcase-spike.json");
     expect(proto.profile.familyName).toBe("PE Family Model Showcase");
     expect(proto.profile.category).toBe("Generic Models");
     expect(proto.profile.placement).toBe("Unhosted");

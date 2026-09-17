@@ -3,6 +3,7 @@ using Pe.Revit.Scripting.Pods;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Transport;
+using Pe.Shared.StorageRuntime.Modules;
 using System.IO;
 
 namespace Pe.App.Pods;
@@ -25,16 +26,16 @@ internal sealed record PodMember(string PodId, string PodFolder, string Path, st
 
 /// <summary>Palette-side view of the pod library: members selected by `$schema`, and apply-source checks.</summary>
 internal static class PodMembers {
-    public static string SchemaUrl(string moduleKey, string rootKey) =>
-        $"{HostEndpoint.ResolveHostBaseUrl().TrimEnd('/')}/schemas/settings/{moduleKey}/{rootKey}.json";
+    public static string SchemaUrl(ISettingsRootBinding library) =>
+        HostEndpoint.ResolveHostBaseUrl().TrimEnd('/') + SettingsSchemaUrl.Path(library);
 
     /// <summary>Installed pods whose manifest passed preparation.</summary>
     public static IReadOnlyList<PodPreparation> Pods() =>
         new ScriptPodPreparationService().List().Where(pod => pod.Success).ToList();
 
-    /// <summary>Members whose `$schema` path is `/schemas/settings/{module}/{root}.json` for one of <paramref name="schemas" />.</summary>
-    public static IReadOnlyList<PodMember> List(params (string ModuleKey, string RootKey)[] schemas) {
-        var suffixes = schemas.Select(s => $"/schemas/settings/{s.ModuleKey}/{s.RootKey}.json").ToList();
+    /// <summary>Members whose `$schema` names one of <paramref name="libraries" />.</summary>
+    public static IReadOnlyList<PodMember> List(params ISettingsRootBinding[] libraries) {
+        var suffixes = libraries.Select(SettingsSchemaUrl.Path).ToList();
         return Pods().SelectMany(pod => pod.Members
                 .Where(member => member.Schema is { } schema && suffixes.Any(suffix => schema.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
                 .Select(member => new PodMember(pod.Manifest!.Id, pod.Folder, member.Path, member.Schema)))

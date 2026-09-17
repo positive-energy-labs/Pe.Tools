@@ -12,7 +12,6 @@ public enum ParameterIdentityKind {
 }
 
 public record ParameterCatalogRequest(
-    string ModuleKey,
     Dictionary<string, string>? ContextValues
 );
 

@@ -24,6 +24,7 @@ LEDGER    docs/features/pods/LEDGER.md (verdicts), this map (waves), .artifacts/
 - 2026-09-16: Two builders implemented `pod.list`, `pod.member.read`, `pod.member.write`: pod-core as bridge ops, host as host-local ops. Ruling per the earlier narrowing: the host-local ops are canonical (they work offline); the three C# bridge ops are deleted and the C# library keeps the functions for palettes in-proc. The bridge keeps `pod.member.compose`, `pod.export`, `pod.import`.
 - 2026-09-16: `pod.member.write` and `pod.member.save` stay two ops (host had one op with an optional `expectedSha256`). Two states in one op is the guard the type can remove.
 - 2026-09-16: Capture on `/family` must keep showing coverage and unmodeled facts after it files the member (law 12). The capture workflow returns the member address plus the capture evidence, and the route shows the evidence beside the new member.
+- 2026-09-16: `pea script import` keeps its local folder choice (`--folder`), per law 12; the earlier "stay out unless a workflow needs them" ruling is withdrawn for import.
 
 ## Waves
 
@@ -58,6 +59,19 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 | w2-families | `/families` onto the kernel, plan confirmation sheet, URL page state | cn-web (kernel author) | crusade/w2-families |
 | w2-engines-cleanup | duplicate lanes, `family.build`, schema-url keyed ops, NUMBER to 0 | cn-engines | crusade/w2-engines-cleanup |
 | w2-critic | read-only purge critic on the wave 1 graft | fresh agent | none (reads `crusade/normalize`) |
+- w2-critic: ADOPT as a reading. Report `reports/w2-critic.md` on `f627e68`. No `SHIM:` markers survive; ten purge rows ranked; three homeless features named (Pea proposal lane has no home outside `/family`; remote field options in the spec editor ask for an empty module; `pea script import` lost its folder choice). Dogma grade: law 11 and law 10 bent because the dogma promised ops nobody owned; the "ops under `Pe.App/Host`" paragraph was wrong; law 9 and 14 collide in the one-key plan/apply on `family.apply`.
+- w2-family: ADOPT pending graft. Stake `crusade/w2-family` at `cfc04e4`, report `reports/w2-family.md`; net -5,627 lines with both family prototypes, `src/family-review`, and the settings file workspace deleted. `/family` is one `EntityRouteDef` (`route/family/manifest.ts`); capture returns `{ member, evidence }` and the evidence panel is back; `SchemaToFieldRender` keyed by `schemaUrl`; web 395 tests, host capture test green; three demo pages render headless. Kernel needs for w2-families: per-stage `needs` (family document for capture and apply), spec picker in every stage, `spec-editor.tsx:231` must pass `schemaUrl`, `families/matrix.tsx:103` deep link. Absent ruling: `/family` keeps a real plan through the confirm admission; law 9 wording ("only families") narrows to "families is the only bulk plan".
+- w2-engines-cleanup: ADOPT pending graft. Stake `crusade/w2-engines-cleanup` at `8f4dbd9`, report `reports/w2-engines-cleanup.md`; net -276 lines. Duplicate schedule profile lane gone, `family.build` with receipt, settings ops keyed by `schemaUrl` with one C# resolver, `settings.validate`, `availableModules` and `settings.module-catalog` deleted, PostHog reads preferences, stray `-w` deleted; contract 68 ops in sync; NUMBER 147 to 42. Left: 40 of the 42 are `.family.json`, the family engine's sibling-file convention for nested models (`FamilyModelBuild.cs:69`), which no brief may touch; `families/store.ts:98` still looks for `familyfoundry.apply` receipts (live defect, sent to w2-families); `revit.apply.schedule` is now table-only and misnamed.
+- Absent ruling: law 3 narrows to "a suffix never selects a validator". The engine's `<name>.family.json` sibling convention for nested models is a reference convention inside the engine, listed Owed for the engine owner, not a crusade target.
+
+### Wave 3 (planned from the critic)
+
+- `family.apply` splits into `family.confirm` (plan only) and `family.apply` (planHash required), the same ruling as write/save. Owner: the `/family` line after w2-family lands.
+- The second member editor (`apps/web/src/settings/*`, about 700 lines) folds into the spec editor, which gains the Pea proposal and staging lane so `/pods` shows proposals. Owner: a fresh web builder.
+- Remote field options keyed by `$schema` URL end to end (critic purge row 4 finishes what w2-engines-cleanup starts).
+- `PeToolsBrowser.cs` deep link targets `/pods?pod=&path=` once page state is in the URL.
+- Purge rows 7 to 9: C# fallback pod capture and duplicated bounds, the `{ patch }` wrap in two languages, the duplicate `PodMember` record in `Pe.App/Pods`.
+- OPEN for the user: `FamilyProfileConverter.cs` converts legacy FF profiles inside the product engine (law 13). It is also the only way the 50 legacy profile members in the migration plan become usable. Rule: keep as the one-shot converter invoked by migration, or delete with the members.
 
 ### Wave 2 (planned)
 

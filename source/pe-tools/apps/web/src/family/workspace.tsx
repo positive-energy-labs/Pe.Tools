@@ -98,7 +98,7 @@
  *   capture live   the kernel's `family.capture` workflow. It files the open family as a NEW
  *                  member, the page lands on it, and the capture's evidence (coverage, the
  *                  unmodeled ledger) shows beside it and feeds the ⇄ live overlay.
- *   build .rfa     `family.build` → `revit.apply.family-model`. A WRITE that leaves the page and
+ *   build .rfa     `family.build`. A WRITE that leaves the page and
  *                  the document: it composes the SAVED member host-side and materializes an .rfa.
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
