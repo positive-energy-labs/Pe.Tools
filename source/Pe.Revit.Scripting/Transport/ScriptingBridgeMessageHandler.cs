@@ -19,6 +19,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     private const int MaxTimeoutSeconds = 3600;
 
     private readonly ScriptWorkspaceBootstrapService _bootstrapService;
+    private readonly ScriptPodPreparationService _pods = new();
     private readonly ScriptPodArchiveService _podArchiveService;
     private readonly RevitScriptExecutionService _executionService;
     private readonly ExternalEvent _externalEvent;
@@ -37,7 +38,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         var csProjReader = new CsProjReader();
         var projectGenerator = new ScriptProjectGenerator(csProjReader);
         this._bootstrapService = new ScriptWorkspaceBootstrapService(projectGenerator);
-        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator);
+        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator, this._pods);
         this._executionService = RevitScriptExecutionService.CreateDefault(uiApplicationAccessor, notificationSink);
         this._externalEvent = ExternalEvent.Create(this);
     }
@@ -171,60 +172,60 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         }
     }
 
-    [Op("scripting.pod.import", Does = "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new local folder under Documents/Pe.Tools/Pods.", Title = "Import Script Pod", Finds = ["script", "pod", "import", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
-    public Task<ScriptPodImportData> ImportPodAsync(
-        ScriptPodImportRequest request,
-        CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        "import script pod",
+    [Op("pod.list", Does = "List installed pods under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and every member with its SHA-256 and $schema. Diagnostics cover pod.json and entrypoint source only; members validate one at a time when used.", Title = "List Pods", Finds = ["pod", "list", "members", "entrypoints", "settings"])]
+    public Task<PodListData> ListPodsAsync(PodListRequest request, CancellationToken cancellationToken) =>
+        // Pure disk IO — no Revit API access, so it never waits behind the execution slot.
+        Task.FromResult(new PodListData(this._pods.List().Select(pod => new PodData(
+            pod.Manifest?.Id,
+            pod.Manifest?.Name,
+            pod.Manifest?.Version,
+            pod.Folder,
+            pod.Manifest?.Entrypoints.Select(entrypoint => new ScriptPodEntrypointData(entrypoint.Id, entrypoint.SourcePath, entrypoint.Name, entrypoint.Description)).ToList() ?? [],
+            pod.Members.Select(member => new PodMemberData(member.Path, member.Sha256, member.Schema)).ToList(),
+            pod.Diagnostics.ToList()
+        )).ToList()));
+
+    [Op("pod.member.read", Does = "Read one pod member by pod id and pod-relative path; returns its text and SHA-256.", Title = "Read Pod Member", Finds = ["pod", "member", "read", "settings", "spec"])]
+    public Task<PodMemberReadData> ReadPodMemberAsync(PodMemberReadRequest request, CancellationToken cancellationToken) {
+        var (content, sha256) = this._pods.ReadMember(request.Pod, request.Path);
+        return Task.FromResult(new PodMemberReadData(content, sha256));
+    }
+
+    [Op("pod.member.write", Does = "Create a new pod member at a pod-relative path under src/, settings/, or assets/. Refuses when the path already exists; returns the SHA-256 of the written bytes.", Title = "Create Pod Member", Finds = ["pod", "member", "write", "create", "capture"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    public Task<PodMemberWriteData> WritePodMemberAsync(PodMemberWriteRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(new PodMemberWriteData(this._pods.WriteMember(request.Pod, request.Path, request.Content)));
+
+    [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
+    public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
+        var result = this._pods.Compose(request.Pod, request.Path, request.Content);
+        return Task.FromResult(new PodMemberComposeData(
+            result.Composed,
+            result.Diagnostics.ToList(),
+            result.Dependencies.Select(dependency => new PodDependencyData(dependency.PodId, dependency.Path, dependency.Sha256)).ToList()
+        ));
+    }
+
+    [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    public Task<PodExportData> ExportPodAsync(PodExportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
+        "export pod",
+        () => this._podArchiveService.Export(request, RevitRuntimeTargetFramework.Resolve(this.RequireUiApplication().Application.VersionNumber ?? "unknown")),
+        cancellationToken
+    );
+
+    [Op("pod.import", Does = "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date.", Title = "Import Pod", Finds = ["pod", "import", "install", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    public Task<PodImportData> ImportPodAsync(PodImportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
+        "import pod",
         () => {
-            var uiApplication = this.RequireUiApplication();
-            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
-            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
-            var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
+            var revitVersion = this.RequireUiApplication().Application.VersionNumber ?? "unknown";
             return this._podArchiveService.Import(
                 request,
                 revitVersion,
-                targetFramework,
-                runtimeAssemblyPath
+                RevitRuntimeTargetFramework.Resolve(revitVersion),
+                RevitRuntimeTargetFramework.GetRuntimeAssemblyPath()
             );
         },
         cancellationToken
     );
-
-    [Op("scripting.pod.export", Does = "Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path.", Title = "Export Script Pod", Finds = ["script", "pod", "export", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
-    public Task<ScriptPodExportData> ExportPodAsync(
-        ScriptPodExportRequest request,
-        CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        "export script pod",
-        () => {
-            var uiApplication = this.RequireUiApplication();
-            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
-            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
-            return this._podArchiveService.Export(request, targetFramework, revitVersion);
-        },
-        cancellationToken
-    );
-
-    [Op("scripting.pod.list", Does = "List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix.", Title = "List Script Pods", Finds = ["script", "pod", "list", "workspace", "entrypoints", "catalog"], Tier = OpTier.Expert)]
-    public Task<ScriptPodListData> ListPodsAsync(
-        ScriptPodListRequest request,
-        CancellationToken cancellationToken
-    ) =>
-        // Pure disk IO — no Revit API access, so it never waits behind the execution slot.
-        Task.FromResult(ScriptPodCatalogService.List());
-
-    [Op("scripting.pod.prepare", Does = "Validate and compose one captured pod snapshot without executing scripts or resolving external services. Returns composed settings only when preparation succeeds, with gate reasons on every result.", Title = "Prepare Pod", Finds = ["pod", "settings", "compose", "validate"], Tier = OpTier.Expert)]
-    public Task<ScriptPodPrepareData> PreparePodAsync(ScriptPodPrepareRequest request, CancellationToken cancellationToken) {
-        cancellationToken.ThrowIfCancellationRequested();
-        var prepared = new ScriptPodPreparationService().Prepare(request.WorkspaceKey, request.SourceBundle);
-        return Task.FromResult(new ScriptPodPrepareData(
-            prepared is PreparedPod snapshot ? snapshot.ContentHash : null,
-            prepared is PreparedPod composed ? composed.ComposedSettings.ToDictionary(pair => pair.Key, pair => pair.Value.Content) : [],
-            prepared.Outcomes.Select(outcome => new ScriptPodGateOutcomeData(outcome.Code, outcome.Location,
-                outcome.Reason, outcome.Remedy, outcome.Severity)).ToList()));
-    }
 
     private async Task<T> EnqueueAsync<T>(
         string operationName,

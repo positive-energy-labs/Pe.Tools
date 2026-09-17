@@ -10,13 +10,12 @@ public sealed record PodComposedDocument(
     IReadOnlyList<PodConsumedDependency> Dependencies
 );
 
+/// <summary>One consumed fragment: the pod whose manifest id owns it, its pod-relative path, and its bytes' SHA-256.</summary>
 public sealed record PodConsumedDependency(
     string PodId,
-    string ReleaseHash,
-    string SourcePath,
-    string Content,
-    string? SourceContent = null,
-    IReadOnlyList<PodConsumedDependency>? Dependencies = null
+    string Path,
+    string Sha256,
+    string Content
 );
 
 public sealed record PodCompositionResult(
@@ -24,8 +23,13 @@ public sealed record PodCompositionResult(
     IReadOnlyList<ScriptDiagnostic> Diagnostics
 );
 
-/// <summary>Composes `$preset` and `$include` from one captured pod snapshot.</summary>
+/// <summary>
+///     Composes `$preset` and `$include` for one member. `resolve` receives the reference as written in the
+///     member; inside a foreign fragment, `@local/` is rewritten to that fragment's own `@&lt;pod-id&gt;/`.
+/// </summary>
 public static class PodComposer {
+    public const string LocalPrefix = "@local/";
+
     public delegate bool ResolveReference(string reference, out PodConsumedDependency dependency, out string reason);
 
     public static PodCompositionResult Compose(string path, string source, ResolveReference resolve) {
@@ -57,6 +61,16 @@ public static class PodComposer {
         );
     }
 
+    /// <summary>Every `$preset`/`$include` string value in the token, in document order.</summary>
+    public static IEnumerable<JValue> DirectiveReferences(JToken token) => token switch {
+        JObject obj => obj.Properties().SelectMany(property =>
+            property.Name is "$preset" or "$include" && property.Value is JValue { Type: JTokenType.String } value
+                ? new[] { value }
+                : DirectiveReferences(property.Value)),
+        JArray array => array.SelectMany(DirectiveReferences),
+        _ => Enumerable.Empty<JValue>()
+    };
+
     public static bool ContainsDirective(JToken token) => token switch {
         JObject obj => obj.ContainsKey("$include") || obj.ContainsKey("$preset") || obj.Properties().Any(property => ContainsDirective(property.Value)),
         JArray array => array.Any(ContainsDirective),
@@ -80,21 +94,26 @@ public static class PodComposer {
             visiting.Remove(reference);
             return null;
         }
-        dependencies.Add(dependency with { Content = dependency.SourceContent ?? dependency.Content, SourceContent = null, Dependencies = null });
-        foreach (var nested in dependency.Dependencies ?? [])
-            dependencies.Add(nested);
+        dependencies.Add(dependency);
+        var scoped = reference.StartsWith(LocalPrefix, StringComparison.Ordinal)
+            ? resolve
+            : (string nested, out PodConsumedDependency nestedDependency, out string nestedReason) => resolve(
+                nested.StartsWith(LocalPrefix, StringComparison.Ordinal) ? $"@{dependency.PodId}/{nested.Substring(LocalPrefix.Length)}" : nested,
+                out nestedDependency,
+                out nestedReason
+            );
         try {
             var loaded = JToken.Parse(dependency.Content, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
             return ExpandIncludes(
-                ExpandPresets(loaded, dependency.SourcePath, resolve, visiting, dependencies, diagnostics),
-                dependency.SourcePath,
-                resolve,
+                ExpandPresets(loaded, dependency.Path, scoped, visiting, dependencies, diagnostics),
+                dependency.Path,
+                scoped,
                 visiting,
                 dependencies,
                 diagnostics
             );
         } catch (JsonException ex) {
-            diagnostics.Add(Error("pod.settings.json", dependency.SourcePath, ex.Message));
+            diagnostics.Add(Error("pod.settings.json", dependency.Path, ex.Message));
             return null;
         } finally {
             visiting.Remove(reference);

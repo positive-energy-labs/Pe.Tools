@@ -15,8 +15,7 @@ public sealed class ScriptPodSourceTests {
     private static ScriptPodSourceBundle Bundle() => new(
         [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}""")),
          new("src/Main.cs", Encode("public static class Main { public static int Run() => Helper.Value; }")),
-         new("src/Helper.cs", Encode("public static class Helper { public const int Value = 42; }"))],
-        []);
+         new("src/Helper.cs", Encode("public static class Helper { public const int Value = 42; }"))]);
 
     private static void CompileAndRun(ScriptPodSourceBundle bundle) {
         var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs");

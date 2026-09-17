@@ -26,7 +26,7 @@ public sealed class ScriptArtifactWriter {
 
     public IReadOnlyList<ScriptArtifactData> Artifacts => this._artifacts;
 
-    internal ScriptArtifactData WriteReceipt(PodExecutionAttributionData receipt) {
+    internal ScriptArtifactData WriteReceipt(PodReceipt receipt) {
         var path = this.ResolveArtifactPath("pod-receipt.json");
         Directory.CreateDirectory(this._runRoot);
         File.WriteAllText(path, JsonConvert.SerializeObject(receipt, Formatting.Indented));

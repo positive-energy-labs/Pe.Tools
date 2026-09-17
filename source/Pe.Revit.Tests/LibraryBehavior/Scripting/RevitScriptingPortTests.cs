@@ -21,7 +21,7 @@ public sealed class RevitScriptingPortTests {
         var bundle = new ScriptPodSourceBundle([
             FileBytes("pod.json", """{"schemaVersion":2,"id":"output-proof-lineage","name":"Output proof","version":"1","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}"""),
             FileBytes("src/Main.cs", """using Pe.Revit.Scripting.Context; public sealed class Main : PeScriptContainer { public override void Execute() { Artifacts.WriteJson("result.json", new { check = "pod-output" }); } }""")
-        ], []);
+        ]);
         try {
             var result = CreateExecutionService(uiApplication).Execute(document,
                 new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey,
