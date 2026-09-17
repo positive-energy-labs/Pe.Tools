@@ -67,7 +67,16 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 - w2-families grafted at merge of `80fcbd6`: `/family` on the kernel plan lane and spec picker, `families.apply` receipt key fixed, spec editor keyed by the member's schema URL as `pod.list` reports it; web 403 tests green; `/family?demo=apply`, `/families?demo=apply`, and `/pods` deep links render in the browser lane with no console errors.
 - Wave 2 closed. NUMBER: 39 hits in 19 files (492 at baseline, 147 after wave 1); every remaining hit is the family engine's `<name>.family.json` sibling convention or a test asserting a removed field is unknown. Secondary LOC 20,156 (baseline 25,116). Kernel routes 3 of 3 plus `/pods`. Revit lane still UNPROVEN on every route.
 
-### Wave 3 (planned from the critic)
+### Wave 3 (cast 2026-09-17)
+
+| Builder | Seam | Line | Branch |
+|---|---|---|---|
+| w3-host | families capture evidence, one spec address, confirm/apply split, `route/pods.ts` reads behind a Reading | cn-host | crusade/w3-host |
+| w3-editor | Pea proposal lane in the spec editor; `apps/web/src/settings` folded away | cn-web | crusade/w3-editor |
+| w3-engines | purge rows 7 to 9, data-table op name, `/pods` deep link from Revit, dead descriptor fields | cn-engines | crusade/w3-engines |
+| w3-demo | live demo lane so capture and apply get a browser proof; scenario suites | fresh agent on cn-pod-core | crusade/w3-demo |
+
+Wave 3 items from the critic, for reference:
 
 - `families.capture` returns `{ members, evidence }` like `family.capture`, and `families.plan` takes `{ source }` so `/families` has one spec address instead of page plus Work. Owner: the host line.
 - `route/pods.ts` host reads move behind a Reading so the `hostBelowRoute` ratchet holds at its baseline of 11; raising the baseline is not the fix.
