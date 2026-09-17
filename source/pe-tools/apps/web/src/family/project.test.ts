@@ -23,8 +23,6 @@ import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
 
 const L = "Length (Common)";
 
-
-
 const SHOWCASE: FamilyModel = {
   family: {
     name: "PE Family Model Showcase",

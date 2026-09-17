@@ -4,10 +4,7 @@ import {
   settingsCandidate,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
-import type {
-  MemberIssue,
-  PodMemberComposeResponse,
-} from "@pe/host-contracts/operation-types";
+import type { MemberIssue, PodMemberComposeResponse } from "@pe/host-contracts/operation-types";
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 import { createSettingsCommandHandlers, executionContent } from "../src/pea/settings-commands.ts";
@@ -144,16 +141,7 @@ test("real Work runtime keeps two members and two panes separate and rejects sta
     ).ok,
   ).toBe(false);
   expect(
-    (
-      await runtime.command(
-        a,
-        "pods",
-        "human",
-        "adopt",
-        { member: member(), sha256: "v1" },
-        1,
-      )
-    ).ok,
+    (await runtime.command(a, "pods", "human", "adopt", { member: member(), sha256: "v1" }, 1)).ok,
   ).toBe(false);
   const pane1 = await runtime.read(a, "pods"),
     pane2 = await runtime.read(a, "pods");

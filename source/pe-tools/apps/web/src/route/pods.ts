@@ -34,7 +34,9 @@ async function admitHost(key: "pod.member.write" | "pod.member.save", input: obj
     30_000,
   );
   if (action.state !== "succeeded")
-    throw Error("error" in action && action.error ? String(action.error) : `${key} ${action.state}`);
+    throw Error(
+      "error" in action && action.error ? String(action.error) : `${key} ${action.state}`,
+    );
   return (action as unknown as { result: PodMemberWritten }).result;
 }
 

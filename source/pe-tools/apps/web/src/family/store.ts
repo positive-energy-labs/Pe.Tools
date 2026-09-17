@@ -322,10 +322,7 @@ export function useFamilyStore(options: {
 
   /* ── The profile picker's option list ───────────────────────────────────── */
   const host = useMemo(() => createLiveFamilyHost(), []);
-  const profileCall = useHostCall(
-    () => host.profile(),
-    ["family-profiles"],
-  );
+  const profileCall = useHostCall(() => host.profile(), ["family-profiles"]);
   const feeds = {
     profile: {
       options: profileCall.data

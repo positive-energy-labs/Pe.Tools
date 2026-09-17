@@ -13,7 +13,7 @@ const statuses = [
 test("import passes only the archive path through Gunshi", async () => {
   const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
   const scripting = {
-    importPod: vi.fn(async () => ({ pod: "pe-standards", folder: "pe-standards" })),
+    importPod: vi.fn(async () => ({ id: "pe-standards", folder: "pe-standards" })),
   };
   const tools = vi
     .spyOn(

@@ -127,9 +127,9 @@ test.each(["success", "token-conflict", "publication-refusal"] as const)(
     const stored = JSON.parse(await readFile(join(f.owner.root, "journal.json"), "utf8"));
     expect(JSON.stringify(stored)).toContain(`${f.owner.id}:save`);
     if (scenario === "publication-refusal")
-      expect(JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route))).toContain(
-        "Later local edit",
-      );
+      expect(
+        JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route)),
+      ).toContain("Later local edit");
   },
 );
 test("Build freezes original saved/composed basis and labels simulated outcome; production output is refused", async () => {

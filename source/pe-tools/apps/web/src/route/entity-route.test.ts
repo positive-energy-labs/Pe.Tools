@@ -89,5 +89,7 @@ test("apply refuses unsaved or foreign members, confirms the plan, then applies 
 test("a refused workflow surfaces its reason", async () => {
   const { c } = ctx({ pod: "p", path: "settings/a.json" });
   run.mockReset().mockResolvedValue({ state: "failed", error: "member changed" });
-  await expect(actions!.apply.run(c as never, undefined as never)).rejects.toThrow("member changed");
+  await expect(actions!.apply.run(c as never, undefined as never)).rejects.toThrow(
+    "member changed",
+  );
 });

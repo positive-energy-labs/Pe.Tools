@@ -364,7 +364,13 @@ export async function admitScheduleAction(
             })
           : [];
         const result = patches.length
-          ? await work.apply(base.key, scheduleGridRouteState.route, "human", patches, view.revision)
+          ? await work.apply(
+              base.key,
+              scheduleGridRouteState.route,
+              "human",
+              patches,
+              view.revision,
+            )
           : { ok: true, revision: view.revision };
         if (result.ok) {
           publication = result;

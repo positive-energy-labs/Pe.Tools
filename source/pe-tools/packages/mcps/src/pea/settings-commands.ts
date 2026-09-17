@@ -36,10 +36,9 @@ export function createSettingsCommandHandlers(
 ): RouteStateCommandHandlers<SettingsRouteDocument> {
   const caller = () => new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl) });
   const read = (member: PodMember) =>
-    (
-      options.pods?.read ??
-      ((request: PodMember) => caller().call("pod.member.read", request))
-    )(member);
+    (options.pods?.read ?? ((request: PodMember) => caller().call("pod.member.read", request)))(
+      member,
+    );
   const compose = (request: PodMemberComposeRequest) =>
     (options.pods?.compose ?? ((value) => caller().call("pod.member.compose", value)))(request);
   const basis = async (member: PodMember) => {

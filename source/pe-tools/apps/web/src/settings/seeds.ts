@@ -4,7 +4,12 @@
  * default pod's MechEquip/TEST.schedule.json and the actual ScheduleProfile schema, both
  * captured live on 2026-08-17. File Readings are seeded with their raw content strings.
  */
-import type { PodMember, Seed, SettingsFieldState, SettingsRouteDocument } from "@pe/agent-contracts";
+import type {
+  PodMember,
+  Seed,
+  SettingsFieldState,
+  SettingsRouteDocument,
+} from "@pe/agent-contracts";
 
 import { SETTINGS_SEED_RAW } from "#/settings-panes/seed-content";
 import { SETTINGS_SEED_SCHEMA as CAPTURED_SETTINGS_SEED_SCHEMA } from "#/settings-panes/seed-schema";

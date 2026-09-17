@@ -54,12 +54,6 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
     manifest: ((await load("/src/chat/manifest.ts")).chatManifest as Factory)({ thread: "" }),
   },
   {
-    path: "/settings",
-    manifest: ((await load("/src/settings/manifest.ts")).settingsManifest as Factory)({
-      scope: { route: "pods", target: null },
-    }),
-  },
-  {
     path: "/instances",
     manifest: (await load("/src/instances/manifest.ts")).instancesManifest as AnyManifest,
   },

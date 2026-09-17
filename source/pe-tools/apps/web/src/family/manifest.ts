@@ -234,7 +234,13 @@ const familySeed = (
     receipts: [],
     inventory: emptyInventory,
   },
-  page: { stage: "author", view, file: `settings/family/${name}.json`, buildReview: null, plan: null },
+  page: {
+    stage: "author",
+    view,
+    file: `settings/family/${name}.json`,
+    buildReview: null,
+    plan: null,
+  },
 });
 
 const absentAuthoringFacts: FamilyAuthoringFacts = {
@@ -363,7 +369,7 @@ export const familyManifest = (
         },
       },
       capture: {
-        label: "capture",
+        label: "capture into pod",
         ...semanticActionFacts("family.capture"),
         input: z.record(z.string(), z.unknown()).optional(),
         dirties: ["family"],

@@ -201,7 +201,9 @@ const workflow = async (
 ): Promise<Record<string, unknown>> => {
   const action = await runSemanticAction(key, input, documentOf(ctx));
   if (action.state !== "succeeded")
-    throw Error("error" in action && action.error ? String(action.error) : `${key} ${action.state}`);
+    throw Error(
+      "error" in action && action.error ? String(action.error) : `${key} ${action.state}`,
+    );
   return (action as unknown as { result: Record<string, unknown> }).result;
 };
 
@@ -209,7 +211,6 @@ const podsOf = (ctx: EntityCtx) => {
   const reading = ctx.readings.pods;
   return reading?.state === "ready" ? (reading.observation as readonly PodRow[]) : [];
 };
-
 
 /**
  * The one entity route. Stages are audit, capture, apply; the audit's own Work, Readings and

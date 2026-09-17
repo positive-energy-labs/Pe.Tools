@@ -97,7 +97,6 @@ export function SpecEditor({
     // `key` is the member's identity; the object is rebuilt every render.
   }, [key, fixture]);
 
-
   const parsed = useMemo(() => parse(draft), [draft]);
   const form = useMemo(() => schemaFormModel(draft, schemaJson), [draft, schemaJson]);
   const baseline = useMemo(() => schemaFormModel(basis, schemaJson), [basis, schemaJson]);
@@ -140,7 +139,10 @@ export function SpecEditor({
         const written = asNew
           ? await podHost.write(ref, draft)
           : await podHost.save(ref, draft, basisSha!);
-        if (!asNew) setBasis(draft), setBasisSha(written.sha256);
+        if (!asNew) {
+          setBasis(draft);
+          setBasisSha(written.sha256);
+        }
         onSaved?.(ref);
       } catch (error) {
         setFailure(message(error));

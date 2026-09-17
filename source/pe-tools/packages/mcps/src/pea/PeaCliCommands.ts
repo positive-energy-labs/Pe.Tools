@@ -552,9 +552,7 @@ function writeScriptPodList(result: PodList) {
         `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
       );
     for (const diagnostic of pod.diagnostics)
-      console.error(
-        `  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`,
-      );
+      console.error(`  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`);
   }
   if (!result.pods.length) console.log("(no pods found — run `pea script bootstrap`)");
 }

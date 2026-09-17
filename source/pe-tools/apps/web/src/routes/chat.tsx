@@ -20,9 +20,7 @@ export const PROMPT_MAX = 200;
 
 const DEFAULTS = { mode: "threads" as const };
 
-const filePaneSearch = z
-  .object({ pod: z.string(), file: z.string() })
-  .optional();
+const filePaneSearch = z.object({ pod: z.string(), file: z.string() }).optional();
 
 export const chatSearchSchema = z.object({
   variant: z.enum(["A", "B", "C"]).optional().catch(undefined),

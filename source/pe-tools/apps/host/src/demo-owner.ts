@@ -70,7 +70,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         handlers:
           spec.route === settingsRouteState.route
             ? createSettingsCommandHandlers({
-                pods: { read: settings.readMember, compose: settings.composeMember },
+                pods: {
+                  read: (member) => settings.readMember(member),
+                  compose: (request) => settings.composeMember(request),
+                },
               })
             : {},
       })),

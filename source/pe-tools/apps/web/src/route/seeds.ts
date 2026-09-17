@@ -36,9 +36,7 @@ export const DEMO_PODS: readonly PodRow[] = [
     version: "0.1.0",
     folder: "Documents/Pe.Tools/Pods/scripts",
     entrypoints: [{ id: "tag", sourcePath: "src/Tag.cs" }],
-    members: [
-      { path: "src/Tag.cs", sha256: hash(7), schema: null },
-    ],
+    members: [{ path: "src/Tag.cs", sha256: hash(7), schema: null }],
     diagnostics: [
       {
         code: "Entrypoint",

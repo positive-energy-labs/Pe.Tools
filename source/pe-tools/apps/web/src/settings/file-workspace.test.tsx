@@ -12,10 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   location: {
     pathname: "/settings",
-    search: { mode: "file", pod: "global", file: "a.json" } as Record<
-      string,
-      unknown
-    >,
+    search: { mode: "file", pod: "global", file: "a.json" } as Record<string, unknown>,
   },
 }));
 vi.mock("@tanstack/react-router", async (original) => ({
@@ -58,8 +55,7 @@ test("one subject-owned read ignores late selections, hides old Work during back
     reject(error: Error): void;
   }> = [];
   mocks.open.mockImplementation(
-    (id) =>
-      new Promise((resolve, reject) => requests.push({ file: id.path, resolve, reject })),
+    (id) => new Promise((resolve, reject) => requests.push({ file: id.path, resolve, reject })),
   );
   mocks.navigate.mockImplementation(async ({ search }) => {
     mocks.location = { ...mocks.location, search: search(mocks.location.search) };

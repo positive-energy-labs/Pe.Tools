@@ -39,9 +39,7 @@ describe("the settings manifest", () => {
   it("refuses every document action until a basis is adopted", () => {
     const empty: SettingsRouteDocument = { basis: null, fields: {} };
     for (const name of ["refresh", "validate", "adopt", "save", "stage"] as const)
-      expect(actions[name].ready(ctx(empty), undefined as never)).toBe(
-        "open a pod member first",
-      );
+      expect(actions[name].ready(ctx(empty), undefined as never)).toBe("open a pod member first");
     // `open` is the one action that runs with no Work: it is what creates the basis.
     expect(actions.open.ready(ctx(empty), undefined as never)).toBe("pick a pod member first");
     expect(

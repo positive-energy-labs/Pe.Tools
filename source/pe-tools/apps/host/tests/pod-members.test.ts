@@ -255,7 +255,9 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   const saved = await admit("save", { kind: "save", sha256 }, authored.revision!);
   expect(saved.state, JSON.stringify(saved)).toBe("succeeded");
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 5 });
-  const after = settingsRouteState.schema.parse((await work.read(scope, settingsRouteState.route))!.doc);
+  const after = settingsRouteState.schema.parse(
+    (await work.read(scope, settingsRouteState.route))!.doc,
+  );
   expect(after.basis?.sha256).toBe(digest(await readFile(file())));
   expect(after.fields["/width"]?.staged).toBeUndefined();
   // The old basis is gone from disk; a second save against it refuses before writing.

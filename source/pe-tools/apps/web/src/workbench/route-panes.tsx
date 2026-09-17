@@ -89,7 +89,8 @@ function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
   if (spec.route === settingsRouteState.route) return <PodsPane />;
   if (spec.route === "families") return <FamiliesRouteContent thread={currentThreadId} />;
   if (spec.route === "takeoffs") return <TakeoffsPane key={workKey(work)} scope={work} />;
-  if (spec.route === scheduleGridRouteState.route) return <LiveScheduleGridWorkspace key={workKey(work)} />;
+  if (spec.route === scheduleGridRouteState.route)
+    return <LiveScheduleGridWorkspace key={workKey(work)} />;
   if (spec.route === "instances")
     return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
   return <ParameterLinksRouteContent />;

@@ -9,7 +9,10 @@ import { settingsManifest } from "#/settings/manifest";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
 test("browser semantic mutations project shared prose, actor, and target need", () => {
-  const settings = settingsManifest({ scope: { route: "pods", target: null, work: "test" }, member: { pod: "p", path: "settings/a.json" } });
+  const settings = settingsManifest({
+    scope: { route: "pods", target: null, work: "test" },
+    member: { pod: "p", path: "settings/a.json" },
+  });
   const pairs = [
     [settings.actions!.save, "settings.write"],
     [family.actions!.build, "family.build"],
