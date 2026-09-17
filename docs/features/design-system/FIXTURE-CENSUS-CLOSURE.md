@@ -27,4 +27,4 @@ The test imports `CHAT_SEEDS`, `familiesManifest.seeds`, `familyManifest().seeds
 
 ## Scope
 
-No production route changed. `src/families/matrix.tsx` still contains two old `source=fixture` links, outside this census-only scope; they are not used as canonical review URLs.
+`src/families/matrix.tsx` now links its original review fixture to `/families?demo=plan`, which exists in `familiesManifest.seeds`. The retired `fixture=native` destination has no seed equivalent, so the link was removed instead of being redirected to a different review state. The production-source link census finds no remaining emitted `source=fixture` URL.

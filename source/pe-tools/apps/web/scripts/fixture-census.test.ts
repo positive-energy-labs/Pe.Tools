@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CHAT_SEEDS } from "../src/chat/seeds";
@@ -8,6 +10,12 @@ import { INSTANCES_SEEDS } from "../src/instances/seeds";
 import { SETTINGS_SEEDS } from "../src/settings/seeds";
 import { takeoffSeeds } from "../src/takeoff/actions";
 import { censusFromRouteTree } from "./fixture-census";
+
+const sourceFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? sourceFiles(path) : /\.[jt]sx?$/.test(entry.name) ? [path] : [];
+  });
 
 describe("fixture census", () => {
   it("admits every maintained route in the generated route tree", () => {
@@ -63,6 +71,16 @@ describe("fixture census", () => {
       expect(
         new URL(entry.canonicalReviewUrl ?? "/", "https://pe.local").searchParams.has("source"),
       ).toBe(false);
+  });
+
+  it("does not emit retired fixture-source links", () => {
+    const src = fileURLToPath(new URL("../src/", import.meta.url));
+    const stale = sourceFiles(src).flatMap((path) =>
+      [
+        ...readFileSync(path, "utf8").matchAll(/href\s*=\s*["']([^"']*source=fixture[^"']*)["']/g),
+      ].map((match) => `${path}:${match[1]}`),
+    );
+    expect(stale).toEqual([]);
   });
 
   it("reports a newly mounted maintained route as missing debt", () => {
