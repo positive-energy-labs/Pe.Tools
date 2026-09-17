@@ -145,6 +145,11 @@ test("with a plan, apply confirms and opens the sheet; confirm applies that hash
   expect(state.page.confirming).toBe(true);
   expect(state.page.sheet?.entries.map((entry) => entry.planHash)).toEqual(["ph"]);
   expect(planned.confirm.ready(c as never, none)).toBeNull();
+  // A pod list mid-refresh has not re-proven the saved sha, so confirm is not offered.
+  const readings = (c as unknown as { readings: object }).readings;
+  Object.assign(c, { readings: { pods: { state: "stale", previous: pods, reason: "dirtied" } } });
+  expect(planned.confirm.ready(c as never, none)).toMatch(/save the spec/);
+  Object.assign(c, { readings });
   run.mockResolvedValueOnce({ state: "succeeded", result: {} });
   await planned.confirm.run(c as never, none);
   expect(run.mock.calls[1]).toEqual([
