@@ -36,7 +36,10 @@ const newAction = {
   run: vi.fn(),
 };
 
-function mount({ skills = [] as { name: string; description: string }[] } = {}) {
+function mount({
+  skills = [] as { name: string; description: string }[],
+  send = vi.fn(async () => ({ ok: true })),
+} = {}) {
   workbench.value = {
     chat: { ...emptyChatState(), inspect: { skills } },
     sendPrompt: vi.fn(async () => undefined),
@@ -48,7 +51,7 @@ function mount({ skills = [] as { name: string; description: string }[] } = {}) 
       handle={
         {
           actions: {
-            send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+            send: { label: "send", says: "", refusal: null, count: null, run: send },
             new: newAction,
             fork: {
               label: "fork",
@@ -70,6 +73,31 @@ function mount({ skills = [] as { name: string; description: string }[] } = {}) 
     );
   return { ...view, attachments };
 }
+
+test("composer Pane lists its real keys without replacing textarea Enter", () => {
+  const send = vi.fn(async () => ({ ok: true }));
+  const lane = mount({ send });
+  const pane = lane.container.querySelector<HTMLElement>("[data-pane-id='composer']")!;
+  const box = screen.getByRole<HTMLTextAreaElement>("textbox");
+
+  act(() => pane.focus());
+  expect(screen.getByLabelText("composer keyboard shortcuts").textContent).toContain(
+    "send message",
+  );
+  expect(screen.getByLabelText("composer keyboard shortcuts").textContent).toContain(
+    "skill commands",
+  );
+  fireEvent.keyDown(pane, { key: "/", code: "Slash" });
+  expect(box.value).toBe("/");
+
+  fireEvent.change(box, { target: { value: "send this" } });
+  fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
+  expect(send).toHaveBeenCalledOnce();
+  expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", isComposing: true })).toBe(true);
+  expect(send).toHaveBeenCalledOnce();
+  expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", shiftKey: true })).toBe(true);
+  expect(send).toHaveBeenCalledOnce();
+});
 
 const png = (name = "shot.png", bytes = 8) =>
   new File([new Uint8Array(bytes)], name, { type: "image/png" });

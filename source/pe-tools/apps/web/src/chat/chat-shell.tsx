@@ -188,33 +188,22 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
           <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
         </Pane>
       </div>
-      <Pane
-        kind="content"
-        scroll="visible"
-        id="composer"
-        title="composer"
-        help="Drafts stay with their visited thread until sent or deleted."
-        headerSurface="recess"
-        boundary={false}
-        headerless
-      >
-        <ComposerBank
-          currentThreadId={currentThreadId}
-          deletedThreadIds={deletedThreadIds}
-          prompt={prompt}
-          handle={handle}
-          topBar={
-            <>
-              <ComposerHead handle={handle} status={status} />
-              <ContextRibbon
-                breakdown={breakdown}
-                cache={cache}
-                onOpenWorld={() => setMode("world")}
-              />
-            </>
-          }
-        />
-      </Pane>
+      <ComposerBank
+        currentThreadId={currentThreadId}
+        deletedThreadIds={deletedThreadIds}
+        prompt={prompt}
+        handle={handle}
+        topBar={
+          <>
+            <ComposerHead handle={handle} status={status} />
+            <ContextRibbon
+              breakdown={breakdown}
+              cache={cache}
+              onOpenWorld={() => setMode("world")}
+            />
+          </>
+        }
+      />
     </div>
   );
 
