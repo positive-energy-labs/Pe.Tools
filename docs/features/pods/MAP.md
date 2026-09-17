@@ -125,6 +125,19 @@ Not cast: the protoui round (table beside draft, `/families` row click into `/fa
 - 2026-09-17, incident, cause UNPROVEN: six Revit 2025 processes started in 50 seconds. One was w5-revit's session. Five had parent `explorer.exe` and the shortcut command line. Both builders and the SDK are ruled out by their command accounts and source. The user suspects AutoHotkey and closed the question.
 - Found on the way, owed: the Documents resolver gives PowerShell 1 second and then silently falls back to `%USERPROFILE%/Documents` (`apps/host/src/product-paths.ts:61`, `packages/mcps/src/pea/skills.ts:450`, `packages/runtime/src/analytics.ts:161`); under load the host resolves a different content home. `herdr.ps1 retire-worktree` fails on paths over 260 characters.
 
+- 2026-09-17, user verdicts before leaving the session to the commander: capture does not refuse on validation ("no i dont think i want that"); fix the new defects; walk the real routes on the project-a clone of August 11 with capture, apply, and granular schedule updates; if there is bandwidth, `/families` becomes an editable table whose edits are staged work and whose spec is generated on apply. The commander rules in the user's absence; every ruling is re-openable.
+
+### Wave 6 (cast 2026-09-17, user away)
+
+| Builder | Seam | Branch |
+|---|---|---|
+| w6-pea | Pea builds `/actions` admissions; skills materialize only at runtime start; one Documents resolver | crusade/w6-pea |
+| w6-cancel | host sends `op.cancel` outside the FIFO gate; action cancel; admission answers at once | crusade/w6-cancel |
+| w6-engine | capture and validate agree; engine dialog policy; `pod.runs`; build and apply input shapes | crusade/w6-engine |
+| w6-web | capture verb restored; capture, plan, apply naming; options-from slot | crusade/w6-web |
+| w6-table | `/families` editable table, staged work, spec generated on apply; not grafted until the user reviews | crusade/w6-table |
+| w6-revit | after graft: real routes on the project-a clone, evidence committed | crusade/w6-revit |
+
 ### Wave 5 candidates (none cast; from `reports/w4-revit.md` defect numbers)
 
 1. Capture then confirm on real families: captured `unmodeled` entries make the member fail its own composition (defect 3). Needs a ruling: capture files `unmodeled` as evidence outside the member, or the validator treats it as advisory.
