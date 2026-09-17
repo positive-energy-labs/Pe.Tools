@@ -443,7 +443,13 @@ export class PeaCliCommands {
     values: Record<string, unknown>,
     scriptTimeoutSeconds?: number,
   ): ScriptingTools {
-    return new ScriptingTools(this.createHostRpcCaller(values, scriptTimeoutSeconds), {
+    return new ScriptingTools({
+      hostBaseUrl: this.resolveHostBaseUrl(values.host),
+      bridgeSessionId: asOptionalString(values.bridgeSessionId),
+      openDocumentId: asOptionalString(values.openDocumentId),
+      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
+      actionId: asOptionalString(values.actionId),
+      timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds),
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
     });
   }
