@@ -75,7 +75,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <UpdateButton />
           <TanStackDevtools
             config={{
-              position: "bottom-right",
+              position: "middle-left",
             }}
             plugins={[
               {
