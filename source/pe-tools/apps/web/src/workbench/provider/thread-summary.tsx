@@ -5,6 +5,8 @@ import { type WorkbenchEndpointConfig } from "../config";
 import { type AccessLevel, type ChatState } from "../chat-state";
 import { type ChatPageStore } from "../store";
 import { type WorkbenchAttachment } from "../prompt";
+import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 export type { WorkbenchAttachment } from "../prompt";
 
@@ -31,6 +33,8 @@ export interface WorkbenchContextValue {
    */
   session?: SessionClient;
   chat: ChatState;
+  /** The selected thread body; only the transcript reads it with Suspense. */
+  bodyAtom: Atom.Atom<AsyncResult.AsyncResult<ChatState, Error>>;
   loading: boolean;
   error?: string;
   threads: StoredThreadSummary[];

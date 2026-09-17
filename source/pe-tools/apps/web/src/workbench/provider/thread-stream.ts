@@ -162,6 +162,7 @@ export function useThreadStream(options: {
 
   const chat = useMemo<ChatState>(() => {
     const stored = body._tag === "Success" ? body.value : EMPTY;
+    if (current.sent.length === 0 && current.frame === null) return stored;
     const known = new Set(stored.messages.map((message) => message.id));
     const unstored = current.sent.filter((message) => !known.has(message.id));
     const messages = unstored.length ? [...stored.messages, ...unstored] : stored.messages;

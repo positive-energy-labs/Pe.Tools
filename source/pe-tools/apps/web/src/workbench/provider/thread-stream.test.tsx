@@ -94,6 +94,24 @@ test("the thread reports pending on every render until its body is here", async 
   expect(renders.filter((render) => !render.body && !render.pending)).toEqual([]);
 });
 
+test("an unchanged ready body keeps its snapshot identity", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(emptyChatState()))),
+  );
+  const session = { subscribe: async () => ({ unsubscribe: () => {} }) };
+  const { result, rerender } = renderHook(() =>
+    useThreadStream({
+      origin: "http://host",
+      thread: { id: "identity-thread", session: session as never },
+    }),
+  );
+  await waitFor(() => expect(result.current.pending).toBe(false));
+  const ready = result.current.chat;
+  rerender();
+  expect(result.current.chat).toBe(ready);
+});
+
 test("switching threads aborts A and never publishes A under B", async () => {
   let settleA!: (response: Response) => void;
   let signalA: AbortSignal | undefined;

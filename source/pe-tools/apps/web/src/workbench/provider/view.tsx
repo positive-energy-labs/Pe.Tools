@@ -19,6 +19,8 @@ import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import {
   errorMessage,
@@ -92,6 +94,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   });
   const { pending: threadPending, error: streamFault, invalidate, displayKnown } = stream;
   const chat = demo ?? stream.chat;
+  const bodyAtom = useMemo(
+    () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
+    [demo, stream.bodyAtom],
+  );
   const loading = demo ? false : chatLoading(hostStatus, threadPending);
 
   const status = selectRunStatus(chat);
@@ -266,6 +272,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       config,
       session,
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
@@ -291,6 +298,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
