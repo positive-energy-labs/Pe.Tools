@@ -370,7 +370,7 @@ export function SituationAction({
                   frame="line"
                   tone="quiet"
                   size="value"
-                  title="stop waiting; the host call itself is not cancelled"
+                  title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
                   onClick={handle.stop}
                 >
                   stop

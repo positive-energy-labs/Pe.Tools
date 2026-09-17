@@ -53,6 +53,7 @@ import type { RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { postRouteWrite } from "./host";
+import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
 const targetHeaders = (target: ExecutionTarget) =>
@@ -180,16 +181,25 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       inFlight = false;
       if (!disposed) write(key, "busy", () => registry.set(busy, null));
     };
-    // The stop cancels the WAIT, not the call: `/call` has no cancel lane, so the host may still
-    // finish. The log says so, and the late result lands as its own row when it does.
+    // The stop reaches the RUNNING OP: the host sends `op.cancel` outside its per-session gate,
+    // so Revit stops at the operation's next checkpoint and the row settles `cancelled`. The wait
+    // is released either way, and a late result still lands as its own row.
     const stopped = new Promise<"stopped">((resolve) => {
-      stopper = () => resolve("stopped");
+      stopper = () => {
+        void cancelRunningAdmissions().then((settled) => {
+          const refused = settled.flatMap((one) =>
+            one.status === "rejected" ? [String(one.reason)] : [],
+          );
+          if (refused.length) note("verb", key, `stop · ${refused.join("; ")}`, true);
+        });
+        resolve("stopped");
+      };
     });
     try {
       const running = work();
       const result = await Promise.race([running, stopped]);
       if (result === "stopped") {
-        note("verb", key, "stopped · the wait was cancelled; the host may still finish", true);
+        note("verb", key, "stopped · cancel signalled; the op stops at its next checkpoint", true);
         const late = (says: string, refusal: Refusal | null) => {
           if (disposed) return;
           write(key, "failure", () => registry.set(failure, refusal));
@@ -248,7 +258,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     },
     write,
     runAction,
-    /** Stop waiting on the running action. No-op when nothing runs. */
+    /** Stop the running action: signal the host, then release the wait. No-op when nothing runs. */
     stop: () => stopper?.(),
     busy,
     failure,
