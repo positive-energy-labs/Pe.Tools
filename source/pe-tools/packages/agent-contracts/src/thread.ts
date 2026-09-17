@@ -19,6 +19,25 @@ export function threadAccess(permissions: unknown): ThreadViewState["access"] {
   );
 }
 
+export type ToolResultSummary =
+  | { kind: "array"; items: number }
+  | { kind: "object"; keyCount: number; keys: string[] }
+  | { kind: "string"; characters: number }
+  | { kind: "scalar" };
+
+export interface DeferredToolResultRef {
+  messageId: string;
+  toolCallId: string;
+  byteSize: number;
+  summary: ToolResultSummary;
+}
+
+export interface ToolResultResponse {
+  messageId: string;
+  toolCallId: string;
+  result: unknown;
+}
+
 /** Persisted + session facts that survive a fetch. Live display state rides the SSE stream only. */
 export interface ThreadViewState<
   TMessage extends { id: string } = { id: string },
@@ -27,6 +46,7 @@ export interface ThreadViewState<
   TInspect = unknown,
 > {
   messages: TMessage[];
+  deferredResults?: DeferredToolResultRef[];
   inspect: TInspect;
   models: { currentId?: string; available: TModel[] };
   permissions: TPermissions;

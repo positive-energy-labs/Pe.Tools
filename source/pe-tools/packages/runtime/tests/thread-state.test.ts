@@ -1,0 +1,169 @@
+import type { AgentController } from "@mastra/core/agent-controller";
+import type { MastraCompositeStore } from "@mastra/core/storage";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, test } from "vite-plus/test";
+import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
+import { createDeterministicRuntime } from "../src/testing.ts";
+import {
+  DEFERRED_TOOL_RESULT_BYTES,
+  projectThreadMessages,
+  readToolResult,
+} from "../src/thread-state.ts";
+
+type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number];
+
+const invocation = (
+  messageId: string,
+  toolCallId: string,
+  result: unknown,
+  state = "result",
+): ThreadMessage =>
+  ({
+    id: messageId,
+    role: "assistant",
+    createdAt: new Date("2026-09-16T00:00:00.000Z"),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: "tool-invocation",
+          toolInvocation: { state, step: 0, toolCallId, toolName: "pe_read", args: {}, result },
+        },
+      ],
+    },
+  }) as ThreadMessage;
+
+test("large successful results become top-level refs without mutating transcript storage", () => {
+  const result = { rows: ["é".repeat(DEFERRED_TOOL_RESULT_BYTES)] };
+  const stored = [invocation("message-1", "call-1", result)];
+  const projected = projectThreadMessages(stored);
+
+  expect(projected.deferredResults).toEqual([
+    {
+      messageId: "message-1",
+      toolCallId: "call-1",
+      byteSize: new TextEncoder().encode(JSON.stringify(result)).byteLength,
+      summary: { kind: "object", keyCount: 1, keys: ["rows"] },
+    },
+  ]);
+  expect(projected.messages[0].content.parts[0]).not.toHaveProperty("toolInvocation.result");
+  expect(stored[0].content.parts[0]).toHaveProperty("toolInvocation.result", result);
+});
+
+test("threshold results and failures stay inline", () => {
+  const exact = "x".repeat(DEFERRED_TOOL_RESULT_BYTES - 2);
+  const failed = { error: true, message: "x".repeat(DEFERRED_TOOL_RESULT_BYTES) };
+  const projected = projectThreadMessages([
+    invocation("exact", "exact", exact),
+    invocation("failed", "failed", failed),
+    invocation("denied", "denied", "x".repeat(DEFERRED_TOOL_RESULT_BYTES), "output-denied"),
+  ]);
+
+  expect(projected.deferredResults).toEqual([]);
+  for (const message of projected.messages)
+    expect(message.content.parts[0]).toHaveProperty("toolInvocation.result");
+});
+
+test("large strings report characters without copying a preview", () => {
+  const result = "é".repeat(DEFERRED_TOOL_RESULT_BYTES);
+  expect(projectThreadMessages([invocation("string", "string", result)]).deferredResults).toEqual([
+    {
+      messageId: "string",
+      toolCallId: "string",
+      byteSize: new TextEncoder().encode(JSON.stringify(result)).byteLength,
+      summary: { kind: "string", characters: result.length },
+    },
+  ]);
+});
+
+test("exact result lookup uses message and call identity and rejects duplicates in one message", async () => {
+  const messages = [
+    invocation("message-a", "shared-call", { value: "A" }),
+    invocation("message-b", "shared-call", { value: "B" }),
+  ];
+  const controller = {
+    init: async () => undefined,
+    queryThreadMessages: async () => messages,
+  } as Pick<AgentController, "init" | "queryThreadMessages">;
+
+  await expect(
+    readToolResult({ controller }, "thread", "message-b", "shared-call"),
+  ).resolves.toEqual({
+    status: 200,
+    body: { messageId: "message-b", toolCallId: "shared-call", result: { value: "B" } },
+  });
+  await expect(readToolResult({ controller }, "thread", "missing", "shared-call")).resolves.toEqual(
+    { status: 404, body: { error: "tool result not found" } },
+  );
+
+  const duplicate = structuredClone(messages[0]);
+  duplicate.content.parts.push(structuredClone(duplicate.content.parts[0]));
+  const duplicateController = {
+    ...controller,
+    queryThreadMessages: async () => [duplicate],
+  } as Pick<AgentController, "init" | "queryThreadMessages">;
+  await expect(
+    readToolResult({ controller: duplicateController }, "thread", "message-a", "shared-call"),
+  ).resolves.toEqual({ status: 409, body: { error: "tool call identity is ambiguous" } });
+});
+
+test("the HTTP endpoint returns the original deferred result", async () => {
+  const threadId = "deferred-thread";
+  const resourceId = "deferred-resource";
+  const result = ["x".repeat(DEFERRED_TOOL_RESULT_BYTES)];
+  const runtime = await createDeterministicRuntime({
+    databasePath: join(await mkdtemp(join(tmpdir(), "pe-deferred-")), "runtime.db"),
+    resourceId,
+    responses: [{ text: "unused" }],
+  });
+  try {
+    const storage = runtime.storage as MastraCompositeStore;
+    const memory = await storage.getStore("memory");
+    if (!memory) throw new Error("missing memory store");
+    const createdAt = new Date("2026-09-16T00:00:00.000Z");
+    await memory.saveThread({
+      thread: { id: threadId, resourceId, title: "Deferred", createdAt, updatedAt: createdAt },
+    });
+    await memory.saveMessages({
+      messages: [
+        {
+          ...invocation("message/1", "call/1", result),
+          threadId,
+          resourceId,
+        } as never,
+      ],
+    });
+
+    const app = await buildAgentControllerApp({ runtime, label: "pea" });
+    const thread = await app.fetch(new Request(`http://local/pe/thread/${threadId}`));
+    const body = (await thread.json()) as {
+      messages: ThreadMessage[];
+      deferredResults: Array<{ byteSize: number; summary: unknown }>;
+    };
+    expect(body.deferredResults).toEqual([
+      {
+        messageId: "message/1",
+        toolCallId: "call/1",
+        byteSize: new TextEncoder().encode(JSON.stringify(result)).byteLength,
+        summary: { kind: "array", items: 1 },
+      },
+    ]);
+    expect(body.messages[0].content.parts[0]).not.toHaveProperty("toolInvocation.result");
+
+    const response = await app.fetch(
+      new Request(
+        `http://local/pe/thread/${threadId}/tool-result/${encodeURIComponent("message/1")}/${encodeURIComponent("call/1")}`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      messageId: "message/1",
+      toolCallId: "call/1",
+      result,
+    });
+  } finally {
+    await runtime.close?.();
+  }
+});

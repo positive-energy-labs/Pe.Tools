@@ -8,7 +8,7 @@ import { observeResources, resourceResponse, type ResourceObserver } from "./res
 import { z } from "zod";
 import { putTargetSchema, routeStatePatchSchema, type PutTargetResult } from "@pe/agent-contracts";
 import type { ScopeStore } from "./scope-store.ts";
-import { readThreadState, toWireDisplayState } from "./thread-state.ts";
+import { readThreadState, readToolResult, toWireDisplayState } from "./thread-state.ts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
@@ -104,6 +104,21 @@ export async function buildAgentControllerApp(
     const threadId = c.req.param("threadId");
     try {
       return c.json(await readThreadState(runtime, await openSession(threadId), threadId));
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 500);
+    }
+  });
+  app.get("/pe/thread/:threadId/tool-result/:messageId/:toolCallId", async (c) => {
+    const threadId = c.req.param("threadId");
+    try {
+      await openSession(threadId);
+      const result = await readToolResult(
+        runtime,
+        threadId,
+        c.req.param("messageId"),
+        c.req.param("toolCallId"),
+      );
+      return c.json(result.body, result.status);
     } catch (error) {
       return c.json({ error: errorMessage(error) }, 500);
     }
