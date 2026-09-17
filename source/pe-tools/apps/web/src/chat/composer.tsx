@@ -119,7 +119,10 @@ export function Composer({
     void send.run();
   };
 
+  const paneOwnsFocus = () =>
+    document.activeElement === formRef.current?.closest<HTMLElement>("[data-slot='pane']");
   const beginSlashCommand = () => {
+    if (!paneOwnsFocus()) return;
     if (!text) setText("/");
     formRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   };
@@ -128,7 +131,9 @@ export function Composer({
       hotkey: "Enter",
       label: "send message",
       says: "Sends this draft. Shift+Enter adds a line.",
-      callback: sendCurrent,
+      callback: () => {
+        if (paneOwnsFocus()) sendCurrent();
+      },
     },
     {
       hotkey: "/",

@@ -93,6 +93,11 @@ test("composer Pane lists its real keys without replacing textarea Enter", () =>
   fireEvent.change(box, { target: { value: "send this" } });
   fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
   expect(send).toHaveBeenCalledOnce();
+  const attach = screen.getByTitle("Attach files");
+  act(() => attach.focus());
+  fireEvent.keyDown(attach, { key: "Enter", code: "Enter" });
+  expect(send).toHaveBeenCalledOnce();
+  act(() => box.focus());
   expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", isComposing: true })).toBe(true);
   expect(send).toHaveBeenCalledOnce();
   expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", shiftKey: true })).toBe(true);

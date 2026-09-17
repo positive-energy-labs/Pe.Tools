@@ -10,6 +10,7 @@ import { useCallback } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { emptyChatState, type ChatState } from "../chat-state";
 import { createChatPageStore, type ChatPageStore } from "../store";
+import { CurrentThreadViewOwner, useCurrentThreadView } from "../thread-view";
 
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 vi.mock("../provider", () => ({ useWorkbench: () => workbench.value }));
@@ -139,10 +140,22 @@ function setup({ turn, loading }: { turn?: number; loading: boolean }) {
   });
   const bench = { store, currentThreadId: "t1", revit: false, loading };
   workbench.value = bench;
+  let threadView: ReturnType<typeof useCurrentThreadView> | undefined;
+  function OwnedHarness({ state }: { state: ChatState }) {
+    threadView = useCurrentThreadView();
+    return <Harness state={state} />;
+  }
   let scrollTop = 0;
   const view = (state: ChatState) => (
     <RegistryContext.Provider value={registry}>
-      <Harness state={state} />
+      <CurrentThreadViewOwner
+        threadKey="t1"
+        registry={registry}
+        turn={turn}
+        patch={async (partial) => void patches.push(partial)}
+      >
+        <OwnedHarness state={state} />
+      </CurrentThreadViewOwner>
     </RegistryContext.Provider>
   );
   const scroller = () => {
@@ -166,7 +179,18 @@ function setup({ turn, loading }: { turn?: number; loading: boolean }) {
     }
     return el;
   };
-  return { registry, store: store as ChatPageStore, patches, bench, view, scroller };
+  return {
+    registry,
+    store: store as ChatPageStore,
+    patches,
+    bench,
+    view,
+    scroller,
+    get threadView() {
+      if (!threadView) throw new Error("test thread view did not mount");
+      return threadView;
+    },
+  };
 }
 
 async function flush() {
@@ -216,7 +240,7 @@ test("a scrollTop drop the browser makes on its own does not detach follow", asy
   heights.set("a3", 100);
   scroller.scrollTop = 6 * H - V; // the browser clamps it to the shorter content
   act(() => void fireEvent.scroll(scroller));
-  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(true);
+  expect(lane.registry.get(lane.threadView.atoms.lensFollowing)).toBe(true);
 
   // A wheel up is intent: that detaches.
   act(() => {
@@ -224,7 +248,7 @@ test("a scrollTop drop the browser makes on its own does not detach follow", asy
     scroller.scrollTop = scroller.scrollTop - 400;
     fireEvent.scroll(scroller);
   });
-  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
+  expect(lane.registry.get(lane.threadView.atoms.lensFollowing)).toBe(false);
 });
 
 test("the scroller never animates a programmatic snap", () => {
@@ -244,7 +268,7 @@ test("a touch fling that coasts into the tail re-attaches follow when the scroll
     scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
   });
-  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
+  expect(lane.registry.get(lane.threadView.atoms.lensFollowing)).toBe(false);
 
   // A second fling: the finger lifts, and momentum carries the view down well past the window.
   act(() => void fireEvent.touchMove(scroller));
@@ -253,9 +277,9 @@ test("a touch fling that coasts into the tail re-attaches follow when the scroll
     scroller.scrollTop = 6 * H - V;
     fireEvent.scroll(scroller);
   });
-  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(false);
+  expect(lane.registry.get(lane.threadView.atoms.lensFollowing)).toBe(false);
   act(() => void fireEvent(scroller, new Event("scrollend")));
-  expect(lane.registry.get(lane.store.atoms.lensFollowing)).toBe(true);
+  expect(lane.registry.get(lane.threadView.atoms.lensFollowing)).toBe(true);
 });
 
 test("the empty state claims an empty thread only once the thread has loaded", async () => {
