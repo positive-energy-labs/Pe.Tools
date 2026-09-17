@@ -11,8 +11,7 @@ import { buildFieldChangeMap, projectHostValidationState } from "./field-state";
 
 export function SchemaToFieldRender({
   schema,
-  moduleKey,
-  rootKey,
+  schemaUrl,
   baselineValues,
   validationResult,
   values,
@@ -36,8 +35,7 @@ export function SchemaToFieldRender({
 
   return (
     <SchemaToFieldRenderContent
-      moduleKey={moduleKey}
-      rootKey={rootKey}
+      schemaUrl={schemaUrl}
       schemaDocument={schemaDocument}
       rootEntries={rootEntries}
       values={values}
@@ -50,8 +48,7 @@ export function SchemaToFieldRender({
 }
 
 function SchemaToFieldRenderContent({
-  moduleKey,
-  rootKey,
+  schemaUrl,
   schemaDocument,
   rootEntries,
   values,
@@ -60,8 +57,7 @@ function SchemaToFieldRenderContent({
   errors,
   useRemoteOptions,
 }: {
-  moduleKey: string;
-  rootKey?: string;
+  schemaUrl: string | null;
   schemaDocument: SchemaDocument;
   rootEntries: Array<[string, SchemaNodeRef]>;
   values: SettingsValues;
@@ -81,8 +77,7 @@ function SchemaToFieldRenderContent({
       onChange={onChange}
       errors={errors}
       schemaDocument={schemaDocument}
-      moduleKey={moduleKey}
-      rootKey={rootKey}
+      schemaUrl={schemaUrl}
       fieldChanges={fieldChanges}
       useRemoteOptions={useRemoteOptions}
     >

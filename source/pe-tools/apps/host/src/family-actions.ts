@@ -453,7 +453,13 @@ export async function admitFamilyAction(
             )) as PodMemberWritten,
           );
         }
-        return { executionContext: target, members };
+        if (prepared.nativeKey === "families.capture") return { executionContext: target, members };
+        // The captured member plus what the capture saw: coverage and the unmodeled ledger.
+        return {
+          executionContext: target,
+          member: members[0],
+          evidence: { ...(captured as object), origin: "capture", rfaPath: null },
+        };
       }
       if (prepared.kind === "native") {
         const result = await native(prepared.nativeKey, prepared.input, prepared.process);

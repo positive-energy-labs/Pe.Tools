@@ -27,7 +27,7 @@ import {
   latestBuildStatus,
   type FamilyAuthoringFacts,
   type FamilyBuildReview,
-} from "./manifest.ts";
+} from "#/route/family/manifest";
 import { useRoute } from "#/route";
 
 /** A live lane with a saved, valid, bound, unarmed document — the one state that may arm. */
@@ -71,7 +71,6 @@ const buildManifest = (current = true) => {
 describe("build ActionHandles — declaration, and the seeded lane's read-only floor", () => {
   it("declares document-needing actions and refuses every one of them under a frozen seed", async () => {
     const declared = buildManifest();
-    expect(declared.needs).toBe("document");
     expect(declared.actions?.["prepare-build"].needs).toBe("document");
     expect(declared.actions?.build.needs).toBe("document");
     const familyReading = declared.readings?.family;

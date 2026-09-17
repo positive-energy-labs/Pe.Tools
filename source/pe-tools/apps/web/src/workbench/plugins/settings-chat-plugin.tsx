@@ -1,4 +1,4 @@
-import { FAMILY_MODEL_SCHEMA } from "#/family/host";
+import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import { isSpecOf } from "#/route/manifest";
 import { useMemo, type ComponentProps } from "react";
 import { ActionReceipts } from "#/actions/receipt";
@@ -92,11 +92,7 @@ function SettingsReview({
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         {isFamilyModel ? (
-          <Link
-            className="ml-auto"
-            to="/family"
-            search={{ mode: "file", pod: member?.pod, file: member?.path }}
-          >
+          <Link className="ml-auto" to="/family" search={{ pod: member?.pod, path: member?.path }}>
             Open workspace
           </Link>
         ) : (

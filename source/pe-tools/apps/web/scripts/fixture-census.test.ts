@@ -5,7 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { CHAT_SEEDS } from "../src/chat/seeds";
 import { manifest as familiesManifest } from "../src/families/manifest";
-import { familyManifest } from "../src/family/manifest";
+import { familyManifest } from "../src/route/family/manifest";
 import { INSTANCES_SEEDS } from "../src/instances/seeds";
 import { PODS_SEEDS } from "../src/route/seeds";
 import { SCHEDULE_SEEDS } from "../src/route/schedules/manifest";
