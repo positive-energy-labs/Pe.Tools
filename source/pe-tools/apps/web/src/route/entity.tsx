@@ -52,6 +52,7 @@ export function EntityRouteView({
   health,
   hold,
   url = true,
+  pick,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -70,6 +71,11 @@ export function EntityRouteView({
   hold?: (id: string) => void;
   /** False inside a page that owns its own URL (a chat pane). */
   url?: boolean;
+  /**
+   * How the route opens another member; default sets the page. A route with unsaved input on the
+   * open member (`/family`) settles that input first.
+   */
+  pick?: (member: { pod: string; path: string }) => void;
   /** The audit. */
   children: ReactNode;
 }) {
@@ -118,7 +124,11 @@ export function EntityRouteView({
                   options: pod ? specs.map((row) => ({ id: row.path, label: row.path })) : null,
                   note: pod ? `no ${def.entity} specs in this pod` : "choose a pod first",
                   picked: (id: string) => id === page.path,
-                  pick: (id: string) => setPage({ path: id, ...closed }),
+                  pick: (id: string) => {
+                    setPage(closed);
+                    if (pick) pick({ pod: page.pod, path: id });
+                    else setPage({ path: id });
+                  },
                 },
               ]
             : []),

@@ -90,7 +90,7 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
     .parse(receipts)
     .find((entry) => entry.id === row.id);
   const step = parsed?.steps.find(
-    (entry) => entry.key === "familyfoundry.apply" && entry.state === "succeeded",
+    (entry) => entry.key === "families.apply" && entry.state === "succeeded",
   );
   if (!parsed || !step || step.state !== "succeeded") return null;
   const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };

@@ -1,11 +1,10 @@
 {
   "rawTable": {
-    "total": 16,
+    "total": 13,
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
       "families": 1,
-      "family-review": 3,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
@@ -35,11 +34,10 @@
     }
   },
   "escHandler": {
-    "total": 6,
+    "total": 4,
     "byArea": {
       "chat": 1,
       "components": 2,
-      "family-review": 2,
       "runs": 1
     }
   },
@@ -52,15 +50,14 @@
     }
   },
   "longTitle": {
-    "total": 52,
+    "total": 40,
     "byArea": {
       "components": 4,
       "families": 6,
       "family": 17,
-      "family-review": 6,
       "grounded-doc": 1,
       "route": 1,
-      "routes": 8,
+      "routes": 2,
       "runs": 5,
       "takeoff": 3,
       "workbench": 1
@@ -75,18 +72,17 @@
     }
   },
   "inlineColor": {
-    "total": 111,
+    "total": 84,
     "byArea": {
       "components": 6,
       "design-system": 1,
       "family": 3,
-      "family-review": 25,
       "grilles": 4,
       "host": 3,
       "lab": 8,
       "ops": 14,
       "param-tables": 5,
-      "routes": 4,
+      "routes": 2,
       "runs": 27,
       "takeoff": 3,
       "workbench": 8
@@ -101,9 +97,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 12,
+    "total": 11,
     "byArea": {
-      "routes": 12
+      "routes": 11
     }
   }
 }

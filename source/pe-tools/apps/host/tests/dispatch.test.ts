@@ -81,7 +81,7 @@ test("ts-only dispatch rejects malformed requests before running the operation",
   } as unknown as RevitBridge["Service"];
 
   await expect(
-    runDispatch(dispatchTsOnlyOperation("pod.member.read", { moduleKey: 123 }, undefined, bridge)),
+    runDispatch(dispatchTsOnlyOperation("pod.member.read", { pod: 123 }, undefined, bridge)),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
 });
 
@@ -183,14 +183,6 @@ test("bridge session summary maps Revit state snapshot fields", async () => {
       activeDocumentObservedAtUnixMs: 42,
       activeDocumentPath: "C:/model.rvt",
       activeDocumentTitle: "Model",
-      availableModules: [
-        {
-          activeDocumentKind: "Any",
-          defaultRootKey: "default",
-          moduleKey: "module-a",
-          scope: "Session",
-        },
-      ],
       hasActiveDocument: true,
       openDocuments: [
         {
@@ -235,7 +227,6 @@ test("bridge session summary maps Revit state snapshot fields", async () => {
   expect(inventory.sessions[0]?.openDocumentCount).toBe(3);
 
   expect(summary.activeDocument?.key).toBe("doc-key");
-  expect(summary.availableModules).toHaveLength(1);
   expect(summary.runtimeAssemblies).toHaveLength(1);
   expect(summary.workbenchResources.parameters.sharedParametersFile).toMatchObject({
     exists: true,
@@ -282,7 +273,6 @@ test("bridge registration rejects mismatched contract versions", () => {
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
       openDocuments: [],
       revitVersion: "2025",
@@ -310,7 +300,6 @@ test("bridge registration accepts current contract version without session id", 
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
       openDocuments: [],
       revitVersion: "2025",

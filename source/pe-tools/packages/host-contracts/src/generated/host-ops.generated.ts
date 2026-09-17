@@ -373,6 +373,46 @@ export namespace FamilyApply {
   }
 }
 
+/** Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template, save it to an explicit .rfa path, and write the run receipt into the source pod. */
+export namespace FamilyBuild {
+  export namespace Req {
+    /**
+     * Build a new family from a saved family model spec on its header's template; nested models resolve from `modelDirectory`.
+     */
+    export interface Request {
+      specJson: string;
+      outputPath: string;
+      source: PodMemberSource;
+      modelDirectory?: null | string;
+      overwrite?: boolean;
+    }
+    /**
+     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     */
+    export interface PodMemberSource {
+      pod: string;
+      path: string;
+      sha256: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      reading: Reading;
+      familyName: string;
+      outputPath: string;
+      templatePath: string;
+      converged: boolean;
+      residueCount: number;
+      receiptPath: string;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
+    }
+  }
+}
+
 /** Capture the active Revit family document as a family.json spec, with per-section coverage and the unmodeled ledger. */
 export namespace FamilyCapture {
   export namespace Req {
@@ -758,33 +798,6 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Build a Revit family from portable family.json by reconciling a fresh template document, save it to an explicit .rfa path, and report the receipt residue. */
-export namespace RevitApplyFamilyModel {
-  export namespace Req {
-    export interface Request {
-      modelJson: string;
-      outputPath: string;
-      modelDirectory?: null | string;
-      overwrite?: boolean;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      reading: Reading;
-      familyName: string;
-      outputPath: string;
-      templatePath: string;
-      converged: boolean;
-      residueCount: number;
-    }
-    export interface Reading {
-      at: string;
-      version?: null | string;
-      observedAt: string;
-    }
-  }
-}
-
 /** Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values. */
 export namespace RevitApplyParameterLinks {
   export namespace Req {
@@ -991,7 +1004,7 @@ export namespace RevitApplyParametersServiceCacheRefresh {
   }
 }
 
-/** Create or update a schedule in one host-owned transaction. Two lanes: 'table' upserts a synthetic data table (a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes); 'profile' creates a regular element-driven schedule from an authored schedule profile. Either lane can also place the schedule on a sheet. */
+/** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
 export namespace RevitApplySchedule {
   export namespace Req {
     /**
@@ -1002,41 +1015,12 @@ export namespace RevitApplySchedule {
      *
      */
     export type DataTableColumnKind = "Text" | "Number";
-    export type ScheduleTitleHorizontalAlignment = "Left" | "Center" | "Right";
-    export type ScheduleColumnHeaderVerticalAlignment = "Center" | "Top" | "Bottom";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type ScheduleAuthoredFieldDisplayType = "Standard" | "Totals" | "MinMax" | "Max" | "Min";
-    export type ScheduleFieldHorizontalAlignment = "Left" | "Center" | "Right";
-    export type ScheduleAuthoredCalculatedFieldType = "Formula" | "Percentage";
-    export type ScheduleAuthoredSortOrder = "Ascending" | "Descending";
-    export type ScheduleAuthoredFilterType =
-      | "HasParameter"
-      | "Equal"
-      | "NotEqual"
-      | "GreaterThan"
-      | "GreaterThanOrEqual"
-      | "LessThan"
-      | "LessThanOrEqual"
-      | "Contains"
-      | "NotContains"
-      | "BeginsWith"
-      | "NotBeginsWith"
-      | "EndsWith"
-      | "NotEndsWith"
-      | "IsAssociatedWithGlobalParameter"
-      | "IsNotAssociatedWithGlobalParameter"
-      | "HasValue"
-      | "HasNoValue";
 
+    /**
+     * Upsert one synthetic data table. Authored element schedules apply through `schedule.apply`.
+     */
     export interface Request {
-      /**
-       * Synthetic data-table lane. Exactly one of Table or Profile must be set.
-       */
-      table?: null | DataTableSpec;
-      /**
-       * Plain authored-schedule lane (create-only, from a schedule profile).
-       */
-      profile?: null | ScheduleProfile;
+      table?: DataTableSpec;
       /**
        * Optionally place the resulting schedule on a sheet.
        */
@@ -1076,88 +1060,6 @@ export namespace RevitApplySchedule {
        */
       values?: (null | string)[];
     }
-    export interface ScheduleProfile {
-      name: string;
-      categoryName: string;
-      viewTemplateName?: null | string;
-      titleStyle?: ScheduleTitleStyleSpec;
-      isItemized?: boolean;
-      filterBySheet?: boolean;
-      columnHeaderVerticalAlignment?: ScheduleColumnHeaderVerticalAlignment;
-      fields?: ScheduleFieldSpec[];
-      sortGroup?: ScheduleSortGroupSpec[];
-      filters?: ScheduleFilterSpec[];
-      onFinishSettings?: null | ScheduleOnFinishSettings;
-    }
-    export interface ScheduleTitleStyleSpec {
-      horizontalAlignment?: ScheduleTitleHorizontalAlignment;
-      borderStyle?: null | ScheduleTitleBorderSpec;
-    }
-    export interface ScheduleTitleBorderSpec {
-      topLineStyleName?: null | string;
-      bottomLineStyleName?: null | string;
-      leftLineStyleName?: null | string;
-      rightLineStyleName?: null | string;
-    }
-    export interface ScheduleFieldSpec {
-      parameter?: ParameterReference;
-      parameterName?: null | string;
-      columnHeaderOverride?: null | string;
-      headerGroup?: null | string;
-      isHidden?: boolean;
-      displayType?: ScheduleAuthoredFieldDisplayType;
-      columnWidth?: null | number;
-      horizontalAlignment?: ScheduleFieldHorizontalAlignment;
-      calculatedType?: null | ScheduleAuthoredCalculatedFieldType;
-      percentageOfField?: null | string;
-      formatOptions?: null | ScheduleFieldFormatSpec;
-      combinedParameters?: CombinedParameterSpec[];
-    }
-    export interface ParameterReference {
-      identity?: null | ParameterIdentity;
-      name?: null | string;
-      sharedGuid?: null | string;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-    export interface ScheduleFieldFormatSpec {
-      unitTypeId?: null | string;
-      symbolTypeId?: null | string;
-      accuracy?: null | number;
-      suppressTrailingZeros?: boolean;
-      suppressLeadingZeros?: boolean;
-      usePlusPrefix?: boolean;
-      useDigitGrouping?: boolean;
-      suppressSpaces?: boolean;
-    }
-    export interface CombinedParameterSpec {
-      parameter?: ParameterReference;
-      parameterName?: null | string;
-      prefix?: null | string;
-      suffix?: null | string;
-      separator?: null | string;
-    }
-    export interface ScheduleSortGroupSpec {
-      fieldName: string;
-      sortOrder?: ScheduleAuthoredSortOrder;
-      showHeader?: boolean;
-      showFooter?: boolean;
-      showBlankLine?: boolean;
-    }
-    export interface ScheduleFilterSpec {
-      fieldName: string;
-      filterType?: ScheduleAuthoredFilterType;
-      value?: null | string;
-    }
-    export interface ScheduleOnFinishSettings {
-      openScheduleOnFinish: boolean;
-    }
     export interface ScheduleSheetPlacementSpec {
       sheet: string;
       /**
@@ -1180,7 +1082,6 @@ export namespace RevitApplySchedule {
     export interface Response {
       dryRun: boolean;
       table?: null | DataTableHandle;
-      profile?: null | ScheduleApplyProfileSummary;
       placement?: null | DataTablePlacementHandle;
       warnings: string[];
     }
@@ -1208,13 +1109,6 @@ export namespace RevitApplySchedule {
       sheetId: number;
       sheetNumber: string;
       sheetName: string;
-    }
-    export interface ScheduleApplyProfileSummary {
-      scheduleName: string;
-      scheduleId: number;
-      scheduleUniqueId: string;
-      appliedFields: string[];
-      skippedFields: string[];
     }
   }
 }
@@ -5074,39 +4968,11 @@ export namespace ScriptingWorkspaceBootstrap {
   }
 }
 
-/** Run the registered typed feature validator for a settings document after host-owned structural validation. */
-export namespace SettingsDocumentSemanticValidation {
-  export namespace Req {
-    export interface Request {
-      moduleKey: string;
-      rootKey: string;
-      relativePath: string;
-      rawContent: string;
-      composedContent: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      isConfigured: boolean;
-      issues: ValidationIssue[];
-    }
-    export interface ValidationIssue {
-      instancePath: string;
-      schemaPath?: null | string;
-      code: string;
-      severity: string;
-      message: string;
-      suggestion?: null | string;
-    }
-  }
-}
-
-/** Read document-specific field option values for a settings module. */
+/** Read document-specific field option values for one field of the settings library a `$schema` URL names. */
 export namespace SettingsFieldOptions {
   export namespace Req {
     export interface Request {
-      moduleKey: string;
-      rootKey: string;
+      schemaUrl: string;
       propertyPath: string;
       sourceKey: string;
       contextValues?: null | {
@@ -5134,42 +5000,10 @@ export namespace SettingsFieldOptions {
   }
 }
 
-/** Read the settings module catalog from Revit for bridge-side schema work. */
-export namespace SettingsModuleCatalog {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type HostModuleScope = "Host" | "Session" | "ActiveDocument";
-    export type HostModuleActiveDocumentKind = "Any" | "ProjectOnly" | "FamilyOnly";
-
-    export interface Response {
-      modules: SettingsModuleDescriptor[];
-    }
-    export interface SettingsModuleDescriptor {
-      moduleKey: string;
-      defaultRootKey: string;
-      roots: SettingsRootDescriptor[];
-      storageOptions: SettingsModuleStorageOptionsContract;
-      scope: HostModuleScope;
-      activeDocumentKind: HostModuleActiveDocumentKind;
-    }
-    export interface SettingsRootDescriptor {
-      rootKey: string;
-      displayName: string;
-    }
-    export interface SettingsModuleStorageOptionsContract {
-      includeRoots: string[];
-      presetRoots: string[];
-    }
-  }
-}
-
 /** Read Revit parameter definitions and available parameter facts from the active document for settings authoring. */
 export namespace SettingsParameterCatalog {
   export namespace Req {
     export interface Request {
-      moduleKey: string;
       contextValues?: null | {
         [k: string]: string;
       };
@@ -5212,18 +5046,48 @@ export namespace SettingsParameterCatalog {
   }
 }
 
-/** Read a settings schema from the connected Revit runtime. */
+/** Read the live editor schema of the settings library a `$schema` URL names. */
 export namespace SettingsSchema {
   export namespace Req {
+    /**
+     * A settings library addressed by the `$schema` URL its specs carry.
+     */
     export interface Request {
-      moduleKey: string;
-      rootKey: string;
+      schemaUrl: string;
     }
   }
   export namespace Res {
     export interface Response {
       schemaJson: string;
       fragmentSchemaJson?: null | string;
+    }
+  }
+}
+
+/** Run the typed semantic validator of the settings library a `$schema` URL names, after host-owned structural validation. */
+export namespace SettingsValidate {
+  export namespace Req {
+    /**
+     * Semantic validation of one spec by the library its `$schema` names; structural validation stays in the host.
+     */
+    export interface Request {
+      schemaUrl: string;
+      rawContent: string;
+      composedContent: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      isConfigured: boolean;
+      issues: ValidationIssue[];
+    }
+    export interface ValidationIssue {
+      instancePath: string;
+      schemaPath?: null | string;
+      code: string;
+      severity: string;
+      message: string;
+      suggestion?: null | string;
     }
   }
 }
@@ -5505,6 +5369,7 @@ export interface HostOps {
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
+  "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
@@ -5516,7 +5381,6 @@ export interface HostOps {
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
-  "revit.apply.family-model": { request: RevitApplyFamilyModel.Req.Request; response: RevitApplyFamilyModel.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
@@ -5557,11 +5421,10 @@ export interface HostOps {
   "scripting.cancel": { request: ScriptingCancel.Req.Request; response: ScriptingCancel.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
-  "settings.document.semantic-validation": { request: SettingsDocumentSemanticValidation.Req.Request; response: SettingsDocumentSemanticValidation.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
-  "settings.module-catalog": { request: SettingsModuleCatalog.Req.Request; response: SettingsModuleCatalog.Res.Response };
   "settings.parameter-catalog": { request: SettingsParameterCatalog.Req.Request; response: SettingsParameterCatalog.Res.Response };
   "settings.schema": { request: SettingsSchema.Req.Request; response: SettingsSchema.Res.Response };
+  "settings.validate": { request: SettingsValidate.Req.Request; response: SettingsValidate.Res.Response };
   "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
   "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
@@ -5578,6 +5441,7 @@ export const hostOpKeys = [
   "families.capture",
   "families.plan",
   "family.apply",
+  "family.build",
   "family.capture",
   "family.editor.apply",
   "family.editor.open",
@@ -5589,7 +5453,6 @@ export const hostOpKeys = [
   "pod.import",
   "pod.member.compose",
   "revit.apply.command.execute",
-  "revit.apply.family-model",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
@@ -5630,11 +5493,10 @@ export const hostOpKeys = [
   "scripting.cancel",
   "scripting.execute",
   "scripting.workspace.bootstrap",
-  "settings.document.semantic-validation",
   "settings.field-options",
-  "settings.module-catalog",
   "settings.parameter-catalog",
   "settings.schema",
+  "settings.validate",
   "takeoffs.adopt",
   "takeoffs.candidates",
   "takeoffs.initialize-carrier",

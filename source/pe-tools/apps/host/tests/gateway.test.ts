@@ -6,7 +6,6 @@ import { test, expect, vi } from "vite-plus/test";
 import { mkdtemp, mkdir, rm, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
 import { Context, Effect, Layer, Queue, Fiber } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { address, takeoffsRouteState } from "@pe/agent-contracts";
@@ -792,16 +791,16 @@ test("source seal captures the positive pod set and exact dependency bytes once"
   }
 });
 
-test("source seal carries only authored pod bytes, never release or composed trees", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "script-release-"));
+test("source seal carries only authored pod bytes, never outputs or stray trees", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "script-seal-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
   const workspaces = join(productUserContentRootPath(), "Pods");
   const root = join(workspaces, "sample");
   try {
     await mkdir(join(root, "src"), { recursive: true });
-    await mkdir(join(root, "composed"), { recursive: true });
-    await mkdir(join(root, "inspection", "library", "settings"), { recursive: true });
+    await mkdir(join(root, "output", "run-1"), { recursive: true });
+    await mkdir(join(root, "stray"), { recursive: true });
     await writeFile(
       join(root, "pod.json"),
       JSON.stringify({
@@ -813,33 +812,9 @@ test("source seal carries only authored pod bytes, never release or composed tre
       }),
     );
     await writeFile(join(root, "src/Main.cs"), "source");
-    await writeFile(join(root, "composed/main.settings.json"), '{"closed":true}');
-    await writeFile(join(root, "inspection/index.json"), "[]");
-    await writeFile(join(root, "inspection/library/settings/base.settings.json"), '{"base":1}');
-    const releasePaths = [
-      "composed/main.settings.json",
-      "inspection/index.json",
-      "inspection/library/settings/base.settings.json",
-      "pod.json",
-      "src/Main.cs",
-    ];
-    await writeFile(
-      join(root, "release.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        podId: "sample",
-        version: "1.0.0",
-        contentHash: "b".repeat(64),
-        files: await Promise.all(
-          releasePaths.map(async (path) => ({
-            path,
-            sha256: createHash("sha256")
-              .update(await readFile(join(root, path)))
-              .digest("hex"),
-          })),
-        ),
-      }),
-    );
+    await writeFile(join(root, "output/run-1/receipt.json"), '{"outcome":"Succeeded"}');
+    await writeFile(join(root, "stray/notes.json"), "[]");
+    await writeFile(join(root, "notes.json"), "{}");
     const outsideLibrary = join(directory, "outside-library");
     await mkdir(outsideLibrary, { recursive: true });
     await writeFile(join(outsideLibrary, "pod.json"), "not json");

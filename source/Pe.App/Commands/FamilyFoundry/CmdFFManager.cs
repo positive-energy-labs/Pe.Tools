@@ -3,11 +3,8 @@ using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Host;
 using Pe.App.Pods;
-using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.Global.Ui;
-using Pe.Revit.Scripting.Pods;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.HostContracts.Scripting;
 using Pe.Revit;
 using Serilog.Events;
 using System.Diagnostics;
@@ -67,20 +64,17 @@ public class CmdFFManager : IExternalCommand {
             $"Applied {ctx.Doc.Title}: {plan.Changes.Count} changes, {receipt.Errors.Count} errors, residue {receipt.Residue.Count}. {receipt.Error}\nReceipt: {result.ReceiptPath}").Show();
     }
 
+    /// <summary>Builds into the source pod's `output/` beside its runs, from the member's own folder for nested models.</summary>
     private static void Build(FoundryContext ctx) {
-        var (model, _, source) = ctx.SelectedProfile!.Member.Load<Pe.Shared.RevitData.Families.FamilyModel>();
-        var podFolder = PodMembers.VerifiedFolder(source);
-        var buildDir = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-build", Guid.NewGuid().ToString("N"));
-        var fileName = $"{model.Family.Name}.rfa";
-        try {
-            var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, Path.Combine(buildDir, fileName), overwrite: true);
-            var receiptPath = PodRuns.WriteReceipt(podFolder,
-                new PodReceipt(source.Pod, source.Path, source.Sha256, "revit.apply.family-model", receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [], null),
-                [(fileName, File.ReadAllBytes(Path.Combine(buildDir, fileName)))]);
-            new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
-                $"Built {model.Family.Name} from {Path.GetFileName(templatePath)}. Converged: {receipt.Converged}, residue {receipt.Residue.Count}.\nReceipt: {receiptPath}").Show();
-        } finally {
-            if (Directory.Exists(buildDir)) Directory.Delete(buildDir, true);
-        }
+        var member = ctx.SelectedProfile!.Member;
+        var (model, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>();
+        var spec = Newtonsoft.Json.Linq.JObject.Parse(composed);
+        _ = spec.Remove("$schema");
+        var outputPath = Path.Combine(member.PodFolder, "output", $"{model.Family.Name}-{DateTime.Now:yyyyMMdd-HHmmss}.rfa");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var built = FamilyFoundryBridgeOps.BuildWithReceipt(ctx.UiDoc.Application.Application,
+            new FamilyBuildRequest(spec.ToString(), outputPath, source, Path.GetDirectoryName(member.FullPath)));
+        new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
+            $"Built {built.FamilyName} from {Path.GetFileName(built.TemplatePath)} → {built.OutputPath}. Converged: {built.Converged}, residue {built.ResidueCount}.\nReceipt: {built.ReceiptPath}").Show();
     }
 }

@@ -17,7 +17,6 @@ import type { ProtoProposal } from "#/family/world";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;
-  const stage = store.routeStage;
   /** WHICH SOURCE — the one question that separates them, asked once (see `#/family/source`). */
   const lane = store.lane;
   const world = lane.world;
@@ -354,7 +353,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   //                  profile; that is `capture all`'s job, under the ⇄ live overlay, once there is
   //                  a reading to move.
   //   build .rfa     WRITES, outside the page and outside the document: `build_evidence` re-opens
-  //                  the SAVED family.json host-side and hands it to `revit.apply.family-model`,
+  //                  the SAVED family.json host-side and hands it to `family.build`,
   //                  which materializes an .rfa and returns evidence pinned to that revision. It
   //                  is the whole reason the arming ceremony exists — see `#/family/build`.
   //
@@ -501,7 +500,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   return {
     store,
     profile,
-    stage,
     lane,
     world,
     draft,

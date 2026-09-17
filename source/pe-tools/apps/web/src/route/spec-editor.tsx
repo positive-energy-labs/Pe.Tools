@@ -227,8 +227,8 @@ export function SpecEditor({
           <div className="px-3 py-1.5">
             <SchemaToFieldRender
               schema={form.schema}
-              // ponytail: field options still key on moduleKey host-side; owed with the C# field-options op.
-              moduleKey=""
+              // The member's own URL from pod.list: a draft's $schema may be relative to its file.
+              schemaUrl={schema ?? ""}
               baselineValues={baseline.baseline}
               values={form.parsedRaw}
               onChange={(path, value) =>

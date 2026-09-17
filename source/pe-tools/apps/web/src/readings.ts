@@ -808,7 +808,7 @@ export const useFieldOptionsQuery = (
     ...options,
     enabled:
       (options?.enabled ?? true) &&
-      Boolean(request.moduleKey && request.propertyPath && request.sourceKey),
+      Boolean(request.schemaUrl && request.propertyPath && request.sourceKey),
   });
 
 export const useParameterCatalogQuery = (
@@ -817,5 +817,5 @@ export const useParameterCatalogQuery = (
 ) =>
   useHostOp("settings.parameter-catalog", request, {
     ...options,
-    enabled: (options?.enabled ?? true) && Boolean(request.moduleKey),
+    enabled: options?.enabled ?? true,
   });

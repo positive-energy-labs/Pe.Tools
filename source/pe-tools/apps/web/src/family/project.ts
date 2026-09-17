@@ -77,7 +77,7 @@ export function projectFamilyModel(
   const lengthType = lengthDataType(model);
   return {
     profile: {
-      path: options.path ?? `${model.family.name}.family.json`,
+      path: options.path ?? `${model.family.name}.json`,
       familyName: model.family.name,
       category: model.family.category,
       template: model.family.template,

@@ -2,8 +2,11 @@ using Pe.Shared.Product;
 
 namespace Pe.Shared.StorageRuntime;
 
-public sealed class ModuleStorage(string moduleKey) {
-    public string ModuleKey { get; } = NormalizeModuleKey(moduleKey);
+/// <summary>Per-command runtime state and output folders, named by the command's module.</summary>
+public sealed class ModuleStorage(string module) {
+    public string ModuleKey { get; } = string.IsNullOrWhiteSpace(module)
+        ? throw new ArgumentException("Module is required.", nameof(module))
+        : module;
 
     public StateStorage State() => StateStorage.ExactDir(
         ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(this.ModuleKey)
@@ -13,11 +16,4 @@ public sealed class ModuleStorage(string moduleKey) {
         ProductUserContentLayout.ForCurrentUser().Output.RootPath,
         this.ModuleKey
     );
-
-    private static string NormalizeModuleKey(string moduleKey) {
-        if (string.IsNullOrWhiteSpace(moduleKey))
-            throw new ArgumentException("Module key is required.", nameof(moduleKey));
-
-        return moduleKey;
-    }
 }

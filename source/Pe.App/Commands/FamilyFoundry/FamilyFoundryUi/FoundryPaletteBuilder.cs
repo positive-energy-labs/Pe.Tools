@@ -7,6 +7,7 @@ using Pe.Shared.RevitData.Families;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 using Pe.App.Pods;
+using Pe.Shared.StorageRuntime.Modules;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -25,10 +26,9 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
 
     public EphemeralWindow Build() {
         var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
-        var files = PodMembers.List((FamilyModelSettingsRegistration.ModuleKey, FamilyModelSettingsRegistration.RootKey),
-                (FamilyModelSettingsRegistration.ModuleKey, FamilyModelSettingsRegistration.PatchRootKey))
+        var files = PodMembers.List(FamilyModelSettingsRegistration.Root, FamilyModelSettingsRegistration.PatchRoot)
             .Select(member => new ProfileListItem(member,
-                member.Schema!.EndsWith($"/{FamilyModelSettingsRegistration.PatchRootKey}.json", StringComparison.OrdinalIgnoreCase)
+                member.Schema!.EndsWith(SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.PatchRoot), StringComparison.OrdinalIgnoreCase)
                     ? FoundryFileKind.Patch
                     : FoundryFileKind.FamilyModel))
             .OrderByDescending(item => item.LastModified)

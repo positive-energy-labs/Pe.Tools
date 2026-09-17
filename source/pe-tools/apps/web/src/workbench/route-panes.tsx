@@ -4,7 +4,7 @@
  */
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { PodsRouteContent } from "#/routes/pods";
-import { FamilyRouteContent } from "#/routes/family";
+import { FamilyRouteView } from "#/route/family/live";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
 import { TakeoffsPane } from "#/takeoff/pane";
@@ -56,7 +56,7 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 
 function FamilyPane() {
   const { currentThreadId } = useWorkbench();
-  return <FamilyRouteContent mode="file" thread={currentThreadId} />;
+  return <FamilyRouteView thread={currentThreadId} url={false} />;
 }
 
 function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {

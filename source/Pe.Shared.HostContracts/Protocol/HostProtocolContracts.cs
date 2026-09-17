@@ -29,26 +29,6 @@ public enum DocumentInvalidationReason {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum HostModuleScope {
-    Host,
-    Session,
-    ActiveDocument
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum HostModuleActiveDocumentKind {
-    Any,
-    ProjectOnly,
-    FamilyOnly
-}
-
-public record HostModuleDescriptor(
-    string ModuleKey,
-    string DefaultRootKey,
-    HostModuleScope Scope,
-    HostModuleActiveDocumentKind ActiveDocumentKind
-);
-
 public record HostProbeData(
     string RuntimeIdentity,
     int HostContractVersion,

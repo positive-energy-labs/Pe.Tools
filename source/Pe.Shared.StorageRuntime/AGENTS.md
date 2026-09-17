@@ -31,7 +31,7 @@ Authored settings document open/save/validate/composition is TS-owned in `source
 | Term                  | Meaning                                                                         | Prefer / Avoid                                                                  |
 | --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | **module**            | A host-visible structural settings area with storage identity                   | Avoid using it for arbitrary feature folders                                    |
-| **root binding**      | A typed runtime binding for one `(moduleKey, rootKey)` pair                     | Avoid collapsing this back to module-level typing                               |
+| **root binding**      | A typed runtime binding for one `$schema` URL (`/schemas/settings/<module>/<root>.json`) | Avoid collapsing this back to module-level typing                               |
 | **schema definition** | Explicit per-type augmentation registered in `SettingsSchemaDefinitionRegistry` | Avoid describing this as generic attribute reflection                           |
 | **field options**     | Runtime option metadata/items for a specific property                           | Avoid using `examples` and field options interchangeably                        |
 | **state**             | Mutable runtime data under `%LocalAppData%\Positive Energy\Pe.Tools\state`      | Never write state under user-authored Pods                                      |
@@ -40,7 +40,7 @@ Authored settings document open/save/validate/composition is TS-owned in `source
 ## Living Memory
 
 - Prefer explicit metadata contracts over scattering storage and schema assumptions across settings types.
-- `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `(moduleKey, rootKey)` pair maps to the same contract. Reusing a key for a different contract should fail fast.
+- `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `$schema` URL maps to the same contract. Reusing a key for a different contract should fail fast.
 - Host structural schemas and live-document field options are different concerns. Keep those seams obvious.
 - Product preferences live at `Documents\Pe.Tools\preferences.json`; authored settings and useful output live inside ordinary pod folders; runtime state and credentials live under LocalAppData.
 - Product root names belong in `Pe.Shared.Product`; storage runtime composes those layouts rather than defining its own roots.

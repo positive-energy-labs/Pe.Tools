@@ -38,7 +38,7 @@ public class RequestService {
         this._throttleGate = throttleGate;
     }
 
-    [Op("settings.field-options", Does = "Read document-specific field option values for a settings module.", Title = "Get Settings Field Options", Finds = ["settings", "field-options", "schema", "document"], Tier = OpTier.Expert)]
+    [Op("settings.field-options", Does = "Read document-specific field option values for one field of the settings library a `$schema` URL names.", Title = "Get Settings Field Options", Finds = ["settings", "field-options", "schema", "document"], Tier = OpTier.Expert)]
     public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
         RevitDocument document,
@@ -46,8 +46,7 @@ public class RequestService {
     ) {
         var key = BuildThrottleKey(
             "field-options",
-            request.ModuleKey,
-            request.RootKey,
+            request.SchemaUrl,
             $"{request.PropertyPath}:{request.SourceKey}",
             request.ContextValues
         );
@@ -57,7 +56,7 @@ public class RequestService {
             FieldOptionsThrottleWindow,
             () => this.GetFieldOptionsCore(request, document, cancellationToken)
         );
-        LogThrottleDecision(nameof(this.GetFieldOptionsAsync), decision, request.ModuleKey, request.PropertyPath);
+        LogThrottleDecision(nameof(this.GetFieldOptionsAsync), decision, request.SchemaUrl, request.PropertyPath);
         return response;
     }
 
@@ -69,7 +68,6 @@ public class RequestService {
     ) {
         var key = BuildThrottleKey(
             "parameter-catalog",
-            request.ModuleKey,
             null,
             null,
             request.ContextValues
@@ -79,7 +77,7 @@ public class RequestService {
             ParameterCatalogThrottleWindow,
             () => this.GetParameterCatalogCore(request, document, cancellationToken)
         );
-        LogThrottleDecision(nameof(this.GetParameterCatalogAsync), decision, request.ModuleKey, null);
+        LogThrottleDecision(nameof(this.GetParameterCatalogAsync), decision, "parameter-catalog", null);
         return response;
     }
 
@@ -92,7 +90,6 @@ public class RequestService {
         var key = BuildThrottleKey(
             "loaded-families-filter-field-options",
             nameof(LoadedFamiliesFilter),
-            null,
             $"{request.PropertyPath}:{request.SourceKey}",
             request.ContextValues
         );
@@ -121,7 +118,6 @@ public class RequestService {
             "value-domain-options",
             request.SourceKey,
             null,
-            null,
             request.ContextValues
         );
 
@@ -134,11 +130,11 @@ public class RequestService {
         return response;
     }
 
-    [Op("settings.schema", Does = "Read a settings schema from the connected Revit runtime.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
+    [Op("settings.schema", Does = "Read the live editor schema of the settings library a `$schema` URL names.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
     public Task<SchemaData> GetSchemaAsync(SchemaRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
-                var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
+                var binding = this._moduleRegistry.ResolveSchemaUrl(request.SchemaUrl);
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
                     binding.SettingsType,
                     SettingsRuntimeMode.LiveDocument,
@@ -156,17 +152,17 @@ public class RequestService {
             }
         }, cancellationToken);
 
-    [Op("settings.document.semantic-validation", Does = "Run the registered typed feature validator for a settings document after host-owned structural validation.", Title = "Validate Settings Document Semantics", Finds = ["settings", "validation", "semantic", "internal"], IsPublic = false)]
-    public Task<SettingsDocumentSemanticValidationData> ValidateSettingsDocumentSemanticsAsync(
-        ValidateSettingsDocumentSemanticsRequest request,
+    [Op("settings.validate", Does = "Run the typed semantic validator of the settings library a `$schema` URL names, after host-owned structural validation.", Title = "Validate Settings", Finds = ["settings", "validation", "semantic", "spec"], IsPublic = false)]
+    public Task<SettingsValidateData> ValidateSettingsAsync(
+        SettingsValidateRequest request,
         CancellationToken cancellationToken
     ) {
-        var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
+        var binding = this._moduleRegistry.ResolveSchemaUrl(request.SchemaUrl);
         var configured = SettingsDocumentValidatorRegistry.Shared.TryValidate(
             binding.SettingsType,
             new SettingsDocumentValidationContext(request.RawContent, request.ComposedContent),
             out var issues);
-        return Task.FromResult(new SettingsDocumentSemanticValidationData(
+        return Task.FromResult(new SettingsValidateData(
             configured,
             issues.Select(issue => new ValidationIssue(
                 issue.Path,
@@ -197,18 +193,6 @@ public class RequestService {
                 );
             }
         }, cancellationToken);
-
-    [Op("settings.module-catalog", Does = "Read the settings module catalog from Revit for bridge-side schema work.", Title = "Get Settings Module Catalog", Finds = ["settings", "module", "catalog", "schema"], IsPublic = false)]
-    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(NoRequest _, RevitDocument document, CancellationToken cancellationToken) => this.EnqueueAsync(() => {
-        var modules = this._moduleRegistry.GetModules()
-            .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
-            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, document.Value))
-            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-            .Select(SettingsModuleAvailability.CreateSettingsModuleDescriptor)
-            .ToList();
-
-        return new GetSettingsModuleCatalogBridgeResponse(modules);
-    }, cancellationToken);
 
     private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
@@ -312,7 +296,7 @@ public class RequestService {
     private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
-                var type = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey).SettingsType;
+                var type = this._moduleRegistry.ResolveSchemaUrl(request.SchemaUrl).SettingsType;
                 var property = SettingsPropertyPathResolver.ResolveProperty(type, request.PropertyPath);
 
                 if (property == null)
@@ -459,8 +443,7 @@ public class RequestService {
 
     private static string BuildThrottleKey(
         string endpoint,
-        string moduleKey,
-        string? rootKey,
+        string? library,
         string? propertyPath,
         IReadOnlyDictionary<string, string>? siblingValues
     ) {
@@ -472,20 +455,20 @@ public class RequestService {
                     .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => $"{pair.Key}={pair.Value}")
             );
-        return $"{endpoint}:{moduleKey}:{rootKey ?? string.Empty}:{propertyPath ?? string.Empty}:{siblingSignature}";
+        return $"{endpoint}:{library ?? string.Empty}:{propertyPath ?? string.Empty}:{siblingSignature}";
     }
 
     private static void LogThrottleDecision(
         string endpoint,
         ThrottleDecision decision,
-        string moduleKey,
+        string library,
         string? propertyPath
     ) {
         if (decision == ThrottleDecision.CacheHit) {
             Log.Debug(
-                "Throttle cache hit: Endpoint={Endpoint}, ModuleKey={ModuleKey}, PropertyPath={PropertyPath}",
+                "Throttle cache hit: Endpoint={Endpoint}, Library={Library}, PropertyPath={PropertyPath}",
                 endpoint,
-                moduleKey,
+                library,
                 propertyPath
             );
             return;
@@ -493,9 +476,9 @@ public class RequestService {
 
         if (decision == ThrottleDecision.Coalesced) {
             Log.Debug(
-                "Throttle coalesced request: Endpoint={Endpoint}, ModuleKey={ModuleKey}, PropertyPath={PropertyPath}",
+                "Throttle coalesced request: Endpoint={Endpoint}, Library={Library}, PropertyPath={PropertyPath}",
                 endpoint,
-                moduleKey,
+                library,
                 propertyPath
             );
         }

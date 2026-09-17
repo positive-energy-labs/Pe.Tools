@@ -1,6 +1,5 @@
 import {
   bridgeDocumentSnapshotSchema,
-  hostModuleDescriptorSchema,
   hostRuntimeAssemblyDataSchema,
   type HostOperationDefinition,
 } from "./contracts/index.js";
@@ -350,7 +349,6 @@ export type HostSessionSummaryData = Schema.Schema.Type<typeof hostSessionSummar
 
 export const hostSessionSummaryDataSchema = Schema.Struct({
   activeDocument: Schema.optional(Schema.NullOr(hostActiveDocumentSummarySchema)),
-  availableModules: Schema.Array(hostModuleDescriptorSchema),
   bridgeIsConnected: Schema.Boolean,
   // Observed session metadata (custody/lane/sdkSessionId/buildStamp) — facts as reported, never
   // staleness.
