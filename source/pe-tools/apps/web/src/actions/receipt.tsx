@@ -23,6 +23,21 @@ import { outputRenderers } from "#/ops/renderers";
  * `resources` are the owner it reads through: a summary and its detail must address the same
  * owner, so a caller that can run under a scoped demo passes that scope's base and client.
  */
+/** Each control's word, and the states it can actually reach. `read` reaches every state. */
+const CONTROL_LABEL: Record<ActionControlKey, string> = {
+  "action.read": "read status",
+  "action.recover": "recover native receipt",
+  "action.resume": "resume original action",
+  "action.cancel": "stop this action",
+};
+const CONTROL_REACHES: Record<ActionControlKey, (state: string | undefined) => boolean> = {
+  "action.read": () => true,
+  "action.recover": (state) => state === "unknown",
+  "action.resume": (state) => state === "unknown" || state === "incomplete",
+  // Only a running action has an in-flight request to signal.
+  "action.cancel": (state) => state === "running",
+};
+
 export function ActionReceiptView({
   id,
   base = "",
@@ -73,20 +88,9 @@ export function ActionReceiptView({
           {(Object.keys(actionControls) as ActionControlKey[]).map((key) => (
             <ActionButton
               key={key}
-              label={
-                key === "action.resume"
-                  ? "resume original action"
-                  : key === "action.recover"
-                    ? "recover native receipt"
-                    : "read status"
-              }
+              label={CONTROL_LABEL[key]}
               reason={actionControls[key].description}
-              disabled={
-                control.isPending ||
-                (key !== "action.read" &&
-                  row?.state !== "unknown" &&
-                  !(key === "action.resume" && row?.state === "incomplete"))
-              }
+              disabled={control.isPending || !CONTROL_REACHES[key](row?.state)}
               onClick={() => control.mutate(key)}
             />
           ))}

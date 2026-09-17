@@ -49,24 +49,24 @@ export const familyActions = {
       "Capture the open family as a new spec member in the route's pod; returns the member address and sha256.",
     input: z.object(captureInto),
   },
-  "family.confirm": {
-    says: "Plan a saved family spec against the open family and return the plan to confirm; changes nothing.",
+  "family.plan": {
+    says: "Plan a saved family spec against the open family and return the plan; changes nothing.",
     needs: "family-document",
     actor: "any",
     dirties: [],
     executors: ["pod.member.compose", "family.plan"],
     description:
-      "Plan a saved family spec against the open family and return the plan to confirm; changes nothing.",
+      "Plan a saved family spec against the open family and return the plan; changes nothing.",
     input: z.object({ source: podMemberSourceSchema }),
   },
   "family.apply": {
-    says: "Apply the exact family plan family.confirm returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
+    says: "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
     needs: "family-document",
     actor: "human",
     dirties: ["family", "pods"],
     executors: ["pod.member.compose", "family.apply"],
     description:
-      "Apply the exact family plan family.confirm returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
+      "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
     input: z.object({
       source: podMemberSourceSchema,
       // The families shape; a family document plans exactly one family.
@@ -85,7 +85,7 @@ export const familyActions = {
       "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
     input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
   },
-  "families.confirm": {
+  "families.plan": {
     says: "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     needs: "project-document",
     actor: "any",
@@ -100,13 +100,13 @@ export const familyActions = {
     }),
   },
   "families.apply": {
-    says: "Apply the exact family plans families.confirm returned, from the same saved spec bytes; each family's plan hash gates drift.",
+    says: "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
     needs: "project-document",
     actor: "human",
     dirties: ["families", "pods"],
     executors: ["pod.member.compose", "families.apply"],
     description:
-      "Apply the exact family plans families.confirm returned, from the same saved spec bytes; each family's plan hash gates drift.",
+      "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
     input: z.object({
       source: podMemberSourceSchema,
       expectedPlanHashes: z.record(z.string(), z.string()),

@@ -99,7 +99,7 @@ const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: 
 /**
  * A captured family model becomes a member that says what it is. `unmodeled` is what the engine
  * saw and cannot execute; it is evidence, so it leaves the member and lands in the capture's run
- * (user verdict 2026-09-17). A member that kept it would fail its own confirm.
+ * (user verdict 2026-09-17). A member that kept it would fail its own plan.
  */
 const familyMember = (modelJson: string) => {
   const { unmodeled = [], ...model } = JSON.parse(modelJson) as { unmodeled?: unknown[] };
@@ -134,7 +134,7 @@ export const podContext = (
 
 /** The document each workflow runs against: a family, any document (build), or a project. */
 const documentKind = (key: FamilyActionKey): boolean | "project" =>
-  key === "family.capture" || key === "family.confirm" || key === "family.apply"
+  key === "family.capture" || key === "family.plan" || key === "family.apply"
     ? true
     : key === "family.build"
       ? false
@@ -211,10 +211,10 @@ type Prepared =
       nativeKey: string;
       input: unknown;
       /**
-       * A plan request is the confirmation sheet: it reads, returns, and mutates nothing. A
-       * `scope` of null is one family document, which plans exactly one family.
+       * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` of null
+       * is one family document, which plans exactly one family.
        */
-      confirm?: { scope: readonly string[] | null; excludedIds: readonly number[] };
+      planned?: { scope: readonly string[] | null; excludedIds: readonly number[] };
     }
   | {
       kind: "capture";
@@ -299,8 +299,8 @@ export async function admitFamilyAction(
           at: new Date().toISOString(),
         };
       }
-      if (key === "family.confirm" || key === "family.apply") {
-        const { source } = familyActions["family.confirm"].input.parse(admission.input);
+      if (key === "family.plan" || key === "family.apply") {
+        const { source } = familyActions["family.plan"].input.parse(admission.input);
         const specJson = await familySpec(deps, source, pods);
         return key === "family.apply"
           ? {
@@ -320,10 +320,10 @@ export async function admitFamilyAction(
               process,
               nativeKey: "family.plan",
               input: { specJson },
-              confirm: { scope: null, excludedIds: [] },
+              planned: { scope: null, excludedIds: [] },
             };
       }
-      if (key === "families.confirm") {
+      if (key === "families.plan") {
         const input = familyActions[key].input.parse(admission.input);
         // The scope is authored Work; the plan is a result and never lands there.
         const base = admission.bases.work;
@@ -340,14 +340,14 @@ export async function admitFamilyAction(
             specJson: await familySpec(deps, input.source, pods),
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
           },
-          confirm: { scope: scope.familyNames, excludedIds: input.excludedIds },
+          planned: { scope: scope.familyNames, excludedIds: input.excludedIds },
         };
       }
       if (key === "families.apply") {
         const input = familyActions[key].input.parse(admission.input);
         if (!Object.keys(input.expectedPlanHashes).length)
           throw refused("No included family has changes to apply");
-        // The saved bytes must still be the ones confirmed; the engine gates each family's hash.
+        // The saved bytes must still be the ones planned; the engine gates each family's hash.
         return {
           kind: "native",
           process,
@@ -512,8 +512,8 @@ export async function admitFamilyAction(
       }
       if (prepared.kind === "native") {
         const result = await native(prepared.nativeKey, prepared.input, prepared.process);
-        if (prepared.confirm) {
-          const { scope, excludedIds } = prepared.confirm;
+        if (prepared.planned) {
+          const { scope, excludedIds } = prepared.planned;
           const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
           if (scope) {
             if (planned.diagnostics.length)

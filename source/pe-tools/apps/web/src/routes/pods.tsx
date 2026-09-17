@@ -4,7 +4,7 @@
  * route its `$schema` names.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -16,7 +16,7 @@ import { PickList } from "#/components/lang/pick-list";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { defineRoute, isSpecOf, type MemberRef, type PodRow } from "#/route";
-import { RECEIPT_PATH, podHost, usePodList, type Receipt } from "#/route/pods";
+import { RECEIPT_PATH, podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
@@ -27,8 +27,7 @@ import {
   DEMO_FAMILIES_SPEC_PATH,
   DEMO_FRAGMENTS,
   DEMO_PODS,
-  DEMO_RECEIPT,
-  DEMO_RECEIPT_PATH,
+  DEMO_RUN,
   DEMO_SPEC,
   DEMO_SPEC_PATH,
   PODS_SEEDS,
@@ -118,11 +117,7 @@ export function PodsRouteContent({
   const product = member
     ? PRODUCT_ROUTES.find((route) => isSpecOf(member.schema, route.def.schema))
     : undefined;
-  const { failure: runsFailure, runs: receipts } = useReceipts(
-    row ?? null,
-    member?.path ?? null,
-    !!demo,
-  );
+  const { failure: runsFailure, runs } = usePodRuns(row?.id ?? null, member?.path ?? null, !!demo);
 
   return (
     <Surface>
@@ -245,27 +240,34 @@ export function PodsRouteContent({
               </Pane>
             }
             end={
-              <Pane kind="inspector" title="runs" meta={String(receipts.length)} side="right">
+              <Pane kind="inspector" title="runs" meta={String(runs.length)} side="right">
                 {runsFailure ? <OutcomeLine kind="error" label="runs" says={runsFailure} /> : null}
-                {receipts.length ? (
+                {runs.length ? (
                   <div className="hairline-rows">
-                    {receipts.map(([run, receipt]) => (
-                      <div key={run} className="flex flex-col px-3 py-1">
-                        <span className="face-mono t-small text-ink">{run}</span>
-                        <span>
-                          {receipt.operation} · {receipt.outcome}
-                        </span>
-                        <span className="face-mono t-small text-ink-mute">
-                          {receipt.memberSha256.slice(0, 12)}
-                          {receipt.memberSha256 === member?.sha256
-                            ? " · these bytes"
-                            : " · older bytes"}
-                        </span>
-                        {receipt.outputs?.map((output) => (
-                          <span key={output} className="t-small text-ink-2">
-                            {output}
-                          </span>
-                        ))}
+                    {runs.map(({ runId, receipt, error }) => (
+                      <div key={runId} className="flex flex-col px-3 py-1">
+                        <span className="face-mono t-small text-ink">{runId}</span>
+                        {receipt ? (
+                          <>
+                            <span>
+                              {receipt.operation} · {receipt.outcome}
+                            </span>
+                            <span className="face-mono t-small text-ink-mute">
+                              {receipt.memberSha256.slice(0, 12)}
+                              {receipt.memberSha256 === member?.sha256
+                                ? " · these bytes"
+                                : " · older bytes"}
+                            </span>
+                            {receipt.outputs?.map((output) => (
+                              <span key={output} className="t-small text-ink-2">
+                                {output}
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          // A crashed run leaves this folder on disk; the op reports it, not hides it.
+                          <OutcomeLine kind="error" label="receipt" says={error ?? "unreadable"} />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -283,33 +285,23 @@ export function PodsRouteContent({
   );
 }
 
-/** Receipts under the pod's `output/*`, filtered to the open member. */
-function useReceipts(pod: PodRow | null, path: string | null, demo: boolean) {
-  const [all, setAll] = useState<readonly (readonly [string, Receipt])[]>([]);
+/** The pod's runs, narrowed to the open member. One host read, newest first. */
+function usePodRuns(pod: string | null, path: string | null, demo: boolean) {
+  const [runs, setRuns] = useState<readonly Run[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
-  const runs = useMemo(
-    () => pod?.members.flatMap((m) => RECEIPT_PATH.exec(m.path)?.[1] ?? []) ?? [],
-    [pod],
-  );
   useEffect(() => {
     setFailure(null);
-    if (demo) return setAll([[RECEIPT_PATH.exec(DEMO_RECEIPT_PATH)![1]!, DEMO_RECEIPT]]);
-    if (!pod) return setAll([]);
+    if (demo) return setRuns(path === DEMO_RUN.receipt!.memberPath ? [DEMO_RUN] : []);
+    if (!pod || !path) return setRuns([]);
     let live = true;
-    // ponytail: one read per run; a `pod.runs` op when pods carry hundreds of runs.
-    void Promise.all(
-      runs.map(async (run) => {
-        const { content } = await podHost.read({ pod: pod.id, path: `output/${run}/receipt.json` });
-        return [run, JSON.parse(content) as Receipt] as const;
-      }),
-    ).then(
-      (rows) => live && setAll(rows.sort(([a], [b]) => b.localeCompare(a))),
+    podHost.runs(pod, path).then(
+      (rows) => live && setRuns(rows),
       (error: unknown) =>
-        live && setFailure(error instanceof Error ? error.message : String(error)),
+        live && (setRuns([]), setFailure(error instanceof Error ? error.message : String(error))),
     );
     return () => {
       live = false;
     };
-  }, [pod, runs, demo]);
-  return { failure, runs: all.filter(([, receipt]) => receipt.memberPath === path) };
+  }, [pod, path, demo]);
+  return { failure, runs };
 }

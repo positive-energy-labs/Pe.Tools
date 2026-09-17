@@ -92,6 +92,11 @@ export function EntityRouteView({
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
   const closed = { confirming: false, sheet: null };
+  // Field options come from the document this route acts on, read-only (user verdict, grill 2).
+  const optionsFrom =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
 
   // A capture or apply files bytes in the pod; the list is the only thing that must re-read.
   useEffect(() => {
@@ -144,7 +149,8 @@ export function EntityRouteView({
           handle={handle}
           target={{ session: ladder.sessionWord, document: ladder.docWord }}
           health={health}
-          commit={page.stage !== "apply" ? undefined : confirming ? "confirm" : "apply"}
+          // The commit verb is the next step, wherever the route stands.
+          commit={confirming || !def.plan ? "apply" : "plan"}
           band={band}
           sentence={
             <>
@@ -170,7 +176,7 @@ export function EntityRouteView({
           page.stage === "audit" ? null : (
             <Pane
               kind="inspector"
-              title={confirming ? "confirm" : "spec"}
+              title={confirming ? "plan" : "spec"}
               meta={def.entity}
               side="right"
             >
@@ -180,15 +186,15 @@ export function EntityRouteView({
                   excluded={view?.excluded ?? NOTHING_HELD}
                   included={view?.included ?? []}
                   toggle={hold}
-                  confirm={() => void handle.actions.confirm.run()}
+                  apply={() => void handle.actions.apply.run()}
                   cancel={() => setPage(closed)}
                   stop={{
                     // `families.apply` checks its token between families, never inside one.
                     label: def.key === "families" ? "stop after this family" : "stop",
                     run: handle.stop,
                   }}
-                  replan={() => void handle.actions.apply.run()}
-                  refusal={handle.actions.confirm.refusal}
+                  replan={() => void handle.actions.plan.run()}
+                  refusal={handle.actions.apply.refusal}
                   busy={handle.busy !== null}
                 />
               ) : null}
@@ -199,6 +205,7 @@ export function EntityRouteView({
                   member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
                 }
                 fixture={fixture}
+                optionsFrom={optionsFrom}
                 onSaved={(ref) => {
                   refreshPods();
                   setPage({ pod: ref.pod, path: ref.path, ...closed });

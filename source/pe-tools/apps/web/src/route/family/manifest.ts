@@ -94,8 +94,8 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   needs: "document",
   // The audit edits a member in every stage, so the Situation offers the spec picker throughout.
   specPicker: "always",
-  // `family.confirm` returns one family plan and changes nothing; `family.apply` applies its hash.
-  plan: admissionPlan({ confirm: "family.confirm", apply: "family.apply" }, (plan) =>
+  // `family.plan` returns one family plan and changes nothing; `family.apply` applies its hash.
+  plan: admissionPlan({ plan: "family.plan", apply: "family.apply" }, (plan) =>
     ffPlanRow(ffPlanEntrySchema.parse(plan)),
   ),
   docs: "Audit one family model beside its Revit family: capture the open family into a pod, edit the saved model, plan and apply it, or build it to an .rfa.",
@@ -261,7 +261,7 @@ const familySeed = (
   },
 });
 
-/** The plan the apply seed confirms: what `family.confirm` would return. */
+/** The plan the apply seed confirms: what `family.plan` would return. */
 const DEMO_PLAN = ffPlanRow({
   familyId: 7001,
   familyName: "grd",

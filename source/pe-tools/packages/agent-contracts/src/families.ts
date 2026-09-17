@@ -112,10 +112,10 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: author a scope, confirm a spec member's plan, exclude, apply.",
+  description: "Family Foundry: author a scope, plan a spec member, exclude, apply.",
   schema: familiesDocumentSchema,
   agentWriteMask: [["scope"], ["excludedIds"], ["executionOptions"]],
-  // Confirming and applying are the `families.confirm` and `families.apply` workflows. Neither is
+  // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

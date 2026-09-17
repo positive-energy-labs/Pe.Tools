@@ -14,7 +14,7 @@ const target = { session: "S", openId: "open-1" };
 const receipt = (id: string, state: string, extra: Record<string, unknown> = {}) => ({
   id,
   kind: "workflow",
-  key: "families.confirm",
+  key: "families.plan",
   actor: "human",
   destination: { kind: "document", ref: target },
   request: {},
@@ -56,7 +56,7 @@ test("a settled retained admission is discarded, not thrown at the next attempt"
   host(rows);
   // First attempt settles cancelled — the state a stop now produces.
   const first = await runSemanticAction(
-    "families.confirm",
+    "families.plan",
     { scope: "a" },
     target,
     {},
@@ -71,7 +71,7 @@ test("a settled retained admission is discarded, not thrown at the next attempt"
 
   // Same retention key, DIFFERENT input: the old admission has settled, so it gets out of the way.
   const second = await runSemanticAction(
-    "families.confirm",
+    "families.plan",
     { scope: "b" },
     target,
     {},
@@ -87,7 +87,7 @@ test("a still-running retained admission refuses and names the stop control", as
   const rows = new Map<string, unknown>();
   host(rows);
   const first = await runSemanticAction(
-    "families.confirm",
+    "families.plan",
     { scope: "a" },
     target,
     {},
@@ -98,7 +98,7 @@ test("a still-running retained admission refuses and names the stop control", as
   );
   rows.set(first.id, receipt(first.id, "running"));
   await expect(
-    runSemanticAction("families.confirm", { scope: "b" }, target, {}, "human", "", undefined, 400),
+    runSemanticAction("families.plan", { scope: "b" }, target, {}, "human", "", undefined, 400),
   ).rejects.toThrow(/is still running; stop it/);
   // And the control the refusal names reaches the host journal, not the bridge directly.
   rows.set(first.id, receipt(first.id, "cancelled", { error: "stopped", status: 499 }));

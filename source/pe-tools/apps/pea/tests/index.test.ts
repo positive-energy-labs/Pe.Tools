@@ -300,3 +300,25 @@ async function isolatePeaState(prefix: string) {
     },
   };
 }
+
+test("no CLI subcommand and no --help materializes skills into the user's Documents", async () => {
+  // w5-revit defect 8: one `pea --help` from a second checkout rewrote the user's skills with
+  // that checkout's text. Materialization belongs to the agent runtime start, nowhere else.
+  const productHome = await mkdtemp(path.join(os.tmpdir(), "pea-help-"));
+  const originalHome = process.env[peaProductHomeEnvVar];
+  const log = console.log;
+  process.env[peaProductHomeEnvVar] = productHome;
+  console.log = () => {};
+  try {
+    const { runPeaMain } = await import("../src/cli.ts");
+    // A bare `pea` is a runtime start, which is exactly when skills SHOULD materialize.
+    for (const args of [["--help"], ["script", "--help"], ["host", "--help"], ["script"]])
+      await runPeaMain(args).catch(() => {});
+    await expect(access(path.join(productHome, peaStandardSkillsRoot))).rejects.toThrow();
+  } finally {
+    console.log = log;
+    if (originalHome === undefined) delete process.env[peaProductHomeEnvVar];
+    else process.env[peaProductHomeEnvVar] = originalHome;
+    await rm(productHome, { recursive: true, force: true });
+  }
+});

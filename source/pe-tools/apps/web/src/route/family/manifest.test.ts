@@ -38,7 +38,7 @@ test("/family is one kernel definition: audit, capture, apply, with the build ce
     "build",
     "cancel-build",
     "capture",
-    "confirm",
+    "plan",
     "prepare-build",
   ]);
   expect(manifest.actions?.build.stage).toBe("audit");

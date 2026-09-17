@@ -253,10 +253,10 @@ const resultOf = <A>(row: unknown) => {
 test("neither route document can hold an observation or a receipt", async () => {
   const { work, admit, captures } = await setup();
   const revision = await authorFamilies(work);
-  const confirmed = resultOf<Plan>(await admit("families.confirm", { source }, revision));
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   const doc = (await work.read(scope, "families"))!;
   // A native plan was returned, and neither the Work document nor a reading moved.
-  expect(confirmed.plan).toHaveLength(2);
+  expect(plan.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
   expect(Object.keys(doc.doc as object).sort()).toEqual(["excludedIds", "scope"]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
@@ -264,7 +264,7 @@ test("neither route document can hold an observation or a receipt", async () => 
 
   const applied = await admit(
     "families.apply",
-    { source, expectedPlanHashes: confirmed.included },
+    { source, expectedPlanHashes: plan.included },
     revision,
   );
   resultOf(applied);
@@ -298,7 +298,7 @@ test("an agent patch cannot reach anything but authored input", async () => {
 
 /* ── families ────────────────────────────────────────────────────────────────────────────── */
 
-test("confirm narrows to the authored family names, names what apply would send, and refuses without a scope", async () => {
+test("plan narrows to the authored family names, names what apply would send, and refuses without a scope", async () => {
   const { work, admit, entries } = await setup();
   entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(9, "Grille", "h9")]);
   const bare = await work.apply(
@@ -308,35 +308,33 @@ test("confirm narrows to the authored family names, names what apply would send,
     [{ path: ["excludedIds"], value: [] }],
     0,
   );
-  const refused = await admit("families.confirm", { source }, bare.revision!);
+  const refused = await admit("families.plan", { source }, bare.revision!);
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/Author a scope/);
   const revision = await authorFamilies(work, bare.revision!);
-  const confirmed = resultOf<Plan>(
-    await admit("families.confirm", { source, excludedIds: [2] }, revision),
-  );
-  expect(confirmed.plan.map((row) => row.familyId)).toEqual([1, 2]);
-  expect(confirmed.included).toEqual({ "1": "h1" });
+  const plan = resultOf<Plan>(await admit("families.plan", { source, excludedIds: [2] }, revision));
+  expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2]);
+  expect(plan.included).toEqual({ "1": "h1" });
 });
 
-test("an agent may confirm, and only a human may apply", async () => {
+test("an agent may plan, and only a human may apply", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
-  resultOf(await admit("families.confirm", { source }, revision, "agent-confirm", "agent"));
+  resultOf(await admit("families.plan", { source }, revision, "agent-plan", "agent"));
   await expect(
     admit("families.apply", { source, expectedPlanHashes: { "1": "h1" } }, revision, "a", "agent"),
   ).rejects.toThrow("requires human approval");
   expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
 
-test("spec bytes saved after confirm refuse apply before any native write", async () => {
+test("spec bytes saved after the plan refuse apply before any native write", async () => {
   const { work, admit, sent, podsRoot } = await setup();
   const revision = await authorFamilies(work);
-  const confirmed = resultOf<Plan>(await admit("families.confirm", { source }, revision));
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   await writeFile(join(podsRoot, "Global", "settings", "p.json"), `${profileBytes}\n`);
   const refused = await admit(
     "families.apply",
-    { source, expectedPlanHashes: confirmed.included },
+    { source, expectedPlanHashes: plan.included },
     revision,
   );
   expect(refused.state).toBe("failed");
@@ -344,11 +342,11 @@ test("spec bytes saved after confirm refuse apply before any native write", asyn
   expect(sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
 });
 
-test("families confirm refuses a reviewed Work revision that is no longer current", async () => {
+test("families plan refuses a reviewed Work revision that is no longer current", async () => {
   const { work, admit, sent } = await setup();
   const planned = await authorFamilies(work);
   await work.apply(scope, "families", "human", [{ path: ["excludedIds"], value: [2] }], planned);
-  const refused = await admit("families.confirm", { source }, planned);
+  const refused = await admit("families.plan", { source }, planned);
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/Current reviewed Families Work/);
   expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
