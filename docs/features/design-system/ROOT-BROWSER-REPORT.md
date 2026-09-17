@@ -89,3 +89,5 @@ Artifacts: `.artifacts/runs/root-browser-20260916/chat-spa-live.json`, `chat-spa
 - No attachment, prompt send, proposal approval, thread deletion, Revit mutation, reload, or non-test draft edit occurred.
 
 Artifact: `.artifacts/runs/root-browser-20260916/chat-thread-rows.json`.
+
+Root integration correction: the terminal HTTPError coincided with the temporary Rail merge-conflict parse failure during integration at 20:09. The conflict is resolved; the root dev runner restarted its host as pid37508 on port55177 and subsequently served the app normally. This sample does not establish a product navigation failure. Retained Activity composers also mean an unfiltered `document.querySelector('textarea')` can read a hidden thread's draft; those earlier script readings do not establish cross-thread draft leakage. Opus owns the replacement journey against settled root source `6b0ddb4`, using visible controls.

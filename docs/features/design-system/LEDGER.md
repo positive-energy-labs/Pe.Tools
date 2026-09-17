@@ -33,12 +33,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-16, Pane separation uses a shared gutter including the viewport perimeter, with room for the focus/help halo and resize handle. The suggested 8px gutter and 6px halo are provisional visual tuning values. Intermediate route breakage is allowed while restoring consistent height and responsive layout contracts.
 - 2026-09-16, Two concurrent Fable 5.1 low partners lead surface and runtime design. Both may delegate through Herdr to Opus/Sol low and Terra high swarms, never to more Fables. The runtime review measures Chrome CSS/layout/paint/render costs alongside transport and lifecycle. Meaningful design ambiguity returns to the user. See `UNIFICATION.md` for the active review brief.
 
-- 2026-09-16, `--gutter`, `--halo`, `--rail-h`, and `--halo-ink` own shared surface spacing and focus color.
+- 2026-09-16, `--gutter` and `--rail-h` own shared surface spacing. Pane owns the selected line treatment and its stronger help state.
 - 2026-09-16, `Rail` is the one head band. `ArtifactFrame` owns its rail through `head` and `headTrail` slots.
 - 2026-09-16, active `Pane` focus uses an outline in the gutter.
 - 2026-09-16, `Pane` has a `flank` kind for a collapsed regional title and retained shortcuts.
 - 2026-09-16, `Pane` owns suspension and render failure recovery. A changing child target passes `boundaryKey`.
-- 2026-09-16, `Surface` owns viewport grid anatomy and explicit gutter tracks.
+- 2026-09-16, `Surface` owns perimeter spacing and the optional scroll-away head; PaneSplit and PaneWorkspace own interior composition. Remove generic Surface grid tracks and SurfaceCell wrappers.
 - 2026-09-16, `MasterTable` owns one rail and an optional filter row.
 - 2026-09-16, `Pane` renders its rail by default. `headerless` is the intentional opt-out, and `ArtifactFrame.foot` uses the rail top edge.
 - 2026-09-16, A `mermaid` fence renders as a diagram inside `Code`, with a source and render toggle in the head. The renderer is `beautiful-mermaid`, because it takes `var(--pe-*)` colors and needs no live DOM; official `mermaid` needs a live DOM, rejects `var()` colors, and leaks an element on each failed render. The fence renders once it closes and shows its source while open. `gantt`, `pie`, and `mindmap` stay as source. A closed fence that fails to parse renders collapsed to its head band with `invalid diagram` and a `show source` toggle, because invalid mermaid is hard to read as text (kaitpw). D2 (5.85 MB wasm), PlantUML, and Structurizr (JVM) are rejected (`.artifacts/handoffs/render-blocks-20260916/diagram.md`).
