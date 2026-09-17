@@ -24,10 +24,9 @@ import { Route as LabRouteImport } from "./routes/lab";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
-import { Route as PrototypePodsRouteImport } from "./routes/prototype-pods";
+import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RunsRouteImport } from "./routes/runs";
-import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
@@ -113,9 +112,9 @@ const ParameterLinksRoute = ParameterLinksRouteImport.update({
   path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PrototypePodsRoute = PrototypePodsRouteImport.update({
-  id: "/prototype-pods",
-  path: "/prototype-pods",
+const PodsRoute = PodsRouteImport.update({
+  id: "/pods",
+  path: "/pods",
   getParentRoute: () => rootRouteImport,
 } as any);
 const RunsRoute = RunsRouteImport.update({
@@ -123,14 +122,9 @@ const RunsRoute = RunsRouteImport.update({
   path: "/runs",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ScheduleGridRoute = ScheduleGridRouteImport.update({
-  id: "/schedule-grid",
-  path: "/schedule-grid",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
+const SchedulesRoute = SchedulesRouteImport.update({
+  id: "/schedules",
+  path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
 const TakeoffsRoute = TakeoffsRouteImport.update({
@@ -196,10 +190,9 @@ export interface FileRoutesByFullPath {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/prototype-pods": typeof PrototypePodsRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
@@ -226,10 +219,9 @@ export interface FileRoutesByTo {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/prototype-pods": typeof PrototypePodsRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
@@ -257,10 +249,9 @@ export interface FileRoutesById {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/prototype-pods": typeof PrototypePodsRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
@@ -289,10 +280,9 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
-    | "/prototype-pods"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
@@ -319,10 +309,9 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
-    | "/prototype-pods"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
@@ -349,10 +338,9 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
-    | "/prototype-pods"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system_/arming"
@@ -380,10 +368,9 @@ export interface RootRouteChildren {
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
-  PrototypePodsRoute: typeof PrototypePodsRoute;
+  PodsRoute: typeof PodsRoute;
   RunsRoute: typeof RunsRoute;
-  ScheduleGridRoute: typeof ScheduleGridRoute;
-  SettingsRoute: typeof SettingsRoute;
+  SchedulesRoute: typeof SchedulesRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
@@ -501,11 +488,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/prototype-pods": {
-      id: "/prototype-pods";
-      path: "/prototype-pods";
-      fullPath: "/prototype-pods";
-      preLoaderRoute: typeof PrototypePodsRouteImport;
+    "/pods": {
+      id: "/pods";
+      path: "/pods";
+      fullPath: "/pods";
+      preLoaderRoute: typeof PodsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/runs": {
@@ -515,18 +502,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof RunsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/schedule-grid": {
-      id: "/schedule-grid";
-      path: "/schedule-grid";
-      fullPath: "/schedule-grid";
-      preLoaderRoute: typeof ScheduleGridRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/settings": {
-      id: "/settings";
-      path: "/settings";
-      fullPath: "/settings";
-      preLoaderRoute: typeof SettingsRouteImport;
+    "/schedules": {
+      id: "/schedules";
+      path: "/schedules";
+      fullPath: "/schedules";
+      preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/takeoffs": {
@@ -622,10 +602,9 @@ const rootRouteChildren: RootRouteChildren = {
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
-  PrototypePodsRoute: PrototypePodsRoute,
+  PodsRoute: PodsRoute,
   RunsRoute: RunsRoute,
-  ScheduleGridRoute: ScheduleGridRoute,
-  SettingsRoute: SettingsRoute,
+  SchedulesRoute: SchedulesRoute,
   TakeoffsRoute: TakeoffsRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,

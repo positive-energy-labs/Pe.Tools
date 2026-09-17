@@ -7,7 +7,8 @@
  */
 import type { Seed } from "@pe/agent-contracts";
 import { CHAT_SEEDS } from "#/chat/seeds";
-import { SETTINGS_SEEDS } from "#/settings/seeds";
+import { PODS_SEEDS } from "#/route/seeds";
+import { SCHEDULE_SEEDS } from "#/route/schedules/manifest";
 import { INSTANCES_SEEDS } from "#/instances/seeds";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { manifest as familyManifest } from "#/family/manifest";
@@ -41,12 +42,13 @@ const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
     }));
 
 /**
- * Chat and Settings declare their manifests as builders over live deps, so their seed records are
+ * Chat and Schedules declare their manifests as builders over live deps, so their seed records are
  * read straight from the seed modules the builders hand to `seeds:`. Same data, no deps needed.
  */
 export const SEED_CATALOGUE: SeedRow[] = [
   ...rows("chat", "/chat", CHAT_SEEDS as AnySeeds),
-  ...rows("settings", "/settings", SETTINGS_SEEDS as AnySeeds),
+  ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
+  ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),
   ...rows("instances", "/instances", INSTANCES_SEEDS as AnySeeds),
   ...rows("takeoffs", "/takeoffs", takeoffManifest.seeds as AnySeeds),
   ...rows("family", "/family", familyManifest.seeds as AnySeeds),

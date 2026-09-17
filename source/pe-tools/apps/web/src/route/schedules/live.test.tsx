@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
-import { setup } from "../../../host/tests/schedule-test-fixture";
+import { setup } from "../../../../host/tests/schedule-test-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 

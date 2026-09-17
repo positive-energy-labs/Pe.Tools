@@ -2,8 +2,8 @@
  * Chat's in-realm panes: the same route bodies, drawn inside a thread. Each pane keys on the
  * thread head's default Target, so a pane and its route always read the same Work.
  */
-import { LiveScheduleGridWorkspace } from "#/schedule-grid/live";
-import { SettingsRouteContent } from "#/routes/settings";
+import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
+import { PodsRouteContent } from "#/routes/pods";
 import { FamilyRouteContent } from "#/routes/family";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
@@ -12,7 +12,7 @@ import { takeoffsRouteState, workKey, type WorkKey } from "@pe/agent-contracts";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   familiesRouteState,
   instancesRouteState,
@@ -85,11 +85,17 @@ function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
         opening {spec.title}
       </EmptyState>
     );
-  if (spec.route === "settings") return <SettingsRouteContent mode="file" />;
+  // The settings pane is the pods browser: the same member editor /pods draws.
+  if (spec.route === "settings") return <PodsPane />;
   if (spec.route === "families") return <FamiliesRouteContent thread={currentThreadId} />;
   if (spec.route === "takeoffs") return <TakeoffsPane key={workKey(work)} scope={work} />;
   if (spec.route === "schedule-grid") return <LiveScheduleGridWorkspace key={workKey(work)} />;
   if (spec.route === "instances")
     return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
   return <ParameterLinksRouteContent />;
+}
+
+function PodsPane() {
+  const [ref, select] = useState<{ pod?: string; path?: string }>({});
+  return <PodsRouteContent {...ref} select={select} />;
 }

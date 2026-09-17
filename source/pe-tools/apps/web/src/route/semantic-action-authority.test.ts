@@ -4,7 +4,7 @@ import { semanticActions } from "@pe/agent-contracts";
 import { manifest as family } from "#/family/manifest";
 import { manifest as families } from "#/families/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
-import { scheduleGridManifest } from "#/schedule-grid/manifest";
+import { schedulesManifest } from "#/route/schedules/manifest";
 import { settingsManifest } from "#/settings/manifest";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
@@ -16,7 +16,7 @@ test("browser semantic mutations project shared prose, actor, and target need", 
     [family.actions!.apply, "family.apply"],
     [families.actions!.apply, "families.apply"],
     [parameterLinks.actions!.apply, "parameter-links.apply"],
-    [scheduleGridManifest().actions!.push, "schedule-grid.apply"],
+    [schedulesManifest().actions!.push, "schedule-grid.apply"],
     [takeoffs.actions!["commit-sync"], "takeoffs.sync"],
   ] as const;
   const needs = {
