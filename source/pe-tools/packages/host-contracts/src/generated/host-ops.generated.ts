@@ -395,11 +395,16 @@ export namespace FamiliesPlan {
 export namespace FamilyApply {
   export namespace Req {
     /**
-     * Apply a saved spec to the active family document; `planHash` from family.plan gates drift. The document is not saved.
+     * Apply a saved spec to the active family document; the family's `expectedPlanHash` from family.plan
+     * gates drift. One key, the active document's owner family — the same shape `families.apply` takes, so
+     * one apply grammar serves both routes. The document is not saved.
+     *
      */
     export interface Request {
       specJson: string;
-      planHash: string;
+      expectedPlanHashes: {
+        [k: string]: string;
+      };
       source: PodMemberSource;
       executionOptions?: null | ExecutionOptions;
     }
@@ -482,18 +487,19 @@ export namespace FamilyApply {
   }
 }
 
-/** Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template, save it to an explicit .rfa path, and write the run receipt into the source pod. */
+/** Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths. */
 export namespace FamilyBuild {
   export namespace Req {
     /**
-     * Build a new family from a saved family model spec on its header's template; nested models resolve from `modelDirectory`.
+     * Build a new family from a saved family model spec on its header's template; nested models resolve
+     * from `modelDirectory`. There is no output path: every build lands in a fresh run folder in the source
+     * pod beside its receipt (user verdict, 2026-09-17), so nothing overwrites and nothing escapes the pod.
+     *
      */
     export interface Request {
       specJson: string;
-      outputPath: string;
       source: PodMemberSource;
       modelDirectory?: null | string;
-      overwrite?: boolean;
     }
     /**
      * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.

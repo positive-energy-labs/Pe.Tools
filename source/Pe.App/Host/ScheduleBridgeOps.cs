@@ -1,8 +1,9 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
 using Pe.Revit.DocumentData.Schedules;
+using Pe.Revit.Failures;
 using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Operations;
@@ -52,14 +53,27 @@ internal static class ScheduleBridgeOps {
     /// <summary>The one apply edge for bridge op and palette: new schedule, then the run in the source pod.</summary>
     internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, PodMemberSource source) {
         var podFolder = PodMembers.VerifiedFolder(source);
+        EngineEdge.RequireReachableCentral(document);
+        var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
-            using var transaction = new Transaction(document, $"Apply Schedule: {spec.Name}");
-            _ = transaction.Start();
-            result = document.ApplyScheduleProfile(spec);
-            _ = transaction.Commit();
+            result = EngineEdge.NoModal(handled, () => {
+                using var transaction = new Transaction(document, $"Apply Schedule: {spec.Name}");
+                _ = transaction.Start();
+                // The verdict's other half: warnings are resolved and recorded here, never shown.
+                var options = transaction.GetFailureHandlingOptions();
+                _ = options.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(handled));
+                _ = options.SetClearAfterRollback(true);
+                _ = options.SetForcedModalHandling(true);
+                transaction.SetFailureHandlingOptions(options);
+                var created = document.ApplyScheduleProfile(spec);
+                if (transaction.Commit() != TransactionStatus.Committed)
+                    throw new InvalidOperationException($"Apply Schedule '{spec.Name}' did not commit. Revit posted: {string.Join("; ", handled.Where(h => h.IsError).Select(h => h.Message).DefaultIfEmpty("no message"))}");
+                return created;
+            });
         } catch (Exception exception) {
-            _ = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Failed", [], exception.Message), []);
+            _ = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Failed", [], exception.Message),
+                EngineEdge.WarningsOutput(handled));
             throw;
         }
         var skipped = result.SkippedFields.Concat(result.SkippedSortGroups).Concat(result.SkippedFilters).Concat(result.SkippedHeaderGroups)
@@ -70,7 +84,7 @@ internal static class ScheduleBridgeOps {
         var resultJson = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ResultReport(result), Formatting.Indented));
         var receiptPath = PodRuns.WriteReceipt(podFolder,
             new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [$"schedule:{result.Schedule.Id.Value()}"], null),
-            [("result.json", resultJson)]);
+            [("result.json", resultJson), .. EngineEdge.WarningsOutput(handled)]);
         return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped, result.Warnings, receiptPath), result);
     }
 

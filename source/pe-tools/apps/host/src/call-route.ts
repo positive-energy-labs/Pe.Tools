@@ -61,6 +61,7 @@ import {
 import {
   composeMember,
   listPods,
+  listRuns,
   readMember,
   saveMember,
   writeMember,
@@ -803,6 +804,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* openShellPath(yield* decodeRequest(key, request));
     case "pod.list":
       return yield* listPods();
+    case "pod.runs":
+      return yield* listRuns(yield* decodeRequest(key, request));
     case "pod.member.read":
       return yield* readMember(yield* decodeRequest(key, request));
     case "pod.member.write":

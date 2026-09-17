@@ -34,7 +34,6 @@ export const DEMO_PODS: readonly PodRow[] = [
       { path: DEMO_FAMILIES_SPEC_PATH, sha256: hash(8), schema: FAMILIES_SCHEMA },
       { path: DEMO_HEADER_PATH, sha256: hash(3), schema: null },
       { path: DEMO_PERF_HEAT_PATH, sha256: hash(4), schema: null },
-      { path: DEMO_RECEIPT_PATH, sha256: hash(5), schema: null },
     ],
     diagnostics: [],
   },

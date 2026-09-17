@@ -14,18 +14,24 @@ public static class FamilyModelParameterProjection {
     public sealed record Result(
         Dictionary<string, FamilyModelParameter> Parameters,
         Dictionary<string, Dictionary<string, PortableValue>> Types,
-        List<FamilyModelUnmodeledFact> Unmodeled
+        List<FamilyModelUnmodeledFact> Unmodeled,
+        // The census of built-in family parameters this document carries, by exact Revit name.
+        List<string> BuiltIns
     );
 
     public static Result Project(IEnumerable<FamilyParameterSnapshot> rows, IEnumerable<string> typeNames) {
         var parameters = new Dictionary<string, FamilyModelParameter>(StringComparer.Ordinal);
         var types = typeNames.ToDictionary(t => t, _ => new Dictionary<string, PortableValue>(StringComparer.Ordinal), StringComparer.Ordinal);
         var unmodeled = new List<FamilyModelUnmodeledFact>();
+        var builtIns = new List<string>();
 
         foreach (var row in rows) {
             var d = row.Definition;
             var name = d.Identity.Name;
-            if (d.Identity.BuiltInParameterId.HasValue || name.StartsWith("FF_Internal_", StringComparison.Ordinal))
+            // The engine never creates a built-in family parameter — the template owns it — but a formula
+            // may name one, so the census is declared and the validator resolves against it.
+            if (d.Identity.BuiltInParameterId.HasValue) { builtIns.Add(name); continue; }
+            if (name.StartsWith("FF_Internal_", StringComparison.Ordinal))
                 continue;
             var shared = !string.IsNullOrWhiteSpace(d.Identity.SharedGuid);
             DataType? dataType = null;
@@ -63,7 +69,7 @@ public static class FamilyModelParameterProjection {
             }
         }
 
-        return new Result(parameters, types, unmodeled);
+        return new Result(parameters, types, unmodeled, builtIns);
     }
 
     /// <summary>

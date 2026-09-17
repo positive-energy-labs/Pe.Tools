@@ -16,7 +16,7 @@ import { PickList } from "#/components/lang/pick-list";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { defineRoute, isSpecOf, type MemberRef, type PodRow } from "#/route";
-import { RECEIPT_PATH, podHost, usePodList, type Run } from "#/route/pods";
+import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
@@ -184,20 +184,18 @@ export function PodsRouteContent({
               ))}
             <PickList
               items={pods.flatMap((item) =>
-                item.members
-                  .filter((m) => !RECEIPT_PATH.test(m.path))
-                  .map((m) => ({
-                    id: `${item.id}${SEP}${m.path}`,
-                    label: m.path,
-                    group: `${item.name} · ${item.version}`,
-                    meta: m.schema
-                      ? m.schema
-                          .split("/")
-                          .at(-1)
-                          ?.replace(/\.json$/, "")
-                      : undefined,
-                    hint: m.schema ?? "no $schema: plain data",
-                  })),
+                item.members.map((m) => ({
+                  id: `${item.id}${SEP}${m.path}`,
+                  label: m.path,
+                  group: `${item.name} · ${item.version}`,
+                  meta: m.schema
+                    ? m.schema
+                        .split("/")
+                        .at(-1)
+                        ?.replace(/\.json$/, "")
+                    : undefined,
+                  hint: m.schema ?? "no $schema: plain data",
+                })),
               )}
               activeId={member ? `${row!.id}${SEP}${member.path}` : null}
               onPick={(id) => {

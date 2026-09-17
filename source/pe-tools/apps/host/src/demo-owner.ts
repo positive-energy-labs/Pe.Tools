@@ -494,7 +494,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 simulated: true,
               };
             } else if (key === "family.apply" && seed.route === "family") {
-              if (!simulatedPlan || (input as { planHash: string }).planHash !== simulatedPlan.hash)
+              const expected = Object.values(
+                (input as { expectedPlanHashes: Record<string, string> }).expectedPlanHashes,
+              );
+              if (!simulatedPlan || expected.length !== 1 || expected[0] !== simulatedPlan.hash)
                 throw unsupported("simulated native plan changed");
               const planned = JSON.parse(simulatedPlan.spec) as { patch?: unknown };
               nativeModel = planned.patch ? JSON.stringify(planned.patch) : simulatedPlan.spec;
@@ -621,10 +624,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             } else if (key === "family.build" && seed.route === "family") {
               if (seed.scenario === "native-unknown")
                 throw new BridgeError("Simulated lost native result", 503);
-              const path = await assertDemoPath(root, (input as { outputPath: string }).outputPath);
               value = {
                 familyName: "Demo",
-                outputPath: path,
+                // The build lands in the run folder; the simulated engine names the same shape.
+                outputPath: `output/${new Date().toISOString().replace(/[:.]/g, "-")}/Demo.rfa`,
                 converged: true,
                 residueCount: 0,
                 receiptPath: null,
@@ -652,6 +655,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       Effect.tryPromise({
         try: async () => {
           if (key === "pod.list") return settings.listPods();
+          if (key === "pod.runs")
+            return settings.listRuns(request as Parameters<typeof settings.listRuns>[0]);
           if (key === "pod.member.read")
             return settings.readMember(request as Parameters<typeof settings.readMember>[0]);
           if (key === "pod.member.compose")
