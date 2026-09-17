@@ -65,3 +65,13 @@ No web edit, stream change, new dependency, result persistence, receipt coupling
 
 - `vp test packages/runtime/tests/thread-state.test.ts` - **PASS**, 5 tests.
 - Focused formatting, lint, and type checks - **PASS** for the owned contract, runtime, endpoint, and test files.
+
+## Matching web consumer
+
+`apps/web/src/workbench/deferred-result.ts` matches top-level metadata by the existing `ToolCall.parentMessageId` and `ToolCall.id`. Its request includes the current thread plus both identities, aborts through the existing `useHostCall` lifecycle, and rejects any response whose message or call identity differs. It does not request while a transcript call is closed; no cache or second authority was added.
+
+`moments.tsx` loads only while the call is expanded. `lens/context-strip.tsx` loads when the selected trace body mounts. Both show explicit loading/error/retry states and retain the structural summary and byte size. The fetched original drives output JSON, copy behavior, route artifact rendering, and image extraction. Deferred content is never represented as an empty success.
+
+No `chat-state`, provider, chat-shell, stream, or server contract file changed in the web phase. `toolImages` was already exported, so no cross-owner seam is required.
+
+Web proof: from `apps/web`, the focused helper, image, diagram, message-copy, and lens tests pass. Focused `vp check` passes for the helper, transcript, trace, and helper test.
