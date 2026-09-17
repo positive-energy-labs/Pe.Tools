@@ -269,14 +269,16 @@ export const paneSplitRecipe = tv({
   },
 });
 
-/** Binary compositional escape hatch. Resize config is absent when the relationship is fixed. */
+/** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
 export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
   const horizontal = axis === "horizontal";
+  const bothSides = start != null && end != null;
   const target = resize?.target ?? "start";
-  const tracks =
-    resize == null
+  const tracks = !bothSides
+    ? "minmax(0, 1fr)"
+    : resize == null
       ? "minmax(0, 1fr) var(--gutter) minmax(0, 1fr)"
       : target === "start"
         ? `${state.renderedSize}px var(--gutter) minmax(0, 1fr)`
@@ -298,8 +300,8 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
         className="flex min-h-0 min-w-0 flex-col overflow-visible"
         style={
           horizontal
-            ? { gridColumn: side === "start" ? 1 : 3, gridRow: 1 }
-            : { gridColumn: 1, gridRow: side === "start" ? 1 : 3 }
+            ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }
+            : { gridColumn: 1, gridRow: bothSides ? (side === "start" ? 1 : 3) : 1 }
         }
       >
         {child}
@@ -316,7 +318,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
       style={gridStyle}
     >
       {renderSide("start", start)}
-      {resize && (
+      {bothSides && resize && (
         <div
           className="size-full min-h-0 min-w-0"
           style={horizontal ? { gridColumn: 2, gridRow: 1 } : { gridColumn: 1, gridRow: 2 }}
