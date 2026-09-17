@@ -177,6 +177,7 @@ test("workspace resize is opt-in and keyboard accessible", () => {
   );
   const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
 
+  expect(workspace.dataset.surface).toBe("recess");
   expect(workspace.style.gridTemplateRows).toBe("340px var(--gutter) minmax(0, 1fr)");
   fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), {
     key: "ArrowDown",
@@ -194,6 +195,7 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
   );
   const split = container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
 
+  expect(split.dataset.surface).toBe("recess");
   expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) minmax(0, 1fr)");
   expect(split.querySelector("[role='separator']")).toBeNull();
   expect(split.classList.contains("overflow-hidden")).toBe(false);
@@ -220,6 +222,9 @@ test("split panes reserve a gutter and keep keyboard resizing", () => {
     />,
   );
   const handle = screen.getByRole("separator", { name: "Resize pane" });
+  expect(
+    resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.dataset.surface,
+  ).toBe("recess");
   expect(handle.parentElement?.style.gridColumn).toBe("2");
   expect(handle.parentElement?.style.gridRow).toBe("1");
   expect(handle.parentElement?.classList.contains("size-full")).toBe(true);
@@ -393,6 +398,21 @@ test("pane headers default on and require an explicit headerless opt-out", () =>
   );
   expect(view.container.querySelector("[data-slot='pane-header']")).toBeNull();
   expect(screen.getByRole("region", { name: "room table" })).toBeTruthy();
+});
+
+test("pane body defaults to the shared inset and flush opts out", () => {
+  const view = render(<Pane kind="content">body</Pane>);
+  const body = view.container.querySelector<HTMLElement>("[data-slot='pane-body']")!;
+
+  expect(body.classList.contains("p-(--gutter)")).toBe(true);
+
+  view.rerender(
+    <Pane kind="content" flush>
+      body
+    </Pane>,
+  );
+  expect(body.classList.contains("p-0")).toBe(true);
+  expect(body.classList.contains("p-(--gutter)")).toBe(false);
 });
 
 test("workspace gutters appear only beside present outer panes and do not clip pane outlines", () => {

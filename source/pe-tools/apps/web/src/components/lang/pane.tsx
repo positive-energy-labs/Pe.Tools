@@ -45,7 +45,7 @@ export const paneRecipe = tv({
       navigation: { body: "overflow-y-auto" },
       visual: { body: "relative overflow-hidden" },
       content: { body: "overflow-auto" },
-      inspector: { body: "overflow-y-auto p-2" },
+      inspector: { body: "overflow-y-auto" },
       flank: { body: "overflow-y-auto" },
     },
     scroll: {
@@ -53,10 +53,15 @@ export const paneRecipe = tv({
       clip: { body: "overflow-hidden" },
       visible: { body: "overflow-visible" },
     },
+    flush: {
+      false: { body: "p-(--gutter)" },
+      true: { body: "p-0" },
+    },
   },
+  defaultVariants: { flush: false },
 });
 
-export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll"> {
+export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush" | "scroll"> {
   kind: PaneKind;
   id?: string;
   shortcuts?: readonly PaneShortcut[];
@@ -156,6 +161,7 @@ export function Pane({
   actions,
   toolbar,
   headerless = false,
+  flush,
   scroll,
   side = "left",
   collapsed = false,
@@ -166,7 +172,7 @@ export function Pane({
   children,
 }: PaneProps) {
   const collapsedFlank = kind === "flank" && collapsed;
-  const { root, body } = paneRecipe({ kind, scroll });
+  const { root, body } = paneRecipe({ kind, scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
