@@ -1,5 +1,5 @@
 /**
- * /settings document — collaborative state for schema-backed host settings authoring.
+ * Member document — collaborative state for authoring one schema-backed pod member.
  *
  * Third instance of the proposal → staged → committed trichotomy (after parameter-links
  * cells and parameter-links draft/preview/apply). Fields are addressed by RFC 6901
@@ -7,8 +7,8 @@
  * "/revit/units/length") — pointer escaping means property names may contain periods
  * and slashes (spec-sheet values like "M.2 Depth" address cleanly).
  * Pea proposes field values; the human stages them; the human-only `settings.write` action
- * splices staged values into the raw content and writes through `settings.document.save`
- * with the content version explicitly adopted as its edit basis.
+ * splices staged values into the raw content and writes through `pod.member.write`
+ * with the member sha256 explicitly adopted as its edit basis.
  */
 import { z } from "zod";
 import { type RouteStateSpec } from "./route-state.ts";
@@ -53,14 +53,18 @@ export const settingsFieldStateSchema = z.object({
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
-/* ── Ephemeral file read (settings.document.open / refresh) ───────────────── */
+/* ── Ephemeral member read (pod.member.read / pod.member.compose) ─────────── */
 
-export const settingsDocumentIdSchema = z.object({
-  moduleKey: z.string(),
-  rootKey: z.string(),
-  relativePath: z.string(),
+/** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
+export const podMemberSchema = z.object({ pod: z.string().min(1), path: z.string().min(1) });
+export type PodMember = z.infer<typeof podMemberSchema>;
+/** The exact member bytes an apply consumed. */
+export const podMemberSourceSchema = podMemberSchema.extend({
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
-export type SettingsDocumentId = z.infer<typeof settingsDocumentIdSchema>;
+export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
+/** The Work key of an authored member: derived from its address, never stored beside it. */
+export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;
 
 export const settingsValidationIssueSchema = z.looseObject({
   message: z.string(),
@@ -75,32 +79,24 @@ const settingsValidationSchema = z.object({
 export type SettingsValidation = z.infer<typeof settingsValidationSchema>;
 
 export const settingsSnapshotSchema = z.object({
-  documentId: settingsDocumentIdSchema,
-  path: z.string(),
-  workspaceId: z.string().optional(),
-  versionToken: z.string().nullable(),
+  member: podMemberSchema,
+  sha256: z.string().nullable(),
   observedAt: z.iso.datetime().optional(),
-  /** Raw JSON text as stored on disk — the save target. */
+  /** Raw JSON text as stored in the pod — the save target. */
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
-  dependencies: z
-    .array(z.object({ directivePath: z.string(), documentId: settingsDocumentIdSchema }))
-    .optional(),
-  modifiedUtc: z.string().nullish(),
   validation: settingsValidationSchema.nullish(),
 });
 export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-export const settingsBasisSchema = settingsSnapshotSchema
-  .pick({
-    documentId: true,
-    path: true,
-    rawContent: true,
-  })
-  .extend({ versionToken: z.string() });
+export const settingsBasisSchema = z.object({
+  member: podMemberSchema,
+  rawContent: z.string(),
+  sha256: z.string().min(1),
+});
 export type SettingsBasis = z.infer<typeof settingsBasisSchema>;
 const settingsRouteDocumentSchema = z.object({
   basis: settingsBasisSchema.nullable().default(null),
@@ -117,19 +113,18 @@ export const settingsRouteState = {
   commands: {
     open: {
       description:
-        "Explicitly adopt a file reading as the edit basis. Refuses pending edits; use adopt after reviewing a conflict.",
-      input: z.object({ documentId: settingsDocumentIdSchema }),
+        "Explicitly adopt a member reading as the edit basis. Refuses pending edits; use adopt after reviewing a conflict.",
+      input: z.object({ member: podMemberSchema }),
       actor: "any",
     },
     adopt: {
       description:
         "Adopt the reviewed disk content version and discard the old field edits/proposals explicitly. Refuses if the disk changed again.",
-      input: z.object({ documentId: settingsDocumentIdSchema, versionToken: z.string() }),
+      input: z.object({ member: podMemberSchema, sha256: z.string() }),
       actor: "human",
     },
     refresh: {
-      description:
-        "Re-read the bound settings document. Proposals and staged values are preserved.",
+      description: "Re-read the bound member. Proposals and staged values are preserved.",
       input: z.object({}),
       actor: "any",
     },

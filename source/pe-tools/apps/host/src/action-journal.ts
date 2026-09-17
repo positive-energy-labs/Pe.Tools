@@ -172,7 +172,7 @@ export class ActionJournal {
             row.id !== admission.id &&
             (row.state === "running" ||
               row.state === "unknown" ||
-              (row.key === "schedule-grid.apply" && row.state === "incomplete")) &&
+              (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
             ((row.state === "unknown" &&
               row.preparation.state === "ready" &&
               ["native-leaf", "host-leaf"].includes(
@@ -181,7 +181,7 @@ export class ActionJournal {
               (canonicalRouteInput(admission.destination) ===
                 canonicalRouteInput(row.destination) &&
                 admission.destination.kind !== "host") ||
-              (row.key === "schedule-grid.apply" &&
+              (row.key === "schedule.grid.push" &&
                 admission.key === row.key &&
                 admission.bases.work &&
                 canonicalRouteInput(admission.bases.work.key) ===
@@ -400,7 +400,7 @@ export class ActionJournal {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
     const incompleteSchedule =
-      original.key === "schedule-grid.apply" && original.state === "incomplete";
+      original.key === "schedule.grid.push" && original.state === "incomplete";
     if (
       (original.state !== "unknown" && !incompleteSchedule) ||
       original.preparation.state !== "ready"

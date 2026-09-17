@@ -17,22 +17,11 @@ import {
   type HostShellOpenData,
   type HostShellOpenRequest,
   type HostSessionSummaryData,
-  type SettingsModuleWorkspaceDescriptor,
-  type SettingsWorkspaceDescriptor,
-  type SettingsWorkspacesData,
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { resolvePeaWorld, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { productPodsRootPath } from "./product-paths.ts";
-export {
-  discoverSettingsTree,
-  openSettingsDocument,
-  openSettingsDocumentWithModule,
-  saveSettingsDocument,
-  validateSettingsDocument,
-} from "./settings.ts";
 import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
@@ -46,14 +35,6 @@ let agentRuntimeStatus: AgentRuntimeStatus = { available: false, error: null };
 export function setAgentRuntimeStatus(status: AgentRuntimeStatus): void {
   agentRuntimeStatus = status;
 }
-
-type LocalOpContext = {
-  readonly bridge: BridgeSessionView;
-  readonly invokeBridge: (
-    operationKey: string,
-    payload?: unknown,
-  ) => Effect.Effect<unknown, unknown>;
-};
 
 export function getHostStatus(
   bridge: BridgeSessionView,
@@ -155,25 +136,6 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         sessionId: bridge.sessionId!,
       })),
   };
-});
-
-export const getSettingsWorkspaces = Effect.fnUntraced(function* (_ctx: LocalOpContext) {
-  const modules = yield* discoverSettingsModules();
-
-  return {
-    workspaces: [
-      {
-        workspaceKey: "pods",
-        displayName: "Pods",
-        basePath: defaultSettingsBasePath(),
-        modules: modules.map((module) => ({
-          moduleKey: module.moduleKey,
-          defaultRootKey: module.defaultRootKey,
-          roots: module.roots,
-        })),
-      } satisfies SettingsWorkspaceDescriptor,
-    ],
-  } satisfies SettingsWorkspacesData;
 });
 
 export const tailLogs = Effect.fnUntraced(function* (input: HostLogsRequest) {
@@ -286,37 +248,4 @@ function productLogPaths() {
     hostLogPath: join(rootPath, productPathNames.hostLogFileName),
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),
   };
-}
-
-const discoverSettingsModules = Effect.fnUntraced(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const base = defaultSettingsBasePath();
-  const names = yield* fs
-    .readDirectory(base)
-    .pipe(Effect.catch(() => Effect.succeed([] as string[])));
-  const modules: SettingsModuleWorkspaceDescriptor[] = [];
-  for (const moduleKey of names) {
-    const manifest = yield* fs
-      .stat(join(base, moduleKey, "pod.json"))
-      .pipe(Effect.catch(() => Effect.succeed(null)));
-    const info = yield* fs
-      .stat(join(base, moduleKey, productPathNames.settingsDirectoryName))
-      .pipe(Effect.catch(() => Effect.succeed(null)));
-    if (manifest?.type === "File" && info?.type === "Directory")
-      modules.push({
-        moduleKey,
-        defaultRootKey: productPathNames.settingsDirectoryName,
-        roots: [
-          {
-            rootKey: productPathNames.settingsDirectoryName,
-            displayName: productPathNames.settingsDirectoryName,
-          },
-        ],
-      });
-  }
-  return modules;
-});
-
-function defaultSettingsBasePath(): string {
-  return productPodsRootPath();
 }

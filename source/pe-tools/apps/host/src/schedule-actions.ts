@@ -27,6 +27,16 @@ import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
+import type { PodMemberWriteResponse, SpecCapture } from "@pe/host-contracts/operation-types";
+import { composedSpec, podFolder } from "./settings.ts";
+import {
+  capturePath,
+  lifetime,
+  podContext,
+  runPods,
+  writeMemberOnce,
+  type FamilyActionDependencies,
+} from "./family-actions.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const same = (a: unknown, b: unknown) => canonicalRouteInput(a) === canonicalRouteInput(b);
@@ -71,9 +81,9 @@ export async function readSchedule(
 ) {
   if (!Object.hasOwn(scheduleReads, raw.key)) throw refused("Unknown schedule read");
   const key = raw.key as ScheduleReadKey;
-  if (key === "schedule-grid.saved")
+  if (key === "schedule.grid.saved")
     return captures.schedule(scheduleReads[key].input.parse(raw.input).id);
-  if (key === "schedule-grid.work")
+  if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   const target = documentRefSchema.parse(raw.target);
   const { session, document } = await current(bridge, target);
@@ -85,7 +95,7 @@ export async function readSchedule(
     deps.sdk,
   );
   await current(bridge, target, process);
-  if (key === "schedule-grid.catalog") {
+  if (key === "schedule.grid.catalog") {
     scheduleReads[key].input.parse(raw.input ?? {});
     const catalog = (await invoke(bridge, target, "revit.catalog.schedules", {
       projection: { view: "Summary" },
@@ -105,7 +115,7 @@ export async function readSchedule(
         })),
     });
   }
-  const input = scheduleReads["schedule-grid.snapshot"].input.parse(raw.input ?? {});
+  const input = scheduleReads["schedule.grid.snapshot"].input.parse(raw.input ?? {});
   const query = {
     ...(input.scheduleId != null
       ? { kind: "ScheduleReferences", scheduleIds: [input.scheduleId] }
@@ -247,17 +257,19 @@ export async function admitScheduleAction(
   owner: ActionJournal,
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
-  deps: TakeoffActionDependencies = {},
+  deps: FamilyActionDependencies = {},
   resume = false,
 ) {
   const admission = actionAdmissionSchema.parse(raw);
-  if (admission.kind !== "workflow" || admission.key !== "schedule-grid.apply")
+  if (admission.kind !== "workflow" || !Object.hasOwn(scheduleActions, admission.key))
     throw refused("Unknown schedule action");
-  if (admission.actor !== scheduleActions[admission.key].actor)
-    throw refused("Schedule apply requires human approval");
-  admission.input = scheduleActions[admission.key].input.parse(admission.input);
+  const key = admission.key as keyof typeof scheduleActions;
+  if (scheduleActions[key].actor === "human" && admission.actor !== "human")
+    throw refused("This schedule action requires human approval");
+  admission.input = scheduleActions[key].input.parse(admission.input);
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
+  if (key !== "schedule.grid.push") return admitScheduleSpec(key, admission, owner, bridge, deps);
   const work = deps.workspace ?? actionWorkspace();
   const base = admission.bases.work;
   if (!work || !base) throw refused("Reviewed Work address and revision required");
@@ -289,7 +301,7 @@ export async function admitScheduleAction(
       if (!execution.recorded("native", "revit.apply.parameter-values")) {
         const fresh = (await readSchedule(
           {
-            key: "schedule-grid.snapshot",
+            key: "schedule.grid.snapshot",
             target,
             input: {
               scheduleId: reading.snapshot.scheduleId,
@@ -312,7 +324,7 @@ export async function admitScheduleAction(
             "revit.apply.parameter-values",
             {
               edits: edits.map(({ key: _key, ...edit }) => edit),
-              transactionName: "Schedule Grid apply",
+              transactionName: "Schedule grid push",
             },
             async (id) => {
               await current(bridge, target, prepared.process);
@@ -322,7 +334,7 @@ export async function admitScheduleAction(
                 "revit.apply.parameter-values",
                 {
                   edits: edits.map(({ key: _key, ...edit }) => edit),
-                  transactionName: "Schedule Grid apply",
+                  transactionName: "Schedule grid push",
                 },
                 id,
               );
@@ -367,7 +379,7 @@ export async function admitScheduleAction(
       try {
         readback = (await readSchedule(
           {
-            key: "schedule-grid.snapshot",
+            key: "schedule.grid.snapshot",
             target,
             input: {
               scheduleId: reading.snapshot.scheduleId,
@@ -400,6 +412,67 @@ export async function admitScheduleAction(
       return result;
     },
     resume,
+  );
+}
+/** Capture writes a new member into the route's pod; apply composes a saved spec and creates a schedule. */
+function admitScheduleSpec(
+  key: "schedule.capture" | "schedule.apply",
+  admission: ReturnType<typeof actionAdmissionSchema.parse>,
+  owner: ActionJournal,
+  bridge: RevitBridge["Service"],
+  deps: FamilyActionDependencies,
+) {
+  if (admission.destination.kind !== "document") throw refused("Exact document target required");
+  const target = admission.destination.ref;
+  const pods = podContext(deps, bridge, target);
+  return owner.admit(
+    admission,
+    async () => {
+      const { process } = await lifetime(bridge, target, "project", deps);
+      if (key === "schedule.capture") {
+        const input = scheduleActions[key].input.parse(admission.input);
+        await runPods(deps, podFolder(input.pod, pods));
+        return {
+          process,
+          nativeKey: key,
+          input: { scheduleId: input.scheduleId },
+          pod: input.pod,
+          path: input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`),
+        };
+      }
+      const { source } = scheduleActions[key].input.parse(admission.input);
+      const { spec } = await runPods(deps, composedSpec(source, pods));
+      return { process, nativeKey: key, input: { spec, source } };
+    },
+    async (execution) => {
+      const prepared = execution.prepared as {
+        process: NativeProcess;
+        nativeKey: string;
+        input: unknown;
+        pod?: string;
+        path?: string;
+      };
+      const result = await execution.step(
+        "native",
+        prepared.nativeKey,
+        prepared.input,
+        async (id) => {
+          await current(bridge, target, nativeProcessSchema.parse(prepared.process));
+          return invoke(bridge, target, prepared.nativeKey, prepared.input, id);
+        },
+      );
+      if (key === "schedule.apply") return { executionContext: target, native: result };
+      const request = {
+        pod: prepared.pod!,
+        path: prepared.path!,
+        content: (result as SpecCapture).spec,
+      };
+      const member = (await execution.step("file", "pod.member.write", request, () =>
+        writeMemberOnce(deps, request, pods),
+      )) as PodMemberWriteResponse;
+      return { executionContext: target, member };
+    },
+    false,
   );
 }
 export const recoverScheduleAction = (

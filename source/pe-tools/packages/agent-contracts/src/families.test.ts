@@ -5,13 +5,13 @@ import { familiesBasis, familiesIncluded, familiesRouteState } from "./families.
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      profilePath: null,
+      spec: null,
       scope: null,
       excludedIds: [],
     });
     // The whole document is agent-writable because the whole document is authored input.
     expect(familiesRouteState.agentWriteMask).toEqual([
-      ["profilePath"],
+      ["spec"],
       ["scope"],
       ["excludedIds"],
       ["executionOptions"],
@@ -24,13 +24,15 @@ describe("familiesRouteState", () => {
 
   it("stamps the basis on the planning inputs, and only those", () => {
     const work = familiesRouteState.schema.parse({
-      profilePath: "desk.json",
+      spec: { pod: "global", path: "settings/desk.json" },
       scope: { categoryNames: ["Ducts"], familyNames: ["Box"], placementScope: "AllLoaded" },
     });
     const excluded = { ...work, excludedIds: [7] };
     // Excluding a family narrows a plan; it does not invalidate the native reading.
     expect(familiesBasis(excluded)).toBe(familiesBasis(work));
-    expect(familiesBasis({ ...work, profilePath: "other.json" })).not.toBe(familiesBasis(work));
+    expect(
+      familiesBasis({ ...work, spec: { pod: "global", path: "settings/other.json" } }),
+    ).not.toBe(familiesBasis(work));
     expect(
       familiesBasis({
         ...work,

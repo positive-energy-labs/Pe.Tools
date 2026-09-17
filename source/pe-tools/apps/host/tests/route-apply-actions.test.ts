@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -30,6 +30,9 @@ const target = { session: "A", openId: "open-A" };
 const scope = { route: "families", target: at };
 const otherScope = { route: "families", target: other };
 const profileBytes = JSON.stringify({ patch: { families: {} } });
+const member = (name: string) => ({ pod: "global", path: `settings/${name}` });
+const composed = `${JSON.stringify(JSON.parse(profileBytes), null, 2)}
+`;
 
 const entry = (familyId: number, familyName: string, planHash: string) => ({
   familyId,
@@ -78,6 +81,11 @@ async function setup() {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-route-apply-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
+  const podsRoot = join(dir, "Pods");
+  await mkdir(join(podsRoot, "Global", "settings"), { recursive: true });
+  await writeFile(join(podsRoot, "Global", "pod.json"), JSON.stringify({ id: "global" }));
+  for (const name of ["p.json", "other.json", "annex.json"])
+    await writeFile(join(podsRoot, "Global", "settings", name), profileBytes);
   const rows = new Map<string, unknown>();
   // biome-ignore lint/suspicious/noExplicitAny: fixture bridge payloads mirror untyped host frames.
   const sent: { key: string; input: any; id?: string }[] = [];
@@ -98,20 +106,19 @@ async function setup() {
     invoke: (key: string, input: unknown, _s: string, _o: string, id?: string) =>
       Effect.promise(async () => {
         sent.push({ key, input, id });
-        if (key === "settings.document.open")
+        if (key === "families.capture")
           return {
             value: {
-              rawContent: profileBytes,
-              composedContent: profileBytes,
-              validation: { isValid: true, issues: [] },
-              metadata: { versionToken: { value: "v1" }, documentId: { stableId: "p.json" } },
+              specs: [
+                { familyId: 1, familyName: "Box", spec: '{"box":1}', coverage: {} },
+                { familyId: 2, familyName: "Pipe Fitting", spec: '{"pipe":1}', coverage: {} },
+              ],
             },
           };
-        if (key === "familyfoundry.plan")
-          return { value: { diagnostics: [], families: planEntries } };
+        if (key === "families.plan") return { value: { diagnostics: [], families: planEntries } };
         if (nativeUnknown) throw Object.assign(Error("bridge timeout"), { statusCode: 504 });
         if (nativeFails) throw Object.assign(Error("native refused"), { statusCode: 409 });
-        if (key === "familyfoundry.apply") {
+        if (key === "families.apply") {
           await duringNative?.();
           return {
             value: {
@@ -150,7 +157,7 @@ async function setup() {
   const captures = new TakeoffCaptures(join(dir, "captures"));
   const owner = new ActionJournal(join(dir, "actions.json"));
   // biome-ignore lint/suspicious/noExplicitAny: the SDK reader is the shared native-receipt fixture.
-  const deps = { workspace: work, sdk: sdkSessions } as any;
+  const deps = { workspace: work, sdk: sdkSessions, podsRoot } as any;
   const read = (key: string, input: unknown = {}, readScope = scope) =>
     readFamily({ key, input, scope: readScope, target }, captures, bridge, deps);
   const admit = async (
@@ -178,6 +185,7 @@ async function setup() {
     return owner.wait(row.id);
   };
   return {
+    podsRoot,
     work,
     owner,
     captures,
@@ -213,7 +221,7 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
     "families",
     "human",
     [
-      { path: ["profilePath"], value: "p.json" },
+      { path: ["spec"], value: member("p.json") },
       {
         path: ["scope"],
         value: {
@@ -238,7 +246,7 @@ test("neither route document can hold an observation or a receipt", async () => 
   const doc = (await work.read(scope, "families"))!;
   // A native plan was read and stored, and the Work document did not move at all.
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["excludedIds", "profilePath", "scope"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual(["excludedIds", "scope", "spec"]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
 
   const applied = await admit(
@@ -290,7 +298,7 @@ test("a planned scope and its reading both survive reload, from their own owners
   expect(plan.basis).toBe(familiesBasis(reloaded));
 });
 
-test("editing the profile makes the reading stale by basis, and never deletes it", async () => {
+test("picking another spec makes the reading stale by basis, and never deletes it", async () => {
   const { work, read, captures, admit, sent } = await setup();
   const planned = await authorFamilies(work);
   const capture = (await read("families.plan")) as { id: string };
@@ -298,7 +306,7 @@ test("editing the profile makes the reading stale by basis, and never deletes it
     scope,
     "families",
     "human",
-    [{ path: ["profilePath"], value: "other.json" }],
+    [{ path: ["spec"], value: member("other.json") }],
     planned,
   );
   expect(edited.ok).toBe(true);
@@ -309,7 +317,7 @@ test("editing the profile makes the reading stale by basis, and never deletes it
   expect(familiesPlanReadingSchema.parse(readings[0]!.reading.value).basis).not.toBe(
     familiesBasis(doc),
   );
-  const before = sent.filter((row) => row.key === "familyfoundry.apply").length;
+  const before = sent.filter((row) => row.key === "families.apply").length;
   const refused = await admit(
     "families.apply",
     { planId: capture.id, expectedPlanHashes: { "1": "h1" } },
@@ -317,7 +325,7 @@ test("editing the profile makes the reading stale by basis, and never deletes it
   );
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/changed after the plan/);
-  expect(sent.filter((row) => row.key === "familyfoundry.apply")).toHaveLength(before);
+  expect(sent.filter((row) => row.key === "families.apply")).toHaveLength(before);
 });
 
 test("families apply refuses a reviewed Work revision that is no longer current", async () => {
@@ -332,10 +340,10 @@ test("families apply refuses a reviewed Work revision that is no longer current"
   );
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/Work changed after review/);
-  expect(sent.filter((s) => s.key === "familyfoundry.apply")).toHaveLength(0);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
 
-test("families apply sends exactly the reviewed hashes and the reviewed profile bytes", async () => {
+test("families apply sends exactly the reviewed hashes, composed spec, and member source", async () => {
   const { work, read, admit, sent } = await setup();
   const revision = await authorFamilies(work);
   const capture = (await read("families.plan")) as { id: string };
@@ -345,9 +353,10 @@ test("families apply sends exactly the reviewed hashes and the reviewed profile 
     revision,
   );
   expect(row.state, JSON.stringify((row as { error?: string }).error)).toBe("succeeded");
-  const native = sent.find((s) => s.key === "familyfoundry.apply")!;
+  const native = sent.find((s) => s.key === "families.apply")!;
   expect(native.input.expectedPlanHashes).toEqual({ "1": "h1", "2": "h2" });
-  expect(native.input.patchJson).toBe(profileBytes);
+  expect(native.input.spec).toBe(composed);
+  expect(native.input.source).toMatchObject(member("p.json"));
 });
 
 test("an exclusion written while the native call runs survives, because Work is never rewritten", async () => {
@@ -382,7 +391,7 @@ test("the same action id joins the original attempt instead of minting a second 
   const first = await admit("families.apply", input, revision, "once");
   const replay = await admit("families.apply", input, revision, "once");
   expect(replay.id).toBe(first.id);
-  expect(sent.filter((s) => s.key === "familyfoundry.apply")).toHaveLength(1);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
 });
 
 test("an unknown native outcome never re-mints the effect under the same id", async () => {
@@ -394,7 +403,7 @@ test("an unknown native outcome never re-mints the effect under the same id", as
   await admit("families.apply", input, revision, "uncertain");
   unknown(false);
   const again = await admit("families.apply", input, revision, "uncertain");
-  expect(sent.filter((s) => s.key === "familyfoundry.apply")).toHaveLength(1);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
   expect(JSON.stringify(again)).toContain("unknown");
 });
 
@@ -407,7 +416,7 @@ test("two documents keep independent authored scopes and independent readings", 
     "families",
     "human",
     [
-      { path: ["profilePath"], value: "annex.json" },
+      { path: ["spec"], value: member("annex.json") },
       {
         path: ["scope"],
         value: { categoryNames: [], familyNames: ["Grille"], placementScope: "PlacedOnly" },
@@ -429,10 +438,10 @@ test("the plan reading narrows to the authored family names and refuses without 
     scope,
     "families",
     "human",
-    [{ path: ["profilePath"], value: "p.json" }],
+    [{ path: ["spec"], value: member("p.json") }],
     0,
   );
-  await expect(read("families.plan")).rejects.toThrow(/profile and a scope/);
+  await expect(read("families.plan")).rejects.toThrow(/spec member and a scope/);
   await authorFamilies(work, seeded.revision!);
   const capture = (await read("families.plan")) as { reading: { value: unknown } };
   expect(familiesPlanReadingSchema.parse(capture.reading.value).entries).toHaveLength(1);
@@ -535,4 +544,23 @@ test("the evaluation is the host readback, stamped to the exact draft it evaluat
 test("neither route advertises a command a server would have to refuse", () => {
   expect(familiesRouteState.commands).toEqual({});
   expect(parameterLinksRouteState.commands).toEqual({});
+});
+
+test("families.capture writes one new member per family into the route's pod", async () => {
+  const { admit, podsRoot } = await setup();
+  const row = await admit(
+    "families.capture",
+    { pod: "global", familyIds: [1, 2] },
+    0,
+    "capture",
+    "agent",
+  );
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  const members = (row as { result: { members: { pod: string; path: string; sha256: string }[] } })
+    .result.members;
+  expect(members.map((m) => m.path)).toEqual([
+    expect.stringMatching(/^settings\/families\/Box-.*\.json$/),
+    expect.stringMatching(/^settings\/families\/Pipe-Fitting-.*\.json$/),
+  ]);
+  expect(await readFile(join(podsRoot, "Global", members[1]!.path), "utf8")).toBe('{"pipe":1}');
 });

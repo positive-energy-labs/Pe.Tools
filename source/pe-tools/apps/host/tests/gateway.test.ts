@@ -215,7 +215,7 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
       (
         await web.call(
           "/call",
-          { key: "settings.document.save", request: {} },
+          { key: "pod.member.write", request: {} },
           { "x-pe-action-id": "bypass", "x-pe-action-actor": "agent" },
         )
       ).status,
@@ -743,7 +743,6 @@ test("source seal captures the positive pod set and exact dependency bytes once"
   const workspaces = join(productUserContentRootPath(), "Pods");
   const root = join(workspaces, "sample");
   const dependency = join(workspaces, "library");
-  const hash = "a".repeat(64);
   try {
     await mkdir(join(root, "src"), { recursive: true });
     await mkdir(join(root, "settings"), { recursive: true });
@@ -756,7 +755,6 @@ test("source seal captures the positive pod set and exact dependency bytes once"
         name: "Sample",
         version: "1.0.0",
         entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
-        requires: [{ id: "library", releaseHash: hash }],
       }),
     );
     await writeFile(join(root, "src/Main.cs"), "first");
@@ -781,11 +779,8 @@ test("source seal captures the positive pod set and exact dependency bytes once"
       "settings/main.settings.json",
       "src/Main.cs",
     ]);
-    expect(sealed?.sourceBundle.dependencies).toHaveLength(1);
-    expect(sealed?.sourceBundle.dependencies[0]).toMatchObject({
-      id: "library",
-      releaseHash: hash,
-    });
+    // Foreign fragments resolve natively by installed id; the seal carries only this pod.
+    expect(sealed?.sourceBundle.dependencies).toEqual([]);
     expect(
       Buffer.from(
         sealed!.sourceBundle.files.find((file) => file.path === "src/Main.cs")!.bytesBase64,
@@ -799,7 +794,7 @@ test("source seal captures the positive pod set and exact dependency bytes once"
   }
 });
 
-test("source seal carries portable release evidence without installed author dependencies", async () => {
+test("source seal carries only authored pod bytes, never release or composed trees", async () => {
   const directory = await mkdtemp(join(tmpdir(), "script-release-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
@@ -817,7 +812,6 @@ test("source seal carries portable release evidence without installed author dep
         name: "Sample",
         version: "1.0.0",
         entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
-        requires: [{ id: "missing-library", releaseHash: "a".repeat(64) }],
       }),
     );
     await writeFile(join(root, "src/Main.cs"), "source");
@@ -857,11 +851,7 @@ test("source seal carries portable release evidence without installed author dep
 
     expect(sealed?.sourceBundle.dependencies).toEqual([]);
     expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
-      "composed/main.settings.json",
-      "inspection/index.json",
-      "inspection/library/settings/base.settings.json",
       "pod.json",
-      "release.json",
       "src/Main.cs",
     ]);
   } finally {

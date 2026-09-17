@@ -12,6 +12,7 @@ import {
   demoSeedSchema,
   exportSeed,
   importSeed,
+  memberWork,
   settingsRouteState,
   takeoffsRouteState,
   familiesRouteState,
@@ -106,33 +107,25 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         : seed.route === "families" || seed.route === "parameter-links"
           ? []
           : seed.files;
-    const files = originalFiles.map((file) => ({
-      ...file,
-      documentId: {
-        moduleKey: file.documentId.moduleKey,
-        rootKey: file.documentId.rootKey,
-        relativePath: file.documentId.relativePath,
-      },
-    }));
-    for (const file of files) {
-      const result = await settings.saveSettings({
-        documentId: file.documentId,
-        mode: "file",
-        rawContent: file.rawContent,
-        expected: { kind: "missing" },
+    // Seed pod ids are citations; every member lands in this instance's own pod.
+    const local = (member: { path: string }) => ({ pod: id, path: member.path });
+    const files = originalFiles.map((file) => ({ ...file, member: local(file.member) }));
+    // The families profile is supplied JSON; it becomes the member the authored Work names.
+    if (seed.route === "families" && seed.work.candidate.spec)
+      files.push({
+        member: local(seed.work.candidate.spec),
+        rawContent: JSON.stringify(seed.readings.profile),
       });
-      if (result.kind !== "written") throw Error("Demo file materialization conflicted");
-    }
+    await settings.ensurePod(id);
+    for (const file of files)
+      await settings.writeMember({ ...file.member, content: file.rawContent });
     const opened =
       seed.route === "family"
-        ? await settings.openSettings({
-            documentId: files[0]!.documentId,
-            mode: "file",
-            includeComposedContent: true,
-          })
+        ? { ...(await settings.readMember(files[0]!.member)), member: files[0]!.member }
         : null;
+    const openedPath = opened ? await settings.memberPath(opened.member) : null;
     const scope: WorkKey = opened
-      ? { route: "settings", target: null, work: opened.metadata.workspaceId }
+      ? { route: "settings", target: null, work: memberWork(opened.member) }
       : { route: seed.route, target: at };
     const route =
       seed.route === "family"
@@ -145,13 +138,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         ? {
             ...seed.work.candidate,
             basis: {
-              documentId: files[0]!.documentId,
-              path: opened!.metadata.documentId.stableId!,
-              rawContent: opened!.rawContent,
-              versionToken: opened!.metadata.versionToken!.value,
+              member: opened!.member,
+              rawContent: opened!.content,
+              sha256: opened!.sha256,
             },
           }
-        : seed.work.candidate;
+        : seed.route === "families" && seed.work.candidate.spec
+          ? { ...seed.work.candidate, spec: local(seed.work.candidate.spec) }
+          : seed.work.candidate;
     const initial = await work.apply(
       scope,
       route,
@@ -160,8 +154,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       0,
     );
     if (!initial.ok) throw Error(initial.error);
-    if (seed.route === "family" && seed.scenario === "token-conflict")
-      await writeFile(opened!.metadata.documentId.stableId!, `${opened!.rawContent}\n`);
+    // A stale plan and a token conflict are the same fact now: the member changed after review.
+    if (
+      seed.route === "family" &&
+      (seed.scenario === "token-conflict" || seed.scenario === "stale-plan")
+    )
+      await writeFile(openedPath!, `${opened!.content}\n`);
     let snapshot = seed.route === "takeoffs" ? structuredClone(seed.readings.snapshot) : null;
     const localSnapshot = (value: TakeoffSnapshot): TakeoffSnapshot => ({
       ...structuredClone(value),
@@ -179,8 +177,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       },
     });
     let r10Failed = false;
-    let nativeModel = opened?.composedContent ?? "{}";
-    let simulatedPlan: { hash: string; patchJson: string } | undefined;
+    let nativeModel = opened?.content ?? "{}";
+    let simulatedPlan: { hash: string; spec: string } | undefined;
     let retired = false;
     let disposal: Promise<void> | undefined;
     const pending = new Set<Promise<Response>>();
@@ -264,24 +262,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 if (write) room.r10 = write.link;
               }
               value = { simulated: true, writes };
-            } else if (key === "settings.document.open" && seed.route === "families") {
-              const composed = JSON.stringify(seed.readings.profile);
-              value = {
-                rawContent: composed,
-                composedContent: composed,
-                validation: { isValid: true, issues: [] },
-                metadata: {
-                  versionToken: { value: "demo-v1" },
-                  documentId: { stableId: "demo-profile.json" },
-                },
-                simulated: true,
-              };
-            } else if (key === "familyfoundry.plan" && seed.route === "families") {
-              const patchJson = (input as { patchJson: string }).patchJson;
-              const planned = {
-                hash: createHash("sha256").update(patchJson).digest("hex"),
-                patchJson,
-              };
+            } else if (key === "settings.schema") {
+              value = { schemaJson: null, simulated: true };
+            } else if (key === "families.plan" && seed.route === "families") {
+              const spec = (input as { spec: string }).spec;
+              const planned = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
@@ -305,7 +290,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 })),
                 simulated: true,
               };
-            } else if (key === "familyfoundry.apply" && seed.route === "families") {
+            } else if (key === "families.apply" && seed.route === "families") {
               const expected = (input as { expectedPlanHashes: Record<string, string> })
                 .expectedPlanHashes;
               if (!simulatedPlan || !Object.keys(expected).length)
@@ -364,75 +349,34 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                     : 0,
                 simulated: true,
               };
-            } else if (key === "revit.detail.family-model" && seed.route === "family") {
+            } else if (key === "family.capture" && seed.route === "family") {
+              value = { spec: nativeModel, simulated: true };
+            } else if (key === "family.plan" && seed.route === "family") {
+              if (seed.scenario === "plan-refusal")
+                throw unsupported("Supplied simulated native refusal");
+              const spec = (input as { spec: string }).spec;
+              simulatedPlan = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               value = {
-                reading: {
-                  at,
-                  version: createHash("sha256").update(nativeModel).digest("hex"),
-                  observedAt: new Date().toISOString(),
-                },
-                familyName: "Simulated demo family",
-                modelJson: nativeModel,
-                unmodeledCount: 0,
-                coverage: { simulation: "Supplied demo model only; no native capture" },
-                issues: [],
+                familyId: 1,
+                planHash: simulatedPlan.hash,
+                changes: [],
                 simulated: true,
               };
-            } else if (key === "familyfoundry.plan" && seed.route === "family") {
-              const patchJson = (input as { patchJson: string }).patchJson;
-              simulatedPlan = {
-                hash: createHash("sha256").update(patchJson).digest("hex"),
-                patchJson,
-              };
-              value = {
-                diagnostics: [],
-                families: [
-                  {
-                    familyId: 1,
-                    familyName: "Simulated demo family",
-                    planHash: simulatedPlan.hash,
-                    changes: [],
-                    runEffects: ["Simulated outcome only"],
-                    warnings: [],
-                    refusals:
-                      seed.scenario === "plan-refusal"
-                        ? [
-                            {
-                              code: "DemoRefusal",
-                              path: "/",
-                              message: "Supplied simulated native refusal",
-                            },
-                          ]
-                        : [],
-                  },
-                ],
-                simulated: true,
-              };
-            } else if (key === "familyfoundry.apply" && seed.route === "family") {
-              if (
-                !simulatedPlan ||
-                (input as { expectedPlanHashes: Record<string, string> }).expectedPlanHashes[
-                  "1"
-                ] !== simulatedPlan.hash
-              )
+            } else if (key === "family.apply" && seed.route === "family") {
+              if (!simulatedPlan || (input as { planHash: string }).planHash !== simulatedPlan.hash)
                 throw unsupported("simulated native plan changed");
-              nativeModel = JSON.stringify(JSON.parse(simulatedPlan.patchJson).patch);
+              nativeModel = simulatedPlan.spec;
               value = {
-                diagnostics: [],
-                receipts: [
-                  {
-                    familyId: 1,
-                    familyName: "Simulated demo family",
-                    success: true,
-                    converged: true,
-                    planHash: simulatedPlan.hash,
-                    residue: [],
-                    errors: [],
-                    artifactDirectory: null,
-                  },
-                ],
+                runId: "simulated",
+                podId: (input as { source: { pod: string } }).source.pod,
+                memberPath: (input as { source: { path: string } }).source.path,
+                memberSha256: (input as { source: { sha256: string } }).source.sha256,
+                operation: key,
+                planHash: simulatedPlan.hash,
+                outcome: "Succeeded",
+                outputs: [],
                 simulated: true,
-                proof: "No Revit mutation or RFA output",
+                proof: "No Revit mutation, RFA output, or run receipt",
               };
             } else if (key === "revit.apply.family-model" && seed.route === "family") {
               if (seed.scenario === "native-unknown")
@@ -467,34 +411,15 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         bridge,
         { workspace: work },
       );
-    if (seed.route === "family" && seed.readings.preparePlan) {
-      await readFamily(
-        {
-          key: "family.plan",
-          scope,
-          target,
-          input: {
-            documentId: files[0]!.documentId,
-            workspaceId: scope.work!,
-            fileVersion: opened!.metadata.versionToken!.value,
-          },
-        },
-        captures,
-        bridge,
-        settings,
-      );
-      if (seed.scenario === "stale-plan")
-        await writeFile(opened!.metadata.documentId.stableId!, `${opened!.rawContent}\n`);
-    }
     const dispatch: CallRouteDispatch = (key, request) =>
       Effect.tryPromise({
         try: async () => {
-          if (key === "settings.tree")
-            return settings.settingsTree(request as Parameters<typeof settings.settingsTree>[0]);
-          if (key === "settings.document.open")
-            return settings.openSettings(request as Parameters<typeof settings.openSettings>[0]);
-          if (key === "settings.document.save")
-            throw unsupported("direct save; use settings.write");
+          if (key === "pod.list") return settings.listPods();
+          if (key === "pod.member.read")
+            return settings.readMember(request as Parameters<typeof settings.readMember>[0]);
+          if (key === "pod.member.compose")
+            return settings.composeMember(request as Parameters<typeof settings.composeMember>[0]);
+          if (key === "pod.member.write") throw unsupported("direct write; use settings.write");
           if (key === "bridge.sessions.list")
             return { sessions: sessions.map((s) => ({ ...s, ...s.state })) };
           if (key === "rhvac.list") {
@@ -551,12 +476,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           fileVersion: rhvac.fileVersion,
           openFile: rhvac.openFile,
           syncFile: rhvac.syncFile,
-          saveSettings: async (request) => {
-            const result = await settings.saveSettings(request);
+          // ponytail: the publication-refusal scenario races Work after the first member write.
+          runPods: async (effect) => {
+            const result = await settings.runPods(effect);
             if (
               seed.route === "family" &&
               seed.scenario === "publication-refusal" &&
-              result.kind === "written"
+              isMemberWrite(result)
             ) {
               const current = await work.read(scope, "settings");
               await work.apply(
@@ -635,7 +561,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       at,
       scope,
       route,
-      documentId: files[0]?.documentId,
+      member: files[0]?.member,
       simulated: true,
     };
     releaseHandler = () => web.dispose();
@@ -690,32 +616,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         if (!current) return json({ kind: "incomplete", missing: ["Work owner"] });
         const exportedFiles = [];
         const missing: string[] = [];
-        const materializedPaths = new Set(
-          await Promise.all(
-            files.map(async (file) =>
-              (await settings.settingsAddress(file.documentId)).path.toLowerCase(),
-            ),
-          ),
-        );
-        for (const file of files) {
+        for (const file of originalFiles) {
           try {
-            const reading = await settings.openSettings({
-              documentId: file.documentId,
-              mode: "file",
-              includeComposedContent: true,
-            });
-            exportedFiles.push({ documentId: file.documentId, rawContent: reading.rawContent });
-            for (const dependency of reading.dependencies)
-              if (
-                !materializedPaths.has(
-                  (await settings.settingsAddress(dependency.documentId)).path.toLowerCase(),
-                )
-              )
-                missing.push(`file dependency ${dependency.directivePath}`);
-            if (reading.validation.issues.some((issue) => issue.code === "CompositionError"))
-              missing.push(`composition ${file.documentId.relativePath}`);
+            const reading = await settings.readMember(local(file.member));
+            exportedFiles.push({ member: file.member, rawContent: reading.content });
           } catch {
-            missing.push(`file ${file.documentId.relativePath}`);
+            missing.push(`member ${file.member.pod}/${file.member.path}`);
           }
         }
         if (missing.length) return json({ kind: "incomplete", missing });
@@ -769,12 +675,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           );
       }
       if (url.pathname === "/family/readings" && request.method === "POST") {
-        const body = (await request.clone().json()) as { key: string; target?: typeof target };
-        if (
-          !["family.capture", "family.plan", "family.saved"].includes(body.key) ||
-          (body.key !== "family.saved" &&
-            (body.target?.session !== id || body.target?.openId !== target.openId))
-        )
+        const body = (await request.clone().json()) as { key: string };
+        if (body.key !== "family.saved")
           return json({ error: "Unsupported or nonlocal Family reading" }, 409);
       }
       const response = await web.handler(request, Context.empty() as never);
@@ -815,6 +717,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     throw error;
   }
 }
+
+const isMemberWrite = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  "pod" in value &&
+  "sha256" in value &&
+  !("content" in value);
 
 /** Explicit routes are more specific than the production /pe/* tenant; no second listener. */
 export function demoRoutes(parent = resolve(".artifacts/tmp/demos")) {

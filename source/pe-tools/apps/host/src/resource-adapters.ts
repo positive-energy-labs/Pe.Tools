@@ -20,13 +20,13 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
   "ops-catalog": (r: { session?: string }) => [
     `/ops${r.session ? `?session=${encodeURIComponent(r.session)}` : ""}`,
   ],
-  "schedule-grid-reading": (r: { subject: string; id?: string; target?: unknown }) => [
-    "/schedule-grid/readings",
+  "schedule-reading": (r: { subject: string; id?: string; target?: unknown }) => [
+    "/schedules/readings",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        key: `schedule-grid.${r.subject}`,
+        key: `schedule.grid.${r.subject}`,
         input:
           r.subject === "work" ? { workspaceId: r.id } : r.subject === "saved" ? { id: r.id } : {},
         target: r.target,
@@ -99,7 +99,7 @@ export function hostResourceObserver(
       case "host-status":
       case "capabilities":
       case "ops-catalog":
-      case "schedule-grid-reading":
+      case "schedule-reading":
       case "takeoff-saved":
       case "rhvac-file-version":
         return oneShot(

@@ -193,7 +193,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
   f.lose();
   expect(
     await runSemanticAction(
-      "schedule-grid.apply",
+      "schedule.grid.push",
       {},
       f.b,
       original.bases,
@@ -206,7 +206,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
   await f.restart();
   expect(
     await runSemanticAction(
-      "schedule-grid.apply",
+      "schedule.grid.push",
       {},
       f.b,
       original.bases,
@@ -333,7 +333,7 @@ test("retired Family Types has no route or capabilities; current Schedule admiss
     skills: [],
   });
   expect(rows.some((r) => r.key.includes("family-types"))).toBe(false);
-  expect(rows.find((r) => r.key === "workflow:schedule-grid.apply")).toMatchObject({
+  expect(rows.find((r) => r.key === "workflow:schedule.grid.push")).toMatchObject({
     actor: "human",
   });
   const f = await setup();

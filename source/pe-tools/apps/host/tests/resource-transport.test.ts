@@ -380,7 +380,7 @@ test("Family capture publication reaches the actual browser index and releases s
       key,
       capturedAt: "2026-09-09T23:00:00.000Z",
       provenance: { kind: "file" },
-      reading: { kind: "capture", value: { evidence: "retained" } },
+      reading: { kind: "spec", value: { evidence: "retained" } },
     });
     await vi.waitFor(() => expect(snapshots(updates).at(-1)?.value).toEqual([capture]));
     release();
@@ -390,7 +390,7 @@ test("Family capture publication reaches the actual browser index and releases s
       key,
       capturedAt: "2026-09-09T23:00:01.000Z",
       provenance: { kind: "file" },
-      reading: { kind: "capture", value: { evidence: "second" } },
+      reading: { kind: "spec", value: { evidence: "second" } },
     });
     expect(read).toHaveBeenCalledTimes(before);
     expect(await o.captures.family(capture.id)).toEqual(capture);

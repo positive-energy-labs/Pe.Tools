@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   address,
+  scheduleCatalogSchema,
   scheduleGridRouteState,
+  scheduleReadingSchema,
+  type DocumentRef,
+  type ScheduleReadKey,
   type ScheduleReading,
   type ActionAdmission,
   type RouteStatePatch,
@@ -14,7 +18,6 @@ import {
 import { createPeaRuntime } from "../../../packages/runtime/src/pea-runtime.ts";
 import { buildAgentControllerApp } from "../../../packages/runtime/src/agent-controller-web.ts";
 import type { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
-import { readScheduleCapture } from "../../../packages/mcps/src/shared/schedule-client.ts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -23,6 +26,24 @@ import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
 import { detailResponse } from "./schedule-fixture.ts";
+
+/** The host's schedule reading endpoint, read the way a route client reads it. */
+async function readScheduleCapture(
+  key: ScheduleReadKey,
+  input: Record<string, unknown>,
+  target?: DocumentRef,
+) {
+  const response = await fetch("/schedules/readings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key, input, target }),
+  });
+  const value = await response.json();
+  if (!response.ok) throw Error((value as { error?: string }).error ?? `${response.status}`);
+  return key === "schedule.grid.catalog"
+    ? scheduleCatalogSchema.parse(value)
+    : scheduleReadingSchema.parse(value);
+}
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -198,7 +219,7 @@ export async function setup() {
   });
   const read = async (target = b) =>
     (await readScheduleCapture(
-      "schedule-grid.snapshot",
+      "schedule.grid.snapshot",
       { scheduleId: detail.entries[0].scheduleId },
       target,
     )) as ScheduleReading;
@@ -231,7 +252,7 @@ export async function setup() {
   const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
     id,
     kind: "workflow",
-    key: "schedule-grid.apply",
+    key: "schedule.grid.push",
     actor: "human",
     destination: { kind: "document", ref: b },
     input: {},

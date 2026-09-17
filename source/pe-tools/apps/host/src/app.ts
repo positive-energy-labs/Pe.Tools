@@ -33,18 +33,14 @@ const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
 // Live settings authoring schema, straight from the connected session. This is
 // the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
 // Never persisted: value-domain samples inside are derived from the open document.
-const settingsSchemaRoute = HttpRouter.add(
-  "GET",
-  "/schemas/settings/:moduleKey/:rootKey",
+const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const params = yield* HttpRouter.params;
-    const moduleKey = decodeURIComponent(params.moduleKey ?? "");
-    const rootKey = decodeURIComponent(params.rootKey ?? "").replace(/\.json$/i, "");
+    const schemaUrl = new URL(req.url, `http://${req.headers.host ?? "127.0.0.1"}`).href;
     const result = yield* Effect.result(
       bridge.invoke(
         "settings.schema",
-        { moduleKey, rootKey },
+        { schemaUrl },
         (yield* bridge.snapshot(undefined)).sessionId,
       ),
     );
@@ -55,10 +51,7 @@ const settingsSchemaRoute = HttpRouter.add(
       );
     const schemaJson = (result.success.value as { schemaJson?: string } | null)?.schemaJson;
     if (!schemaJson)
-      return Response.jsonUnsafe(
-        { error: `No schema for ${moduleKey}/${rootKey}` },
-        { status: 404 },
-      );
+      return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     return Response.text(schemaJson, {
       headers: { "content-type": "application/json", "cache-control": "no-cache" },
     });

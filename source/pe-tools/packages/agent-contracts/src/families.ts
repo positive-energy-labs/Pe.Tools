@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { observationSchema } from "./reading.ts";
+import { podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -70,7 +71,7 @@ export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
  * only what a human or pea typed.
  */
 const familiesDocumentSchema = z.object({
-  profilePath: z.string().nullable().default(null),
+  spec: podMemberSchema.nullable().default(null),
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
   executionOptions: familyExecutionOptionsSchema.optional(),
@@ -83,7 +84,7 @@ export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
  */
 export const familiesBasis = (work: FamiliesRouteDocument): string =>
   canonicalRouteInput({
-    profilePath: work.profilePath,
+    spec: work.spec,
     scope: work.scope,
     executionOptions: work.executionOptions ?? null,
   });
@@ -93,7 +94,7 @@ export const familiesPlanReadingSchema = z.object({
   basis: z.string().min(1),
   workRevision: z.number().int().nonnegative(),
   reading: observationSchema,
-  fileVersion: z.string().nullable(),
+  source: podMemberSourceSchema,
   composedDigest: z.string().min(1),
   entries: z.array(ffPlanEntrySchema),
   executionOptions: familyExecutionOptionsSchema.optional(),
@@ -119,9 +120,9 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: author a profile and scope, read a native plan, exclude, apply.",
+  description: "Family Foundry: pick a spec member and scope, read a native plan, exclude, apply.",
   schema: familiesDocumentSchema,
-  agentWriteMask: [["profilePath"], ["scope"], ["excludedIds"], ["executionOptions"]],
+  agentWriteMask: [["spec"], ["scope"], ["excludedIds"], ["executionOptions"]],
   // Reading a plan is `family.plan`-style host read; applying it is the `families.apply`
   // semantic action. Neither is a route command, so neither can write into authored Work.
   commands: {},

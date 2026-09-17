@@ -17,7 +17,13 @@ import {
   readFamily,
   type FamilyActionDependencies,
 } from "./family-actions.ts";
-import { familyActions, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
+import {
+  familyActions,
+  actionAdmissionSchema,
+  memberWork,
+  scheduleActions,
+  workKeySchema,
+} from "@pe/agent-contracts";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
 import { takeoffActions } from "@pe/agent-contracts";
 import { Effect, Layer, Schema } from "effect";
@@ -40,18 +46,13 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
-  discoverSettingsTree,
   getBridgeSessionSummary,
   getHostStatus,
-  getSettingsWorkspaces,
   listBridgeSessions,
-  openSettingsDocument,
-  openSettingsDocumentWithModule,
   openShellPath,
-  saveSettingsDocument,
   tailLogs,
-  validateSettingsDocument,
 } from "./local-ops.ts";
+import { composeMember, listPods, readMember, writeMember, type PodContext } from "./settings.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
   rhvacAssemblies,
@@ -116,7 +117,7 @@ export function makeCallRoute(
   const owner = () => (operations ??= hostActionJournal());
   const admit = (raw: unknown, bridge: RevitBridge["Service"], resume = false) => {
     const input = actionAdmissionSchema.parse(raw);
-    return input.kind === "workflow" && input.key === "schedule-grid.apply"
+    return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
       ? admitScheduleAction(input, owner(), observations(), bridge, actionDeps, resume)
       : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
         ? admitInstancesAction(input, owner(), actionDeps, resume)
@@ -272,13 +273,7 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(
-              key,
-              request,
-              bridgeSessionId,
-              bridge,
-              openDocumentId ?? undefined,
-            ),
+            value: yield* dispatch(key, request, bridgeSessionId, bridge),
             target: null,
           }
         : key === "takeoffs.snapshot"
@@ -473,7 +468,7 @@ export function makeCallRoute(
             const workScope = actionBasesSchema.safeParse(row.bases).data?.work?.key;
             if (scope.kind === "schedule-grid") {
               if (
-                row.key === "schedule-grid.apply" &&
+                row.key === "schedule.grid.push" &&
                 // The Work key names its workspace as `work` since fold-1; the filter still speaks
                 // the domain word `workspaceId`.
                 workScope?.work === scope.workspaceId
@@ -489,30 +484,21 @@ export function makeCallRoute(
                 selected.push(row);
               continue;
             }
-            if (
-              row.key === "settings.write" &&
-              row.destination.kind === "host" &&
-              row.request.workspaceId === scope.workspaceId
-            )
-              selected.push(row);
+            const member = (row.request.member ?? row.request.source) as
+              | { pod: string; path: string }
+              | undefined;
+            const work = member ? memberWork(member) : undefined;
+            if (row.key === "settings.write" && work === scope.workspaceId) selected.push(row);
             else if (
               row.destination.kind === "document" &&
               (scope.kind === "family-file" ||
                 (scope.kind === "family" &&
                   row.destination.ref.session === scope.target.session &&
-                  row.destination.ref.openId === scope.target.openId))
-            ) {
-              if (row.key === "family.build" && row.request.workspaceId === scope.workspaceId)
-                selected.push(row);
-              if (row.key === "family.apply" && typeof row.request.planId === "string") {
-                const plan = await observations().family(row.request.planId);
-                if (
-                  plan.reading.kind === "plan" &&
-                  plan.reading.value.workspaceId === scope.workspaceId
-                )
-                  selected.push(row);
-              }
-            }
+                  row.destination.ref.openId === scope.target.openId)) &&
+              (row.key === "family.build" || row.key === "family.apply") &&
+              work === scope.workspaceId
+            )
+              selected.push(row);
           }
           rows = selected;
         }
@@ -555,7 +541,7 @@ export function makeCallRoute(
             if (choice === "recover") {
               const original = (await owner().list(undefined, body.id))[0];
               return Response.jsonUnsafe(
-                await (original?.kind === "workflow" && original.key === "schedule-grid.apply"
+                await (original?.kind === "workflow" && Object.hasOwn(scheduleActions, original.key)
                   ? recoverScheduleAction(body.id, owner(), actionDeps)
                   : original?.kind === "workflow" && Object.hasOwn(instancesActions, original.key)
                     ? recoverInstancesAction(body.id, owner(), actionDeps)
@@ -635,7 +621,7 @@ export function makeCallRoute(
       ),
     ),
   );
-  const scheduleReadings = HttpRouter.add("POST", "/schedule-grid/readings", (req) =>
+  const scheduleReadings = HttpRouter.add("POST", "/schedules/readings", (req) =>
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
@@ -763,7 +749,6 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   bridgeSessionId: string | undefined,
   bridge: RevitBridge["Service"],
-  openDocumentId?: string,
 ) {
   switch (key) {
     case "takeoffs.saved":
@@ -792,54 +777,17 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* tailLogs(yield* decodeRequest(key, request));
     case "host.shell.open":
       return yield* openShellPath(yield* decodeRequest(key, request));
-    case "settings.workspaces": {
-      const bridgeView = yield* bridge.snapshot(bridgeSessionId);
-      return yield* getSettingsWorkspaces({
-        bridge: bridgeView,
-        invokeBridge: (operationKey, payload) =>
-          bridge
-            .invoke(operationKey, payload, bridgeSessionId, openDocumentId)
-            .pipe(Effect.map((result) => result.value)),
-      });
-    }
-    case "settings.tree":
-      return yield* discoverSettingsTree(yield* decodeRequest(key, request), {
-        bridgeSessionId,
-        invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge
-            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
-            .pipe(Effect.map((result) => result.value)),
-      });
-    case "settings.document.open":
-      return yield* openSettingsDocument(yield* decodeRequest(key, request), {
-        bridgeSessionId,
-        invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge
-            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
-            .pipe(Effect.map((result) => result.value)),
-      });
-    case "settings.document.open-with-module": {
-      const decoded = yield* decodeRequest(key, request);
-      return yield* openSettingsDocumentWithModule(decoded.request, decoded.module, {
-        schemaJson: decoded.schemaJson,
-      });
-    }
-    case "settings.document.validate":
-      return yield* validateSettingsDocument(yield* decodeRequest(key, request), {
-        bridgeSessionId,
-        invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge
-            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
-            .pipe(Effect.map((result) => result.value)),
-      });
-    case "settings.document.save":
-      return yield* saveSettingsDocument(yield* decodeRequest(key, request), {
-        bridgeSessionId,
-        invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
-          bridge
-            .invoke(operationKey, payload, scopedBridgeSessionId, openDocumentId)
-            .pipe(Effect.map((result) => result.value)),
-      });
+    case "pod.list":
+      return yield* listPods();
+    case "pod.member.read":
+      return yield* readMember(yield* decodeRequest(key, request));
+    case "pod.member.write":
+      return yield* writeMember(yield* decodeRequest(key, request));
+    case "pod.member.compose":
+      return yield* composeMember(
+        yield* decodeRequest(key, request),
+        yield* podContext(bridge, bridgeSessionId),
+      );
     case "rhvac.open":
       return yield* rhvacOpen(yield* decodeRequest(key, request));
     case "rhvac.assemblies":
@@ -861,6 +809,19 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
     case "aps.auth.token":
       return yield* apsAuthToken(yield* decodeRequest(key, request));
   }
+});
+
+/** A session-less host composes schema-only; it never pretends a bridge is there. */
+const podContext = Effect.fnUntraced(function* (
+  bridge: RevitBridge["Service"],
+  bridgeSessionId: string | undefined,
+) {
+  const session = yield* bridge.snapshot(bridgeSessionId);
+  if (!session.connected || !session.sessionId) return {} satisfies PodContext;
+  return {
+    invokeBridge: (key, payload) =>
+      bridge.invoke(key, payload, session.sessionId).pipe(Effect.map((result) => result.value)),
+  } satisfies PodContext;
 });
 
 type RequestSchemaOf<K extends TsOnlyOperationKey> = (typeof tsOnlyOperationSchemas)[K] extends {

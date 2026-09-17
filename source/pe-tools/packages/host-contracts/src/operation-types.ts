@@ -5,6 +5,16 @@ import {
   type HostOperationDefinition,
 } from "./contracts/index.js";
 import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
+import {
+  podListResponseSchema,
+  podMemberComposeRequestSchema,
+  podMemberComposeResponseSchema,
+  podMemberReadResponseSchema,
+  podMemberSchema,
+  podMemberWriteRequestSchema,
+  podMemberWriteResponseSchema,
+} from "./crusade-shim.js";
+export * from "./crusade-shim.js";
 import { Schema } from "effect";
 
 /** Bridge op keys, sourced from the checked-in live-session typegen output. */
@@ -123,262 +133,6 @@ export const hostShellOpenDataSchema = Schema.Struct({
   path: Schema.String,
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
-
-export const SettingsFileKind = {
-  Profile: "Profile",
-  Fragment: "Fragment",
-  Schema: "Schema",
-  Other: "Other",
-} as const;
-
-export type SettingsFileKind = (typeof SettingsFileKind)[keyof typeof SettingsFileKind];
-
-export const settingsFileKindSchema = Schema.Literals(["Profile", "Fragment", "Schema", "Other"]);
-
-export const SettingsDirectiveScope = {
-  Local: "Local",
-  Global: "Global",
-} as const;
-
-export type SettingsDirectiveScope =
-  (typeof SettingsDirectiveScope)[keyof typeof SettingsDirectiveScope];
-
-export const settingsDirectiveScopeSchema = Schema.Literals(["Local", "Global"]);
-
-export const SettingsDocumentDependencyKind = {
-  Include: "Include",
-  Preset: "Preset",
-} as const;
-
-export type SettingsDocumentDependencyKind =
-  (typeof SettingsDocumentDependencyKind)[keyof typeof SettingsDocumentDependencyKind];
-
-export const settingsDocumentDependencyKindSchema = Schema.Literals(["Include", "Preset"]);
-
-export type SettingsDocumentId = Schema.Schema.Type<typeof settingsDocumentIdSchema>;
-
-export const settingsDocumentIdSchema = Schema.Struct({
-  moduleKey: Schema.String,
-  relativePath: Schema.String,
-  rootKey: Schema.String,
-  stableId: Schema.optional(Schema.String),
-});
-
-export type SettingsVersionToken = Schema.Schema.Type<typeof settingsVersionTokenSchema>;
-
-export const settingsVersionTokenSchema = Schema.Struct({
-  value: Schema.String,
-});
-
-export type SettingsDocumentMetadata = Schema.Schema.Type<typeof settingsDocumentMetadataSchema>;
-
-export const settingsDocumentMetadataSchema = Schema.Struct({
-  documentId: settingsDocumentIdSchema,
-  workspaceId: Schema.String,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.optional(Schema.NullOr(Schema.String)),
-  versionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
-});
-
-export type SettingsDocumentDependency = Schema.Schema.Type<
-  typeof settingsDocumentDependencySchema
->;
-
-export const settingsDocumentDependencySchema = Schema.Struct({
-  directivePath: Schema.String,
-  documentId: settingsDocumentIdSchema,
-  kind: settingsDocumentDependencyKindSchema,
-  scope: settingsDirectiveScopeSchema,
-});
-
-export type SettingsValidationIssue = Schema.Schema.Type<typeof settingsValidationIssueSchema>;
-
-export const settingsValidationIssueSchema = Schema.Struct({
-  code: Schema.String,
-  message: Schema.String,
-  path: Schema.String,
-  severity: Schema.String,
-  suggestion: Schema.optional(Schema.NullOr(Schema.String)),
-});
-
-export type SettingsValidationResult = Schema.Schema.Type<typeof settingsValidationResultSchema>;
-
-export const settingsValidationResultSchema = Schema.Struct({
-  isValid: Schema.Boolean,
-  issues: Schema.Array(settingsValidationIssueSchema),
-});
-
-export type SettingsDocumentSnapshot = Schema.Schema.Type<typeof settingsDocumentSnapshotSchema>;
-
-export const settingsDocumentSnapshotSchema = Schema.Struct({
-  capabilityHints: Schema.Record(Schema.String, Schema.String),
-  composedContent: Schema.optional(Schema.NullOr(Schema.String)),
-  dependencies: Schema.Array(settingsDocumentDependencySchema),
-  metadata: settingsDocumentMetadataSchema,
-  rawContent: Schema.String,
-  validation: settingsValidationResultSchema,
-});
-
-export type OpenSettingsDocumentRequest = Schema.Schema.Type<
-  typeof openSettingsDocumentRequestSchema
->;
-
-export const openSettingsDocumentRequestSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["file", "module"])),
-  workspaceId: Schema.optional(Schema.String),
-  documentId: settingsDocumentIdSchema,
-  includeComposedContent: Schema.optional(Schema.Boolean),
-});
-
-export type SaveSettingsDocumentRequest = Schema.Schema.Type<
-  typeof saveSettingsDocumentRequestSchema
->;
-
-export const saveSettingsDocumentRequestSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["file", "module"])),
-  workspaceId: Schema.optional(Schema.String),
-  documentId: settingsDocumentIdSchema,
-  expected: Schema.Union([
-    Schema.Struct({ kind: Schema.Literal("present"), version: Schema.String }),
-    Schema.Struct({ kind: Schema.Literal("missing") }),
-  ]),
-  rawContent: Schema.String,
-});
-
-export type ValidateSettingsDocumentRequest = Schema.Schema.Type<
-  typeof validateSettingsDocumentRequestSchema
->;
-
-export const validateSettingsDocumentRequestSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["file", "module"])),
-  documentId: settingsDocumentIdSchema,
-  rawContent: Schema.String,
-});
-
-export type SaveSettingsDocumentResult = Schema.Schema.Type<
-  typeof saveSettingsDocumentResultSchema
->;
-
-export const saveSettingsDocumentResultSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("written"), snapshot: settingsDocumentSnapshotSchema }),
-  Schema.Struct({
-    kind: Schema.Literal("conflict"),
-    current: Schema.NullOr(settingsDocumentSnapshotSchema),
-  }),
-]);
-
-export type SettingsRootDescriptor = Schema.Schema.Type<typeof settingsRootDescriptorSchema>;
-
-export const settingsRootDescriptorSchema = Schema.Struct({
-  displayName: Schema.String,
-  rootKey: Schema.String,
-});
-
-export type SettingsModuleWorkspaceDescriptor = Schema.Schema.Type<
-  typeof settingsModuleWorkspaceDescriptorSchema
->;
-
-export const settingsStorageOptionsSchema = Schema.Struct({
-  includeRoots: Schema.optional(Schema.Array(Schema.String)),
-  presetRoots: Schema.optional(Schema.Array(Schema.String)),
-});
-
-export const settingsModuleWorkspaceDescriptorSchema = Schema.Struct({
-  defaultRootKey: Schema.String,
-  moduleKey: Schema.String,
-  roots: Schema.Array(settingsRootDescriptorSchema),
-  storageOptions: Schema.optional(settingsStorageOptionsSchema),
-});
-
-export type OpenSettingsDocumentWithModuleRequest = Schema.Schema.Type<
-  typeof openSettingsDocumentWithModuleRequestSchema
->;
-
-export const openSettingsDocumentWithModuleRequestSchema = Schema.Struct({
-  module: settingsModuleWorkspaceDescriptorSchema,
-  request: openSettingsDocumentRequestSchema,
-  schemaJson: Schema.optional(Schema.String),
-});
-
-export type SettingsWorkspaceDescriptor = Schema.Schema.Type<
-  typeof settingsWorkspaceDescriptorSchema
->;
-
-export const settingsWorkspaceDescriptorSchema = Schema.Struct({
-  basePath: Schema.String,
-  displayName: Schema.String,
-  modules: Schema.Array(settingsModuleWorkspaceDescriptorSchema),
-  workspaceKey: Schema.String,
-});
-
-export type SettingsWorkspacesData = Schema.Schema.Type<typeof settingsWorkspacesDataSchema>;
-
-export const settingsWorkspacesDataSchema = Schema.Struct({
-  workspaces: Schema.Array(settingsWorkspaceDescriptorSchema),
-});
-
-export type SettingsFileEntry = Schema.Schema.Type<typeof settingsFileEntrySchema>;
-
-export const settingsFileEntrySchema = Schema.Struct({
-  baseName: Schema.String,
-  directory: Schema.optional(Schema.NullOr(Schema.String)),
-  isFragment: Schema.Boolean,
-  isSchema: Schema.Boolean,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.String,
-  name: Schema.String,
-  path: Schema.String,
-  relativePath: Schema.String,
-  relativePathWithoutExtension: Schema.String,
-});
-
-export type SettingsFileNode = Schema.Schema.Type<typeof settingsFileNodeSchema>;
-
-export const settingsFileNodeSchema = Schema.Struct({
-  id: Schema.String,
-  isFragment: Schema.Boolean,
-  isSchema: Schema.Boolean,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.String,
-  name: Schema.String,
-  relativePath: Schema.String,
-  relativePathWithoutExtension: Schema.String,
-});
-
-export type SettingsDirectoryNode = {
-  readonly directories: readonly SettingsDirectoryNode[];
-  readonly files: readonly SettingsFileNode[];
-  readonly name: string;
-  readonly relativePath: string;
-};
-
-export const settingsDirectoryNodeSchema: Schema.Codec<SettingsDirectoryNode> = Schema.suspend(() =>
-  Schema.Struct({
-    directories: Schema.Array(settingsDirectoryNodeSchema),
-    files: Schema.Array(settingsFileNodeSchema),
-    name: Schema.String,
-    relativePath: Schema.String,
-  }),
-);
-
-export type SettingsDiscoveryResult = Schema.Schema.Type<typeof settingsDiscoveryResultSchema>;
-
-export const settingsDiscoveryResultSchema = Schema.Struct({
-  files: Schema.Array(settingsFileEntrySchema),
-  root: settingsDirectoryNodeSchema,
-});
-
-export type SettingsTreeRequest = Schema.Schema.Type<typeof settingsTreeRequestSchema>;
-
-export const settingsTreeRequestSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["file", "module"])),
-  includeFragments: Schema.optional(Schema.Boolean),
-  includeSchemas: Schema.optional(Schema.Boolean),
-  moduleKey: Schema.optional(Schema.String),
-  recursive: Schema.optional(Schema.Boolean),
-  rootKey: Schema.optional(Schema.String),
-  subDirectory: Schema.optional(Schema.NullOr(Schema.String)),
-});
 
 export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
@@ -827,28 +581,20 @@ export const tsOnlyOperationSchemas = {
     request: rhvacListRequestSchema,
     response: rhvacListDataSchema,
   },
-  "settings.document.open": {
-    request: openSettingsDocumentRequestSchema,
-    response: settingsDocumentSnapshotSchema,
+  "pod.list": {
+    response: podListResponseSchema,
   },
-  "settings.document.open-with-module": {
-    request: openSettingsDocumentWithModuleRequestSchema,
-    response: settingsDocumentSnapshotSchema,
+  "pod.member.read": {
+    request: podMemberSchema,
+    response: podMemberReadResponseSchema,
   },
-  "settings.document.save": {
-    request: saveSettingsDocumentRequestSchema,
-    response: saveSettingsDocumentResultSchema,
+  "pod.member.write": {
+    request: podMemberWriteRequestSchema,
+    response: podMemberWriteResponseSchema,
   },
-  "settings.document.validate": {
-    request: validateSettingsDocumentRequestSchema,
-    response: settingsValidationResultSchema,
-  },
-  "settings.tree": {
-    request: settingsTreeRequestSchema,
-    response: settingsDiscoveryResultSchema,
-  },
-  "settings.workspaces": {
-    response: settingsWorkspacesDataSchema,
+  "pod.member.compose": {
+    request: podMemberComposeRequestSchema,
+    response: podMemberComposeResponseSchema,
   },
 } as const;
 
@@ -1015,85 +761,59 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
   },
   {
-    key: "settings.workspaces",
+    key: "pod.list",
     origin: "host-local",
-    displayName: "Settings Workspaces",
-    description: "Settings workspaces available to author, with their modules and roots.",
+    displayName: "Pods",
+    description:
+      "Every installed pod under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Diagnostics cover the manifest only; a bad member never hides its siblings.",
     intent: "Read",
-    visibility: "EscalationVisible",
+    visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
     requestTypeName: "NoRequest",
-    responseTypeName: "SettingsWorkspacesData",
-    searchTerms: ["settings", "workspaces", "modules", "roots"],
+    responseTypeName: "PodList",
+    searchTerms: ["pods", "members", "settings", "specs", "list", "browse"],
   },
   {
-    key: "settings.tree",
+    key: "pod.member.read",
     origin: "host-local",
-    displayName: "Settings Tree",
-    description:
-      "Browse the settings document tree (profiles, fragments, schemas) for a module and root.",
+    displayName: "Read Pod Member",
+    description: "Read one pod member's exact text and sha256, addressed as { pod, path }.",
     intent: "Read",
-    visibility: "EscalationVisible",
+    visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
-    requestTypeName: "SettingsTreeRequest",
-    responseTypeName: "SettingsDiscoveryResult",
-    searchTerms: ["settings", "tree", "browse", "documents", "fragments", "schemas"],
+    requestTypeName: "PodMember",
+    responseTypeName: "PodMemberRead",
+    searchTerms: ["pod", "member", "read", "open", "spec", "settings"],
   },
   {
-    key: "settings.document.open",
+    key: "pod.member.write",
     origin: "host-local",
-    displayName: "Open Settings Document",
+    displayName: "Write Pod Member",
     description:
-      "Open a settings document: raw + composed content, metadata, dependencies, and validation.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "OpenSettingsDocumentRequest",
-    responseTypeName: "SettingsDocumentSnapshot",
-    searchTerms: ["settings", "open", "document", "profile", "composed"],
-  },
-  {
-    key: "settings.document.open-with-module",
-    origin: "host-local",
-    displayName: "Open Settings Document (module)",
-    description: "Open a settings document against an explicit module descriptor and schema.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "OpenSettingsDocumentWithModuleRequest",
-    responseTypeName: "SettingsDocumentSnapshot",
-    searchTerms: ["settings", "open", "module", "schema"],
-  },
-  {
-    key: "settings.document.validate",
-    origin: "host-local",
-    displayName: "Validate Settings Document",
-    description: "Validate settings document content against its schema without saving.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "ValidateSettingsDocumentRequest",
-    responseTypeName: "SettingsValidationResult",
-    searchTerms: ["settings", "validate", "lint", "check"],
-  },
-  {
-    key: "settings.document.save",
-    origin: "host-local",
-    displayName: "Save Settings Document",
-    description:
-      "Save a settings document with optimistic concurrency (version token); reports conflicts and validation.",
+      "Create a pod member (refuses an existing path), or replace one when expectedSha256 names its current bytes. Returns the new sha256.",
     intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
-    requestTypeName: "SaveSettingsDocumentRequest",
-    responseTypeName: "SaveSettingsDocumentResult",
-    searchTerms: ["settings", "save", "write", "document", "profile"],
+    requestTypeName: "PodMemberWriteRequest",
+    responseTypeName: "PodMemberWriteResponse",
+    searchTerms: ["pod", "member", "write", "save", "create", "spec"],
+  },
+  {
+    key: "pod.member.compose",
+    origin: "host-local",
+    displayName: "Compose Pod Member",
+    description:
+      "Validate a member or unsaved draft: JSON schema structure in the host (offline), composition and semantic checks through the Revit session when one is attached. Without a session, $include/$preset members report that composition needs Revit.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    needs: "nothing",
+    requestTypeName: "PodMemberComposeRequest",
+    responseTypeName: "PodMemberComposeResponse",
+    searchTerms: ["pod", "member", "compose", "validate", "schema", "include", "preset"],
   },
   {
     key: "aps.auth.status",

@@ -2,7 +2,6 @@ import { Deferred, Effect, FileSystem, Ref } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import type { HttpClient } from "effect/unstable/http";
 import type { ChildProcessSpawner } from "effect/unstable/process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -23,19 +22,8 @@ import {
   normalizeApsTokenRequest,
   resolveApsScopes,
 } from "../src/aps-auth.ts";
-import {
-  getBridgeSessionSummary,
-  getSettingsWorkspaces,
-  listBridgeSessions,
-  openShellPath,
-} from "../src/local-ops.ts";
-import { LocalOpError } from "../src/local-error.ts";
-import {
-  discoverSettingsTree,
-  openSettingsDocumentWithModule,
-  saveSettingsDocument,
-  validateSettingsDocument,
-} from "../src/settings.ts";
+import { getBridgeSessionSummary, listBridgeSessions, openShellPath } from "../src/local-ops.ts";
+import { productPodsRootPath } from "../src/product-paths.ts";
 
 type BridgePendingRefValue =
   Parameters<typeof reserveBridgePending>[0] extends Ref.Ref<infer T> ? T : never;
@@ -52,15 +40,12 @@ function runDispatch<A, E>(
   );
 }
 
-test("dispatch threads bridgeSessionId through local snapshots and bridge invokes", async () => {
+test("pod compose runs schema-only when the selected session is disconnected", async () => {
   const seen: string[] = [];
   const bridge = {
-    invoke: (key: string, _payload: unknown, bridgeSessionId?: string) => {
-      seen.push(`invoke:${key}:${bridgeSessionId ?? ""}`);
-      return Effect.succeed({
-        value: { schemaJson: "{}" },
-        target: { session: "bridge-b", document: null },
-      });
+    invoke: (key: string) => {
+      seen.push(`invoke:${key}`);
+      return Effect.succeed({ value: {} });
     },
     snapshot: (bridgeSessionId?: string) => {
       seen.push(`snapshot:${bridgeSessionId ?? ""}`);
@@ -68,11 +53,24 @@ test("dispatch threads bridgeSessionId through local snapshots and bridge invoke
     },
     list: Effect.succeed([]),
   } as unknown as RevitBridge["Service"];
-
-  // ts-only ops thread the session id into local snapshots and bridge invokes.
-  await runDispatch(dispatchTsOnlyOperation("settings.workspaces", undefined, "bridge-b", bridge));
-
-  expect(seen[0]).toBe("snapshot:bridge-b");
+  const profile = withTempUserProfile();
+  try {
+    const podDir = join(productPodsRootPath(), "P");
+    mkdirSync(podDir, { recursive: true });
+    writeFileSync(join(podDir, "pod.json"), '{"id":"p"}');
+    const result = await runDispatch(
+      dispatchTsOnlyOperation(
+        "pod.member.compose",
+        { pod: "p", path: "settings/x.json", content: '{"$include":"@local/y"}' },
+        "bridge-b",
+        bridge,
+      ),
+    );
+    expect(seen).toEqual(["snapshot:bridge-b"]);
+    expect(result).toMatchObject({ composed: null, schemaValidation: "no-schema" });
+  } finally {
+    profile.dispose();
+  }
 });
 
 test("ts-only dispatch rejects malformed requests before running the operation", async () => {
@@ -83,7 +81,7 @@ test("ts-only dispatch rejects malformed requests before running the operation",
   } as unknown as RevitBridge["Service"];
 
   await expect(
-    runDispatch(dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge)),
+    runDispatch(dispatchTsOnlyOperation("pod.member.read", { moduleKey: 123 }, undefined, bridge)),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
 });
 
@@ -106,281 +104,6 @@ test("host shell open validates an absolute existing path and returns the launch
     ).rejects.toMatchObject({ statusCode: 404 });
   } finally {
     rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test("settings tree path validation fails as LocalOpError", async () => {
-  await expect(
-    runDispatch(
-      discoverSettingsTree({
-        subDirectory: "C:\\outside",
-      }),
-    ),
-  ).rejects.toBeInstanceOf(LocalOpError);
-});
-
-test("settings save uses content hash version tokens", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const result = await runDispatch(
-      saveSettingsDocument({
-        expected: { kind: "missing" },
-        documentId: {
-          moduleKey: "Global",
-          rootKey: "fragments",
-          relativePath: "hash-test",
-        },
-        rawContent: '{"ok":true}',
-      }),
-    );
-
-    expect(result.kind).toBe("written");
-    if (result.kind !== "written") throw new Error("expected write");
-    expect(result.snapshot.metadata.versionToken?.value).toBe(sha256('{"ok":true}'));
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings save writes schema-invalid documents and returns validation issues", async () => {
-  const profile = withTempUserProfile();
-  const seen: string[] = [];
-  try {
-    const result = await runDispatch(
-      saveSettingsDocument(
-        {
-          expected: { kind: "missing" },
-          documentId: {
-            moduleKey: "customer-library",
-            rootKey: "settings",
-            relativePath: "invalid-but-saved.schedule.json",
-          },
-          rawContent:
-            '{"$schema":"http://localhost/schemas/settings/CmdScheduleManager/schedules.json"}',
-        },
-        {
-          invokeBridge: (operationKey, payload) => {
-            seen.push(operationKey);
-            if (operationKey === "settings.schema")
-              expect(payload).toEqual({ moduleKey: "CmdScheduleManager", rootKey: "schedules" });
-            if (operationKey === "settings.module-catalog")
-              throw new Error("Pod folder names are not registered library module names.");
-            return Effect.succeed({
-              schemaJson:
-                '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
-            });
-          },
-        },
-      ),
-    );
-
-    expect(result.kind).toBe("written");
-    if (result.kind !== "written") throw new Error("expected write");
-    expect(seen).not.toContain("settings.module-catalog");
-    expect(result.snapshot.validation.isValid).toBe(false);
-    expect(result.snapshot.validation.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings open preserves missing document as not found", async () => {
-  const profile = withTempUserProfile();
-  try {
-    await expect(
-      runDispatch(
-        openSettingsDocumentWithModule(
-          {
-            documentId: {
-              moduleKey: "CmdScheduleManager",
-              rootKey: "schedules",
-              relativePath: "profiles/missing",
-            },
-            includeComposedContent: true,
-          },
-          {
-            moduleKey: "CmdScheduleManager",
-            defaultRootKey: "schedules",
-            roots: [{ rootKey: "schedules", displayName: "schedules" }],
-            storageOptions: { includeRoots: [], presetRoots: [] },
-          },
-        ),
-      ),
-    ).rejects.toMatchObject({ statusCode: 404 });
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings validation uses bridge schema json", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const result = await runDispatch(
-      validateSettingsDocument(
-        {
-          documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/main",
-          },
-          rawContent:
-            '{"$schema":"http://localhost/schemas/settings/CmdScheduleManager/schedules.json"}',
-        },
-        {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: [], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : {
-                    schemaJson:
-                      '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
-                  },
-            ),
-        },
-      ),
-    );
-
-    expect(result.isValid).toBe(false);
-    expect(result.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings create-only save refuses to overwrite an existing document", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const request = {
-      documentId: {
-        moduleKey: "Global",
-        rootKey: "fragments",
-        relativePath: "create-only",
-      },
-      rawContent: '{"version":1}',
-      expected: { kind: "missing" as const },
-    };
-    expect((await runDispatch(saveSettingsDocument(request))).kind).toBe("written");
-
-    const conflict = await runDispatch(
-      saveSettingsDocument({ ...request, rawContent: '{"version":2}' }),
-    );
-    expect(conflict.kind).toBe("conflict");
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings validation merges registered semantic diagnostics after structural validation", async () => {
-  const result = await runDispatch(
-    validateSettingsDocument(
-      {
-        documentId: {
-          moduleKey: "FamilyFoundry",
-          rootKey: "models",
-          relativePath: "showcase",
-        },
-        rawContent:
-          '{"$schema":"http://localhost/schemas/settings/FamilyFoundry/models.json","family":{"name":"Showcase"}}',
-      },
-      {
-        invokeBridge: (operationKey) => {
-          if (operationKey === "settings.module-catalog")
-            return Effect.succeed({
-              modules: [
-                {
-                  moduleKey: "FamilyFoundry",
-                  defaultRootKey: "models",
-                  roots: [{ rootKey: "models", displayName: "Family Models" }],
-                  storageOptions: { includeRoots: [], presetRoots: [] },
-                },
-              ],
-            });
-          if (operationKey === "settings.schema")
-            return Effect.succeed({ schemaJson: '{"type":"object"}' });
-          return Effect.succeed({
-            isConfigured: true,
-            issues: [
-              {
-                instancePath: "$.solids.body.frame",
-                schemaPath: null,
-                code: "unsupported-frame",
-                severity: "error",
-                message: "Frame is not declared.",
-                suggestion: null,
-              },
-            ],
-          });
-        },
-      },
-    ),
-  );
-
-  expect(result.isValid).toBe(false);
-  expect(result.issues).toContainEqual(
-    expect.objectContaining({
-      code: "unsupported-frame",
-      path: "$.solids.body.frame",
-    }),
-  );
-});
-
-test("settings workspaces are discovered from local pods without consulting Revit", async () => {
-  const profile = withTempUserProfile();
-  const seen: unknown[] = [];
-  try {
-    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "settings"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(profile.path, "Documents", "Pe.Tools", "Pods", "family-library", "pod.json"),
-      "{}",
-    );
-    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "script-only", "src"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(profile.path, "Documents", "Pe.Tools", "Pods", "script-only", "pod.json"),
-      "{}",
-    );
-    mkdirSync(join(profile.path, "Documents", "Pe.Tools", "Pods", "manifestless", "settings"), {
-      recursive: true,
-    });
-    const result = await runDispatch(
-      getSettingsWorkspaces({
-        bridge: { connected: true },
-        invokeBridge: (operationKey, payload) => {
-          seen.push({ operationKey, payload });
-          return Effect.succeed({ modules: [] });
-        },
-      }),
-    );
-
-    expect(seen).toEqual([]);
-    expect(result.workspaces).toEqual([
-      {
-        workspaceKey: "pods",
-        displayName: "Pods",
-        basePath: join(profile.path, "Documents", "Pe.Tools", "Pods"),
-        modules: [
-          {
-            moduleKey: "family-library",
-            defaultRootKey: "settings",
-            roots: [{ rootKey: "settings", displayName: "settings" }],
-          },
-        ],
-      },
-    ]);
-  } finally {
-    profile.dispose();
   }
 });
 
@@ -615,8 +338,4 @@ function withTempUserProfile() {
       rmSync(path, { recursive: true, force: true });
     },
   };
-}
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
 }

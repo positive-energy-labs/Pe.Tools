@@ -1,697 +1,363 @@
 import { createHash } from "node:crypto";
-import { basename, join, win32 } from "node:path";
+import { isUtf8 } from "node:buffer";
+import { join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
-import { Effect, FileSystem, Option, Semaphore } from "effect";
-import {
-  SettingsFileKind,
-  type OpenSettingsDocumentRequest,
-  type SaveSettingsDocumentRequest,
-  type SaveSettingsDocumentResult,
-  type SettingsDirectoryNode,
-  type SettingsDiscoveryResult,
-  type SettingsDocumentDependency,
-  type SettingsDocumentId,
-  type SettingsDocumentSnapshot,
-  type SettingsFileEntry,
-  type SettingsFileNode,
-  type SettingsTreeRequest,
-  type SettingsValidationIssue,
-  type ValidateSettingsDocumentRequest,
+import { Effect, FileSystem, Semaphore } from "effect";
+import type {
+  BridgeMemberCompose,
+  BridgeSettingsSchema,
+  BridgeSettingsValidate,
+  MemberIssue,
+  PodList,
+  PodMember,
+  PodMemberComposeRequest,
+  PodMemberComposeResponse,
+  PodMemberWriteRequest,
+  PodMemberWriteResponse,
 } from "@pe/host-contracts/operation-types";
-import { capturePod } from "./operation-script.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   localOpFileError,
   makeDirectory,
   readDirectoryEntriesOrEmpty,
-  statFile,
   writeFileStringAtomic,
 } from "./files/index.ts";
 
-type SettingsDirectoryListing = { files: string[]; directories: string[] };
-type MutableSettingsDirectoryNode = Omit<SettingsDirectoryNode, "directories" | "files"> & {
-  directories: MutableSettingsDirectoryNode[];
-  files: SettingsFileNode[];
+/**
+ * Pod members are host-native file I/O under `Documents/Pe.Tools/Pods/<folder>/`; a pod is found by
+ * its manifest `id`, never its folder name. Structural (JSON schema) validation runs here, offline.
+ * Composition and semantic validation belong to the Revit session and arrive through the bridge.
+ */
+export type PodContext = {
+  readonly podsRoot?: string;
+  readonly invokeBridge?: (key: string, payload: unknown) => Effect.Effect<unknown, unknown>;
 };
-
-export type SettingsRuntimeContext = {
-  /** Storage authority survives file mode, which clears only native schema services. */
-  readonly storageRoot?: string;
-  readonly bridgeSessionId?: string;
-  readonly schemaJson?: string;
-  readonly invokeBridge?: (
-    operationKey: string,
-    payload?: unknown,
-    bridgeSessionId?: string,
-  ) => Effect.Effect<unknown, unknown>;
-};
-
-type SettingsModuleDescriptor = {
-  readonly moduleKey: string;
-  readonly defaultRootKey: string;
-  readonly roots: readonly { readonly rootKey: string; readonly displayName: string }[];
-  readonly storageOptions?: {
-    readonly includeRoots?: readonly string[];
-    readonly presetRoots?: readonly string[];
-  };
-};
-
-type ParsedJson =
-  | {
-      readonly ok: true;
-      readonly value: unknown;
-    }
-  | {
-      readonly ok: false;
-      readonly issue: SettingsValidationIssue;
-    };
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
-// ponytail: one host-wide save lane; per-file locks only if unrelated saves contend.
-const saveLock = Semaphore.makeUnsafe(1);
-const schemaCache = new Map<string, { validate?: ValidateFunction; errorMessage?: string }>();
+// ponytail: one host-wide write lane; per-member locks only if unrelated writes contend.
+const writeLock = Semaphore.makeUnsafe(1);
+const schemaCache = new Map<string, ValidateFunction | string>();
 
-export const discoverSettingsTree = Effect.fnUntraced(function* (
-  input: SettingsTreeRequest,
-  ctx: SettingsRuntimeContext = {},
-) {
-  const request = normalizeSettingsTreeRequest(input);
-  return yield* discoverSettingsTreeFromDisk(
-    request,
-    input.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
-  );
-});
-
-export const settingsDocumentAddress = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  storageRoot?: string,
-) {
-  const { documentPath } = yield* resolveDocumentPath(
-    documentId,
-    "settings.document.save",
-    storageRoot,
-  );
-  return { path: documentPath, workspaceId: `settings:${sha256(documentPath.toLowerCase())}` };
-});
-
-export function openSettingsDocument(
-  request: OpenSettingsDocumentRequest,
-  ctx: SettingsRuntimeContext = {},
-): Effect.Effect<SettingsDocumentSnapshot, LocalOpError | Error, FileSystem.FileSystem> {
-  return openSettingsDocumentFromDisk(
-    request,
-    request.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
-  );
-}
-
-export function openSettingsDocumentWithModule(
-  request: OpenSettingsDocumentRequest,
-  module: SettingsModuleDescriptor,
-  ctx: SettingsRuntimeContext = {},
-): Effect.Effect<SettingsDocumentSnapshot, LocalOpError | Error, FileSystem.FileSystem> {
-  return openSettingsDocumentFromDisk(request, ctx, module);
-}
-
-export function validateSettingsDocument(
-  request: ValidateSettingsDocumentRequest,
-  ctx: SettingsRuntimeContext = {},
-): Effect.Effect<
-  SettingsDocumentSnapshot["validation"],
-  LocalOpError | Error,
-  FileSystem.FileSystem
-> {
-  if (request.mode === "file") ctx = { storageRoot: ctx.storageRoot };
-  return Effect.gen(function* () {
-    const module = yield* discoverModule(request.documentId, ctx);
-    const materialized = yield* materializeDocument(
-      request.documentId,
-      request.rawContent,
-      module,
-      true,
-      ctx,
-    );
-    return materialized.validation;
-  });
-}
-
-export function saveSettingsDocument(
-  request: SaveSettingsDocumentRequest,
-  ctx: SettingsRuntimeContext = {},
-): Effect.Effect<SaveSettingsDocumentResult, LocalOpError | Error, FileSystem.FileSystem> {
-  return saveLock.withPermit(
-    saveSettingsDocumentToDisk(
-      request,
-      request.mode === "file" ? { storageRoot: ctx.storageRoot } : ctx,
-    ),
-  );
-}
-
-function defaultSettingsBasePath(): string {
-  return productPodsRootPath();
-}
-
-function normalizeSettingsTreeRequest(input: SettingsTreeRequest): Required<SettingsTreeRequest> {
-  return {
-    mode: input.mode ?? "module",
-    moduleKey: input.moduleKey || "default",
-    rootKey: input.rootKey || "settings",
-    subDirectory: input.subDirectory ?? null,
-    recursive: input.recursive === true,
-    includeFragments: input.includeFragments !== false,
-    includeSchemas: input.includeSchemas !== false,
-  };
-}
-
-const discoverSettingsTreeFromDisk = Effect.fnUntraced(function* (
-  request: Required<SettingsTreeRequest>,
-  ctx: SettingsRuntimeContext,
-) {
-  const module = yield* discoverModule(
-    { moduleKey: request.moduleKey, rootKey: request.rootKey, relativePath: "" },
-    ctx,
-  );
-  const root = module.roots.find(
-    (candidate) => candidate.rootKey.toLowerCase() === request.rootKey.toLowerCase(),
-  );
-  if (!root) throw new Error(`Unknown root '${request.rootKey}' for module '${module.moduleKey}'.`);
-  const { discoveryRootPath, rootDirectory, subDirectory } = yield* resolveLocalPath(
-    "settings.tree",
-    () => {
-      const rootDirectory = resolveSettingsRootDirectory(
-        ctx.storageRoot ?? defaultSettingsBasePath(),
-        module.moduleKey,
-        root.rootKey,
-      );
-      const subDirectory = normalizeRelativePath(request.subDirectory);
-      return {
-        discoveryRootPath: safeJoin(rootDirectory, subDirectory),
-        rootDirectory,
-        subDirectory,
-      };
-    },
-  );
-  yield* makeDirectory(discoveryRootPath, "settings.tree");
-
-  const discovered = yield* listSettingsDirectory(
-    discoveryRootPath,
-    rootDirectory,
-    request.recursive,
-    "settings.tree",
-  );
-  const discoveredEntries = yield* Effect.all(
-    discovered.files.map((path) => createSettingsFileEntry(path, rootDirectory, "settings.tree")),
-  );
-  const files = discoveredEntries
-    .filter((entry) => request.includeFragments || !entry.isFragment)
-    .filter((entry) => request.includeSchemas || !entry.isSchema)
-    .sort((left, right) => right.modifiedUtc.localeCompare(left.modifiedUtc));
-  const rootRelativePath = subDirectory;
-  return {
-    files,
-    root: buildSettingsDirectoryTree(
-      rootRelativePath ? basename(rootRelativePath) : request.rootKey,
-      rootRelativePath,
-      files,
-      discovered.directories,
-    ),
-  } satisfies SettingsDiscoveryResult;
-});
-
-const saveSettingsDocumentToDisk = Effect.fnUntraced(function* (
-  request: SaveSettingsDocumentRequest,
-  ctx: SettingsRuntimeContext,
-) {
-  const module = yield* discoverModule(request.documentId, ctx);
-  const { documentPath } = yield* resolveDocumentPath(
-    request.documentId,
-    "settings.document.save",
-    ctx.storageRoot,
-  );
-  if (
-    request.workspaceId &&
-    request.workspaceId !== `settings:${sha256(documentPath.toLowerCase())}`
-  )
-    return yield* Effect.fail(
-      new LocalOpError(
-        "settings.document.save",
-        "This file belongs to another Work. Select its file workspace.",
-        409,
-      ),
-    );
-  if (!request.expected)
-    return yield* Effect.fail(
-      new LocalOpError(
-        "settings.document.save",
-        "A present or missing precondition is required.",
-        400,
-      ),
-    );
-  const fs = yield* FileSystem.FileSystem;
-  const current = yield* readSettingsFile(documentPath, true);
-  if (
-    request.expected.kind === "missing"
-      ? current !== null
-      : current === null || current.version !== request.expected.version
-  ) {
-    return {
-      kind: "conflict",
-      current:
-        current === null
-          ? null
-          : yield* settingsSnapshot(request.documentId, documentPath, current, module, ctx, true),
-    } satisfies SaveSettingsDocumentResult;
+export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
+  const root = ctx.podsRoot ?? productPodsRootPath();
+  const found = yield* readManifests(root);
+  const pods: PodList["pods"][number][] = [];
+  for (const pod of found.pods) {
+    const twins = found.pods.filter((other) => other.id === pod.id);
+    const members = yield* listMembers(join(root, pod.folder), "");
+    pods.push({
+      ...pod,
+      members,
+      diagnostics:
+        twins.length > 1
+          ? [
+              issue(
+                "DuplicatePodId",
+                `Pod id '${pod.id}' is claimed by folders ${twins.map((t) => t.folder).join(", ")}.`,
+              ),
+            ]
+          : [],
+    });
   }
-  if (
-    new TextDecoder("utf-8", { ignoreBOM: true }).decode(
-      new TextEncoder().encode(request.rawContent),
-    ) !== request.rawContent
-  )
+  return { pods, unreadable: found.unreadable } satisfies PodList;
+});
+
+export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
+  const path = yield* memberFile(member, ctx, "pod.member.read");
+  const read = yield* readText(path, "pod.member.read");
+  if (!read)
     return yield* Effect.fail(
       new LocalOpError(
-        "settings.document.save",
-        "Raw content must round-trip as UTF-8; unpaired surrogates cannot be saved exactly.",
-        400,
+        "pod.member.read",
+        `No member '${member.path}' in pod '${member.pod}'.`,
+        404,
       ),
     );
-  // Validation describes authoring; invalid JSON is still valid file content to preserve.
-  const written = { rawContent: request.rawContent, version: sha256(request.rawContent) };
-  const snapshot = yield* settingsSnapshot(
-    request.documentId,
-    documentPath,
-    written,
-    module,
-    ctx,
-    true,
-  );
-  yield* makeDirectory(win32.dirname(documentPath), "settings.document.save");
-  if (request.expected.kind === "missing") {
-    const result = yield* Effect.result(
-      fs.writeFileString(documentPath, request.rawContent, { flag: "wx" }),
+  // Text members round-trip exactly; a replacement character would silently change the bytes.
+  if (!read.utf8)
+    return yield* Effect.fail(
+      new LocalOpError("pod.member.read", "The member is not valid UTF-8 text.", 400),
     );
-    if (result._tag === "Failure") {
-      if (result.failure.reason._tag === "AlreadyExists") {
-        const observed = yield* readSettingsFile(documentPath, true);
-        return {
-          kind: "conflict",
-          current:
-            observed === null
-              ? null
-              : yield* settingsSnapshot(
-                  request.documentId,
-                  documentPath,
-                  observed,
-                  module,
-                  ctx,
-                  true,
-                ),
-        } satisfies SaveSettingsDocumentResult;
+  return { content: read.content, sha256: read.sha256 };
+});
+
+export const writeMember = (request: PodMemberWriteRequest, ctx: PodContext = {}) =>
+  writeLock.withPermit(
+    Effect.gen(function* () {
+      const key = "pod.member.write";
+      const path = yield* memberFile(request, ctx, key);
+      if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
+        return yield* Effect.fail(
+          new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
+        );
+      if (new TextDecoder().decode(new TextEncoder().encode(request.content)) !== request.content)
+        return yield* Effect.fail(
+          new LocalOpError(
+            key,
+            "Content must round-trip as UTF-8; unpaired surrogates cannot be written.",
+            400,
+          ),
+        );
+      const fs = yield* FileSystem.FileSystem;
+      yield* makeDirectory(win32.dirname(path), key);
+      if (request.expectedSha256 === undefined) {
+        const created = yield* Effect.result(
+          fs.writeFileString(path, request.content, { flag: "wx" }),
+        );
+        if (created._tag === "Failure")
+          return yield* Effect.fail(
+            created.failure.reason._tag === "AlreadyExists"
+              ? new LocalOpError(key, `Member '${request.path}' already exists.`, 409)
+              : localOpFileError(key, created.failure),
+          );
+      } else {
+        // Optimistic against external writers: read/check + rename is not an atomic CAS.
+        const current = yield* readText(path, key);
+        if (current?.sha256 !== request.expectedSha256)
+          return yield* Effect.fail(
+            new LocalOpError(key, `Member '${request.path}' changed since it was read.`, 409),
+          );
+        yield* writeFileStringAtomic(path, request.content, key);
       }
-      return yield* Effect.fail(localOpFileError("settings.document.save", result.failure));
-    }
-  } else {
-    // Optimistic against external writers: read/check + rename is not an atomic CAS.
-    const checked = yield* readSettingsFile(documentPath, true);
-    if (checked === null || checked.version !== request.expected.version)
       return {
-        kind: "conflict",
-        current:
-          checked === null
-            ? null
-            : yield* settingsSnapshot(request.documentId, documentPath, checked, module, ctx, true),
-      } satisfies SaveSettingsDocumentResult;
-    yield* writeFileStringAtomic(documentPath, request.rawContent, "settings.document.save");
+        pod: request.pod,
+        path: normalizeMemberPath(request.path),
+        sha256: sha256(request.content),
+      } satisfies PodMemberWriteResponse;
+    }),
+  );
+
+export const composeMember = Effect.fnUntraced(function* (
+  request: PodMemberComposeRequest,
+  ctx: PodContext = {},
+) {
+  const saved = request.content == null ? yield* readMember(request, ctx) : null;
+  const content = saved?.content ?? request.content!;
+  const base = {
+    sha256: saved?.sha256 ?? sha256(content),
+    schemaUrl: null,
+    composed: null,
+    dependencies: [],
+  };
+  let value: unknown;
+  try {
+    value = JSON.parse(content.replace(/^\uFEFF/, ""));
+  } catch (error) {
+    return {
+      ...base,
+      diagnostics: [issue("JsonParseError", errorMessage(error), "error")],
+      schemaValidation: "not-run",
+      semanticValidation: "not-run",
+    } satisfies PodMemberComposeResponse;
   }
-  // This snapshot names our bytes, never a post-write reread of another writer's content.
-  return { kind: "written", snapshot } satisfies SaveSettingsDocumentResult;
+  const schemaUrl = isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
+  const diagnostics: MemberIssue[] = [];
+  let composed: unknown = value;
+  let dependencies: PodMemberComposeResponse["dependencies"] = [];
+  if (hasDirectives(value)) {
+    if (!ctx.invokeBridge) {
+      diagnostics.push(
+        issue(
+          "CompositionNeedsRevit",
+          "Composition needs a Revit session; $include and $preset stay unresolved until one is attached.",
+          "info",
+        ),
+      );
+      composed = undefined;
+    } else {
+      const result = (yield* ctx.invokeBridge("pod.member.compose", {
+        pod: request.pod,
+        path: request.path,
+        content,
+      })) as BridgeMemberCompose;
+      diagnostics.push(...result.diagnostics.map(bridgeIssue));
+      dependencies = [...result.dependencies];
+      composed = result.composed == null ? undefined : JSON.parse(result.composed);
+    }
+  }
+  const schemaJson =
+    request.schemaJson ??
+    (schemaUrl && ctx.invokeBridge
+      ? (((yield* ctx.invokeBridge("settings.schema", { schemaUrl })) as BridgeSettingsSchema)
+          .schemaJson ?? undefined)
+      : undefined);
+  const schemaValidation: PodMemberComposeResponse["schemaValidation"] = !schemaUrl
+    ? "no-schema"
+    : composed === undefined
+      ? "not-run"
+      : !schemaJson
+        ? "unavailable"
+        : validateStructure(schemaJson, composed, diagnostics);
+  let semanticValidation: PodMemberComposeResponse["semanticValidation"] = "not-run";
+  if (schemaValidation === "passed" && ctx.invokeBridge) {
+    const semantic = (yield* ctx.invokeBridge("settings.validate", {
+      schemaUrl,
+      content: JSON.stringify(composed),
+    })) as BridgeSettingsValidate;
+    diagnostics.push(...semantic.issues.map(bridgeIssue));
+    semanticValidation = semantic.issues.length ? "failed" : "passed";
+  } else if (schemaValidation === "passed") semanticValidation = "unavailable";
+  return {
+    ...base,
+    schemaUrl,
+    composed: composed === undefined ? null : `${JSON.stringify(composed, null, 2)}\n`,
+    dependencies,
+    diagnostics,
+    schemaValidation,
+    semanticValidation,
+  } satisfies PodMemberComposeResponse;
 });
 
-const openSettingsDocumentFromDisk = Effect.fnUntraced(function* (
-  request: OpenSettingsDocumentRequest,
-  ctx: SettingsRuntimeContext,
-  resolvedModule?: SettingsModuleDescriptor,
+/** The composed spec an engine consumes; refuses anything that did not compose cleanly. */
+export const composedSpec = Effect.fnUntraced(function* (
+  member: PodMember & { sha256: string },
+  ctx: PodContext,
 ) {
-  const module = resolvedModule ?? (yield* discoverModule(request.documentId, ctx));
-  const { documentPath } = yield* resolveDocumentPath(
-    request.documentId,
-    "settings.document.open",
-    ctx.storageRoot,
-  );
-  if (
-    request.workspaceId &&
-    request.workspaceId !== `settings:${sha256(documentPath.toLowerCase())}`
-  )
+  const saved = yield* readMember(member, ctx);
+  if (saved.sha256 !== member.sha256)
+    return yield* Effect.fail(
+      new LocalOpError("pod.member.compose", "The member changed after it was reviewed.", 409),
+    );
+  const result = yield* composeMember({ ...member, content: saved.content }, ctx);
+  const errors = result.diagnostics.filter((d) => d.severity === "error");
+  if (errors.length || result.composed == null)
     return yield* Effect.fail(
       new LocalOpError(
-        "settings.document.open",
-        "This file belongs to another Work. Select its file workspace.",
+        "pod.member.compose",
+        errors.map((d) => `${d.path}: ${d.message}`).join("\n") || "The member did not compose.",
         409,
       ),
     );
-  const content = yield* readSettingsFile(documentPath, false);
-  if (!content)
-    return yield* Effect.fail(new LocalOpError("settings.document.open", "File not found", 404));
-  return yield* settingsSnapshot(
-    request.documentId,
-    documentPath,
-    content,
-    module,
-    ctx,
-    request.includeComposedContent === true,
+  return { spec: result.composed, dependencies: result.dependencies };
+});
+
+export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
+  const root = ctx.podsRoot ?? productPodsRootPath();
+  const matches = (yield* readManifests(root)).pods.filter((pod) => pod.id === podId);
+  if (matches.length === 1) return join(root, matches[0]!.folder);
+  return yield* Effect.fail(
+    new LocalOpError(
+      "pod.resolve",
+      matches.length
+        ? `Pod id '${podId}' is claimed by folders ${matches.map((m) => m.folder).join(", ")}.`
+        : `No installed pod has id '${podId}'.`,
+      matches.length ? 409 : 404,
+    ),
   );
 });
 
-const readSettingsFile = Effect.fnUntraced(function* (path: string, missing: boolean) {
+const memberFile = Effect.fnUntraced(function* (
+  member: PodMember,
+  ctx: PodContext,
+  operationKey: string,
+) {
+  const folder = yield* podFolder(member.pod, ctx);
+  return yield* Effect.try({
+    try: () => safeJoin(folder, normalizeMemberPath(member.path)),
+    catch: (error) => new LocalOpError(operationKey, errorMessage(error), 400),
+  });
+});
+
+const readManifests = Effect.fnUntraced(function* (root: string) {
+  const pods: Omit<PodList["pods"][number], "members" | "diagnostics">[] = [];
+  const unreadable: { folder: string; message: string }[] = [];
+  for (const entry of yield* readDirectoryEntriesOrEmpty(root, "pod.list")) {
+    if (entry.info.type !== "Directory") continue;
+    const manifest = yield* readText(join(root, entry.name, "pod.json"), "pod.list");
+    if (!manifest) continue;
+    try {
+      const value = JSON.parse(manifest.content.replace(/^\uFEFF/, "")) as Record<string, unknown>;
+      if (typeof value.id !== "string" || !value.id) throw Error("pod.json has no id");
+      pods.push({
+        id: value.id,
+        name: typeof value.name === "string" ? value.name : value.id,
+        version: typeof value.version === "string" ? value.version : "",
+        folder: entry.name,
+        entrypoints: Array.isArray(value.entrypoints)
+          ? value.entrypoints.flatMap((e) =>
+              isRecord(e) && typeof e.id === "string" ? [e.id] : [],
+            )
+          : [],
+      });
+    } catch (error) {
+      unreadable.push({ folder: entry.name, message: errorMessage(error) });
+    }
+  }
+  return { pods, unreadable };
+});
+
+const listMembers: (
+  folder: string,
+  relative: string,
+) => Effect.Effect<
+  PodList["pods"][number]["members"][number][],
+  LocalOpError,
+  FileSystem.FileSystem
+> = Effect.fnUntraced(function* (folder: string, relative: string) {
+  const members: PodList["pods"][number]["members"][number][] = [];
+  const entries = yield* readDirectoryEntriesOrEmpty(join(folder, relative), "pod.list");
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const path = relative ? `${relative}/${entry.name}` : entry.name;
+    if (path === "output" || path === "pod.json") continue;
+    if (entry.info.type === "Directory") members.push(...(yield* listMembers(folder, path)));
+    else if (entry.info.type === "File") {
+      const read = yield* readText(join(folder, path), "pod.list");
+      if (read) members.push({ path, sha256: read.sha256, schema: declaredSchema(path, read) });
+    }
+  }
+  return members;
+});
+
+/** Reads bytes once; a member that is not UTF-8 still lists, it just declares no schema. */
+const readText = Effect.fnUntraced(function* (path: string, operationKey: string) {
   const fs = yield* FileSystem.FileSystem;
   const result = yield* Effect.result(fs.readFile(path));
   if (result._tag === "Failure") {
-    const error = localOpFileError("settings.document.read", result.failure);
-    if (missing && error.statusCode === 404) return null;
+    const error = localOpFileError(operationKey, result.failure);
+    if (error.statusCode === 404) return null;
     return yield* Effect.fail(error);
   }
-  const bytes = result.success;
-  const rawContent = yield* Effect.try({
-    try: () => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
-    catch: () => new LocalOpError("settings.document.read", "The file is not valid UTF-8.", 400),
-  });
-  return { rawContent, version: createHash("sha256").update(bytes).digest("hex") };
-});
-
-const settingsSnapshot = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  documentPath: string,
-  content: { rawContent: string; version: string },
-  module: SettingsModuleDescriptor,
-  ctx: SettingsRuntimeContext,
-  includeComposedContent: boolean,
-) {
-  const materialized = yield* materializeDocument(
-    documentId,
-    content.rawContent,
-    module,
-    includeComposedContent,
-    ctx,
-  );
+  const content = new TextDecoder("utf-8", { ignoreBOM: true }).decode(result.success);
   return {
-    metadata: {
-      documentId: { ...documentId, stableId: documentPath },
-      workspaceId: `settings:${sha256(documentPath.toLowerCase())}`,
-      kind: SettingsFileKind.Profile,
-      versionToken: { value: content.version },
-    },
-    rawContent: content.rawContent,
-    composedContent: materialized.composedContent,
-    dependencies: materialized.dependencies,
-    validation: materialized.validation,
-    capabilityHints: {
-      backend: "ts-local-disk",
-      compositionPolicy: includeComposedContent ? "pod-preparation" : "not-requested",
-      schemaValidation: materialized.schemaValidation,
-      semanticValidation: materialized.semanticValidation,
-    },
-  } satisfies SettingsDocumentSnapshot;
-});
-
-const materializeDocument = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  rawContent: string,
-  module: SettingsModuleDescriptor,
-  includeComposedContent: boolean,
-  ctx: SettingsRuntimeContext,
-) {
-  const parsed = parseJson(rawContent);
-  if (!parsed.ok)
-    return {
-      composedContent: null,
-      dependencies: [],
-      schemaJson: null,
-      schemaValidation: "not-run",
-      semanticValidation: "not-run",
-      validation: { isValid: false, issues: [parsed.issue] },
-    };
-
-  const composition = yield* composeForRead(documentId, parsed.value, rawContent, ctx);
-  const provider = settingsSchemaProvider(parsed.value);
-  const schemaValidation = yield* validateWithProviderSchema(
-    provider,
-    composition.value ?? parsed.value,
-    ctx,
-  );
-  const schemaJson =
-    "schemaJson" in schemaValidation && typeof schemaValidation.schemaJson === "string"
-      ? schemaValidation.schemaJson
-      : null;
-  const structuralIssues = [...composition.issues, ...schemaValidation.issues];
-  const semanticValidation = structuralIssues.some((issue) => issue.severity === "error")
-    ? { issues: [] as SettingsValidationIssue[], status: "not-run" }
-    : yield* validateWithFeatureSemantics(
-        documentId,
-        provider,
-        rawContent,
-        composition.value ?? parsed.value,
-        ctx,
-      );
-  const issues = [...structuralIssues, ...semanticValidation.issues];
-  return {
-    composedContent:
-      includeComposedContent && composition.value != null
-        ? normalizeJsonTrailingNewline(JSON.stringify(composition.value, null, 2))
-        : null,
-    dependencies: composition.dependencies,
-    schemaJson,
-    schemaValidation: schemaValidation.status,
-    semanticValidation: semanticValidation.status,
-    validation: { isValid: !issues.some((issue) => issue.severity === "error"), issues },
+    content,
+    utf8: isUtf8(result.success),
+    sha256: createHash("sha256").update(result.success).digest("hex"),
   };
 });
 
-const composeForRead = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  value: unknown,
-  rawContent: string,
-  ctx: SettingsRuntimeContext,
-) {
-  const dependencies: SettingsDocumentDependency[] = [];
-  if (!containsDirectiveMetadata(value))
-    return { dependencies, issues: [] as SettingsValidationIssue[], value };
-
-  const result = yield* Effect.result(
-    Effect.gen(function* () {
-      if (!ctx.invokeBridge)
-        return yield* Effect.fail(
-          new Error(
-            "Pod composition requires the native preparation service. Connect the matching Revit session to preview composed JSON.",
-          ),
-        );
-      const relativePath = normalizeRelativePath(documentId.relativePath);
-      const member = `settings/${relativePath.toLowerCase().endsWith(".json") ? relativePath : `${relativePath}.json`}`;
-      const sourceBundle = yield* Effect.tryPromise(() =>
-        capturePod(documentId.moduleKey, ctx.storageRoot, {
-          path: member,
-          bytesBase64: Buffer.from(rawContent, "utf8").toString("base64"),
-        }),
-      );
-      const prepared = yield* ctx.invokeBridge(
-        "scripting.pod.prepare",
-        {
-          workspaceKey: documentId.moduleKey,
-          sourceBundle,
-        },
-        ctx.bridgeSessionId,
-      );
-      if (
-        !isRecord(prepared) ||
-        !Array.isArray(prepared.outcomes) ||
-        !isRecord(prepared.composedSettings)
-      )
-        return yield* Effect.fail(new Error("Pod preparation returned an invalid response."));
-      const issues: SettingsValidationIssue[] = [];
-      for (const outcome of prepared.outcomes) {
-        if (
-          !isRecord(outcome) ||
-          typeof outcome.code !== "string" ||
-          typeof outcome.reason !== "string"
-        )
-          return yield* Effect.fail(new Error("Pod preparation returned an invalid gate outcome."));
-        issues.push({
-          path: typeof outcome.location === "string" ? outcome.location : "$",
-          code: outcome.code,
-          severity: String(outcome.severity).toLowerCase(),
-          message: outcome.reason,
-          suggestion: typeof outcome.remedy === "string" ? outcome.remedy : null,
-        });
-      }
-      if (issues.some((issue) => issue.severity === "error")) return { value: null, issues };
-      const content = prepared.composedSettings[member.replace(/^settings\//, "composed/")];
-      if (typeof content !== "string")
-        return yield* Effect.fail(new Error(`Pod preparation did not produce '${member}'.`));
-      return { value: yield* Effect.try(() => JSON.parse(content) as unknown), issues };
-    }),
-  );
-  if (result._tag === "Success") return { dependencies, ...result.success };
-  return {
-    dependencies,
-    issues: [
-      {
-        path: "$",
-        code: "PodPreparationUnavailable",
-        severity: "error",
-        message: errorMessage(result.failure),
-        suggestion: "Resolve the reported preparation failure and retry.",
-      },
-    ],
-    value: null,
-  };
-});
-
-const validateWithProviderSchema = Effect.fnUntraced(function* (
-  provider: SettingsSchemaProvider | null,
-  value: unknown,
-  ctx: SettingsRuntimeContext,
-) {
-  if (ctx.schemaJson)
-    return { ...validateWithSchemaJson(ctx.schemaJson, value), schemaJson: ctx.schemaJson };
-  if (!provider) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
-  if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
-
-  const schemaResult = yield* Effect.result(
-    ctx.invokeBridge("settings.schema", provider, ctx.bridgeSessionId),
-  );
-  if (schemaResult._tag === "Failure")
-    return {
-      issues: [
-        {
-          path: "$",
-          code: "SchemaProviderUnavailable",
-          severity: "warning",
-          message: errorMessage(schemaResult.failure),
-          suggestion: "Connect the matching Revit session and retry.",
-        },
-      ] satisfies SettingsValidationIssue[],
-      status: "provider-error",
-    };
-
-  const schemaJson = getSchemaJson(schemaResult.success);
-  if (!schemaJson) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
-
-  return { ...validateWithSchemaJson(schemaJson, value), schemaJson };
-});
-
-const validateWithFeatureSemantics = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  provider: SettingsSchemaProvider | null,
-  rawContent: string,
-  composedValue: unknown,
-  ctx: SettingsRuntimeContext,
-) {
-  if (!provider) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
-  if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
-
-  const result = yield* Effect.result(
-    ctx.invokeBridge(
-      "settings.document.semantic-validation",
-      {
-        ...provider,
-        relativePath: documentId.relativePath,
-        rawContent,
-        composedContent: normalizeJsonTrailingNewline(JSON.stringify(composedValue, null, 2)),
-      },
-      ctx.bridgeSessionId,
-    ),
-  );
-  if (result._tag === "Failure")
-    return {
-      issues: [
-        {
-          path: "$",
-          code: "SemanticValidatorUnavailable",
-          severity: "warning",
-          message: errorMessage(result.failure),
-          suggestion: "Connect the matching Revit session and retry.",
-        },
-      ] satisfies SettingsValidationIssue[],
-      status: "provider-error",
-    };
-
-  const response = normalizeSemanticValidation(result.success);
-  return {
-    issues: response.issues,
-    status: response.isConfigured ? "configured" : "not-configured",
-  };
-});
-
-function normalizeSemanticValidation(value: unknown): {
-  isConfigured: boolean;
-  issues: SettingsValidationIssue[];
-} {
-  if (!isRecord(value)) return { isConfigured: false, issues: [] };
-
-  const issues = Array.isArray(value.issues)
-    ? value.issues.flatMap((candidate) => {
-        if (!isRecord(candidate) || typeof candidate.message !== "string") return [];
-        return [
-          {
-            path:
-              typeof candidate.instancePath === "string"
-                ? candidate.instancePath
-                : typeof candidate.path === "string"
-                  ? candidate.path
-                  : "$",
-            code: typeof candidate.code === "string" ? candidate.code : "SemanticValidation",
-            severity: typeof candidate.severity === "string" ? candidate.severity : "error",
-            message: candidate.message,
-            suggestion: typeof candidate.suggestion === "string" ? candidate.suggestion : null,
-          },
-        ];
-      })
-    : [];
-  return { isConfigured: value.isConfigured === true, issues };
-}
-
-function validateWithSchemaJson(schemaJson: string, value: unknown) {
-  const { validate, errorMessage: compileErrorMessage } = compileSchema(schemaJson);
-  if (!validate)
-    return {
-      issues: [
-        {
-          path: "$",
-          code: "SchemaCompileError",
-          severity: "warning",
-          message: compileErrorMessage ?? "Settings schema could not be compiled.",
-          suggestion: "Check the C# schema provider output.",
-        },
-      ] satisfies SettingsValidationIssue[],
-      status: "compile-error",
-    };
-
-  const ok = validate(value) as boolean;
-  return {
-    issues: ok ? [] : (validate.errors ?? []).map(toValidationIssue),
-    status: "configured",
-  };
-}
-
-function compileSchema(schemaJson: string): { validate?: ValidateFunction; errorMessage?: string } {
-  const hash = sha256(schemaJson);
-  const cached = schemaCache.get(hash);
-  if (cached) return cached;
-
+function declaredSchema(path: string, read: { content: string }): string | null {
+  if (!path.toLowerCase().endsWith(".json")) return null;
   try {
-    const schema = JSON.parse(schemaJson) as Record<string, unknown>;
-    delete schema.$schema;
-    const result = { validate: ajv.compile(schema) };
-    schemaCache.set(hash, result);
-    return result;
-  } catch (error) {
-    const result = {
-      errorMessage: errorMessage(error) || "Settings schema could not be compiled.",
-    };
-    schemaCache.set(hash, result);
-    return result;
+    const value: unknown = JSON.parse(read.content.replace(/^\uFEFF/, ""));
+    return isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
+  } catch {
+    return null;
   }
 }
 
-function toValidationIssue(error: ErrorObject): SettingsValidationIssue {
+function validateStructure(schemaJson: string, value: unknown, into: MemberIssue[]) {
+  let validate = schemaCache.get(schemaJson);
+  if (validate === undefined) {
+    try {
+      const schema = JSON.parse(schemaJson) as Record<string, unknown>;
+      delete schema.$schema;
+      validate = ajv.compile(schema);
+    } catch (error) {
+      validate = errorMessage(error);
+    }
+    schemaCache.set(schemaJson, validate);
+  }
+  if (typeof validate === "string") {
+    into.push(issue("SchemaCompileError", validate, "warning"));
+    return "unavailable" as const;
+  }
+  if (validate(value)) return "passed" as const;
+  into.push(...(validate.errors ?? []).map(ajvIssue));
+  return "failed" as const;
+}
+
+function ajvIssue(error: ErrorObject): MemberIssue {
   return {
     path: error.instancePath ? error.instancePath.replace(/^\//, "").replace(/\//g, ".") : "$",
     code: error.keyword,
@@ -701,286 +367,45 @@ function toValidationIssue(error: ErrorObject): SettingsValidationIssue {
   };
 }
 
-function getSchemaJson(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const schemaJson = (value as { schemaJson?: unknown }).schemaJson;
-  return typeof schemaJson === "string" && schemaJson.trim() ? schemaJson : null;
-}
-
-const discoverModule = (documentId: SettingsDocumentId, _ctx: SettingsRuntimeContext) =>
-  Effect.succeed({
-    moduleKey: documentId.moduleKey,
-    defaultRootKey: documentId.rootKey,
-    roots: [{ rootKey: documentId.rootKey, displayName: documentId.rootKey }],
-    storageOptions: { includeRoots: [], presetRoots: [] },
-  } satisfies SettingsModuleDescriptor);
-
-type SettingsSchemaProvider = { moduleKey: string; rootKey: string };
-
-// A declared schema selects a data validator; the local folder never selects a library.
-function settingsSchemaProvider(value: unknown): SettingsSchemaProvider | null {
-  if (!isRecord(value) || typeof value.$schema !== "string") return null;
-  try {
-    const path = new URL(value.$schema).pathname;
-    const match = /^\/schemas\/settings\/([^/]+)\/([^/]+)\.json$/.exec(path);
-    return match
-      ? { moduleKey: decodeURIComponent(match[1]!), rootKey: decodeURIComponent(match[2]!) }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-const resolveDocumentPath = Effect.fnUntraced(function* (
-  documentId: SettingsDocumentId,
-  operationKey: string,
-  storageRoot?: string,
-) {
-  return yield* resolveLocalPath(operationKey, () => {
-    const rootDirectory = resolveSettingsRootDirectory(
-      storageRoot ?? defaultSettingsBasePath(),
-      documentId.moduleKey,
-      documentId.rootKey,
-    );
-    return {
-      documentPath: resolveSettingsDocumentPath(rootDirectory, documentId.relativePath),
-      rootDirectory,
-    };
-  });
-});
-
-function parseJson(rawContent: string): ParsedJson {
-  try {
-    return { ok: true, value: JSON.parse(rawContent.replace(/^\uFEFF/, "")) as unknown };
-  } catch (error) {
-    return {
-      ok: false,
-      issue: {
-        path: "$",
-        code: "JsonParseError",
-        severity: "error",
-        message: errorMessage(error),
-        suggestion: "Fix the JSON syntax and retry.",
-      },
-    };
-  }
-}
-
-function containsDirectiveMetadata(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsDirectiveMetadata);
-  if (!isRecord(value)) return false;
-  if ("$include" in value || "$preset" in value) return true;
-  return Object.values(value).some(containsDirectiveMetadata);
-}
-
-function statMtime(info: FileSystem.File.Info): Date {
-  return Option.getOrElse(info.mtime, () => new Date(0));
-}
-
-const listSettingsDirectory: (
-  directory: string,
-  rootDirectory: string,
-  recursive: boolean,
-  operationKey: string,
-) => Effect.Effect<SettingsDirectoryListing, LocalOpError, FileSystem.FileSystem> =
-  Effect.fnUntraced(function* (
-    directory: string,
-    rootDirectory: string,
-    recursive: boolean,
-    operationKey: string,
-  ) {
-    const entries = yield* readDirectoryEntriesOrEmpty(directory, operationKey);
-    const files: string[] = [];
-    const directories: string[] = [];
-    for (const entry of entries) {
-      const path = join(directory, entry.name);
-      if (entry.info.type === "Directory") {
-        directories.push(toRelativePath(rootDirectory, path));
-        if (recursive) {
-          const nested = yield* listSettingsDirectory(path, rootDirectory, true, operationKey);
-          files.push(...nested.files);
-          directories.push(...nested.directories);
-        }
-        continue;
-      }
-      if (entry.info.type === "File" && entry.name.toLowerCase().endsWith(".json"))
-        files.push(path);
-    }
-    return { files, directories } satisfies SettingsDirectoryListing;
-  });
-
-const createSettingsFileEntry = Effect.fnUntraced(function* (
-  filePath: string,
-  rootDirectory: string,
-  operationKey: string,
-) {
-  const file = yield* statFile(filePath, operationKey);
-  const relativePath = toRelativePath(rootDirectory, filePath);
-  const relativePathWithoutExtension = stripJsonExtension(relativePath);
-  const directory = dirnameRelative(relativePath);
-  const name = basename(relativePath);
-  const isSchema =
-    name.toLowerCase().endsWith(".schema.json") || name.toLowerCase() === "schema.json";
-  const isFragment = relativePath.split("/").some((segment) => segment.startsWith("_"));
+function bridgeIssue(raw: {
+  code?: string;
+  message: string;
+  path?: string | null;
+  severity?: string;
+}): MemberIssue {
+  const severity = raw.severity?.toLowerCase();
   return {
-    path: filePath,
-    relativePath,
-    relativePathWithoutExtension,
-    name,
-    baseName: stripJsonExtension(name),
-    directory,
-    modifiedUtc: statMtime(file).toISOString(),
-    kind: isSchema
-      ? SettingsFileKind.Schema
-      : isFragment
-        ? SettingsFileKind.Fragment
-        : SettingsFileKind.Profile,
-    isFragment,
-    isSchema,
+    code: raw.code ?? "Semantic",
+    message: raw.message,
+    path: raw.path ?? "$",
+    severity: severity === "warning" || severity === "info" ? severity : "error",
   };
-});
-
-function buildSettingsDirectoryTree(
-  rootName: string,
-  rootRelativePath: string,
-  files: SettingsFileEntry[],
-  directories: string[],
-): SettingsDirectoryNode {
-  const root: MutableSettingsDirectoryNode = {
-    name: rootName,
-    relativePath: rootRelativePath,
-    directories: [],
-    files: [],
-  };
-  for (const directory of [...new Set(directories)].filter(Boolean)) {
-    ensureDirectoryNode(
-      root,
-      rootRelativePath,
-      localRelativePath(directory, rootRelativePath).split("/").filter(Boolean),
-    );
-  }
-  for (const file of files) {
-    const segments = localRelativePath(file.relativePath, rootRelativePath)
-      .split("/")
-      .filter(Boolean);
-    const name = segments.pop();
-    if (!name) continue;
-    const current = ensureDirectoryNode(root, rootRelativePath, segments);
-    current.files.push({
-      name,
-      relativePath: file.relativePath,
-      relativePathWithoutExtension: file.relativePathWithoutExtension,
-      id: file.relativePathWithoutExtension,
-      modifiedUtc: file.modifiedUtc,
-      kind: file.kind,
-      isFragment: file.isFragment,
-      isSchema: file.isSchema,
-    } satisfies SettingsFileNode);
-  }
-  sortSettingsTree(root);
-  return root;
 }
 
-function ensureDirectoryNode(
-  root: MutableSettingsDirectoryNode,
-  rootRelativePath: string,
-  segments: string[],
-): MutableSettingsDirectoryNode {
-  let current = root;
-  let currentRelativePath = rootRelativePath;
-  for (const segment of segments) {
-    currentRelativePath = currentRelativePath ? `${currentRelativePath}/${segment}` : segment;
-    let next = current.directories.find(
-      (directory) => directory.name.toLowerCase() === segment.toLowerCase(),
-    );
-    if (!next) {
-      next = { name: segment, relativePath: currentRelativePath, directories: [], files: [] };
-      current.directories.push(next);
-    }
-    current = next;
-  }
-  return current;
+function issue(code: string, message: string, severity: MemberIssue["severity"] = "error") {
+  return { code, message, path: "$", severity } satisfies MemberIssue;
 }
 
-function sortSettingsTree(node: MutableSettingsDirectoryNode): void {
-  node.directories.sort((left, right) => left.name.localeCompare(right.name));
-  node.files.sort((left, right) => left.name.localeCompare(right.name));
-  for (const directory of node.directories) sortSettingsTree(directory);
+function hasDirectives(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasDirectives);
+  if (!isRecord(value)) return false;
+  return "$include" in value || "$preset" in value || Object.values(value).some(hasDirectives);
 }
 
-const resolveLocalPath = Effect.fnUntraced(function* <A>(operationKey: string, resolve: () => A) {
-  return yield* Effect.try({
-    try: resolve,
-    catch: (error) => newLocalOpError(operationKey, errorMessage(error), 400),
-  });
-});
-
-function resolveSettingsRootDirectory(
-  basePath: string,
-  moduleKey: string,
-  rootKey: string,
-): string {
-  return safeJoin(
-    safeJoin(basePath, normalizeRelativePath(moduleKey)),
-    normalizeRelativePath(rootKey),
-  );
-}
-
-function resolveSettingsDocumentPath(rootDirectory: string, relativePath: string): string {
-  const normalized = normalizeRelativePath(relativePath);
-  if (!normalized) throw new Error("Settings document path is required.");
-  return safeJoin(
-    rootDirectory,
-    normalized.toLowerCase().endsWith(".json") ? normalized : `${normalized}.json`,
-  );
+function normalizeMemberPath(input: string): string {
+  if (win32.isAbsolute(input)) throw new Error("Member paths are pod-relative.");
+  const segments = input.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (!segments.length || segments.some((s) => s === "." || s === ".."))
+    throw new Error(`Invalid member path '${input}'.`);
+  return segments.join("/");
 }
 
 function safeJoin(rootPath: string, relativePath: string): string {
   const root = win32.resolve(rootPath);
   const combined = win32.resolve(root, relativePath.replace(/\//g, "\\"));
-  if (combined !== root && !combined.toLowerCase().startsWith(`${root.toLowerCase()}\\`))
-    throw new Error("Path escapes the configured settings root.");
+  if (!combined.toLowerCase().startsWith(`${root.toLowerCase()}\\`))
+    throw new Error("Member path escapes its pod.");
   return combined;
-}
-
-function normalizeRelativePath(input: string | null | undefined): string {
-  if (!input) return "";
-  if (win32.isAbsolute(input)) throw new Error("Rooted settings paths are not allowed.");
-  const segments = input
-    .replace(/\\/g, "/")
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  if (segments.some((segment) => segment === "." || segment === ".."))
-    throw new Error("Invalid settings path segment.");
-  return segments.join("/");
-}
-
-function toRelativePath(rootDirectory: string, filePath: string): string {
-  return win32.relative(rootDirectory, filePath).replace(/\\/g, "/");
-}
-
-function localRelativePath(relativePath: string, rootRelativePath: string): string {
-  if (!rootRelativePath) return relativePath;
-  const prefix = `${rootRelativePath.replace(/\/$/, "")}/`;
-  if (relativePath.toLowerCase().startsWith(prefix.toLowerCase()))
-    return relativePath.slice(prefix.length);
-  return relativePath.toLowerCase() === rootRelativePath.toLowerCase()
-    ? basename(relativePath)
-    : relativePath;
-}
-
-function dirnameRelative(relativePath: string): string | null {
-  const index = relativePath.lastIndexOf("/");
-  return index <= 0 ? null : relativePath.slice(0, index);
-}
-
-function stripJsonExtension(path: string): string {
-  return path.toLowerCase().endsWith(".json") ? path.slice(0, -5) : path;
-}
-
-function normalizeJsonTrailingNewline(rawContent: string): string {
-  return `${rawContent.replace(/\s*$/, "")}\n`;
 }
 
 function sha256(text: string): string {
@@ -993,8 +418,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function newLocalOpError(key: string, note: string, statusCode?: number): LocalOpError {
-  return new LocalOpError(key, note, statusCode);
 }
