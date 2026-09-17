@@ -46,17 +46,17 @@ Verdicts per builder land here after harvest: ADOPT / KILL / FALSIFIED with stak
 - w1-engines grafted at merge of `1c27dae`: shims deleted, `PodMembers.cs` is a thin view over the library, contract regenerated from a compiling Pe.App (72 ops), `codegen:check` in sync, `Pe.Shared.Tests` deterministic green. Run outputs are flat files named `<family>--<file>` because `WriteReceipt` takes plain names.
 - w1-web grafted.
 - w1-host: ADOPT pending graft. Stake `crusade/w1-host` at `14dd9b2`, report `reports/w1-host.md`; `settings.ts` 1000 to about 400 lines, net -1,370. Members `{ pod, path }` with host-native file I/O, offline ajv, `CompositionNeedsRevit` info instead of error, capture ending in a member write, apply as plan-then-apply on one key, `pod-members.test.ts` 73 targeted host tests green; full host suite fails only where it boots the old web. Overran the 90-minute box on scenario test runtime.
-- w1-host grafted at  (report Graft section): three duplicate C# bridge ops deleted (69 ops), write/save split, both shims gone, web and Pea typed;  and  re-addressed to members; web 426 tests, host non-scenario 148 tests green; six demo pages render headless with no page errors. Left that becomes wave 2:  lost its capture evidence panel (coverage, unmodeled facts) because capture now files a member instead of a reading; three scenario failures in takeoffs and chat suites unconfirmed on the base; , semantic validation, and field options still module-keyed in C#.
-- Wave 1 closed. NUMBER on the grafted tree: 147 dead-name hits in 57 files (baseline 492 at ). Secondary LOC 20,222 (baseline 25,116). Kernel routes 2 of 3 ( on it;  beside it).
+- w1-host grafted at `e8d577f` (report Graft section): three duplicate C# bridge ops deleted (69 ops), write/save split, both shims gone, web and Pea typed; `/family` and `/families` re-addressed to members; web 426 tests, host non-scenario 148 tests green; six demo pages render headless with no page errors. Left that becomes wave 2: `/family` lost its capture evidence panel (coverage, unmodeled facts) because capture now files a member instead of a reading; three scenario failures in takeoffs and chat suites unconfirmed on the base; `settings.schema`, semantic validation, and field options still module-keyed in C#.
+- Wave 1 closed. NUMBER on the grafted tree: 147 dead-name hits in 57 files (baseline 492 at `8143b9a`). Secondary LOC 20,222 (baseline 25,116). Kernel routes 2 of 3 (`/schedules` on it; `/pods` beside it).
 
 ### Wave 2 (cast 2026-09-16)
 
 | Builder | Seam | Line | Branch |
 |---|---|---|---|
-| w2-family |  onto the kernel, evidence panel restored | cn-host (primed on the member re-address) | crusade/w2-family |
-| w2-families |  onto the kernel, plan confirmation sheet, URL page state | cn-web (kernel author) | crusade/w2-families |
-| w2-engines-cleanup | duplicate lanes, , schema-url keyed ops, NUMBER to 0 | cn-engines | crusade/w2-engines-cleanup |
-| w2-critic | read-only purge critic on the wave 1 graft | fresh agent | none (reads ) |
+| w2-family | `/family` onto the kernel, evidence panel restored | cn-host (primed on the member re-address) | crusade/w2-family |
+| w2-families | `/families` onto the kernel, plan confirmation sheet, URL page state | cn-web (kernel author) | crusade/w2-families |
+| w2-engines-cleanup | duplicate lanes, `family.build`, schema-url keyed ops, NUMBER to 0 | cn-engines | crusade/w2-engines-cleanup |
+| w2-critic | read-only purge critic on the wave 1 graft | fresh agent | none (reads `crusade/normalize`) |
 
 ### Wave 2 (planned)
 
