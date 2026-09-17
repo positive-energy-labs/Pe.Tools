@@ -81,31 +81,6 @@ public record ScriptCancelData(
     string Message
 );
 
-public record PodListRequest();
-
-public record PodListData(List<PodData> Pods);
-
-/// <summary>An installed pod. Id, name, and version are null when pod.json is invalid; diagnostics cover manifest and entrypoints only.</summary>
-public record PodData(
-    string? Id,
-    string? Name,
-    string? Version,
-    string Folder,
-    List<ScriptPodEntrypointData> Entrypoints,
-    List<PodMemberData> Members,
-    List<ScriptDiagnostic> Diagnostics
-);
-
-public record PodMemberData(string Path, string Sha256, string? Schema);
-
-public record PodMemberReadRequest(string Pod, string Path);
-
-public record PodMemberReadData(string Content, string Sha256);
-
-public record PodMemberWriteRequest(string Pod, string Path, string Content);
-
-public record PodMemberWriteData(string Sha256);
-
 public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);
 
 public record PodMemberComposeData(string? Composed, List<ScriptDiagnostic> Diagnostics, List<PodDependencyData> Dependencies);
@@ -119,13 +94,6 @@ public record PodExportData(string ArchivePath, List<PodDependencyData> Vendored
 public record PodImportRequest(string ArchivePath, string? Folder = null);
 
 public record PodImportData(string Id, string Folder);
-
-public record ScriptPodEntrypointData(
-    string Id,
-    string SourcePath,
-    string? Name = null,
-    string? Description = null
-);
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptExecutionStatus {

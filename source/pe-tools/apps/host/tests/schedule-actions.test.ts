@@ -287,7 +287,7 @@ test("unresolved original Work action survives another lifetime and is discovera
   await f.submit(original);
   await f.restart();
   expect(
-    await readScopedActionStatuses({ kind: "schedule-grid", workspaceId: f.scope.work }),
+    await readScopedActionStatuses({ kind: "schedules", workspaceId: f.scope.work }),
   ).toMatchObject([{ id: original.id, state: "unknown" }]);
   const a = await f.read(f.a);
   await f.patch([{ path: ["basis"], value: { captureId: a.id } }]);

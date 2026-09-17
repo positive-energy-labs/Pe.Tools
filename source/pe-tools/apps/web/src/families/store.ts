@@ -20,7 +20,7 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
-import type { FfProjectData } from "#/host/familyfoundry";
+import { memberKey, memberOfKey, type FfProjectData } from "#/host/familyfoundry";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute } from "#/route";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
@@ -156,7 +156,8 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
   );
 
   const doc = handle.work.doc as FamiliesRouteDocument | null;
-  const profilePath = doc?.profilePath ?? null;
+  // The picker speaks ids; the Work speaks member addresses.
+  const profilePath = doc?.spec ? memberKey(doc.spec) : null;
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
@@ -230,7 +231,7 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       setProfile: (profile: string) =>
         handle.work.write([
-          { path: ["profilePath"], value: profile },
+          { path: ["spec"], value: memberOfKey(profile) },
           { path: ["excludedIds"], value: [] },
         ]),
       exclude: (id: number) => {
@@ -242,11 +243,8 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
         if (!documentScope) throw Error("Select an exact available project document");
         const ids = [...memory.pickedIds];
         if (!ids.length) return;
-        const result = await callHostRpc(
-          "familyfoundry.project",
-          { familyIds: ids },
-          documentScope,
-        );
+        // The read-only capture: families read back out as specs, nothing written to a pod.
+        const result = await callHostRpc("families.capture", { familyIds: ids }, documentScope);
         patch({ projection: result });
       },
       openFamily: (familyId: number) => {

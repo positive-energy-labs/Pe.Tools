@@ -10,7 +10,7 @@ export async function readScheduleCapture(
   target?: DocumentRef,
   base = "",
 ) {
-  const response = await fetch(`${base}/schedule-grid/readings`, {
+  const response = await fetch(`${base}/schedules/readings`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ key, input, target }),
@@ -18,7 +18,7 @@ export async function readScheduleCapture(
   const value = await response.json();
   if (!response.ok)
     throw Error((value as { error?: string }).error ?? `Schedule read failed (${response.status})`);
-  return key === "schedule-grid.catalog"
+  return key === "schedule.grid.catalog"
     ? scheduleCatalogSchema.parse(value)
     : scheduleReadingSchema.parse(value);
 }

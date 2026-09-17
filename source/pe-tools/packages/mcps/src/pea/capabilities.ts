@@ -23,10 +23,10 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   type HostOpResponse,
+  type PodList,
 } from "@pe/host-contracts/operation-types";
 import type { Capability, CapabilityCatalog, RouteStateSpec } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
-import { callPodOp, type PodOpResponse } from "../shared/pod-ops.ts";
 import { bundledPeaSkills, type BundledPeaSkill } from "./skills.ts";
 import type { RouteRegistration } from "./routes.ts";
 
@@ -34,7 +34,7 @@ type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-export type PodList = PodOpResponse<"pod.list">;
+export type { PodList };
 type Sessions = HostOpResponse<"bridge.sessions.list">["sessions"];
 
 export interface CapabilitySources {
@@ -279,7 +279,7 @@ export function createCapabilityCatalogSource(options: {
       });
       const [ops, pods, sessions] = await Promise.allSettled([
         fetchOps(base, bridgeSelector),
-        callPodOp(caller, "pod.list", {}),
+        caller.call("pod.list"),
         caller.call("bridge.sessions.list"),
       ]);
       const opsValue =

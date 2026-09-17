@@ -779,8 +779,6 @@ test("source seal captures the positive pod set and exact dependency bytes once"
       "settings/main.settings.json",
       "src/Main.cs",
     ]);
-    // Foreign fragments resolve natively by installed id; the seal carries only this pod.
-    expect(sealed?.sourceBundle.dependencies).toEqual([]);
     expect(
       Buffer.from(
         sealed!.sourceBundle.files.find((file) => file.path === "src/Main.cs")!.bytesBase64,
@@ -849,7 +847,6 @@ test("source seal carries only authored pod bytes, never release or composed tre
 
     const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
 
-    expect(sealed?.sourceBundle.dependencies).toEqual([]);
     expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
       "pod.json",
       "src/Main.cs",

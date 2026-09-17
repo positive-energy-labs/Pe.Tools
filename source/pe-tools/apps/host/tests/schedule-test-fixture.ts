@@ -224,9 +224,9 @@ export async function setup() {
       target,
     )) as ScheduleReading;
   const reading = await read();
-  const scope = { route: "schedule-grid", target: null, work: reading.workspaceId };
+  const scope = { route: "schedules", target: null, work: reading.workspaceId };
   const view = async () =>
-    (await fetch(`/pe/route-state/schedule-grid?work=${scope.work}`)).json() as Promise<{
+    (await fetch(`/pe/route-state/schedules?work=${scope.work}`)).json() as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
     }>;
@@ -234,7 +234,7 @@ export async function setup() {
     const previous = await view();
     return (
       await fetch(
-        `/pe/${actor === "agent" ? "agent/" : ""}route-state/schedule-grid/apply?work=${scope.work}`,
+        `/pe/${actor === "agent" ? "agent/" : ""}route-state/schedules/apply?work=${scope.work}`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },

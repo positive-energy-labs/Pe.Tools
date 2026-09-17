@@ -9,14 +9,14 @@ import { settingsManifest } from "#/settings/manifest";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
 test("browser semantic mutations project shared prose, actor, and target need", () => {
-  const settings = settingsManifest({ scope: { route: "settings", target: null, work: "test" } });
+  const settings = settingsManifest({ scope: { route: "pods", target: null, work: "test" }, member: { pod: "p", path: "settings/a.json" } });
   const pairs = [
     [settings.actions!.save, "settings.write"],
     [family.actions!.build, "family.build"],
     [family.actions!.apply, "family.apply"],
     [families.actions!.apply, "families.apply"],
     [parameterLinks.actions!.apply, "parameter-links.apply"],
-    [schedulesManifest().actions!.push, "schedule-grid.apply"],
+    [schedulesManifest().actions!.push, "schedule.grid.push"],
     [takeoffs.actions!["commit-sync"], "takeoffs.sync"],
   ] as const;
   const needs = {

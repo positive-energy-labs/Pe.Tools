@@ -254,8 +254,7 @@ export async function saveSettingsAction(
   if (scope.work === undefined || !document.basis) throw Error("An adopted file Work is required");
   const input = semanticActions["settings.write"].input.parse({
     member: document.basis.member,
-    workspaceId: scope.work,
-    write: { kind: "save", versionToken: document.basis.versionToken },
+    write: { kind: "save", sha256: document.basis.sha256 },
   });
   return runSemanticAction(
     "settings.write",

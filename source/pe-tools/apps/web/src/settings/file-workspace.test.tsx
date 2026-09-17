@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   location: {
     pathname: "/settings",
-    search: { mode: "file", module: "Global", root: "fragments", file: "a.json" } as Record<
+    search: { mode: "file", pod: "global", file: "a.json" } as Record<
       string,
       unknown
     >,
@@ -23,13 +23,8 @@ vi.mock("@tanstack/react-router", async (original) => ({
   useNavigate: () => mocks.navigate,
   useLocation: () => mocks.location,
 }));
-vi.mock("#/settings/host", () => ({
-  createLiveSettingsHost: () => ({
-    open: mocks.open,
-    workspaces: async () => [],
-    tree: async () => [],
-  }),
-}));
+vi.mock("#/settings/host", () => ({ openMember: mocks.open }));
+vi.mock("#/route/pods", () => ({ podHost: { list: async () => [] } }));
 vi.mock("#/route", async (original) => ({
   ...(await original<typeof import("#/route")>()),
   useRoute: () => ({
@@ -50,13 +45,12 @@ afterEach(() => {
   mocks.workRevision = 1;
 });
 const snapshot = (file: string) => ({
-  documentId: { moduleKey: "Global", rootKey: "fragments", relativePath: file },
-  workspaceId: file,
-  path: file,
+  member: { pod: "global", path: file },
+  sha256: "v1",
   rawContent: "{}",
-  versionToken: "v1",
   validation: { isValid: true, issues: [] },
 });
+const work = (file: string) => `Work member:global/${file}`;
 test("one subject-owned read ignores late selections, hides old Work during back/read failure, and select only navigates", async () => {
   const requests: Array<{
     file: string;
@@ -65,7 +59,7 @@ test("one subject-owned read ignores late selections, hides old Work during back
   }> = [];
   mocks.open.mockImplementation(
     (id) =>
-      new Promise((resolve, reject) => requests.push({ file: id.relativePath, resolve, reject })),
+      new Promise((resolve, reject) => requests.push({ file: id.path, resolve, reject })),
   );
   mocks.navigate.mockImplementation(async ({ search }) => {
     mocks.location = { ...mocks.location, search: search(mocks.location.search) };
@@ -79,7 +73,7 @@ test("one subject-owned read ignores late selections, hides old Work during back
           <ActionButton
             label="Select B"
             reason="Navigate to the selected file"
-            onClick={() => void select(snapshot("b.json").documentId)}
+            onClick={() => void select(snapshot("b.json").member)}
           />
         </div>
       )}
@@ -88,23 +82,23 @@ test("one subject-owned read ignores late selections, hides old Work during back
   const view = render(ui());
   expect(requests.map((row) => row.file)).toEqual(["a.json"]);
   await act(async () => requests[0].resolve(snapshot("a.json")));
-  expect(screen.getByText("Work a.json")).toBeTruthy();
+  expect(screen.getByText(work("a.json"))).toBeTruthy();
   expect(screen.getByText("Profile ready")).toBeTruthy();
   await act(async () => fireEvent.click(screen.getByText("Select B")));
   expect(requests).toHaveLength(1);
   view.rerender(ui());
-  expect(screen.queryByText("Work a.json")).toBeNull();
+  expect(screen.queryByText(work("a.json"))).toBeNull();
   mocks.location = { ...mocks.location, search: { ...mocks.location.search, file: "c.json" } };
   view.rerender(ui());
   await act(async () => requests[2].resolve(snapshot("c.json")));
   await act(async () => requests[1].resolve(snapshot("b.json")));
-  expect(screen.getByText("Work c.json")).toBeTruthy();
+  expect(screen.getByText(work("c.json"))).toBeTruthy();
   expect(mocks.location.search.file).toBe("c.json");
   mocks.location = { ...mocks.location, search: { ...mocks.location.search, file: "a.json" } };
   view.rerender(ui());
-  expect(screen.queryByText("Work c.json")).toBeNull();
+  expect(screen.queryByText(work("c.json"))).toBeNull();
   await act(async () => requests[3].reject(new Error("deleted on disk")));
-  expect(screen.queryByText("Work a.json")).toBeNull();
+  expect(screen.queryByText(work("a.json"))).toBeNull();
   expect(screen.getByText("deleted on disk", { exact: false })).toBeTruthy();
   expect(requests.map((row) => row.file)).toEqual(["a.json", "b.json", "c.json", "a.json"]);
 });
@@ -148,7 +142,7 @@ test("authoritative absent Work opens the selected file and projects it through 
       {(_scope, _select, observation, handle) => (
         <span>
           {handle.work.doc?.basis
-            ? `Authoring ${observation.reading.state === "ready" ? observation.reading.observation.path : ""}`
+            ? `Authoring ${observation.reading.state === "ready" ? observation.reading.observation.member.path : ""}`
             : "choose a family file"}
         </span>
       )}
@@ -157,7 +151,7 @@ test("authoritative absent Work opens the selected file and projects it through 
   const view = render(ui());
   await screen.findByText("choose a family file");
   await waitFor(() =>
-    expect(mocks.openWork).toHaveBeenCalledWith({ documentId: snapshot("a.json").documentId }),
+    expect(mocks.openWork).toHaveBeenCalledWith({ member: snapshot("a.json").member }),
   );
 
   mocks.workDoc = { basis: { versionToken: "v1" } };

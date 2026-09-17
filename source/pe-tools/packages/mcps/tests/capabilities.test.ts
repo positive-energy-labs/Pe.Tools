@@ -1,3 +1,4 @@
+import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { familiesRouteState } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
@@ -53,10 +54,11 @@ const pods = {
       folder: "broken",
       entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
       members: [],
-      diagnostics: [{ path: "pod.json", severity: "error", message: "bad json" }],
+      diagnostics: [{ code: "Manifest", path: "pod.json", severity: "error", message: "bad json" }],
     },
   ],
-};
+  unreadable: [],
+} satisfies PodList;
 
 function catalog(): CapabilityCatalog {
   return {

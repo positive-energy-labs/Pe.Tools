@@ -7,11 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { fileAddressSearch, fileSearch } from "#/settings/file-workspace";
 
-const id = (file: string) => ({
-  moduleKey: "FamilyFoundry",
-  rootKey: "models",
-  relativePath: file,
-});
+const id = (file: string) => ({ pod: "pe-standards", path: file });
 
 // The two-pane sharing test that lived here is deleted: `createFamilyStore`'s injected registry,
 // slices, host and writers are gone — the Family page is `useFamilyStore` over `useRoute` and the
@@ -25,7 +21,7 @@ test("router navigation, back, and reload retain the selected file address", asy
     validateSearch: fileSearch,
   });
   const history = createMemoryHistory({
-    initialEntries: ["/family?mode=file&module=FamilyFoundry&root=models&file=a.json"],
+    initialEntries: ["/family?mode=file&pod=pe-standards&file=a.json"],
   });
   const router = createRouter({ routeTree: root.addChildren([route]), history });
   await router.load();
@@ -41,7 +37,6 @@ test("router navigation, back, and reload retain the selected file address", asy
   await reload.load();
   expect(reload.state.location.search).toMatchObject({
     file: "a.json",
-    module: "FamilyFoundry",
-    root: "models",
+    pod: "pe-standards",
   });
 });

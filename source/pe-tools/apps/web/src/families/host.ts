@@ -1,7 +1,9 @@
 import { type AppliedFilter, type DocumentRef } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
-import { FF_PROFILE_MODULE } from "#/host/familyfoundry";
+import { FF_SPEC_SCHEMA, memberKey } from "#/host/familyfoundry";
+import { isSpecOf } from "#/route/manifest";
+import { podHost } from "#/route/pods";
 
 export type FamiliesDraft = {
   placement: AppliedFilter["placementScope"];
@@ -51,17 +53,14 @@ export function createLiveFamiliesHost(): FamiliesHost {
         ),
       ].sort((a, b) => a.localeCompare(b));
     },
+    /** Every installed spec member, as picker ids (`pod:path`). */
     async profiles() {
-      const result = await callHostRpc("settings.tree", {
-        ...FF_PROFILE_MODULE,
-        subDirectory: "",
-        recursive: true,
-        includeFragments: false,
-        includeSchemas: false,
-      });
-      return result.files
-        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
-        .map((entry) => entry.relativePath)
+      return (await podHost.list())
+        .flatMap((pod) =>
+          pod.members
+            .filter((member) => isSpecOf(member.schema, FF_SPEC_SCHEMA))
+            .map((member) => memberKey({ pod: pod.id, path: member.path })),
+        )
         .sort((a, b) => a.localeCompare(b));
     },
   };

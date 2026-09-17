@@ -4,6 +4,10 @@ import {
   settingsCandidate,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
+import type {
+  MemberIssue,
+  PodMemberComposeResponse,
+} from "@pe/host-contracts/operation-types";
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 import { createSettingsCommandHandlers, executionContent } from "../src/pea/settings-commands.ts";
@@ -11,8 +15,21 @@ import { createSettingsCommandHandlers, executionContent } from "../src/pea/sett
 afterEach(() => vi.restoreAllMocks());
 const member = (path = "settings/a.json") => ({ pod: "pe-standards", path });
 const reading = (content = '{"x":1}', sha256 = "v1") => ({ content, sha256 });
+const composition = (
+  composed: string | null,
+  diagnostics: MemberIssue[] = [],
+): PodMemberComposeResponse => ({
+  sha256: "v1",
+  schemaUrl: null,
+  schemaJson: null,
+  composed,
+  diagnostics,
+  dependencies: [],
+  schemaValidation: "no-schema",
+  semanticValidation: "not-run",
+});
 const work = (): SettingsRouteDocument => ({
-  basis: { member: member(), rawContent: '{"x":1}', versionToken: "v1" },
+  basis: { member: member(), rawContent: '{"x":1}', sha256: "v1" },
   fields: { "/x": { staged: { value: 2 }, proposal: { value: 3, by: "pea" } } },
 });
 const context = (document: SettingsRouteDocument) => ({
@@ -38,18 +55,18 @@ test("refresh and conflicts preserve pending work; adoption requires the reviewe
     "Pending work",
   );
   await expect(
-    handlers.adopt({ member: member(), versionToken: "v1" }, context(document)),
+    handlers.adopt({ member: member(), sha256: "v1" }, context(document)),
   ).rejects.toThrow("changed after review");
   await expect(
-    handlers.adopt({ member: member("settings/b.json"), versionToken: "v2" }, context(document)),
+    handlers.adopt({ member: member("settings/b.json"), sha256: "v2" }, context(document)),
   ).rejects.toThrow("bound member");
-  await handlers.adopt({ member: member(), versionToken: "v2" }, context(document));
+  await handlers.adopt({ member: member(), sha256: "v2" }, context(document));
   expect(document.fields).toEqual({});
-  expect(document.basis?.versionToken).toBe("v2");
+  expect(document.basis?.sha256).toBe("v2");
 });
 
 test("validate composes the staged draft of the bound member", async () => {
-  const compose = vi.fn(async () => ({ composed: "{}", diagnostics: [], dependencies: [] }));
+  const compose = vi.fn(async () => composition("{}"));
   const handlers = createSettingsCommandHandlers({
     pods: { read: async () => reading(), compose },
   });
@@ -57,15 +74,14 @@ test("validate composes the staged draft of the bound member", async () => {
   expect(compose).toHaveBeenCalledWith({ ...member(), content: JSON.stringify({ x: 2 }, null, 2) });
 });
 
-test("execution refuses a composition with non-info diagnostics", () => {
-  const composition = (severity?: string) => ({
-    composed: '{"x":1}',
-    dependencies: [],
-    diagnostics: [{ path: "/x", message: "bad", severity }],
-  });
-  expect(executionContent(composition("info"))).toBe('{"x":1}');
-  expect(() => executionContent(composition("error"))).toThrow("/x: bad");
-  expect(() => executionContent(composition())).toThrow("/x: bad");
+test("execution refuses a composition with non-info diagnostics or no composed JSON", () => {
+  const issue = (severity: MemberIssue["severity"]) => [
+    { code: "x", path: "/x", message: "bad", severity },
+  ];
+  expect(executionContent(composition('{"x":1}', issue("info")))).toBe('{"x":1}');
+  expect(() => executionContent(composition('{"x":1}', issue("error")))).toThrow("/x: bad");
+  expect(() => executionContent(composition('{"x":1}', issue("warning")))).toThrow("/x: bad");
+  expect(() => executionContent(composition(null))).toThrow("needs a Revit session");
 });
 
 test("malformed raw stays exact; structured splicing refuses without loss", () => {
@@ -122,7 +138,7 @@ test("real Work runtime keeps two members and two panes separate and rejects sta
         "pods",
         "human",
         "adopt",
-        { member: member("settings/b.json"), versionToken: "v1" },
+        { member: member("settings/b.json"), sha256: "v1" },
         2,
       )
     ).ok,
@@ -134,7 +150,7 @@ test("real Work runtime keeps two members and two panes separate and rejects sta
         "pods",
         "human",
         "adopt",
-        { member: member(), versionToken: "v1" },
+        { member: member(), sha256: "v1" },
         1,
       )
     ).ok,

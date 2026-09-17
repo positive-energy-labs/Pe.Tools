@@ -1,7 +1,11 @@
-import type {
-  SettingsValidationIssue,
-  SettingsValidationResult,
-} from "@pe/host-contracts/operation-types";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
+
+/** A member's validation as the host reports it. */
+export interface SettingsValidationResult {
+  isValid: boolean;
+  issues: readonly MemberIssue[];
+}
+type SettingsValidationIssue = MemberIssue;
 import type { SchemaDocument } from "@pe/schema-core";
 
 export interface FieldChangeSummary {

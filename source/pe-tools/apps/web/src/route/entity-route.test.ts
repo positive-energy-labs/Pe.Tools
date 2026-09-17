@@ -1,5 +1,10 @@
 import { expect, test, vi } from "vite-plus/test";
 
+const run = vi.hoisted(() => vi.fn());
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
+  runSemanticAction: run,
+}));
+
 import { entityRoute, type Ctx, type EntityPage, type PodRow } from "./manifest";
 
 const def = {
@@ -8,9 +13,9 @@ const def = {
   entity: "thing",
   target: "document" as const,
   schema: "/schemas/settings/Things/things.json",
-  capture: "thing.capture",
-  plan: "thing.plan",
-  apply: "thing.apply",
+  capture: "family.capture" as const,
+  apply: "family.apply" as const,
+  confirm: true,
 };
 
 const pods: PodRow[] = [
@@ -32,62 +37,57 @@ const pods: PodRow[] = [
   },
 ];
 
+const ref = { session: "s", openId: "o" };
 function ctx(page: Partial<EntityPage>) {
-  const calls: [string, unknown][] = [];
   const state = { page: { stage: "audit", pod: "", path: "", ...page } as EntityPage };
   const c = {
-    target: { kind: "document", ref: { session: "s", openId: "o" } },
+    target: { kind: "document", ref },
     readings: { pods: { state: "ready", observation: pods } },
     get page() {
       return state.page;
     },
-    call: async (op: string, input?: unknown) => {
-      calls.push([op, input]);
-      return op === "thing.capture"
-        ? { Name: "x" }
-        : op === "pod.member.compose"
-          ? { composed: { Name: "composed" } }
-          : op === "thing.plan"
-            ? { planHash: "ph" }
-            : {};
-    },
     setPage: (next: Partial<EntityPage>) => Object.assign(state.page, next),
   } as unknown as Ctx<unknown, string, EntityPage>;
-  return { c, calls, state };
+  return { c, state };
 }
-
-vi.stubGlobal("location", { origin: "http://web:3000" });
 
 const { actions } = entityRoute(def);
 
-test("capture files a new member with the route's $schema in the chosen pod", async () => {
+test("capture is the host workflow into the chosen pod; the page lands on the new member", async () => {
   expect(actions!.capture.ready(ctx({}).c as never, undefined as never)).toMatch(/choose the pod/);
-  const { c, calls, state } = ctx({ pod: "p" });
-  await actions!.capture.run(c as never, undefined as never);
-  const [op, write] = calls[1]!;
-  expect(calls[0]![0]).toBe("thing.capture");
-  expect(op).toBe("pod.member.write");
-  expect(JSON.parse((write as { content: string }).content)).toMatchObject({
-    $schema: expect.stringMatching(/\/schemas\/settings\/Things\/things\.json$/),
-    Name: "x",
+  const { c, state } = ctx({ pod: "p" });
+  run.mockReset().mockResolvedValue({
+    state: "succeeded",
+    result: { member: { pod: "p", path: "settings/family/x.json", sha256: "n" } },
   });
-  expect(state.page.path).toMatch(/^settings\/thing\/.+\.json$/);
+  await actions!.capture.run(c as never, undefined as never);
+  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p" }, ref);
+  expect(state.page.path).toBe("settings/family/x.json");
 });
 
-test("apply refuses unsaved or foreign members and sends composed bytes with source and plan hash", async () => {
+test("apply refuses unsaved or foreign members, confirms the plan, then applies that hash", async () => {
   expect(
     actions!.apply.ready(ctx({ pod: "p", path: "nope.json" }).c as never, undefined as never),
   ).toMatch(/save/);
   expect(
     actions!.apply.ready(ctx({ pod: "p", path: "settings/b.json" }).c as never, undefined as never),
   ).toMatch(/not a thing spec/);
-  const { c, calls } = ctx({ pod: "p", path: "settings/a.json" });
+  const { c } = ctx({ pod: "p", path: "settings/a.json" });
   expect(actions!.apply.ready(c as never, undefined as never)).toBeNull();
+  run
+    .mockReset()
+    .mockResolvedValueOnce({ state: "succeeded", result: { plan: { planHash: "ph" } } })
+    .mockResolvedValueOnce({ state: "succeeded", result: {} });
   await actions!.apply.run(c as never, undefined as never);
-  expect(calls.map(([op]) => op)).toEqual(["pod.member.compose", "thing.plan", "thing.apply"]);
-  expect(calls[2]![1]).toMatchObject({
-    spec: { Name: "composed" },
-    planHash: "ph",
-    source: { pod: "p", path: "settings/a.json", sha256: "h" },
-  });
+  const source = { pod: "p", path: "settings/a.json", sha256: "h" };
+  expect(run.mock.calls).toEqual([
+    ["family.apply", { source }, ref],
+    ["family.apply", { source, planHash: "ph" }, ref],
+  ]);
+});
+
+test("a refused workflow surfaces its reason", async () => {
+  const { c } = ctx({ pod: "p", path: "settings/a.json" });
+  run.mockReset().mockResolvedValue({ state: "failed", error: "member changed" });
+  await expect(actions!.apply.run(c as never, undefined as never)).rejects.toThrow("member changed");
 });

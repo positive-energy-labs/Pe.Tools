@@ -67,7 +67,7 @@ export async function capturePod(
     }
   };
   await walk("");
-  return { files, dependencies: [] };
+  return { files };
 }
 
 function validateFolder(folder: string): void {

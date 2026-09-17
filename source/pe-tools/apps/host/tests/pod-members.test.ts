@@ -15,6 +15,7 @@ import {
   composeMember,
   listPods,
   readMember,
+  saveMember,
   writeMember,
   type PodContext,
 } from "../src/settings.ts";
@@ -43,13 +44,13 @@ beforeEach(async () => {
       id: "sample",
       name: "Sample",
       version: "1.0.0",
-      entrypoints: [{ id: "run" }],
+      entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
     }),
   );
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
 
-test("pods list by manifest id; a bad member never hides its siblings; runs are not members", async () => {
+test("pods list by manifest id; a bad member never hides its siblings; runs list read-only", async () => {
   await writeFile(file(), '{"$schema":"https://pe/schemas/settings/family.json","width":1}');
   await writeFile(join(root, "Renamed In Explorer", "settings", "broken.json"), "{ nope");
   await mkdir(join(root, "Renamed In Explorer", "output", "run-1"), { recursive: true });
@@ -61,8 +62,13 @@ test("pods list by manifest id; a bad member never hides its siblings; runs are 
 
   const listed = await run(listPods(ctx()));
   const sample = listed.pods.find((pod) => pod.folder === "Renamed In Explorer")!;
-  expect(sample).toMatchObject({ id: "sample", name: "Sample", entrypoints: ["run"] });
+  expect(sample).toMatchObject({
+    id: "sample",
+    name: "Sample",
+    entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+  });
   expect(sample.members).toEqual([
+    { path: "output/run-1/receipt.json", sha256: expect.any(String), schema: null },
     { path: "settings/broken.json", sha256: expect.any(String), schema: null },
     {
       path: "settings/file.json",
@@ -90,16 +96,16 @@ test("read returns exact bytes and their sha256; invalid UTF-8 refuses", async (
   await expect(run(readMember(member, ctx()))).rejects.toMatchObject({ statusCode: 400 });
 });
 
-test("write creates once, replaces only the reviewed bytes, and refuses runs and escapes", async () => {
+test("write creates once, save replaces only the reviewed bytes, and refuses runs and escapes", async () => {
   const created = await run(writeMember({ ...member, content: '{"a":1}' }, ctx()));
   expect(created).toEqual({ ...member, sha256: digest('{"a":1}') });
   await expect(run(writeMember({ ...member, content: "{}" }, ctx()))).rejects.toMatchObject({
     statusCode: 409,
   });
   await expect(
-    run(writeMember({ ...member, content: "{}", expectedSha256: digest("stale") }, ctx())),
+    run(saveMember({ ...member, content: "{}", expectedSha256: digest("stale") }, ctx())),
   ).rejects.toMatchObject({ statusCode: 409 });
-  await run(writeMember({ ...member, content: '{"a":2}', expectedSha256: created.sha256 }, ctx()));
+  await run(saveMember({ ...member, content: '{"a":2}', expectedSha256: created.sha256 }, ctx()));
   expect(await readFile(file(), "utf8")).toBe('{"a":2}');
   for (const path of ["output/run/receipt.json", "pod.json", "../escape.json"])
     await expect(
@@ -153,7 +159,8 @@ test("offline structural validation runs from a held schema; parse errors are is
 
 test("with a session, the draft composes natively, then schema and semantic checks run", async () => {
   const calls: [string, unknown][] = [];
-  const draft = '{"$schema":"https://pe/s.json","$preset":"@local/base.json"}';
+  const schemaUrl = "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json";
+  const draft = JSON.stringify({ $schema: schemaUrl, $preset: "@local/base.json" });
   const withBridge: PodContext = {
     podsRoot: root,
     invokeBridge: (key, payload) => {
@@ -162,34 +169,51 @@ test("with a session, the draft composes natively, then schema and semantic chec
         return Effect.succeed({
           composed: '{"width":3}',
           diagnostics: [
-            { code: "Shadowed", message: "a preset key is shadowed", severity: "Warning" },
+            {
+              stage: "Shadowed",
+              message: "a preset key is shadowed",
+              severity: "Warning",
+              source: "settings/base.json",
+            },
           ],
           dependencies: [{ id: "sample", path: "settings/base.json", sha256: "b".repeat(64) }],
         });
       if (key === "settings.schema") return Effect.succeed({ schemaJson: schema });
-      return Effect.succeed({ issues: [{ code: "Unknown", message: "no such family" }] });
+      return Effect.succeed({
+        isConfigured: true,
+        issues: [
+          { instancePath: "/width", code: "Unknown", severity: "Error", message: "no such family" },
+        ],
+      });
     },
   };
   const result = await run(composeMember({ ...member, content: draft }, withBridge));
   expect(calls.map(([key]) => key)).toEqual([
     "pod.member.compose",
     "settings.schema",
-    "settings.validate",
+    "settings.document.semantic-validation",
   ]);
   expect(calls[0]![1]).toEqual({ ...member, content: draft });
-  expect(calls[1]![1]).toEqual({ schemaUrl: "https://pe/s.json" });
+  expect(calls[1]![1]).toEqual({ moduleKey: "FamilyFoundry", rootKey: "models" });
+  expect(calls[2]![1]).toMatchObject({
+    moduleKey: "FamilyFoundry",
+    rootKey: "models",
+    relativePath: member.path,
+    rawContent: draft,
+  });
   expect(JSON.parse(result.composed!)).toEqual({ width: 3 });
   expect(result.dependencies).toHaveLength(1);
-  expect(result.diagnostics.map((d) => [d.code, d.severity])).toEqual([
-    ["Shadowed", "warning"],
-    ["Unknown", "error"],
+  expect(result.diagnostics.map((d) => [d.code, d.path, d.severity])).toEqual([
+    ["Shadowed", "settings/base.json", "warning"],
+    ["Unknown", "/width", "error"],
   ]);
+  expect(result.schemaJson).toBe(schema);
   expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
 });
 
 test("settings.write saves reviewed member Work and republishes the new basis", async () => {
   await writeFile(file(), '{"width":1}');
-  const scope = { route: "settings", target: null, work: memberWork(member) };
+  const scope = { route: settingsRouteState.route, target: null, work: memberWork(member) };
   const rows = new Map<string, unknown>();
   const work = new RouteWorkspace({
     registrations: [{ spec: settingsRouteState, handlers: {} }],
@@ -203,7 +227,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   const sha256 = digest('{"width":1}');
   const authored = await work.apply(
     scope,
-    "settings",
+    settingsRouteState.route,
     "human",
     [
       { path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } },
@@ -231,14 +255,14 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   const saved = await admit("save", { kind: "save", sha256 }, authored.revision!);
   expect(saved.state, JSON.stringify(saved)).toBe("succeeded");
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 5 });
-  const after = settingsRouteState.schema.parse((await work.read(scope, "settings"))!.doc);
+  const after = settingsRouteState.schema.parse((await work.read(scope, settingsRouteState.route))!.doc);
   expect(after.basis?.sha256).toBe(digest(await readFile(file())));
   expect(after.fields["/width"]?.staged).toBeUndefined();
   // The old basis is gone from disk; a second save against it refuses before writing.
   const stale = await admit(
     "stale",
     { kind: "save", sha256 },
-    (await work.read(scope, "settings"))!.revision,
+    (await work.read(scope, settingsRouteState.route))!.revision,
   );
   expect(stale.state).toBe("failed");
 });

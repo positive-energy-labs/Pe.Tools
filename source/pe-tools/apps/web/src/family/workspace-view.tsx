@@ -1,3 +1,4 @@
+import { memberOfKey } from "#/host/familyfoundry";
 import { Code, stringify } from "#/components/lang/code";
 import { PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
@@ -43,8 +44,8 @@ function FamilyHead() {
               store.feeds.profile.state === "error"
                 ? "the family host did not list its files"
                 : "reading the family files…",
-            picked: (id) => id === file,
-            pick: (id) => void store.actions.open(id).catch(() => undefined),
+            picked: (id) => memberOfKey(id).path === file,
+            pick: (id) => void store.actions.open(memberOfKey(id)).catch(() => undefined),
           },
         ]}
       />
@@ -143,28 +144,14 @@ function FamilyHead() {
             [
               "depends",
               <a
-                key={dependency.directivePath}
-                href="/settings"
-                title="Edit the shared source JSON. Changes affect every profile that includes it."
-                onClick={(event) => {
-                  event.preventDefault();
-                  void store.actions
-                    .openShared(dependency.documentId)
-                    .then(() => {
-                      const url = new URL(window.location.href);
-                      url.pathname = "/settings";
-                      url.searchParams.delete("family");
-                      window.location.assign(url.href);
-                    })
-                    .catch((error: unknown) =>
-                      store.actions.say(error instanceof Error ? error.message : String(error)),
-                    );
-                }}
+                key={`${dependency.id}:${dependency.path}`}
+                href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}
+                title="Edit the shared source JSON in its pod. Changes affect every member that includes it."
               >
-                {sharedEdit?.directives.includes(dependency.directivePath)
+                {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
                   ? "open referenced source "
                   : "edit shared "}
-                {dependency.directivePath}
+                @{dependency.id}/{dependency.path}
               </a>,
             ] as const,
         ),

@@ -23,7 +23,6 @@ export const DEMO_PODS: readonly PodRow[] = [
     folder: "Documents/Pe.Tools/Pods/mech-standards",
     entrypoints: [],
     members: [
-      { path: "pod.json", sha256: hash(1), schema: null },
       { path: DEMO_SPEC_PATH, sha256: hash(2), schema: SCHEDULE_SCHEMA },
       { path: "settings/_fields/Header.json", sha256: hash(3), schema: null },
       { path: "settings/_fields/IU Perf Heat.json", sha256: hash(4), schema: null },
@@ -36,24 +35,30 @@ export const DEMO_PODS: readonly PodRow[] = [
     name: "Scripts",
     version: "0.1.0",
     folder: "Documents/Pe.Tools/Pods/scripts",
-    entrypoints: ["src/Tag.cs"],
+    entrypoints: [{ id: "tag", sourcePath: "src/Tag.cs" }],
     members: [
-      { path: "pod.json", sha256: hash(6), schema: null },
       { path: "src/Tag.cs", sha256: hash(7), schema: null },
     ],
-    diagnostics: [{ message: "entrypoint src/Tag.cs: PeScripts.csproj is missing" }],
+    diagnostics: [
+      {
+        code: "Entrypoint",
+        path: "src/Tag.cs",
+        severity: "error",
+        message: "entrypoint src/Tag.cs: PeScripts.csproj is missing",
+      },
+    ],
   },
 ];
 
 export const DEMO_RECEIPT: Receipt = {
-  pod: "mech-standards",
-  member: DEMO_SPEC_PATH,
-  sha256: hash(2),
-  op: "schedule.apply",
+  podId: "mech-standards",
+  memberPath: DEMO_SPEC_PATH,
+  memberSha256: hash(2),
+  operation: "schedule.apply",
   planHash: null,
-  outcome: "applied",
-  outputs: ["schedule 481223 · DX Fan Coil Unit Performance Schedule"],
-  at: "2026-09-12T14:02:11Z",
+  outcome: "Succeeded",
+  outputs: ["result.json"],
+  reason: null,
 };
 
 export const DEMO_SPEC: DemoSpec = { content: SETTINGS_SEED_RAW, schema: SETTINGS_SEED_SCHEMA };

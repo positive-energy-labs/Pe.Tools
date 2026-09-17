@@ -1,44 +1,53 @@
 /**
- * The web's one reach into the pod folder: the `pod.*` ops. The host is the only reader of the
- * folder; these calls hand it an address (`{ pod, path }`) and get bytes or diagnostics back.
+ * The web's one reach into the pod folder: the host-local `pod.*` ops. The host owns member I/O so
+ * the web works offline; these calls hand it an address (`{ pod, path }`) and get bytes or
+ * diagnostics back. Writes are mutations, so they are admitted to the host action journal.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { Reading } from "@pe/agent-contracts";
+import { actionAdmissionSchema, type Reading } from "@pe/agent-contracts";
+import type {
+  MemberIssue,
+  PodMemberComposeResponse,
+  PodMemberWritten,
+} from "@pe/host-contracts/operation-types";
 
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc } from "#/host/client";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./manifest";
 
-export interface Diagnostic {
-  message: string;
-  path?: string;
-  severity?: string;
+export type Diagnostic = MemberIssue;
+export type Composed = PodMemberComposeResponse;
+
+/** A host-local mutation: admitted under an id, its receipt is the truth of what happened. */
+async function admitHost(key: "pod.member.write" | "pod.member.save", input: object) {
+  const action = await submitAction(
+    actionAdmissionSchema.parse({
+      id: crypto.randomUUID(),
+      kind: "operation",
+      key,
+      actor: "human",
+      destination: { kind: "host" },
+      input,
+      bases: {},
+    }),
+    "",
+    30_000,
+  );
+  if (action.state !== "succeeded")
+    throw Error("error" in action && action.error ? String(action.error) : `${key} ${action.state}`);
+  return (action as unknown as { result: PodMemberWritten }).result;
 }
 
-export interface Composed {
-  composed: unknown;
-  diagnostics: readonly Diagnostic[];
-  dependencies: readonly { id: string; path: string; sha256: string }[];
-}
-
-// ponytail: `callHostDynamic` until `pod.*` lands in host-ops.generated.ts; then `callHostRpc`.
 export const podHost = {
-  list: async () => ((await callHostDynamic("pod.list")) as { pods: PodRow[] }).pods,
-  read: (ref: MemberRef) =>
-    callHostDynamic("pod.member.read", ref) as Promise<{ content: string; sha256: string }>,
-  write: (ref: MemberRef, content: string) =>
-    callHostDynamic("pod.member.write", { ...ref, content }) as Promise<{ sha256: string }>,
-  compose: (ref: MemberRef, content: string) =>
-    callHostDynamic("pod.member.compose", { ...ref, content }) as Promise<Composed>,
-  schema: async (schemaUrl: string) => {
-    const schema = await callHostDynamic("settings.schema", { schemaUrl });
-    return typeof schema === "string" ? schema : JSON.stringify(schema);
-  },
-  validate: async (schemaUrl: string, content: unknown) =>
-    (
-      (await callHostDynamic("settings.validate", { schemaUrl, content })) as {
-        diagnostics: Diagnostic[];
-      }
-    ).diagnostics,
+  list: async (): Promise<PodRow[]> => [...(await callHostRpc("pod.list")).pods],
+  read: (ref: MemberRef) => callHostRpc("pod.member.read", ref),
+  /** Create a new member; refuses an existing path. */
+  write: (ref: MemberRef, content: string) => admitHost("pod.member.write", { ...ref, content }),
+  /** Overwrite the member only if it still holds the bytes the editor read. */
+  save: (ref: MemberRef, content: string, expectedSha256: string) =>
+    admitHost("pod.member.save", { ...ref, content, expectedSha256 }),
+  compose: (ref: MemberRef, content?: string) =>
+    callHostRpc("pod.member.compose", { ...ref, ...(content === undefined ? {} : { content }) }),
 };
 
 /** `pod.list` as a Reading, for an entity route to hand `useRoute` as its `pods`. */
@@ -69,16 +78,16 @@ export function usePodList(enabled = true): [Reading<unknown>, () => void] {
   return [reading, useCallback(() => setTick((n) => n + 1), [])];
 }
 
-/** A run folder's receipt (dogma law 10). */
+/** A run folder's receipt, as the engines write it (dogma law 10). */
 export interface Receipt {
-  pod: string;
-  member: string;
-  sha256: string;
-  op: string;
+  podId: string;
+  memberPath: string;
+  memberSha256: string;
+  operation: string;
   planHash?: string | null;
   outcome: string;
   outputs?: readonly string[];
-  at?: string;
+  reason?: string | null;
 }
 
 export const RECEIPT_PATH = /^output\/([^/]+)\/receipt\.json$/;

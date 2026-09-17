@@ -8,9 +8,8 @@ import { initialDraft, rowAgreement } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 
 const snapshot = (rawContent: string, composedContent = rawContent): FamilySnapshot => ({
-  documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "test" },
-  path: "test.json",
-  versionToken: "1",
+  member: { pod: "demo", path: "test" },
+  sha256: "1",
   observedAt: "2026-09-06T00:00:00Z",
   rawContent,
   composedContent,

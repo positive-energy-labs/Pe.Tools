@@ -3,8 +3,8 @@ import { useEffect, useMemo } from "react";
 import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 
 import type { Verdict } from "#/components/master-table/model";
-import { callHostRpc } from "#/host/client";
-import { FF_PROFILE_MODULE } from "#/host/familyfoundry";
+import { memberOfKey } from "#/host/familyfoundry";
+import { openMember } from "#/settings/host";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
 import {
@@ -116,18 +116,14 @@ function useFamiliesWorkspaceModel(
   const profileLibrary = useHostCall(
     () =>
       Promise.all(
-        profilePaths.map((relativePath) =>
-          callHostRpc(
-            "settings.document.open",
-            { documentId: { ...FF_PROFILE_MODULE, relativePath } },
-            scope,
-          ).then(
+        profilePaths.map((key) =>
+          openMember(memberOfKey(key)).then(
             (data) => ({ data, error: undefined as unknown }),
             (error: unknown) => ({ data: undefined, error }),
           ),
         ),
       ),
-    [...HOST_QUERY_KEY, target, "settings.document.open", profilePaths.join("|")],
+    [...HOST_QUERY_KEY, "pod.member.compose", profilePaths.join("|")],
     !fixture,
   );
   const profileDocs = profileLibrary.data ?? [];

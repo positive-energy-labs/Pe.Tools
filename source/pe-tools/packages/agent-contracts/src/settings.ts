@@ -86,6 +86,10 @@ export const settingsSnapshotSchema = z.object({
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
+  /** The fragments composition consumed, by installed pod id. */
+  dependencies: z
+    .array(z.object({ id: z.string(), path: z.string(), sha256: z.string() }))
+    .optional(),
   validation: settingsValidationSchema.nullish(),
 });
 export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;

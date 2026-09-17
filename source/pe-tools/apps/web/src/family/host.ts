@@ -1,37 +1,30 @@
 import {
   type FamilyDocument,
+  type PodMember,
   type SettingsFieldState,
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import { callHostRpc } from "#/host/client";
+import { isSpecOf } from "#/route/manifest";
+import { podHost } from "#/route/pods";
 
-export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
+/** The `$schema` path that says a member is a family model. */
+export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
 export type FieldState = SettingsFieldState;
 export type FamilySnapshot = SettingsSnapshot;
 export type EvidenceSlice = NonNullable<FamilyDocument["evidence"]>;
 export interface FamilyHost {
-  profile(target: string): Promise<string[]>;
+  profile(): Promise<PodMember[]>;
 }
 
-export function createLiveFamilyHost(baseURL = ""): FamilyHost {
+export function createLiveFamilyHost(): FamilyHost {
   return {
-    async profile(target) {
-      const result = await callHostRpc(
-        "settings.tree",
-        {
-          ...FAMILY_MODULE,
-          mode: "file",
-          subDirectory: "",
-          recursive: true,
-          includeFragments: false,
-          includeSchemas: false,
-        },
-        { bridgeSessionId: target || undefined, baseURL },
+    async profile() {
+      return (await podHost.list()).flatMap((pod) =>
+        pod.members
+          .filter((member) => isSpecOf(member.schema, FAMILY_MODEL_SCHEMA))
+          .map((member) => ({ pod: pod.id, path: member.path })),
       );
-      return result.files
-        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
-        .map((entry) => entry.relativePath);
     },
   };
 }

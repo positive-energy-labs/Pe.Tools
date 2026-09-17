@@ -109,9 +109,11 @@ async function setup() {
         if (key === "families.capture")
           return {
             value: {
-              specs: [
-                { familyId: 1, familyName: "Box", spec: '{"box":1}', coverage: {} },
-                { familyId: 2, familyName: "Pipe Fitting", spec: '{"pipe":1}', coverage: {} },
+              diagnostics: [],
+              families: [
+                { familyId: 1, familyName: "Box", success: true, modelJson: '{"box":1}' },
+                { familyId: 2, familyName: "Pipe Fitting", success: true, modelJson: '{"pipe":1}' },
+                { familyId: 3, familyName: "Locked", success: false, error: "cannot open" },
               ],
             },
           };
@@ -355,7 +357,7 @@ test("families apply sends exactly the reviewed hashes, composed spec, and membe
   expect(row.state, JSON.stringify((row as { error?: string }).error)).toBe("succeeded");
   const native = sent.find((s) => s.key === "families.apply")!;
   expect(native.input.expectedPlanHashes).toEqual({ "1": "h1", "2": "h2" });
-  expect(native.input.spec).toBe(composed);
+  expect(native.input.specJson).toBe(composed);
   expect(native.input.source).toMatchObject(member("p.json"));
 });
 
@@ -562,5 +564,9 @@ test("families.capture writes one new member per family into the route's pod", a
     expect.stringMatching(/^settings\/families\/Box-.*\.json$/),
     expect.stringMatching(/^settings\/families\/Pipe-Fitting-.*\.json$/),
   ]);
-  expect(await readFile(join(podsRoot, "Global", members[1]!.path), "utf8")).toBe('{"pipe":1}');
+  // A captured model says what it is; a family that failed to open writes nothing.
+  expect(JSON.parse(await readFile(join(podsRoot, "Global", members[1]!.path), "utf8"))).toEqual({
+    $schema: "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json",
+    pipe: 1,
+  });
 });

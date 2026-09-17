@@ -5,16 +5,6 @@ import {
   type HostOperationDefinition,
 } from "./contracts/index.js";
 import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
-import {
-  podListResponseSchema,
-  podMemberComposeRequestSchema,
-  podMemberComposeResponseSchema,
-  podMemberReadResponseSchema,
-  podMemberSchema,
-  podMemberWriteRequestSchema,
-  podMemberWriteResponseSchema,
-} from "./crusade-shim.js";
-export * from "./crusade-shim.js";
 import { Schema } from "effect";
 
 /** Bridge op keys, sourced from the checked-in live-session typegen output. */
@@ -133,6 +123,106 @@ export const hostShellOpenDataSchema = Schema.Struct({
   path: Schema.String,
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
+
+// --- Pod members (host-local: the host owns member I/O so the web works offline) -------------
+
+/** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
+export const podMemberSchema = Schema.Struct({ pod: Schema.String, path: Schema.String });
+export type PodMember = Schema.Schema.Type<typeof podMemberSchema>;
+
+export const memberIssueSchema = Schema.Struct({
+  code: Schema.String,
+  message: Schema.String,
+  path: Schema.String,
+  severity: Schema.Literals(["error", "warning", "info"]),
+  suggestion: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
+
+export const podListResponseSchema = Schema.Struct({
+  pods: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      name: Schema.String,
+      version: Schema.String,
+      folder: Schema.String,
+      entrypoints: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          sourcePath: Schema.String,
+          name: Schema.optional(Schema.NullOr(Schema.String)),
+          description: Schema.optional(Schema.NullOr(Schema.String)),
+        }),
+      ),
+      members: Schema.Array(
+        Schema.Struct({
+          path: Schema.String,
+          sha256: Schema.String,
+          schema: Schema.NullOr(Schema.String),
+        }),
+      ),
+      diagnostics: Schema.Array(memberIssueSchema),
+    }),
+  ),
+  /** Folders whose `pod.json` could not name a pod; they list nothing else. */
+  unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
+});
+export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
+
+export const podMemberReadResponseSchema = Schema.Struct({
+  content: Schema.String,
+  sha256: Schema.String,
+});
+export type PodMemberRead = Schema.Schema.Type<typeof podMemberReadResponseSchema>;
+
+/** Create only: refuses an existing path. */
+export const podMemberWriteRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  content: Schema.String,
+});
+export type PodMemberWriteRequest = Schema.Schema.Type<typeof podMemberWriteRequestSchema>;
+
+/** Overwrite only the exact bytes the editor read. */
+export const podMemberSaveRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  content: Schema.String,
+  expectedSha256: Schema.String,
+});
+export type PodMemberSaveRequest = Schema.Schema.Type<typeof podMemberSaveRequestSchema>;
+
+export const podMemberWrittenSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  sha256: Schema.String,
+});
+export type PodMemberWritten = Schema.Schema.Type<typeof podMemberWrittenSchema>;
+
+export const podMemberComposeRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  /** The unsaved draft; absent composes the saved bytes. */
+  content: Schema.optional(Schema.NullOr(Schema.String)),
+  /** A schema the editor already holds; lets structural validation run with no session. */
+  schemaJson: Schema.optional(Schema.String),
+});
+export type PodMemberComposeRequest = Schema.Schema.Type<typeof podMemberComposeRequestSchema>;
+
+export const podMemberComposeResponseSchema = Schema.Struct({
+  sha256: Schema.String,
+  schemaUrl: Schema.NullOr(Schema.String),
+  /** The schema the host validated against, so the editor can render its form. */
+  schemaJson: Schema.NullOr(Schema.String),
+  composed: Schema.NullOr(Schema.String),
+  diagnostics: Schema.Array(memberIssueSchema),
+  dependencies: Schema.Array(
+    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+  ),
+  schemaValidation: Schema.Literals(["passed", "failed", "not-run", "no-schema", "unavailable"]),
+  semanticValidation: Schema.Literals(["passed", "failed", "not-run", "unavailable"]),
+});
+export type PodMemberComposeResponse = Schema.Schema.Type<typeof podMemberComposeResponseSchema>;
 
 export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
@@ -590,7 +680,11 @@ export const tsOnlyOperationSchemas = {
   },
   "pod.member.write": {
     request: podMemberWriteRequestSchema,
-    response: podMemberWriteResponseSchema,
+    response: podMemberWrittenSchema,
+  },
+  "pod.member.save": {
+    request: podMemberSaveRequestSchema,
+    response: podMemberWrittenSchema,
   },
   "pod.member.compose": {
     request: podMemberComposeRequestSchema,
@@ -792,14 +886,28 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Write Pod Member",
     description:
-      "Create a pod member (refuses an existing path), or replace one when expectedSha256 names its current bytes. Returns the new sha256.",
+      "Create a new pod member; refuses an existing path. Returns the written sha256. Capture and save-as-new use this.",
     intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
     requestTypeName: "PodMemberWriteRequest",
-    responseTypeName: "PodMemberWriteResponse",
-    searchTerms: ["pod", "member", "write", "save", "create", "spec"],
+    responseTypeName: "PodMemberWritten",
+    searchTerms: ["pod", "member", "write", "create", "capture", "spec"],
+  },
+  {
+    key: "pod.member.save",
+    origin: "host-local",
+    displayName: "Save Pod Member",
+    description:
+      "Overwrite an existing pod member only when expectedSha256 names its current bytes. Returns the new sha256.",
+    intent: "Mutate",
+    visibility: "EscalationVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodMemberSaveRequest",
+    responseTypeName: "PodMemberWritten",
+    searchTerms: ["pod", "member", "save", "overwrite", "edit", "spec"],
   },
   {
     key: "pod.member.compose",
@@ -960,16 +1068,17 @@ export type OpCallArgs<K extends AnyOperationKey, Options> =
     ? [request?: OpRequestOf<K>, options?: Options]
     : [request: OpRequestOf<K>, options?: Options];
 
-export type HostOpResponse<K extends AnyOperationKey> = K extends HostOperationKey
-  ? HostOps[K]["response"]
-  : K extends TsOnlyOperationKey
-    ? TsOnlyResponse<K>
+// A host-local op is dispatched by the host even when a bridge op shares its key.
+export type HostOpResponse<K extends AnyOperationKey> = K extends TsOnlyOperationKey
+  ? TsOnlyResponse<K>
+  : K extends HostOperationKey
+    ? HostOps[K]["response"]
     : never;
 
-export type HostOpRequest<K extends AnyOperationKey> = K extends HostOperationKey
-  ? HostOps[K]["request"]
-  : K extends TsOnlyOperationKey
-    ? TsOnlyRequest<K>
+export type HostOpRequest<K extends AnyOperationKey> = K extends TsOnlyOperationKey
+  ? TsOnlyRequest<K>
+  : K extends HostOperationKey
+    ? HostOps[K]["request"]
     : never;
 
 export const hostProblemDetailsSchema = Schema.Record(Schema.String, Schema.Unknown);

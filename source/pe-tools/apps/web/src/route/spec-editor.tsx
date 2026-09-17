@@ -18,7 +18,7 @@ import { useHostStatus } from "#/readings";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 
 import type { MemberRef } from "./manifest";
-import { podHost, type Composed, type Diagnostic } from "./pods";
+import { podHost, type Composed } from "./pods";
 
 /** The demo lane's member: no host is asked for anything. */
 export interface DemoSpec {
@@ -73,11 +73,11 @@ export function SpecEditor({
   const session =
     !fixture && status.state === "ready" && status.observation.bridgeIsConnected === true;
   const [basis, setBasis] = useState<string | null>(fixture?.content ?? null);
+  const [basisSha, setBasisSha] = useState<string | null>(null);
   const [draft, setDraft] = useState(fixture?.content ?? "");
   const [schemaJson, setSchemaJson] = useState<string | null>(fixture?.schema ?? null);
   const [mode, setMode] = useState<Mode>("form");
   const [composed, setComposed] = useState<Composed | null>(null);
-  const [semantic, setSemantic] = useState<readonly Diagnostic[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
   const key = member ? `${member.pod}/${member.path}` : "";
@@ -88,7 +88,7 @@ export function SpecEditor({
     setBasis(null);
     setFailure(null);
     podHost.read(member).then(
-      ({ content }) => live && (setBasis(content), setDraft(content)),
+      ({ content, sha256 }) => live && (setBasis(content), setBasisSha(sha256), setDraft(content)),
       (error) => live && setFailure(message(error)),
     );
     return () => {
@@ -97,18 +97,6 @@ export function SpecEditor({
     // `key` is the member's identity; the object is rebuilt every render.
   }, [key, fixture]);
 
-  useEffect(() => {
-    if (fixture) return;
-    if (!schema) return setSchemaJson(null);
-    let live = true;
-    podHost.schema(schema).then(
-      (json) => live && setSchemaJson(json),
-      (error) => live && setFailure(`schema ${schema}: ${message(error)}`),
-    );
-    return () => {
-      live = false;
-    };
-  }, [schema, fixture]);
 
   const parsed = useMemo(() => parse(draft), [draft]);
   const form = useMemo(() => schemaFormModel(draft, schemaJson), [draft, schemaJson]);
@@ -120,12 +108,13 @@ export function SpecEditor({
     if (fixture || !member || parsed.error) return;
     let live = true;
     const timer = setTimeout(() => {
+      // One host call: schema issues offline; composition and semantic issues with a session.
       podHost
         .compose(member, draft)
-        .then(async (result) => {
+        .then((result) => {
           if (!live) return;
           setComposed(result);
-          setSemantic(session && schema ? await podHost.validate(schema, result.composed) : []);
+          if (result.schemaJson) setSchemaJson(result.schemaJson);
         })
         .catch((error) => live && setFailure(message(error)));
     }, 400);
@@ -143,16 +132,27 @@ export function SpecEditor({
     );
 
   const dirty = basis !== null && draft !== basis;
-  const save = () =>
+  /** Save overwrites only the bytes this editor read; save as new files a sibling member. */
+  const save = (asNew: boolean) =>
     startSave(async () => {
-      const ref = { pod: member.pod, path: siblingPath(member.path) };
+      const ref = asNew ? { pod: member.pod, path: siblingPath(member.path) } : member;
       try {
-        await podHost.write(ref, draft);
+        const written = asNew
+          ? await podHost.write(ref, draft)
+          : await podHost.save(ref, draft, basisSha!);
+        if (!asNew) setBasis(draft), setBasisSha(written.sha256);
         onSaved?.(ref);
       } catch (error) {
         setFailure(message(error));
       }
     });
+  const saveReason = fixture
+    ? "The demo member is read-only."
+    : parsed.error
+      ? `The draft is not JSON: ${parsed.error}`
+      : dirty
+        ? null
+        : "Nothing to save.";
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5">
@@ -197,19 +197,24 @@ export function SpecEditor({
             />
             <ActionButton
               tone="commit"
+              label="save"
+              busy={saving}
+              disabled={!!saveReason || saving || !basisSha}
+              reason={
+                saveReason ??
+                "Overwrite this member; refuses if it changed on disk since it was read."
+              }
+              onClick={() => save(false)}
+            />
+            <ActionButton
               label="save as new"
               busy={saving}
-              disabled={!dirty || !!parsed.error || saving || !!fixture}
+              disabled={!!saveReason || saving}
               reason={
-                fixture
-                  ? "The demo member is read-only."
-                  : parsed.error
-                    ? `The draft is not JSON: ${parsed.error}`
-                    : dirty
-                      ? "File the draft as a new member beside this one; apply reads saved members only."
-                      : "Nothing to save."
+                saveReason ??
+                "File the draft as a new member beside this one; apply reads saved members only."
               }
-              onClick={save}
+              onClick={() => save(true)}
             />
           </>
         }
@@ -242,11 +247,16 @@ export function SpecEditor({
           says="the schema form cannot render this draft; raw JSON is kept as written"
         />
       ) : null}
-      {[...(composed?.diagnostics ?? []), ...semantic].map((issue, index) => (
-        <OutcomeLine key={index} kind="error" label={issue.path ?? "$"} says={issue.message} />
+      {(composed?.diagnostics ?? []).map((issue, index) => (
+        <OutcomeLine
+          key={index}
+          kind={issue.severity === "error" ? "error" : "advisory"}
+          label={issue.path}
+          says={issue.message}
+        />
       ))}
-      {session && composed ? (
-        <Code code={JSON.stringify(composed.composed, null, 2)} lang="json" title="composed" />
+      {session && composed?.composed ? (
+        <Code code={composed.composed} lang="json" title="composed" />
       ) : null}
     </div>
   );

@@ -1,24 +1,25 @@
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  memberWork,
+  settingsRouteState,
+  type PodMember,
   type Reading,
-  type SettingsDocumentId,
   type SettingsSnapshot,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { createLiveSettingsHost } from "#/settings/host";
-import { useRoute } from "#/route";
+import { openMember } from "#/settings/host";
+import { podHost } from "#/route/pods";
+import { useRoute, type PodRow } from "#/route";
 import { settingsManifest, type SettingsHandle } from "#/settings/manifest";
 import { ActionButton } from "#/components/lang/action-button";
 import { OutcomeLine } from "#/components/lang/outcome";
 
-const host = createLiveSettingsHost();
 export const fileSearch = (
   search: Record<string, unknown>,
-): { mode?: "file"; module?: string; root?: string; file?: string } => ({
+): { mode?: "file"; pod?: string; file?: string } => ({
   ...(search.mode === "file" ? { mode: "file" as const } : {}),
-  ...(typeof search.module === "string" ? { module: search.module } : {}),
-  ...(typeof search.root === "string" ? { root: search.root } : {}),
+  ...(typeof search.pod === "string" ? { pod: search.pod } : {}),
   ...(typeof search.file === "string" ? { file: search.file } : {}),
 });
 type FileSearch = ReturnType<typeof fileSearch>;
@@ -37,7 +38,7 @@ export function FileWorkspace({
   family?: boolean;
   children: (
     scope: WorkKey,
-    select: (id: SettingsDocumentId) => Promise<void>,
+    select: (member: PodMember) => Promise<void>,
     observation: FileObservation,
     handle: SettingsHandle,
   ) => ReactNode;
@@ -50,29 +51,28 @@ export function FileWorkspace({
     (paneKey ? (search[paneKey] ?? {}) : search) as Record<string, unknown>,
   );
   const selected = address.file ? address : initial;
-  const subject = JSON.stringify([selected.module, selected.root, selected.file]);
+  const subject = JSON.stringify([selected.pod, selected.file]);
   const [reading, setReading] = useState<{ subject: string; snapshot: SettingsSnapshot } | null>(
     null,
   );
   const opened = reading?.subject === subject ? reading.snapshot : null;
   const [failure, setFailure] = useState<{ subject: string; message: string } | null>(null);
   const error = failure?.subject === subject ? failure.message : "";
-  const select = async (documentId: SettingsDocumentId) => {
+  const select = async (member: PodMember) => {
     await navigate({
       to: location.pathname,
       search: (previous: Record<string, unknown>) =>
         paneKey
-          ? { ...previous, [paneKey]: fileAddressSearch({}, documentId) }
-          : fileAddressSearch(previous, documentId),
+          ? { ...previous, [paneKey]: fileAddressSearch({}, member) }
+          : fileAddressSearch(previous, member),
     } as Parameters<typeof navigate>[0]);
   };
   useEffect(() => {
     let current = true;
     setReading(null);
     setFailure(null);
-    if (selected.file && selected.module && selected.root) {
-      void host
-        .open({ moduleKey: selected.module, rootKey: selected.root, relativePath: selected.file })
+    if (selected.file && selected.pod) {
+      void openMember({ pod: selected.pod, path: selected.file })
         .then((reading) => {
           if (current) {
             setReading({ subject, snapshot: reading });
@@ -91,8 +91,8 @@ export function FileWorkspace({
       {!opened && (!selected.file || error) && <FilePicker select={select} />}
       {!opened && selected.file && !error && <span>Reading {selected.file}?</span>}
       {error && <OutcomeLine kind="error" label="file read failed" says={error} />}
-      {opened?.workspaceId && (
-        <FileWorkOwner key={opened.workspaceId} opened={opened}>
+      {opened && (
+        <FileWorkOwner key={memberWork(opened.member)} opened={opened}>
           {(scope, observation, handle) => children(scope, select, observation, handle)}
         </FileWorkOwner>
       )}
@@ -100,56 +100,32 @@ export function FileWorkspace({
   );
 }
 
-export const fileAddressSearch = (previous: Record<string, unknown>, id: SettingsDocumentId) => ({
+export const fileAddressSearch = (previous: Record<string, unknown>, member: PodMember) => ({
   ...previous,
   mode: "file" as const,
-  module: id.moduleKey,
-  root: id.rootKey,
-  file: id.relativePath,
+  pod: member.pod,
+  file: member.path,
 });
 
-function FilePicker({ select }: { select: (id: SettingsDocumentId) => Promise<void> }) {
-  const [workspaces, setWorkspaces] = useState<Awaited<ReturnType<typeof host.workspaces>>>([]);
-  const [files, setFiles] = useState<Awaited<ReturnType<typeof host.tree>>>([]);
-  const [bound, setBound] = useState<{
-    workspace: string | null;
-    module: string | null;
-    root: string | null;
-    file: string | null;
-  }>({
-    workspace: null,
-    module: null,
-    root: null,
-    file: null,
-  });
+/** Pods and their JSON members; picking one only navigates. No Revit is needed. */
+function FilePicker({ select }: { select: (member: PodMember) => Promise<void> }) {
+  const [pods, setPods] = useState<readonly PodRow[]>([]);
+  const [pod, setPod] = useState<string | null>(null);
+  const [file, setFile] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    void host
-      .workspaces()
+    void podHost
+      .list()
       .then((rows) => {
-        setWorkspaces(rows);
-        setBound((value) => ({ ...value, workspace: rows[0]?.workspaceKey ?? null }));
+        setPods(rows);
+        setPod(rows[0]?.id ?? null);
       })
       .catch((cause) => setError(String(cause)));
   }, []);
-  useEffect(() => {
-    let current = true;
-    setFiles([]);
-    if (bound.module && bound.root)
-      void host
-        .tree(bound.module, bound.root)
-        .then((rows) => {
-          if (current) setFiles(rows);
-        })
-        .catch((cause) => setError(String(cause)));
-    return () => {
-      current = false;
-    };
-  }, [bound.module, bound.root]);
-  const modules = workspaces.find((row) => row.workspaceKey === bound.workspace)?.modules ?? [];
-  const roots = modules.find((row) => row.moduleKey === bound.module)?.roots ?? [];
-  const pick = (key: "workspace" | "module" | "root" | "file") => (value: string) =>
-    setBound((previous) => ({ ...previous, [key]: value || null }));
+  const members =
+    pods
+      .find((row) => row.id === pod)
+      ?.members.filter((member) => member.path.toLowerCase().endsWith(".json")) ?? [];
   const choose = (
     label: string,
     value: string | null,
@@ -171,46 +147,28 @@ function FilePicker({ select }: { select: (id: SettingsDocumentId) => Promise<vo
   return (
     <div className="flex flex-wrap items-center gap-2 p-2">
       {choose(
-        "workspace",
-        bound.workspace,
-        workspaces.map((row) => ({ id: row.workspaceKey, label: row.displayName })),
-        pick("workspace"),
+        "pod",
+        pod,
+        pods.map((row) => ({ id: row.id, label: row.name })),
+        (value) => (setPod(value || null), setFile(null)),
       )}
       {choose(
-        "module",
-        bound.module,
-        modules.map((row) => ({ id: row.moduleKey, label: row.moduleKey })),
-        pick("module"),
-      )}
-      {choose(
-        "root",
-        bound.root,
-        roots.map((row) => ({ id: row.rootKey, label: row.displayName })),
-        pick("root"),
-      )}
-      {choose(
-        "file",
-        bound.file,
-        files.map((row) => ({ id: row.path, label: row.relativePath })),
-        pick("file"),
+        "member",
+        file,
+        members.map((row) => ({ id: row.path, label: row.path })),
+        (value) => setFile(value || null),
       )}
       <ActionButton
         label="open"
-        disabled={!bound.file}
-        reason="Open the picked settings file."
+        disabled={!pod || !file}
+        reason="Open the picked pod member."
         onClick={() => {
-          const file = files.find((row) => row.path === bound.file);
-          if (!file || !bound.module || !bound.root)
-            return setError("Choose a file from the settings tree.");
-          void select({
-            moduleKey: bound.module,
-            rootKey: bound.root,
-            relativePath: file.relativePath,
-          }).catch((cause) => setError(String(cause)));
+          if (!pod || !file) return setError("Choose a member from a pod.");
+          void select({ pod, path: file }).catch((cause) => setError(String(cause)));
         }}
       />
-      <span className="t-small text-ink-2">File mode requires no Revit connection</span>
-      {error ? <OutcomeLine kind="error" label="file discovery failed" says={error} /> : null}
+      <span className="t-small text-ink-2">Members open without a Revit connection</span>
+      {error ? <OutcomeLine kind="error" label="pod discovery failed" says={error} /> : null}
     </div>
   );
 }
@@ -222,20 +180,21 @@ function FileWorkOwner({
   opened: SettingsSnapshot;
   children: (scope: WorkKey, observation: FileObservation, handle: SettingsHandle) => ReactNode;
 }) {
+  const work = memberWork(opened.member);
   const scope: WorkKey = useMemo(
-    () => ({ route: "settings", target: null, work: opened.workspaceId! }),
-    [opened.workspaceId],
+    () => ({ route: settingsRouteState.route, target: null, work }),
+    [work],
   );
   const manifest = useMemo(
-    () => settingsManifest({ scope, documentId: opened.documentId }),
-    [scope, opened.documentId],
+    () => settingsManifest({ scope, member: opened.member }),
+    [scope, opened.member],
   );
   const [reading, setReading] = useState<Reading<SettingsSnapshot>>({
     state: "ready",
     observation: opened,
   });
   const route = useRoute(manifest, {
-    work: opened.workspaceId!,
+    work,
     provided: { document: reading },
   });
   const generation = useRef(0);
@@ -249,14 +208,14 @@ function FileWorkOwner({
   useEffect(() => {
     if (!route.work.current || route.work.doc?.basis || initialized.current) return;
     initialized.current = true;
-    void route.actions.open.run({ documentId: opened.documentId });
-  }, [route.work.current, route.work.doc?.basis, route.actions.open, opened.documentId]);
+    void route.actions.open.run({ member: opened.member });
+  }, [route.work.current, route.work.doc?.basis, route.actions.open, opened.member]);
   useEffect(() => () => void generation.current++, []);
   const refresh = async () => {
     const attempt = ++generation.current;
     setReading({ state: "stale", previous: observation, reason: "dirtied" });
     try {
-      const next = await host.open(opened.documentId);
+      const next = await openMember(opened.member);
       if (attempt === generation.current) setReading({ state: "ready", observation: next });
     } catch (cause) {
       if (attempt === generation.current) {

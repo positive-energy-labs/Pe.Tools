@@ -1,5 +1,5 @@
 import { FileWorkspace, fileSearch, type FileObservation } from "#/settings/file-workspace";
-import type { WorkKey, SettingsDocumentId } from "@pe/agent-contracts";
+import type { PodMember, WorkKey } from "@pe/agent-contracts";
 import { useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -15,8 +15,7 @@ export const familySearch = (
   search: Record<string, unknown>,
 ): ReturnType<typeof routeSearch> & {
   mode?: "file";
-  module?: string;
-  root?: string;
+  pod?: string;
   file?: string;
   thread?: string;
   demo?: string;
@@ -110,7 +109,7 @@ function FamilyPage({
   capture,
 }: {
   fileKey: WorkKey;
-  selectFile: (id: SettingsDocumentId) => Promise<void>;
+  selectFile: (member: PodMember) => Promise<void>;
   profile?: FileObservation;
   settingsHandle: SettingsHandle;
   target?: string;

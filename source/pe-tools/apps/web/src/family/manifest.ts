@@ -7,13 +7,13 @@ import { z } from "zod";
 import {
   actionStatusSchema,
   familyActions,
-  familyCaptureSchema,
-  familyPlanReadingSchema,
   familyProjectionSchema,
-  settingsDocumentIdSchema,
+  ffPlanEntrySchema,
+  podMemberSourceSchema,
   settingsSnapshotSchema,
   type FamilyCapture,
   type FamilyDocument,
+  type PodMemberSource,
   type Seed,
   type WorkKey,
   type DocumentRef,
@@ -33,10 +33,8 @@ import {
 import { previousOf } from "#/readings";
 
 import { familyFixtures, type AuthoredFamilyName } from "./authored-families";
-import { FAMILY_MODULE } from "./host";
 import {
   actionResult,
-  readFamilyCapture,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
@@ -50,15 +48,22 @@ export interface FamilyPage {
   file: string | null;
   /** The exact saved profile and operator intent reviewed before a build may leave the page. */
   buildReview: FamilyBuildReview | null;
+  /** The confirmation sheet of apply (dogma law 9): the host's plan for these exact bytes. */
+  plan: FamilyPlan | null;
 }
 
 export interface FamilyBuildReview {
   target: DocumentRef;
-  documentId: z.infer<typeof settingsDocumentIdSchema>;
-  workspaceId: string;
-  fileVersion: string;
+  source: PodMemberSource;
   reason: string;
 }
+
+const familyPlanSchema = z.object({
+  target: z.object({ session: z.string().min(1), openId: z.string().min(1) }),
+  source: podMemberSourceSchema,
+  entry: ffPlanEntrySchema,
+});
+export type FamilyPlan = z.infer<typeof familyPlanSchema>;
 
 export type FamilyAuthoringFacts = Omit<BuildFacts, "armedToken" | "boundTarget"> & {
   current: boolean;
@@ -70,29 +75,22 @@ export const familyPageSchema = z.object({
   file: z.string().nullable().default(null),
   buildReview: z
     .object({
-      documentId: settingsDocumentIdSchema,
+      source: podMemberSourceSchema,
       target: z.object({ session: z.string().min(1), openId: z.string().min(1) }),
-      workspaceId: z.string().min(1),
-      fileVersion: z.string().min(1),
       reason: z.string(),
     })
     .nullable()
     .default(null),
+  plan: familyPlanSchema.nullable().default(null),
 });
 
 export type FamilyReadingKey = "family" | "profile" | "receipts" | "inventory";
 
 type Ctx = RouteCtx<FamilyRouteDocument, FamilyReadingKey, FamilyPage>;
-type ProjectedFamilyDocument = Omit<FamilyDocument, "plan"> & {
-  plan?: (z.infer<typeof familyPlanReadingSchema> & { captureId: string }) | null;
-};
+type ProjectedFamilyDocument = Omit<FamilyDocument, "plan">;
 
-/** The latest successful apply of one retained plan to this exact document lifetime. */
-export function latestApplyStatus(
-  rows: readonly FamilyCapture[],
-  statuses: unknown,
-  target: { session: string; openId: string },
-) {
+/** The latest successful apply (a `family.apply` with a plan hash) to this exact document lifetime. */
+export function latestApplyStatus(statuses: unknown, target: { session: string; openId: string }) {
   if (!statuses) return null;
   return (
     actionStatusSchema
@@ -102,10 +100,10 @@ export function latestApplyStatus(
         (row) =>
           row.key === "family.apply" &&
           row.state === "succeeded" &&
+          typeof row.request.planHash === "string" &&
           row.destination.kind === "document" &&
           row.destination.ref.session === target.session &&
-          row.destination.ref.openId === target.openId &&
-          rows.some((capture) => capture.id === row.request.planId),
+          row.destination.ref.openId === target.openId,
       )
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null
   );
@@ -132,7 +130,7 @@ export function latestBuildStatus(
         )
           return false;
         const request = familyActions["family.build"].input.safeParse(row.request);
-        return request.success && sameProfileIdentity(profile, request.data);
+        return request.success && sameSource(profile.source, request.data.source);
       })
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null
   );
@@ -145,7 +143,6 @@ export function latestBuildStatus(
 export function projectReadings(
   rows: readonly FamilyCapture[],
   target?: { session: string; openId: string },
-  statuses?: unknown,
 ): ProjectedFamilyDocument {
   const result: ProjectedFamilyDocument = { bindings: {} };
   for (const capture of [...rows].reverse()) {
@@ -158,84 +155,57 @@ export function projectReadings(
       continue;
     if (capture.reading.kind === "spec")
       result.doc = familyProjectionSchema.shape.doc.parse(capture.reading.value);
-    else if (capture.reading.kind === "capture" && capture.provenance.kind === "live") {
-      result.evidence = familyProjectionSchema.shape.evidence.parse(capture.reading.value);
-      result.plan = null;
-    } else if (capture.reading.kind === "plan" && capture.provenance.kind === "live")
-      result.plan = { ...capture.reading.value, captureId: capture.id };
   }
-  const applied = target ? latestApplyStatus(rows, statuses, target) : null;
-  if (result.plan?.captureId === applied?.request.planId) result.plan = null;
   return result;
 }
 
-/** The live plan for the bound family document, read from the `family` capture stream. */
-const planOf = (ctx: Ctx) => {
-  const raw = previousOf(ctx.readings.family);
-  if (!raw || ctx.target.kind !== "document") return null;
-  const rows = familyCaptureSchema.array().parse(raw);
-  return projectReadings(rows, ctx.target.ref, previousOf(ctx.readings.receipts)).plan ?? null;
+/** The confirmation sheet, only while it names this document and these exact saved bytes. */
+export const planOf = (ctx: Ctx) => {
+  const plan = ctx.page.plan;
+  const profile = profileInputOf(ctx);
+  return plan &&
+    profile &&
+    ctx.target.kind === "document" &&
+    plan.target.session === ctx.target.ref.session &&
+    plan.target.openId === ctx.target.ref.openId &&
+    sameSource(plan.source, profile.source)
+    ? plan
+    : null;
 };
 
 /** The authored file the verbs act on; null when none is open. */
-const fileOf = (ctx: Ctx) =>
-  ctx.page.file ? { documentId: { ...FAMILY_MODULE, relativePath: ctx.page.file } } : null;
+const fileOf = (ctx: Ctx) => ctx.page.file;
 const NO_FILE = "Open an authored family.json first";
 
 const profileOf = (ctx: Ctx) =>
   settingsSnapshotSchema.safeParse(previousOf(ctx.readings.profile)).data ?? null;
 
+/** The saved member the verbs act on: its address and the exact bytes read. */
 const profileInputOf = (ctx: Ctx) => {
   const profile = profileOf(ctx);
-  return profile?.workspaceId && profile.versionToken
-    ? {
-        documentId: profile.documentId,
-        workspaceId: profile.workspaceId,
-        fileVersion: profile.versionToken,
-      }
-    : null;
+  return profile?.sha256 ? { source: { ...profile.member, sha256: profile.sha256 } } : null;
 };
 
-const sameProfileIdentity = (
-  left: z.infer<typeof familyPlanReadingSchema> | FamilyBuildReview,
-  profile: NonNullable<ReturnType<typeof profileInputOf>>,
-) =>
-  left.documentId.moduleKey === profile.documentId.moduleKey &&
-  left.documentId.rootKey === profile.documentId.rootKey &&
-  left.documentId.relativePath === profile.documentId.relativePath &&
-  left.workspaceId === profile.workspaceId &&
-  left.fileVersion === profile.fileVersion;
+export const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
+  left.pod === right.pod && left.path === right.path && left.sha256 === right.sha256;
 
 const targetOf = (ctx: Ctx) => {
   if (ctx.target.kind !== "document") throw Error("An open family document is required");
   return ctx.target.ref;
 };
 
-/** Family captures belong to the authored file workspace, independently of the open Revit file. */
+/** Family readings belong to the authored file workspace, independently of the open Revit file. */
 const familyCaptureWork = (work: WorkKey): WorkKey | null =>
   work.work ? { route: "family", target: null, work: work.work } : null;
 
-const captureScopeOf = (ctx: Ctx): WorkKey => {
-  const work = familyCaptureWork(ctx.work.key);
-  if (!work) throw Error("An authored file workspace is required");
-  return work;
-};
-
-const read = async (
-  ctx: Ctx,
-  key: "family.capture" | "family.plan",
-  input: Record<string, unknown>,
-) => {
-  await readFamilyCapture(key, input, captureScopeOf(ctx), targetOf(ctx));
-};
-
 const run = async (
   ctx: Ctx,
-  key: "family.build" | "family.apply",
+  key: "family.build" | "family.apply" | "family.capture",
   input: Record<string, unknown>,
-) => {
-  actionResult(await runSemanticAction(key, semanticActionInput(key, input), targetOf(ctx)));
-};
+) =>
+  actionResult(
+    await runSemanticAction(key, semanticActionInput(key, input), targetOf(ctx)),
+  ) as Record<string, unknown>;
 
 const emptyWork: FamilyRouteDocument = {};
 const emptyInventory = { sessions: [] } satisfies {
@@ -251,10 +221,8 @@ const familySeed = (
   work: emptyWork,
   readings: {
     profile: {
-      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: name },
-      path: `${name}.family.json`,
-      workspaceId: "demo",
-      versionToken: "fixture-native-v1",
+      member: { pod: "demo", path: `settings/family/${name}.json` },
+      sha256: "fixture-native-v1",
       observedAt: "2026-09-06T00:00:00Z",
       rawContent: familyFixtures[name],
     },
@@ -266,7 +234,7 @@ const familySeed = (
     receipts: [],
     inventory: emptyInventory,
   },
-  page: { stage: "author", view, file: `${name}.family.json`, buildReview: null },
+  page: { stage: "author", view, file: `settings/family/${name}.json`, buildReview: null, plan: null },
 });
 
 const absentAuthoringFacts: FamilyAuthoringFacts = {
@@ -284,7 +252,11 @@ const buildInput = z
   })
   .default({ reason: "" });
 
-export const familyManifest = (authoring = absentAuthoringFacts) =>
+export const familyManifest = (
+  authoring = absentAuthoringFacts,
+  /** Capture files a new member; the page opens it. */
+  openMember: (member: { pod: string; path: string }) => Promise<void> = async () => {},
+) =>
   defineRoute({
     key: "family",
     name: "Family",
@@ -295,7 +267,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         const scope = familyCaptureWork(work);
         return scope ? { kind: "family-readings", work: scope } : null;
       },
-      // FileWorkspace supplies this Reading from its supported settings.document.open authority.
+      // FileWorkspace supplies this Reading from pod.member.read + pod.member.compose.
       profile: () => null,
       /** Every action receipt for the bound document; the apply fold reads only this. */
       receipts: { kind: "receipts", target: { session: "", openId: "" } },
@@ -361,14 +333,14 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
             ctx.target.ref.session !== review.target.session ||
             ctx.target.ref.openId !== review.target.openId ||
             !profile ||
-            !sameProfileIdentity(review, profile)
+            !sameSource(review.source, profile.source)
           )
             return "Review the current saved family profile";
           return (
             buildRefusals({
               ...authoring,
               boundTarget: ctx.target.ref.session,
-              armedToken: review.fileVersion,
+              armedToken: review.source.sha256,
             })
               .map((refusal) => refusal.says)
               .join(" · ") || null
@@ -383,7 +355,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
             ctx.target.kind !== "document" ||
             ctx.target.ref.session !== review.target.session ||
             ctx.target.ref.openId !== review.target.openId ||
-            !sameProfileIdentity(review, profile)
+            !sameSource(review.source, profile.source)
           )
             throw Error("The current reviewed family profile is required");
           await run(ctx, "family.build", profile);
@@ -391,25 +363,28 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         },
       },
       capture: {
-        label: "capture evidence",
-        says: "Capture the current family's evidence from the bound document.",
-        needs: "family",
-        actor: "any",
+        label: "capture",
+        ...semanticActionFacts("family.capture"),
         input: z.record(z.string(), z.unknown()).optional(),
         dirties: ["family"],
         stage: "evidence",
-        ready: (ctx: Ctx) => (ctx.work.key.work ? null : "Open an authored family workspace first"),
-        run: async (ctx: Ctx, input?: Record<string, unknown>) => {
-          await read(ctx, "family.capture", input ?? {});
+        ready: (ctx: Ctx) =>
+          profileOf(ctx) ? null : "Open a member so the capture knows which pod it lands in",
+        run: async (ctx: Ctx) => {
+          const pod = profileOf(ctx)?.member.pod;
+          if (!pod) throw Error("Open a member so the capture knows which pod it lands in");
+          const result = await run(ctx, "family.capture", { pod });
+          const [member] = result.members as { pod: string; path: string }[];
+          if (member) await openMember(member);
         },
       },
       plan: {
         label: "plan",
-        says: "Plan the authored family edits against the bound family document.",
+        says: "Plan the saved family spec against the bound family document; the plan is the confirmation apply needs.",
         needs: "family",
-        actor: "any",
+        actor: "human",
         input: z.record(z.string(), z.unknown()).optional(),
-        dirties: ["family"],
+        dirties: [],
         requires: { readings: ["profile"] },
         stage: "evidence",
         ready: (ctx: Ctx) =>
@@ -418,10 +393,17 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
             : profileInputOf(ctx)
               ? null
               : "Wait for the current saved family profile",
-        run: async (ctx: Ctx, input?: Record<string, unknown>) => {
+        run: async (ctx: Ctx) => {
           const profile = profileInputOf(ctx);
           if (!profile) throw Error("The current saved family profile is required");
-          await read(ctx, "family.plan", { ...input, ...profile });
+          const result = await run(ctx, "family.apply", profile);
+          ctx.setPage({
+            plan: familyPlanSchema.parse({
+              target: targetOf(ctx),
+              source: profile.source,
+              entry: result.plan,
+            }),
+          });
         },
       },
       apply: {
@@ -434,22 +416,16 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         count: (ctx: Ctx) => planOf(ctx)?.entry.changes.length ?? null,
         ready: (ctx: Ctx) => {
           const plan = planOf(ctx);
-          if (!plan) return "Plan first";
-          const profile = profileInputOf(ctx);
-          if (!profile || !sameProfileIdentity(plan, profile))
-            return "Plan the current saved family profile";
+          if (!plan) return "Plan the current saved family profile first";
           return plan.entry.refusals.length
             ? `The plan carries ${plan.entry.refusals.length} refusals`
             : null;
         },
-        run: async (ctx: Ctx, input?: Record<string, unknown>) => {
+        run: async (ctx: Ctx) => {
           const plan = planOf(ctx);
-          if (!plan) throw Error("Plan first");
-          await run(ctx, "family.apply", {
-            ...input,
-            planId: plan.captureId,
-            expectedPlanHash: plan.entry.planHash,
-          });
+          if (!plan) throw Error("Plan the current saved family profile first");
+          await run(ctx, "family.apply", { source: plan.source, planHash: plan.entry.planHash });
+          ctx.setPage({ plan: null });
         },
       },
     } as never,

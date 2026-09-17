@@ -3,16 +3,16 @@
  * commands are now the manifest's `work` and `actions`) and `settings/product.ts` (the slot/verb
  * table is now the action list). Nothing here renders and nothing here holds React state.
  *
- * Settings is file-driven: its Readings are the bound document and the schema that renders it,
- * both `{kind:"file"}`. The route's Work is `settingsRouteState`, whose four commands
+ * Settings is member-driven: its Readings are the bound pod member and the schema that renders
+ * it, both `{kind:"member"}`. The route's Work is `settingsRouteState`, whose four commands
  * (open/adopt/refresh/validate) are reached through the one route-state writer; `save` is the
  * external mutation and goes through the action client so it earns a receipt.
  */
 import { z } from "zod";
 import {
-  settingsDocumentIdSchema,
+  podMemberSchema,
   settingsRouteState,
-  type SettingsDocumentId,
+  type PodMember,
   type SettingsRouteDocument,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -20,8 +20,8 @@ import {
 import { defineRoute, semanticActionFacts, type RouteHandle, type RouteManifest } from "#/route";
 import {
   SETTINGS_SEEDS,
-  SETTINGS_SEED_DOCUMENT_ID,
-  SETTINGS_SEED_SCHEMA_ID,
+  SETTINGS_SEED_MEMBER,
+  SETTINGS_SEED_SCHEMA_MEMBER,
   type SettingsAction,
   type SettingsPage,
   type SettingsReading,
@@ -50,68 +50,62 @@ export type SettingsHandle = RouteHandle<
 export interface SettingsRouteDeps {
   /** The Work this route reads and writes. */
   scope: WorkKey;
-  /** The document the Readings are OF. Absent = the seed address, so the demo lane still reads. */
-  documentId?: SettingsDocumentId;
-  /** Picking a file is navigation, not a write: the shell hands the route its navigator. */
-  selectFile?: (documentId: SettingsDocumentId) => Promise<void>;
+  /** The member the Readings are OF. Absent = the seed address, so the demo lane still reads. */
+  member?: PodMember;
+  /** Picking a member is navigation, not a write: the shell hands the route its navigator. */
+  selectFile?: (member: PodMember) => Promise<void>;
 }
 
 const page = z.object({
-  workspaceKey: z.string().optional(),
-  moduleKey: z.string().optional(),
-  rootKey: z.string().optional(),
+  pod: z.string().optional(),
   filePath: z.string().optional(),
   query: z.string().optional(),
   field: z.string().optional(),
 });
 
 const stageInput = z.object({ path: z.string(), value: z.unknown() });
-const openInput = z.object({ documentId: settingsDocumentIdSchema }).partial();
-const adoptInput = z.object({ versionToken: z.string() });
+const openInput = z.object({ member: podMemberSchema }).partial();
+const adoptInput = z.object({ sha256: z.string() });
 const validateInput = z.object({ includeProposals: z.boolean().optional() }).partial();
 
 export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest => {
-  const documentId = deps.documentId ?? SETTINGS_SEED_DOCUMENT_ID;
-  const schemaId = deps.documentId
-    ? { ...deps.documentId, relativePath: SETTINGS_SEED_SCHEMA_ID.relativePath }
-    : SETTINGS_SEED_SCHEMA_ID;
+  const member = deps.member ?? SETTINGS_SEED_MEMBER;
+  const schemaMember = deps.member
+    ? { ...deps.member, path: SETTINGS_SEED_SCHEMA_MEMBER.path }
+    : SETTINGS_SEED_SCHEMA_MEMBER;
 
   return defineRoute({
-    key: "settings",
+    key: settingsRouteState.route,
     name: "Settings",
-    docs: "Open a settings file as the edit basis, make the needed changes, then save the reviewed document back to disk.",
-    // File-driven: a settings document is read from disk, never from an open Revit model.
+    docs: "Open a pod member as the edit basis, make the needed changes, then save the reviewed member back to its pod.",
+    // Member-driven: a pod member is read from disk, never from an open Revit model.
     work: settingsRouteState,
     readings: {
-      document: { kind: "file", id: documentId },
-      schema: { kind: "file", id: schemaId },
+      document: { kind: "member", member },
+      schema: { kind: "member", member: schemaMember },
     },
     page,
     actions: {
       open: {
         label: "open",
-        says: "adopts the picked file as the edit basis; refuses while edits are pending",
+        says: "adopts the picked member as the edit basis; refuses while edits are pending",
         needs: "host",
         actor: "any",
         input: openInput as unknown as z.ZodType<never>,
         dirties: ["document", "schema"],
         ready: (ctx) =>
-          ctx.page?.filePath || ctx.work?.doc?.basis || deps.documentId
+          ctx.page?.filePath || ctx.work?.doc?.basis || deps.member
             ? null
-            : "pick a settings file first",
+            : "pick a pod member first",
         run: async (ctx, input) => {
-          const picked = (input as { documentId?: SettingsDocumentId } | undefined)?.documentId;
+          const picked = (input as { member?: PodMember } | undefined)?.member;
           const next =
             picked ??
-            (ctx.page?.moduleKey && ctx.page.rootKey && ctx.page.filePath
-              ? {
-                  moduleKey: ctx.page.moduleKey,
-                  rootKey: ctx.page.rootKey,
-                  relativePath: ctx.page.filePath,
-                }
-              : documentId);
+            (ctx.page?.pod && ctx.page.filePath
+              ? { pod: ctx.page.pod, path: ctx.page.filePath }
+              : member);
           if (deps.selectFile) return deps.selectFile(next);
-          return ctx.command("open", { documentId: next });
+          return ctx.command("open", { member: next });
         },
       },
       refresh: {
@@ -121,7 +115,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["document"],
-        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a settings file first"),
+        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a pod member first"),
         run: (ctx) => ctx.command("refresh"),
       },
       validate: {
@@ -131,7 +125,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
         actor: "any",
         input: validateInput as unknown as z.ZodType<never>,
         dirties: ["document"],
-        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a settings file first"),
+        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a pod member first"),
         run: (ctx, input) =>
           ctx.command("validate", {
             includeProposals: false,
@@ -145,11 +139,11 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
         actor: "human",
         input: adoptInput as unknown as z.ZodType<never>,
         dirties: ["document"],
-        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a settings file first"),
+        ready: (ctx) => (ctx.work?.doc?.basis ? null : "open a pod member first"),
         run: (ctx, input) =>
           ctx.command("adopt", {
-            documentId: ctx.work?.doc?.basis?.documentId ?? documentId,
-            versionToken: (input as { versionToken?: string } | undefined)?.versionToken ?? "",
+            member: ctx.work?.doc?.basis?.member ?? member,
+            sha256: (input as { sha256?: string } | undefined)?.sha256 ?? "",
           }),
       },
       save: {
@@ -160,8 +154,8 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
         requires: { work: true },
         ready: (ctx) => {
           const doc = ctx.work?.doc;
-          if (!doc?.basis) return "open a settings file first";
-          if (!doc.basis.versionToken) return "review an adopted file before saving";
+          if (!doc?.basis) return "open a pod member first";
+          if (!doc.basis.sha256) return "review an adopted member before saving";
           return null;
         },
         run: async (ctx) => {
@@ -172,7 +166,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
           const result = actionResult(row) as { kind?: string } | undefined;
           if (result?.kind === "conflict")
             throw new Error(
-              "File conflict. Refresh, review, and explicitly adopt the new basis; edits were preserved.",
+              "Member conflict. Refresh, review, and explicitly adopt the new basis; edits were preserved.",
             );
         },
       },
@@ -188,7 +182,7 @@ export const settingsManifest = (deps: SettingsRouteDeps): SettingsRouteManifest
         // the button said it was runnable.
         ready: (ctx, input) =>
           !ctx.work?.doc?.basis
-            ? "open a settings file first"
+            ? "open a pod member first"
             : ((input as { path?: string } | undefined)?.path ?? ctx.page?.field)
               ? null
               : "select a field to stage",

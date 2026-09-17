@@ -21,7 +21,7 @@ export const PROMPT_MAX = 200;
 const DEFAULTS = { mode: "threads" as const };
 
 const filePaneSearch = z
-  .object({ module: z.string(), root: z.string(), file: z.string() })
+  .object({ pod: z.string(), file: z.string() })
   .optional();
 
 export const chatSearchSchema = z.object({

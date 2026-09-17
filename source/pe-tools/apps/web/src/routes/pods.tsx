@@ -195,11 +195,13 @@ export function PodsRouteContent({
                       <div key={run} className="flex flex-col px-3 py-1">
                         <span className="face-mono t-small text-ink">{run}</span>
                         <span>
-                          {receipt.op} · {receipt.outcome}
+                          {receipt.operation} · {receipt.outcome}
                         </span>
                         <span className="face-mono t-small text-ink-mute">
-                          {receipt.sha256.slice(0, 12)}
-                          {receipt.sha256 === member?.sha256 ? " · these bytes" : " · older bytes"}
+                          {receipt.memberSha256.slice(0, 12)}
+                          {receipt.memberSha256 === member?.sha256
+                            ? " · these bytes"
+                            : " · older bytes"}
                         </span>
                         {receipt.outputs?.map((output) => (
                           <span key={output} className="t-small text-ink-2">
@@ -251,5 +253,5 @@ function useReceipts(pod: PodRow | null, path: string | null, demo: boolean) {
       live = false;
     };
   }, [pod, runs, demo]);
-  return { failure, runs: all.filter(([, receipt]) => receipt.member === path) };
+  return { failure, runs: all.filter(([, receipt]) => receipt.memberPath === path) };
 }

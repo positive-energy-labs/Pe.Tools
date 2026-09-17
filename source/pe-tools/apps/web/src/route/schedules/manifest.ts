@@ -56,7 +56,6 @@ export const scheduleSpec: EntityRouteDef<
   ScheduleGridReading,
   ScheduleGridPage
 > = {
-  // Work is addressed by route key; the host route-state spec still names it `schedule-grid`.
   key: scheduleGridRouteState.route,
   name: "Schedules",
   entity: "schedule",
@@ -80,23 +79,23 @@ export const schedulesManifest = () =>
       work: scheduleGridRouteState,
       readings: {
         catalog: {
-          kind: "schedule-grid-reading",
+          kind: "schedule-reading",
           subject: "catalog",
           target: { session: "", openId: "" },
         },
         work: (page: ScheduleGridPage) =>
           page.workspaceId
-            ? { kind: "schedule-grid-reading", subject: "work", id: page.workspaceId }
+            ? { kind: "schedule-reading", subject: "work", id: page.workspaceId }
             : null,
         saved: (page: ScheduleGridPage) =>
           page.captureId
-            ? { kind: "schedule-grid-reading", subject: "saved", id: page.captureId }
+            ? { kind: "schedule-reading", subject: "saved", id: page.captureId }
             : null,
         receipts: (page: ScheduleGridPage) =>
           page.workspaceId
             ? {
                 kind: "receipts",
-                scope: { kind: "schedule-grid", workspaceId: page.workspaceId },
+                scope: { kind: "schedules", workspaceId: page.workspaceId },
               }
             : null,
       },
@@ -107,7 +106,7 @@ export const schedulesManifest = () =>
           says: "reads the bound document's schedule catalogue again",
           needs: "document",
           actor: "any",
-          input: scheduleReads["schedule-grid.catalog"].input as unknown as z.ZodType<never>,
+          input: scheduleReads["schedule.grid.catalog"].input as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["catalog"],
           ready: () => null,
@@ -118,13 +117,13 @@ export const schedulesManifest = () =>
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
           actor: "any",
-          input: scheduleReads["schedule-grid.snapshot"].input as unknown as z.ZodType<never>,
+          input: scheduleReads["schedule.grid.snapshot"].input as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["work", "saved"],
           ready: () => null,
           run: async (ctx: Ctx, input: Record<string, unknown>) => {
             const reading = scheduleReadingSchema.parse(
-              await readScheduleCapture("schedule-grid.snapshot", input, targetOf(ctx)),
+              await readScheduleCapture("schedule.grid.snapshot", input, targetOf(ctx)),
             );
             ctx.setPage({
               workspaceId: reading.workspaceId,
@@ -135,8 +134,8 @@ export const schedulesManifest = () =>
         },
         push: {
           label: "push",
-          ...semanticActionFacts("schedule-grid.apply"),
-          input: semanticActionInputSchema("schedule-grid.apply") as never,
+          ...semanticActionFacts("schedule.grid.push"),
+          input: semanticActionInputSchema("schedule.grid.push") as never,
           stage: "audit",
           dirties: ["work", "saved", "receipts"],
           requires: { work: true, readings: ["saved", "receipts"] },
@@ -148,7 +147,7 @@ export const schedulesManifest = () =>
                 : null,
           run: async (ctx: Ctx) => {
             const result = actionResult(
-              await runSemanticAction("schedule-grid.apply", {}, targetOf(ctx), {
+              await runSemanticAction("schedule.grid.push", {}, targetOf(ctx), {
                 work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
               }),
             ) as {

@@ -172,29 +172,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         }
     }
 
-    [Op("pod.list", Does = "List installed pods under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and every member with its SHA-256 and $schema. Diagnostics cover pod.json and entrypoint source only; members validate one at a time when used.", Title = "List Pods", Finds = ["pod", "list", "members", "entrypoints", "settings"])]
-    public Task<PodListData> ListPodsAsync(PodListRequest request, CancellationToken cancellationToken) =>
-        // Pure disk IO — no Revit API access, so it never waits behind the execution slot.
-        Task.FromResult(new PodListData(this._pods.List().Select(pod => new PodData(
-            pod.Manifest?.Id,
-            pod.Manifest?.Name,
-            pod.Manifest?.Version,
-            pod.Folder,
-            pod.Manifest?.Entrypoints.Select(entrypoint => new ScriptPodEntrypointData(entrypoint.Id, entrypoint.SourcePath, entrypoint.Name, entrypoint.Description)).ToList() ?? [],
-            pod.Members.Select(member => new PodMemberData(member.Path, member.Sha256, member.Schema)).ToList(),
-            pod.Diagnostics.ToList()
-        )).ToList()));
-
-    [Op("pod.member.read", Does = "Read one pod member by pod id and pod-relative path; returns its text and SHA-256.", Title = "Read Pod Member", Finds = ["pod", "member", "read", "settings", "spec"])]
-    public Task<PodMemberReadData> ReadPodMemberAsync(PodMemberReadRequest request, CancellationToken cancellationToken) {
-        var (content, sha256) = this._pods.ReadMember(request.Pod, request.Path);
-        return Task.FromResult(new PodMemberReadData(content, sha256));
-    }
-
-    [Op("pod.member.write", Does = "Create a new pod member at a pod-relative path under src/, settings/, or assets/. Refuses when the path already exists; returns the SHA-256 of the written bytes.", Title = "Create Pod Member", Finds = ["pod", "member", "write", "create", "capture"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    public Task<PodMemberWriteData> WritePodMemberAsync(PodMemberWriteRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult(new PodMemberWriteData(this._pods.WriteMember(request.Pod, request.Path, request.Content)));
-
     [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
     public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
         var result = this._pods.Compose(request.Pod, request.Path, request.Content);

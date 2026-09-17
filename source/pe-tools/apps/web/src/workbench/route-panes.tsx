@@ -34,9 +34,9 @@ const routePaneSpecs = {
   instances: instancesRouteState,
   takeoffs: takeoffsRouteState,
   families: familiesRouteState,
-  settings: settingsRouteState,
+  pods: settingsRouteState,
   "parameter-links": parameterLinksRouteState,
-  "schedule-grid": scheduleGridRouteState,
+  schedules: scheduleGridRouteState,
 } satisfies Partial<Record<ChatPluginRoute, RouteStateSpec<z.ZodType>>>;
 
 const routePanes = {
@@ -86,10 +86,10 @@ function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
       </EmptyState>
     );
   // The settings pane is the pods browser: the same member editor /pods draws.
-  if (spec.route === "settings") return <PodsPane />;
+  if (spec.route === settingsRouteState.route) return <PodsPane />;
   if (spec.route === "families") return <FamiliesRouteContent thread={currentThreadId} />;
   if (spec.route === "takeoffs") return <TakeoffsPane key={workKey(work)} scope={work} />;
-  if (spec.route === "schedule-grid") return <LiveScheduleGridWorkspace key={workKey(work)} />;
+  if (spec.route === scheduleGridRouteState.route) return <LiveScheduleGridWorkspace key={workKey(work)} />;
   if (spec.route === "instances")
     return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
   return <ParameterLinksRouteContent />;

@@ -1,3 +1,5 @@
+import { FAMILY_MODEL_SCHEMA } from "#/family/host";
+import { isSpecOf } from "#/route/manifest";
 import { useMemo, type ComponentProps } from "react";
 import { ActionReceipts } from "#/actions/receipt";
 import { useRoute } from "#/route/use-route";
@@ -67,9 +69,9 @@ function SettingsReview({
   onCommit: () => Promise<unknown>;
 }) {
   const document = recordedRouteDoc(sessionState, settingsRouteState);
-  const isFamilyModel =
-    document?.basis?.documentId.moduleKey === "FamilyFoundry" &&
-    document.basis?.documentId.rootKey === "models";
+  const member = document?.basis?.member;
+  // `$schema` is the only thing that says what a member is for.
+  const isFamilyModel = declaresSchema(document?.basis?.rawContent, FAMILY_MODEL_SCHEMA);
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -93,12 +95,7 @@ function SettingsReview({
           <Link
             className="ml-auto"
             to="/family"
-            search={{
-              mode: "file",
-              module: document?.basis?.documentId.moduleKey,
-              root: document?.basis?.documentId.rootKey,
-              file: document?.basis?.documentId.relativePath,
-            }}
+            search={{ mode: "file", pod: member?.pod, file: member?.path }}
           >
             Open workspace
           </Link>
@@ -129,4 +126,12 @@ function displaySettingsValue(value: unknown): string {
   if (value === undefined) return "—";
   if (typeof value === "string") return value;
   return JSON.stringify(value);
+}
+
+function declaresSchema(raw: string | undefined, schema: string) {
+  try {
+    return isSpecOf((JSON.parse(raw ?? "") as { $schema?: string }).$schema, schema);
+  } catch {
+    return false;
+  }
 }

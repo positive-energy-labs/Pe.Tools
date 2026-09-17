@@ -6,6 +6,7 @@ import {
 } from "effect/unstable/http";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { RevitBridge } from "./bridge.ts";
@@ -48,10 +49,13 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
       const result = yield* Effect.result(
         bridge.invoke("host.ops.catalog", {}, readSessionId, null),
       );
+      // A host-local op is canonical; its bridge namesake (pod.member.compose) is listed once.
       const bridgeOps =
         result._tag === "Success" &&
         Array.isArray((result.success.value as { operations?: unknown }).operations)
-          ? (result.success.value as { operations: unknown[] }).operations
+          ? (result.success.value as { operations: { key?: unknown }[] }).operations.filter(
+              (op) => !isTsOnlyOperationKey(String(op.key)),
+            )
           : [];
       const body: {
         operations: unknown[];

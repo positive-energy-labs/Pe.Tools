@@ -120,7 +120,7 @@ const workOf = (ctx: Ctx) => {
  * authored snapshot rows it used to hold — those rows are not captures and threw on mount.
  */
 const seededWork: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  profilePath: "C:\\Profiles\\review.ffprofile",
+  spec: { pod: "demo", path: "settings/families/review.json" },
 });
 const emptyInventory = { sessions: [] } satisfies {
   sessions: readonly BridgeSessionListEntry[];
@@ -187,7 +187,7 @@ export const manifest = defineRoute({
       dirties: ["families"],
       requires: { work: true },
       count: (ctx: Ctx) => ctx.work.doc?.scope?.familyNames.length ?? null,
-      ready: (ctx: Ctx) => (ctx.work.doc?.profilePath ? null : "Choose a profile"),
+      ready: (ctx: Ctx) => (ctx.work.doc?.spec ? null : "Choose a spec"),
       run: async (ctx: Ctx) => {
         await readFamilyCapture("families.plan", {}, workOf(ctx).key, targetOf(ctx));
       },
@@ -202,7 +202,7 @@ export const manifest = defineRoute({
       count: (ctx: Ctx) => planOf(ctx).included.length || null,
       ready: (ctx: Ctx) => {
         const doc = ctx.work.doc;
-        if (!doc?.profilePath) return "Choose a profile";
+        if (!doc?.spec) return "Choose a spec";
         const { latest, plan } = planOf(ctx);
         return applyRefusalOf(doc, latest, plan, doc.excludedIds);
       },

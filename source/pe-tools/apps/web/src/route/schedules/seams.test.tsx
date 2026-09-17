@@ -93,9 +93,9 @@ test("no Work is subscribed and no bridge is claimed before a reading gives the 
   );
   await screen.findByText("bridge connecting");
   // The document-scoped slice used to open here and report "bridge connected" over Work that
-  // schedule-grid.apply refuses for having no workspaceId.
+  // schedule.grid.push refuses for having no workspaceId.
   expect(screen.queryByText("bridge connected")).toBeNull();
-  expect(opened.filter((url) => decodeURIComponent(url).includes("schedule-grid"))).toEqual([]);
+  expect(opened.filter((url) => decodeURIComponent(url).includes("schedules"))).toEqual([]);
   mounted.unmount();
 });
 

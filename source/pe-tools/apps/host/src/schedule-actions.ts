@@ -8,6 +8,7 @@ import {
   scheduleActions,
   scheduleReads,
   scheduleGridDocumentSchema,
+  scheduleGridRouteState,
   scheduleGridSnapshotSchema,
   scheduleCatalogSchema,
   nativeProcessSchema,
@@ -27,7 +28,8 @@ import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import type { PodMemberWriteResponse, SpecCapture } from "@pe/host-contracts/operation-types";
+import type { PodMemberWritten } from "@pe/host-contracts/operation-types";
+import type { ScheduleCapture } from "@pe/host-contracts/generated";
 import { composedSpec, podFolder } from "./settings.ts";
 import {
   capturePath,
@@ -276,7 +278,7 @@ export async function admitScheduleAction(
   return owner.admit(
     admission,
     async () => {
-      const view = await work.read(base.key, "schedule-grid");
+      const view = await work.read(base.key, scheduleGridRouteState.route);
       if (!view || view.revision !== base.revision) throw refused("Work changed");
       const document = scheduleGridDocumentSchema.parse(view.doc);
       if (!document.basis) throw refused("Select a binding reading before staging edits");
@@ -346,7 +348,7 @@ export async function admitScheduleAction(
       let publication: unknown;
       // Compare-and-swap only unchanged consumed cells; a conflict re-reads Work, never re-executes Revit.
       for (let attempt = 0; attempt < 4; attempt++) {
-        const view = await work.read(base.key, "schedule-grid");
+        const view = await work.read(base.key, scheduleGridRouteState.route);
         if (!view)
           throw new ActionIncomplete("Native outcome recorded; Work unavailable", { native });
         const latest = scheduleGridDocumentSchema.parse(view.doc);
@@ -362,7 +364,7 @@ export async function admitScheduleAction(
             })
           : [];
         const result = patches.length
-          ? await work.apply(base.key, "schedule-grid", "human", patches, view.revision)
+          ? await work.apply(base.key, scheduleGridRouteState.route, "human", patches, view.revision)
           : { ok: true, revision: view.revision };
         if (result.ok) {
           publication = result;
@@ -442,7 +444,7 @@ function admitScheduleSpec(
       }
       const { source } = scheduleActions[key].input.parse(admission.input);
       const { spec } = await runPods(deps, composedSpec(source, pods));
-      return { process, nativeKey: key, input: { spec, source } };
+      return { process, nativeKey: key, input: { specJson: spec, source } };
     },
     async (execution) => {
       const prepared = execution.prepared as {
@@ -465,11 +467,11 @@ function admitScheduleSpec(
       const request = {
         pod: prepared.pod!,
         path: prepared.path!,
-        content: (result as SpecCapture).spec,
+        content: (result as ScheduleCapture.Res.Response).specJson,
       };
       const member = (await execution.step("file", "pod.member.write", request, () =>
         writeMemberOnce(deps, request, pods),
-      )) as PodMemberWriteResponse;
+      )) as PodMemberWritten;
       return { executionContext: target, member };
     },
     false,

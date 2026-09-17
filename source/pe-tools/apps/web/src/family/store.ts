@@ -17,8 +17,8 @@ import {
   settingsWorkSnapshot,
   type FamilyCapture,
   type FamilyDocument,
+  type PodMember,
   type Reading,
-  type SettingsDocumentId,
   type SettingsRouteDocument,
   type SettingsSnapshot,
   type WorkKey,
@@ -26,12 +26,8 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
-import {
-  FAMILY_MODULE,
-  createLiveFamilyHost,
-  type EvidenceSlice,
-  type FieldState,
-} from "#/family/host";
+import { createLiveFamilyHost, type EvidenceSlice, type FieldState } from "#/family/host";
+import { memberKey } from "#/host/familyfoundry";
 import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { familyEditBuffer } from "./edit-buffer";
@@ -103,13 +99,12 @@ const initialMemory = (): FamilyPageMemory => ({
 /** The last succeeded `family.apply` receipt, folded onto the projection. */
 export function applyOnto(
   projection: FamilyDocument,
-  rows: readonly FamilyCapture[],
   statuses: unknown,
   receipts: unknown,
   target: { session: string; openId: string },
 ): FamilyDocument {
   if (!statuses || !receipts) return projection;
-  const status = latestApplyStatus(rows, statuses, target);
+  const status = latestApplyStatus(statuses, target);
   if (!status) return projection;
   const row = actionReceiptSchema
     .array()
@@ -117,7 +112,7 @@ export function applyOnto(
     .find((entry) => entry.id === status.id);
   if (!row) return projection;
   const step = row.steps.find(
-    (entry) => entry.key === "familyfoundry.apply" && entry.state === "succeeded",
+    (entry) => entry.key === "family.apply" && entry.state === "succeeded",
   );
   if (step?.state === "succeeded") {
     projection.apply = familyProjectionSchema.shape.apply.parse(step.result);
@@ -137,8 +132,8 @@ export function useFamilyStore(options: {
   /** Current saved-file observation supplied by FileWorkspace; absent only in a seed. */
   profile?: Reading<SettingsSnapshot>;
   refreshProfile?: () => Promise<void>;
-  selectFile?: (documentId: SettingsDocumentId) => Promise<void>;
-  initialDocumentId?: SettingsDocumentId;
+  selectFile?: (member: PodMember) => Promise<void>;
+  initialMember?: PodMember;
 }) {
   const workspaceId = options.fileKey.work;
   if (!workspaceId) throw Error("Family requires an authored file workspace");
@@ -191,7 +186,9 @@ export function useFamilyStore(options: {
     ],
   );
   const routeManifest = useMemo(() => {
-    const declared = familyManifest(authoringFacts);
+    const declared = familyManifest(authoringFacts, async (member) => {
+      await options.selectFile?.(member);
+    });
     return {
       ...declared,
       readings: {
@@ -201,7 +198,7 @@ export function useFamilyStore(options: {
           : {}),
       },
     };
-  }, [authoringFacts, options.thread]);
+  }, [authoringFacts, options.thread, options.selectFile]);
   const profileObservation = options.profile ? previousOf(options.profile) : undefined;
   const provided = useMemo(
     () => (options.profile ? { profile: options.profile } : undefined),
@@ -210,7 +207,7 @@ export function useFamilyStore(options: {
   const handle = useRoute(routeManifest, {
     target: options.target ?? null,
     work: workspaceId,
-    page: profileObservation ? { file: profileObservation.documentId.relativePath } : undefined,
+    page: profileObservation ? { file: profileObservation.member.path } : undefined,
     provided,
   });
   const [page, setPage] = handle.page as readonly [FamilyPage, (next: Partial<FamilyPage>) => void];
@@ -234,25 +231,23 @@ export function useFamilyStore(options: {
   }, [familyReading]);
   const statuses = previousOf(handle.readings.receipts as Reading<unknown>);
   const applyStatus = useMemo(
-    () => (target ? latestApplyStatus(readings, statuses, target) : null),
-    [readings, statuses, target],
+    () => (target ? latestApplyStatus(statuses, target) : null),
+    [statuses, target],
   );
   const applyReceipt = useReading<unknown>(
     !handle.demo && applyStatus ? { kind: "receipts", id: applyStatus.id } : null,
   );
   const receipt = previousOf(applyReceipt);
   const familyDoc = useMemo(() => {
-    const projection = projectReadings(readings, target ?? undefined, statuses);
-    return target ? applyOnto(projection, readings, statuses, receipt, target) : projection;
+    const projection = projectReadings(readings, target ?? undefined);
+    return target ? applyOnto(projection, statuses, receipt, target) : projection;
   }, [readings, target, statuses, receipt]);
   const buildStatus = useMemo(
     () =>
-      target && profileObservation?.workspaceId && profileObservation.versionToken
+      target && profileObservation?.sha256
         ? latestBuildStatus(statuses, target, {
             target,
-            documentId: profileObservation.documentId,
-            workspaceId: profileObservation.workspaceId,
-            fileVersion: profileObservation.versionToken,
+            source: { ...profileObservation.member, sha256: profileObservation.sha256 },
             reason: "",
           })
         : null,
@@ -275,7 +270,7 @@ export function useFamilyStore(options: {
   /* ── Derived lane ───────────────────────────────────────────────────────── */
   const review = {
     revision: settingsRevision,
-    versionToken: settingsDoc?.basis?.versionToken ?? null,
+    versionToken: settingsDoc?.basis?.sha256 ?? null,
   };
   const evidence = useMemo((): EvidenceSlice | null => {
     const value = familyDoc.evidence;
@@ -295,8 +290,8 @@ export function useFamilyStore(options: {
     const projected = settingsDoc ? settingsWorkSnapshot(settingsDoc, true) : null;
     return initialDraft(familySource(projected, evidence).world);
   }, [editState.draft, settingsDoc, evidence]);
-  const reconciliation = { plan: familyDoc.plan, apply: familyDoc.apply };
-  const profile = settingsDoc?.basis?.documentId?.relativePath ?? "";
+  const reconciliation = { plan: page.plan, apply: familyDoc.apply };
+  const profile = settingsDoc?.basis?.member.path ?? "";
   /** The verbs read the authored file from the page; an opened settings file names it (a seed
    * names its own, so a demo lane with no settings Work keeps the seeded file). */
   const openedFile = lane.document?.relativePath ?? null;
@@ -312,10 +307,10 @@ export function useFamilyStore(options: {
     unsavedCount: authoringFacts.unsavedCount,
     stagedCount: authoringFacts.stagedCount,
     boundTarget: targetLabel,
-    armedToken: page.buildReview?.fileVersion ?? null,
+    armedToken: page.buildReview?.source.sha256 ?? null,
   };
   const armedBuild: ArmedBuild = page.buildReview
-    ? { token: page.buildReview.fileVersion, reason: page.buildReview.reason }
+    ? { token: page.buildReview.source.sha256, reason: page.buildReview.reason }
     : null;
   const buildOutcome: BuildRefusal | null =
     handle.outcome?.key === "build" && handle.outcome.refusal
@@ -328,12 +323,14 @@ export function useFamilyStore(options: {
   /* ── The profile picker's option list ───────────────────────────────────── */
   const host = useMemo(() => createLiveFamilyHost(), []);
   const profileCall = useHostCall(
-    () => host.profile(targetLabel),
-    ["family-profiles", targetLabel],
+    () => host.profile(),
+    ["family-profiles"],
   );
   const feeds = {
     profile: {
-      options: profileCall.data ? profileCall.data.map((id) => ({ id, label: id })) : null,
+      options: profileCall.data
+        ? profileCall.data.map((member) => ({ id: memberKey(member), label: member.path }))
+        : null,
       state: profileCall.error
         ? ("error" as const)
         : profileCall.isPending
@@ -350,10 +347,10 @@ export function useFamilyStore(options: {
   /** The one-shot open of the document the route arrived pointing at. */
   const opened = useRef(false);
   useEffect(() => {
-    if (!options.initialDocumentId || opened.current || settingsDoc?.basis) return;
+    if (!options.initialMember || opened.current || settingsDoc?.basis) return;
     opened.current = true;
-    void settingsHandle.actions.open.run({ documentId: options.initialDocumentId });
-  }, [options.initialDocumentId, settingsDoc?.basis, settingsHandle.actions.open]);
+    void settingsHandle.actions.open.run({ member: options.initialMember });
+  }, [options.initialMember, settingsDoc?.basis, settingsHandle.actions.open]);
 
   const actions = useMemo(
     () => ({
@@ -421,29 +418,27 @@ export function useFamilyStore(options: {
         }),
       say: (text: string) => patch({ receipt: { verb: "page", text, at: Date.now() } }),
       flush,
-      openShared: async (documentId: SettingsDocumentId) => {
+      openShared: async (member: PodMember) => {
         await flush();
-        return settingsHandle.actions.open.run({ documentId });
+        return settingsHandle.actions.open.run({ member });
       },
-      /** Opening a different authored file is a file-Work navigation, never a doc write. */
-      async open(relativePath: string) {
+      /** Opening a different authored member is a Work navigation, never a doc write. */
+      async open(member: PodMember) {
         await flush();
-        setPage({ buildReview: null });
-        const documentId = { ...FAMILY_MODULE, relativePath };
-        if (options.selectFile) return options.selectFile(documentId);
-        await settingsHandle.actions.open.run({ documentId });
+        setPage({ buildReview: null, plan: null });
+        if (options.selectFile) return options.selectFile(member);
+        await settingsHandle.actions.open.run({ member });
       },
       refresh: () => settingsHandle.actions.refresh.run(),
-      adopt: (_documentId: SettingsDocumentId, versionToken: string) =>
-        settingsHandle.actions.adopt.run({ versionToken }),
+      adopt: (_member: PodMember, sha256: string) => settingsHandle.actions.adopt.run({ sha256 }),
       async save(reviewed = review) {
         if (edits.getSnapshot().draft) {
           await flush();
           throw Error("Input staged. Review the updated shared candidate before saving.");
         }
         if (reviewed?.revision == null || !reviewed.versionToken)
-          return "Review an adopted file before saving.";
-        if (!settingsDoc) return "Review an adopted file before saving.";
+          return "Review an adopted member before saving.";
+        if (!settingsDoc) return "Review an adopted member before saving.";
         const refusal = await settingsHandle.actions.save.run();
         if (refusal) return refusal.message;
         await options.refreshProfile?.();

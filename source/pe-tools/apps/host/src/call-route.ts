@@ -52,7 +52,14 @@ import {
   openShellPath,
   tailLogs,
 } from "./local-ops.ts";
-import { composeMember, listPods, readMember, writeMember, type PodContext } from "./settings.ts";
+import {
+  composeMember,
+  listPods,
+  readMember,
+  saveMember,
+  writeMember,
+  type PodContext,
+} from "./settings.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
   rhvacAssemblies,
@@ -466,7 +473,7 @@ export function makeCallRoute(
             )
               continue;
             const workScope = actionBasesSchema.safeParse(row.bases).data?.work?.key;
-            if (scope.kind === "schedule-grid") {
+            if (scope.kind === "schedules") {
               if (
                 row.key === "schedule.grid.push" &&
                 // The Work key names its workspace as `work` since fold-1; the filter still speaks
@@ -783,6 +790,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* readMember(yield* decodeRequest(key, request));
     case "pod.member.write":
       return yield* writeMember(yield* decodeRequest(key, request));
+    case "pod.member.save":
+      return yield* saveMember(yield* decodeRequest(key, request));
     case "pod.member.compose":
       return yield* composeMember(
         yield* decodeRequest(key, request),

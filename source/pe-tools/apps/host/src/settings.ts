@@ -4,17 +4,20 @@ import { join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { Effect, FileSystem, Semaphore } from "effect";
 import type {
-  BridgeMemberCompose,
-  BridgeSettingsSchema,
-  BridgeSettingsValidate,
   MemberIssue,
   PodList,
   PodMember,
   PodMemberComposeRequest,
   PodMemberComposeResponse,
+  PodMemberSaveRequest,
   PodMemberWriteRequest,
-  PodMemberWriteResponse,
+  PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
+import type {
+  PodMemberCompose,
+  SettingsDocumentSemanticValidation,
+  SettingsSchema,
+} from "@pe/host-contracts/generated";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -82,51 +85,70 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
   return { content: read.content, sha256: read.sha256 };
 });
 
+/** Create a new member; refuses an existing path. */
 export const writeMember = (request: PodMemberWriteRequest, ctx: PodContext = {}) =>
   writeLock.withPermit(
     Effect.gen(function* () {
       const key = "pod.member.write";
-      const path = yield* memberFile(request, ctx, key);
-      if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
-        return yield* Effect.fail(
-          new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
-        );
-      if (new TextDecoder().decode(new TextEncoder().encode(request.content)) !== request.content)
-        return yield* Effect.fail(
-          new LocalOpError(
-            key,
-            "Content must round-trip as UTF-8; unpaired surrogates cannot be written.",
-            400,
-          ),
-        );
+      const path = yield* writablePath(request, ctx, key);
       const fs = yield* FileSystem.FileSystem;
       yield* makeDirectory(win32.dirname(path), key);
-      if (request.expectedSha256 === undefined) {
-        const created = yield* Effect.result(
-          fs.writeFileString(path, request.content, { flag: "wx" }),
+      const created = yield* Effect.result(
+        fs.writeFileString(path, request.content, { flag: "wx" }),
+      );
+      if (created._tag === "Failure")
+        return yield* Effect.fail(
+          created.failure.reason._tag === "AlreadyExists"
+            ? new LocalOpError(key, `Member '${request.path}' already exists.`, 409)
+            : localOpFileError(key, created.failure),
         );
-        if (created._tag === "Failure")
-          return yield* Effect.fail(
-            created.failure.reason._tag === "AlreadyExists"
-              ? new LocalOpError(key, `Member '${request.path}' already exists.`, 409)
-              : localOpFileError(key, created.failure),
-          );
-      } else {
-        // Optimistic against external writers: read/check + rename is not an atomic CAS.
-        const current = yield* readText(path, key);
-        if (current?.sha256 !== request.expectedSha256)
-          return yield* Effect.fail(
-            new LocalOpError(key, `Member '${request.path}' changed since it was read.`, 409),
-          );
-        yield* writeFileStringAtomic(path, request.content, key);
-      }
-      return {
-        pod: request.pod,
-        path: normalizeMemberPath(request.path),
-        sha256: sha256(request.content),
-      } satisfies PodMemberWriteResponse;
+      return written(request);
     }),
   );
+
+/** Overwrite a member only when its current bytes are the ones the editor read. */
+export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) =>
+  writeLock.withPermit(
+    Effect.gen(function* () {
+      const key = "pod.member.save";
+      const path = yield* writablePath(request, ctx, key);
+      // Optimistic against external writers: read/check + rename is not an atomic CAS.
+      const current = yield* readText(path, key);
+      if (current?.sha256 !== request.expectedSha256)
+        return yield* Effect.fail(
+          new LocalOpError(key, `Member '${request.path}' changed since it was read.`, 409),
+        );
+      yield* writeFileStringAtomic(path, request.content, key);
+      return written(request);
+    }),
+  );
+
+const writablePath = Effect.fnUntraced(function* (
+  request: PodMember & { content: string },
+  ctx: PodContext,
+  key: string,
+) {
+  const path = yield* memberFile(request, ctx, key);
+  if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
+    return yield* Effect.fail(
+      new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
+    );
+  if (new TextDecoder().decode(new TextEncoder().encode(request.content)) !== request.content)
+    return yield* Effect.fail(
+      new LocalOpError(
+        key,
+        "Content must round-trip as UTF-8; unpaired surrogates cannot be written.",
+        400,
+      ),
+    );
+  return path;
+});
+
+const written = (request: PodMember & { content: string }): PodMemberWritten => ({
+  pod: request.pod,
+  path: normalizeMemberPath(request.path),
+  sha256: sha256(request.content),
+});
 
 export const composeMember = Effect.fnUntraced(function* (
   request: PodMemberComposeRequest,
@@ -137,6 +159,7 @@ export const composeMember = Effect.fnUntraced(function* (
   const base = {
     sha256: saved?.sha256 ?? sha256(content),
     schemaUrl: null,
+    schemaJson: request.schemaJson ?? null,
     composed: null,
     dependencies: [],
   };
@@ -152,6 +175,7 @@ export const composeMember = Effect.fnUntraced(function* (
     } satisfies PodMemberComposeResponse;
   }
   const schemaUrl = isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
+  const library = schemaUrl ? settingsLibrary(schemaUrl) : null;
   const diagnostics: MemberIssue[] = [];
   let composed: unknown = value;
   let dependencies: PodMemberComposeResponse["dependencies"] = [];
@@ -170,17 +194,21 @@ export const composeMember = Effect.fnUntraced(function* (
         pod: request.pod,
         path: request.path,
         content,
-      })) as BridgeMemberCompose;
-      diagnostics.push(...result.diagnostics.map(bridgeIssue));
+      })) as PodMemberCompose.Res.Response;
+      diagnostics.push(
+        ...result.diagnostics.map((d) =>
+          bridgeIssue({ code: d.stage, message: d.message, path: d.source, severity: d.severity }),
+        ),
+      );
       dependencies = [...result.dependencies];
       composed = result.composed == null ? undefined : JSON.parse(result.composed);
     }
   }
   const schemaJson =
     request.schemaJson ??
-    (schemaUrl && ctx.invokeBridge
-      ? (((yield* ctx.invokeBridge("settings.schema", { schemaUrl })) as BridgeSettingsSchema)
-          .schemaJson ?? undefined)
+    (library && ctx.invokeBridge
+      ? ((yield* ctx.invokeBridge("settings.schema", library)) as SettingsSchema.Res.Response)
+          .schemaJson
       : undefined);
   const schemaValidation: PodMemberComposeResponse["schemaValidation"] = !schemaUrl
     ? "no-schema"
@@ -190,17 +218,26 @@ export const composeMember = Effect.fnUntraced(function* (
         ? "unavailable"
         : validateStructure(schemaJson, composed, diagnostics);
   let semanticValidation: PodMemberComposeResponse["semanticValidation"] = "not-run";
-  if (schemaValidation === "passed" && ctx.invokeBridge) {
-    const semantic = (yield* ctx.invokeBridge("settings.validate", {
-      schemaUrl,
-      content: JSON.stringify(composed),
-    })) as BridgeSettingsValidate;
-    diagnostics.push(...semantic.issues.map(bridgeIssue));
-    semanticValidation = semantic.issues.length ? "failed" : "passed";
+  if (schemaValidation === "passed" && library && ctx.invokeBridge) {
+    const semantic = (yield* ctx.invokeBridge("settings.document.semantic-validation", {
+      ...library,
+      relativePath: request.path,
+      rawContent: content,
+      composedContent: `${JSON.stringify(composed, null, 2)}\n`,
+    })) as SettingsDocumentSemanticValidation.Res.Response;
+    diagnostics.push(
+      ...semantic.issues.map((i) => bridgeIssue({ ...i, path: i.instancePath || "$" })),
+    );
+    semanticValidation = !semantic.isConfigured
+      ? "unavailable"
+      : semantic.issues.some((i) => i.severity.toLowerCase() === "error")
+        ? "failed"
+        : "passed";
   } else if (schemaValidation === "passed") semanticValidation = "unavailable";
   return {
     ...base,
     schemaUrl,
+    schemaJson: schemaJson ?? null,
     composed: composed === undefined ? null : `${JSON.stringify(composed, null, 2)}\n`,
     dependencies,
     diagnostics,
@@ -229,7 +266,7 @@ export const composedSpec = Effect.fnUntraced(function* (
         409,
       ),
     );
-  return { spec: result.composed, dependencies: result.dependencies };
+  return { spec: result.composed, schemaUrl: result.schemaUrl, dependencies: result.dependencies };
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
@@ -276,7 +313,16 @@ const readManifests = Effect.fnUntraced(function* (root: string) {
         folder: entry.name,
         entrypoints: Array.isArray(value.entrypoints)
           ? value.entrypoints.flatMap((e) =>
-              isRecord(e) && typeof e.id === "string" ? [e.id] : [],
+              isRecord(e) && typeof e.id === "string" && typeof e.sourcePath === "string"
+                ? [
+                    {
+                      id: e.id,
+                      sourcePath: e.sourcePath,
+                      name: typeof e.name === "string" ? e.name : null,
+                      description: typeof e.description === "string" ? e.description : null,
+                    },
+                  ]
+                : [],
             )
           : [],
       });
@@ -299,7 +345,8 @@ const listMembers: (
   const entries = yield* readDirectoryEntriesOrEmpty(join(folder, relative), "pod.list");
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     const path = relative ? `${relative}/${entry.name}` : entry.name;
-    if (path === "output" || path === "pod.json") continue;
+    // Runs under output/ list so their receipts are readable; only pod.json is not a member.
+    if (path === "pod.json") continue;
     if (entry.info.type === "Directory") members.push(...(yield* listMembers(folder, path)));
     else if (entry.info.type === "File") {
       const read = yield* readText(join(folder, path), "pod.list");
@@ -384,6 +431,21 @@ function bridgeIssue(raw: {
 
 function issue(code: string, message: string, severity: MemberIssue["severity"] = "error") {
   return { code, message, path: "$", severity } satisfies MemberIssue;
+}
+
+/**
+ * The C# settings libraries are still keyed by module and root, and their `$schema` URLs name both:
+ * `/schemas/settings/<module>/<root>.json`. The URL is the member's only identity claim; this reads it.
+ */
+export function settingsLibrary(schemaUrl: string): { moduleKey: string; rootKey: string } | null {
+  try {
+    const match = /\/schemas\/settings\/([^/]+)\/([^/]+)\.json$/.exec(new URL(schemaUrl).pathname);
+    return match
+      ? { moduleKey: decodeURIComponent(match[1]!), rootKey: decodeURIComponent(match[2]!) }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function hasDirectives(value: unknown): boolean {

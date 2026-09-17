@@ -8,16 +8,19 @@ import type { RouteStateCommandHandlers } from "@pe/agent-contracts";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { callPodOp, type PodOpResponse } from "../shared/pod-ops.ts";
-
-type MemberReading = PodOpResponse<"pod.member.read">;
-type MemberComposition = PodOpResponse<"pod.member.compose">;
+import type {
+  PodMemberComposeRequest,
+  PodMemberComposeResponse as MemberComposition,
+  PodMemberRead as MemberReading,
+} from "@pe/host-contracts/operation-types";
 
 /** Execution uses the member's composition; raw JSON stays authored. */
 export function executionContent(composition: MemberComposition): string {
   const errors = composition.diagnostics.filter((issue) => issue.severity !== "info");
   if (errors.length)
-    throw new Error(errors.map((issue) => `${issue.path ?? "$"}: ${issue.message}`).join("\n"));
+    throw new Error(errors.map((issue) => `${issue.path}: ${issue.message}`).join("\n"));
+  if (composition.composed == null)
+    throw new Error("The member did not compose; composition needs a Revit session.");
   return composition.composed;
 }
 
@@ -27,7 +30,7 @@ export function createSettingsCommandHandlers(
     hostBaseUrl?: string;
     pods?: {
       read(this: void, member: PodMember): Promise<MemberReading>;
-      compose(this: void, request: PodMember & { content?: string }): Promise<MemberComposition>;
+      compose(this: void, request: PodMemberComposeRequest): Promise<MemberComposition>;
     };
   } = {},
 ): RouteStateCommandHandlers<SettingsRouteDocument> {
@@ -35,18 +38,16 @@ export function createSettingsCommandHandlers(
   const read = (member: PodMember) =>
     (
       options.pods?.read ??
-      ((request: PodMember) => callPodOp(caller(), "pod.member.read", request))
+      ((request: PodMember) => caller().call("pod.member.read", request))
     )(member);
-  const compose = (request: PodMember & { content?: string }) =>
-    (options.pods?.compose ?? ((value) => callPodOp(caller(), "pod.member.compose", value)))(
-      request,
-    );
+  const compose = (request: PodMemberComposeRequest) =>
+    (options.pods?.compose ?? ((value) => caller().call("pod.member.compose", value)))(request);
   const basis = async (member: PodMember) => {
     const reading = await read(member);
     return settingsBasisSchema.parse({
       member,
       rawContent: reading.content,
-      versionToken: reading.sha256,
+      sha256: reading.sha256,
     });
   };
   const requireWork = (ctx: { work?: string }) => {
@@ -68,7 +69,7 @@ export function createSettingsCommandHandlers(
       if (
         document.basis &&
         sameMember(document.basis.member, member) &&
-        document.basis.versionToken === next.versionToken
+        document.basis.sha256 === next.sha256
       )
         return next;
       if (pending(document))
@@ -80,12 +81,12 @@ export function createSettingsCommandHandlers(
     },
     adopt: async (input, ctx) => {
       requireWork(ctx);
-      const { member, versionToken } = input as { member: PodMember; versionToken: string };
+      const { member, sha256 } = input as { member: PodMember; sha256: string };
       const bound = ctx.getDoc().basis?.member;
       if (bound && !sameMember(bound, member))
         throw new Error("Adopt re-reads the bound member; open another member in its own Work.");
       const next = await basis(member);
-      if (next.versionToken !== versionToken)
+      if (next.sha256 !== sha256)
         throw new Error("The member changed after review. Refresh and review again.");
       await ctx.setDoc({ basis: next, fields: {} });
       return next;

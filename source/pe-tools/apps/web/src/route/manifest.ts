@@ -4,6 +4,8 @@
  * `RouteShell` draws it. The fable calls this type `Route`; every `routes/*.tsx` already exports a
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
+import type { PodList } from "@pe/host-contracts/operation-types";
+import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { ReactNode } from "react";
 import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
@@ -130,15 +132,7 @@ export interface MemberRef {
 }
 
 /** One `pod.list` row, as the host projects it. */
-export interface PodRow {
-  id: string;
-  name: string;
-  version: string;
-  folder: string;
-  entrypoints: readonly string[];
-  members: readonly { path: string; sha256: string; schema: string | null }[];
-  diagnostics: readonly { message: string; path?: string }[];
-}
+export type PodRow = PodList["pods"][number];
 
 export type EntityStage = "audit" | "capture" | "apply";
 export type EntityAction = "capture" | "apply";
@@ -168,10 +162,15 @@ export interface EntityRouteDef<W, R extends string, P> {
   target: "document" | "selection";
   /** The spec's `$schema` path (`/schemas/settings/…`); the only thing that says a member is this route's. */
   schema: string;
-  capture: string;
-  /** Families only: the confirmation sheet behind apply (dogma law 9). */
-  plan?: string;
-  apply: string;
+  /** The host workflow that captures into the route's pod and returns the new member. */
+  capture: SemanticActionKey;
+  /**
+   * The host workflow that applies a saved spec. With `confirm`, the first admission (no
+   * `planHash`) returns the plan as the confirmation sheet and the second applies that hash
+   * (dogma law 9).
+   */
+  apply: SemanticActionKey;
+  confirm?: boolean;
   /** What capture needs beyond the target, read off the audit; a string refuses. */
   captureInput?: (ctx: Ctx<W, R, P & EntityPage>) => Record<string, unknown> | string;
   docs?: ReactNode;
@@ -189,17 +188,28 @@ export const isSpecOf = (schema: string | null | undefined, path: string) => {
 
 type EntityCtx = Ctx<unknown, string, EntityPage>;
 
-const targetInput = (ctx: EntityCtx) =>
-  ctx.target.kind === "document" ? { target: ctx.target.ref } : {};
+const documentOf = (ctx: EntityCtx) => {
+  if (ctx.target.kind !== "document") throw Error("pick a document");
+  return ctx.target.ref;
+};
+
+/** A host workflow's result, or its refusal as an error. */
+const workflow = async (
+  key: SemanticActionKey,
+  input: Record<string, unknown>,
+  ctx: EntityCtx,
+): Promise<Record<string, unknown>> => {
+  const action = await runSemanticAction(key, input, documentOf(ctx));
+  if (action.state !== "succeeded")
+    throw Error("error" in action && action.error ? String(action.error) : `${key} ${action.state}`);
+  return (action as unknown as { result: Record<string, unknown> }).result;
+};
 
 const podsOf = (ctx: EntityCtx) => {
   const reading = ctx.readings.pods;
   return reading?.state === "ready" ? (reading.observation as readonly PodRow[]) : [];
 };
 
-/** Capture always files a new member; the timestamp is the only thing that makes it new. */
-export const capturePath = (entity: string, at = new Date()) =>
-  `settings/${entity}/${at.toISOString().replace(/[:.]/g, "-")}.json`;
 
 /**
  * The one entity route. Stages are audit, capture, apply; the audit's own Work, Readings and
@@ -226,12 +236,10 @@ export function entityRoute<W, const R extends string, P extends object, const A
       run: async (ctx) => {
         const extra = def.captureInput?.(ctx as never);
         if (typeof extra === "string") throw Error(extra);
-        const spec = await ctx.call(def.capture, { ...targetInput(ctx), ...extra });
-        const path = capturePath(def.entity);
-        const $schema = new URL(def.schema, globalThis.location.origin).href;
-        const content = JSON.stringify({ $schema, ...(spec as object) }, null, 2);
-        await ctx.call("pod.member.write", { pod: ctx.page.pod, path, content });
-        ctx.setPage({ path });
+        // The host captures and files the new member; the page lands on what it wrote.
+        const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
+        const members = (result.members ?? [result.member]) as MemberRef[];
+        if (members[0]) ctx.setPage({ path: members[0].path });
       },
     },
     apply: {
@@ -257,21 +265,12 @@ export function entityRoute<W, const R extends string, P extends object, const A
           .find((row) => row.id === pod)
           ?.members.find((row) => row.path === path);
         if (!member) throw Error("save the spec before applying");
-        const { composed } = (await ctx.call("pod.member.compose", { pod, path })) as {
-          composed: unknown;
-        };
+        // The host composes the saved bytes, refuses if they moved, and files the run receipt.
         const source = { pod, path, sha256: member.sha256 };
-        const plan = def.plan
-          ? ((await ctx.call(def.plan, { ...targetInput(ctx), spec: composed })) as {
-              planHash: string;
-            })
+        const plan = def.confirm
+          ? ((await workflow(def.apply, { source }, ctx)).plan as { planHash: string })
           : null;
-        await ctx.call(def.apply, {
-          ...targetInput(ctx),
-          spec: composed,
-          source,
-          ...(plan ? { planHash: plan.planHash } : {}),
-        });
+        await workflow(def.apply, { source, ...(plan ? { planHash: plan.planHash } : {}) }, ctx);
       },
     },
   };

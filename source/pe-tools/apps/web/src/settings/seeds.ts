@@ -4,12 +4,7 @@
  * default pod's MechEquip/TEST.schedule.json and the actual ScheduleProfile schema, both
  * captured live on 2026-08-17. File Readings are seeded with their raw content strings.
  */
-import type {
-  Seed,
-  SettingsDocumentId,
-  SettingsFieldState,
-  SettingsRouteDocument,
-} from "@pe/agent-contracts";
+import type { PodMember, Seed, SettingsFieldState, SettingsRouteDocument } from "@pe/agent-contracts";
 
 import { SETTINGS_SEED_RAW } from "#/settings-panes/seed-content";
 import { SETTINGS_SEED_SCHEMA as CAPTURED_SETTINGS_SEED_SCHEMA } from "#/settings-panes/seed-schema";
@@ -22,11 +17,9 @@ const SETTINGS_SEED_SCHEMA = CAPTURED_SETTINGS_SEED_SCHEMA.replace(
 /** The Readings this route subscribes: the bound document, and the schema that renders it. */
 export type SettingsReading = "document" | "schema";
 
-/** Page state: the file address the picker is pointing at, before `open` adopts it as Work. */
+/** Page state: the member the picker is pointing at, before `open` adopts it as Work. */
 export interface SettingsPage {
-  workspaceKey?: string;
-  moduleKey?: string;
-  rootKey?: string;
+  pod?: string;
   filePath?: string;
   query?: string;
   /** The field pointer `stage` writes. Staging is per-field, so the page names which one. */
@@ -36,20 +29,15 @@ export interface SettingsPage {
 /** Every action the route declares. The seed map below is total over this union. */
 export type SettingsAction = "open" | "refresh" | "validate" | "adopt" | "save" | "stage";
 
-export const SETTINGS_SEED_DOCUMENT_ID: SettingsDocumentId = {
-  moduleKey: "default",
-  rootKey: "settings",
-  relativePath: "MechEquip/TEST.schedule.json",
+export const SETTINGS_SEED_MEMBER: PodMember = {
+  pod: "default",
+  path: "settings/MechEquip/TEST.schedule.json",
 };
 
-export const SETTINGS_SEED_SCHEMA_ID: SettingsDocumentId = {
-  moduleKey: "default",
-  rootKey: "settings",
-  relativePath: ".schemas/schedule-profile.schema.json",
+export const SETTINGS_SEED_SCHEMA_MEMBER: PodMember = {
+  pod: "default",
+  path: "settings/.schemas/schedule-profile.schema.json",
 };
-
-export const SETTINGS_SEED_PATH =
-  "C:/Users/kaitp/OneDrive/Documents/Pe.Tools/Pods/default/settings/MechEquip/TEST.schedule.json";
 
 /**
  * Seeded trichotomy on REAL pointers in the real document — one of each thing a reviewer must be
@@ -75,10 +63,9 @@ const SEED_FIELDS: Record<string, SettingsFieldState> = {
 
 export const SETTINGS_SEED_WORK: SettingsRouteDocument = {
   basis: {
-    path: SETTINGS_SEED_PATH,
+    member: SETTINGS_SEED_MEMBER,
     rawContent: SETTINGS_SEED_RAW,
-    versionToken: "seed-v1",
-    documentId: SETTINGS_SEED_DOCUMENT_ID,
+    sha256: "seed-v1",
   },
   fields: SEED_FIELDS,
 };
@@ -88,10 +75,8 @@ export { SETTINGS_SEED_RAW, SETTINGS_SEED_SCHEMA };
 type SettingsSeed = Seed<SettingsRouteDocument, SettingsReading, SettingsPage>;
 
 const at: SettingsPage = {
-  workspaceKey: "default",
-  moduleKey: SETTINGS_SEED_DOCUMENT_ID.moduleKey,
-  rootKey: SETTINGS_SEED_DOCUMENT_ID.rootKey,
-  filePath: SETTINGS_SEED_PATH,
+  pod: SETTINGS_SEED_MEMBER.pod,
+  filePath: SETTINGS_SEED_MEMBER.path,
 };
 
 const base = (title: string, over: Partial<SettingsSeed> = {}): SettingsSeed => ({
@@ -113,7 +98,7 @@ export const SETTINGS_SEEDS: Record<SettingsAction, SettingsSeed> = {
   adopt: base("disk moved under the edit basis; adopt discards the old edits", {
     work: {
       ...SETTINGS_SEED_WORK,
-      basis: { ...SETTINGS_SEED_WORK.basis!, versionToken: "seed-v2" },
+      basis: { ...SETTINGS_SEED_WORK.basis!, sha256: "seed-v2" },
     },
   }),
   save: base("two staged fields and one open proposal, ready to commit"),

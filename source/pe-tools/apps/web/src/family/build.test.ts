@@ -112,13 +112,7 @@ describe("build receipt projection", () => {
   const target = { session: "revit-a", openId: "family-a" };
   const review: FamilyBuildReview = {
     target,
-    documentId: {
-      moduleKey: "FamilyFoundry",
-      rootKey: "models",
-      relativePath: "refline.family.json",
-    },
-    workspaceId: "demo",
-    fileVersion: "v7",
+    source: { pod: "demo", path: "settings/family/refline.json", sha256: "7".repeat(64) },
     reason: "release candidate",
   };
   const status = (id: string, startedAt: string, request = review) => ({
@@ -141,7 +135,7 @@ describe("build receipt projection", () => {
           status("older", "2026-09-14T01:00:00.000Z"),
           status("other-version", "2026-09-14T03:00:00.000Z", {
             ...review,
-            fileVersion: "v8",
+            source: { ...review.source, sha256: "8".repeat(64) },
           }),
           status("current", "2026-09-14T02:00:00.000Z"),
         ],

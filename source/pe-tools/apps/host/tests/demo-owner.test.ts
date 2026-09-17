@@ -95,7 +95,7 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
   });
 });
 async function save(f: Awaited<ReturnType<typeof setup>>) {
-  const work = await f.owner.work.read(f.owner.scope, "settings");
+  const work = await f.owner.work.read(f.owner.scope, settingsRouteState.route);
   const basis = (work!.doc as { basis: { member: unknown; sha256: string } }).basis;
   const response = await f.fetch("/actions", {
     id: `${f.owner.id}:save`,
@@ -127,7 +127,7 @@ test.each(["success", "token-conflict", "publication-refusal"] as const)(
     const stored = JSON.parse(await readFile(join(f.owner.root, "journal.json"), "utf8"));
     expect(JSON.stringify(stored)).toContain(`${f.owner.id}:save`);
     if (scenario === "publication-refusal")
-      expect(JSON.stringify(await f.owner.work.read(f.owner.scope, "settings"))).toContain(
+      expect(JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route))).toContain(
         "Later local edit",
       );
   },
@@ -232,7 +232,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
   const parent = await mkdtemp(join(tmpdir(), "pe-demo-namespaces-"));
   cleanup.push(() => rm(parent, { recursive: true, force: true }));
   const productionFile = join(parent, "production-work.json");
-  const scope = { route: "settings", target: null, work: "production" };
+  const scope = { route: settingsRouteState.route, target: null, work: "production" };
   const production = new RouteWorkspace({
     registrations: [{ spec: settingsRouteState, handlers: {} }],
     store: {
@@ -251,7 +251,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
   });
   await production.apply(
     scope,
-    "settings",
+    settingsRouteState.route,
     "human",
     [{ path: ["fields"], value: { "/private": { staged: { value: "production sentinel" } } } }],
     0,

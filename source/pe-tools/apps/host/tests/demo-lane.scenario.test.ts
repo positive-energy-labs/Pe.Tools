@@ -56,7 +56,7 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
   {
     path: "/settings",
     manifest: ((await load("/src/settings/manifest.ts")).settingsManifest as Factory)({
-      scope: { route: "settings", target: null },
+      scope: { route: "pods", target: null },
     }),
   },
   {

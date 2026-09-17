@@ -31,18 +31,30 @@ import {
   type FamilyCapture,
 } from "@pe/agent-contracts";
 import type {
+  PodMemberSaveRequest,
+  PodMemberWriteRequest,
+  PodMemberWritten,
+} from "@pe/host-contracts/operation-types";
+import type {
   FamiliesCapture,
   FamiliesPlan,
+  FamilyCapture as NativeFamilyCapture,
   FamilyPlan,
-  PodMemberWriteRequest,
-  PodMemberWriteResponse,
-  SpecCapture,
-} from "@pe/host-contracts/operation-types";
+} from "@pe/host-contracts/generated";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
-import { composedSpec, podFolder, readMember, writeMember, type PodContext } from "./settings.ts";
+import {
+  composedSpec,
+  podFolder,
+  readMember,
+  saveMember,
+  settingsLibrary,
+  writeMember,
+  type PodContext,
+} from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
 
@@ -66,13 +78,35 @@ export type FamilyActionDependencies = TakeoffActionDependencies &
 /** A conditional member write that refused wrote nothing: a clean refusal, never an unknown effect. */
 export const writeMemberOnce = (
   deps: PodDependencies,
-  request: PodMemberWriteRequest,
+  request: PodMemberWriteRequest | PodMemberSaveRequest,
   pods: PodContext,
-) =>
-  runPods(deps, writeMember(request, pods)).catch((error: unknown) => {
+): Promise<PodMemberWritten> =>
+  runPods(
+    deps,
+    "expectedSha256" in request ? saveMember(request, pods) : writeMember(request, pods),
+  ).catch((error: unknown) => {
     if (error instanceof LocalOpError && error.statusCode === 409) throw refused(error.message);
     throw error;
   });
+
+/** The `$schema` a family model member carries; C# owns the URL shape. */
+const familyModelSchema = `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
+
+/**
+ * The inline spec the family engine takes (`{ select, patch, run }`). A family model member is a
+ * patch with no selector, so it is sent as `{ patch: model }`, the same way the palettes send it.
+ */
+const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) => {
+  const { spec, schemaUrl } = await runPods(deps, composedSpec(source, pods));
+  const library = schemaUrl ? settingsLibrary(schemaUrl) : null;
+  if (library?.moduleKey !== "FamilyFoundry" || library.rootKey !== "models") return spec;
+  const { $schema: _, ...model } = JSON.parse(spec) as Record<string, unknown>;
+  return JSON.stringify({ patch: model });
+};
+
+/** A captured family model becomes a member that says what it is. */
+const familyMember = (modelJson: string) =>
+  `${JSON.stringify({ $schema: familyModelSchema, ...(JSON.parse(modelJson) as object) }, null, 2)}\n`;
 
 export const runPods = <A, E>(
   deps: PodDependencies,
@@ -154,7 +188,11 @@ export async function lifetime(
 }
 
 type Prepared =
-  | { kind: "settings"; document: SettingsRouteDocument; request: PodMemberWriteRequest }
+  | {
+      kind: "settings";
+      document: SettingsRouteDocument;
+      request: PodMemberWriteRequest | PodMemberSaveRequest;
+    }
   | {
       kind: "native";
       process: NativeProcess;
@@ -203,7 +241,7 @@ export async function admitFamilyAction(
         const base = admission.bases.work;
         if (!base || !work || base.key.work !== memberWork(input.member))
           throw refused("Reviewed member Work is required");
-        const view = await work.read(base.key, "settings");
+        const view = await work.read(base.key, settingsRouteState.route);
         if (!view || view.revision !== base.revision)
           throw refused("Member Work changed after review");
         const document = settingsRouteState.schema.parse(view.doc);
@@ -254,15 +292,21 @@ export async function admitFamilyAction(
       }
       if (key === "family.apply") {
         const input = familyActions[key].input.parse(admission.input);
-        const { spec } = await runPods(deps, composedSpec(input.source, pods));
+        const specJson = await familySpec(deps, input.source, pods);
         return input.planHash
           ? {
               kind: "native",
               process,
               nativeKey: "family.apply",
-              input: { spec, planHash: input.planHash, source: input.source },
+              input: { specJson, planHash: input.planHash, source: input.source },
             }
-          : { kind: "native", process, nativeKey: "family.plan", input: { spec }, confirm: true };
+          : {
+              kind: "native",
+              process,
+              nativeKey: "family.plan",
+              input: { specJson },
+              confirm: true,
+            };
       }
       if (key === "families.apply" || key === "parameter-links.apply") {
         const base = admission.bases.work;
@@ -296,15 +340,15 @@ export async function admitFamilyAction(
             throw refused("The reviewed family plans or exclusions changed");
           if (!Object.keys(included).length)
             throw refused("No included family has changes to apply");
-          const { spec } = await runPods(deps, composedSpec(plan.source, pods));
-          if (digest(spec) !== plan.composedDigest)
+          const specJson = await familySpec(deps, plan.source, pods);
+          if (digest(specJson) !== plan.composedDigest)
             throw refused("The reviewed spec composition changed after the plan; plan again");
           return {
             kind: "native",
             process,
             nativeKey: "families.apply",
             input: {
-              spec,
+              specJson,
               expectedPlanHashes: included,
               source: plan.source,
               ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
@@ -335,6 +379,7 @@ export async function admitFamilyAction(
       }
       const input = familyActions["family.build"].input.parse(admission.input);
       const { spec } = await runPods(deps, composedSpec(input.source, pods));
+      const { $schema: _, ...model } = JSON.parse(spec) as Record<string, unknown>;
       const file = win32.join(
         await runPods(deps, podFolder(input.source.pod, pods)),
         input.source.path,
@@ -344,7 +389,7 @@ export async function admitFamilyAction(
         process,
         nativeKey: "revit.apply.family-model",
         input: {
-          modelJson: spec,
+          modelJson: JSON.stringify(model),
           ...(deps.nativePaths
             ? await deps.nativePaths(input, admission.id, file)
             : {
@@ -377,30 +422,53 @@ export async function admitFamilyAction(
         const at = new Date(prepared.at);
         const specs =
           prepared.nativeKey === "families.capture"
-            ? (captured as FamiliesCapture).specs.map((s) => ({
-                spec: s.spec,
-                path: capturePath("families", s.familyName, at),
-              }))
+            ? (captured as FamiliesCapture.Res.Response).families.flatMap((f) =>
+                f.success && f.modelJson
+                  ? [
+                      {
+                        spec: familyMember(f.modelJson),
+                        path: capturePath("families", f.familyName ?? `family-${f.familyId}`, at),
+                      },
+                    ]
+                  : [],
+              )
             : [
                 {
-                  spec: (captured as SpecCapture).spec,
-                  path: prepared.path ?? capturePath("family", "family", at),
+                  spec: familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
+                  path:
+                    prepared.path ??
+                    capturePath(
+                      "family",
+                      (captured as NativeFamilyCapture.Res.Response).familyName,
+                      at,
+                    ),
                 },
               ];
-        const members: PodMemberWriteResponse[] = [];
+        const members: PodMemberWritten[] = [];
         for (const { spec, path } of specs) {
           const request = { pod: prepared.pod, path, content: spec };
           members.push(
             (await execution.step("file", "pod.member.write", request, () =>
               writeMemberOnce(deps, request, pods),
-            )) as PodMemberWriteResponse,
+            )) as PodMemberWritten,
           );
         }
         return { executionContext: target, members };
       }
       if (prepared.kind === "native") {
         const result = await native(prepared.nativeKey, prepared.input, prepared.process);
-        if (prepared.confirm) return { executionContext: target, plan: result as FamilyPlan };
+        if (prepared.confirm) {
+          // The confirmation sheet: one family document plans exactly one family, or it refuses.
+          const planned = result as FamilyPlan.Res.Response;
+          const plan = planned.families[0];
+          if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)
+            throw refused(
+              [...planned.diagnostics, ...(plan?.refusals ?? [])]
+                .map((d) => `${d.code} · ${d.path} — ${d.message}`)
+                .join(" · ") || "Expected one family plan",
+            );
+          return { executionContext: target, plan };
+        }
         return {
           executionContext: target,
           native: result,
@@ -409,9 +477,10 @@ export async function admitFamilyAction(
             : {}),
         };
       }
-      const written = (await execution.step("file", "pod.member.write", prepared.request, () =>
+      const writer = "expectedSha256" in prepared.request ? "pod.member.save" : "pod.member.write";
+      const written = (await execution.step("file", writer, prepared.request, () =>
         writeMemberOnce(deps, prepared.request, pods),
-      )) as PodMemberWriteResponse;
+      )) as PodMemberWritten;
       const base = admission.bases.work!;
       if (!work) throw new ActionIncomplete("Member write succeeded; Work unavailable", written);
       const fields = structuredClone(prepared.document.fields);
@@ -419,7 +488,7 @@ export async function admitFamilyAction(
       const member: PodMember = { pod: written.pod, path: written.path };
       const publication = await work.apply(
         base.key,
-        "settings",
+        settingsRouteState.route,
         admission.actor,
         [
           {
@@ -526,11 +595,11 @@ export async function readFamily(
       const pods = podContext(deps, bridge, target);
       const saved = await runPods(deps, readMember(document.spec, pods));
       const source: PodMemberSource = { ...document.spec, sha256: saved.sha256 };
-      const { spec } = await runPods(deps, composedSpec(source, pods));
+      const specJson = await familySpec(deps, source, pods);
       const result = (await native("families.plan", {
-        spec,
+        specJson,
         ...(document.executionOptions ? { executionOptions: document.executionOptions } : {}),
-      })) as FamiliesPlan;
+      })) as FamiliesPlan.Res.Response;
       if (result.diagnostics.length)
         throw refused(
           result.diagnostics.map((d) => `${d.code} · ${d.path} — ${d.message}`).join(" · "),
@@ -551,7 +620,7 @@ export async function readFamily(
             observedAt: new Date().toISOString(),
           },
           source,
-          composedDigest: digest(spec),
+          composedDigest: digest(specJson),
           entries: result.families.filter((entry) => allowed.has(entry.familyName)),
           executionOptions: document.executionOptions,
         }),

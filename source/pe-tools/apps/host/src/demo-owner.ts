@@ -67,7 +67,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         parameterLinksRouteState,
       ].map((spec) => ({
         spec,
-        handlers: spec.route === "settings" ? createSettingsCommandHandlers({ settings }) : {},
+        handlers:
+          spec.route === settingsRouteState.route
+            ? createSettingsCommandHandlers({
+                pods: { read: settings.readMember, compose: settings.composeMember },
+              })
+            : {},
       })),
       store: {
         async getState({ targetKey, route }) {
@@ -125,11 +130,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         : null;
     const openedPath = opened ? await settings.memberPath(opened.member) : null;
     const scope: WorkKey = opened
-      ? { route: "settings", target: null, work: memberWork(opened.member) }
+      ? { route: settingsRouteState.route, target: null, work: memberWork(opened.member) }
       : { route: seed.route, target: at };
     const route =
       seed.route === "family"
-        ? "settings"
+        ? settingsRouteState.route
         : seed.route === "families" || seed.route === "parameter-links"
           ? seed.route
           : "takeoffs";
@@ -263,9 +268,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               }
               value = { simulated: true, writes };
             } else if (key === "settings.schema") {
-              value = { schemaJson: null, simulated: true };
+              value = { schemaJson: "", simulated: true };
             } else if (key === "families.plan" && seed.route === "families") {
-              const spec = (input as { spec: string }).spec;
+              const spec = (input as { specJson: string }).specJson;
               const planned = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               simulatedPlan = planned;
               value = {
@@ -350,31 +355,55 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 simulated: true,
               };
             } else if (key === "family.capture" && seed.route === "family") {
-              value = { spec: nativeModel, simulated: true };
+              value = {
+                reading: { at, version: null, observedAt: new Date().toISOString() },
+                familyName: "Simulated demo family",
+                modelJson: nativeModel,
+                unmodeledCount: 0,
+                coverage: { simulation: "Supplied demo model only; no native capture" },
+                issues: [],
+                simulated: true,
+              };
             } else if (key === "family.plan" && seed.route === "family") {
               if (seed.scenario === "plan-refusal")
                 throw unsupported("Supplied simulated native refusal");
-              const spec = (input as { spec: string }).spec;
+              const spec = (input as { specJson: string }).specJson;
               simulatedPlan = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               value = {
-                familyId: 1,
-                planHash: simulatedPlan.hash,
-                changes: [],
+                diagnostics: [],
+                families: [
+                  {
+                    familyId: 1,
+                    familyName: "Simulated demo family",
+                    planHash: simulatedPlan.hash,
+                    changes: [],
+                    runEffects: ["Simulated outcome only"],
+                    refusals: [],
+                    warnings: [],
+                  },
+                ],
                 simulated: true,
               };
             } else if (key === "family.apply" && seed.route === "family") {
               if (!simulatedPlan || (input as { planHash: string }).planHash !== simulatedPlan.hash)
                 throw unsupported("simulated native plan changed");
-              nativeModel = simulatedPlan.spec;
+              const planned = JSON.parse(simulatedPlan.spec) as { patch?: unknown };
+              nativeModel = planned.patch ? JSON.stringify(planned.patch) : simulatedPlan.spec;
               value = {
-                runId: "simulated",
-                podId: (input as { source: { pod: string } }).source.pod,
-                memberPath: (input as { source: { path: string } }).source.path,
-                memberSha256: (input as { source: { sha256: string } }).source.sha256,
-                operation: key,
-                planHash: simulatedPlan.hash,
-                outcome: "Succeeded",
-                outputs: [],
+                diagnostics: [],
+                receipts: [
+                  {
+                    familyId: 1,
+                    familyName: "Simulated demo family",
+                    success: true,
+                    converged: true,
+                    planHash: simulatedPlan.hash,
+                    residue: [],
+                    errors: [],
+                    artifactDirectory: null,
+                  },
+                ],
+                receiptPath: null,
                 simulated: true,
                 proof: "No Revit mutation, RFA output, or run receipt",
               };
@@ -484,10 +513,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               seed.scenario === "publication-refusal" &&
               isMemberWrite(result)
             ) {
-              const current = await work.read(scope, "settings");
+              const current = await work.read(scope, settingsRouteState.route);
               await work.apply(
                 scope,
-                "settings",
+                settingsRouteState.route,
                 "human",
                 [
                   {

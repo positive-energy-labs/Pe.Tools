@@ -26,7 +26,7 @@ export function familySource(
   fields: Record<string, SettingsFieldState> = {},
   spec?: FamilyDocument["doc"],
 ): FamilySource {
-  const relativePath = snapshot?.documentId.relativePath ?? "";
+  const relativePath = snapshot?.member.path ?? "";
   let projected: FamilyPageModel | null = null;
   let model: FamilyModel | null = null;
   let parseError: string | null = null;
@@ -63,7 +63,7 @@ export function familySource(
       parseError = error instanceof Error ? error.message : String(error);
     }
   }
-  const versionToken = snapshot?.versionToken ?? null;
+  const versionToken = snapshot?.sha256 ?? null;
   const world = projected
     ? projected
     : buildFamilyPageModel({

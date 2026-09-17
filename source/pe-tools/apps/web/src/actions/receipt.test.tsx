@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { memberWork } from "@pe/agent-contracts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Context, Effect, Layer } from "effect";
@@ -49,8 +50,11 @@ test("real host receipt list remounts original controls without dispatch and iso
   let owner = new ActionJournal(path);
   let effects = 0;
   const target = { session: "B", openId: "original-B" };
-  const a = { kind: "file" as const, workspaceId: "settings:a" };
-  const b = { kind: "file" as const, workspaceId: "settings:b" };
+  // A member's Work key is derived from its address; the receipt list scopes by it.
+  const memberA = { pod: "p", path: "settings/a.json" };
+  const memberB = { pod: "p", path: "settings/b.json" };
+  const a = { kind: "file" as const, workspaceId: memberWork(memberA) };
+  const b = { kind: "file" as const, workspaceId: memberWork(memberB) };
   for (const [id, key, destination, state] of [
     ["file-incomplete", "settings.write", { kind: "host" }, "incomplete"],
     ["file-unknown", "settings.write", { kind: "host" }, "unknown"],
@@ -63,7 +67,10 @@ test("real host receipt list remounts original controls without dispatch and iso
         kind: "workflow",
         actor: "human",
         destination,
-        input: { workspaceId: key === "family.build" ? b.workspaceId : a.workspaceId },
+        input:
+          key === "family.build"
+            ? { source: { ...memberB, sha256: "b".repeat(64) } }
+            : { member: memberA },
         bases: {},
       },
       async () => ({}),
@@ -157,7 +164,7 @@ test("real host receipt list remounts original controls without dispatch and iso
         kind: "workflow" as const,
         actor: "human",
         destination: { kind: "host" },
-        input: { workspaceId: "settings:c" },
+        input: { member: { pod: "p", path: "settings/c.json" } },
         bases: {},
       },
       async () => ({}),
@@ -168,7 +175,12 @@ test("real host receipt list remounts original controls without dispatch and iso
         });
       },
     );
-    render(view({ kind: "file", workspaceId: "settings:c" }, "running-original"));
+    render(
+      view(
+        { kind: "file", workspaceId: memberWork({ pod: "p", path: "settings/c.json" }) },
+        "running-original",
+      ),
+    );
     await screen.findByText(/Action running-original \/ running/);
     expect(requests.every((r) => r.method === "GET")).toBe(true);
     release();

@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
-import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
+import type { SettingsValidationResult } from "../field-state";
 import type {
   NormalizedRenderFieldOptionDependency,
   RenderSchemaNode,

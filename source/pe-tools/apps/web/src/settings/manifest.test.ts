@@ -20,16 +20,16 @@ const ctx = (doc: SettingsRouteDocument | null, page: Record<string, unknown> = 
 
 describe("the settings manifest", () => {
   it("declares its Work, its two file Readings, and one seed per action", () => {
-    expect(manifest.key).toBe("settings");
-    expect(manifest.work?.route).toBe("settings");
+    expect(manifest.key).toBe("pods");
+    expect(manifest.work?.route).toBe("pods");
     const readings = Object.entries(manifest.readings ?? {}).map(([key, request]) => {
       expect(typeof request).not.toBe("function");
       if (typeof request === "function") throw Error(`${key} must be a static Reading`);
       return [key, request.kind];
     });
     expect(readings).toEqual([
-      ["document", "file"],
-      ["schema", "file"],
+      ["document", "member"],
+      ["schema", "member"],
     ]);
     // Totality: `?demo=<action>` must have a moment to mount for every action the route declares.
     expect(names.sort()).toEqual(Object.keys(SETTINGS_SEEDS).sort());
@@ -40,10 +40,10 @@ describe("the settings manifest", () => {
     const empty: SettingsRouteDocument = { basis: null, fields: {} };
     for (const name of ["refresh", "validate", "adopt", "save", "stage"] as const)
       expect(actions[name].ready(ctx(empty), undefined as never)).toBe(
-        "open a settings file first",
+        "open a pod member first",
       );
     // `open` is the one action that runs with no Work: it is what creates the basis.
-    expect(actions.open.ready(ctx(empty), undefined as never)).toBe("pick a settings file first");
+    expect(actions.open.ready(ctx(empty), undefined as never)).toBe("pick a pod member first");
     expect(
       actions.open.ready(ctx(empty, { filePath: "MechEquip/TEST.json" }), undefined as never),
     ).toBeNull();
@@ -66,11 +66,11 @@ describe("the settings manifest", () => {
 
   it("refuses to save a basis that was never version-stamped", () => {
     const unstamped: SettingsRouteDocument = {
-      basis: { ...SETTINGS_SEEDS.save.work.basis!, versionToken: "" },
+      basis: { ...SETTINGS_SEEDS.save.work.basis!, sha256: "" },
       fields: {},
     };
     expect(actions.save.ready(ctx(unstamped), undefined as never)).toBe(
-      "review an adopted file before saving",
+      "review an adopted member before saving",
     );
   });
 });

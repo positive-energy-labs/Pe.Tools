@@ -695,49 +695,6 @@ export namespace PodImport {
   }
 }
 
-/** List installed pods under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and every member with its SHA-256 and $schema. Diagnostics cover pod.json and entrypoint source only; members validate one at a time when used. */
-export namespace PodList {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      pods: PodData[];
-    }
-    /**
-     * An installed pod. Id, name, and version are null when pod.json is invalid; diagnostics cover manifest and entrypoints only.
-     */
-    export interface PodData {
-      id?: null | string;
-      name?: null | string;
-      version?: null | string;
-      folder: string;
-      entrypoints: ScriptPodEntrypointData[];
-      members: PodMemberData[];
-      diagnostics: ScriptDiagnostic[];
-    }
-    export interface ScriptPodEntrypointData {
-      id: string;
-      sourcePath: string;
-      name?: null | string;
-      description?: null | string;
-    }
-    export interface PodMemberData {
-      path: string;
-      sha256: string;
-      schema?: null | string;
-    }
-    export interface ScriptDiagnostic {
-      stage: string;
-      severity: ScriptDiagnosticSeverity;
-      message: string;
-      source?: null | string;
-    }
-  }
-}
-
 /** Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256. */
 export namespace PodMemberCompose {
   export namespace Req {
@@ -764,38 +721,6 @@ export namespace PodMemberCompose {
     export interface PodDependencyData {
       id: string;
       path: string;
-      sha256: string;
-    }
-  }
-}
-
-/** Read one pod member by pod id and pod-relative path; returns its text and SHA-256. */
-export namespace PodMemberRead {
-  export namespace Req {
-    export interface Request {
-      pod: string;
-      path: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      content: string;
-      sha256: string;
-    }
-  }
-}
-
-/** Create a new pod member at a pod-relative path under src/, settings/, or assets/. Refuses when the path already exists; returns the SHA-256 of the written bytes. */
-export namespace PodMemberWrite {
-  export namespace Req {
-    export interface Request {
-      pod: string;
-      path: string;
-      content: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
       sha256: string;
     }
   }
@@ -5589,10 +5514,7 @@ export interface HostOps {
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "pod.export": { request: PodExport.Req.Request; response: PodExport.Res.Response };
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
-  "pod.list": { request: PodList.Req.Request; response: PodList.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
-  "pod.member.read": { request: PodMemberRead.Req.Request; response: PodMemberRead.Res.Response };
-  "pod.member.write": { request: PodMemberWrite.Req.Request; response: PodMemberWrite.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.family-model": { request: RevitApplyFamilyModel.Req.Request; response: RevitApplyFamilyModel.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
@@ -5665,10 +5587,7 @@ export const hostOpKeys = [
   "host.ops.catalog",
   "pod.export",
   "pod.import",
-  "pod.list",
   "pod.member.compose",
-  "pod.member.read",
-  "pod.member.write",
   "revit.apply.command.execute",
   "revit.apply.family-model",
   "revit.apply.parameter-links",

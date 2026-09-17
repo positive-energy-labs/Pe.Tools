@@ -56,7 +56,6 @@ import {
   type DocumentRef,
 } from "@pe/agent-contracts";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
-import { callPodOp } from "../shared/pod-ops.ts";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
@@ -530,7 +529,7 @@ async function dispatch(
         actor: "agent",
         timeoutMs: input.timeoutSeconds * 1000,
       });
-      const pods = await callPodOp(caller, "pod.list", {});
+      const pods = await caller.call("pod.list");
       const sourcePath = pods.pods
         .find((value) => value.folder === pod.workspace)
         ?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
@@ -552,7 +551,7 @@ async function dispatch(
       if (!parsed) throw new Error(`Malformed route key '${row.key}'.`);
       if (parsed.route === scheduleGridRouteState.route && !input.workspaceId)
         throw new Error(
-          "Read op:schedule-grid.snapshot and pass its workspaceId for subject Work.",
+          "Read op:schedule.grid.snapshot and pass its workspaceId for subject Work.",
         );
       if (parsed.route === settingsRouteState.route && !input.workspaceId)
         throw new Error(

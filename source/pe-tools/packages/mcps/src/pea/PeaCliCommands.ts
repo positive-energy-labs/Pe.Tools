@@ -3,10 +3,11 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
 import { runSemanticAction } from "../shared/takeoff-action-client.ts";
 import { define } from "gunshi";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
-import type { PodOpResponse } from "../shared/pod-ops.ts";
+import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";
 import {
   ScriptingTools,
@@ -64,7 +65,7 @@ export class PeaCliCommands {
         "pea script list",
         "pea script execute --source-path src\\SampleScript.cs",
         "pea script cancel",
-        "pea script export --workspace panel-audit --output .\\panel-audit.zip",
+        "pea script export --pod panel-audit --output .\\panel-audit.zip",
         "pea script import --archive .\\panel-audit.zip",
       ].join("\n"),
       subCommands: {
@@ -218,7 +219,7 @@ export class PeaCliCommands {
         const key = firstNonBlank(ctx.values.key)?.replace(/^(op|workflow):/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
         const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
-        if (key === "schedule-grid.apply" || Object.hasOwn(scheduleReads, key)) {
+        if (key === "schedule.grid.push" || Object.hasOwn(scheduleReads, key)) {
           const target =
             ctx.values.bridgeSessionId && ctx.values.openDocumentId
               ? { session: ctx.values.bridgeSessionId, openId: ctx.values.openDocumentId }
@@ -226,7 +227,7 @@ export class PeaCliCommands {
           const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
           const base = this.resolveHostBaseUrl(ctx.values.host);
           const result =
-            key === "schedule-grid.apply"
+            key === "schedule.grid.push"
               ? await runSemanticAction(
                   key,
                   input,
@@ -397,7 +398,7 @@ export class PeaCliCommands {
         const archivePath = firstNonBlank(ctx.values.archive);
         if (!archivePath) throw new Error("Provide --archive <path.zip>.");
         const result = await this.createScriptingTools(ctx.values).importPod({ archivePath });
-        console.log(`pod    ${result.pod}`);
+        console.log(`pod    ${result.id}`);
         console.log(`folder ${result.folder}`);
       },
     });
@@ -415,12 +416,17 @@ export class PeaCliCommands {
         actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         pod: { type: "string", description: "Manifest id of the pod to export." },
+        output: { type: "string", description: "Path of the .zip archive to write." },
       },
       toKebab: true,
       run: async (ctx) => {
         const pod = firstNonBlank(ctx.values.pod);
-        if (!pod) throw new Error("Provide --pod <id>.");
-        const result = await this.createScriptingTools(ctx.values).exportPod({ pod });
+        const output = firstNonBlank(ctx.values.output);
+        if (!pod || !output) throw new Error("Provide --pod <id> and --output <path.zip>.");
+        const result = await this.createScriptingTools(ctx.values).exportPod({
+          pod,
+          archivePath: resolve(output),
+        });
         console.log(`archive ${result.archivePath}`);
       },
     });
@@ -538,7 +544,7 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`sample       ${result.sampleScriptPath}`);
 }
 
-function writeScriptPodList(result: PodOpResponse<"pod.list">) {
+function writeScriptPodList(result: PodList) {
   for (const pod of result.pods) {
     console.log(`${pod.id}  ${pod.name} v${pod.version}  ${pod.folder}`);
     for (const entrypoint of pod.entrypoints)
@@ -547,7 +553,7 @@ function writeScriptPodList(result: PodOpResponse<"pod.list">) {
       );
     for (const diagnostic of pod.diagnostics)
       console.error(
-        `  ${diagnostic.severity ?? "error"} ${diagnostic.path ?? "pod.json"}: ${diagnostic.message}`,
+        `  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`,
       );
   }
   if (!result.pods.length) console.log("(no pods found — run `pea script bootstrap`)");

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import z from "zod";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.js";
-import { callPodOp } from "./pod-ops.ts";
 
 // Defaults live in the C# request DTO (ExecuteRevitScriptRequest) — this layer passes values
 // through untouched so there is exactly one source of truth for scripting semantics.
@@ -70,6 +69,7 @@ export const scriptPodExportInputSchema = z.object({
   pod: z
     .string()
     .describe("Manifest id of the installed pod to export; foreign fragments are vendored."),
+  archivePath: z.string().describe("Absolute path of the .zip archive to write."),
 });
 
 export type ScriptRuntimeContext = HostSessionScope & {
@@ -125,15 +125,15 @@ export class ScriptingTools {
   }
 
   listPods() {
-    return callPodOp(this.client, "pod.list", {});
+    return this.client.call("pod.list");
   }
 
   importPod(input: ScriptPodImportInput) {
-    return callPodOp(this.client, "pod.import", { archivePath: input.archivePath });
+    return this.client.call("pod.import", { archivePath: input.archivePath });
   }
 
   exportPod(input: ScriptPodExportInput) {
-    return callPodOp(this.client, "pod.export", { pod: input.pod });
+    return this.client.call("pod.export", { pod: input.pod, archivePath: input.archivePath });
   }
 
   static fromContext(context: ScriptRuntimeContext): ScriptingTools {

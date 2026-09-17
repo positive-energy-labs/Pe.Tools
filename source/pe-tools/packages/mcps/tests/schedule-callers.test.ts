@@ -19,7 +19,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       [
         "call",
         "--key",
-        "op:schedule-grid.snapshot",
+        "op:schedule.grid.snapshot",
         "--bridge-session-id",
         "B",
         "--open-document-id",
@@ -39,7 +39,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       [
         "call",
         "--key",
-        "workflow:schedule-grid.apply",
+        "workflow:schedule.grid.push",
         "--bridge-session-id",
         "B",
         "--open-document-id",
@@ -83,7 +83,7 @@ test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only a
   const start = f.sent.length;
   for (const target of [undefined, { kind: "open", ref: f.b }, undefined]) {
     const result = await run(peRead, {
-      key: "op:schedule-grid.snapshot",
+      key: "op:schedule.grid.snapshot",
       input: { scheduleId: 42 },
       target,
       timeoutSeconds: 5,
@@ -102,7 +102,7 @@ test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only a
   ]);
   expect(
     await run(peDo, {
-      key: "workflow:schedule-grid.apply",
+      key: "workflow:schedule.grid.push",
       input: { bases: (await f.admission()).bases },
       timeoutSeconds: 5,
     }),
