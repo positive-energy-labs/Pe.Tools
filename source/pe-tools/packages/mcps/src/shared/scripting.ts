@@ -50,11 +50,8 @@ export const scriptBootstrapInputSchema = z.object({
     .describe("Pe scripting workspace (pod) key. Defaults to the runtime workspace."),
 });
 
-export const scriptCancelInputSchema = z.object({
-  executionId: z
-    .string()
-    .optional()
-    .describe("Optional execution id guard; omit to cancel whatever script is currently running."),
+export const opCancelInputSchema = z.object({
+  requestId: z.string().describe("The requestId the in-flight operation was sent under."),
 });
 
 export const scriptPodListInputSchema = z.object({});
@@ -86,7 +83,7 @@ export type ScriptRuntimeContext = HostSessionScope & {
 
 export type ScriptExecuteInput = z.input<typeof scriptExecuteInputSchema>;
 export type ScriptBootstrapInput = z.input<typeof scriptBootstrapInputSchema>;
-export type ScriptCancelInput = z.input<typeof scriptCancelInputSchema>;
+export type OpCancelInput = z.input<typeof opCancelInputSchema>;
 export type ScriptPodListInput = z.input<typeof scriptPodListInputSchema>;
 export type ScriptPodImportInput = z.input<typeof scriptPodImportInputSchema>;
 export type ScriptPodExportInput = z.input<typeof scriptPodExportInputSchema>;
@@ -117,11 +114,8 @@ export class ScriptingTools {
     });
   }
 
-  cancel(input: ScriptCancelInput = {}) {
-    return this.client.call(
-      "scripting.cancel",
-      input.executionId != null ? { executionId: input.executionId } : {},
-    );
+  cancel(input: OpCancelInput) {
+    return this.client.call("op.cancel", { requestId: input.requestId });
   }
 
   bootstrap(input: ScriptBootstrapInput) {

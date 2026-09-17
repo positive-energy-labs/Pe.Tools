@@ -329,6 +329,19 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
+        } catch (OperationCanceledException) {
+            // The pump owns the token, so the pump answers the cancelled frame. Here we only
+            // stamp the verdict `op result` reads, then let it through.
+            var message = $"Operation '{request.OperationKey}' was cancelled.";
+            Log.Information(
+                "Host bridge request cancelled: OperationKey={OperationKey}, RequestId={RequestId}",
+                request.OperationKey,
+                request.RequestId
+            );
+            CompleteOpReceipt(receipt, "cancelled", JsonConvert.SerializeObject(
+                new { error = message, statusCode = BridgeOperationExceptions.CancelledStatusCode },
+                this._serializerSettings));
+            throw;
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -436,7 +449,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private static (string Verdict, int StatusCode) RevitTaskOutcomeResponse(RevitTaskOutcome outcome) => outcome switch {
-        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively => ("cancelled", 499),
+        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively
+            => ("cancelled", BridgeOperationExceptions.CancelledStatusCode),
         RevitTaskOutcome.TimedOut => ("timed-out", 504),
         RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423),
         RevitTaskOutcome.RefusedQueueUnresponsive => ("rejected", 423),

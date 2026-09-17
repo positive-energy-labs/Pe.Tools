@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Bridge;
@@ -45,6 +45,72 @@ public sealed class BridgeRequestPumpTests {
             read,
             Is.SameAs(secondStarted.Task),
             "The read loop did not read the second frame while the first op was still running."
+        );
+    }
+
+    [Test]
+    public async Task CancelByIdEndsTheRunningOpWithACancelledOutcome() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var started = new TaskCompletionSource();
+
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (request, token) => {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+        });
+        var loop = pump.RunAsync(shutdown.Token);
+
+        await pair.Server.WriteAsync(RequestFrame("slow"), CancellationToken.None);
+        await started.Task.WaitAsync(Patience);
+
+        var cancelled = await pump.CancelAsync(new OpCancelRequest("slow"), CancellationToken.None);
+        var frame = await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience);
+        shutdown.Cancel();
+
+        Assert.Multiple(() => {
+            Assert.That(cancelled.Cancelled, Is.True);
+            Assert.That(frame?.Kind, Is.EqualTo(BridgeFrameKind.Response));
+            Assert.That(frame?.Response?.RequestId, Is.EqualTo("slow"));
+            Assert.That(frame?.Response?.StatusCode, Is.EqualTo(499), "a cancelled op answers cancelled, not a fault");
+            Assert.That(frame?.Response?.Issues?.Single().Code, Is.EqualTo("Cancelled"));
+        });
+    }
+
+    [Test]
+    public async Task CancelForAnUnknownIdIsAPlainRefusal() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var pump = new BridgeRequestPump(pair.Client, (_, _) => Task.CompletedTask);
+
+        var result = await pump.CancelAsync(new OpCancelRequest("never-sent"), CancellationToken.None);
+
+        Assert.Multiple(() => {
+            Assert.That(result.Cancelled, Is.False);
+            Assert.That(result.RequestId, Is.EqualTo("never-sent"));
+            Assert.That(result.Message, Does.Contain("not in flight"));
+        });
+    }
+
+    [Test]
+    public async Task ConcurrentWritesDoNotInterleaveOnTheSocket() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var first = new string('a', 200_000);
+        var second = new string('b', 200_000);
+
+        // Both ops answer at the same instant; the transport's write lock is what keeps each
+        // frame whole. An interleaved frame does not deserialize at all.
+        await Task.WhenAll(
+            Task.Run(() => pair.Client.WriteAsync(RequestFrame("first", payloadJson: first), CancellationToken.None)),
+            Task.Run(() => pair.Client.WriteAsync(RequestFrame("second", payloadJson: second), CancellationToken.None))
+        ).WaitAsync(Patience);
+
+        var frames = new[] {
+            await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience),
+            await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience)
+        };
+
+        Assert.That(
+            frames.Select(frame => frame?.Request?.PayloadJson).OrderBy(payload => payload, StringComparer.Ordinal),
+            Is.EqualTo(new[] { first, second }.OrderBy(payload => payload, StringComparer.Ordinal))
         );
     }
 
