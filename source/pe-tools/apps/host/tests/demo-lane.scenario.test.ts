@@ -374,6 +374,61 @@ test("live /family: capture, confirm, apply files a run receipt", async () => {
   expect(workflows).toEqual(["family.capture", "family.confirm", "family.apply"]);
 }, 180_000);
 
+/**
+ * THE EDITABLE TABLE. No file ceremony: two cells are typed across two families, the edits are
+ * staged route Work (they survive a reload), and PLAN generates one patch member per family at that
+ * moment, files it in the working pod, and plans it. Apply sends each row's hash back to the member
+ * that produced it, and `/pods` shows the run against the generated member.
+ */
+test("live /families: staged cell edits generate the spec on plan, then apply", async () => {
+  const { shown, workflows } = await liveLoop("families-table", async (page) => {
+    const pod = await openLive(page, "/families", "demo=capture&live=1");
+    await page.goto(`${page.url()}&stage=apply&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    const body = page.locator("body");
+    let cells = 0;
+    for (const [family, next] of [
+      ["Fan Coil Unit - Ducted", "FXMQ20"],
+      ["Heat Pump - Split", "RXL30"],
+    ]) {
+      const cell = page.locator(`input[value="${family} model"]`).first();
+      await expect.poll(() => cell.count(), { timeout: 30_000 }).toBe(1);
+      await cell.fill(next!);
+      await cell.press("Enter");
+      // One cell at a time, as a person edits: staging rebuilds the table, and a value typed into
+      // a second cell before the first lands can be lost with it (owed, `families/store.ts`).
+      cells += 1;
+      await expect
+        .poll(() => body.innerText(), { timeout: 30_000 })
+        .toContain(`staged · ${cells} cell${cells === 1 ? "" : "s"} · ${cells} famil`);
+    }
+    const staged = /staged · 2 cells · 2 families/;
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toMatch(staged);
+    // Staged edits are Work, not page memory: a reload still finds them.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toMatch(staged);
+    if (SCRATCH)
+      await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
+    await run(page, "plan");
+    // Plan wrote the spec nobody authored: the page now names the generated member.
+    const path = await landed(page, /^settings\/families\/staged-Fan-Coil-Unit-+Ducted-.*\.json$/);
+    if (SCRATCH)
+      await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
+    await run(page, "apply families");
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("confirm ran");
+    // Applied edits are spent; the receipt is the record from here.
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).not.toMatch(staged);
+    return receiptOnPods(page, pod, path, "families.apply");
+  });
+  expect(shown).toContain("succeeded");
+  // One confirm and one apply per edited family: a patch's `types` map cannot address two.
+  expect(workflows).toEqual([
+    "families.confirm",
+    "families.confirm",
+    "families.apply",
+    "families.apply",
+  ]);
+}, 180_000);
+
 test("live /families: capture, confirm, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");

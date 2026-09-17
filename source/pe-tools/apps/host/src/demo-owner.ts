@@ -738,7 +738,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             return result;
           },
         },
-        { forwardBase: null, dispatch, local: rhvac.local, captureHostOp: () => {} },
+        {
+          forwardBase: null,
+          dispatch,
+          // An admitted host-local write lands in THIS owner's pod root, never the user's
+          // Documents: `/families` files the member its staged edits generate through this.
+          local: (key, input) =>
+            key === "pod.member.write"
+              ? settings.writeMember(input as Parameters<typeof settings.writeMember>[0])
+              : rhvac.local(key, input),
+          captureHostOp: () => {},
+        },
       ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true, memoMap: Layer.makeMemoMapUnsafe() },
     );

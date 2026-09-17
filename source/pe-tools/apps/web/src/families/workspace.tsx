@@ -35,6 +35,7 @@ function useFamiliesWorkspaceModel(
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = store.applied;
+  const edits = store.edits;
   const plan = store.plan;
   const excludedIds = new Set(store.excludedIds);
   const pickedIds = store.pickedIds;
@@ -236,7 +237,12 @@ function useFamiliesWorkspaceModel(
     setPickedIds,
     showUncommon,
     totalFamilies,
+    edits,
+    stageEdit: store.actions.stageEdit,
+    revertEdit: store.actions.revertEdit,
   });
+
+  const stagedFamilies = useMemo(() => new Set(edits.map((edit) => edit.familyId)).size, [edits]);
 
   const chips = useTableChips({
     categories:
@@ -262,6 +268,14 @@ function useFamiliesWorkspaceModel(
         ? {
             label: `capture · ${pickedIds.size} picked · esc`,
             onClear: () => setPickedIds(new Set()),
+          }
+        : null,
+    // Staged cells are unsaved authored work: countable here, revertible whole in one press.
+    staged:
+      edits.length > 0
+        ? {
+            label: `staged · ${edits.length} cell${edits.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
+            onClear: () => void store.actions.revertEdits(),
           }
         : null,
   });
@@ -292,6 +306,8 @@ function useFamiliesWorkspaceModel(
     target,
     scope,
     draft,
+    edits,
+    stagedFamilies,
     placement,
     draftCategories,
     pickedFamilies,

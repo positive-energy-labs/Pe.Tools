@@ -7,11 +7,13 @@ describe("familiesRouteState", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
       scope: null,
       excludedIds: [],
+      edits: [],
     });
     // The whole document is agent-writable because the whole document is authored input.
     expect(familiesRouteState.agentWriteMask).toEqual([
       ["scope"],
       ["excludedIds"],
+      ["edits"],
       ["executionOptions"],
     ]);
   });

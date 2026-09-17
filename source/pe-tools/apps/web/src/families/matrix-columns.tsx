@@ -1,9 +1,11 @@
 import { useMemo } from "react";
-import { ReadCell } from "#/components/master-table/cells";
+import type { FamilyCellEdit } from "@pe/agent-contracts";
+import { ReadCell, TextCell } from "#/components/master-table/cells";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
+import { stagedAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
@@ -46,8 +48,24 @@ const CLUSTER_ORDER: Record<Cluster, number> = {
   "project-only": 3,
 };
 
+/**
+ * Whether a patch can express a change to this cell — the one thing that decides if it is editable.
+ * A patch writes `types.<typeName>.<parameter>` on the family document, so an unresolved parameter
+ * (not on this family), a project binding (the value lives on instances, not in the family) and a
+ * formula-driven parameter (the family computes it) are all outside what a patch can say.
+ */
+export function patchable(row: TypeRow, key: string): boolean {
+  const scope = row.scopes[key];
+  return (
+    Boolean(scope) &&
+    scope !== "Unresolved" &&
+    scope !== "ProjectBindingOnly" &&
+    row.formulas[key] !== "Present"
+  );
+}
+
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
-function cellReason(row: TypeRow, key: string): string {
+function cellReason(row: TypeRow, key: string, instance: boolean): string {
   const scope = row.scopes[key];
   if (!scope || scope === "Unresolved")
     return "This parameter does not exist on this family, so there is nothing to read and nothing a profile could change here.";
@@ -55,9 +73,12 @@ function cellReason(row: TypeRow, key: string): string {
     return "Bound at the PROJECT, not owned by the family. The value lives on placed instances; editing the family will not move it.";
   if (row.formulas[key] === "Present")
     return "Driven by a formula inside the family — the number shown is what the formula resolved to for this type, not an authored value.";
-  return row.values[key]
-    ? `Authored value for this type: ${row.values[key]}. Read-only here — /families audits the fleet; edit one family in /family.`
-    : "The parameter exists on this family but this type carries no value for it.";
+  const what = instance
+    ? `the INSTANCE DEFAULT this type hands every instance placed from it`
+    : `this type's authored value`;
+  return `Type "${row.typeName}" of ${row.familyName}: ${what}${
+    row.values[key] ? ` — currently ${row.values[key]}` : " — currently blank"
+  }. Type to stage an edit; plan generates the spec. Esc restores, the × beside a staged value reverts it.`;
 }
 
 // ── plan lens ───────────────────────────────────────────────────────────────────────────────────
@@ -75,6 +96,9 @@ export function useFamiliesColumns({
   setPickedIds,
   showUncommon,
   totalFamilies,
+  edits,
+  stageEdit,
+  revertEdit,
 }: {
   familyState: (familyId: number) => Verdict;
   params: ParamColumn[];
@@ -82,6 +106,9 @@ export function useFamiliesColumns({
   setPickedIds: FamiliesStore["actions"]["setPickedIds"];
   showUncommon: boolean;
   totalFamilies: number;
+  edits: readonly FamilyCellEdit[];
+  stageEdit: FamiliesStore["actions"]["stageEdit"];
+  revertEdit: FamiliesStore["actions"]["revertEdit"];
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -208,10 +235,47 @@ export function useFamiliesColumns({
           const scopeOf = row.scopes[col.key];
           const value = row.values[col.key] ?? "";
           const unresolved = !scopeOf || scopeOf === "Unresolved";
+          const reason = cellReason(row, col.key, col.isInstance);
+          if (patchable(row, col.key)) {
+            const cell = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+            const staged = stagedAt(edits, cell);
+            return (
+              <span className="flex min-w-0 items-center" data-staged={staged ? "" : undefined}>
+                <TextCell
+                  value={staged ? staged.value : value}
+                  placeholder={staged ? value : undefined}
+                  title={
+                    staged
+                      ? `Staged: ${value || "(blank)"} → ${staged.value}. Nothing has reached Revit; plan generates the spec from every staged cell.`
+                      : reason
+                  }
+                  onCommit={(next) =>
+                    void stageEdit({
+                      ...cell,
+                      familyName: row.familyName,
+                      // Committing the value Revit already holds is a revert, not a no-op edit.
+                      value: next === value ? "" : next,
+                    })
+                  }
+                />
+                {staged ? (
+                  <Press
+                    type="button"
+                    tone="quiet"
+                    size="value"
+                    title={`Revert this cell to ${value || "(blank)"}; the other staged cells stay.`}
+                    onClick={() => void revertEdit(cell)}
+                  >
+                    ×
+                  </Press>
+                ) : null}
+              </span>
+            );
+          }
           return (
             <ReadCell
               value={unresolved ? "" : value || "—"}
-              reason={cellReason(row, col.key)}
+              reason={reason}
               /* A project binding and a formula are FACTS about where a value lives, not
                  alarms — they get quiet ink and spend no meaning role. Formula-driven was
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
@@ -229,7 +293,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, pickedIds, familyState]);
+  }, [params, totalFamilies, showUncommon, pickedIds, familyState, edits, stageEdit, revertEdit]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,

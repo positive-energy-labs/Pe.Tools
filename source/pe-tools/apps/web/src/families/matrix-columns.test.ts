@@ -22,6 +22,9 @@ test("a parameter on the only scoped family remains visible as common", () => {
       setPickedIds: () => {},
       showUncommon: false,
       totalFamilies: 1,
+      edits: [],
+      stageEdit: () => Promise.resolve(null),
+      revertEdit: () => Promise.resolve(null),
     }),
   );
   expect(result.current.uncommonCount).toBe(0);

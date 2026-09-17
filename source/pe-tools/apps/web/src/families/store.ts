@@ -7,7 +7,7 @@
  * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
@@ -16,6 +16,7 @@ import {
   ffReceiptSchema,
   podMemberSourceSchema,
   type ActionStatus,
+  type FamilyCellEdit,
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
@@ -28,6 +29,7 @@ import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
+import { revert, stage } from "#/families/staged";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
@@ -51,6 +53,7 @@ const EMPTY_MEMORY: FamiliesPageMemory = {
 };
 
 const NO_EXCLUDED: readonly number[] = [];
+const NO_EDITS: readonly FamilyCellEdit[] = [];
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -178,6 +181,26 @@ export function useFamiliesStore(
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
+  const edits = doc?.edits ?? NO_EDITS;
+  /*
+   * Two cells typed back to back are two Work writes, and the second must build on the first even
+   * though the Work reading has not come back yet — otherwise the later write erases the earlier
+   * cell. `asked` is what we last wrote; it yields to Work the moment Work agrees, so Work stays
+   * the only authority and this is a queue, never a second copy of the document.
+   */
+  const observed = useRef(edits);
+  observed.current = edits;
+  const asked = useRef<readonly FamilyCellEdit[] | null>(null);
+  if (asked.current && JSON.stringify(asked.current) === JSON.stringify(edits))
+    asked.current = null;
+  const writeEdits = useCallback(
+    (next: readonly FamilyCellEdit[]) => {
+      asked.current = next;
+      return handle.work.write([{ path: ["edits"], value: [...next] }]);
+    },
+    [handle.work],
+  );
+  const stagedEdits = useCallback(() => asked.current ?? observed.current, []);
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -242,6 +265,11 @@ export function useFamiliesStore(
         setMemory((current) => ({ ...current, table: next(value, current.table) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
+      /** Stage one cell's value as authored Work; an empty value reverts that cell. */
+      stageEdit: (cell: FamilyCellEdit) => writeEdits(stage(stagedEdits(), cell)),
+      revertEdit: (cell: Pick<FamilyCellEdit, "familyId" | "typeName" | "parameter">) =>
+        writeEdits(revert(stagedEdits(), cell)),
+      revertEdits: () => writeEdits([]),
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
@@ -256,7 +284,17 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, draft, setPage, pickedIds, excludedIds, target, documentScope],
+    [
+      handle.work,
+      draft,
+      setPage,
+      pickedIds,
+      excludedIds,
+      writeEdits,
+      stagedEdits,
+      target,
+      documentScope,
+    ],
   );
 
   return {
@@ -265,6 +303,7 @@ export function useFamiliesStore(
     target,
     documentScope,
     excludedIds,
+    edits,
     applied,
     plan,
     applyData,

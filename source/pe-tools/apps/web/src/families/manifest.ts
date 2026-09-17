@@ -13,10 +13,20 @@ import {
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
-import { admissionPlan, entityRoute, type EntityPage, type EntityRouteDef } from "#/route";
+import {
+  admissionPlan,
+  entityRoute,
+  workflow,
+  type EntityPage,
+  type EntityRouteDef,
+  type MemberSource,
+  type PlanEntry,
+} from "#/route";
+import { podHost } from "#/route/pods";
 
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
+import { stagedMembers } from "./staged";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
@@ -36,6 +46,10 @@ export const familiesPageSchema = z.object({
 export type FamiliesReadingKey = "receipts" | "inventory";
 
 /* ── The definition ────────────────────────────────────────────────────────── */
+
+/** The generated member's `$schema`: this library, on the host actually serving the page. */
+const stagedSchema = () =>
+  typeof location === "undefined" ? FF_SPEC_SCHEMA : new URL(FF_SPEC_SCHEMA, location.origin).href;
 
 export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage> =
   {
@@ -61,7 +75,75 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       // Held-back rows are authored Work; the sheet toggles them there.
       excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
     },
-    docs: "Audit loaded families over a scope, capture picked families into a pod as specs, then confirm a saved spec's plan and apply exactly the families it changes.",
+    /**
+     * The editable table's half. Plan generates one patch member per edited family, files it in the
+     * page's pod through the same host writer capture uses, and plans each through
+     * `families.confirm`; apply sends each included row's hash back to the member that produced it.
+     * The person never named, saved, or opened a file — but one exists, and the receipt names it.
+     */
+    staged: {
+      count: (ctx) => (ctx.work.doc?.edits ?? []).length,
+      plan: async (ctx) => {
+        const doc = ctx.work.doc;
+        if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
+        if (!ctx.page.pod) throw Error("choose the pod the generated spec lands in");
+        const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
+        const entries: PlanEntry[] = [];
+        const generated = stagedMembers(doc.edits, new Date(), stagedSchema());
+        for (const member of generated) {
+          const source = await podHost.write(
+            { pod: ctx.page.pod, path: member.path },
+            member.content,
+          );
+          // The page names the first generated member so the Situation can open what was written;
+          // every member is still addressed per row, and each files its own run. Named only after
+          // it exists: naming a path before the write lands makes the editor read a missing file.
+          if (member === generated[0]) ctx.setPage({ path: member.path });
+          const result = await workflow(
+            "families.confirm",
+            {
+              source,
+              excludedIds: doc.excludedIds,
+              ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
+            },
+            ctx,
+            bases,
+          );
+          // The spec selects one family, but the engine plans what it matches: keep that family's
+          // row and no other, so a row can never be attributed to a member that did not plan it.
+          for (const plan of [result.plan].flat()) {
+            const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
+            if (Number(row.id) === member.familyId) entries.push({ ...row, source });
+          }
+        }
+        return { entries };
+      },
+      apply: async (ctx, included) => {
+        const doc = ctx.work.doc;
+        const byMember = new Map<string, { source: MemberSource; rows: PlanEntry[] }>();
+        for (const row of included) {
+          if (!row.source) throw Error(`the planned row for ${row.name} names no saved member`);
+          const key = `${row.source.pod}:${row.source.path}`;
+          const bucket = byMember.get(key);
+          if (bucket) bucket.rows.push(row);
+          else byMember.set(key, { source: row.source, rows: [row] });
+        }
+        for (const { source, rows } of byMember.values())
+          await workflow(
+            "families.apply",
+            {
+              source,
+              ...(doc?.executionOptions ? { executionOptions: doc.executionOptions } : {}),
+              expectedPlanHashes: Object.fromEntries(rows.map((r) => [r.id, r.planHash])),
+            },
+            ctx,
+          );
+        // Applied edits are spent: the run receipt is the record from here, and leaving them
+        // staged would offer the same change again over a model that already took it.
+        await ctx.write([{ path: ["edits"], value: [] }]);
+      },
+    },
+    docs: "Audit loaded families over a scope, edit the cells a patch can express as staged work, capture picked families into a pod as specs, then plan a spec — saved or generated from the staged edits — and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<

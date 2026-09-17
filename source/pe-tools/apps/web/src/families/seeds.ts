@@ -113,10 +113,15 @@ type FamiliesSeed = Seed<
   FamiliesPage & Partial<EntityPage>
 >;
 
-const seed = (title: string, page: Partial<EntityPage>, readings = {}): FamiliesSeed => ({
+const seed = (
+  title: string,
+  page: Partial<EntityPage>,
+  readings = {},
+  doc: FamiliesRouteDocument = work,
+): FamiliesSeed => ({
   title,
   target: { kind: "document", ref: TARGET },
-  work,
+  work: doc,
   readings: {
     receipts: [],
     inventory: { sessions: [] },
@@ -126,7 +131,35 @@ const seed = (title: string, page: Partial<EntityPage>, readings = {}): Families
   page: { pod: POD.id, ...page } as never,
 });
 
-/** `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan. */
+/**
+ * The editable table: two cells staged across two families, held as authored Work. Nothing has
+ * reached Revit and no file exists yet — plan generates one patch member per family at that moment.
+ */
+const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
+  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
+  excludedIds: [],
+  edits: [
+    {
+      familyId: 3101,
+      familyName: "Fan Coil Unit - Ducted",
+      typeName: "FCU-1",
+      parameter: "PE_G___Model",
+      value: "FXMQ20",
+    },
+    {
+      familyId: 3102,
+      familyName: "Heat Pump - Split",
+      typeName: "HP-1",
+      parameter: "PE_G___Manufacturer",
+      value: "Mitsubishi",
+    },
+  ],
+});
+
+/**
+ * `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan;
+ * `?demo=edit` shows the table with staged cell edits waiting for plan.
+ */
 export const FAMILIES_SEEDS = {
   capture: seed("two families picked for capture into the demo pod", {
     stage: "capture",
@@ -138,4 +171,10 @@ export const FAMILIES_SEEDS = {
     confirming: true,
     sheet: { entries: plan.map(ffPlanRow) },
   }),
+  edit: seed(
+    "two cells staged across two families; plan generates the spec from them",
+    { stage: "apply" },
+    {},
+    staged,
+  ),
 };

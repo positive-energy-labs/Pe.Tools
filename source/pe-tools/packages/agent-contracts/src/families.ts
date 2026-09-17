@@ -82,13 +82,30 @@ const appliedScopeSchema = z.object({
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 
 /**
+ * One staged cell edit on the `/families` audit: the value a person typed into one family type's
+ * parameter cell. It is authored Work, not a result — it survives a reload, and plan generates the
+ * spec from it. The address is a family, a type and the EXACT Revit parameter name, because that is
+ * what a Family Foundry patch keys on (`patch.types.<typeName>.<parameter>`).
+ */
+export const familyCellEditSchema = z.object({
+  familyId: z.number(),
+  familyName: z.string(),
+  typeName: z.string(),
+  parameter: z.string(),
+  value: z.string(),
+});
+export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
+
+/**
  * The Families route document is authored Work and nothing else. The spec is the page's member
- * (one address, sent as `source`); plans and receipts are results. This document holds only the
- * scope and what a human or pea held back.
+ * (one address, sent as `source`) or, for staged edits, the member plan generates from them; plans
+ * and receipts are results. This document holds only the scope, the staged edits, and what a human
+ * or pea held back.
  */
 const familiesDocumentSchema = z.object({
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
+  edits: z.array(familyCellEditSchema).default([]),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
@@ -112,9 +129,10 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: author a scope, confirm a spec member's plan, exclude, apply.",
+  description:
+    "Family Foundry: author a scope, stage cell edits, confirm a spec member's plan, exclude, apply.",
   schema: familiesDocumentSchema,
-  agentWriteMask: [["scope"], ["excludedIds"], ["executionOptions"]],
+  agentWriteMask: [["scope"], ["excludedIds"], ["edits"], ["executionOptions"]],
   // Confirming and applying are the `families.confirm` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},

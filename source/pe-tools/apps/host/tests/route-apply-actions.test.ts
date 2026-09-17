@@ -258,7 +258,7 @@ test("neither route document can hold an observation or a receipt", async () => 
   // A native plan was returned, and neither the Work document nor a reading moved.
   expect(confirmed.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["excludedIds", "scope"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual(["edits", "excludedIds", "scope"]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
   expect(await captures.familyReadings(scope)).toEqual([]);
 
