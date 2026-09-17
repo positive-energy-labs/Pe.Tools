@@ -30,7 +30,7 @@ import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { useHostStatus } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
-import { CellTrichotomyReviewer } from "#/workbench/trichotomy-reviewer";
+import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 import {
   actionResult,
   saveSettingsAction,
