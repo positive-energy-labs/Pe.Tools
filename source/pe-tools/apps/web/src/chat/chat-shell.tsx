@@ -157,23 +157,22 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
   ]);
 
   const runStatus = selectRunStatus(chat);
-  const status = operationError
-    ? { text: operationError, caution: true }
-    : turnFailure
-      ? { text: turnFailure.message, caution: true }
-      : turnFailed
-        ? { text: "failed", caution: true }
+  const status = {
+    text:
+      turnFailed || turnFailure
+        ? "failed"
         : !displayKnown
-          ? { text: loading ? "loading thread state" : "connecting", caution: false }
-          : {
-              text:
-                runStatus === "waiting"
-                  ? "waiting for you"
-                  : runStatus === "running"
-                    ? "running"
-                    : "ready",
-              caution: false,
-            };
+          ? loading
+            ? "loading thread state"
+            : "connecting"
+          : runStatus === "waiting"
+            ? "waiting for you"
+            : runStatus === "running"
+              ? "running"
+              : "ready",
+    caution: turnFailed || turnFailure !== null,
+    detail: operationError ?? turnFailure?.message,
+  };
   const chatColumn = (
     <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
       <div className="min-h-0 min-w-0 flex-1">

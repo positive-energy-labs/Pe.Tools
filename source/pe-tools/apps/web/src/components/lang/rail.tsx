@@ -22,7 +22,13 @@ export function Rail({
         data-surface={ground}
         className={`flex h-(--rail-h) shrink-0 items-center gap-2 px-2 ${edge === "top" ? "hairline-t" : "hairline-b"}`}
       >
-        <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden truncate whitespace-nowrap">
+        <div
+          data-slot="rail-lead"
+          className="no-scrollbar flex min-w-0 flex-1 items-baseline gap-2 overflow-x-auto whitespace-nowrap"
+          onFocusCapture={({ target }) =>
+            (target as HTMLElement).scrollIntoView({ block: "nearest", inline: "nearest" })
+          }
+        >
           {lead}
         </div>
         {trail != null ? (

@@ -86,7 +86,7 @@ export function ComposerHead({
   /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
    * Situation already answers "what is bound and how is it", and a rail that appears and
    * disappears over the chat shifted the whole lane every time it spoke. */
-  status?: { text: string; caution: boolean };
+  status?: { text: string; caution: boolean; detail?: string };
 }) {
   const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
@@ -224,6 +224,16 @@ export function ComposerHead({
           />
         }
       />
+      {status?.detail ? (
+        <div
+          role="alert"
+          className="hairline-b px-2 py-1 t-small"
+          data-testid="composer-status-detail"
+          data-tone="caution"
+        >
+          {status.detail}
+        </div>
+      ) : null}
       {approvals.length ? (
         <div
           aria-label="Pea proposals"

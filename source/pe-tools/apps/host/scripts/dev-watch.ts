@@ -15,6 +15,8 @@ const disconnect = () => {
     killTimeout = setTimeout(() => owned.kill(), 10_000).unref();
   }
 };
+// TODO: Include the fs.watch event and path in the restart log. Observed restarts cannot yet be
+// attributed to a real source write or a spurious notification because this callback drops both.
 const changed = () => {
   clearTimeout(debounce);
   debounce = setTimeout(() => {

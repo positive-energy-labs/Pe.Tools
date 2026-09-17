@@ -17,7 +17,7 @@ import { Code } from "#/components/lang/code";
 import { cn } from "#/lib/utils";
 
 const PROSE_CLASS = [
-  "prose max-w-none text-ink",
+  "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",
   "prose-pe",
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   "prose-headings:font-sans prose-headings:text-ink prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
