@@ -20,7 +20,7 @@ internal sealed record ScriptExecutionPlan(
     ScriptSourceSet SourceSet,
     ScriptWorkspaceExecutionMode ExecutionMode,
     PodManifest? PodManifest,
-    PodExecutionAttributionData? Attribution,
+    PodReceipt? Attribution,
     string ProjectContent,
     bool RequireSingleContainer
 );

@@ -147,10 +147,10 @@ internal static class ScriptFileTemplates {
         ## Pod identity and ownership
 
         - Local folder / workspaceKey locates this copy; it may be renamed independently of pod.json id.
-        - Manifest id names the lineage. Content hash identifies exact execution content. Human version is a label.
-        - Parent identifies the exact ancestor release. Origin locates a transport and does not authenticate identity.
+        - Manifest id names the lineage; `@<id>/path` references resolve to the one installed pod with that id. Each member's SHA-256 identifies its exact content. Human version is a label.
         - Pods may contain typed JSON settings and assets without scripts. Libraries own operations and semantic validation; JSON files do not declare executable actions.
-        - Published releases ship composed settings and inspection source. Use independent import for editable composed settings without authoring dependencies; preserve parent ancestry and never run inspection files as a fallback.
+        - `$schema` alone says what a JSON member is for. `$include` and `$preset` compose one member at a time when it is used.
+        - Export vendors consumed foreign fragments under `settings/_vendor/<id>/` so the archive composes from its own bytes. Import writes `imported.json` as provenance only.
         - Adopt updates explicitly. APS remains authoritative and is fetched only by operations using its resources.
         - Write useful output files with Artifacts. Share the run folder with its receipt; output is excluded from publication.
 

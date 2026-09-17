@@ -434,7 +434,7 @@ public sealed class RevitScriptExecutionService(
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
             PodManifest? podManifest = null;
-            PodExecutionAttributionData? preparedAttribution = null;
+            PodReceipt? preparedAttribution = null;
             string? projectSeed = null;
             if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
@@ -444,32 +444,21 @@ public sealed class RevitScriptExecutionService(
                 );
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
-                var bundle = request.SourceBundle ?? CapturePodSource(workspaceKey, request.SourcePath!);
-                var preparation = new ScriptPodPreparationService().Prepare(workspaceKey, bundle);
-                if (preparation is not PreparedPod prepared)
-                    throw new ArgumentException(string.Join("; ", preparation.Outcomes
-                        .Where(outcome => outcome.Severity == ScriptDiagnosticSeverity.Error)
-                        .Select(outcome => $"{outcome.Code} at {outcome.Location}: {outcome.Reason} {outcome.Remedy}")), PodManifestValidator.DiagnosticStage);
+                var bundle = request.SourceBundle ?? CapturePodSource(workspaceRoot);
+                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle);
+                if (!preparation.Success)
+                    throw new ArgumentException(string.Join("; ", preparation.Diagnostics
+                        .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
+                        .Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}")), PodManifestValidator.DiagnosticStage);
                 var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
                 projectSeed = captured.ProjectSeed;
                 var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
-                diagnostics.Add(ScriptDiagnosticFactory.Info("pod.prepare", $"Prepared pod snapshot {prepared.ContentHash} for entrypoint '{entrypoint.Id}'.", request.SourcePath));
+                var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
                 // Outcome and output references are filled when CreateResult observes the final result.
-                preparedAttribution = new PodExecutionAttributionData(
-                    podManifest.Id,
-                    podManifest.Version,
-                    prepared.ContentHash,
-                    prepared.ReleaseHash,
-                    entrypoint.SourcePath,
-                    "scripting.execute",
-                    executionId,
-                    string.Empty,
-                    [],
-                    []
-                );
+                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, string.Empty, [], null);
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
@@ -626,93 +615,12 @@ public sealed class RevitScriptExecutionService(
         _ => "Script mode:"
     };
 
-    internal static ScriptPodSourceBundle CapturePodSource(string workspaceKey, string sourcePath, Func<string, string>? workspaceRootResolver = null) {
-        var resolveWorkspaceRoot = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
-        var root = resolveWorkspaceRoot(workspaceKey);
-        var selectedPath = Path.Combine(root, ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath).Replace('/', Path.DirectorySeparatorChar));
-        if (!File.Exists(selectedPath)) throw new IOException($"Workspace source file does not exist: {selectedPath}");
-        var dependencies = new List<ScriptPodDependencyBundle>();
-        var capturedDependencies = new HashSet<string>(StringComparer.Ordinal);
-        var visiting = new HashSet<string>(StringComparer.Ordinal) { workspaceKey };
-        var files = Capture(workspaceKey, includeDependencies: true);
-        return new ScriptPodSourceBundle(files, dependencies);
-
-        List<ScriptPodSourceFile> Capture(string id, bool includeDependencies) {
-            var podRoot = resolveWorkspaceRoot(id);
-            var manifestPath = Path.Combine(podRoot, ProductPathNames.PodManifestFileName);
-            if (!File.Exists(manifestPath))
-                throw new ArgumentException($"Workspace '{id}' has no pod.json.", PodManifestValidator.DiagnosticStage);
-            var paths = PositiveFiles(podRoot).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
-            if (paths.Count > ScriptPodSourceNormalizer.MaxFiles)
-                throw new IOException($"Pod capture exceeds {ScriptPodSourceNormalizer.MaxFiles} files.");
-            var bytes = 0L;
-            var captured = paths.Select(path => {
-                var content = Read(path);
-                if ((bytes += Convert.FromBase64String(content).LongLength) > 4 * 1024 * 1024)
-                    throw new IOException("Pod capture exceeds 4 MiB.");
-                return new ScriptPodSourceFile(GetRelativePath(podRoot, path).Replace('\\', '/'), content);
-            }).ToList();
-            if (ScriptPodPreparationService.HasExactReleasedFileSet(captured.ToDictionary(
-                    file => file.Path,
-                    file => Convert.FromBase64String(file.BytesBase64),
-                    StringComparer.OrdinalIgnoreCase)))
-                return captured;
-            if (!includeDependencies)
-                return captured;
-            var manifest = PodManifestValidator.ValidateJson(System.Text.Encoding.UTF8.GetString(
-                Convert.FromBase64String(captured.Single(file => file.Path == "pod.json").BytesBase64)));
-            if (!manifest.Success || manifest.Manifest is null)
-                throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(diagnostic => diagnostic.Message)), PodManifestValidator.DiagnosticStage);
-            foreach (var requirement in manifest.Manifest.Requires) {
-                if (requirement.Id == workspaceKey)
-                    throw new ArgumentException($"Pod dependency '{requirement.Id}' cannot overwrite the root pod capture.", PodManifestValidator.DiagnosticStage);
-                if (visiting.Contains(requirement.Id))
-                    throw new ArgumentException($"Pod dependency cycle through '{requirement.Id}'.", PodManifestValidator.DiagnosticStage);
-                if (!capturedDependencies.Add(requirement.Id))
-                    continue;
-                var dependencyKey = ScriptPodPreparationService.ResolveDependencyWorkspaceKey(podRoot, requirement);
-                _ = visiting.Add(requirement.Id);
-                dependencies.Add(new ScriptPodDependencyBundle(requirement.Id, requirement.ReleaseHash, Capture(dependencyKey, true)));
-                _ = visiting.Remove(requirement.Id);
-            }
-            return captured;
-        }
-
-        string Read(string path) {
-            if (new FileInfo(path).Length > ScriptPodSourceNormalizer.MaxFileBytes)
-                throw new IOException("Pod file exceeds 512 KiB.");
-            var bytes = File.ReadAllBytes(path);
-            if (bytes.Length > ScriptPodSourceNormalizer.MaxFileBytes)
-                throw new IOException("Pod file exceeds 512 KiB.");
-            return Convert.ToBase64String(bytes);
-        }
-
-        static IEnumerable<string> PositiveFiles(string root) {
-            foreach (var name in new[] { "pod.json", "release.json", "PeScripts.csproj" }) {
-                var path = Path.Combine(root, name);
-                if (File.Exists(path)) yield return path;
-            }
-            var directoryCount = 1;
-            foreach (var name in new[] { "src", "settings", "composed", "assets", "inspection" }) {
-                var directory = Path.Combine(root, name);
-                if (!Directory.Exists(directory)) continue;
-                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException($"Pod input directory cannot be a link: {name}");
-                var pending = new Stack<string>();
-                pending.Push(directory);
-                while (pending.Count > 0) {
-                    var current = pending.Pop();
-                    if (++directoryCount > 256) throw new IOException("Pod directory limit exceeded.");
-                    foreach (var child in Directory.EnumerateDirectories(current)) {
-                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
-                            throw new IOException($"Pod input directory cannot be a link: {GetRelativePath(root, child)}");
-                        pending.Push(child);
-                    }
-                    foreach (var path in Directory.EnumerateFiles(current))
-                        yield return path;
-                }
-            }
-        }
+    internal static ScriptPodSourceBundle CapturePodSource(string workspaceRoot) {
+        var diagnostics = new List<ScriptDiagnostic>();
+        var files = ScriptPodPreparationService.Capture(workspaceRoot, diagnostics);
+        if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
+            throw new IOException(string.Join("; ", diagnostics.Select(diagnostic => $"{diagnostic.Source}: {diagnostic.Message}")));
+        return new ScriptPodSourceBundle(files.Select(file => new ScriptPodSourceFile(file.Key, Convert.ToBase64String(file.Value))).ToList());
     }
 
     private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {
@@ -1146,9 +1054,7 @@ public sealed class RevitScriptExecutionService(
         var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
             Outcome = status.ToString(),
             Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
-            Outputs = [
-                .. (artifacts ?? []).Select(artifact => new ScriptOutputReferenceData("artifact", artifact.RelativePath))
-            ]
+            Outputs = [.. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
         };
         var resultArtifacts = artifacts?.ToList() ?? [];
         var resultDiagnostics = diagnostics.ToList();
