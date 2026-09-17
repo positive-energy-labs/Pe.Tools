@@ -63,6 +63,12 @@ export const scriptPodImportInputSchema = z.object({
   archivePath: z
     .string()
     .describe("Absolute or process-relative path to the Pod .zip archive to import."),
+  folder: z
+    .string()
+    .optional()
+    .describe(
+      "Local folder name under Pods/. Omit to use the pod.json id; the folder is only an address.",
+    ),
 });
 
 export const scriptPodExportInputSchema = z.object({
@@ -129,7 +135,10 @@ export class ScriptingTools {
   }
 
   importPod(input: ScriptPodImportInput) {
-    return this.client.call("pod.import", { archivePath: input.archivePath });
+    return this.client.call("pod.import", {
+      archivePath: input.archivePath,
+      ...(input.folder != null ? { folder: input.folder } : {}),
+    });
   }
 
   exportPod(input: ScriptPodExportInput) {

@@ -392,12 +392,19 @@ export class PeaCliCommands {
         actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
+        folder: {
+          type: "string",
+          description: "Local folder name under Pods/. Omit to use the pod.json id.",
+        },
       },
       toKebab: true,
       run: async (ctx) => {
         const archivePath = firstNonBlank(ctx.values.archive);
         if (!archivePath) throw new Error("Provide --archive <path.zip>.");
-        const result = await this.createScriptingTools(ctx.values).importPod({ archivePath });
+        const result = await this.createScriptingTools(ctx.values).importPod({
+          archivePath,
+          folder: firstNonBlank(ctx.values.folder),
+        });
         console.log(`pod    ${result.id}`);
         console.log(`folder ${result.folder}`);
       },
