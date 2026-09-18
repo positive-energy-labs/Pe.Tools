@@ -6,7 +6,7 @@ import { useRoute } from "#/route/use-route";
 import { memberWorkManifest } from "#/route/spec-editor";
 import { Link } from "@tanstack/react-router";
 
-import { cellSummary, settingsRouteState, type RouteStatePatch } from "@pe/agent-contracts";
+import { settingsRouteState, stagedEntries, type RouteStatePatch } from "@pe/agent-contracts";
 import { recordedRouteDoc } from "#/workbench/route-chat-plugins/tool-names";
 
 import {
@@ -82,7 +82,6 @@ function SettingsReview({
   // `$schema` is the only thing that says what a member is for.
   const isFamilyModel = declaresSchema(document?.basis?.rawContent, FAMILY_MODEL_SCHEMA);
   const fields = document?.fields ?? {};
-  const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
     (field) => field.proposal != null && field.staged == null,
   ).length;
@@ -102,7 +101,7 @@ function SettingsReview({
     >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
-        <Metric value={summary.staged} label="staged" />
+        <Metric value={stagedEntries(fields).length} label="staged" />
         {isFamilyModel ? (
           <Link className="ml-auto" to="/family" search={{ pod: member?.pod, path: member?.path }}>
             Open workspace

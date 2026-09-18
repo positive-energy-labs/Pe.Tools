@@ -21,7 +21,7 @@
  * commands, and a projection that invented them from the fixture would be the one lie these
  * surfaces may not tell.
  */
-import { settingsFieldPointer } from "@pe/agent-contracts";
+import { settingsFieldPointer, transitionPatches } from "@pe/agent-contracts";
 
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
@@ -479,11 +479,17 @@ export function draftedModel(
 
 /** Stage a value at one JSON Pointer. `undefined` DELETES the property, which is a different act
  * from writing an empty string and the settings schema keeps them apart. */
+/** A typed edit, as the shared cell machine stages it. The draft diff is this route's baseline. */
 function stage(segments: string[], value: string | undefined): RouteStatePatch {
-  return {
-    path: ["fields", settingsFieldPointer(segments), "staged"],
-    value: value === undefined ? { delete: true } : { value },
-  };
+  return transitionPatches(
+    ["fields"],
+    settingsFieldPointer(segments),
+    {},
+    {
+      kind: "stage",
+      rung: value === undefined ? { delete: true } : { value },
+    },
+  )[0]!;
 }
 
 /**
@@ -509,20 +515,23 @@ export function draftToPatches(
     // document has no line for at all, seeded with the literal so the geometry does not move.
     if (promoted.has(name) && !(name in savedDraft.authored)) {
       const seed = draft.newParams.find((param) => param.name === name);
-      patches.push({
-        path: [
-          "fields",
+      patches.push(
+        ...transitionPatches(
+          ["fields"],
           settingsFieldPointer([model.parameters ? "parameters" : "familyParameters", name]),
-          "staged",
-        ],
-        value: {
-          value: {
-            dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
-            ...(seed?.group ? { propertiesGroup: seed.group } : {}),
-            ...(isFormula(value) ? { formula: value.replace(/^\s*=\s*/, "") } : { value }),
+          {},
+          {
+            kind: "stage",
+            rung: {
+              value: {
+                dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
+                ...(seed?.group ? { propertiesGroup: seed.group } : {}),
+                ...(isFormula(value) ? { formula: value.replace(/^\s*=\s*/, "") } : { value }),
+              },
+            },
           },
-        },
-      });
+        ),
+      );
       continue;
     }
 

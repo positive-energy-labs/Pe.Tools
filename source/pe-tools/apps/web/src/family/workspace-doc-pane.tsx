@@ -1,4 +1,4 @@
-import { paramSpec } from "#/family/family-model";
+import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
@@ -168,6 +168,7 @@ export function FamilyWorkspaceDocPane() {
             {...cellFromTrichotomy(
               proposalCell(family, (saved.authored[name] ?? null) !== authored ? authored : null),
               { value: authored },
+              parameterText,
             )}
             onLocate={family[0] ? () => locate(family[0]!) : undefined}
             note={

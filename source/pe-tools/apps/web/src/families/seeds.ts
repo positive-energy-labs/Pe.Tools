@@ -6,6 +6,7 @@
  */
 import {
   familiesRouteState,
+  familyCellKey,
   type FamiliesRouteDocument,
   type FfPlanEntry,
   type Seed,
@@ -132,9 +133,9 @@ const seed = (
 });
 
 /**
- * The editable table in the proposal language: Pea proposed one cell and a person accepted it; a
- * person proposed another that nobody has accepted yet. Nothing has reached Revit and no file
- * exists — plan generates one patch member per family from the ACCEPTED cell only.
+ * The editable table in the proposal language: Pea proposed one cell and a person staged it; a
+ * person proposed another that nobody has staged yet. Nothing has reached Revit and no file
+ * exists — plan generates one patch member per family from the staged cell only.
  */
 const peaModel = {
   familyId: 3101,
@@ -142,28 +143,27 @@ const peaModel = {
   typeName: "FCU-1",
   parameter: "PE_G___Model",
   value: "FXMQ20",
-  by: "pea",
 } as const;
 const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
   excludedIds: [],
-  edits: [
-    peaModel,
-    {
-      familyId: 3102,
-      familyName: "Heat Pump - Split",
-      typeName: "HP-1",
-      parameter: "PE_G___Manufacturer",
-      value: "Mitsubishi",
-      by: "human",
+  cells: {
+    [familyCellKey(peaModel)]: {
+      proposal: { value: { familyName: peaModel.familyName, value: peaModel.value } },
+      staged: { value: { familyName: peaModel.familyName, value: peaModel.value } },
     },
-  ],
-  accepted: [peaModel],
+    [familyCellKey({ familyId: 3102, typeName: "HP-1", parameter: "PE_G___Manufacturer" })]: {
+      proposal: {
+        value: { familyName: "Heat Pump - Split", value: "Mitsubishi" },
+      },
+      staged: null,
+    },
+  },
 });
 
 /**
  * `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan;
- * `?demo=edit` shows the table with one accepted and one open cell proposal.
+ * `?demo=edit` shows the table with one staged and one open cell proposal.
  */
 export const FAMILIES_SEEDS = {
   capture: seed("two families picked for capture into the demo pod", {
@@ -177,7 +177,7 @@ export const FAMILIES_SEEDS = {
     sheet: { entries: plan.map(ffPlanRow) },
   }),
   edit: seed(
-    "two cell proposals across two families, one accepted; plan generates the spec from the accepted one",
+    "two cell proposals across two families, one staged; plan generates the spec from the staged one",
     { stage: "apply" },
     {},
     staged,

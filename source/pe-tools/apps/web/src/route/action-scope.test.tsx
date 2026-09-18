@@ -79,3 +79,166 @@ test("an action completing after an A to B to A target change cannot write the n
     subscribe.mockRestore();
   }
 });
+
+test("an action cannot replace newer member navigation within the same target and Work", async () => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const manifest = defineRoute({
+    key: "late-member",
+    name: "Late member",
+    page: z.object({ member: z.string(), review: z.string().nullable() }),
+    actions: {
+      capture: {
+        label: "capture",
+        says: "captures one member",
+        needs: "host",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: async (ctx) => {
+          await held;
+          ctx.setPage({ member: "captured-old", review: "old result" });
+        },
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() =>
+      useRoute(manifest, { work: "shared", page: { member: "A", review: null } }),
+    );
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.actions.capture.run();
+    });
+    act(() => result.current.page[1]({ member: "B" }));
+    act(() => result.current.page[1]({ member: "A" }));
+    await act(async () => {
+      release();
+      await pending;
+    });
+    expect(result.current.page[0]).toEqual({ member: "A", review: null });
+  } finally {
+    cleanup();
+  }
+});
+
+test("a retained old action handle cannot borrow the epoch of newer navigation", async () => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const manifest = defineRoute({
+    key: "retained-action",
+    name: "Retained action",
+    page: z.object({ member: z.string(), review: z.string().nullable() }),
+    actions: {
+      capture: {
+        label: "capture",
+        says: "captures the rendered member",
+        needs: "host",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: async (ctx) => {
+          const member = ctx.page.member;
+          await held;
+          ctx.setPage({ review: `${member} result` });
+        },
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() =>
+      useRoute(manifest, { work: "shared", page: { member: "P", review: null } }),
+    );
+    const oldAction = result.current.actions.capture;
+    act(() => result.current.page[1]({ member: "Q" }));
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = oldAction.run();
+    });
+    await act(async () => {
+      release();
+      await pending;
+    });
+    expect(result.current.page[0]).toEqual({ member: "Q", review: null });
+  } finally {
+    cleanup();
+  }
+});
+
+test("action page progress continues until a user selection or review change supersedes it", async () => {
+  let release = () => {};
+  let held = Promise.resolve();
+  const hold = () => {
+    held = new Promise<void>((resolve) => (release = resolve));
+  };
+  const manifest = defineRoute({
+    key: "page-progress",
+    name: "Page progress",
+    page: z.object({
+      progress: z.string(),
+      selection: z.array(z.string()),
+      review: z.string().nullable(),
+    }),
+    actions: {
+      plan: {
+        label: "plan",
+        says: "publishes two steps",
+        needs: "host",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: async (ctx) => {
+          ctx.setPage({ progress: "generated" });
+          await held;
+          ctx.setPage({ progress: "planned", selection: ["old"], review: "old review" });
+        },
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() =>
+      useRoute(manifest, {
+        work: "shared",
+        page: { progress: "idle", selection: [], review: null },
+      }),
+    );
+
+    hold();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.actions.plan.run();
+    });
+    expect(result.current.page[0].progress).toBe("generated");
+    await act(async () => {
+      release();
+      expect(await pending).toBeNull();
+    });
+    expect(result.current.page[0]).toEqual({
+      progress: "planned",
+      selection: ["old"],
+      review: "old review",
+    });
+
+    hold();
+    act(() => {
+      pending = result.current.actions.plan.run();
+    });
+    expect(result.current.page[0].progress).toBe("generated");
+    act(() => result.current.page[1]({ selection: ["new"], review: null }));
+    await act(async () => {
+      release();
+      expect(await pending).toBeNull();
+    });
+    expect(result.current.page[0]).toEqual({
+      progress: "generated",
+      selection: ["new"],
+      review: null,
+    });
+    expect(result.current.outcome).toMatchObject({ key: "plan", refusal: null });
+  } finally {
+    cleanup();
+  }
+});

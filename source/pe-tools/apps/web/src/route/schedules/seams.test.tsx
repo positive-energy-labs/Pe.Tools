@@ -156,6 +156,7 @@ test("a re-establishing stream reads as refreshing, not as a dead bridge", () =>
     <ScheduleGridWorkspace
       state={{
         slice: null,
+        revision: null,
         hydrated: true,
         refreshing: true,
         peaActive: false,
@@ -273,6 +274,80 @@ test("the apply queue keeps an explicit expectedRevision explicit and does not p
   expect(view.doc.cells["9::3"]?.staged?.value).toBe("C");
   // Two writes landed, not three, and neither was retried behind the caller's back.
   expect(view.revision).toBe(start + 2);
+  mounted.unmount();
+});
+
+/** A mounted schedules route over the fixture; `route()` is its latest handle. */
+async function mountWork() {
+  const f = await setup();
+  stubBrowser(f.app);
+  await f.patch([{ path: ["cells"], value: {} }]);
+  let route!: Pick<
+    RouteHandle<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage, ScheduleGridAction>,
+    "work" | "failure"
+  >;
+  function Probe() {
+    route = useRoute(schedulesManifest(), { work: f.scope.work });
+    return <span>{String(route.work.revision)}</span>;
+  }
+  const mounted = render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <Probe />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => {
+    expect(route.work.revision).not.toBeNull();
+    expect(route.work.current).toBe(true);
+  });
+  const rendered = route.work.revision!;
+  expect(rendered).toBe((await f.view()).revision);
+  return { f, mounted, rendered, route: () => route };
+}
+const stage = (key: string, value: string) => [
+  { path: ["cells", key, "staged"], value: { value } },
+];
+
+test("a bound write follows the owner's own landed writes past its rendered revision", async () => {
+  const { f, mounted, rendered, route } = await mountWork();
+  let landed!: unknown[];
+  await act(async () => {
+    const work = route().work;
+    // Type, then accept at once: the accept was rendered before the typed write landed.
+    landed = await Promise.all([
+      work.write(stage("7::1", "typed")),
+      work.write(stage("7::2", "accepted"), rendered),
+      work.write(stage("7::3", "denied"), rendered),
+    ]);
+  });
+  expect(landed).toEqual([null, null, null]);
+  expect((await f.view()).revision).toBe(rendered + 3);
+  mounted.unmount();
+});
+
+test("a foreign write between the owner's write and a bound write still refuses", async () => {
+  const { f, mounted, rendered, route } = await mountWork();
+  let landed!: unknown[];
+  await act(async () => {
+    const work = route().work;
+    const typed = await work.write(stage("8::1", "typed"));
+    await f.patch(stage("8::9", "foreign"));
+    landed = [typed, await work.write(stage("8::2", "accepted"), rendered)];
+  });
+  expect(landed[0]).toBeNull();
+  expect(landed[1]).toMatchObject({ code: "stale-revision" });
+  expect((await f.view()).doc.cells["8::2"]).toBeUndefined();
+  mounted.unmount();
+});
+
+test("a bound write with no rendered revision refuses as not-ready and says so", async () => {
+  const { f, mounted, rendered, route } = await mountWork();
+  let refusal: unknown;
+  await act(async () => {
+    refusal = await route().work.write(stage("6::1", "unbound"), null);
+  });
+  expect(refusal).toMatchObject({ code: "not-ready" });
+  expect(route().failure).toMatchObject({ code: "not-ready" });
+  expect((await f.view()).revision).toBe(rendered);
   mounted.unmount();
 });
 

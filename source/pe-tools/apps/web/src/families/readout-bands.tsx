@@ -5,8 +5,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
 import { ValueDiff } from "#/components/lang/value-diff";
-import type { FamilyCellEdit } from "@pe/agent-contracts";
-import { at, editKey, isAccepted } from "#/families/staged";
+import { familyCellEntries } from "#/families/staged";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
@@ -191,37 +190,38 @@ export function FamiliesCaptureBand() {
 /**
  * THE PROPOSALS BAND — the house proposal specimen at table scale (`/design-system/proposal-flow`,
  * schedules' pending strip): one line per proposed cell, current → proposed, who proposed it, and
- * accept / deny per cell and for the whole table. Accept promotes the value into `accepted`; deny
- * clears the proposal and any accept, so the cell shows Revit's value again (no denied state).
- * Plan reads `accepted` and nothing else.
+ * accept / deny per cell and for the whole table. Accept promotes the proposal into `staged`; deny
+ * clears the proposal. Plan reads staged cells and nothing else.
  */
 export function FamiliesProposalsBand() {
-  const { store, edits, accepted, rows, params } = useFamiliesWorkspace();
-  // A cell stands in the band while a proposal or an accept stands on it.
-  const cells = [...edits, ...accepted.filter((edit) => !at(edits, edit))];
-  if (!cells.length) return null;
-  const current = (edit: FamilyCellEdit) => {
-    const key = params.find((param) => param.name === edit.parameter)?.key;
-    const row = rows.find((r) => r.familyId === edit.familyId && r.typeName === edit.typeName);
+  const { store, cells, rows, params } = useFamiliesWorkspace();
+  const entries = familyCellEntries(cells).filter(
+    (entry) => entry.cell.proposal != null || entry.cell.staged != null,
+  );
+  if (!entries.length) return null;
+  const current = (entry: (typeof entries)[number]) => {
+    const key = params.find((param) => param.name === entry.parameter)?.key;
+    const row = rows.find((r) => r.familyId === entry.familyId && r.typeName === entry.typeName);
     return key && row ? (row.values[key] ?? "") : null;
   };
-  const open = edits.filter((edit) => !isAccepted(accepted, edit));
+  const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);
+  const staged = entries.filter(({ cell }) => cell.staged != null);
   return (
     <section aria-label="proposals" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
       <div className="flex items-center gap-2">
         <SectionLabel>
-          <span title="Every proposed cell on this table. Pea and you propose the same way; only you accept. Plan generates the spec from accepted cells only.">
+          <span title="Pea proposes; you stage reviewed values. Plan reads staged cells.">
             proposals
           </span>
         </SectionLabel>
-        <FactChip tone={open.length ? "pea" : "meta"} title="Proposals nobody has accepted yet.">
+        <FactChip tone={open.length ? "pea" : "meta"} title="Proposals nobody has staged yet.">
           {open.length} open
         </FactChip>
         <FactChip
-          tone={accepted.length ? "caution" : "meta"}
-          title="Accepted cells: what plan will generate."
+          tone={staged.length ? "caution" : "meta"}
+          title="Staged cells: what plan will generate."
         >
-          {accepted.length} accepted
+          {staged.length} staged
         </FactChip>
         <span className="ml-auto flex items-center gap-1">
           <ActionButton
@@ -237,54 +237,52 @@ export function FamiliesProposalsBand() {
           />
           <ActionButton
             label="deny all"
-            reason="Clear every proposal and accept on this table — every cell shows Revit's value again."
-            onClick={() => void store.actions.deny(cells)}
+            reason="Clear every proposal on this table. Staged human values stay."
+            onClick={() => void store.actions.deny(entries)}
           />
         </span>
       </div>
-      {cells.map((edit) => {
-        const acceptedHere = at(accepted, edit);
-        const proposal = at(edits, edit);
-        const isOpen = proposal != null && !isAccepted(accepted, proposal);
+      {entries.map((entry) => {
+        const proposal = entry.cell.proposal;
+        const stagedHere = entry.cell.staged;
+        const display = proposal?.value ?? stagedHere?.value;
+        const isOpen = proposal != null && stagedHere == null;
         return (
           <div
-            key={editKey(edit)}
-            data-proposal-row={editKey(edit)}
+            key={entry.key}
+            data-proposal-row={entry.key}
             className="flex items-center gap-3 t-small"
           >
             <span className="face-mono w-72 truncate text-ink-2">
-              {edit.familyName} · {edit.typeName} · {edit.parameter}
+              {display?.familyName ?? "family"} · {entry.typeName} · {entry.parameter}
             </span>
             <span className="min-w-0 flex-1 truncate">
-              <ValueDiff from={current(edit)} to={(acceptedHere ?? edit).value} />
+              <ValueDiff from={current(entry)} to={(stagedHere ?? proposal)?.value.value ?? ""} />
             </span>
-            {proposal && acceptedHere && proposal.value !== acceptedHere.value ? (
-              <FactChip tone="pea" title="Pea's value against the one you accepted.">
-                Pea proposes {proposal.value}
+            {proposal && stagedHere && proposal.value.value !== stagedHere.value.value ? (
+              <FactChip tone="pea" title="Pea's value against the one you staged.">
+                Pea proposes {proposal.value.value}
               </FactChip>
             ) : null}
-            <FactChip tone={edit.by === "pea" ? "pea" : "caution"} title="Who proposed this value.">
-              by {edit.by === "pea" ? "Pea" : "you"}
-            </FactChip>
             <FactChip
               tone={isOpen ? "pea" : "caution"}
-              title="Open waits for you; accepted goes into plan."
+              title="Open waits for you; staged goes into plan."
             >
-              {isOpen ? "open" : "accepted"}
+              {isOpen ? "open" : "staged"}
             </FactChip>
             <span className="flex shrink-0 items-center gap-1">
               {isOpen ? (
                 <ActionButton
                   tone="agent"
                   label="accept"
-                  reason={`Accept ${proposal!.value} — plan includes it; nothing reaches Revit until apply.`}
-                  onClick={() => void store.actions.accept([proposal!])}
+                  reason={`Stage ${proposal!.value.value} — plan includes it; nothing reaches Revit until apply.`}
+                  onClick={() => void store.actions.accept([entry])}
                 />
               ) : null}
               <ActionButton
                 label="deny"
                 reason="Clear this proposal — the cell shows Revit's value again and plan leaves it out."
-                onClick={() => void store.actions.deny([edit])}
+                onClick={() => void store.actions.deny([entry])}
               />
             </span>
           </div>

@@ -86,7 +86,6 @@ const SCHEDULE_SEED_FIELDS: Record<string, SettingsFieldState> = {
   "/ViewTemplateName": {
     proposal: {
       value: "Schedule - PE Standard v2",
-      by: "pea",
       note: "office template register lists v2 as current for performance schedules",
       confidence: "high",
     },

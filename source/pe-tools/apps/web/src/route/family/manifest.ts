@@ -13,18 +13,17 @@ import {
   familyProjectionSchema,
   podMemberSourceSchema,
   settingsSnapshotSchema,
+  stagedEntries,
   type ActionReceipt,
   type ActionStatus,
   type FamilyCapture,
   type FamilyDocument,
   type FamilyDraft,
-  type FamilyProposal,
   type PodMemberSource,
   type Seed,
+  type SettingsFieldState,
   type WorkKey,
   type DocumentRef,
-  type SettingsFieldState,
-  type RouteStatePatch,
   settingsCandidate,
   settingsFieldPointer,
 } from "@pe/agent-contracts";
@@ -57,49 +56,9 @@ export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json"
 /** The route's Work is the family draft: the live reading and the proposals on it. */
 type FamilyRouteDocument = FamilyDraft;
 
-/** The draft's spec text with every accepted proposal laid on it: what save files and plan plans. */
+/** The baseline with staged cells laid on it: what save files and plan plans. */
 export const draftSpec = (draft: FamilyDraft): string | null =>
-  draft.reading === null
-    ? null
-    : settingsCandidate(draft.reading, draftFields({ ...draft, edits: [] }));
-
-/**
- * A person's field edits laid on the draft (the workspace's `fields.<pointer>.staged|proposal`
- * patches): a staged field is an accept by a person and settles any proposal there; a cleared
- * proposal is a deny and leaves nothing.
- */
-export function proposeOnDraft(
-  draft: FamilyDraft,
-  patches: readonly RouteStatePatch[],
-): FamilyDraft {
-  let { edits, accepted } = draft;
-  for (const { path, value } of patches) {
-    const pointer = String(path[1]);
-    edits = edits.filter((edit) => edit.pointer !== pointer);
-    if (path[2] === "staged")
-      accepted = [
-        ...accepted.filter((edit) => edit.pointer !== pointer),
-        { pointer, ...(value as { value?: unknown; delete?: true }), by: "human" },
-      ];
-  }
-  return { ...draft, edits, accepted };
-}
-
-/** The draft's proposals as the field trichotomy the family workspace renders. */
-export const draftFields = (draft: Pick<FamilyDraft, "edits" | "accepted">) => {
-  const edit = ({ value, delete: remove }: FamilyProposal) =>
-    remove ? { delete: true as const } : { value };
-  const fields: Record<string, SettingsFieldState> = {};
-  for (const proposal of draft.edits)
-    fields[proposal.pointer] = { proposal: { ...edit(proposal), by: proposal.by }, staged: null };
-  for (const accepted of draft.accepted)
-    fields[accepted.pointer] = {
-      proposal: null,
-      ...fields[accepted.pointer],
-      staged: edit(accepted),
-    };
-  return fields;
-};
+  draft.reading === null ? null : settingsCandidate(draft.reading, draft.cells);
 
 export interface FamilyPage {
   view: "sheet" | "anatomy" | "drill" | "inspector";
@@ -161,7 +120,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
    * (capture's own save, run and all), plans it, and apply sends that member's hash.
    */
   staged: {
-    count: (ctx) => ctx.work.doc?.accepted.length ?? 0,
+    count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
     plan: async (ctx) => {
       const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
       if (!spec) throw Error("read the family first");
@@ -181,16 +140,11 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
         { source: row.source, expectedPlanHashes: { [row.id]: row.planHash } },
         ctx,
       );
-      // The applied draft is spent: its text is what Revit now holds, and its proposals are done.
-      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
-      await ctx.write([
-        { path: ["reading"], value: spec },
-        { path: ["edits"], value: [] },
-        { path: ["accepted"], value: [] },
-      ]);
+      // Host publication will retire only the unchanged cells consumed by this sealed plan.
+      // Until that contract lands, preserving Work is safer than erasing concurrent edits.
     },
   },
-  docs: "Audit the open family as a live draft with no pod: propose and accept edits, save the draft into a pod as a member, plan and apply it, open a saved member into the draft, or build a saved member to an .rfa.",
+  docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, save the draft into a pod as a member, plan and apply it, open a saved member into the draft, or build a saved member to an .rfa.",
 };
 
 const latestOf = (rows: ActionStatus[]) =>
@@ -311,7 +265,7 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
     ...(proposed
       ? {
           [proposed]: {
-            proposal: { value: "6in", by: "pea", note: "office standard", confidence: "low" },
+            proposal: { value: "6in", note: "office standard", confidence: "low" },
             staged: null,
           },
         }
@@ -320,14 +274,10 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
 }
 
 /** The demo lane's draft over a fixture: the fixture is the reading, its demo fields the proposals. */
-export function familyDemoDraft(raw: string): FamilyDraft {
-  const draft: FamilyDraft = { reading: raw, edits: [], accepted: [] };
-  for (const [pointer, field] of Object.entries(familyDemoFields(raw))) {
-    if (field.proposal) draft.edits.push({ pointer, value: field.proposal.value, by: "pea" });
-    if (field.staged) draft.accepted.push({ pointer, value: field.staged.value, by: "human" });
-  }
-  return draft;
-}
+export const familyDemoDraft = (raw: string): FamilyDraft => ({
+  reading: raw,
+  cells: familyDemoFields(raw),
+});
 
 const DEMO_POD = "demo";
 const demoPath = (name: AuthoredFamilyName) => `settings/family/${name}.json`;

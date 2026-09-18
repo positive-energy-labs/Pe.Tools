@@ -7,19 +7,30 @@
  * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
   diagnosticSchema,
+  familyCellKey,
   familiesCaptureEvidenceSchema,
   ffReceiptSchema,
   podMemberSourceSchema,
   type ActionStatus,
-  type FamilyCellEdit,
+  type FamilyCellAddress,
+  type FamilyCellState,
+  type FamilyCellValue,
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
+  fanOut,
+  transitionBinding,
+  transitionPatches,
+  type FanOutKind,
+  type RouteStatePatch,
+  type SkipReason,
+  type Transition,
+  type TransitionKind,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
@@ -28,8 +39,8 @@ import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
+import type { Refusal } from "#/route/refusal";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
-import { drop, put } from "#/families/staged";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
@@ -53,7 +64,7 @@ const EMPTY_MEMORY: FamiliesPageMemory = {
 };
 
 const NO_EXCLUDED: readonly number[] = [];
-const NO_EDITS: readonly FamilyCellEdit[] = [];
+const NO_CELLS: Record<string, FamilyCellState> = {};
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -131,6 +142,13 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
   };
 }
 
+/** A cell write's outcome, per address: one refusal covers every address the write covered. */
+export interface CellWrite {
+  covered: string[];
+  skipped: { key: string; reason: SkipReason }[];
+  refused?: Refusal & { addresses: string[] };
+}
+
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
@@ -169,31 +187,47 @@ export function useFamiliesStore(
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
-  const edits = doc?.edits ?? NO_EDITS;
-  const accepted = doc?.accepted ?? NO_EDITS;
+  const cells = doc?.cells ?? NO_CELLS;
   /*
-   * Two cells typed back to back are two Work writes, and the second must build on the first even
-   * though the Work reading has not come back yet — otherwise the later write erases the earlier
-   * cell. `asked` is what we last wrote; it yields to Work the moment Work agrees, so Work stays
-   * the only authority and this is a queue, never a second copy of the document.
+   * Every cell verb is one transition of the shared cell machine, written as one Work write of its
+   * rung patches. Bound kinds (accept, deny) carry the rendered revision, which the queue rebases
+   * over this owner's own landed writes only. One address is the cell's own control; more is an
+   * aggregate fan-out, which skips keys the kind is not open on (and contested keys, for accept).
    */
-  type Cells = { edits: readonly FamilyCellEdit[]; accepted: readonly FamilyCellEdit[] };
-  const observed = useRef<Cells>({ edits, accepted });
-  observed.current = { edits, accepted };
-  const asked = useRef<Cells | null>(null);
-  if (asked.current && JSON.stringify(asked.current) === JSON.stringify(observed.current))
-    asked.current = null;
-  const writeCells = useCallback(
-    (change: (cells: Cells) => Cells) => {
-      const nextCells = change(asked.current ?? observed.current);
-      asked.current = nextCells;
-      return handle.work.write([
-        { path: ["edits"], value: [...nextCells.edits] },
-        { path: ["accepted"], value: [...nextCells.accepted] },
-      ]);
-    },
-    [handle.work],
-  );
+  const writeCells = async (
+    kind: TransitionKind,
+    covered: string[],
+    skipped: { key: string; reason: SkipReason }[],
+    patches: RouteStatePatch[],
+  ): Promise<CellWrite> => {
+    if (!patches.length) return { covered, skipped };
+    const refusal = await handle.work.write(
+      patches,
+      transitionBinding(kind) === "bound" ? handle.work.revision : undefined,
+    );
+    return {
+      covered,
+      skipped,
+      ...(refusal ? { refused: { ...refusal, addresses: covered } } : {}),
+    };
+  };
+  const transition = (address: FamilyCellAddress, change: Transition) => {
+    const key = familyCellKey(address);
+    return writeCells(
+      change.kind,
+      [key],
+      [],
+      transitionPatches(["cells"], key, cells[key] ?? {}, change),
+    );
+  };
+  const aggregate = (addresses: readonly FamilyCellAddress[], kind: FanOutKind) => {
+    if (addresses.length === 1) return transition(addresses[0]!, { kind });
+    const out = fanOut(cells, addresses.map(familyCellKey), kind, {
+      cellsPath: ["cells"],
+      actor: "human",
+    });
+    return writeCells(kind, out.covered, out.skipped, out.patches);
+  };
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -269,30 +303,24 @@ export function useFamiliesStore(
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /**
-       * A typed value is a proposal, the same shape Pea writes, told apart by `by`. It replaces
-       * whatever stood on the cell, and any accept there, since that accept was for another value.
-       * An empty commit, or the value Revit already holds, denies the cell instead.
+       * A typed value stages; Pea's standing proposal remains as a counter. This route's codec:
+       * an emptied cell unstages, and the baseline is the family's current value.
        */
-      propose: (edit: FamilyCellEdit, current: string) =>
-        writeCells((cells) => ({
-          edits:
-            edit.value === "" || edit.value === current
-              ? drop(cells.edits, edit)
-              : put(cells.edits, edit),
-          accepted: drop(cells.accepted, edit),
-        })),
-      /** Accept the proposals standing on these cells, value and author as proposed. */
-      accept: (proposals: readonly FamilyCellEdit[]) =>
-        writeCells((cells) => ({
-          edits: cells.edits,
-          accepted: proposals.reduce(put, cells.accepted),
-        })),
-      /** Deny: the proposal and any accept on these cells are gone; the cell shows Revit again. */
-      deny: (cellsToDeny: readonly Pick<FamilyCellEdit, "familyId" | "typeName" | "parameter">[]) =>
-        writeCells((cells) => ({
-          edits: cellsToDeny.reduce(drop, cells.edits),
-          accepted: cellsToDeny.reduce(drop, cells.accepted),
-        })),
+      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
+        transition(
+          address,
+          value.value === ""
+            ? { kind: "unstage" }
+            : {
+                kind: "stage",
+                rung: { value: { familyName: value.familyName, value: value.value } },
+                baseline: { value: { familyName: value.familyName, value: current } },
+              },
+        ),
+      accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
+      /** Deny clears the proposal on screen only; an independently staged value survives. */
+      deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
+      unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
@@ -307,7 +335,7 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, draft, setPage, pickedIds, excludedIds, writeCells, target, documentScope],
+    [handle.work, cells, draft, setPage, pickedIds, excludedIds, target, documentScope],
   );
 
   return {
@@ -316,8 +344,7 @@ export function useFamiliesStore(
     target,
     documentScope,
     excludedIds,
-    edits,
-    accepted,
+    cells,
     applied,
     plan,
     applyData,

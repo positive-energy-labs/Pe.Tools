@@ -22,12 +22,12 @@ const noop = () => {};
 
 /** Open, contested and Pea-agreed staged: the three verb sets the reviewer draws. */
 const REVIEW_SPECIMEN: Record<string, ReviewCell> = {
-  "Neck Width": { proposal: { value: "10in", by: "pea", confidence: "high" }, staged: null },
+  "Neck Width": { proposal: { value: "10in", confidence: "high" }, staged: null },
   "Face Width": {
-    proposal: { value: "Neck Width + 5in", by: "pea" },
+    proposal: { value: "Neck Width + 5in" },
     staged: { value: "Neck Width + 6in" },
   },
-  "Neck Height": { proposal: { value: "10in", by: "pea" }, staged: { value: "10in" } },
+  "Neck Height": { proposal: { value: "10in" }, staged: { value: "10in" } },
 };
 const write = async () => null;
 

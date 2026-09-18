@@ -427,14 +427,14 @@ export function docWriter<S extends RouteStateSpec<any>>(
 ) {
   const send = async (
     operation: "apply" | "command",
-    body: Record<string, unknown>,
-    onAccepted?: (revision: number) => void,
+    body: { expectedRevision: number } & Record<string, unknown>,
+    onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
       const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
-      if (result.ok) onAccepted?.(result.revision);
+      if (result.ok) onAccepted?.(body.expectedRevision, result.revision);
       return writeRefusal(result);
     } catch (cause) {
       return causeRefusal(cause);
@@ -453,7 +453,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     apply: (
       patches: RouteStatePatch[],
       expectedRevision?: number,
-      onAccepted?: (revision: number) => void,
+      onAccepted?: (base: number, revision: number) => void,
     ) => {
       const revision = writeRevision(expectedRevision);
       if (revision === null) return Promise.resolve(notHydrated);
@@ -463,7 +463,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
       name: keyof S["commands"] & string,
       input?: unknown,
       expectedRevision?: number,
-      onAccepted?: (revision: number) => void,
+      onAccepted?: (base: number, revision: number) => void,
     ) => {
       const revision = writeRevision(expectedRevision);
       return revision === null
@@ -520,12 +520,15 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
+    /** `expectedRevision` binds the write; `null` binds it to nothing rendered and refuses. */
     readonly write: (
       patches: RouteStatePatch[],
-      expectedRevision?: number,
+      expectedRevision?: number | null,
     ) => Promise<Refusal | null>;
     /** Another writer landed first; the last write was refused. `reload` reads Work again. */
     readonly conflict: boolean;
+    /** The owner's own sentence when Work cannot be read (e.g. saved in an older shape). */
+    readonly refusal: string | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
@@ -834,26 +837,44 @@ export function useRoute<W, R extends string, P, A extends string>(
     [spec, slice, key, owner],
   );
   // Authored patches queue so two same-tick edits carry the first accepted revision into the
-  // second write. An explicit revision remains the caller's conflict boundary.
+  // second write. An explicit revision remains the caller's conflict boundary, rebased only over
+  // this owner's own landed writes: `own` maps each landed write's base to its result, and a bound
+  // write follows that chain, so a revision rendered before the owner's own writes landed still
+  // binds while any foreign write breaks the chain and refuses truthfully. `null` is a bound write
+  // with nothing rendered to bind to.
   const writeWork = useMemo(() => {
     let queue: Promise<void> = Promise.resolve();
     let queued = 0;
     let landed: number | null = null;
-    return (patches: RouteStatePatch[], expectedRevision?: number): Promise<Refusal | null> => {
+    const own = new Map<number, number>();
+    return (
+      patches: RouteStatePatch[],
+      expectedRevision?: number | null,
+    ): Promise<Refusal | null> => {
       queued += 1;
-      let accepted: number | undefined;
+      let accepted: { base: number; revision: number } | undefined;
       const result = queue
         .then(async () => {
           if (seed) return refuse("not-ready", "frozen seed is read-only");
-          return writer
-            ? writer.apply(patches, expectedRevision ?? landed ?? undefined, (revision) => {
-                accepted = revision;
-              })
-            : notHydrated;
+          if (expectedRevision === null)
+            return refuse("not-ready", "Work has not been read yet; nothing on screen to act on");
+          if (!writer) return notHydrated;
+          let bound = expectedRevision;
+          if (bound !== undefined) while (own.has(bound)) bound = own.get(bound)!;
+          return writer.apply(patches, bound ?? landed ?? undefined, (base, revision) => {
+            accepted = { base, revision };
+          });
         })
         .catch(causeRefusal)
         .then((refusal) => {
-          if (!refusal && accepted !== undefined) landed = accepted;
+          if (!refusal && accepted) {
+            own.set(accepted.base, accepted.revision);
+            // ponytail: bounded by count, not by observation. A caller can hold a revision rendered
+            // before the owner's latest render, and an all-own chain back to it is still truthful;
+            // a caller bound more than 256 own writes back refuses stale.
+            if (own.size > 256) own.delete(own.keys().next().value!);
+            landed = accepted.revision;
+          }
           if (refusal) owner.registry.set(owner.failure, refusal);
           queued -= 1;
           if (queued === 0) landed = null;
@@ -864,10 +885,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     };
   }, [writer, owner, seed]);
   // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
-  const setPage = useCallback(
-    (next: Partial<P>) => setPageState((current) => ({ ...current, ...next })),
-    [],
-  );
+  const pageEpoch = useRef(0);
+  const setPage = useCallback((next: Partial<P>) => {
+    pageEpoch.current += 1;
+    setPageState((current) => ({ ...current, ...next }));
+  }, []);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -926,6 +948,10 @@ export function useRoute<W, R extends string, P, A extends string>(
       const missing = action.requires?.readings?.find((name) => readings[name].state !== "ready");
       return missing === undefined ? null : `${missing} is not ready`;
     };
+    // An action's Work is one snapshot. Its late writes must let the host reject that snapshot,
+    // not silently borrow a newer revision observed while the action was computing.
+    const actionRevision = workCurrent ? (doc?.revision ?? 0) : null;
+    const actionPageEpoch = pageEpoch.current;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
       work: { key, doc: doc?.doc ?? null, revision: doc?.revision ?? null },
@@ -934,17 +960,24 @@ export function useRoute<W, R extends string, P, A extends string>(
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
       write: async (patches: RouteStatePatch[]) => {
-        const refusal = writer ? await writer.apply(patches) : notHydrated;
+        const refusal =
+          writer && actionRevision !== null
+            ? await writer.apply(patches, actionRevision)
+            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
       command: async (name: string, input?: unknown) => {
-        const refusal = writer ? await writer.command(name as never, input) : notHydrated;
+        const refusal =
+          writer && actionRevision !== null
+            ? await writer.command(name as never, input, actionRevision)
+            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
       setPage: (next: Partial<P>) => {
-        if (currentActionScope.current === actionScope) setPage(next);
+        if (currentActionScope.current === actionScope && pageEpoch.current === actionPageEpoch)
+          setPageState((current) => ({ ...current, ...next }));
       },
     };
     return Object.fromEntries(
@@ -1019,13 +1052,14 @@ export function useRoute<W, R extends string, P, A extends string>(
       current: workCurrent,
       write: writeWork,
       conflict: conflictNow,
+      refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
       reload: () => {
         if (seed) return;
         owner.registry.set(owner.conflict, false);
         if (spec) dirty({ ...key, kind: "work" });
       },
     }),
-    [key, doc, workCurrent, writeWork, owner, conflictNow, spec, seed],
+    [key, doc, workCurrent, sliceResult, writeWork, owner, conflictNow, spec, seed],
   );
 
   return {

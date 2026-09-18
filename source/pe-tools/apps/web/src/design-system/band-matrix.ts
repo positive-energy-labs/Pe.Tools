@@ -153,7 +153,7 @@ export const baselineOf = (key: string) => {
   return ROWS.get(row)?.baseline[parameter] ?? null;
 };
 
-const pea = (value: string, note?: string): Proposal => ({ value, by: "pea", note });
+const pea = (value: string, note?: string): Proposal => ({ value, note });
 
 /** Why a cell refuses writes. The locked cell still carries a stray Pea proposal: deny only. */
 export const LOCKS: Readonly<Record<string, string>> = {
@@ -196,7 +196,7 @@ export const MATRIX_CELLS: MatrixCells = {
   [cellKey("AHU-1", "MCA")]: { proposal: pea("38A"), staged: null },
   // delete: an empty weight Pea wants gone
   [cellKey("UH-3", "Weight")]: {
-    proposal: { delete: true, by: "pea", note: "superseded by Operating Weight" },
+    proposal: { delete: true, note: "superseded by Operating Weight" },
     staged: null,
   },
 };

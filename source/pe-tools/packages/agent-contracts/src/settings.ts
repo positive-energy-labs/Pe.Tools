@@ -41,7 +41,6 @@ const settingsProposalSourceSchema = z.object({
 export const settingsFieldStateSchema = z.object({
   proposal: settingsFieldEditSchema
     .extend({
-      by: z.enum(["pea", "human"]).default("pea"),
       note: z.string().nullish(),
       confidence: z.enum(["high", "low"]).nullish(),
       /** Multi-citation: one value may be grounded by several regions (a table

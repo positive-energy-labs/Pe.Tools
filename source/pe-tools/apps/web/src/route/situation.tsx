@@ -642,11 +642,13 @@ export function Situation({
     count: staged?.count ?? 0,
     noun: staged?.noun ?? "edit",
     conflict: handle.work.conflict,
+    unreadable: handle.work.refusal != null,
   });
   // The band's own state, beside the verbs: a conflicting writer and the runner's last refusal
   // when no verb flag says it (a Work write and a late result after a stop have no button to grow a flag from).
   const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
   const unresolved = [
+    handle.work.refusal,
     handle.work.conflict ? "another writer changed this Work; your last write did not land" : null,
     late ? `${late.code}: ${late.message}` : null,
   ].filter(Boolean);
@@ -697,31 +699,29 @@ export function Situation({
               {sentence}
             </p>
             <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
-            {staged ? (
-              <WorkBand
-                count={staged.count}
-                noun={staged.noun}
-                revision={handle.work.revision}
-                read={staged.read}
-                conflict={handle.work.conflict}
-                busy={handle.busy !== null}
-                discard={() => void staged.discard()}
-                commit={
-                  commitAction
-                    ? {
-                        label: commitAction.label,
-                        reason: commitAction.refusal ?? commitAction.says,
-                        disabled: commitAction.refusal !== null,
-                        run: () => void commitAction.run(),
-                      }
-                    : undefined
-                }
-                unresolved={unresolved as string[]}
-                reload={handle.work.reload}
-                body={staged.body}
-                showRevision={false}
-              />
-            ) : null}
+            <WorkBand
+              count={staged?.count ?? 0}
+              noun={staged?.noun ?? "edit"}
+              revision={handle.work.revision}
+              read={staged?.read}
+              conflict={handle.work.conflict}
+              busy={handle.busy !== null}
+              discard={() => void staged?.discard()}
+              commit={
+                commitAction
+                  ? {
+                      label: commitAction.label,
+                      reason: commitAction.refusal ?? commitAction.says,
+                      disabled: commitAction.refusal !== null,
+                      run: () => void commitAction.run(),
+                    }
+                  : undefined
+              }
+              unresolved={unresolved as string[]}
+              reload={handle.work.reload}
+              body={staged?.body}
+              showRevision={false}
+            />
             {band}
           </div>
           <div className="flex min-w-[24rem] flex-[2] flex-col">

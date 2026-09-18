@@ -17,16 +17,13 @@ const verbs = (cell: ReviewCell) =>
   ).map((t) => t.kind);
 
 test("an open proposal takes accept and deny", () => {
-  expect(verbs({ proposal: { value: "10in", by: "pea" }, staged: null })).toEqual([
-    "accept",
-    "deny",
-  ]);
+  expect(verbs({ proposal: { value: "10in" }, staged: null })).toEqual(["accept", "deny"]);
 });
 
 test("a contested cell takes accept, deny and unstage", () => {
   expect(
     verbs({
-      proposal: { value: "Neck Width + 5in", by: "pea" },
+      proposal: { value: "Neck Width + 5in" },
       staged: { value: "Neck Width + 6in" },
     }),
   ).toEqual(["accept", "deny", "unstage"]);
@@ -34,12 +31,12 @@ test("a contested cell takes accept, deny and unstage", () => {
 
 test("a staged cell that agrees with Pea takes unstage only, compared as canonical JSON", () => {
   expect(
-    verbs({ proposal: { value: { w: 10, h: 8 }, by: "pea" }, staged: { value: { h: 8, w: 10 } } }),
+    verbs({ proposal: { value: { w: 10, h: 8 } }, staged: { value: { h: 8, w: 10 } } }),
   ).toEqual(["unstage"]);
 });
 
 test("a locked cell keeps deny only, to clear a stray Pea proposal", () => {
-  const stray = { proposal: { value: "40A", by: "pea" as const }, staged: null };
+  const stray = { proposal: { value: "40A" }, staged: null };
   expect(
     reviewTransitions(
       "cells",
@@ -55,7 +52,7 @@ test("unstage on the schedule-grid review clears staged through the consumer's a
   const apply = vi.fn<ScheduleGridState["apply"]>(async () => null);
   const state = {
     slice: {
-      cells: { "1::2": { proposal: { value: "180 VA", by: "pea" }, staged: { value: "180 VA" } } },
+      cells: { "1::2": { proposal: { value: "180 VA" }, staged: { value: "180 VA" } } },
     },
     revision: 3,
     apply,
