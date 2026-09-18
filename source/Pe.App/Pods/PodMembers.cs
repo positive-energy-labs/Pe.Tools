@@ -28,24 +28,16 @@ internal static class PodMembers {
     public static string FullPath(this PodMember member, PreparedPod pod) =>
         ScriptPodPreparationService.FullPath(pod.Folder, member.Path);
 
-    /// <summary>Compose the member and read it as <typeparamref name="T" />; the source names the exact bytes read.</summary>
-    public static (T Spec, string Composed, PodMemberSource Source) Load<T>(this PodMember member, PreparedPod pod) where T : class {
-        var pods = new ScriptPodPreparationService();
+    /// <summary>
+    ///     Compose the member from one read of its saved bytes and read it as <typeparamref name="T" />. The source
+    ///     carries those exact root bytes and every dependency consumed, for the run to keep.
+    /// </summary>
+    public static (T Spec, string Composed, PodComposedSource Source) Load<T>(this PodMember member, PreparedPod pod) where T : class {
         var id = pod.Manifest.Id;
-        var (raw, sha256) = pods.ReadMember(id, member.Path);
-        var composition = pods.Compose(id, member.Path, raw);
+        var composition = new ScriptPodPreparationService().Compose(id, member.Path, null);
         if (composition.Composed is null)
             throw new InvalidDataException($"{id}:{member.Path} did not compose: {string.Join("; ", composition.Diagnostics.Select(d => d.Message))}");
-        var spec = ModuleSettingsStorage<T>.ReadPrepared(raw, composition.Composed, $"{id}:{member.Path}");
-        return (spec, composition.Composed, new PodMemberSource(id, member.Path, sha256));
-    }
-
-    /// <summary>The pod folder for an apply source, refusing a member whose saved bytes changed since it was read.</summary>
-    public static string VerifiedFolder(PodMemberSource source) {
-        var pods = new ScriptPodPreparationService();
-        var (_, actual) = pods.ReadMember(source.Pod, source.Path);
-        return string.Equals(actual, source.Sha256, StringComparison.OrdinalIgnoreCase)
-            ? pods.ResolveFolder(source.Pod)
-            : throw new InvalidDataException($"{source.Pod}:{source.Path} changed on disk ({actual}); save and compose it again.");
+        var spec = ModuleSettingsStorage<T>.ReadPrepared(composition.Source.Content, composition.Composed, $"{id}:{member.Path}");
+        return (spec, composition.Composed, composition.ToSource());
     }
 }

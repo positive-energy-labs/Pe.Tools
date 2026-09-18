@@ -145,12 +145,10 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
 
     [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
     public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
-        var result = this._pods.Compose(request.Pod, request.Path, request.Content);
-        return Task.FromResult(new PodMemberComposeData(
-            result.Composed,
-            result.Diagnostics.ToList(),
-            result.Dependencies.Select(dependency => new PodDependencyData(dependency.PodId, dependency.Path, dependency.Sha256)).ToList()
-        ));
+        var captured = request.Source is null ? null : ScriptPodPreparationService.CaptureComposeSource(request);
+        var result = this._pods.Compose(request.Pod, request.Path, request.Content, captured);
+        var source = result.ToSource();
+        return Task.FromResult(new PodMemberComposeData(result.Composed, source.Root, result.Diagnostics.ToList(), source.Dependencies));
     }
 
     [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]

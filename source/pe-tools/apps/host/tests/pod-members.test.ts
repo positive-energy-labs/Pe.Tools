@@ -13,6 +13,7 @@ import { admitFamilyAction } from "../src/family-actions.ts";
 import { writeFileStringAtomic } from "../src/files/index.ts";
 import {
   composeMember,
+  composedSpec,
   listPods,
   listRuns,
   readMember,
@@ -117,8 +118,29 @@ test("runs list newest first, by member, and a run with no receipt still says so
     }),
   );
 
+  // A native run writes its input before any effect; a crash after that leaves input and no receipt.
+  await mkdir(join(root, "Runs", "output", "run-2"), { recursive: true });
+  const source = {
+    kind: "pod-composition",
+    origin: "SavedMember",
+    pod: "runs",
+    path: "settings/file.json",
+    sha256: "def",
+  };
+  await writeFile(
+    join(root, "Runs", "output", "run-2", "input.json"),
+    JSON.stringify({ operation: "schedule.apply", source, files: [] }),
+  );
+
   const { runs } = await run(listRuns({ pod: "runs" }, ctx()));
   expect(runs).toEqual([
+    {
+      runId: "run-2",
+      receiptPath: "output/run-2/receipt.json",
+      receipt: null,
+      source,
+      error: "The run holds its input but no receipt.json; its outcome is unresolved.",
+    },
     {
       runId: "run-1",
       receiptPath: "output/run-1/receipt.json",
@@ -133,8 +155,10 @@ test("runs list newest first, by member, and a run with no receipt still says so
     },
   ]);
   expect(
-    (await run(listRuns({ pod: "runs", path: "settings/file.json" }, ctx()))).runs,
-  ).toHaveLength(1);
+    (await run(listRuns({ pod: "runs", path: "settings/file.json" }, ctx()))).runs.map(
+      (r) => r.runId,
+    ),
+  ).toEqual(["run-2", "run-1"]);
   expect((await run(listRuns({ pod: "runs", path: "other.json" }, ctx()))).runs).toEqual([]);
 });
 
@@ -144,6 +168,7 @@ test("read returns exact bytes and their sha256; invalid UTF-8 refuses", async (
   expect(await run(readMember(member, ctx()))).toEqual({
     content: raw,
     sha256: digest(await readFile(file())),
+    bytesBase64: Buffer.from(await readFile(file())).toString("base64"),
   });
   await writeFile(file(), Buffer.from([0x7b, 0xff, 0x7d]));
   await expect(run(readMember(member, ctx()))).rejects.toMatchObject({ statusCode: 400 });
@@ -187,6 +212,7 @@ test("offline, a $include member renders with a composition notice instead of an
     expect.objectContaining({ code: "CompositionNeedsRevit", severity: "info" }),
   ]);
   expect(result).toMatchObject({ composed: null, schemaValidation: "not-run" });
+  expect(Buffer.from(result.source.bytesBase64, "base64")).toEqual(await readFile(file()));
 });
 
 test("offline structural validation runs from a held schema; parse errors are issues", async () => {
@@ -221,6 +247,7 @@ test("with a session, the draft composes natively, then schema and semantic chec
       if (key === "pod.member.compose")
         return Effect.succeed({
           composed: '{"width":3}',
+          source: (payload as { source: unknown }).source,
           diagnostics: [
             {
               stage: "Shadowed",
@@ -229,7 +256,14 @@ test("with a session, the draft composes natively, then schema and semantic chec
               source: "settings/base.json",
             },
           ],
-          dependencies: [{ id: "sample", path: "settings/base.json", sha256: "b".repeat(64) }],
+          dependencies: [
+            {
+              id: "sample",
+              path: "settings/base.json",
+              sha256: "b".repeat(64),
+              bytesBase64: Buffer.from("{}").toString("base64"),
+            },
+          ],
         });
       if (key === "settings.schema") return Effect.succeed({ schemaJson: schema });
       return Effect.succeed({
@@ -246,7 +280,17 @@ test("with a session, the draft composes natively, then schema and semantic chec
     "settings.schema",
     "settings.validate",
   ]);
-  expect(calls[0]![1]).toEqual({ ...member, content: draft });
+  expect(calls[0]![1]).toEqual({
+    ...member,
+    content: draft,
+    source: {
+      id: "sample",
+      path: member.path,
+      sha256: digest(draft),
+      bytesBase64: Buffer.from(draft).toString("base64"),
+      origin: "SuppliedDraft",
+    },
+  });
   expect(calls[1]![1]).toEqual({ schemaUrl });
   expect(calls[2]![1]).toMatchObject({
     schemaUrl,
@@ -260,6 +304,36 @@ test("with a session, the draft composes natively, then schema and semantic chec
   ]);
   expect(result.schemaJson).toBe(schema);
   expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
+});
+
+test("composed spec sends the saved read bytes once and keeps saved attribution", async () => {
+  const raw = '\uFEFF{ "items": [{ "$include": "@local/base" }] }\r\n';
+  await writeFile(file(), raw);
+  let composeRequest: unknown;
+  const withBridge: PodContext = {
+    podsRoot: root,
+    invokeBridge: (key, payload) => {
+      composeRequest = payload;
+      const source = (payload as { source: unknown }).source;
+      return Effect.succeed({
+        composed: '{"items":[]}',
+        source,
+        diagnostics: [],
+        dependencies: [],
+      });
+    },
+  };
+
+  const result = await run(composedSpec({ ...member, sha256: digest(raw) }, withBridge));
+
+  expect(result.source).toEqual({
+    id: "sample",
+    path: member.path,
+    sha256: digest(raw),
+    bytesBase64: Buffer.from(raw).toString("base64"),
+    origin: "SavedMember",
+  });
+  expect(composeRequest).toMatchObject({ content: raw, source: result.source });
 });
 
 test("settings.write saves reviewed member Work and republishes the new basis", async () => {

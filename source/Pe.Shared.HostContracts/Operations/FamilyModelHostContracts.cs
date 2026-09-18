@@ -20,7 +20,7 @@ public sealed record FamilyCaptureData(
 /// </summary>
 public sealed record FamilyBuildRequest(
     string SpecJson,
-    PodMemberSource Source,
+    PodComposedSource Source,
     string? ModelDirectory = null
 );
 
@@ -33,5 +33,8 @@ public sealed record FamilyBuildData(
     string TemplatePath,
     bool Converged,
     int ResidueCount,
-    string ReceiptPath
+
+    /// <summary>`null` when the family was built but its run output could not be saved; `outputError` names why.</summary>
+    string? ReceiptPath,
+    string? OutputError = null
 );

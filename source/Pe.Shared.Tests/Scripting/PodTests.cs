@@ -99,6 +99,83 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Compose_retains_exact_source_and_consumed_dependency_bytes_on_failure() {
+        this.WritePod("Office", "office", new() {
+            ["settings/family.json"] = "{\"items\":[{\"$include\":\"@local/part\"},{\"$include\":\"@local/missing\"}]}",
+            ["settings/part.json"] = "placeholder"
+        });
+        var bytes = new byte[] { (byte)'[', (byte)'\"', 0xff, (byte)'\"', (byte)']' };
+        File.WriteAllBytes(Path.Combine(this._pods, "Office", "settings", "part.json"), bytes);
+
+        var result = this._service.Compose("office", "settings/family.json", null);
+
+        Assert.Multiple(() => {
+            Assert.That(result.Composed, Is.Null);
+            Assert.That(result.Source.Id, Is.EqualTo("office"));
+            Assert.That(result.Dependencies, Has.Count.EqualTo(1));
+            Assert.That(result.Dependencies[0].Bytes, Is.EqualTo(bytes));
+            Assert.That(result.Dependencies[0].Sha256, Is.EqualTo(ScriptPodPreparationService.Sha256(bytes)));
+        });
+    }
+
+    [Test]
+    public void Compose_captures_saved_or_draft_root_and_ordered_nested_dependencies_once() {
+        var global = this.WritePod("Global", "global", new() {
+            ["settings/Header.json"] = "placeholder",
+            ["settings/Title.json"] = "placeholder"
+        });
+        var office = this.WritePod("Office", "office", new() { ["settings/family.json"] = "placeholder" });
+        var rootBytes = WithBom("{\r\n  \"$preset\": \"@global/Header\", \"note\": \"café\"  \r\n}");
+        var headerBytes = Encoding.UTF8.GetBytes("{ \"$include\": \"@local/Title\" }  \n");
+        var titleBytes = WithBom("{ \"title\": \"Δ\" }\r\n");
+        File.WriteAllBytes(Path.Combine(office, "settings", "family.json"), rootBytes);
+        File.WriteAllBytes(Path.Combine(global, "settings", "Header.json"), headerBytes);
+        File.WriteAllBytes(Path.Combine(global, "settings", "Title.json"), titleBytes);
+
+        var saved = this._service.Compose("office", "settings/family.json", null);
+        var reviewedBytes = WithBom("{ \"$include\": \"@global/Header\" }");
+        var reviewedContent = Encoding.UTF8.GetString(reviewedBytes);
+        var supplied = ScriptPodPreparationService.CaptureComposeSource(new PodMemberComposeRequest(
+            "office",
+            "settings/family.json",
+            reviewedContent,
+            new PodCapturedSourceData(
+                "office",
+                "settings/family.json",
+                ScriptPodPreparationService.Sha256(reviewedBytes),
+                Convert.ToBase64String(reviewedBytes),
+                PodSourceOrigin.SuppliedDraft)));
+        var bridged = this._service.Compose("office", "settings/family.json", reviewedContent, supplied);
+        File.WriteAllText(Path.Combine(global, "settings", "Title.json"), "{}");
+        const string draftText = "{ \"draft\": \"yes\" }";
+        var draft = this._service.Compose("office", "settings/family.json", draftText);
+
+        Assert.Multiple(() => {
+            Assert.That(saved.Diagnostics, Is.Empty);
+            Assert.That(saved.Source.Id, Is.EqualTo("office"));
+            Assert.That(saved.Source.Origin, Is.EqualTo(PodSourceOrigin.SavedMember));
+            Assert.That(saved.Source.Bytes, Is.EqualTo(rootBytes));
+            Assert.That(saved.Source.Sha256, Is.EqualTo(ScriptPodPreparationService.Sha256(rootBytes)));
+            Assert.That(saved.Dependencies.Select(dependency => dependency.Path),
+                Is.EqualTo(new[] { "settings/Header.json", "settings/Title.json" }));
+            Assert.That(saved.Dependencies[0].Bytes, Is.EqualTo(headerBytes));
+            Assert.That(saved.Dependencies[1].Bytes, Is.EqualTo(titleBytes));
+            Assert.That(bridged.Diagnostics, Is.Empty);
+            Assert.That(bridged.Source.Id, Is.EqualTo("office"));
+            Assert.That(bridged.Source.Origin, Is.EqualTo(PodSourceOrigin.SuppliedDraft));
+            Assert.That(bridged.Source.Bytes, Is.EqualTo(reviewedBytes));
+            Assert.That(bridged.Dependencies[1].Bytes, Is.EqualTo(titleBytes));
+            Assert.That(draft.Source.Id, Is.EqualTo("office"));
+            Assert.That(draft.Source.Origin, Is.EqualTo(PodSourceOrigin.SuppliedDraft));
+            Assert.That(draft.Source.Bytes, Is.EqualTo(Encoding.UTF8.GetBytes(draftText)));
+            Assert.That(draft.Source.Bytes, Is.Not.EqualTo(rootBytes));
+        });
+    }
+
+    private static byte[] WithBom(string content) => new UTF8Encoding(true).GetPreamble()
+        .Concat(Encoding.UTF8.GetBytes(content)).ToArray();
+
+    [Test]
     public void Duplicate_ids_fail_and_name_both_folders() {
         this.WritePod("One", "global");
         this.WritePod("Two", "global");
@@ -117,7 +194,8 @@ public sealed class PodTests {
 
         var sha = this._service.WriteMember("office", "settings/captured.json", "{}");
 
-        Assert.That(this._service.ReadMember("office", "settings/captured.json"), Is.EqualTo(("{}", sha)));
+        var saved = this._service.Compose("office", "settings/captured.json", null).Source;
+        Assert.That((saved.Content, saved.Sha256, saved.Origin), Is.EqualTo(("{}", sha, PodSourceOrigin.SavedMember)));
         Assert.Throws<IOException>(() => this._service.WriteMember("office", "settings/captured.json", "{\"x\":1}"));
         Assert.Throws<InvalidDataException>(() => this._service.WriteMember("office", "output/x.json", "{}"));
         Assert.Throws<InvalidDataException>(() => this._service.WriteMember("office", "settings/../pod.json", "{}"));
@@ -161,6 +239,87 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Run_input_keeps_the_exact_composed_root_and_ordered_dependency_bytes() {
+        var global = this.WritePod("Global", "global", new() { ["settings/Header.json"] = "placeholder" });
+        var office = this.WritePod("Office", "office", new() { ["settings/family.json"] = "placeholder" });
+        var rootBytes = WithBom("{\r\n  \"$preset\": \"@global/Header\", \"note\": \"café\"  \r\n}");
+        var headerBytes = Encoding.UTF8.GetBytes("{ \"title\": \"Δ\" }  \n");
+        File.WriteAllBytes(Path.Combine(office, "settings", "family.json"), rootBytes);
+        File.WriteAllBytes(Path.Combine(global, "settings", "Header.json"), headerBytes);
+        var composition = this._service.Compose("office", "settings/family.json", null);
+        var source = composition.ToSource();
+        // A later disk edit changes nothing the run keeps: it never rereads.
+        File.WriteAllText(Path.Combine(office, "settings", "family.json"), "{}");
+        File.WriteAllText(Path.Combine(global, "settings", "Header.json"), "{}");
+
+        var run = PodRuns.NewRunFolder(office);
+        var written = PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, composition.Composed!));
+        var input = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
+
+        Assert.Multiple(() => {
+            Assert.That(written, Is.EqualTo(new[] { "input.json", "effective-input.json", "source/00-family.json", "source/01-Header.json" }));
+            Assert.That(File.ReadAllBytes(Path.Combine(run, "effective-input.json")), Is.EqualTo(Encoding.UTF8.GetBytes(composition.Composed!)));
+            Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-family.json")), Is.EqualTo(rootBytes));
+            Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "01-Header.json")), Is.EqualTo(headerBytes));
+            Assert.That(input["files"]!.Select(file => (string)file["role"]!), Is.EqualTo(new[] { "effective", "saved-member", "dependency" }));
+            Assert.That(input["files"]![1]!["pod"]!.Value<string>(), Is.EqualTo("office"));
+            Assert.That(input["files"]![1]!["sha256"]!.Value<string>(), Is.EqualTo(ScriptPodPreparationService.Sha256(rootBytes)));
+            Assert.That(input["files"]![2]!["pod"]!.Value<string>(), Is.EqualTo("global"));
+            Assert.That(input["files"]![2]!["address"]!.Value<string>(), Is.EqualTo("settings/Header.json"));
+        });
+    }
+
+    [Test]
+    public void Run_input_refuses_bytes_that_disagree_with_their_hash_and_leaves_no_partial_input() {
+        var office = this.WritePod("Office", "office", new() { ["settings/family.json"] = "{\"a\":1}" });
+        var source = this._service.Compose("office", "settings/family.json", null).ToSource();
+        var forged = source with { Root = source.Root with { BytesBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"a\":2}")) } };
+        Assert.Throws<InvalidDataException>(() => PodRuns.ComposedInput(forged, "{}"));
+
+        var run = PodRuns.NewRunFolder(office);
+        Directory.CreateDirectory(Path.Combine(run, "source", "00-family.json"));
+        Assert.Throws<UnauthorizedAccessException>(() => PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, "{}")));
+        Assert.That(Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories), Is.Empty);
+    }
+
+    [Test]
+    public void Receipt_that_cannot_be_saved_after_an_effect_returns_its_reason_instead_of_throwing() {
+        var office = this.WritePod("Office", "office");
+        var run = PodRuns.NewRunFolder(office);
+        Directory.CreateDirectory(Path.Combine(run, "receipt.json"));
+
+        var (path, unsaved) = PodRuns.SettleReceiptIn(run, new PodReceipt("office", "settings/a.json", "sha", "schedule.apply", null, "Succeeded", [], null), []);
+
+        Assert.That(path, Is.Null);
+        Assert.That(unsaved, Does.Contain("native outcome stands"));
+    }
+
+    [Test]
+    public void Output_read_that_fails_after_the_effect_leaves_the_outcome_standing() {
+        var office = this.WritePod("Office", "office");
+        var run = PodRuns.NewRunFolder(office);
+        // The family apply edge passes its artifact reads lazily; the first one fails here, after the effect.
+        IEnumerable<(string, byte[])> Outputs() {
+            yield return ("apply.json", [1]);
+            throw new FileNotFoundException("artifact vanished");
+        }
+
+        var (path, unsaved) = PodRuns.SettleReceiptIn(run, new PodReceipt("office", "settings/a.json", "sha", "family.apply", null, "Succeeded", [], null), Outputs());
+
+        Assert.That(path, Is.Null);
+        Assert.That(unsaved, Does.Contain("artifact vanished"));
+    }
+
+    [Test]
+    public void Output_named_like_the_receipt_is_refused_in_any_case() {
+        var office = this.WritePod("Office", "office");
+        var run = PodRuns.NewRunFolder(office);
+        foreach (var name in new[] { "receipt.json", "Receipt.json", "RECEIPT.JSON" })
+            Assert.Throws<ArgumentException>(() => PodRuns.WriteReceiptIn(run,
+                new PodReceipt("office", "settings/a.json", "sha", "family.apply", null, "Succeeded", [], null), [(name, [1])]), name);
+    }
+
+    [Test]
     public void Run_receipt_lands_in_the_pod_output_with_its_outputs() {
         var folder = this.WritePod("Office", "office");
 
@@ -196,12 +355,12 @@ public sealed class PodTests {
     public void Composer_rejects_malformed_directives() {
         foreach (var malformed in new[] { "{\"$preset\":null}", "{\"$preset\":3}", "{\"$include\":[]}", "{\"$include\":\"@local/a\",\"b\":1}" }) {
             var rejected = PodComposer.Compose("settings/main.json", malformed, AlwaysResolve);
-            Assert.That(rejected.Document, Is.Null, malformed);
+            Assert.That(rejected.Content, Is.Null, malformed);
             Assert.That(rejected.Diagnostics, Is.Not.Empty, malformed);
         }
 
         static bool AlwaysResolve(string reference, out PodConsumedDependency dependency, out string reason) {
-            dependency = new PodConsumedDependency("local", "settings/a.json", string.Empty, "{}");
+            dependency = new PodConsumedDependency("local", "settings/a.json", string.Empty, Encoding.UTF8.GetBytes("{}"), "{}");
             reason = string.Empty;
             return true;
         }

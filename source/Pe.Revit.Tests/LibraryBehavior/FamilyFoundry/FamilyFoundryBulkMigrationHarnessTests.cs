@@ -145,7 +145,13 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             using (var transaction = new Transaction(document, "Seed formula")) {
                 transaction.Start();
                 var fm = document.FamilyManager;
-                fm.AddParameter("PE_E___Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
+                var voltage = fm.AddParameter("PE_E___Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
+                var types = fm.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B").ToList();
+                Assert.That(types, Has.Count.EqualTo(2));
+                foreach (var type in types) {
+                    fm.CurrentType = type;
+                    fm.Set(voltage, UnitUtils.ConvertToInternalUnits(type.Name == "A" ? 120 : 208, UnitTypeId.Volts));
+                }
                 var poles = fm.AddParameter("PE_E___NumberOfPoles", GroupTypeId.Electrical, SpecTypeId.Int.NumberOfPoles, false);
                 fm.SetFormula(poles, raw);
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
@@ -159,23 +165,133 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     document.FamilyManager.get_Parameter("PE_E___NumberOfPoles"), native, out var error), Is.True, error);
                 Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
             }
-            var before = FamilyModelJson.Serialize(current);
+            var before = JToken.Parse(FamilyModelJson.Serialize(current));
             var currentType = document.FamilyManager.CurrentType.Name;
             var modified = document.IsModified;
-            FamilyModel Desired(string formula) => FamilyReconciler.Desired(current, new FamilyPatch { Patch = new JObject {
+            var originalPoles = document.FamilyManager.Types.Cast<FamilyType>()
+                .Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsInteger(document.FamilyManager.FindParameter("PE_E___NumberOfPoles")));
+            Assert.That(originalPoles, Has.Count.EqualTo(2));
+            Assert.That(originalPoles["A"], Is.EqualTo(1));
+            Assert.That(originalPoles["B"], Is.EqualTo(2));
+            FamilyPatch Patch(string formula) => new() { Patch = new JObject {
                 ["parameters"] = new JObject { ["PE_E___NumberOfPoles"] = new JObject { ["formula"] = formula } }
-            } }).Value!;
+            } };
 
-            var canonical = FamilyReconciler.ResolveNativeFormulas(Desired(raw), document);
-            Assert.That(canonical.Parameters["PE_E___NumberOfPoles"].Formula, Is.EqualTo(native));
-            Assert.That(FamilyReconciler.Reconcile(canonical, current, UnitResolvers.Revit(document)).Changes, Is.Empty);
-            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            var canonical = document.PreviewFamily(Patch(raw));
+            Assert.That(canonical.Changes, Is.Empty);
+            Assert.That(canonical.Diagnostics, Is.Empty);
+            Assert.That(JToken.DeepEquals(
+                JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), before), Is.True,
+                "Preview must preserve the captured model; JSON object property order is not semantic.");
             Assert.That(document.FamilyManager.CurrentType.Name, Is.EqualTo(currentType));
             Assert.That(document.IsModified, Is.EqualTo(modified));
 
-            var changed = FamilyReconciler.ResolveNativeFormulas(Desired(raw.Replace("120", "208")), document);
-            Assert.That(FamilyReconciler.Diff(changed, current, UnitResolvers.Revit(document)),
+            var changed = document.PreviewFamily(Patch(raw.Replace("120", "208")));
+            Assert.That(changed.Changes,
                 Has.Some.Matches<FamilyChange>(c => c.Section == "parameters" && c.Key == "PE_E___NumberOfPoles"));
+            var apply = new ReconcileFamily(Patch(raw.Replace("120", "208")), expectedPlanHash: changed.PlanHash);
+            using (var processor = new OperationProcessor(document))
+                _ = processor.ProcessQueue(new OperationQueue().Add(apply));
+            var applied = document.CaptureFamilyModel();
+            Assert.That(apply.LastReceipt?.Converged, Is.True);
+            Assert.That(apply.LastReceipt?.PlanHash, Is.EqualTo(changed.PlanHash));
+            Assert.That(applied.Parameters["PE_E___NumberOfPoles"].Formula, Does.Contain("208"));
+            var appliedPoles = document.FamilyManager.FindParameter("PE_E___NumberOfPoles");
+            var values = document.FamilyManager.Types.Cast<FamilyType>()
+                .Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsInteger(appliedPoles));
+            Assert.That(values, Has.Count.EqualTo(2));
+            Assert.That(values["A"], Is.EqualTo(2));
+            Assert.That(values["B"], Is.EqualTo(1));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Preview_refuses_invalid_units_without_mutation() {
+        var document = this.NewFamily("FF invalid unit preview");
+        try {
+            var before = JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel()));
+            var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}""");
+            var preview = document.PreviewFamily(patch);
+            Assert.That(preview.Diagnostics, Is.Not.Empty);
+            var apply = new ReconcileFamily(patch);
+            Exception? refusal;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+                (_, refusal) = contexts.Single().OperationLogs;
+            }
+            Assert.That(refusal, Is.Not.Null);
+            foreach (var diagnostic in preview.Diagnostics)
+                Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
+            Assert.That(apply.LastReceipt, Is.Null);
+            Assert.That(JToken.DeepEquals(
+                JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), before), Is.True,
+                "Preview must preserve the captured model; JSON object property order is not semantic.");
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Preview_and_apply_refuse_the_same_existing_shared_tooltip_change() {
+        var document = this.NewFamily("FF shared tooltip preview");
+        try {
+            var definition = CompanyDefinitions().Single(item => item.Name == "PE_G___Model");
+            Func<Document, FamilySharedParameterSource> source = d => new(d, [definition]);
+            var parameter = new JObject {
+                ["shared"] = true,
+                ["sharedGuid"] = definition.DownloadOptions.GetGuid(),
+                ["sharedSpecId"] = definition.DownloadOptions.GetSpecTypeId().TypeId,
+                ["tooltip"] = definition.Description ?? "",
+                ["value"] = "original value"
+            };
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { [definition.Name!] = parameter } } };
+            var create = new ReconcileFamily(patch, sharedSource: source);
+            using (var processor = new OperationProcessor(document))
+                _ = processor.ProcessQueue(new OperationQueue().Add(create));
+            Assert.That(create.LastReceipt?.Converged, Is.True);
+            var original = document.CaptureFamilyModel().Parameters[definition.Name!];
+            var originalValues = document.FamilyManager.Types.Cast<FamilyType>()
+                .ToDictionary(type => type.Name, type => type.AsString(document.FamilyManager.FindParameter(definition.Name!)));
+            Assert.That(originalValues.Values, Is.All.Not.Empty);
+
+            parameter["tooltip"] = "replacement is unsupported";
+            var preview = document.PreviewFamily(patch, sharedSource: source);
+            var apply = new ReconcileFamily(patch, sharedSource: source);
+            Exception? refusal;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+                (_, refusal) = contexts.Single().OperationLogs;
+            }
+            var diagnostic = preview.Diagnostics.Single();
+            Assert.That(diagnostic.Code, Is.EqualTo(FamilyModelDiagnosticCodes.SharedTooltipUnsupported));
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
+            Assert.That(apply.LastReceipt, Is.Null);
+            var preserved = document.CaptureFamilyModel().Parameters[definition.Name!];
+            Assert.That((preserved.SharedGuid, preserved.Formula), Is.EqualTo((original.SharedGuid, original.Formula)));
+            Assert.That(document.FamilyManager.Types.Cast<FamilyType>()
+                .ToDictionary(type => type.Name, type => type.AsString(document.FamilyManager.FindParameter(definition.Name!))),
+                Is.EqualTo(originalValues));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Full_model_build_forwards_execution_options_into_plan_identity() {
+        var document = this.NewFamily("FF build options identity");
+        try {
+            var current = document.CaptureFamilyModel();
+            var options = new ExecutionOptions { OptimizeTypeOperations = false };
+            ReconcileFamily Dry(ExecutionOptions? executionOptions) {
+                var operation = new ReconcileFamily(current, dryRun: true, executionOptions: executionOptions);
+                using var processor = new OperationProcessor(document, executionOptions);
+                _ = processor.ProcessQueue(new OperationQueue().Add(operation));
+                return operation;
+            }
+            var defaults = Dry(null);
+            var nondefault = Dry(options);
+            Assert.That(nondefault.LastPlan?.PlanHash, Is.Not.EqualTo(defaults.LastPlan?.PlanHash));
+            var receipt = FamilyModelBuild.Reconcile(document, current, options);
+            Assert.That(receipt?.PlanHash, Is.EqualTo(nondefault.LastPlan?.PlanHash));
         } finally { document.Close(false); }
     }
 

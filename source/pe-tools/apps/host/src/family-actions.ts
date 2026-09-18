@@ -97,9 +97,14 @@ export const writeMemberOnce = (
 const familyModelSchema = () =>
   `${process.env[hostProcessIdentity.hostBaseUrlVariable] || hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
 
-/** The composed member as authored; the C# family edge reads its `$schema`. */
-const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) =>
-  (await runPods(deps, composedSpec(source, pods))).spec;
+/**
+ * The composed member as authored, and the exact root and dependency bytes that one composition read.
+ * A native run keeps those bytes; the C# family edge reads the spec's `$schema`.
+ */
+const familySpec = async (deps: PodDependencies, member: PodMemberSource, pods: PodContext) => {
+  const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
+  return { specJson: spec, source: { root: source, dependencies } };
+};
 
 /**
  * A captured family model becomes a member that says what it is. `unmodeled` is what the engine
@@ -379,8 +384,11 @@ export async function admitFamilyAction(
         };
       }
       if (key === "family.plan" || key === "family.apply") {
-        const { source } = familyActions["family.plan"].input.parse(admission.input);
-        const specJson = await familySpec(deps, source, pods);
+        const { specJson, source } = await familySpec(
+          deps,
+          familyActions["family.plan"].input.parse(admission.input).source,
+          pods,
+        );
         return key === "family.apply"
           ? {
               kind: "native",
@@ -415,7 +423,7 @@ export async function admitFamilyAction(
           process,
           nativeKey: "families.plan",
           input: {
-            specJson: await familySpec(deps, input.source, pods),
+            specJson: (await familySpec(deps, input.source, pods)).specJson,
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
           },
           planned: {
@@ -434,7 +442,7 @@ export async function admitFamilyAction(
           kind: "native",
           process,
           nativeKey: "families.apply",
-          input: { ...input, specJson: await familySpec(deps, input.source, pods) },
+          input: { ...input, ...(await familySpec(deps, input.source, pods)) },
         };
       }
       if (key === "parameter-links.apply") {
@@ -466,7 +474,7 @@ export async function admitFamilyAction(
         };
       }
       const input = familyActions["family.build"].input.parse(admission.input);
-      const spec = await familySpec(deps, input.source, pods);
+      const { specJson, source } = await familySpec(deps, input.source, pods);
       const file = win32.join(
         await runPods(deps, podFolder(input.source.pod, pods)),
         input.source.path,
@@ -476,8 +484,8 @@ export async function admitFamilyAction(
         process,
         nativeKey: "family.build",
         input: {
-          specJson: spec,
-          source: input.source,
+          specJson,
+          source,
           // No output path: family.build lands the .rfa in its own run folder in the source pod.
           ...(deps.nativePaths
             ? await deps.nativePaths(input, admission.id, file)

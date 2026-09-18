@@ -8,7 +8,7 @@ public sealed record ScheduleSpecCaptureRequest(long ScheduleId);
 public sealed record ScheduleSpecCaptureData(string ScheduleName, string SpecJson);
 
 /// <summary>Create a new schedule from a saved spec. Apply never edits an existing schedule.</summary>
-public sealed record ScheduleSpecApplyRequest(string SpecJson, PodMemberSource Source);
+public sealed record ScheduleSpecApplyRequest(string SpecJson, PodComposedSource Source);
 
 public sealed record ScheduleSpecApplyData(
     long ScheduleId,
@@ -16,5 +16,7 @@ public sealed record ScheduleSpecApplyData(
     int AppliedFieldCount,
     IReadOnlyList<string> Skipped,
     IReadOnlyList<string> Warnings,
-    string ReceiptPath
+
+    /// <summary>`null` when the schedule exists but its run output could not be saved; `warnings` names why.</summary>
+    string? ReceiptPath
 );
