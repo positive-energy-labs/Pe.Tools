@@ -341,7 +341,9 @@ test("live /schedules: capture then apply files a run receipt", async () => {
       .toContain("apply schedule ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
-  expect(shown).toContain("succeeded");
+  expect(shown).toContain("Succeeded");
+  // Every capture writes a run: the capture's own run sits on this member beside the apply's.
+  expect(shown).toContain("schedule.capture");
   expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
 }, 180_000);
 
@@ -361,7 +363,7 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
     expect(await page.locator("body").innerText()).not.toContain("unreachable");
     return receiptOnPods(page, pod, path, "family.apply");
   });
-  expect(shown).toContain("succeeded");
+  expect(shown).toContain("Succeeded");
   // The capture filed a run of its own on this member: that run holds the unmodeled facts.
   expect(shown).toContain("family.capture");
   expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
@@ -382,6 +384,6 @@ test("live /families: capture, plan, apply files a run receipt", async () => {
       .toContain("apply families ran");
     return receiptOnPods(page, pod, path, "families.apply");
   });
-  expect(shown).toContain("succeeded");
+  expect(shown).toContain("Succeeded");
   expect(workflows).toEqual(["families.capture", "families.plan", "families.apply"]);
 }, 180_000);

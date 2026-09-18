@@ -316,7 +316,7 @@ public static class DataTypes {
     ///     `SpecTypeId.DuctSize` in length units (internal feet, `UnitUtils.GetValidUnits` offers feet,
     ///     inches, millimeters) exactly like `SpecTypeId.Length`. Census of this enum through
     ///     `ParamOps.Spec` against the Revit spec table: those three are the only length-measured members;
-    ///     every other member measures itself. `DataTypeMeasureCensus` in `Pe.Revit.Tests` pins the census
+    ///     every other member measures itself. `DataTypeMeasureCensusTests` in `Pe.Revit.Tests` pins the census
     ///     against `UnitUtils` in a session.
     /// </summary>
     public static DataType Measure(this DataType dt) => dt is DataType.PipeSize or DataType.DuctSize ? DataType.Length : dt;

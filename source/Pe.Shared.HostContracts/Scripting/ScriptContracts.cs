@@ -69,7 +69,12 @@ public record PodReceipt(
     string Outcome,
     List<string> Outputs,
     string? Reason
-);
+) {
+    private readonly string? _reason = Reason is "" ? null : Reason;
+
+    /// <summary>A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".</summary>
+    public string? Reason { get => this._reason; init => this._reason = value is "" ? null : value; }
+}
 
 public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);
 

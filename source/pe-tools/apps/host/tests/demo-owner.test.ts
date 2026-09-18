@@ -238,7 +238,7 @@ test("demo Family capture files a new member and returns what the capture saw", 
     memberPath: result.member.path,
     memberSha256: result.member.sha256,
     operation: "family.capture",
-    outcome: "succeeded",
+    outcome: "Succeeded",
     outputs: ["unmodeled.json"],
   });
 });
@@ -285,7 +285,7 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
     memberSha256: source.sha256,
     operation: "family.apply",
     planHash,
-    outcome: "succeeded",
+    outcome: "Succeeded",
   });
   await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
   const stale = await apply("stale-member", planHash);

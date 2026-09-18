@@ -148,6 +148,42 @@ const diagnosticLine = (d: { code: string; path: string; message: string }) =>
 export const capturePath = (entity: string, name: string, at = new Date()) =>
   `settings/${entity}/${name.replace(/[^\w.-]+/g, "-")}-${at.toISOString().replace(/[:.]/g, "-")}.json`;
 
+/** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
+export const writeCaptureRun = (
+  deps: PodDependencies,
+  pods: PodContext,
+  at: string,
+  written: PodMemberWritten,
+  operation: string,
+  outputs: Readonly<Record<string, string>> = {},
+) =>
+  runPods(
+    deps,
+    writeRun(
+      written.pod,
+      `${at.replace(/[:.]/g, "-")}-${digest(written.path).slice(0, 8)}`,
+      {
+        ...outputs,
+        "receipt.json": `${JSON.stringify(
+          {
+            podId: written.pod,
+            memberPath: written.path,
+            memberSha256: written.sha256,
+            operation,
+            planHash: null,
+            outcome: "Succeeded",
+            outputs: Object.keys(outputs),
+            reason: null,
+          },
+          null,
+          2,
+        )}
+`,
+      },
+      pods,
+    ),
+  );
+
 export async function current(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
@@ -449,34 +485,12 @@ export async function admitFamilyAction(
             writeMemberOnce(deps, request, pods),
           )) as PodMemberWritten;
           members.push(written);
-          const runId = `${prepared.at.replace(/[:.]/g, "-")}-${digest(path).slice(0, 8)}`;
           runs.set(
             familyId,
-            await runPods(
-              deps,
-              writeRun(
-                prepared.pod,
-                runId,
-                {
-                  "unmodeled.json": `${JSON.stringify(unmodeled, null, 2)}\n`,
-                  "receipt.json": `${JSON.stringify(
-                    {
-                      podId: written.pod,
-                      memberPath: written.path,
-                      memberSha256: written.sha256,
-                      operation: prepared.nativeKey,
-                      planHash: null,
-                      outcome: "succeeded",
-                      outputs: ["unmodeled.json"],
-                      reason: null,
-                    },
-                    null,
-                    2,
-                  )}\n`,
-                },
-                pods,
-              ),
-            ),
+            await writeCaptureRun(deps, pods, prepared.at, written, prepared.nativeKey, {
+              "unmodeled.json": `${JSON.stringify(unmodeled, null, 2)}
+`,
+            }),
           );
         }
         // The captured members plus what the capture saw: coverage and the unmodeled ledger, which
