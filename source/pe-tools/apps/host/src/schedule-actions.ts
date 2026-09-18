@@ -61,7 +61,7 @@ async function current(
         session.processStartUtcUnixMs !== Date.parse(process.processStartUtc)))
   )
     throw refused("The exact schedule document lifetime/process is unavailable");
-  return { session, document: addressSchema.parse(doc.address) };
+  return { session, doc };
 }
 async function invoke(
   bridge: RevitBridge["Service"],
@@ -89,7 +89,7 @@ export async function readSchedule(
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   const target = documentRefSchema.parse(raw.target);
-  const { session, document } = await current(bridge, target);
+  const { session, doc } = await current(bridge, target);
   if (!session.processId || session.processStartUtcUnixMs == null)
     throw refused("Original process identity unavailable");
   const process = await readOriginalProcess(
@@ -119,6 +119,10 @@ export async function readSchedule(
     });
   }
   const input = scheduleReads["schedule.grid.snapshot"].input.parse(raw.input ?? {});
+  // A reading is filed under its document's address; an unsaved or detached document has none.
+  if (!doc.address)
+    throw refused(`Save '${doc.title}' to a file before reading its schedules; it has no path.`);
+  const document = addressSchema.parse(doc.address);
   const query = {
     ...(input.scheduleId != null
       ? { kind: "ScheduleReferences", scheduleIds: [input.scheduleId] }

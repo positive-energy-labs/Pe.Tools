@@ -32,6 +32,14 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
   ).toMatchObject({ state: "succeeded", result: { applied: 2 } });
 });
 
+test("a pathless document refuses its schedule reading in one sentence", async () => {
+  const f = await setup();
+  f.unsave();
+  await expect(f.read()).rejects.toThrow(
+    "Save 'Same' to a file before reading its schedules; it has no path.",
+  );
+});
+
 test.each([
   ["missing", { applied: 0, dryRun: false, results: [] }],
   [

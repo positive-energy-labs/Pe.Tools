@@ -100,7 +100,8 @@ export async function setup() {
   let reopened = false,
     lost = false,
     unknown = false,
-    readbackFails = false;
+    readbackFails = false,
+    pathless = false;
   let hold: Promise<void> | undefined,
     release = () => {};
   let response: unknown = {
@@ -124,7 +125,8 @@ export async function setup() {
         openDocuments: [
           {
             openId: reopened && target === b ? "reopened-B" : target.openId,
-            address: document,
+            title: "Same",
+            address: pathless ? null : document,
             isFamilyDocument: false,
           },
         ],
@@ -295,6 +297,9 @@ export async function setup() {
       detail = value;
     },
     reads: () => readCount,
+    unsave: () => {
+      pathless = true;
+    },
     reopen: () => {
       reopened = true;
     },

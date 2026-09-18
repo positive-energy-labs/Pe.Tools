@@ -612,13 +612,18 @@ internal sealed class BridgeAgent : IDisposable {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var tracker = DocumentTrackerAccessor.Current
             ?? throw new InvalidOperationException("Document tracker is unavailable.");
-        var documents = tracker.Open.Where(document => !document.IsLinked)
-            .Select(document => new BridgeDocumentSnapshot(
-                document.OpenId(),
-                document.Title,
-                document.Resolve().GetCloudModelGuid() ?? document.Path,
-                document.IsFamilyDocument,
-                activeDocument != null && document.Matches(activeDocument)))
+        // Title and address come from the live document, never the tracker's event-time snapshot:
+        // SaveAs changes the path, and an EditFamily document is admitted before it has a title.
+        var documents = tracker.Open.Where(tracked => !tracked.IsLinked)
+            .Select(tracked => {
+                var document = tracked.Resolve();
+                return new BridgeDocumentSnapshot(
+                    tracked.OpenId(),
+                    document.Title,
+                    document.GetCloudModelGuid() ?? document.GetDocumentPath(),
+                    document.IsFamilyDocument,
+                    activeDocument != null && tracked.Matches(activeDocument));
+            })
             .ToList();
         var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(

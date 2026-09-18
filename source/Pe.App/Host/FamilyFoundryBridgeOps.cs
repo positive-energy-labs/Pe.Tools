@@ -105,7 +105,7 @@ internal static class FamilyFoundryBridgeOps {
 
     internal static FamilyCaptureData CaptureActiveFamily(Document document) {
         var model = document.CaptureFamilyModel();
-        return new FamilyCaptureData(DocumentReading.Here(document), model.Family.Name, FamilyModelJson.Serialize(model),
+        return new FamilyCaptureData(DateTime.UtcNow.ToString("O"), model.Family.Name, FamilyModelJson.Serialize(model),
             model.Unmodeled.Count, model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()), model.CaptureIssues);
     }
 

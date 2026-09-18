@@ -72,7 +72,9 @@ const fixtureEvidenceSchema = z.object({
 });
 export const familyEvidenceSchema = z.union([
   z.object({
-    reading: observationSchema,
+    // A capture is scoped by the action's exact document lifetime, never by address: an
+    // Edit Family document has no path until it is saved.
+    observedAt: z.iso.datetime(),
     familyName: z.string(),
     modelJson: z.string(),
     unmodeledCount: z.number(),

@@ -11,7 +11,6 @@ import {
   actionReceiptSchema,
   familyCaptureSchema,
   familyProjectionSchema,
-  here,
   memberWork,
   settingsFieldDirectives,
   settingsFieldPointer,
@@ -45,7 +44,7 @@ import {
   type FamilyAuthoringFacts,
   type FamilyPage,
 } from "#/route/family/manifest";
-import { documentAddress, previousOf, inventoryOf, useReading } from "#/readings";
+import { previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
 import { openMember, useMemberWork } from "#/route/spec-editor";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
@@ -371,11 +370,6 @@ export function useFamilyStore(options: {
     [buildReceiptReading, buildStatus],
   );
 
-  const inventory = handle.readings.inventory as Reading<{
-    sessions: Parameters<typeof inventoryOf>[0];
-  }>;
-  const sessions = useMemo(() => inventoryOf(previousOf(inventory)?.sessions ?? []), [inventory]);
-
   /* ── Derived lane ───────────────────────────────────────────────────────── */
   const review = { revision: settingsRevision };
   /**
@@ -389,10 +383,9 @@ export function useFamilyStore(options: {
   const evidence = useMemo((): EvidenceSlice | null => {
     if (!captured || !member) return null;
     if (captured.member.pod !== member.pod || captured.member.path !== member.path) return null;
-    const session = sessions.find((entry) => entry.sessionId === target?.session);
-    const address = session ? documentAddress(session) : null;
-    return address ? ((here(captured.evidence, address) as EvidenceSlice | null) ?? null) : null;
-  }, [captured, member, sessions, target?.session]);
+    // captureStatus is already this exact document lifetime; a family may have no path.
+    return captured.evidence;
+  }, [captured, member]);
   const lane = useMemo(
     () => familySource(snapshot, evidence, fields, familyDoc.doc),
     // eslint-disable-next-line react-hooks/exhaustive-deps

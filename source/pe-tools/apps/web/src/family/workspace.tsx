@@ -219,7 +219,7 @@ function CaptureEvidence() {
             noun(evidence.unmodeledCount, "unmodeled fact")
           )}
         </FactChip>
-        <span className="face-mono text-ink-mute">{evidence.reading.observedAt}</span>
+        <span className="face-mono text-ink-mute">{evidence.observedAt}</span>
       </div>
       {evidence.issues.map((issue, index) => (
         <OutcomeLine

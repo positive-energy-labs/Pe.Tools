@@ -82,6 +82,8 @@ export const bridgeRegistrationAckSchema = Schema.Struct({
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
+/** `openId` is the bridge's id, the one `?target=` accepts (not `pe-revit doc open`'s).
+ * `address` is null until the document is saved (detached, new, or an EditFamily family). */
 export const bridgeDocumentSnapshotSchema = Schema.Struct({
   openId: Schema.String,
   title: Schema.String,

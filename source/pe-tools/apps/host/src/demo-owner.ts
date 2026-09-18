@@ -460,7 +460,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               };
             } else if (key === "family.capture" && seed.route === "family") {
               value = {
-                reading: { at, version: null, observedAt: new Date().toISOString() },
+                observedAt: new Date().toISOString(),
                 familyName: "Simulated demo family",
                 // The native engine captures a bare model; the host names what it is. A real capture
                 // always sees facts it cannot execute, so the simulation does too.
@@ -541,7 +541,6 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               );
               if (!schedule) throw unsupported("unknown simulated schedule");
               value = {
-                reading: { at, version: null, observedAt: new Date().toISOString() },
                 scheduleName: schedule.name,
                 specJson: JSON.stringify({
                   $schema: `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/CmdScheduleManager/schedules.json`,
