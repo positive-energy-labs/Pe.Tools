@@ -164,8 +164,10 @@ const modelZoneSchema = z.object({
       failures: z.number(),
       declaredSqft: z.number(),
       roomSqft: z.number(),
-      claimedWallSqft: z.number(),
+      /** Partition's Accounting.Excluded. */
       excludedSqft: z.number(),
+      /** Partition's Accounting.Void. */
+      voidSqft: z.number(),
     }),
   ),
   driftSqft: z.number().nullable(),
@@ -252,10 +254,13 @@ export const partitionRunSchema = z.object({
   rebound: z.number(),
   orphaned: z.number(),
   domainSqft: z.number(),
-  claimedWallSqft: z.number(),
-  excludedResidueSqft: z.number(),
+  excludedSqft: z.number(),
+  voidSqft: z.number(),
   totalSqft: z.number(),
-  profile: z.string(),
+  /** Where the zone's enclosure came from. */
+  enclosureSource: z.string(),
+  /** Why Partition held the run back, when it did. */
+  hold: z.string().nullish(),
   failures: z.array(z.string()),
   rooms: z.array(detectedRoomSchema),
   residues: z.array(detectedResidueSchema),
