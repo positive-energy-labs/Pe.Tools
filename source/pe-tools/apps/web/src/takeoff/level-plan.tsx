@@ -13,7 +13,7 @@ import {
   stateInk,
   type RoomState,
 } from "#/takeoff/room-state";
-import type { Stage, WorldRoom, WorldZone } from "#/takeoff/world";
+import type { Phase, ModelRoom, ModelZone } from "#/takeoff/world";
 
 export function LevelPlan({
   zones,
@@ -26,14 +26,14 @@ export function LevelPlan({
   onCursor,
   onClear,
 }: {
-  zones: WorldZone[];
-  stageFilter: Stage | null;
+  zones: ModelZone[];
+  stageFilter: Phase | null;
   selectedKey: string | null;
   cursor: string | null;
-  stateOf: (room: WorldRoom) => RoomState;
-  onSelectZone: (z: WorldZone) => void;
+  stateOf: (room: ModelRoom) => RoomState;
+  onSelectZone: (z: ModelZone) => void;
   onHover: (id: string) => void;
-  onCursor: (z: WorldZone, guid: string) => void;
+  onCursor: (z: ModelZone, guid: string) => void;
   onClear: () => void;
 }) {
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);

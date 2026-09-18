@@ -27,6 +27,7 @@
              persistence path (ES is banned). Takeoff stays otherwise leaf. -->
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
+<ProjectReference Include="..\Pe.Revit.Partition\Pe.Revit.Partition.csproj" />
     </ItemGroup>
 
 </Project>

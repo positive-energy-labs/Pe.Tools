@@ -131,7 +131,7 @@ interface MockSystem {
   overCap: boolean;
 }
 
-export interface MockWorld {
+export interface MockModel {
   zones: MockZone[];
   systems: MockSystem[];
   r10Path: string;
@@ -185,7 +185,7 @@ const ZONE_NAMES = [
   "Attic Suite",
 ];
 
-export function mockWorld(): MockWorld {
+export function mockModel(): MockModel {
   const zones = buildZones();
   let sysCounter = 0;
   let identifier = 100;

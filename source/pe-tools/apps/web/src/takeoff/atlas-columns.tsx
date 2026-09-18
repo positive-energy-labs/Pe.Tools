@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import { FactChip } from "#/components/lang/chip";
 import { CellSelect, NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
@@ -8,7 +7,11 @@ import type { AtlasActions } from "#/takeoff/atlas";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import { MANUAL_J } from "#/takeoff/room-actions";
 import { ROOM_STATES, STATE_META, STAGE_BLURB, stateMeta } from "#/takeoff/room-state";
-import { ATLAS_COLUMN_SEMANTICS, type AtlasRow as Row, type TakeoffStore } from "#/takeoff/store";
+import {
+  ATLAS_COLUMN_SEMANTICS,
+  type AtlasRow as Row,
+  type TakeoffsController,
+} from "#/takeoff/controller";
 import { STAGE_ORDER, type RoomType } from "#/takeoff/world";
 
 const ROOM_TYPES: RoomType[] = [
@@ -31,11 +34,11 @@ function RoomNameCell({
   row,
   onCommit,
 }: {
-  store: TakeoffStore;
+  store: TakeoffsController;
   row: Row;
   onCommit: (value: string) => void;
 }) {
-  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  const entity = store.entity(row.room.guid);
   const state = [
     entity.hovered ? "hovered" : null,
     entity.selected ? "table selection" : null,
@@ -93,7 +96,7 @@ export function useAtlasColumns({
   actions: AtlasActions;
   fieldsMode: "columns" | "panel";
   flagVocabulary: string[];
-  store: TakeoffStore;
+  store: TakeoffsController;
 }) {
   return useMemo<Column<Row>[]>(
     () => [

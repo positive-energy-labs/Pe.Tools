@@ -41,7 +41,8 @@ public sealed record ProbeAnswer(
     ProbeHit? Floor,
     ProbeHit? Ceiling,
     double MaxDistanceFt,
-    double Ms
+    double Ms,
+    ProbePurpose Purpose = ProbePurpose.Obstructions
 );
 
 public sealed record CensusBucket(
@@ -64,11 +65,143 @@ public sealed record CensusAnswer(
 );
 
 /// <summary>
+///     Original CAD curves whose existing ribbon band overlaps the requested slab. Completion means
+///     the selected imports were visited; it does not mean physical openings were inventoried.
+/// </summary>
+public sealed record OriginalCurvesAnswer(
+    Stamp Stamp,
+    Searched Searched,
+    IReadOnlyList<OriginalCurve> Curves,
+    IReadOnlyList<CurveCaptureFailure> Failures,
+    string Scope,
+    double Ms
+);
+
+/// <summary>
 ///     The two questions the soup answers this round. Neither builds anything: a verb applies the
 ///     queued tracker delta to the host partition and then reads. An unbuilt world answers empty
 ///     with a stamp that says so.
 /// </summary>
 public static class Verbs {
+    /// <summary>
+    ///     Rereads selected host or linked CAD imports. XY rejects curves outside the box; z0..z1
+    ///     selects curves through the same per-curve storey-band assumption used by ribbons.
+    /// </summary>
+    public static OriginalCurvesAnswer OriginalCurves(
+        Document document,
+        double z0,
+        double z1,
+        Aabb xyClip,
+        Filter filter
+    ) {
+        if (z1 < z0) (z0, z1) = (z1, z0);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var world = SpaceWorld.Resident(document);
+        world.ApplyQueued();
+        var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
+        var result = new List<OriginalCurve>();
+        var failures = new List<CurveCaptureFailure>();
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int candidates = 0, examined = 0, skipped = 0;
+
+        foreach (var partition in touched) {
+            var imports = partition.Prims.Where(r => r.Kind == PrimKind.Curve2D)
+                .GroupBy(r => r.ElementId).OrderBy(g => g.Key);
+            var levels = new FilteredElementCollector(partition.Doc).OfClass(typeof(Level)).Cast<Level>()
+                .Select(l => (l.ProjectElevation, l.Name)).ToList();
+            foreach (var rows in imports) {
+                var eligible = rows.Where(filter.Wants).ToList();
+                if (eligible.Count == 0 || !eligible.Any(r => OverlapsXy(r.Box, xyClip))) {
+                    continue;
+                }
+                if (partition.Doc.GetElement(rows.Key.ToElementId()) is not ImportInstance import) {
+                    failures.Add(new CurveCaptureFailure([], "traversal", $"import {rows.Key} was unavailable"));
+                    continue;
+                }
+
+                var curves = new List<Ingest.CapturedCurve>();
+                var importFailures = new List<CurveCaptureFailure>();
+                Ingest.ReadCurves(import, curves, importFailures);
+                var importHandle = partition.HandleFor(eligible[0]);
+                failures.AddRange(importFailures.Select(f => f with { Handle = importHandle }));
+                candidates += curves.Count;
+                foreach (var curve in curves) {
+                    var row = eligible.FirstOrDefault(r => string.Equals(r.Layer, curve.Layer, StringComparison.OrdinalIgnoreCase));
+                    if (row is null || !CurveOverlaps(curve.Points, levels, partition.Transform, z0, z1, xyClip)) {
+                        skipped++;
+                        continue;
+                    }
+                    examined++;
+                    _ = categories.Add(row.Category);
+                    try {
+                        result.Add(ToOriginal(partition.HandleFor(row), curve, partition.Transform));
+                    } catch (Exception ex) {
+                        failures.Add(new CurveCaptureFailure(curve.Path, "curve-pose", ex.Message,
+                            partition.HandleFor(row)));
+                    }
+                }
+            }
+        }
+
+        sw.Stop();
+        return new OriginalCurvesAnswer(
+            world.StampFor(touched, filter),
+            new Searched(touched.Count, categories.Count, candidates, examined, skipped),
+            result, failures,
+            "selected-import-curves-by-ribbon-band; not-a-physical-opening-inventory",
+            Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+    }
+
+    private static bool CurveOverlaps(
+        IList<XYZ> points,
+        IReadOnlyList<(double Z, string Name)> levels,
+        Transform transform,
+        double z0,
+        double z1,
+        Aabb clip
+    ) {
+        var band = Ingest.Band(levels, points);
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var point in points) {
+            Include(point);
+            Include(new XYZ(point.X, point.Y, band.TopZ));
+        }
+        return minX <= clip.MaxX && maxX >= clip.MinX
+            && minY <= clip.MaxY && maxY >= clip.MinY
+            && minZ <= z1 && maxZ >= z0;
+
+        void Include(XYZ point) {
+            var host = transform.IsIdentity ? point : transform.OfPoint(point);
+            minX = Math.Min(minX, host.X); maxX = Math.Max(maxX, host.X);
+            minY = Math.Min(minY, host.Y); maxY = Math.Max(maxY, host.Y);
+            minZ = Math.Min(minZ, host.Z); maxZ = Math.Max(maxZ, host.Z);
+        }
+    }
+
+    private static OriginalCurve ToOriginal(Handle handle, Ingest.CapturedCurve curve, Transform transform) {
+        double[] Point(XYZ p) {
+            var q = transform.IsIdentity ? p : transform.OfPoint(p);
+            return [q.X, q.Y, q.Z];
+        }
+        double[] Vector(XYZ p) {
+            var q = transform.IsIdentity ? p : transform.OfVector(p);
+            return [q.X, q.Y, q.Z];
+        }
+        OriginalArc? arc = null;
+        if (curve.Native is Arc a) {
+            var radiusVector = transform.IsIdentity ? a.XDirection * a.Radius : transform.OfVector(a.XDirection * a.Radius);
+            arc = new OriginalArc(Point(a.Center), radiusVector.GetLength(), a.IsBound,
+                a.IsBound ? Point(a.GetEndPoint(0)) : null,
+                a.IsBound ? Point(a.GetEndPoint(1)) : null,
+                Vector(a.XDirection), Vector(a.YDirection), Vector(a.Normal),
+                a.IsBound ? a.GetEndParameter(0) : null,
+                a.IsBound ? a.GetEndParameter(1) : null);
+        }
+        return new OriginalCurve(handle, curve.Path, curve.Layer, curve.Kind,
+            curve.Points.Select(Point).ToList(), arc);
+    }
+
     /// <summary>What is in this box, by source, category, and kind, plus the ten fattest elements.</summary>
     public static CensusAnswer Census(Document document, Aabb box, Filter? filter = null) {
         filter ??= Filter.Default;
@@ -278,14 +411,11 @@ public static class Verbs {
         n = ClipPlane(buf, n, (float)z1, false);
         if (n < 3) return null;
 
-        var area = 0.0;
-        for (var i = 0; i < n; i++) {
-            var a = buf[i];
-            var b = buf[(i + 1) % n];
-            area += (a.X * b.Y) - (b.X * a.Y);
-        }
-
-        if (Math.Abs(area) < 2e-8) return null;
+        var first = buf[0];
+        var hasLength = false;
+        for (var i = 1; i < n; i++)
+            if (buf[i].X != first.X || buf[i].Y != first.Y) { hasLength = true; break; }
+        if (!hasLength) return null;
 
         var ring = new double[n * 2];
         for (var i = 0; i < n; i++) {
@@ -332,7 +462,8 @@ public static class Verbs {
         Document document,
         XYZ at,
         Filter? filter = null,
-        double maxDistanceFt = 200.0
+        double maxDistanceFt = 200.0,
+        ProbePurpose purpose = ProbePurpose.Obstructions
     ) {
         filter ??= Filter.Default;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -349,14 +480,19 @@ public static class Verbs {
             var prims = p.Prims;
             bool Wants(int pi) => filter.Wants(prims[pi]);
 
-            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Wants, out var dd, out var ti)
+            bool Floor(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
+                || (prims[pi].HeightRole & HeightRole.Floor) != 0);
+            bool Overhead(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
+                || (prims[pi].HeightRole & HeightRole.Overhead) != 0);
+
+            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Floor, out var dd, out var ti)
                 && (down is null || dd < down.DistanceFt)) {
                 var row = prims[p.Bvh.Triangle(ti).Prim];
                 down = new ProbeHit(p.HandleFor(row), Math.Round(dd, 6), Math.Round(at.Z - dd, 6));
                 _ = cats.Add(row.Category);
             }
 
-            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, 1), maxDistanceFt, Wants, out var du, out var ui)
+            if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, 1), maxDistanceFt, Overhead, out var du, out var ui)
                 && (up is null || du < up.DistanceFt)) {
                 var row = prims[p.Bvh.Triangle(ui).Prim];
                 up = new ProbeHit(p.HandleFor(row), Math.Round(du, 6), Math.Round(at.Z + du, 6));
@@ -373,6 +509,6 @@ public static class Verbs {
             down,
             up,
             maxDistanceFt,
-            Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+            Math.Round(sw.Elapsed.TotalMilliseconds, 3), purpose);
     }
 }

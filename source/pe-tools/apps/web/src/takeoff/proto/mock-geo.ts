@@ -1,16 +1,63 @@
-import { loadFixtureTakeoff } from "#/rhvac/fixture";
-import type { RhvacTakeoffData, TakeoffResidueShape, TakeoffRoomShape } from "#/rhvac/types";
+import { mergeTakeoffLevels, parseTakeoffTsv } from "#/rhvac/takeoff";
+import type {
+  RhvacTakeoffData,
+  RoomMap,
+  TakeoffResidueShape,
+  TakeoffRoomShape,
+} from "#/rhvac/types";
 import { containsEvenOdd } from "#/takeoff/model";
 
 import {
   assistData,
-  mockWorld,
+  mockModel,
   STAGE_ORDER,
   type MockRoom,
-  type MockWorld,
+  type MockModel,
   type MockZone,
   type RoomType,
 } from "./mock";
+
+/* project-a dev fixture — extract/map + Partition replay TSVs from public/rhvac-fixture.
+   The extract JSON is UTF-8 with BOM; strip it before parsing. Inlined from the deleted
+   `rhvac/fixture.ts` (fold 4): this is the only caller. */
+const BASE = "/rhvac-fixture";
+
+interface FixtureManifest {
+  extract: string;
+  roomMap: string;
+  takeoff: string[];
+}
+
+async function fetchText(path: string): Promise<string> {
+  const response = await fetch(`${BASE}/${path}`);
+  if (!response.ok) throw new Error(`fixture ${path}: HTTP ${response.status}`);
+  const text = await response.text();
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+const sha256 = async (text: string): Promise<string> =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+const fetchJson = async <T>(path: string): Promise<T> => JSON.parse(await fetchText(path)) as T;
+
+async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
+  const manifest = await fetchJson<FixtureManifest>("manifest.json");
+  const [roomMap, ...tsvTexts] = await Promise.all([
+    fetchJson<RoomMap>(manifest.roomMap),
+    ...manifest.takeoff.map((name) => fetchText(name)),
+  ]);
+  const parsedLevels = tsvTexts.map((text) => parseTakeoffTsv(text));
+  const hashes = await Promise.all(tsvTexts.map(sha256));
+  return {
+    levels: mergeTakeoffLevels(parsedLevels),
+    roomMap,
+    tsvSha256: Object.fromEntries(
+      parsedLevels.map((level, index) => [level.levelName, hashes[index]!]),
+    ),
+  };
+}
 
 const hash = (s: string) => {
   let h = 2166136261;
@@ -43,7 +90,7 @@ export interface GeoZone extends Omit<MockZone, "rooms"> {
   residues: TakeoffResidueShape[];
 }
 
-interface GeoWorld extends Omit<MockWorld, "zones"> {
+interface GeoWorld extends Omit<MockModel, "zones"> {
   zones: GeoZone[];
 }
 
@@ -58,7 +105,7 @@ function laneOf(levelName: string): string | null {
   return null;
 }
 
-function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWorld {
+function joinGeometry(world: MockModel, takeoff: RhvacTakeoffData): GeoWorld {
   const byZone = new Map<string, TakeoffRoomShape[]>();
   const residuesByZone = new Map<string, TakeoffResidueShape[]>();
 
@@ -139,5 +186,5 @@ function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWorld {
   return { ...world, zones };
 }
 
-export const loadMockWorldGeo = async (): Promise<GeoWorld> =>
-  joinGeometry(mockWorld(), await loadFixtureTakeoff());
+export const loadMockGeo = async (): Promise<GeoWorld> =>
+  joinGeometry(mockModel(), await loadFixtureTakeoff());
