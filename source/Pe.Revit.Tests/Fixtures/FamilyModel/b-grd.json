@@ -1,4 +1,5 @@
 {
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": { "name": "PE GRD Exhaust", "category": "AirTerminals", "template": "Generic Model face based", "placement": "WorkPlaneBased" },
   "parameters": {
     "PE_M_Grd_OpenWidth":  { "dataType": "Length", "value": "24in" },

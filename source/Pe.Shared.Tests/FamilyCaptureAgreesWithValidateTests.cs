@@ -15,7 +15,7 @@ public sealed class FamilyCaptureAgreesWithValidateTests {
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(FamilyModelContractTests.FixtureDir, name));
 
     private const string Captured = "w5-revit-lattice-girder.captured.json";
-    private const string Fixed = "w5-revit-lattice-girder.family.json";
+    private const string Fixed = "w5-revit-lattice-girder.json";
 
     /// <summary>The falsification, reproduced with no Revit: exactly the three diagnostics w5-revit hit.</summary>
     [Test]

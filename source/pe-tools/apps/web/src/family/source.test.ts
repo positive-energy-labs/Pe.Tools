@@ -18,10 +18,7 @@ const snapshot = (rawContent: string, composedContent = rawContent): FamilySnaps
 test("native fixtures project parameters without inventing fixture content and author native paths", () => {
   for (const name of ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"]) {
     const raw = readFileSync(
-      new URL(
-        `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.family.json`,
-        import.meta.url,
-      ),
+      new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
       "utf8",
     );
     const input = snapshot(raw);
@@ -127,10 +124,7 @@ test("native source geometry resolves macros and authored seeds without solving 
   const source = (name: string): FamilyModel =>
     JSON.parse(
       readFileSync(
-        new URL(
-          `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.family.json`,
-          import.meta.url,
-        ),
+        new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
         "utf8",
       ),
     );

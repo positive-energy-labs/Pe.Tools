@@ -1,4 +1,5 @@
 {
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": { "name": "PE Bath-Shower (hinge)", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBasedHosted" },
   "parameters": {
     "_conn angle":            { "dataType": "Angle",  "value": "90deg", "isInstance": true },

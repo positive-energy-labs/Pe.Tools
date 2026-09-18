@@ -1,4 +1,5 @@
 {
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": { "name": "vane", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
   "parameters": {
     "_vane length": { "dataType": "Length", "value": "12in", "isInstance": true },

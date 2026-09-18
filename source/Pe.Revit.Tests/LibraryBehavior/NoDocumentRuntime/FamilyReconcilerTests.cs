@@ -129,7 +129,7 @@ public sealed class FamilyReconcilerTests {
     private static string FixturePath(string name) {
         var dir = Path.GetDirectoryName(typeof(FamilyReconcilerTests).Assembly.Location)!;
         for (var probe = new DirectoryInfo(dir); probe is not null; probe = probe.Parent) {
-            var candidate = Path.Combine(probe.FullName, "Fixtures", "FamilyModel", $"{name}.family.json");
+            var candidate = Path.Combine(probe.FullName, "Fixtures", "FamilyModel", $"{name}.json");
             if (File.Exists(candidate)) return candidate;
         }
         throw new FileNotFoundException(name);

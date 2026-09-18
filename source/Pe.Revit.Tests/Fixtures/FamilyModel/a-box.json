@@ -1,4 +1,5 @@
 {
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": { "name": "PE Box", "category": "ElectricalEquipment", "template": "Electrical Equipment", "placement": "OneLevelBased" },
   "parameters": {
     "Width":   { "dataType": "Length", "value": "24in" },

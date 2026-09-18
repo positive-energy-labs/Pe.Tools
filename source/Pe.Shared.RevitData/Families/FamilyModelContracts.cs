@@ -583,7 +583,7 @@ public sealed class FamilyModelVisibilityViews {
 // ───────────────────────────── nested, arrays, connectors, details ─────────────────────────────
 
 /// <summary>
-///     One nested `FamilyInstance`. <see cref="Family" /> names a sibling `&lt;Family&gt;.family.json` built
+///     One nested `FamilyInstance`. <see cref="Family" /> names a family model in the model directory (a JSON member whose `$schema` is the family model schema and whose `family.name` is <see cref="Family" />) built
 ///     first, or in the bulk lane a family already loaded by that name, else refuse (VERDICTS-R1 §5).
 ///     <see cref="Host" /> is the work plane (a datum, a ref plane, or `line:&lt;Name&gt;.end`, position only);
 ///     <see cref="FamilyModelAlign" /> locks the instance's own named reference planes to host planes (the puck method,
@@ -1158,6 +1158,27 @@ public static class FamilyModelJson {
     }
 
     public static string Serialize(FamilyModel model) => JsonConvert.SerializeObject(model, Settings);
+
+    /// <summary>
+    ///     The one JSON member in <paramref name="directory" /> whose `$schema` ends with <paramref name="schemaPath" />
+    ///     and whose `family.name` is <paramref name="name" />; null when none. Two matches refuse and name both files.
+    /// </summary>
+    public static string? FindModel(string directory, string name, string schemaPath) {
+        var matches = Directory.EnumerateFiles(directory, "*.json").Where(path => {
+            try {
+                return JToken.Parse(File.ReadAllText(path)) is JObject o
+                       && o["$schema"] is JValue { Value: string schema } && schema.EndsWith(schemaPath, StringComparison.OrdinalIgnoreCase)
+                       && o["family"] is JObject family && family["name"] is JValue { Value: string declared } && declared == name;
+            } catch (JsonException) {
+                return false; // not JSON, so not a family model: plain data beside it never hides a sibling
+            }
+        }).OrderBy(path => path, StringComparer.Ordinal).ToList();
+        return matches.Count switch {
+            0 => null,
+            1 => matches[0],
+            _ => throw new InvalidOperationException($"Nested family '{name}' matches {matches.Count} family models: {string.Join(", ", matches.Select(Path.GetFileName))}.")
+        };
+    }
 }
 
 /// <summary>

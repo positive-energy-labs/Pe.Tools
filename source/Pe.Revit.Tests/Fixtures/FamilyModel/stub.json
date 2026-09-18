@@ -1,4 +1,5 @@
 {
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": { "name": "stub", "category": "GenericModels", "template": "Generic Model face based", "placement": "WorkPlaneBased" },
   "parameters": { "_diameter": { "dataType": "Length", "value": "3/4in", "isInstance": true } },
   "types": { "default": {} },

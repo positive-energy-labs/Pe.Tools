@@ -20,7 +20,7 @@ namespace Pe.App.Benchmarks;
 internal static class PracticalBenchmarks {
     internal const int DefaultIterations = 3;
     private const BuiltInCategory TestFamilyCategory = BuiltInCategory.OST_GenericModel;
-    private const string BoxFamilyModelFixture = "a-box.family.json";
+    private const string BoxFamilyModelFixture = "a-box.json";
 
     private const string FamilyFoundryRoundtripBenchmarkName =
         "FF_manager_roundtrip_can_repeat_on_staged_generic_family_document";

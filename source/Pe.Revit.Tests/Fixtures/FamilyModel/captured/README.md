@@ -7,8 +7,8 @@ script door with the capture dll loaded in its own `AssemblyLoadContext`
 
 | File | Source .rfa | Execution id |
 | --- | --- | --- |
-| `c-bath-shower.captured.family.json` | `PE Bath-Shower.rfa` (G: copy 2026-07-02, current type `Double Shower (head only)`) | `a2e0afe971c64af8975c6be2e779aa56` |
-| `b-grd.captured.family.json` | `PE GRD Exhaust.rfa` (G: `final unhosted` copy 2026-03-25) | `a2e0afe971c64af8975c6be2e779aa56` |
+| `c-bath-shower.captured.json` | `PE Bath-Shower.rfa` (G: copy 2026-07-02, current type `Double Shower (head only)`) | `a2e0afe971c64af8975c6be2e779aa56` |
+| `b-grd.captured.json` | `PE GRD Exhaust.rfa` (G: `final unhosted` copy 2026-03-25) | `a2e0afe971c64af8975c6be2e779aa56` |
 
 Documents were opened from the fixture copies and closed with `Close(false)`. Regenerate by rerunning the
 script or `FamilyModelCaptureTests` on the fresh lane once `Pe.Revit.Tests` builds.

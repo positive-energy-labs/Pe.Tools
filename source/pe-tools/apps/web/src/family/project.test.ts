@@ -2,7 +2,7 @@
  * The projection, both directions, against the SHOWCASE model.
  *
  * The fixture below is `source/Pe.Revit.Tests/Fixtures/Profiles/family-model/
- * family-model-showcase.family.json` transcribed as a typed `FamilyModel`. Transcribed rather than
+ * family-model-showcase.json` transcribed as a typed `FamilyModel`. Transcribed rather than
  * imported because this project does not enable `resolveJsonModule` — and typed rather than `any`,
  * so a schema change that would break the real document breaks this file first.
  *

@@ -5,7 +5,7 @@ namespace Pe.Shared.RevitData.Families;
 /// <summary>
 ///     The closed diagnostic code set. Every closed-set token error is <see cref="InvalidJson" /> from the
 ///     converters before any rule runs; the rest are validator rules (r2-schema §6). Rules that need the
-///     installed template table or a sibling `.family.json` (`unknown-template`, `unknown-nested-type`,
+///     installed template table or a nested family model (`unknown-template`, `unknown-nested-type`,
 ///     `unknown-instance-parameter`) live in the lowering, not here.
 /// </summary>
 public static class FamilyModelDiagnosticCodes {

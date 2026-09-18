@@ -212,9 +212,9 @@ internal static class RevitFamilyFixtureHarness {
                ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }
 
-    /// <summary>`Fixtures/FamilyModel/&lt;name&gt;.family.json`, parsed strictly and macro-expanded.</summary>
+    /// <summary>`Fixtures/FamilyModel/&lt;name&gt;.json`, parsed strictly and macro-expanded.</summary>
     public static FamilyModel LoadFamilyModelFixture(string name) {
-        var parsed = FamilyModelJson.Parse(File.ReadAllText(GetFamilyModelFixturePath($"{name}.family.json")));
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(GetFamilyModelFixturePath($"{name}.json")));
         return parsed.Value ?? throw new InvalidOperationException(string.Join(Environment.NewLine, parsed.Diagnostics.Select(d => $"{d.Path} {d.Code}: {d.Message}")));
     }
 

@@ -9,6 +9,7 @@ using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Parameters;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.StorageRuntime.Modules;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
 
@@ -17,7 +18,7 @@ namespace Pe.Revit.FamilyFoundry.Apply;
 ///     an open family document, and select the families a patch names in a project (r2-reconcile §6).
 /// </summary>
 public static class FamilyModelBuild {
-    /// <summary>Fresh document from the header's template; caller owns it. Nested dependencies resolve from modelDirectory: sibling .family.json before .rfa.</summary>
+    /// <summary>Fresh document from the header's template; caller owns it. Nested dependencies resolve from modelDirectory: sibling .json before .rfa.</summary>
     public static (Document Document, FamilyReceipt Receipt, string TemplatePath) Build(Application application, FamilyModel model,
         ExecutionOptions? options = null, string? modelDirectory = null,
         Func<Document, FamilySharedParameterSource>? sharedSource = null) =>
@@ -66,23 +67,21 @@ public static class FamilyModelBuild {
                 throw new InvalidOperationException($"Nested family '{name}' must be a portable sibling file name.");
             if (string.IsNullOrWhiteSpace(directory))
                 throw new InvalidOperationException($"ModelDirectory is required to resolve nested family '{name}'.");
-            var jsonPath = Path.Combine(directory, name + ".family.json");
+            var jsonPath = FamilyModelJson.FindModel(directory, name, SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.Root));
             var nativePath = Path.Combine(directory, name + ".rfa");
             Document? child = null;
             try {
-                if (File.Exists(jsonPath)) {
+                if (jsonPath is not null) {
                     var parsed = FamilyModelJson.Parse(File.ReadAllText(jsonPath));
                     if (parsed.Value is null || parsed.Diagnostics.Count != 0)
                         throw new InvalidOperationException($"Invalid dependency '{jsonPath}': {string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path}: {d.Message}"))}");
-                    if (parsed.Value.Family.Name != name)
-                        throw new InvalidOperationException($"Dependency '{jsonPath}' declares family '{parsed.Value.Family.Name}', expected '{name}'.");
                     child = Build(application, parsed.Value, options, directory, ancestors, sharedSource).Document;
                 } else if (File.Exists(nativePath)) {
                     child = application.OpenDocumentFile(nativePath);
                     if (!child.IsFamilyDocument)
                         throw new InvalidOperationException($"Dependency '{nativePath}' is not a family document.");
                 } else {
-                    throw new FileNotFoundException($"Nested family '{name}' requires sibling '{jsonPath}' or '{nativePath}'.");
+                    throw new FileNotFoundException($"Nested family '{name}' requires a family model named '{name}' in '{directory}' or '{nativePath}'.");
                 }
                 var loaded = child.LoadFamily(target, new DefaultFamilyLoadOptions())
                              ?? throw new InvalidOperationException($"Revit did not load nested family '{name}'.");
