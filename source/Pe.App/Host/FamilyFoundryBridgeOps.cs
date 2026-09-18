@@ -11,6 +11,7 @@ using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Pods;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
@@ -20,6 +21,7 @@ using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
 using System.IO;
+using System.Diagnostics;
 
 namespace Pe.App.Host;
 
@@ -36,7 +38,7 @@ internal static class FamilyFoundryBridgeOps {
     [Op("family.apply", Does = "Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
-            request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
+            request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, cancellationToken: cancellationToken)), cancellationToken);
 
     [Op("families.capture", Does = "Open selected loaded families read-only and capture each as a family.json spec with coverage.", Title = "Capture Loaded Families", Finds = ["families", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Expensive)]
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
@@ -75,6 +77,13 @@ internal static class FamilyFoundryBridgeOps {
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
         var podFolder = PodMembers.VerifiedFolder(request.Source);
         var run = PodRuns.NewRunFolder(podFolder);
+        var inputOutputs = PodRuns.WriteInputIn(run, new {
+            operation = "family.build",
+            source = request.Source,
+            target = new { kind = "new-family-document", process = ProcessEvidence(), revitVersion = application.VersionNumber },
+            options = new { request.ModelDirectory },
+            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+        }, request.SpecJson);
         var outputPath = Path.Combine(run, $"{FileName(parsed.Value.Family.Name)}.rfa");
         var source = request.Source;
         var handled = new List<(bool IsError, string Message)>();
@@ -82,10 +91,10 @@ internal static class FamilyFoundryBridgeOps {
             var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
             var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
-                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), EngineEdge.WarningsOutput(handled));
+                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [.. inputOutputs, outputPath], null), EngineEdge.WarningsOutput(handled));
             return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
-            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), EngineEdge.WarningsOutput(handled));
+            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
@@ -115,6 +124,17 @@ internal static class FamilyFoundryBridgeOps {
         CancellationToken cancellationToken = default) {
         var podFolder = PodMembers.VerifiedFolder(source);
         EngineEdge.RequireReachableCentral(document);
+        var run = PodRuns.NewRunFolder(podFolder);
+        var inputOutputs = PodRuns.WriteInputIn(run, new {
+            operation,
+            source,
+            target = DocumentTarget(document),
+            executionOptions,
+            selectedFamilyIds = expectedPlanHashes.Keys.OrderBy(id => id).ToList(),
+            expectedPlanHashes,
+            loadAndSave,
+            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+        }, specJson);
         var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
@@ -131,11 +151,11 @@ internal static class FamilyFoundryBridgeOps {
                 .Concat(EngineEdge.WarningsOutput(handled))
                 .ToList();
             // One family applied is a run that changed Revit, so it succeeded; its failed siblings are on the receipts.
-            var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
+            var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
                     data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
                         : data.Receipts.Any(r => r.Success) ? "Succeeded" : "Failed",
-                    [],
+                    inputOutputs,
                     relative.Reason),
                 outputs);
             return relative with {
@@ -145,6 +165,23 @@ internal static class FamilyFoundryBridgeOps {
         } finally {
             if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
         }
+    }
+
+    private static object DocumentTarget(Document document) {
+        var tracked = DocumentTrackerAccessor.Current?.Find(document);
+        return new {
+            kind = document.IsFamilyDocument ? "family-document" : "project-document",
+            openId = tracked?.OpenId(),
+            document.Title,
+            path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
+            process = ProcessEvidence(),
+            unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
+        };
+    }
+
+    private static object ProcessEvidence() {
+        using var process = Process.GetCurrentProcess();
+        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
     }
 
     /// <summary>Every failure with its full text: op-level diagnostics first, then each family's own. The run keeps it as `failures.json`.</summary>
@@ -195,19 +232,10 @@ internal static class FamilyFoundryBridgeOps {
             // A cancelled plan returns nothing: the confirmation sheet is only worth reading whole.
             cancellationToken.ThrowIfCancellationRequested();
             try { return WithFamilyDocument(document, family, (famDoc, editDiagnostics) => {
-            var current = famDoc.CaptureFamilyModel();
-            var warnings = CaptureIssues(current, family, editDiagnostics);
-            var effective = patch.ResolveParameterRules(current);
-            var desired = FamilyReconciler.Desired(current, patch);
-            if (desired.Value is null || desired.Diagnostics.Count > 0)
-                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], desired.Diagnostics.Select(ToDiagnostic).ToList(), warnings);
-            using var source = new FamilySharedParameterSource(famDoc);
-            var resolved = FamilyReconciler.ResolveNativeFormulas(source.Resolve(desired.Value, effective), famDoc);
-            var unitDiagnostics = FamilyModelUnitValidation.Validate(resolved, effective, source.GetDefinition);
-            if (unitDiagnostics.Count > 0)
-                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList(), warnings);
-            var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, effective, source.ResolvedDefinitions, executionOptions);
-            return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, plan.PlanHash, plan.Changes.Select(ToChange).ToList(), plan.RunEffects, plan.Refusals.Select(ToDiagnostic).ToList(), warnings);
+            var preview = famDoc.PreviewFamily(patch, executionOptions);
+            var warnings = CaptureIssues(preview.Original, family, editDiagnostics);
+            return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, preview.PlanHash,
+                preview.Changes.Select(ToChange).ToList(), preview.RunEffects, preview.Diagnostics.Select(ToDiagnostic).ToList(), warnings);
             }); } catch (Exception exception) when (exception is Autodesk.Revit.Exceptions.InvalidOperationException or InvalidOperationException) {
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [],
                     [new FamilyFoundryDiagnostic("FamilyEditRefused", "$.familyId", exception.Message)], []);

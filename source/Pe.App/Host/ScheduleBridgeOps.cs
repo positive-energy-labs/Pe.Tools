@@ -8,6 +8,7 @@ using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Pods;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
 using Pe.Revit.SettingsRuntime.Modules;
@@ -16,6 +17,7 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using System.IO;
+using System.Diagnostics;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Host;
@@ -35,7 +37,7 @@ internal static class ScheduleBridgeOps {
         PaletteThreading.RunRevitAsync(() => {
             try {
                 var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(request.SpecJson, request.SpecJson, $"{request.Source.Pod}:{request.Source.Path}");
-                return ApplySpec(document.Value, spec, request.Source).Data;
+                return ApplySpec(document.Value, spec, request.SpecJson, request.Source).Data;
             } catch (JsonValidationException exception) {
                 throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, exception.ValidationErrors));
             } catch (Exception exception) when (exception is InvalidDataException or DirectoryNotFoundException or FileNotFoundException) {
@@ -51,9 +53,16 @@ internal static class ScheduleBridgeOps {
     }
 
     /// <summary>The one apply edge for bridge op and palette: new schedule, then the run in the source pod.</summary>
-    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, PodMemberSource source) {
+    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, string specJson, PodMemberSource source) {
         var podFolder = PodMembers.VerifiedFolder(source);
         EngineEdge.RequireReachableCentral(document);
+        var run = PodRuns.NewRunFolder(podFolder);
+        var inputOutputs = PodRuns.WriteInputIn(run, new {
+            operation = "schedule.apply",
+            source,
+            target = DocumentTarget(document),
+            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+        }, specJson);
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
@@ -72,7 +81,7 @@ internal static class ScheduleBridgeOps {
                 return created;
             });
         } catch (Exception exception) {
-            _ = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Failed", [], exception.Message),
+            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Failed", inputOutputs, exception.Message),
                 EngineEdge.WarningsOutput(handled));
             throw;
         }
@@ -82,10 +91,27 @@ internal static class ScheduleBridgeOps {
             .Concat(result.FilterBySheetSkipped is { } sheet ? [$"Filter by sheet: {sheet}"] : [])
             .ToList();
         var resultJson = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ResultReport(result), Formatting.Indented));
-        var receiptPath = PodRuns.WriteReceipt(podFolder,
-            new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [$"schedule:{result.Schedule.Id.Value()}"], null),
+        var receiptPath = PodRuns.WriteReceiptIn(run,
+            new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [.. inputOutputs, $"schedule:{result.Schedule.Id.Value()}"], null),
             [("result.json", resultJson), .. EngineEdge.WarningsOutput(handled)]);
         return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped, result.Warnings, receiptPath), result);
+    }
+
+    private static object DocumentTarget(Document document) {
+        var tracked = DocumentTrackerAccessor.Current?.Find(document);
+        return new {
+            kind = "project-document",
+            openId = tracked?.OpenId(),
+            document.Title,
+            path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
+            process = ProcessEvidence(),
+            unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
+        };
+    }
+
+    private static object ProcessEvidence() {
+        using var process = Process.GetCurrentProcess();
+        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
     }
 
     private static object ResultReport(ScheduleCreationResult result) => new {

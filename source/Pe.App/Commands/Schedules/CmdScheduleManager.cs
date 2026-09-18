@@ -273,9 +273,9 @@ public class CmdScheduleManager : IExternalCommand {
         ScheduleCreationResult result;
         string receiptPath;
         try {
-            var (spec, _, source) = ctx.SelectedProfile.Member.Load<SharedScheduleProfile>(ctx.SelectedProfile.Pod);
+            var (spec, composed, source) = ctx.SelectedProfile.Member.Load<SharedScheduleProfile>(ctx.SelectedProfile.Pod);
             scheduleProfile = spec;
-            var applied = ScheduleBridgeOps.ApplySpec(ctx.Doc, spec, source);
+            var applied = ScheduleBridgeOps.ApplySpec(ctx.Doc, spec, composed, source);
             result = applied.Result;
             receiptPath = applied.Data.ReceiptPath;
         } catch (Exception ex) {
@@ -442,8 +442,8 @@ public class CmdScheduleManager : IExternalCommand {
 
             foreach (var member in batchItem.Schedules()) {
                 try {
-                    var (spec, _, source) = member.Load<SharedScheduleProfile>(batchItem.Pod);
-                    var applied = ScheduleBridgeOps.ApplySpec(context.Doc, spec, source);
+                    var (spec, composed, source) = member.Load<SharedScheduleProfile>(batchItem.Pod);
+                    var applied = ScheduleBridgeOps.ApplySpec(context.Doc, spec, composed, source);
                     results.Add((member.Path, true, string.Empty));
                     createdSchedules.Add(applied.Result.ScheduleName);
                     receipts.Add(applied.Data.ReceiptPath);

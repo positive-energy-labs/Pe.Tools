@@ -31,6 +31,7 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-17: The audit stage is a live read of the target's entity into an in-memory draft; capture and apply are "save this draft as a member" and "write this draft to Revit". A pod appears at save, not at audit. `/family` stops requiring a saved member to look at a family. One draft shape per entity serves the audit table and the spec editor; on schedules, cell values are a section of the spec that capture omits. (Shape B1; the user: "if it makes sense architecturally and/or could help us code share and consolidate then I'm in".)
 - 2026-09-17: A draft is thread-owned Work, not route-owned page state. Pea proposes into it from chat without the route being open; the inline chat card renders the same proposals band the route renders; the user opens the route to see the whole table. "User asks to rename a param across the entire project, then the inline rendered proposal in chat surfaces it to the user, and the user can open the route to see. That is my dream."
 - 2026-09-18: Composition retains the exact consumed root and dependency bytes once; effective JSON is a decoded view and never source-byte authority.
+- 2026-09-18: Family build/apply and schedule apply write immutable `input.json` evidence plus byte-exact `effective-input.json` before native effects, and receipts retain both paths for admitted outcomes. Authored root/dependency bytes and reviewed Work revisions remain owed because these native callers do not receive them.
 
 ## Tried & rejected
 
@@ -43,6 +44,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-16: Whole-pod snapshot hash as receipt attribution; an edit to an unrelated member changes every future receipt's source. Attribution uses member path plus member SHA-256.
 
 ## Owed
+
+- Bind Plan and Apply to one reviewed Work revision and retain authored root and dependency bytes when composition contributes them; the native input output currently proves only the effective JSON and evidence available at its call boundary.
 
 - Publish transform: vendoring in `ScriptPodArchiveService.cs`. Accept when a pod that references `@global/_fields/Header` publishes, imports on a machine with no `global` pod, and composes without error; the vendored file is byte-identical to the source.
 - Manifest: remove `requires`, `parent`, `origin`, `externalRequirements` gating from `PodManifest.cs`; keep `schemaVersion`, `id`, `name`, `version`, `description`, `entrypoints`. Accept when `PodManifestValidator` rejects the removed fields as unknown.

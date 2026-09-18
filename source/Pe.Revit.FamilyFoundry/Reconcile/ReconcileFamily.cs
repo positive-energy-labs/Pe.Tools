@@ -81,35 +81,15 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext ctx, OperationContext groupContext) {
         this.Reset();
         var formulaCache = new Dictionary<(string Parameter, string Formula), string>();
-        var current = this._capture(doc.Document);
         var authoredPatch = this._patch ?? new FamilyPatch { Patch = Newtonsoft.Json.Linq.JObject.Parse(FamilyModelJson.Serialize(this._desired!)) };
-        var patch = new FamilyPatch { Select = authoredPatch.Select, Run = authoredPatch.Run, Patch = authoredPatch.ResolveParameterRules(current) };
         using var source = this._sharedSource?.Invoke(doc.Document) ?? new FamilySharedParameterSource(doc.Document);
-        FamilyModel? desired;
-        {
-            var parsed = FamilyReconciler.Desired(current, patch);
-            if (parsed.Value is null || parsed.Diagnostics.Count > 0)
-                return new OperationLog(this.Name, parsed.Diagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
-            desired = source.Resolve(parsed.Value, patch.Patch);
-            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document, formulaCache);
-        }
-
-        foreach (var parameter in (authoredPatch.Patch["parameters"] as Newtonsoft.Json.Linq.JObject)?.Properties() ?? [])
-            if (parameter.Value is Newtonsoft.Json.Linq.JObject fields && fields["tooltip"] is { Type: not Newtonsoft.Json.Linq.JTokenType.Null } tooltip &&
-                current.Parameters.TryGetValue(parameter.Name, out var existing) && existing.Shared == true &&
-                desired.Parameters.TryGetValue(parameter.Name, out var target) && target.Shared == true &&
-                existing.SharedGuid == target.SharedGuid &&
-                !string.Equals(existing.Tooltip, (string?)tooltip, StringComparison.Ordinal)) {
-                var unreadable = current.Unmodeled.Any(fact => fact.Reason == UnmodeledReason.ParameterMetadataUnreadable &&
-                    fact.Path == $"$.parameters.{parameter.Name}.tooltip");
-                throw new InvalidOperationException(unreadable
-                    ? $"Explicit tooltip for existing shared parameter '{parameter.Name}' cannot be verified because its native tooltip could not be read."
-                    : $"Explicit tooltip for existing shared parameter '{parameter.Name}' is '{(string?)tooltip}', but its captured native tooltip is '{existing.Tooltip ?? ""}'. Shared tooltip replacement is unsupported.");
-            }
-        var unitDiagnostics = FamilyModelUnitValidation.Validate(desired!, patch.Patch, source.GetDefinition);
-        if (unitDiagnostics.Count > 0)
-            return new OperationLog(this.Name, unitDiagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
-        var plan = FamilyReconciler.Reconcile(desired!, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, patch.Patch, source.ResolvedDefinitions, this._executionOptions);
+        var prepared = FamilyPreparation.Prepare(doc.Document, authoredPatch, this._executionOptions, source, this._capture, formulaCache);
+        if (prepared.Diagnostics.Count > 0)
+            return new OperationLog(this.Name, prepared.Diagnostics.Select(d => new LogEntry(d.Path).Error($"{d.Code}: {d.Message}")).ToList());
+        var current = prepared.Original;
+        var patch = prepared.EffectivePatch;
+        var desired = prepared.Desired!;
+        var plan = prepared.Plan!;
         this.ObservedParametersDigest = source.ObservedParametersDigest;
         this.ObservedResourceIds = source.ObservedResourceIds.OrderBy(id => id, StringComparer.Ordinal).ToList();
         this.LastPlan = plan;
@@ -130,7 +110,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             if (afterMigration.Value is null || afterMigration.Diagnostics.Count > 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, afterMigration.Diagnostics.Select(d => d.Message)));
             desired = source.Resolve(afterMigration.Value, patch.Patch);
-            desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document, formulaCache);
+            desired = FamilyPreparation.ResolveNativeFormulas(desired, doc.Document, formulaCache);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
         }
         if (applyPlan.Refusals.Count > 0)
@@ -140,7 +120,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             OperationProcessor.ThrowOnErrors(logs);
         }
         doc.Document.Regenerate();
-        desired = FamilyReconciler.ResolveNativeFormulas(desired!, doc.Document, formulaCache);
+        desired = FamilyPreparation.ResolveNativeFormulas(desired!, doc.Document, formulaCache);
         var observed = this._capture(doc.Document);
         var connectorRule = this._patch?.Run?.ElectricalConnectorParameters;
         var authoredConnectorAssociations = (this._patch?.Patch["connectors"] as Newtonsoft.Json.Linq.JObject)?.Properties()
