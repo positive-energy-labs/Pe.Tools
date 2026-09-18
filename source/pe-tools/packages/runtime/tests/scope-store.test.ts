@@ -3,6 +3,7 @@ import type { Session } from "@mastra/core/agent-controller";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createDeterministicRuntime } from "../src/testing.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "../src/scope-store.ts";
+import { turnContextKey, type Turn } from "@pe/agent-contracts";
 
 function deferred() {
   let resolve!: () => void;
@@ -152,30 +153,50 @@ test("scope PUT fences running writes and applies an approved proposal only to f
     const first = { kind: "open", ref: { session: "s", openId: "first" } } as const;
     const second = { kind: "open", ref: { session: "s", openId: "second" } } as const;
     expect((await put({ defaultTarget: first, expectedRevision: 0 })).status).toBe(200);
-    const approvedTurn = crypto.randomUUID();
-    let frozen: unknown;
-    await runtime.scopes.admit("thread", approvedTurn, async (head) => {
-      frozen = structuredClone(head);
-    });
     const session = await runtime.controller.createSession({
       resourceId: runtime.resourceId,
       scope: "thread",
       threadId: "thread",
     });
-    vi.spyOn(session.run, "isRunning").mockReturnValue(true);
+    const isRunning = vi.spyOn(session.run, "isRunning").mockReturnValue(true);
 
     expect((await put({ defaultTarget: second, expectedRevision: 1 })).status).toBe(409);
+
+    const turns: Turn[] = [];
+    const contextTurns: Turn[] = [];
+    vi.spyOn(session, "sendSignal").mockImplementation(((input, options) => {
+      const turn = (input as { metadata?: { turn?: Turn } }).metadata?.turn;
+      if (!turn) throw new Error("missing turn metadata");
+      const requestContext = options?.requestContext;
+      if (!requestContext) throw new Error("missing turn request context");
+      turns.push(turn);
+      contextTurns.push((requestContext as { get(key: string): Turn }).get(turnContextKey));
+      return {
+        id: turn.id,
+        type: "user",
+        accepted: Promise.resolve({ accepted: true as const }),
+      };
+    }) as typeof session.sendSignal);
+    await admitTurn(runtime.scopes, session, { content: "run" });
+    const approvedTurn = turns[0].id;
+
     expect(
       (await put({ defaultTarget: second, expectedRevision: 1, turn: crypto.randomUUID() })).status,
     ).toBe(409);
     expect(
       (await put({ defaultTarget: second, expectedRevision: 1, turn: approvedTurn })).status,
     ).toBe(200);
-    expect(frozen).toMatchObject({ defaultTarget: first, revision: 1 });
+    expect(turns[0]).toMatchObject({ defaultTarget: first, revision: 1 });
+    expect(contextTurns[0]).toEqual(turns[0]);
     expect(await runtime.scopes.read("thread")).toMatchObject({
       defaultTarget: second,
       revision: 2,
     });
+    isRunning.mockReturnValue(false);
+    await admitTurn(runtime.scopes, session, { content: "next" });
+    expect(turns[0]).toMatchObject({ defaultTarget: first, revision: 1 });
+    expect(turns[1]).toMatchObject({ defaultTarget: second, revision: 2 });
+    expect(contextTurns[1]).toEqual(turns[1]);
   } finally {
     await runtime.close?.();
   }
