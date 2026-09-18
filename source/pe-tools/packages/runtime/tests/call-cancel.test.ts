@@ -11,6 +11,8 @@ import { readThreadState } from "../src/thread-state.ts";
 // A person's cancel is recorded per call, so the transcript can say `cancelled` honestly; a host
 // restart and an unanswered ask stay what they were. Only the model is fake.
 const call = "scenario-call-0";
+// Its own thread: Mastra's thread lock is shared by every test process on this machine.
+const thread = `call-cancel-${crypto.randomUUID()}`;
 /** A gated call that, once approved, never settles: a native call still in flight at cancel. */
 const inFlight = createTool({
   id: "pe_find",
@@ -42,8 +44,8 @@ async function start() {
     });
     const session = await runtime.controller.createSession({
       resourceId: "r",
-      scope: "t",
-      threadId: "t",
+      scope: thread,
+      threadId: thread,
     });
     return { runtime, session };
   };
@@ -61,7 +63,7 @@ async function gate(
   await armed;
   if (approve) session.respondToToolApproval({ decision: "approve", toolCallId: call });
   await expect
-    .poll(async () => JSON.stringify((await readThreadState(runtime, session, "t")).messages))
+    .poll(async () => JSON.stringify((await readThreadState(runtime, session, thread)).messages))
     .toContain(call);
 }
 
@@ -73,7 +75,7 @@ test("a person's cancel lists the approved call it stopped", async () => {
     session.abort();
     await ended;
 
-    const state = await readThreadState(runtime, session, "t");
+    const state = await readThreadState(runtime, session, thread);
     expect(state.cancelledCalls).toEqual([
       { messageId: expect.any(String), toolCallId: call, toolName: "pe_find" },
     ]);
@@ -90,7 +92,7 @@ test("a host restart lists nothing: the call ended without a terminal result", a
   await first.runtime.close?.();
   const { runtime, session } = await first.open();
   try {
-    const state = await readThreadState(runtime, session, "t");
+    const state = await readThreadState(runtime, session, thread);
     expect(JSON.stringify(state.messages)).toContain(call);
     expect(state.cancelledCalls).toBeUndefined();
     expect(state.expiredAsks).toBeUndefined();
@@ -107,7 +109,7 @@ test("an ask a cancel ends stays an expired ask, not a cancelled call", async ()
     session.abort();
     await ended;
 
-    const state = await readThreadState(runtime, session, "t");
+    const state = await readThreadState(runtime, session, thread);
     expect(state.expiredAsks).toEqual([
       expect.objectContaining({ toolCallId: call, toolName: "pe_find" }),
     ]);
