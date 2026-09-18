@@ -12,6 +12,7 @@ import { Tag } from "#/components/lang/chip";
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
 import { Press } from "#/components/lang/press";
+import { Input } from "#/components/lang/input";
 
 export type SheetRow = Grille & { id: string };
 
@@ -84,7 +85,7 @@ export function Sheet({
         { value: "off", label: "not on the sheet" },
       ],
       cell: (r) => (
-        <input
+        <Input
           type="checkbox"
           checked={picked.has(r.id)}
           onChange={(e) => onPick(r.id, e.target.checked)}

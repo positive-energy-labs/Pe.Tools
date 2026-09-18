@@ -83,7 +83,13 @@ export function UiInputSpecimens() {
         importPath="#/components/lang/input"
         recipe={inputRecipe}
         render={(props) => (
-          <Input surface={props.surface as "field" | "embedded"} placeholder="search params" />
+          <Input
+            type={props.kind === "check" ? "checkbox" : undefined}
+            surface={props.surface as "field" | "embedded"}
+            aria-label={props.kind === "check" ? "include row" : undefined}
+            placeholder="search params"
+            defaultChecked={props.kind === "check" ? true : undefined}
+          />
         )}
       />
       <RecipeGrid
