@@ -74,7 +74,7 @@ test("capture evidence comes from the newest capture of this document and names 
   const result = {
     member: { pod: "demo", path: "settings/family/Box.json", sha256: "a".repeat(64) },
     evidence: {
-      reading: { at: "C:/Box.rfa", version: null, observedAt: "2026-09-17T02:00:00Z" },
+      observedAt: "2026-09-17T02:00:00Z",
       familyName: "Box",
       modelJson: "{}",
       unmodeledCount: 2,

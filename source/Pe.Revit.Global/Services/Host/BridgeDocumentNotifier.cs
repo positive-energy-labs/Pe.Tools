@@ -41,6 +41,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 this._documents.Opened -= this.OnOpened;
                 this._documents.Closed -= this.OnClosed;
                 this._documents.ActiveChanged -= this.OnActiveChanged;
+                this._documents.KeyChanged -= this.OnKeyChanged;
                 this._documents.Changed -= this.OnChanged;
             }
 
@@ -60,6 +61,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             this._isReplaying = false;
             this._documents.Closed += this.OnClosed;
             this._documents.ActiveChanged += this.OnActiveChanged;
+            this._documents.KeyChanged += this.OnKeyChanged;
             this._documents.Changed += this.OnChanged;
             this._isInitialized = true;
         }
@@ -78,6 +80,10 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Closed);
 
     private void OnActiveChanged(TrackedDocument? active) =>
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+
+    // SaveAs and first save move the address; the host must hear it without waiting for an edit.
+    private void OnKeyChanged(TrackedDocument tracked, DocumentKey previous) =>
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
     private void OnChanged(TrackedDocument tracked, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {
