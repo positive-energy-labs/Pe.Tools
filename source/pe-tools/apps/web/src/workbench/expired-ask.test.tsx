@@ -82,3 +82,28 @@ test("the context strip draws an expired call as a quiet record, not running or 
   expect(meta.textContent).toBe("expired");
   expect(meta.textContent).not.toMatch(/in progress|failed/);
 });
+
+test("expired is keyed by the runtime's ask record, never by the tool name", () => {
+  const stopped = (toolCallId: string, toolName: string) =>
+    ({
+      ...askCall,
+      id: `m-${toolCallId}`,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: "tool-invocation",
+            toolInvocation: { state: "call", toolCallId, toolName, args: {} },
+          },
+        ],
+      },
+    }) as unknown as MastraDBMessage;
+  const state: ChatState = {
+    ...emptyChatState(),
+    messages: [askCall, stopped("run-1", "run_script"), stopped("ask-2", "ask_user")],
+    expiredAsks: [{ messageId: "a1", toolCallId: "ask-1", toolName: "ask_user" }],
+  };
+  const status = Object.fromEntries(selectToolCalls(state).map((call) => [call.id, call.status]));
+  // ponytail: a stopped non-ask call is `failed` until the runtime records who stopped it.
+  expect(status).toEqual({ "ask-1": "expired", "run-1": "failed", "ask-2": "failed" });
+});
