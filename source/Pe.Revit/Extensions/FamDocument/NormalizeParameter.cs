@@ -19,8 +19,11 @@ public static class FamilyDocumentNormalizeParameter {
         // Shared replacement cannot create an external definition while another parameter owns its name.
         if (!source.IsShared && shared is not null && source.Definition.Name == shared.Name)
             fm.RenameParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"));
+        // A shared source always leaves through a unique temporary family name: replacing it straight to `name` fails natively when
+        // it already holds that name ("The parameter 'X' is already in use", shared→family same-name). The rename below restores `name`;
+        // any failure rolls this sub-transaction back, so the temporary name never survives.
         else if (source.IsShared)
-            replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
+            replacement = fm.ReplaceParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
         else {
             if (replacement.Definition.Name != name) fm.RenameParameter(replacement, name);
