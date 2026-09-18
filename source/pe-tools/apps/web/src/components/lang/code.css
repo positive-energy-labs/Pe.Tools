@@ -1,0 +1,148 @@
+/* The code block's token and overlay CSS. Token classes come from @tanstack/highlight
+   (`th-token th-<class>`); colors ride the design-lang role tokens (design-lang.css) so a
+   block reads as part of the design around it. Washes follow lang.css's
+   color-mix-over---pe-on idiom. */
+
+[data-code-pane] {
+  position: relative;
+  overflow: auto;
+  tab-size: 2;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+}
+
+[data-code-pane] pre.th-code {
+  font: inherit;
+  margin: 0;
+  padding: 8px 12px;
+  white-space: pre;
+}
+
+/* A drawn `mermaid` block (`diagram.tsx`): the SVG fits the pane and centers; its colors are
+   already `var(--pe-*)`. */
+[data-code-pane][data-diagram] {
+  padding: 8px 12px;
+}
+[data-code-pane][data-diagram] svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* `wrap`: machine prose with no line structure to protect — error text, a system prompt. */
+[data-code-pane][data-code-wrap] pre.th-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* json token roles — property keys lead; strings/numbers get quiet distinction. */
+[data-code-pane] .th-property {
+  color: var(--pe-ink);
+  font-weight: var(--weight-medium);
+}
+[data-code-pane] .th-string {
+  color: var(--pe-ink-2);
+}
+[data-code-pane] .th-number {
+  color: var(--pe-commit);
+}
+[data-code-pane] .th-literal {
+  color: var(--pe-caution);
+}
+[data-code-pane] .th-operator,
+[data-code-pane] .th-meta {
+  color: var(--pe-ink-mute);
+}
+
+/* line decorations — callers pass classNames on decorations */
+[data-code-pane] .th-line {
+  display: inline-block;
+  min-width: 100%;
+}
+[data-code-pane] .th-line.dec-proposed {
+  background: color-mix(in srgb, var(--pe-pea-ink) 12%, var(--pe-on));
+}
+[data-code-pane] .th-line.dec-staged {
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
+}
+[data-code-pane] .th-line.dec-attention {
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
+  box-shadow: inset 2px 0 0 var(--pe-caution);
+}
+[data-code-pane] .th-line.dec-issue {
+  box-shadow: inset 2px 0 0 var(--pe-alarm);
+}
+
+/* The focused structured field, painted in the json. Selection is a FILL, never a hue. */
+[data-code-pane] .th-decoration.dec-field {
+  background: var(--pe-select);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pe-ink) 20%, transparent);
+  border-radius: var(--radius);
+}
+
+/* ── editor overlay: paint and textarea share one grid cell; the pane is the only scroller ── */
+[data-code-editor] {
+  display: grid;
+  height: 100%;
+}
+
+[data-code-paint],
+[data-code-input] {
+  grid-area: 1 / 1;
+}
+
+[data-code-paint] {
+  pointer-events: none;
+}
+
+[data-code-input] {
+  min-width: 0;
+  padding: 8px 12px;
+  margin: 0;
+  border: 0;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--pe-ink);
+  font: inherit;
+  letter-spacing: inherit;
+  tab-size: 2;
+  white-space: pre;
+  overflow: hidden;
+}
+
+[data-code-input]::selection {
+  background: color-mix(in srgb, var(--pe-ink) 18%, transparent);
+}
+
+/* ── the roles JSON does not have: every other language's tokens, on the same palette ── */
+[data-code-pane] .th-keyword,
+[data-code-pane] .th-tag {
+  color: var(--pe-ink);
+  font-weight: var(--weight-medium);
+}
+[data-code-pane] .th-type,
+[data-code-pane] .th-function,
+[data-code-pane] .th-selector,
+[data-code-pane] .th-command {
+  color: var(--pe-pea-ink);
+}
+[data-code-pane] .th-comment {
+  color: var(--pe-ink-mute);
+}
+[data-code-pane] .th-attr,
+[data-code-pane] .th-variable,
+[data-code-pane] .th-link,
+[data-code-pane] .th-heading,
+[data-code-pane] .th-code-inline {
+  color: var(--pe-ink-2);
+}
+[data-code-pane] .th-inserted {
+  color: var(--pe-done);
+}
+[data-code-pane] .th-deleted {
+  color: var(--pe-alarm);
+}

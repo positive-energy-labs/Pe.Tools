@@ -1,24 +1,18 @@
 import { FileUp, Link2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
-import { PROSE_CLASS } from "#/workbench/prose";
+import { Markdown } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { ImagesPane, MarkdownBlock, PagePane } from "./images-pane";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {
-  return (
-    <div className={cn(PROSE_CLASS, "max-w-none [&_table]:my-1 [&_:first-child]:mt-0")}>
-      <Markdown remarkPlugins={[remarkGfm]}>{md}</Markdown>
-    </div>
-  );
+  return <Markdown text={md} className="[&_table]:my-1 [&_:first-child]:mt-0" />;
 });
 
 export const pageKey = (page: number) => `p${page}`;
@@ -163,7 +157,7 @@ export function UploadSurface({
               placeholder="…or paste a public PDF URL"
             />
           </div>
-          <Verb
+          <ActionButton
             label="parse"
             onClick={submitUrl}
             disabled={!url.trim()}
@@ -197,7 +191,7 @@ export function MarkdownPane({
     >
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
-          <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
+          <div key={page.page} ref={anchorRef(refs, pageKey(page.page))}>
             <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1">Page {page.page}</p>
             <div className="flex flex-col gap-1">
               {engine.blocksForPage(page.page).map((block) => (
@@ -211,7 +205,7 @@ export function MarkdownPane({
   );
 }
 
-export function laneAnchorRef(refs: React.RefObject<Map<string, HTMLElement>>, key: string) {
+export function anchorRef(refs: React.RefObject<Map<string, HTMLElement>>, key: string) {
   return (el: HTMLElement | null) => {
     if (el) refs.current.set(key, el);
     else refs.current.delete(key);

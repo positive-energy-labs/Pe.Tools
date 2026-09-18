@@ -3,7 +3,7 @@ import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { GroundedBlock, ParsedPage } from "#/grounded-doc/types";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
-import { BlockMarkdown, VEIL_HOVER, laneAnchorRef, pageKey } from "./block-markdown";
+import { BlockMarkdown, VEIL_HOVER, anchorRef, pageKey } from "./block-markdown";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export function ImagesPane({
@@ -26,7 +26,7 @@ export function ImagesPane({
           const images = engine.imagesForPage(page.page);
           if (images.length === 0) return null;
           return (
-            <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
+            <div key={page.page} ref={anchorRef(refs, pageKey(page.page))}>
               <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1">Page {page.page}</p>
               <div className="flex flex-col gap-2">
                 {images.map((image) => {
@@ -38,7 +38,7 @@ export function ImagesPane({
                       tone="neutral"
                       state={isFocused ? "focused" : "rest"}
                       key={image.id}
-                      ref={laneAnchorRef(refs, image.id)}
+                      ref={anchorRef(refs, image.id)}
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
                       style={{ overflow: "hidden" }}
@@ -164,7 +164,7 @@ export function PageCanvas({
   });
 
   return (
-    <div ref={laneAnchorRef(refs, pageKey(page.page))}>
+    <div ref={anchorRef(refs, pageKey(page.page))}>
       <p className="mb-1">Page {page.page}</p>
       <div
         className="relative overflow-hidden"
@@ -220,7 +220,7 @@ export function PageCanvas({
               tone="neutral"
               state={isFocused ? "focused" : "rest"}
               key={image.id}
-              ref={laneAnchorRef(refs, image.id)}
+              ref={anchorRef(refs, image.id)}
               style={{ ...toPercent(image.bbox), position: "absolute" }}
               title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
