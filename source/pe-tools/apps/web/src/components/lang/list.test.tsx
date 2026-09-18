@@ -238,3 +238,18 @@ test("in-cell: Enter opens from the td, a pick commits and focus returns, Tab mo
   await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).toBeNull());
   expect(document.activeElement).toBe(document.querySelectorAll("td[data-cell]")[1]);
 });
+
+test("in-cell: a printable key opens the list already filtered by it", async () => {
+  render(<Cells count={1} />);
+  const td = document.querySelector<HTMLElement>("td[data-cell]")!;
+  await act(async () => td.focus());
+  await act(async () => fireEvent.keyDown(td, { key: "d" }));
+  await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).not.toBeNull());
+  expect(rows()).toEqual(["Double"]);
+});
+
+test("a footer holds verbs that are not rows", () => {
+  render(<Words footer={<button type="button">Clear target</button>} />);
+  expect(screen.getByRole("button", { name: "Clear target" })).toBeTruthy();
+  expect(rows()).not.toContain("Clear target");
+});

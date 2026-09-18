@@ -49,6 +49,8 @@ export interface CollectionOptions<T> {
   onTab?: (back: boolean) => boolean;
   /** A query owned outside the list (the composer's text after "/", R14). */
   query?: string;
+  /** The query the list opens with (a cell opened by a printable key, R13). */
+  initialQuery?: string;
   /** The hotkey registry region these keys belong to (a pane id or a widget name). */
   region: string;
   /** The element the keys listen on: the list itself, or the input that owns it (R14). */
@@ -117,7 +119,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     status: remote = "ready",
   } = options;
   const listId = useId();
-  const [ownQuery, setOwnQuery] = useState("");
+  const [ownQuery, setOwnQuery] = useState(options.initialQuery ?? "");
   const query = options.query ?? ownQuery;
   const setQuery = (next: string) => setOwnQuery(next);
   const [cursorKey, setCursorKey] = useState<string | null>(null);

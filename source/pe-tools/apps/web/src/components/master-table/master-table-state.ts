@@ -52,7 +52,12 @@ export function editCell(cell: HTMLTableCellElement, replacement?: string): bool
     }
     // A button-shaped editor (a CellSelect's trigger) declares itself; editing it is opening it.
     const opener = cell.querySelector<HTMLButtonElement>("[data-cell-editor]:not([disabled])");
-    if (!opener || replacement !== undefined) return false;
+    if (!opener) return false;
+    // A printable key opens a list editor already filtered by it; other editors ignore it.
+    if (replacement !== undefined) {
+      if (!opener.hasAttribute("data-cell-query")) return false;
+      opener.dataset.query = replacement;
+    }
     opener.click();
     return true;
   }

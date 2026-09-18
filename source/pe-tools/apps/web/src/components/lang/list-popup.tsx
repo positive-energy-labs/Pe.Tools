@@ -46,6 +46,8 @@ export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   owner?: HTMLElement | null;
   /** Rows scroll inside this height; group heads stick. */
   maxHeight?: string;
+  /** Verbs under the rows that are not rows (the head picker's "Clear target", R11). */
+  footer?: ReactNode;
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
   onCollection?: (collection: Collection<T>) => void;
 };
@@ -139,6 +141,7 @@ export function List<T>(props: ListProps<T>) {
         ) : null}
         {status === "pending" || status === "failed" ? null : visible.map(render)}
       </div>
+      {props.footer != null ? <div className="hairline-t px-1 pt-1">{props.footer}</div> : null}
     </div>
   );
 }
@@ -227,6 +230,8 @@ export function CellListSelect<T>({
   ...list
 }: Omit<ListProps<T>, "onEscape" | "onTab"> & { value: string; display?: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // A printable key on the td opens the list already filtered by it (R13).
+  const [initial, setInitial] = useState("");
   const host = useContext(CellHost);
   const move = useCellNavigation();
   const close = () => {
@@ -239,8 +244,13 @@ export function CellListSelect<T>({
         type="button"
         tabIndex={-1}
         data-cell-editor=""
+        data-cell-query=""
         className="flex h-(--item-h) w-full min-w-0 items-center justify-between gap-1 px-1 face-mono"
-        onClick={() => setOpen(true)}
+        onClick={(event) => {
+          setInitial(event.currentTarget.dataset.query ?? "");
+          delete event.currentTarget.dataset.query;
+          setOpen(true);
+        }}
       >
         {display ?? value}
         <span aria-hidden className="text-ink-2">
@@ -252,6 +262,7 @@ export function CellListSelect<T>({
           <PopupFrame anchor={host?.current} label={list["aria-label"]}>
             <List
               {...list}
+              initialQuery={initial}
               filter={list.filter ?? "substring"}
               onPick={(item, path) => {
                 list.onPick?.(item, path);
