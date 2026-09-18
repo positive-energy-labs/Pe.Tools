@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Factory</title>
+    <style>
+      :root {
+        color: #1d1d1b;
+        background: #f6f5f1;
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 1100px;
+        padding: 32px;
+      }
+      h1,
+      h2 {
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      section {
+        margin-block: 32px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border-bottom: 1px solid rgb(29 29 27 / 20%);
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      .mono,
+      .number,
+      #feed {
+        font-family: ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .error {
+        color: #c43d3d;
+      }
+      .chart {
+        border-bottom: 1px solid rgb(29 29 27 / 20%);
+        margin-block: 20px;
+      }
+      svg {
+        display: block;
+        height: 180px;
+        overflow: visible;
+        width: 100%;
+      }
+      #feed {
+        list-style: none;
+        padding: 0;
+      }
+      #feed li {
+        border-bottom: 1px solid rgb(29 29 27 / 12%);
+        padding: 6px 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Factory</h1>
+    <section>
+      <h2>Loops</h2>
+      <div id="loops">no events yet</div>
+    </section>
+    <section>
+      <h2>Control charts</h2>
+      <div id="charts">no events yet</div>
+    </section>
+    <section>
+      <h2>Events</h2>
+      <div id="events">no events yet</div>
+    </section>
+    <script>
+      const events = [];
+      const esc = (value) =>
+        String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+      const payload = (event) => JSON.parse(event.payload);
+      const latestValue = (key, seq) => {
+        const [sensor, field] = key.split(".");
+        return events
+          .filter(
+            (event) =>
+              event.kind === "reading" && event.seq < seq && payload(event).sensor === sensor,
+          )
+          .map((event) => payload(event).values[field])
+          .filter((value) => value !== undefined)
+          .at(-1);
+      };
+      const chart = (key, rule, triggers) => {
+        const [sensor, field] = key.split(".");
+        let last;
+        const points = triggers.map((trigger) => {
+          const reading = events.find(
+            (event) =>
+              event.kind === "reading" &&
+              event.sha === trigger.sha &&
+              payload(event).sensor === sensor,
+          );
+          if (reading) last = payload(reading).values[field];
+          return last;
+        });
+        const setpoints = points.map((value, index) =>
+          rule === "down" ? points[index - 1] : rule === "any" ? undefined : Number(rule.slice(2)),
+        );
+        const numbers = [...points, ...setpoints].filter((value) => Number.isFinite(value));
+        const min = Math.min(...numbers, 0),
+          max = Math.max(...numbers, 1),
+          span = max - min || 1;
+        const x = (index) => 44 + index * (720 / Math.max(1, triggers.length - 1));
+        const y = (value) => 145 - ((value - min) / span) * 115;
+        const line = points
+          .map((value, index) => (Number.isFinite(value) ? `${x(index)},${y(value)}` : ""))
+          .filter(Boolean)
+          .join(" ");
+        const limit = setpoints
+          .map((value, index) => (Number.isFinite(value) ? `${x(index)},${y(value)}` : ""))
+          .filter(Boolean)
+          .join(" ");
+        const violations = new Set(
+          events
+            .filter((event) => event.kind === "error" && payload(event).values[key] > 0)
+            .map((event) => event.sha),
+        );
+        return `<div class="chart"><strong>${esc(key)}</strong> <span class="mono">${esc(rule)}</span><svg viewBox="0 0 800 170" role="img" aria-label="${esc(key)} control chart">
+          <line x1="44" y1="145" x2="764" y2="145" stroke="#1d1d1b" opacity=".35"/>
+          ${triggers.map((trigger, index) => `<line x1="${x(index)}" y1="145" x2="${x(index)}" y2="151" stroke="#1d1d1b"/><text x="${x(index)}" y="165" text-anchor="middle" font-family="monospace" font-size="9">${trigger.sha.slice(0, 7)}</text>`).join("")}
+          ${limit ? `<polyline points="${limit}" fill="none" stroke="#1d1d1b" stroke-dasharray="4 4" opacity=".55"/>` : ""}
+          <polyline points="${line}" fill="none" stroke="#1d1d1b" stroke-width="2"/>
+          ${points.map((value, index) => (Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"/>` : "")).join("")}
+        </svg></div>`;
+      };
+      async function render() {
+        const state = await fetch("/state").then((response) => response.json());
+        const errors = events.filter((event) => event.kind === "error");
+        const latest = [...new Map(errors.map((event) => [event.loop, event])).values()];
+        document.querySelector("#loops").innerHTML = latest.length
+          ? `<table><thead><tr><th>loop</th><th>sha</th><th>setpoint</th><th>value</th><th>error</th></tr></thead><tbody>${latest.flatMap((event) => Object.entries(payload(event).values).map(([key, error]) => `<tr><td>${esc(event.loop)}</td><td class="mono">${event.sha.slice(0, 7)}</td><td>${esc(key)}</td><td class="number">${esc(latestValue(key, event.seq) ?? "-")}</td><td class="number ${error > 0 ? "error" : ""}">${error}</td></tr>`)).join("")}</tbody></table>`
+          : "no events yet";
+        const triggers = events.filter((event) => event.kind === "triggered");
+        const setpoints = Object.values(state.setpoints).reduce(
+          (all, value) => Object.assign(all, value),
+          {},
+        );
+        document.querySelector("#charts").innerHTML = Object.keys(setpoints).length
+          ? Object.entries(setpoints)
+              .map(([key, rule]) => chart(key, rule, triggers))
+              .join("")
+          : "no events yet";
+        document.querySelector("#events").innerHTML = events.length
+          ? `<ol id="feed">${[...events]
+              .reverse()
+              .map(
+                (event) =>
+                  `<li>${event.seq} ${esc(event.ts)} ${esc(event.kind)} ${event.sha.slice(0, 7)} ${esc(event.payload)}</li>`,
+              )
+              .join("")}</ol>`
+          : "no events yet";
+      }
+      render();
+      const stream = new EventSource("/events?since=0");
+      stream.onmessage = (message) => {
+        events.push(JSON.parse(message.data));
+        render();
+      };
+    </script>
+  </body>
+</html>
