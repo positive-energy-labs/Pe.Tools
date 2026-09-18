@@ -620,6 +620,28 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
       .filter((row) => row.loop === loop && runKinds.has(row.kind))
       .at(-1);
     const data = run ? (JSON.parse(run.payload) as Record<string, string>) : {};
+    const merged = database
+      .prepare(
+        "SELECT sha FROM events WHERE kind = 'merged' AND loop = ? ORDER BY seq DESC LIMIT 1",
+      )
+      .get(loop) as { sha: string } | undefined;
+    const values = error
+      ? (JSON.parse(error.payload) as { values: Record<string, number | null> }).values
+      : {};
+    const deltas = Object.fromEntries(
+      Object.entries(declaration.setpoint ?? {}).map(([key, setpoint]) => {
+        const [sensor, field] = key.split(".");
+        const current = error ? latestValues(database, sensor, error.seq + 1)?.[field] : undefined;
+        const baseline = merged ? readValues(database, sensor, merged.sha)?.[field] : undefined;
+        const value = current === undefined || baseline === undefined ? null : current - baseline;
+        const wrong =
+          value !== null &&
+          (setpoint === "down" || setpoint.startsWith("<=")
+            ? value > 0
+            : setpoint.startsWith(">=") && value < 0);
+        return [key, { value, wrong }];
+      }),
+    );
     const every = declaration.on?.match(/^every(?::|\s+)(\d+)/)?.[1];
     const commits =
       every && run
@@ -629,9 +651,8 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
       loop,
       sha: error?.sha,
       measured: error ? { ts: error.ts, sha: error.sha } : null,
-      values: error
-        ? (JSON.parse(error.payload) as { values: Record<string, number | null> }).values
-        : {},
+      values,
+      deltas,
       state: run?.kind ?? "idle",
       lastRun: run ? { ts: run.ts, sha: run.sha } : null,
       next: every

@@ -230,7 +230,8 @@
                   Object.entries(loop.values)
                     .map(([key, error]) => {
                       const reading = errorEvent ? latestReading(key, errorEvent.seq) : undefined;
-                      return `${esc(key)} ${esc(reading?.value ?? "-")} <span class="${error > 0 ? "error" : ""}">${esc(error)}</span>${reading ? `<span class="measured" title="${esc(reading.event.ts)}">measured ${relative(reading.event.ts)} at ${reading.event.sha.slice(0, 7)}</span>` : ""}`;
+                      const delta = loop.deltas[key];
+                      return `${esc(key)} ${esc(reading?.value ?? "-")} <span class="${error > 0 ? "error" : ""}">${esc(error)}</span> · Δ <span class="${delta?.wrong ? "error" : ""}">${esc(delta?.value ?? "-")}</span>${reading ? `<span class="measured" title="${esc(reading.event.ts)}">measured ${relative(reading.event.ts)} at ${reading.event.sha.slice(0, 7)}</span>` : ""}`;
                     })
                     .join("<br>") || "no setpoints"
                 }</td></tr>`;
