@@ -135,4 +135,5 @@ test("categories read once from field-options; one scope change reads the catalo
   await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
   expect(count("revit.catalog.loaded-families")).toBe(1);
   expect(count("revit.catalog.field-options")).toBe(1);
-});
+  // A whole-route mount plus two real waits: over 5s under a loaded full run.
+}, 15_000);
