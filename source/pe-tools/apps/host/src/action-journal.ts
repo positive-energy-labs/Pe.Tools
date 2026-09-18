@@ -1,7 +1,7 @@
 import { BridgeError } from "./bridge.ts";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import {
   canonicalRouteInput,
@@ -138,6 +138,42 @@ export class ActionJournal {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     return row;
+  }
+  /**
+   * Exported inputs of one action, keyed by its original ID. Structured request evidence the host
+   * serialized before dispatch; never original authored bytes and never a settled outcome.
+   */
+  async outputs(id: string): Promise<{ id: string; home: string; files: Record<string, unknown> }> {
+    const home = this.home(id);
+    const names = await readdir(home, { recursive: true, withFileTypes: true }).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
+    const files: Record<string, unknown> = {};
+    for (const entry of names)
+      if (entry.isFile() && entry.name.endsWith(".json")) {
+        const path = join(entry.parentPath, entry.name);
+        files[path.slice(home.length + 1).replaceAll("\\", "/")] = JSON.parse(
+          await readFile(path, "utf8"),
+        );
+      }
+    return { id, home, files };
+  }
+  /** One output home per action ID; hashed because IDs are caller text, not safe path segments. */
+  private home(id: string) {
+    return join(
+      dirname(this.path),
+      "action-outputs",
+      createHash("sha256").update(id).digest("hex"),
+    );
+  }
+  private async export(id: string, name: string, value: unknown) {
+    const file = join(this.home(id), name);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
+    await rename(`${file}.tmp`, file);
   }
   async admit(
     raw: ActionAdmission,
@@ -288,6 +324,16 @@ export class ActionJournal {
           cursor = row.steps.length;
           let result;
           try {
+            await this.export(row.id, `steps/${step.id}.json`, {
+              id: step.id,
+              kind,
+              key,
+              input: step.input,
+            }).catch((error) => {
+              throw new BridgeError(`Step input export failed: ${String(error)}`, 503, {
+                notDispatched: true,
+              });
+            });
             result = await effect(step.id);
           } catch (error) {
             await save((row) => ({
@@ -315,8 +361,11 @@ export class ActionJournal {
       let validated = row.preparation.state === "ready";
       const completion = Promise.resolve()
         .then(async () => {
+          // A resumed attempt exported both when it was first admitted and prepared.
+          if (!prior) await this.export(row.id, "admission.json", admission);
           if (row.preparation.state !== "ready") {
             const value = await prepare();
+            await this.export(row.id, "preparation.json", value ?? null);
             await save((row) => ({
               ...row,
               preparation: { state: "ready", value: value ?? null },
