@@ -169,6 +169,7 @@ export function LiveScheduleGridWorkspace({
           An apply occurred after this reading; re-read to observe current values.
         </div>
       )}
+      {page.pushRun && <div role="status">push run · {page.pushRun}</div>}
       <ScheduleReceipts workspaceId={page.workspaceId} receipts={receipts} />
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
     </div>

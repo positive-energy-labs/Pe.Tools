@@ -16,14 +16,14 @@ export const scheduleReadingSchema = z.object({
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
 export const scheduleActions = {
   "schedule.grid.push": {
-    says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
+    says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
     needs: "project-document",
     actor: "human",
-    dirties: ["schedules"],
-    executors: ["revit.apply.parameter-values"],
+    dirties: ["schedules", "pods"],
+    executors: ["revit.apply.parameter-values", "pod.run.write"],
     description:
-      "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback.",
-    input: z.object({}),
+      "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
+    input: z.object({ pod: z.string().min(1).optional() }),
   },
   "schedule.capture": {
     says: "Capture one schedule as a new spec member in the route's pod and write its run; returns the member address, sha256, and run.",

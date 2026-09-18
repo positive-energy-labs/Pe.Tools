@@ -6,7 +6,7 @@ import { address, exportSeed, importSeed, type DemoSeed } from "@pe/agent-contra
 import { Context, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
-import { readingKey, settingsRouteState } from "@pe/agent-contracts";
+import { readingKey, scheduleGridRouteState, settingsRouteState } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
@@ -286,7 +286,13 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
     operation: "family.apply",
     planHash,
     outcome: "Succeeded",
+    // User verdict 2026-09-17: succeeded means `reason: null`; the simulation is a listed output.
+    outputs: ["simulated.json"],
+    reason: null,
   });
+  expect(
+    JSON.parse(await readFile(join(receiptPath, "..", "simulated.json"), "utf8")),
+  ).toMatchObject({ simulated: true });
   await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
   const stale = await apply("stale-member", planHash);
   expect(stale.state).toBe("failed");
@@ -379,4 +385,102 @@ test("same HTTP router separates production Work and two demo resource owners; r
   expect((await send(a.base, { method: "DELETE" })).status).toBe(200);
   expect(await reading(b.base, b.scope)).toMatchObject({ kind: "snapshot" });
   expect(await readFile(productionFile, "utf8")).toBe(before);
+});
+
+test("demo schedule push files a run in the bound pod with values before and after", async () => {
+  const f = await setup({
+    version: 1,
+    namespace: "isolated-demo",
+    route: "families",
+    seedAddress: address("C:/production/project.rvt"),
+    failure: { kind: "none" },
+    originalEvidence: { id: "production-unknown", state: "unknown" },
+    work: {
+      key: { route: "families", target: null, work: "production" },
+      revision: 0,
+      candidate: {},
+    },
+    readings: {
+      profile: { family: { name: "Box" } },
+      member: { pod: "demo", path: "settings/families/box.json" },
+      families: ["Box"],
+    },
+    page: { armed: true },
+    scenario: "success",
+  } as unknown as DemoSeed);
+  const read = await f.fetch("/schedules/readings", {
+    key: "schedule.grid.snapshot",
+    input: { scheduleId: 481223 },
+    target: f.owner.target,
+  });
+  expect(read.status, await read.clone().text()).toBe(200);
+  const reading = (await read.json()) as { id: string; workspaceId: string };
+  const key = { route: "schedules", target: null, work: reading.workspaceId };
+  const route = scheduleGridRouteState.route;
+  const staged = await f.owner.work.apply(
+    key,
+    route,
+    "human",
+    [
+      { path: ["basis"], value: { captureId: reading.id } },
+      { path: ["cells", "2::1"], value: { staged: { value: "R-454B" } } },
+    ],
+    (await f.owner.work.read(key, route))?.revision ?? 0,
+  );
+  expect(staged.ok).toBe(true);
+  const pod = f.owner.member!.pod;
+  const push = async (id: string, input: Record<string, unknown>) => {
+    await f.fetch("/actions", {
+      id,
+      kind: "workflow",
+      key: "schedule.grid.push",
+      actor: "human",
+      destination: { kind: "document", ref: f.owner.target },
+      input,
+      bases: { work: { key, revision: (await f.owner.work.read(key, route))!.revision } },
+    });
+    return (await f.owner.journal.wait(id)) as {
+      state: string;
+      result: { run: string | null; receipt: Record<string, unknown> };
+    };
+  };
+  const row = await push(`${f.owner.id}:push`, { pod });
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  expect(row.result.run).toMatch(/^output\/.+$/);
+  const receipt = {
+    podId: pod,
+    operation: "schedule.grid.push",
+    outcome: "Succeeded",
+    reason: null,
+    scheduleId: 481223,
+    cells: [
+      {
+        cell: "2::1",
+        elementIds: [2],
+        parameterName: "REFRIGERANT",
+        before: "R-32",
+        after: "R-454B",
+        error: null,
+      },
+    ],
+  };
+  const file = await f.owner.settings.memberPath({ pod, path: `${row.result.run}/receipt.json` });
+  expect(JSON.parse(await readFile(file, "utf8"))).toMatchObject(receipt);
+  // No pod bound: the same receipt lives only in the action journal (host state).
+  await f.owner.work.apply(
+    key,
+    route,
+    "human",
+    [{ path: ["cells", "1::2"], value: { staged: { value: "Wall unit" } } }],
+    (await f.owner.work.read(key, route))!.revision,
+  );
+  const bare = await push(`${f.owner.id}:push-bare`, {});
+  expect(bare.state, JSON.stringify(bare)).toBe("succeeded");
+  expect(bare.result.run).toBeNull();
+  expect(bare.result.receipt).toMatchObject({
+    podId: null,
+    outcome: "Succeeded",
+    reason: null,
+    cells: [{ cell: "1::2", before: "", after: "Wall unit" }],
+  });
 });

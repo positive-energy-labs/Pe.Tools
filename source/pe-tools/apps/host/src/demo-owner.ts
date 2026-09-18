@@ -237,6 +237,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     });
     let r10Failed = false;
     let nativeModel = opened?.content ?? "{}";
+    // The simulated schedule's cells; a push edits them so the readback shows the new value.
+    const rows = DEMO_ROWS.map((row) => [...row]);
     let simulatedPlan: { hash: string; spec: string } | undefined;
     // Every owner but `family` holds a project document, so the project engines answer there.
     const project = seed.route !== "family";
@@ -251,6 +253,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         path: `output/${runId}/receipt.json`,
       });
       await mkdir(join(file, ".."), { recursive: true });
+      // Succeeded means `reason: null`; the simulation is an output the receipt lists.
+      await writeFile(
+        join(file, "..", "simulated.json"),
+        JSON.stringify({
+          simulated: true,
+          note: "simulated demo engine; nothing was written to Revit",
+        }),
+      );
       await writeFile(
         file,
         JSON.stringify(
@@ -261,8 +271,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             operation,
             planHash,
             outcome: "Succeeded",
-            outputs: [],
-            reason: "simulated demo engine; nothing was written to Revit",
+            outputs: ["simulated.json"],
+            reason: null,
           },
           null,
           2,
@@ -550,6 +560,18 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 }),
                 simulated: true,
               };
+            } else if (key === "revit.apply.parameter-values" && project) {
+              const edits = (
+                input as { edits: { elementId: number; parameterName: string; value: string }[] }
+              ).edits;
+              for (const edit of edits)
+                rows[edit.elementId - 1]![DEMO_COLUMNS.indexOf(edit.parameterName)] = edit.value;
+              value = {
+                applied: edits.length,
+                dryRun: false,
+                results: edits.map((_, index) => ({ index, ok: true })),
+                simulated: true,
+              };
             } else if (key === "revit.catalog.schedules" && project) {
               value = {
                 entries: DEMO_SCHEDULES.map((row) => ({
@@ -577,9 +599,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                       headerText: fieldName,
                       fieldName,
                     })),
-                    rows: DEMO_ROWS.map((values, index) => ({
+                    rows: rows.map((values, index) => ({
                       rowNumber: index + 1,
                       values,
+                      // Element id = row number; the column's field is the parameter.
+                      bindings: DEMO_COLUMNS.map((parameterName, columnNumber) => ({
+                        columnNumber,
+                        targetElementIds: [index + 1],
+                        parameterName,
+                        storageType: "String",
+                        isEditable: true,
+                      })),
                     })),
                   },
                 ],
