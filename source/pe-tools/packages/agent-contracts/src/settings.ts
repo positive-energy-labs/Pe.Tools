@@ -12,22 +12,10 @@
  */
 import { z } from "zod";
 import { type RouteStateSpec } from "./route-state.ts";
-import { persistedProposal, trichotomyAgentMask } from "./trichotomy.ts";
+import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
-/* ── Field trichotomy — settings keep the shared proposal/staged shape.
+/* ── Field trichotomy — the shared cell over any JSON value.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
-
-const settingsFieldEditSchema = z
-  .object({
-    value: z.unknown().optional(),
-    delete: z.literal(true).optional(),
-  })
-  .refine((edit) => edit.delete === true || Object.hasOwn(edit, "value"), {
-    error: "a settings edit must set a value or delete the property",
-  })
-  .refine((edit) => !(edit.delete === true && Object.hasOwn(edit, "value")), {
-    error: "a settings edit cannot both set and delete the property",
-  });
 
 /** One document citation for a proposed value, in markdown coordinates — pea never
  * sees a bbox. `blockId` may reference a parsed block OR a parser-extracted image;
@@ -38,17 +26,14 @@ const settingsProposalSourceSchema = z.object({
   colIdx: z.number().int().nonnegative().optional(),
   note: z.string().nullish(),
 });
-export const settingsFieldStateSchema = z.object({
-  proposal: persistedProposal(
-    settingsFieldEditSchema.extend({
-      note: z.string().nullish(),
-      confidence: z.enum(["high", "low"]).nullish(),
-      /** Multi-citation: one value may be grounded by several regions (a table
-       * cell AND a figure). Order is presentation order. */
-      sources: z.array(settingsProposalSourceSchema).nullish(),
-    }),
-  ).nullish(),
-  staged: settingsFieldEditSchema.nullish(),
+/** The one cell over any JSON value. Deletable: `/family` and the pods reviewer stage deletes. */
+export const settingsFieldStateSchema = trichotomyCellSchema(z.unknown(), {
+  deletable: true,
+  proposal: {
+    /** Multi-citation: one value may be grounded by several regions (a table
+     * cell AND a figure). Order is presentation order. */
+    sources: z.array(settingsProposalSourceSchema).nullish(),
+  },
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 

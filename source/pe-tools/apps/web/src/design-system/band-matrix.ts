@@ -2,7 +2,7 @@
  * The band specimen's Families matrix: 6 families × 3 types × 8 parameters, grown from the
  * Families demo seeds (`families/seeds.ts`). A stand-in for a live `families` matrix reading; the
  * proposals are shaped like real Pea work — one uniform group (with one contested cell in it), one diverse
- * group, one contested cell, one locked cell with a stray proposal, one delete. Writes go through the same
+ * group, one contested cell, one locked cell with a stray proposal. Writes go through the same
  * `RouteStatePatch`es a route document takes, applied locally.
  */
 import {
@@ -201,11 +201,6 @@ export const MATRIX_CELLS: MatrixCells = {
   },
   // locked, with a stray proposal Pea should not have made
   [cellKey("AHU-1", "MCA")]: { proposal: pea("38A"), staged: null },
-  // delete: an empty weight Pea wants gone
-  [cellKey("UH-3", "Weight")]: {
-    proposal: { delete: true, note: "superseded by Operating Weight" },
-    staged: null,
-  },
 };
 
 /** Apply route-document patches (`["cells", key, rung]`, no value = clear) to the local cells. */

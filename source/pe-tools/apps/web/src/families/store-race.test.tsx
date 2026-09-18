@@ -298,11 +298,11 @@ test("an aggregate accept skips a contested cell and refuses once for every cove
   expect(cell(y)?.staged?.value.value).toBe("mine");
 });
 
-test("clearing a cell stages the empty value, never a delete (ruling 1600-3)", async () => {
+test("an emptied cell stages the empty value; empty equal to the baseline stages nothing", async () => {
   const { actions } = start();
+  // Rulings 2026-09-18 16:00 #3: an empty value is a value, so a person can clear a parameter.
   await act(() => actions().propose(x, human(""), "base"));
   expect(cell(x)?.staged).toEqual({ value: { familyName: "F", value: "" } });
-  // An already-empty value typed back empty stages nothing.
   await act(() => actions().propose(y, human(""), ""));
   expect(cell(y)?.staged ?? null).toBeNull();
 });

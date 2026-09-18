@@ -8,7 +8,7 @@ import { RouteWorkspace } from "../src/route-workspace.ts";
  * proof left here is the mask and the Work key. Dispatch, replay-once, refusal and recovery are
  * proven on the real journal in apps/host/tests/instances-actions.test.ts.
  */
-test("Instances isolates Work by key and admits an agent only to the staged proposal", async () => {
+test("Instances isolates Work by key; the staged document is a person's, never Pea's", async () => {
   const data = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
     registrations: [{ spec: instancesRouteState, handlers: {} }],
@@ -25,20 +25,18 @@ test("Instances isolates Work by key and admits an agent only to the staged prop
   expect(
     await workspace.apply(a, "instances", "agent", [{ path: ["observation"], value: {} }], 0),
   ).toMatchObject({ ok: false, hint: expect.stringContaining("human-only") });
-  expect(
-    await workspace.apply(
-      a,
-      "instances",
-      "agent",
-      [
-        {
-          path: ["staged"],
-          value: { kind: "open", session: "session:exact", document: "C:\\Models\\A.rvt" },
-        },
-      ],
-      0,
-    ),
-  ).toMatchObject({ ok: true, revision: 1 });
+  const staged = [
+    {
+      path: ["staged"],
+      value: { kind: "open", session: "session:exact", document: "C:\\Models\\A.rvt" },
+    },
+  ];
+  // O-2: the staged document is what open/start consumes, so Pea may not write it.
+  expect(await workspace.apply(a, "instances", "agent", staged, 0)).toMatchObject({ ok: false });
+  expect(await workspace.apply(a, "instances", "human", staged, 0)).toMatchObject({
+    ok: true,
+    revision: 1,
+  });
   expect((await workspace.read(a, "instances"))?.doc).toMatchObject({
     staged: { kind: "open", document: "C:\\Models\\A.rvt" },
   });

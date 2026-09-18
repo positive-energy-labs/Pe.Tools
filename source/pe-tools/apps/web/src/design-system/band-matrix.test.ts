@@ -26,7 +26,8 @@ test("the matrix is 6 families × 3 types × 8 parameters, with the journeys pro
   expect(new Set(airflow.map(([, cell]) => cell.proposal?.value)).size).toBe(9);
   expect(kinds(cellKey("HP-2", "MOCP"))).toEqual(["accept", "deny", "unstage"]);
   expect(kinds(cellKey("AHU-1", "MCA"))).toEqual(["deny"]);
-  expect(MATRIX_CELLS[cellKey("UH-3", "Weight")]?.proposal?.delete).toBe(true);
+  // Families cells take no delete (the ruled cell factory: delete is opt-in, settings only).
+  expect(Object.values(MATRIX_CELLS).some((cell) => cell.proposal?.delete)).toBe(false);
 });
 
 test("the specimen writes the contract's patches, applied locally", () => {

@@ -372,13 +372,9 @@ export const takeoffsRouteState = {
   route: "takeoffs",
   title: "Takeoffs",
   description:
-    "Authored room proposals, adoption choices and review judgments. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
+    "A person's staged room values, adoption choices and review judgments; Pea reads this document and writes none of it until the route moves to proposal cells. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
   schema: takeoffsDocumentSchema,
-  agentWriteMask: [
-    ["staged", "*"],
-    ["adoptPatches", "*"],
-    ["decisions", "*"],
-    ["reviewFlags", "*"],
-  ],
+  // Every field is a to-be-committed value; Pea gets proposal cells at this route's cutover.
+  agentWriteMask: [] as string[][],
   commands: {},
 } satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;

@@ -183,8 +183,8 @@ export function BandGaps() {
         stand-in r0 that nothing else writes; it cannot show a stale-revision refusal.
       </Gap>
       <Gap>
-        <strong>Structural proposals:</strong> the cell draws delete; rename and add-row have no
-        language shape yet.
+        <strong>Delete:</strong> a person clears a value to empty everywhere; deleting the property
+        is opt-in in the cell contract and only settings cells take it, so this matrix draws none.
       </Gap>
     </section>
   );

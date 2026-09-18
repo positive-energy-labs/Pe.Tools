@@ -146,9 +146,11 @@ export type ParameterLinksReading = z.infer<typeof parameterLinksReadingSchema>;
 export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
-  description: "Author a model-owned parameter linkage profile, evaluate it, and reconcile it.",
+  description:
+    "A person authors a model-owned parameter linkage profile, evaluates it, and reconciles it; Pea reads the draft and writes none of it.",
   schema: parameterLinksDocumentSchema,
-  agentWriteMask: [["draft"]],
+  // The draft is what apply reconciles; Pea gets a proposal cell at this route's cutover.
+  agentWriteMask: [] as string[][],
   // Reading and applying are host ports, not route commands: an observation of Revit can
   // never be written into the draft a human is editing.
   commands: {},

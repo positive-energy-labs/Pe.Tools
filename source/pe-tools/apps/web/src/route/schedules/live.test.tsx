@@ -90,10 +90,9 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
   // The same host lane as the second push below: native apply, journal and Work publication take
   // seconds when SSE and jsdom share one event loop under a full suite.
-  await vi.waitFor(
-    async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined(),
-    { timeout: 10_000 },
-  );
+  await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined(), {
+    timeout: 10_000,
+  });
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);

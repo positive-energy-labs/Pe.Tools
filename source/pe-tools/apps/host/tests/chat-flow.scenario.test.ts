@@ -351,24 +351,17 @@ test("the browser walks one durable chat lifecycle", async () => {
     // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
-    // pe_do route:instances.propose stages a start; the card shows r1 and the resolved target.
+    // O-2: the staged document is what start consumes, so it is a person's. Instances offers Pea
+    // no propose door: the call refuses by name and no Work is written.
     await driveTurn("PROPOSE_TURN", proposeFinalText);
-    await expect
-      .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
-      .toBe("r1");
-    // A workspace write touches no Target at all: Instances Work is `?work=instances` (spec §7),
-    // the same key `instances/cluster.tsx` reads, so the card names neither session nor document.
-    expect(await page.locator("[data-tool-id]").last().getByTestId("tool-target").count()).toBe(0);
-    await expect
-      .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
-      .toContain("start scenario in Revit 2026");
+    expect(JSON.stringify((await readThread()).messages)).toContain(
+      "Unknown capability 'route:instances.propose'",
+    );
+    expect((await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).status).toBe(404);
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
     const routeQuery = `target=${encodeURIComponent(scopeDocument)}`;
-    expect(
-      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
-    ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
     // `ops` is no longer a route document; `takeoffs` is the Address-keyed one that is left.
     const applied = await fetch(`${baseUrl}/pe/route-state/takeoffs/apply?${routeQuery}`, {
       method: "POST",

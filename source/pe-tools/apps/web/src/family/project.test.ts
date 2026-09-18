@@ -293,6 +293,17 @@ describe("draftToPatches — draft → staged field patches", () => {
     expect(draftToPatches(SHOWCASE, baseline, baseline)).toEqual([]);
   });
 
+  it("an emptied type override is still that override's value: it stages the empty string", () => {
+    const typeName = Object.keys(initialDraft(world()).types)[0]!;
+    const { draft, baseline } = edited((d) => {
+      d.types[typeName] = { ...d.types[typeName], "Body Width": "" };
+    });
+    expect(draftToPatches(SHOWCASE, draft, baseline)).toContainEqual({
+      path: ["fields", `/types/${typeName}/Body Width`, "staged"],
+      value: { value: "" },
+    });
+  });
+
   it("writes a family value to /familyParameters/<name>/value", () => {
     const { draft, baseline } = edited((d) => {
       d.authored["Body Width"] = "26in";

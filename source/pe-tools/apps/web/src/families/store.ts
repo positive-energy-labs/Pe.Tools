@@ -262,10 +262,9 @@ export function useFamiliesStore(
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /**
-       * A typed value stages; Pea's standing proposal remains as a counter. This route's codec:
-       * the baseline is the family's current value, and an emptied cell stages the empty value
-       * (ruling 1600-3: clearing a value is allowed everywhere). Typing the current value back
-       * stages nothing.
+       * A typed value stages, an emptied one included: empty is a value, so a person can clear a
+       * parameter. Equal to the family's current value, it stages nothing. Pea's standing
+       * proposal remains as a counter.
        */
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) => {
         const key = familyCellKey(address);

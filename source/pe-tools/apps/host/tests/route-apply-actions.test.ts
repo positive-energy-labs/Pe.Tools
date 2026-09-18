@@ -542,6 +542,8 @@ test("families apply sends exactly the reviewed hashes, and the spec, source byt
     dependencies: [],
   });
   expect(native.input.executionOptions).toEqual(options);
+  // The native run names the plan it applies (execution reads it once C# declares the field).
+  expect(native.input.plan).toBe(plan.id);
 });
 
 test("an exclusion written while the native call runs survives, because Work is never rewritten", async () => {
@@ -947,4 +949,75 @@ test("an apply where no family succeeded settles failed with the receipt's reaso
   );
   const result = resultOf<{ native: { receipts: { success: boolean }[] } }>(partial);
   expect(result.native.receipts.map((r) => r.success)).toEqual([true, false]);
+});
+
+/* ── O8-a: a plan applies once ───────────────────────────────────────────────────────────── */
+
+test("a plan that already applied refuses a second apply: plan again, and nothing is dispatched", async () => {
+  const { work, admit, sent } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  const input = { plan: plan.id, expectedPlanHashes: plan.included };
+  resultOf(await admit("families.apply", input, revision, "first"));
+  const second = await admit("families.apply", input, revision, "second");
+  expect(second.state).toBe("failed");
+  expect((second as { error?: string }).error).toMatch(/already applied .*; plan again/);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
+});
+
+test("a plan whose apply outcome is unknown refuses another apply until it is recovered", async () => {
+  const { work, admit, sent, unknown } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  const input = { plan: plan.id, expectedPlanHashes: plan.included };
+  unknown(true);
+  await admit("families.apply", input, revision, "uncertain");
+  unknown(false);
+  await expect(admit("families.apply", input, revision, "again")).rejects.toThrow(/recover/);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
+});
+
+/* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */
+
+test("a staged cell changed since the plan refuses apply visibly; a Pea proposal alone does not", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
+  // Pea proposes on a consumed cell: the review still stands.
+  const now = (await env.work.read(scope, "families"))!.revision;
+  const pea = await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["cells", H, "proposal"], value: rung("25") }],
+    now,
+  );
+  expect(pea.ok).toBe(true);
+  // The person changes a consumed cell: what they reviewed is no longer what is staged.
+  await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["cells", W, "staged"], value: rung("11") }],
+    pea.revision!,
+  );
+  const stale = await env.admit("families.apply", apply, revision, "stale");
+  expect(stale.state).toBe("failed");
+  expect((stale as { error?: string }).error).toBe(
+    "The staged cells changed since this plan; plan again",
+  );
+  expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
+});
+
+test("a Pea proposal on a consumed cell does not stale the plan", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  const now = (await env.work.read(scope, "families"))!.revision;
+  await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["cells", W, "proposal"], value: rung("12") }],
+    now,
+  );
+  resultOf(await env.admit("families.apply", apply, revision));
 });
