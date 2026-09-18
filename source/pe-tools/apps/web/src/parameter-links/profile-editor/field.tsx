@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import type { ParameterReference } from "@pe/agent-contracts";
 import { type FieldOption } from "#/host/field-options";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "#/components/lang/combobox";
 
 export function findParameterOption(items: FieldOption[], reference: ParameterReference) {
   return items.find(
@@ -46,17 +53,23 @@ export function Enum<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <select
+    <Combobox
+      items={[...options]}
       value={value}
       disabled={disabled}
-      onChange={(event) => onChange(event.target.value as T)}
-      className="h-7 w-full px-2"
+      onValueChange={(option: T | null) => option && onChange(option)}
+      itemToStringLabel={(option: T) => option}
     >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      <ComboboxTrigger fill>{value}</ComboboxTrigger>
+      <ComboboxContent>
+        <ComboboxList>
+          {(option: T) => (
+            <ComboboxItem key={option} value={option}>
+              {option}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }

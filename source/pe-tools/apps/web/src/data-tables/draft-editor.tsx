@@ -4,8 +4,20 @@ import { Tag } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "#/components/lang/combobox";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
+
+const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
+  { value: "Text", label: "txt" },
+  { value: "Number", label: "num" },
+];
 
 export function DraftEditor({
   draft,
@@ -88,22 +100,33 @@ export function DraftEditor({
                       }
                       title="Column heading — written to the schedule on apply"
                     />
-                    <select
-                      value={column.kind}
-                      title="Column type: txt = Text, num = Number"
-                      className="h-6"
-                      onChange={(e) =>
+                    <Combobox
+                      items={COLUMN_KINDS}
+                      value={COLUMN_KINDS.find((kind) => kind.value === column.kind) ?? null}
+                      onValueChange={(kind: (typeof COLUMN_KINDS)[number] | null) =>
+                        kind &&
                         patch((d) => ({
                           ...d,
                           columns: d.columns.map((c, i) =>
-                            i === columnIndex ? { ...c, kind: e.target.value as ColumnKind } : c,
+                            i === columnIndex ? { ...c, kind: kind.value } : c,
                           ),
                         }))
                       }
+                      itemToStringLabel={(kind: (typeof COLUMN_KINDS)[number]) => kind.label}
                     >
-                      <option value="Text">txt</option>
-                      <option value="Number">num</option>
-                    </select>
+                      <ComboboxTrigger title="Column type: txt = Text, num = Number">
+                        {column.kind === "Text" ? "txt" : "num"}
+                      </ComboboxTrigger>
+                      <ComboboxContent>
+                        <ComboboxList>
+                          {(kind: (typeof COLUMN_KINDS)[number]) => (
+                            <ComboboxItem key={kind.value} value={kind}>
+                              {kind.label}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
                     <Press
                       type="button"
                       title={

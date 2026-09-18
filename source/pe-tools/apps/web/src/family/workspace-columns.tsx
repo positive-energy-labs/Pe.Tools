@@ -1,5 +1,12 @@
 import { useMemo } from "react";
 import { ActionButton } from "#/components/lang/action-button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "#/components/lang/combobox";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import {
@@ -99,40 +106,50 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     const candidates = [...world.paramRows, ...draft.newParams].filter(
       (param) => param.dataType === dataType,
     );
+    const options = [
+      { value: "#new", label: `＋ new parameter "${newName}", seeded ${literal}` },
+      ...candidates.map((param) => ({
+        value: param.name,
+        label: `${param.name} — inherits ${draft.authored[param.name] ?? "nothing"}${
+          (draft.authored[param.name] ?? "") === literal
+            ? " (same as now)"
+            : `, discards ${literal}`
+        }`,
+      })),
+    ];
 
     if (open)
       return (
-        <select
-          // eslint-disable-next-line jsx-a11y/no-autofocus
-          autoFocus
-          value=""
-          aria-label={`bind ${slug}.${property}`}
-          // The two choices' consequences are stated once, on the table's HelpTip.
-          title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
-          onChange={(event) => {
-            const choice = event.target.value;
-            if (choice === "") setBinding(null);
-            else if (choice === "#new") bindToNew(slug, property, dataType);
-            else bindTo(slug, property, choice);
+        <Combobox
+          items={options}
+          defaultOpen
+          value={null}
+          onOpenChange={(next) => !next && setBinding(null)}
+          onValueChange={(option: (typeof options)[number] | null) => {
+            if (option?.value === "#new") bindToNew(slug, property, dataType);
+            else if (option) bindTo(slug, property, option.value);
           }}
-          className={className}
+          itemToStringLabel={(option: (typeof options)[number]) => option.label}
         >
-          <option value="">bind to… (Esc cancels)</option>
-          <option value="#new">{`＋ new parameter "${newName}", seeded ${literal}`}</option>
-          {/* PREVIEW, not just a name. Binding to an existing parameter DISCARDS the literal and
-              the dim starts reading that row — so the option has to say the number it is about to
-              inherit, and the one it is about to lose. A picker that showed only names would be
-              asking you to approve a value change you cannot see. */}
-          {candidates.map((param) => (
-            <option key={param.name} value={param.name}>
-              {`${param.name} — inherits ${draft.authored[param.name] ?? "nothing"}${
-                (draft.authored[param.name] ?? "") === literal
-                  ? " (same as now)"
-                  : `, discards ${literal}`
-              }`}
-            </option>
-          ))}
-        </select>
+          <span className={className}>
+            <ComboboxInput
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              aria-label={`bind ${slug}.${property}`}
+              placeholder="bind to… (Esc cancels)"
+              title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
+            />
+          </span>
+          <ComboboxContent>
+            <ComboboxList>
+              {(option: (typeof options)[number]) => (
+                <ComboboxItem key={option.value} value={option}>
+                  {option.label}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       );
 
     return (

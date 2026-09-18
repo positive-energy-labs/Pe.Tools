@@ -6,10 +6,17 @@
  * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
  * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
  * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
- * focus law). `CellSelect` is the one forced wrapper: a `<select>` cannot be an input, so it
- * keeps its own element and routes its refusal through the alarm mixes instead.
+ * focus law). `CellSelect` is the one forced wrapper: it keeps table navigation around the kit
+ * Combobox and routes its refusal through the alarm mixes.
  */
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "#/components/lang/combobox";
 import { StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
 import { token } from "#/lib/token";
@@ -76,37 +83,50 @@ export function NumberCell({
 export function CellSelect({
   value,
   onChange,
-  children,
+  options,
   invalid,
-  className,
   title,
 }: {
   value: string;
   onChange: (value: string) => void;
-  children: React.ReactNode;
+  options: readonly { value: string; label: string }[];
   invalid?: boolean;
-  className?: string;
   title?: string;
 }) {
   const move = useCellNavigation();
+  const selected = options.find((option) => option.value === value) ?? null;
   return (
-    <select
-      value={value}
-      title={title}
-      tabIndex={-1}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
-      }}
-      data-tone={invalid ? "alarm" : undefined}
-      data-wash={invalid ? "" : undefined}
-      className={cn(
-        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-(--item-pad-x) outline-none focus:outline focus:outline-line-2",
-        className,
-      )}
+    <Combobox
+      items={[...options]}
+      value={selected}
+      onValueChange={(option: { value: string; label: string } | null) =>
+        option && onChange(option.value)
+      }
+      itemToStringLabel={(option: { value: string; label: string }) => option.label}
     >
-      {children}
-    </select>
+      <ComboboxTrigger
+        fill
+        title={title}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Tab" && move?.(event.shiftKey ? "left" : "right"))
+            event.preventDefault();
+        }}
+        data-tone={invalid ? "alarm" : undefined}
+        data-wash={invalid ? "" : undefined}
+      >
+        {selected?.label ?? value}
+      </ComboboxTrigger>
+      <ComboboxContent>
+        <ComboboxList>
+          {(option: { value: string; label: string }) => (
+            <ComboboxItem key={option.value} value={option}>
+              {option.label}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

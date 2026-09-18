@@ -1,4 +1,11 @@
 import { Switcher } from "#/components/lang/switcher";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "#/components/lang/combobox";
 import type { GeomMeta } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -30,18 +37,24 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       />
     );
   return (
-    <select
+    <Combobox
+      items={meta.options ?? []}
       value={value}
-      onChange={(event) => editMeta(slug, meta.key, event.target.value)}
-      title={meta.note}
-      aria-label={meta.label}
-      className="h-(--item-h) w-full px-1"
+      onValueChange={(option: string | null) => option && editMeta(slug, meta.key, option)}
+      itemToStringLabel={(option: string) => option}
     >
-      {(meta.options ?? []).map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      <ComboboxTrigger fill title={meta.note} aria-label={meta.label}>
+        {value}
+      </ComboboxTrigger>
+      <ComboboxContent>
+        <ComboboxList>
+          {(option: string) => (
+            <ComboboxItem key={option} value={option}>
+              {option}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
