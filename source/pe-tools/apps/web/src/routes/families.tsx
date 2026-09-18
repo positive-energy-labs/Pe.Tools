@@ -1,20 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamiliesStore, fixtureFamilyRows } from "#/families/fixture";
-import { createLiveFamiliesHost } from "#/families/host";
-import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
-import { RouteScope } from "#/workbench/route-scope";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import type { Scope } from "#/state/route-store";
+import { useFamiliesStore } from "#/families/store";
+import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
 
+import { manifest as familiesManifest } from "#/families/manifest";
+export const manifest = familiesManifest;
+
+const str = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** `?demo=<action>` mounts one seed of `manifest.seeds`; stage, pod and path are the page in the URL. */
 export const familiesSearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
+): ReturnType<typeof routeSearch> & EntitySearch & { demo?: string } => ({
+  ...routeSearch(search),
+  ...entitySearch(search),
+  demo: str(search.demo) || undefined,
 });
 
 export const Route = createFileRoute("/families")({
@@ -23,30 +24,28 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  return <FamiliesRouteContent source={Route.useSearch().source} />;
+  const { target, stage, pod, path } = Route.useSearch();
+  const thread = useRouteThread();
+  return <FamiliesRouteContent target={target} thread={thread} entry={{ stage, pod, path }} url />;
 }
 
-export function FamiliesRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <FamiliesFixtureRoute />;
-  return (
-    <RouteScope>
-      {(scope) => <FamiliesStoreOwner key={scope.scope.document} scope={scope} />}
-    </RouteScope>
-  );
-}
-
-export function FamiliesFixtureRoute() {
-  const store = useRouteStore(() => createFixtureFamiliesStore(appAtomRegistry));
-  return <FamiliesWorkspace store={store} fixtureFamilies={fixtureFamilyRows} />;
-}
-
-function FamiliesStoreOwner({ scope }: { scope: Scope }) {
-  const store = useRouteStore(() => {
-    return createFamiliesStore({
-      registry: appAtomRegistry,
-      scope,
-      host: createLiveFamiliesHost(),
-    });
+export function FamiliesRouteContent({
+  target = "",
+  thread,
+  entry,
+  url = false,
+}: {
+  target?: string;
+  thread?: string;
+  /** The URL page state, read once at mount. */
+  entry?: EntitySearch;
+  /** True only on the route itself; a chat pane does not own the URL. */
+  url?: boolean;
+}) {
+  const store = useFamiliesStore({
+    target,
+    thread,
+    entry: entry && Object.fromEntries(Object.entries(entry).filter(([, value]) => value)),
   });
-  return <FamiliesWorkspace store={store} />;
+  return <FamiliesWorkspace store={store} url={url} />;
 }

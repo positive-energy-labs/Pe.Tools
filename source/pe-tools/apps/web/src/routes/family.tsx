@@ -1,20 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createFixtureFamilyStore } from "#/family/fixture";
-import { createLiveFamilyHost } from "#/family/host";
-import { createFamilyStore } from "#/family/store";
-import { FamilyWorkspace } from "#/family/workspace";
-import { RouteScope } from "#/workbench/route-scope";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import type { Scope } from "#/state/route-store";
+import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
+import { FamilyRouteView } from "#/route/family/live";
+import { familyManifest } from "#/route/family/manifest";
+
+/** The route, declared once. `route/family/live.tsx` binds it to the family audit and the pods. */
+export const manifest = familyManifest();
 
 export const familySearch = (
   search: Record<string, unknown>,
-): { thread?: string; source?: "fixture" } => ({
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? "fixture" : undefined,
+): ReturnType<typeof routeSearch> &
+  EntitySearch & {
+    demo?: string;
+    capture?: boolean;
+  } => ({
+  ...routeSearch(search),
+  // A deep link (`/pods`, a chat pane) names the stage and member the route opens on.
+  ...entitySearch(search),
+  capture: search.capture === true || search.capture === "true" ? true : undefined,
+  /** `?demo=<action>` mounts one seed of `manifest.seeds`. */
+  demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
 
 export const Route = createFileRoute("/family")({
@@ -23,30 +28,16 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  return <FamilyRouteContent source={Route.useSearch().source} />;
-}
-
-export function FamilyRouteContent({ source }: { source?: "fixture" }) {
-  if (source === "fixture") return <FamilyFixtureRoute />;
+  const { target, capture, stage, pod, path } = Route.useSearch();
+  const thread = useRouteThread();
   return (
-    <RouteScope>
-      {(scope) => <FamilyStoreOwner key={scope.scope.document} scope={scope} />}
-    </RouteScope>
+    <FamilyRouteView
+      target={target ?? null}
+      thread={thread}
+      capture={capture}
+      initial={Object.fromEntries(
+        Object.entries({ stage, pod, path }).filter(([, value]) => value),
+      )}
+    />
   );
-}
-
-function FamilyFixtureRoute() {
-  const store = useRouteStore(() => createFixtureFamilyStore(appAtomRegistry));
-  return <FamilyWorkspace store={store} source="fixture" />;
-}
-
-function FamilyStoreOwner({ scope }: { scope: Scope }) {
-  const store = useRouteStore(() => {
-    return createFamilyStore({
-      registry: appAtomRegistry,
-      scope,
-      host: createLiveFamilyHost(),
-    });
-  });
-  return <FamilyWorkspace store={store} />;
 }

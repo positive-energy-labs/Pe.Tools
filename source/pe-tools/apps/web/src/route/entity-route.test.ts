@@ -1,0 +1,259 @@
+import { expect, test, vi } from "vite-plus/test";
+
+const run = vi.hoisted(() => vi.fn());
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
+  runSemanticAction: run,
+}));
+
+import {
+  admissionPlan,
+  entitySearch,
+  entityRoute,
+  type Ctx,
+  type EntityPage,
+  type PlanEntry,
+  type PodRow,
+} from "./manifest";
+
+const base = {
+  key: "things",
+  name: "Things",
+  entity: "thing",
+  target: "document" as const,
+  schema: "/schemas/settings/Things/things.json",
+  capture: "family.capture" as const,
+  apply: "family.apply" as const,
+};
+
+const row = (planHash: string, flag: string | null = null): PlanEntry => ({
+  id: planHash,
+  name: planHash,
+  planHash,
+  actions: 1,
+  detail: "",
+  flag,
+  warnings: [],
+});
+
+const pods: PodRow[] = [
+  {
+    id: "p",
+    name: "P",
+    version: "1",
+    folder: "Pods/p",
+    entrypoints: [],
+    members: [
+      {
+        path: "settings/a.json",
+        sha256: "h",
+        schema: "http://x:1/schemas/settings/Things/things.json",
+      },
+      { path: "settings/b.json", sha256: "i", schema: null },
+    ],
+    diagnostics: [],
+  },
+];
+
+const ref = { session: "s", openId: "o" };
+const source = { pod: "p", path: "settings/a.json", sha256: "h" };
+
+function ctx(page: Partial<EntityPage>) {
+  const state = {
+    page: {
+      stage: "audit",
+      pod: "",
+      path: "",
+      selection: [],
+      confirming: false,
+      sheet: null,
+      ...page,
+    } as EntityPage,
+  };
+  const c = {
+    target: { kind: "document", ref },
+    readings: { pods: { state: "ready", observation: pods } },
+    work: { key: {}, doc: null, revision: null },
+    get page() {
+      return state.page;
+    },
+    setPage: (next: Partial<EntityPage>) => Object.assign(state.page, next),
+  } as unknown as Ctx<unknown, string, EntityPage>;
+  return { c, state };
+}
+
+const planless = entityRoute(base).actions!;
+const planned = entityRoute({
+  ...base,
+  plan: admissionPlan({ plan: "family.plan", apply: "family.apply" }, (plan) =>
+    row((plan as { planHash: string }).planHash),
+  ),
+}).actions!;
+const none = undefined as never;
+
+test("capture is the host workflow into the chosen pod; the page lands on the new member", async () => {
+  expect(planless.capture.ready(ctx({}).c as never, none)).toMatch(/choose the pod/);
+  const { c, state } = ctx({ pod: "p" });
+  run.mockReset().mockResolvedValue({
+    state: "succeeded",
+    result: { member: { pod: "p", path: "settings/family/x.json", sha256: "n" } },
+  });
+  await planless.capture.run(c as never, none);
+  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p" }, ref, undefined);
+  expect(state.page).toMatchObject({ stage: "capture", path: "settings/family/x.json" });
+});
+
+test("a selection route refuses capture until audit rows are picked, and clears them after", async () => {
+  const actions = entityRoute({
+    ...base,
+    target: "selection",
+    captureInput: (c) => ({ ids: c.page.selection }),
+  }).actions!;
+  expect(actions.capture.ready(ctx({ pod: "p" }).c as never, none)).toMatch(/pick rows/);
+  const { c, state } = ctx({ pod: "p", selection: ["7", "9"] });
+  expect(actions.capture.ready(c as never, none)).toBeNull();
+  run.mockReset().mockResolvedValue({
+    state: "succeeded",
+    result: { members: [{ pod: "p", path: "settings/x/7.json" }] },
+  });
+  await actions.capture.run(c as never, none);
+  expect(run).toHaveBeenCalledWith("family.capture", { pod: "p", ids: ["7", "9"] }, ref, undefined);
+  expect(state.page).toMatchObject({ stage: "capture", path: "settings/x/7.json", selection: [] });
+});
+
+test("apply refuses unsaved or foreign members; without a plan it applies the saved source", async () => {
+  expect(planless.apply.ready(ctx({ pod: "p", path: "nope.json" }).c as never, none)).toMatch(
+    /save/,
+  );
+  expect(planless.apply.ready(ctx({ pod: "p", path: "settings/b.json" }).c as never, none)).toMatch(
+    /not a thing spec/,
+  );
+  expect(planless).not.toHaveProperty("plan");
+  const { c } = ctx({ pod: "p", path: "settings/a.json" });
+  run.mockReset().mockResolvedValue({ state: "succeeded", result: {} });
+  await planless.apply.run(c as never, none);
+  expect(run.mock.calls).toEqual([["family.apply", { source }, ref, undefined]]);
+});
+
+test("with a plan, plan opens the sheet and apply sends that hash", async () => {
+  const { c, state } = ctx({ pod: "p", path: "settings/a.json" });
+  expect(planned.apply.ready(c as never, none)).toBe("plan first");
+  run
+    .mockReset()
+    .mockResolvedValueOnce({ state: "succeeded", result: { plan: { planHash: "ph" } } });
+  await planned.plan.run(c as never, none);
+  expect(run.mock.calls).toEqual([["family.plan", { source }, ref, undefined]]);
+  expect(state.page).toMatchObject({ stage: "apply", confirming: true });
+  expect(state.page.sheet?.entries.map((entry) => entry.planHash)).toEqual(["ph"]);
+  expect(planned.apply.ready(c as never, none)).toBeNull();
+  // A pod list that is re-reading still answers with what it last saw, so apply stays offered.
+  const readings = (c as unknown as { readings: object }).readings;
+  Object.assign(c, { readings: { pods: { state: "stale", previous: pods, reason: "dirtied" } } });
+  expect(planned.apply.ready(c as never, none)).toBeNull();
+  Object.assign(c, { readings });
+  run.mockResolvedValueOnce({ state: "succeeded", result: {} });
+  await planned.apply.run(c as never, none);
+  expect(run.mock.calls[1]).toEqual([
+    "family.apply",
+    { source, expectedPlanHashes: { ph: "ph" } },
+    ref,
+    undefined,
+  ]);
+  expect(state.page).toMatchObject({ confirming: false, sheet: null });
+});
+
+test("a many-row plan applies one hash per included row, with the route's authored Work", async () => {
+  const many = entityRoute({
+    ...base,
+    plan: admissionPlan<{ excludedIds: number[] }, string, object>(
+      { plan: "families.plan", apply: "families.apply" },
+      (plan) => row((plan as { planHash: string }).planHash),
+      (work) => ({ excludedIds: work.excludedIds, executionOptions: { singleTransaction: true } }),
+    ),
+  }).actions!;
+  const { c, state } = ctx({ pod: "p", path: "settings/a.json" });
+  const work = { key: { route: "things" }, doc: { excludedIds: [2] }, revision: 3 };
+  Object.assign(c, { work });
+  run.mockReset().mockResolvedValueOnce({
+    state: "succeeded",
+    result: { plan: [{ planHash: "a" }, { planHash: "b" }], included: { a: "a", b: "b" } },
+  });
+  await many.plan.run(c as never, none);
+  const options = { singleTransaction: true };
+  expect(run.mock.calls[0]).toEqual([
+    "families.plan",
+    { source, excludedIds: [2], executionOptions: options },
+    ref,
+    { work: { key: work.key, revision: 3 } },
+  ]);
+  expect(state.page.sheet?.entries).toHaveLength(2);
+  run.mockResolvedValueOnce({ state: "succeeded", result: {} });
+  await many.apply.run(c as never, none);
+  expect(run.mock.calls[1]).toEqual([
+    "families.apply",
+    { source, executionOptions: options, expectedPlanHashes: { a: "a", b: "b" } },
+    ref,
+    undefined,
+  ]);
+  expect(state.page).toMatchObject({ confirming: false, sheet: null });
+});
+
+test("apply sends only included rows and refuses when nothing is left", async () => {
+  const apply = vi.fn(async (..._args: unknown[]) => {});
+  const actions = entityRoute({
+    ...base,
+    plan: {
+      read: async () => ({ entries: [] }),
+      excluded: () => ["b"],
+      apply,
+    },
+  }).actions!;
+  const { c } = ctx({
+    pod: "p",
+    path: "settings/a.json",
+    confirming: true,
+    sheet: { entries: [row("a"), row("b"), row("c", "nothing to apply")] },
+  });
+  await actions.apply.run(c as never, none);
+  expect(apply.mock.calls[0]![1]).toEqual([row("a")]);
+  const flagged = entityRoute({
+    ...base,
+    plan: { read: async () => ({ entries: [] }), apply },
+  }).actions!;
+  expect(
+    flagged.apply.ready(
+      ctx({
+        pod: "p",
+        path: "settings/a.json",
+        confirming: true,
+        sheet: { entries: [row("c", "refused")] },
+      }).c as never,
+      none,
+    ),
+  ).toMatch(/no included row/);
+});
+
+test("a refused workflow surfaces its reason", async () => {
+  const { c } = ctx({ pod: "p", path: "settings/a.json" });
+  run.mockReset().mockResolvedValue({ state: "failed", error: "member changed" });
+  await expect(planless.apply.run(c as never, none)).rejects.toThrow("member changed");
+});
+
+test("the URL carries stage, pod and path, and nothing malformed", () => {
+  expect(entitySearch({ stage: "apply", pod: "p", path: "a.json", x: 1 })).toEqual({
+    stage: "apply",
+    pod: "p",
+    path: "a.json",
+  });
+  expect(entitySearch({ stage: "nope", pod: "", path: 3 })).toEqual({});
+});
+
+test("verbs need what their workflow contract needs; the route needs what the definition says", () => {
+  // `family.capture` and `family.apply` need a family document.
+  expect([planless.capture.needs, planless.apply.needs, planned.apply.needs]).toEqual([
+    "family",
+    "family",
+    "family",
+  ]);
+  expect(entityRoute(base).needs).toBe("project");
+  expect(entityRoute({ ...base, needs: "document" }).needs).toBe("document");
+});

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   FileScan,
+  FlaskConical,
   Boxes,
   History,
   LayoutGrid,
@@ -16,8 +17,11 @@ import {
   Terminal,
 } from "lucide-react";
 
-import { RouteHead } from "#/targeting/head";
+import { RouteShell, emptyManifest } from "#/route";
 import { Card } from "#/components/lang/card";
+
+/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
+export const manifest = emptyManifest("index", "Positive Energy");
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -66,12 +70,12 @@ const TOOLS = [
       "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
   },
   {
-    to: "/settings",
-    title: "Settings",
-    label: "Host pipeline",
+    to: "/pods",
+    title: "Pods",
+    label: "Pods",
     icon: Settings2,
     description:
-      "Schema-backed host settings — pea proposes field values, you review, stage, validate, and save.",
+      "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
   },
   {
     to: "/doc-lab",
@@ -82,6 +86,14 @@ const TOOLS = [
       "The grounded-document engine in isolation — parsed markdown beside the PDF pages, hover either side to link them.",
   },
   {
+    to: "/lab",
+    title: "Lab",
+    label: "Experimental",
+    icon: FlaskConical,
+    description:
+      "Composed glances — many host calls gathered into one drawing, run against a session you pick.",
+  },
+  {
     to: "/ops",
     title: "Ops Playground",
     label: "Host API",
@@ -89,12 +101,12 @@ const TOOLS = [
     description: "Call any host operation directly and inspect the raw response.",
   },
   {
-    to: "/schedule-grid",
-    title: "Schedule Grid",
+    to: "/schedules",
+    title: "Schedules",
     label: "Revit data",
     icon: LayoutGrid,
     description:
-      "Any Revit schedule as an editable grid — pea proposes cell values, you review, stage, and push them back to the document.",
+      "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
   },
   {
     to: "/data-tables",
@@ -162,7 +174,7 @@ function App() {
   return (
     <div className="min-h-screen px-6">
       <header className="py-4">
-        <RouteHead name="Positive Energy" />
+        <RouteShell manifest={manifest} name="Positive Energy" />
       </header>
 
       <main className="py-16">
