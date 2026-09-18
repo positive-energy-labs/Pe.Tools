@@ -38,7 +38,7 @@ internal static class FamilyFoundryBridgeOps {
     [Op("family.apply", Does = "Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => RefuseStaleSource(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
-            request.ExpectedPlanHashes, document.Value, request.ExecutionOptions)), cancellationToken);
+            request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, cancellationToken: cancellationToken)), cancellationToken);
 
     [Op("families.capture", Does = "Open selected loaded families read-only and capture each as a family.json spec with coverage.", Title = "Capture Loaded Families", Finds = ["families", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Expensive)]
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
@@ -162,10 +162,6 @@ internal static class FamilyFoundryBridgeOps {
                 ReceiptPath = receiptPath,
                 Receipts = relative.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is null ? null : Path.GetDirectoryName(receiptPath) }).ToList()
             };
-        } catch (Exception exception) {
-            if (!File.Exists(Path.Combine(run, "receipt.json")))
-                _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, operation, null, "Failed", inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
-            throw;
         } finally {
             if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
         }
