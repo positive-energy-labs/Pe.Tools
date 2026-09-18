@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { backfill, recordVerdict, serve, tick } from "../src/main.ts";
+import { backfill, recordVerdict, serve, setLoopPaused, tick } from "../src/main.ts";
 
 describe("tick", () => {
   it("triggers, senses, gates, reruns, and merges", async () => {
@@ -202,6 +202,24 @@ describe("tick", () => {
       tick(repo, database);
       expect(git("rev-parse", "main").toString().trim()).toBe(mainBefore);
       expect(existsSync(escapedPath)).toBe(false);
+
+      writeFileSync(
+        join(repo, "factory.toml"),
+        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[actuator.change]\nrun="node {root}/actuator.mjs"\n[loop.paused]\nact="change"\ngate="human"\n',
+      );
+      writeFileSync(join(repo, "paused.txt"), "paused\n");
+      git("add", "factory.toml", "paused.txt");
+      git("commit", "-m", "paused loop");
+      const pausedSha = git("rev-parse", "main").toString().trim();
+      setLoopPaused(repo, "paused", true, database);
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT count(*) count FROM events WHERE loop = 'paused' AND sha = ? AND kind = 'acting'",
+          )
+          .get(pausedSha),
+      ).toEqual({ count: 0 });
 
       writeFileSync(
         join(repo, "factory.toml"),

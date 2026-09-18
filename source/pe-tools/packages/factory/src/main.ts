@@ -143,6 +143,7 @@ const sense = (
   database: DatabaseSync,
   sha: string,
   previous?: string,
+  force = false,
 ) => {
   const changed = previous
     ? git(repo, "diff", "--name-only", previous, sha).split(/\r?\n/).filter(Boolean)
@@ -164,6 +165,7 @@ const sense = (
         )
         .get(sha, name);
       if (
+        !force &&
         previous &&
         !retry &&
         !changed.some((file) => sensor.scope.some((glob) => matchesGlob(file, glob)))
@@ -345,8 +347,15 @@ const act = (
   loopName: string,
   loop: Config["loop"][string],
   sha: string,
+  force = false,
 ) => {
   if (!loop.act) return false;
+  const pause = database
+    .prepare(
+      "SELECT kind FROM events WHERE loop = ? AND kind IN ('paused','resumed') ORDER BY seq DESC LIMIT 1",
+    )
+    .get(loopName) as { kind: string } | undefined;
+  if (pause?.kind === "paused") return false;
   const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
   const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
   const fail = (actuator: string, stderr: string, stdout = "") => {
@@ -380,7 +389,7 @@ const act = (
   ) {
     return false;
   }
-  if (last?.kind !== "verdict") {
+  if (!force && last?.kind !== "verdict") {
     const error = database
       .prepare(
         "SELECT payload FROM events WHERE kind = 'error' AND loop = ? AND sha = ? ORDER BY seq DESC LIMIT 1",
@@ -429,7 +438,11 @@ const act = (
       shell: true,
     });
     if (result.status !== 0) {
-      return fail(loop.act, result.stderr.trim() || `actuator exited ${result.status}`, result.stdout);
+      return fail(
+        loop.act,
+        result.stderr.trim() || `actuator exited ${result.status}`,
+        result.stdout,
+      );
     }
     if (!git(worktree, "status", "--porcelain")) {
       return fail(
@@ -490,6 +503,28 @@ export function recordVerdict(
   if (last?.kind !== "gated") throw new Error("run is not gated");
   append(database, "verdict", sha, { decision: body.decision, text: body.text }, loop);
   return database.prepare("SELECT * FROM events ORDER BY seq DESC LIMIT 1").get() as EventRow;
+}
+
+export function setLoopPaused(
+  repo: string,
+  loop: string,
+  paused: boolean,
+  suppliedDatabase?: DatabaseSync,
+) {
+  const config = configAt(repo);
+  if (!config.loop[loop]) throw new Error(`unknown loop: ${loop}`);
+  const database = suppliedDatabase ?? openDatabase(repo, config);
+  try {
+    append(
+      database,
+      paused ? "paused" : "resumed",
+      git(repo, "rev-parse", config.factory.ref),
+      {},
+      loop,
+    );
+  } finally {
+    if (!suppliedDatabase) database.close();
+  }
 }
 
 export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
@@ -567,7 +602,16 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
         (order.get(a.sha) ?? Number.MAX_SAFE_INTEGER) -
         (order.get(b.sha) ?? Number.MAX_SAFE_INTEGER),
     );
-  const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
+  const runKinds = new Set([
+    "acting",
+    "proposed",
+    "gated",
+    "verdict",
+    "merged",
+    "failed",
+    "paused",
+    "resumed",
+  ]);
   const loops = Object.entries(config.loop).map(([loop, declaration]) => {
     const error = database
       .prepare("SELECT * FROM events WHERE kind = 'error' AND loop = ? ORDER BY seq DESC LIMIT 1")
@@ -754,12 +798,16 @@ export const serve = (repo: string, database: DatabaseSync) =>
     }
   });
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const repoIndex = args.indexOf("--repo");
   if (repoIndex >= 0 && !args[repoIndex + 1]) throw new Error("--repo requires a path");
   const repo = resolve(repoIndex >= 0 ? args[repoIndex + 1]! : process.cwd());
   const config = configAt(repo);
+  const command =
+    repoIndex >= 0
+      ? args.filter((_, index) => index !== repoIndex && index !== repoIndex + 1)
+      : args;
   const backfillIndex = args.indexOf("--backfill");
   if (backfillIndex >= 0) {
     const count = Number.parseInt(args[backfillIndex + 1] ?? "", 10);
@@ -772,6 +820,62 @@ function main() {
     tick(repo);
     return;
   }
+  const [verb, target, decision, ...text] = command;
+  if (verb === "sense") {
+    const database = openDatabase(repo, config);
+    try {
+      const sha = git(repo, "rev-parse", target ?? config.factory.ref);
+      const parent = git(repo, "rev-list", "--parents", "-n", "1", sha).split(" ")[1];
+      sense(repo, config, database, sha, parent, true);
+      console.log(
+        JSON.stringify(
+          rows(database)
+            .filter((row) => row.kind === "reading" && row.sha === sha)
+            .map((row) => ({ sha: row.sha, ...JSON.parse(row.payload) })),
+          null,
+          2,
+        ),
+      );
+    } finally {
+      database.close();
+    }
+    return;
+  }
+  if (verb === "run") {
+    const loop = target && config.loop[target];
+    if (!target || !loop) throw new Error(`unknown loop: ${target ?? ""}`);
+    const database = openDatabase(repo, config);
+    try {
+      act(repo, config, database, target, loop, git(repo, "rev-parse", config.factory.ref), true);
+    } finally {
+      database.close();
+    }
+    return;
+  }
+  if (verb === "pause" || verb === "resume") {
+    if (!target) throw new Error(`${verb} requires a loop`);
+    setLoopPaused(repo, target, verb === "pause");
+    return;
+  }
+  if (verb === "verdict") {
+    if (!target || !["accept", "reject"].includes(decision ?? "")) {
+      throw new Error("verdict requires <run> accept|reject [text]");
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:${config.factory.port}/verdict`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ run: target, decision, text: text.join(" ") }),
+      });
+      console.log(await response.text());
+      if (!response.ok) process.exitCode = 1;
+    } catch {
+      console.error("factory daemon is not running");
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (verb) throw new Error(`unknown verb: ${verb}`);
 
   const database = openDatabase(repo, config);
   tick(repo, database);
@@ -794,4 +898,9 @@ function main() {
   process.once("SIGTERM", stop);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}
