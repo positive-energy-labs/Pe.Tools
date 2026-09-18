@@ -81,7 +81,7 @@ public sealed class PodRunInputTests {
 
     [Test]
     public void Schedule_apply_success_creates_native_schedule_and_retains_exact_input(UIApplication ui) {
-        const string specJson = "{\r\n  \"name\": \"Input proof schedule\",\r\n  \"categoryName\": \"Generic Models\",\r\n  \"fields\": []\r\n}";
+        const string specJson = "{\r\n  \"Name\": \"Input proof schedule\",\r\n  \"CategoryName\": \"Generic Models\",\r\n  \"Fields\": []\r\n}";
         var (pod, source, composed) = NewPod(specJson);
         Document? document = null;
         try {
