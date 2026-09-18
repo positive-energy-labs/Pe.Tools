@@ -283,7 +283,7 @@ test("demo Family capture with no pod reads the live spec and files nothing; wit
   expect(saved.evidence.run).toBeTruthy();
 });
 
-test("demo Family plan returns a hash, apply sends that exact hash, and changed bytes refuse", async () => {
+test("demo Family plan returns a hash, apply sends that exact hash, from the bytes the plan sealed", async () => {
   const seed = family();
   if (seed.route !== "family") throw Error("Family seed expected");
   seed.work.candidate.fields = {};
@@ -299,7 +299,9 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
           key: planHash ? "family.apply" : "family.plan",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
-          input: { source, ...(planHash ? { expectedPlanHashes: { "1": planHash } } : {}) },
+          input: planHash
+            ? { plan: `${f.owner.id}:planned`, expectedPlanHashes: { "1": planHash } }
+            : { source },
           bases: {},
         })
       ).status,
@@ -333,11 +335,14 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
   expect(
     JSON.parse(await readFile(join(receiptPath, "..", "simulated.json"), "utf8")),
   ).toMatchObject({ simulated: true });
+  // A member saved after the plan does not change what apply runs: the plan sealed its bytes.
   await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
-  const stale = await apply("stale-member", planHash);
-  expect(stale.state).toBe("failed");
-  expect(stale.steps).toEqual([]);
-  expect(JSON.stringify(stale)).toContain("changed after it was reviewed");
+  const later = await apply("after-save", planHash);
+  expect(later.state).toBe("succeeded");
+  expect(later.steps[0]!.input).toMatchObject({
+    specJson: (planned.preparation as { value: { sealed: { specJson: string } } }).value.sealed
+      .specJson,
+  });
 });
 
 test("same HTTP router separates production Work and two demo resource owners; reset cannot retire production", async () => {

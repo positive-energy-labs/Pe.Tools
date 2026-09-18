@@ -17,11 +17,11 @@ import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import {
   admissionPlan,
+  byPlan,
   entityRoute,
   workflow,
   type EntityPage,
   type EntityRouteDef,
-  type MemberSource,
   type PlanEntry,
 } from "#/route";
 import { podHost } from "#/route/pods";
@@ -118,33 +118,20 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
           // The sheet names the member each family applies from.
           for (const plan of [result.plan].flat()) {
             const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
-            entries.push({ ...row, detail: `${row.detail} · from ${member.path}`, source });
+            entries.push({
+              ...row,
+              detail: `${row.detail} · from ${member.path}`,
+              source,
+              plan: String(result.id),
+            });
           }
         }
         return { entries };
       },
+      // Each member's plan sealed its bytes and the staged cells it consumed; the host retires
+      // those cells after proven native success, only where they are still unchanged.
       apply: async (ctx, included) => {
-        const doc = ctx.work.doc;
-        const byMember = new Map<string, { source: MemberSource; rows: PlanEntry[] }>();
-        for (const row of included) {
-          if (!row.source) throw Error(`the planned row for ${row.name} names no saved member`);
-          const key = `${row.source.pod}:${row.source.path}`;
-          const bucket = byMember.get(key);
-          if (bucket) bucket.rows.push(row);
-          else byMember.set(key, { source: row.source, rows: [row] });
-        }
-        for (const { source, rows } of byMember.values())
-          await workflow(
-            "families.apply",
-            {
-              source,
-              ...(doc?.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-              expectedPlanHashes: Object.fromEntries(rows.map((r) => [r.id, r.planHash])),
-            },
-            ctx,
-          );
-        // Host publication will retire only unchanged cells consumed by this sealed plan.
-        // Preserve Work until that contract can compare the original reviewed revision.
+        for (const input of byPlan(included)) await workflow("families.apply", input, ctx);
       },
     },
     docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or generated staged cells and apply exactly the families it changes.",

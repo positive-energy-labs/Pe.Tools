@@ -1,7 +1,8 @@
 import { familyCellKey, type FamilyCellAddress, type FamilyCellState } from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { cellAt, familyCellEntries, patchValue, stagedMembers } from "./staged.ts";
+import { patchValue } from "@pe/agent-contracts";
+import { cellAt, familyCellEntries, stagedMembers } from "./staged.ts";
 
 const now = new Date("2026-09-17T12:00:00.000Z");
 const entry = (

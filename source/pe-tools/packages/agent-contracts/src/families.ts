@@ -130,6 +130,44 @@ const familyCellKeySchema = z.string().refine(
   { error: "a family cell key must be a canonical [familyId,typeName,parameter] JSON tuple" },
 );
 
+/** A typed cell value as the Family Foundry patch writes it: a JSON scalar stays one. */
+export const patchValue = (text: string): string | number | boolean =>
+  text === "true"
+    ? true
+    : text === "false"
+      ? false
+      : text.trim() !== "" && Number.isFinite(Number(text))
+        ? Number(text)
+        : text;
+
+/**
+ * The patch member one family's staged cells generate, without its `$schema`, and the cell keys it
+ * consumed. Web files it; the host proves a planned member is exactly this before a plan may retire
+ * those cells. Null when the family has nothing staged.
+ */
+export function familyStagedPatch(
+  cells: Record<string, FamilyCellState>,
+  familyId: number,
+): {
+  familyName: string;
+  spec: { select: { names: string[] }; patch: { types: Record<string, Record<string, unknown>> } };
+  keys: string[];
+} | null {
+  const types: Record<string, Record<string, unknown>> = {};
+  const keys: string[] = [];
+  let familyName: string | null = null;
+  for (const [key, cell] of Object.entries(cells)) {
+    const address = familyCellAddress(key);
+    if (address.familyId !== familyId || !cell.staged) continue;
+    familyName ??= cell.staged.value.familyName;
+    (types[address.typeName] ??= {})[address.parameter] = patchValue(cell.staged.value.value);
+    keys.push(key);
+  }
+  return familyName === null
+    ? null
+    : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
+}
+
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
  * (one address, sent as `source`) or the members plan generates from staged cells;

@@ -31,6 +31,7 @@ import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types"
 
 import {
   admissionPlan,
+  byPlan,
   entityRoute,
   semanticActionFacts,
   semanticActionInput,
@@ -128,20 +129,29 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
       const saved = await workflow("family.capture", { pod: ctx.page.pod, spec }, ctx);
       const source = saved.member as MemberSource;
       ctx.setPage({ path: source.path });
-      const result = await workflow("family.plan", { source }, ctx);
+      // Bound to the reviewed draft: the host consumes its staged cells only if this member is it.
+      const result = await workflow(
+        "family.plan",
+        { source },
+        ctx,
+        ctx.work.revision === null
+          ? undefined
+          : { work: { key: ctx.work.key, revision: ctx.work.revision } },
+      );
       const row = ffPlanRow(ffPlanEntrySchema.parse(result.plan));
-      return { entries: [{ ...row, detail: `${row.detail} · from ${source.path}`, source }] };
+      return {
+        entries: [
+          {
+            ...row,
+            detail: `${row.detail} · from ${source.path}`,
+            source,
+            plan: String(result.id),
+          },
+        ],
+      };
     },
     apply: async (ctx, included) => {
-      const [row] = included;
-      if (!row?.source) throw Error("the planned row names no saved member");
-      await workflow(
-        "family.apply",
-        { source: row.source, expectedPlanHashes: { [row.id]: row.planHash } },
-        ctx,
-      );
-      // Host publication will retire only the unchanged cells consumed by this sealed plan.
-      // Until that contract lands, preserving Work is safer than erasing concurrent edits.
+      for (const input of byPlan(included)) await workflow("family.apply", input, ctx);
     },
   },
   docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, save the draft into a pod as a member, plan and apply it, open a saved member into the draft, or build a saved member to an .rfa.",
@@ -332,7 +342,9 @@ const familySeed = (
     buildReview: null,
     stage,
     ...(saved ? { pod: DEMO_POD, path: demoPath(name) } : {}),
-    ...(stage === "apply" ? { confirming: true, sheet: { entries: [DEMO_PLAN] } } : {}),
+    ...(stage === "apply"
+      ? { confirming: true, sheet: { entries: [{ ...DEMO_PLAN, plan: "demo-plan" }] } }
+      : {}),
   },
 });
 
