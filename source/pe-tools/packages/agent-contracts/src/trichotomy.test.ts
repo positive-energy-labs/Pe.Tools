@@ -7,6 +7,7 @@ import {
   availableTransitions,
   cellTransitions,
   fanOut,
+  sameValue,
   summarize,
   transitionBinding,
   transitionPatches,
@@ -313,5 +314,15 @@ describe("summarize", () => {
         "A/2": { proposal: null, staged: null },
       })[0]!.span,
     ).toBe(1);
+  });
+});
+
+describe("sameValue", () => {
+  it("compares what rungs write, canonically, and nothing else", () => {
+    expect(sameValue({ value: { b: 1, a: 2 } }, { value: { a: 2, b: 1 } })).toBe(true);
+    expect(sameValue({ value: "x", note: "n" } as never, { value: "x" })).toBe(true);
+    expect(sameValue({ delete: true }, { value: undefined })).toBe(false);
+    expect(sameValue({ value: "x" }, null)).toBe(false);
+    expect(sameValue(undefined, undefined)).toBe(false);
   });
 });
