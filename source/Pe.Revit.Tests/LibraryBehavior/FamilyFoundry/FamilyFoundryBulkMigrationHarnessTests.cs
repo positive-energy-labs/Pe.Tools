@@ -1534,8 +1534,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(document.FamilyManager.FindParameter("Horsepower (HP)"), Is.Null);
             var target = document.FamilyManager.FindParameter(definition.Name!);
             Assert.That(target, Is.Not.Null);
-            Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Any(type => type.HasValue(target)), Is.False,
-                "No profile default was authored, so the missing source leaves the target blank.");
+            // kaitpw 2026-09-08 (FamilyProfileConverter Sentinels): a created numeric parameter with nothing to say reads -1, never a silent 0.
+            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
+                Assert.That(type.HasValue(target), Is.True, $"{type.Name}: the missing source leaves the created target at the -1 sentinel (kaitpw 2026-09-08).");
+                Assert.That(type.AsDouble(target), Is.Not.EqualTo(0d), $"{type.Name}: never a silent 0 (kaitpw 2026-09-08).");
+                Assert.That(type.AsDouble(target), Is.EqualTo(-1d), $"{type.Name}: a created numeric parameter with nothing to say reads -1 (kaitpw 2026-09-08).");
+            }
         } finally { document.Close(false); }
     }
 
