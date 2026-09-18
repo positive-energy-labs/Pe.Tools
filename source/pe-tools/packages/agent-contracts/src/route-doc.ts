@@ -8,32 +8,14 @@ import {
   type RouteWriteKind,
 } from "./route-state.ts";
 
-export interface ExternalOperation {
-  command: string;
-  startedAt: string;
-}
-
-export type RouteRefusalCode = "stale_revision" | "request_id_conflict" | "replay_unavailable";
-
-export interface CommandReceipt {
-  command: string;
-  inputDigest: string;
-  completedAt: string;
-  revision: number;
-  replayable: boolean;
-  result?: unknown;
-}
+export type RouteRefusalCode = "stale_revision";
 
 export interface RouteEnvelope<D> {
   version: 1;
   revision: number;
   doc: D;
-  inFlight?: ExternalOperation;
-  outcomeUnknown?: ExternalOperation;
-  receipts?: Record<string, CommandReceipt>;
 }
 
-export type RoutePatch = RouteStatePatch;
 export type RouteActor = "agent" | "human";
 export type RouteRefusal = {
   ok: false;
@@ -54,7 +36,7 @@ export function applyPatches<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
   envelope: RouteEnvelope<z.infer<S>>,
   actor: RouteActor,
-  patches: readonly RoutePatch[],
+  patches: readonly RouteStatePatch[],
   expectedRevision: number,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
@@ -124,12 +106,6 @@ export function guardCommand<S extends z.ZodType>(
   const parsed = command.input.safeParse(input ?? {});
   if (!parsed.success)
     return refuse("error", `invalid input for command '${name}'`, formatZodError(parsed.error));
-  if (envelope.outcomeUnknown && command.mutatesExternal && !command.recoversExternal)
-    return refuse(
-      "refused",
-      `command '${name}' is blocked because a prior external outcome is unknown`,
-      "run a recovery command successfully before another external mutation.",
-    );
   return { ok: true, input: parsed.data, command };
 }
 
@@ -138,6 +114,10 @@ export function commitDoc<S extends z.ZodType>(
   envelope: RouteEnvelope<z.infer<S>>,
   next: unknown,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
+  const writeSchema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
+  const checked = writeSchema.safeParse(next);
+  if (!checked.success)
+    return refuse("error", "the patched document is invalid", formatZodError(checked.error));
   const parsed = spec.schema.safeParse(next);
   if (!parsed.success)
     return refuse("error", "the patched document is invalid", formatZodError(parsed.error));
@@ -156,7 +136,7 @@ function isMaskAllowed(mask: string[][], path: (string | number)[]): boolean {
   );
 }
 
-function applyPatch(root: Record<string, unknown>, patch: RoutePatch): void {
+function applyPatch(root: Record<string, unknown>, patch: RouteStatePatch): void {
   if (patch.path.length === 0) return;
   if (patch.path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment))))
     throw new Error(`patch path ${formatPath(patch.path)} contains a forbidden segment`);
