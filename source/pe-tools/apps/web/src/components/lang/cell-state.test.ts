@@ -56,3 +56,31 @@ describe("cellFromTrichotomy", () => {
     expect(cellStateLabel(committed)).toBe("clean");
   });
 });
+
+describe("cellFromTrichotomy value equality", () => {
+  const facts = { value: "shown" };
+  it("treats equal deserialized objects as pea's staged value, not a counter-proposal", () => {
+    const cell = cellFromTrichotomy(
+      { proposal: { by: "pea", value: { b: 2, a: [1] } }, staged: { value: { a: [1], b: 2 } } },
+      facts,
+    );
+    expect(cell.stagedBy).toBe("pea");
+    expect(cell.counterValue).toBeUndefined();
+  });
+  it("words an object counter through the caller's formatter, and JSON by default", () => {
+    const rungs = {
+      proposal: { by: "pea" as const, value: { a: 1 } },
+      staged: { value: { a: 2 } },
+    };
+    expect(cellFromTrichotomy(rungs, facts).counterValue).toBe('{"a":1}');
+    expect(cellFromTrichotomy(rungs, facts, () => "one").counterValue).toBe("one");
+  });
+  it("a delete against a set of the same value is a counter-proposal", () => {
+    const cell = cellFromTrichotomy(
+      { proposal: { by: "pea", value: 1, delete: true } as never, staged: { value: 1 } },
+      facts,
+    );
+    expect(cell.stagedBy).toBe("you");
+    expect(cell.counterValue).toBe("delete");
+  });
+});
