@@ -6,10 +6,13 @@ import type {
   Session,
   WireDisplayState,
 } from "@mastra/core/agent-controller";
+import { createSignal, type AgentSignalInput } from "@mastra/core/agent";
 import { Buffer } from "node:buffer";
 import {
+  askExpiryOf,
   threadAccess,
   type DeferredToolResultRef,
+  type ExpiredAsk,
   type ThreadViewState,
   type ToolResultResponse,
   type ToolResultSummary,
@@ -49,10 +52,12 @@ export async function readThreadState(
     runtime.controller.listAvailableModels(),
   ]);
   const { messages, deferredResults } = projectThreadMessages(storedMessages);
+  const expiredAsks = selectExpiredAsks(storedMessages, session);
   const permissions = session.permissions.getRules();
   return {
     messages,
     ...(deferredResults.length ? { deferredResults } : {}),
+    ...(expiredAsks.length ? { expiredAsks } : {}),
     models: { currentId: session.model.get() || undefined, available },
     permissions,
     access: threadAccess(permissions),
@@ -62,6 +67,82 @@ export async function readThreadState(
 }
 
 type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number];
+
+/** Built-ins that ask through a tool suspension rather than the permission gate. */
+const suspendingAsks = new Set(["ask_user", "request_access", "submit_plan"]);
+
+/**
+ * Asks whose turn is gone, derived without a write: a stored ask call that never reached a terminal
+ * state and that nothing live awaits. Turn end, cancel (an abort-declined gate stays `call`, only a
+ * human denial is `output-denied`) and host restart all land here; the trigger is not recorded.
+ * ponytail: "was an ask" reads the CURRENT approval policy; a policy changed since the ask would
+ * misfile it. Upgrade: record the ask on `tool_approval_required` if that ever matters.
+ */
+export function selectExpiredAsks(
+  messages: ThreadMessage[],
+  session: Pick<Session, "displayState" | "resolveToolApproval">,
+): ExpiredAsk[] {
+  const display = session.displayState.get();
+  const live = new Set([
+    display.pendingApproval?.toolCallId,
+    ...display.pendingSuspensions.keys(),
+    ...(display.isRunning ? display.activeTools.keys() : []),
+  ]);
+  return messages.flatMap((message) =>
+    message.content.parts.flatMap((part) => {
+      if (part.type !== "tool-invocation") return [];
+      const { state, toolCallId, toolName } = part.toolInvocation;
+      if (state !== "call" && state !== "partial-call") return [];
+      if (live.has(toolCallId)) return [];
+      if (!suspendingAsks.has(toolName) && session.resolveToolApproval(toolName) !== "ask")
+        return [];
+      return [{ messageId: message.id, toolCallId, toolName }];
+    }),
+  );
+}
+
+/** Drops parked resume data and its display mirror, so an expired ask cannot be answered. */
+export function expireAsks(
+  session: Pick<Session, "suspensions" | "emit">,
+  reason: Parameters<typeof askExpiryOf>[0],
+): boolean {
+  const expiry = askExpiryOf(reason);
+  if (expiry === null) return false;
+  for (const { toolCallId, toolName } of session.suspensions.clear())
+    session.emit({ type: "tool_suspension_cancelled", toolCallId, toolName, reason: expiry });
+  return true;
+}
+
+/**
+ * Every turn start funnels through `sendSignal` (Mastra's sendMessage, steer and followUp call it;
+ * Pea's admitTurn does too); a resume does not. The parked run still owns the thread, and a signal
+ * sent into it hangs. So a new turn expires the asks, cancels the parked run (which ends `aborted`)
+ * and sends once that run's stream has torn down.
+ */
+export function expireAsksOnNewTurn(session: Session): void {
+  const sendSignal = session.sendSignal.bind(session);
+  session.sendSignal = ((input, options) => {
+    if (!session.suspensions.hasPending()) return sendSignal(input, options);
+    expireAsks(session, "new-turn");
+    session.abort();
+    const torndown = new AbortController();
+    const idle = Promise.race([
+      session.stream.waitForTeardown(torndown.signal),
+      // Bounded as Mastra bounds its own waitForStreamIdle; teardown lands well inside it.
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]).finally(() => torndown.abort());
+    const signal = createSignal(
+      "content" in input
+        ? { type: "user", tagName: "user", contents: input.content }
+        : (input as AgentSignalInput),
+    );
+    return {
+      id: signal.id,
+      type: signal.type,
+      accepted: idle.then(() => sendSignal(input, options).accepted),
+    };
+  }) as typeof session.sendSignal;
+}
 
 export function projectThreadMessages(messages: ThreadMessage[]): {
   messages: ThreadMessage[];
