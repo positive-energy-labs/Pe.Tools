@@ -75,8 +75,7 @@ internal static class ScheduleBridgeOps {
         EngineEdge.RequireReachableCentral(document);
         var (run, inputOutputs) = EngineEdge.StartRun(composed, new {
             operation = "schedule.apply",
-            target = EngineEdge.RunTarget(document),
-            unavailableEvidence = new[] { "reviewed Work revision" }
+            target = EngineEdge.RunTarget(document)
         }, specJson);
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;

@@ -182,6 +182,7 @@ export namespace FamiliesApply {
       };
       source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
+      plan?: null | string;
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
@@ -433,6 +434,7 @@ export namespace FamilyApply {
       };
       source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
+      plan?: null | string;
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied

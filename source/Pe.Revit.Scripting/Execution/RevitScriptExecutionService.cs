@@ -117,7 +117,7 @@ public sealed class RevitScriptExecutionService(
                 outputSink.Attribution = plan.Attribution ?? new PodReceipt(
                     ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
                     null, null, PodRunOrigin.Operation, "scripting.execute", null, PodRunOutcome.Failed, [], null);
-                outputSink.Artifacts.WriteInput(RunInputMetadata(plan, request), RunInputFiles(plan, request));
+                outputSink.Artifacts.WriteInput(PodRuns.WithReviewBasis(RunInputMetadata(plan, request), null), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
                 AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
                 return CreateResult(ScriptExecutionStatus.Rejected, outputSink, diagnostics, revitVersion, plan.TargetFramework, containerTypeName, executionId);
@@ -533,8 +533,7 @@ public sealed class RevitScriptExecutionService(
             ? (object)new { kind = "pod-bundle", pod = member.PodId, path = member.MemberPath, sha256 = member.MemberSha256 }
             : new { kind = "operation", name = request.SourceName },
         plan.PermissionMode,
-        target = new { document = plan.Document?.Title, plan.RevitVersion, plan.TargetFramework },
-        unavailableEvidence = new[] { "reviewed Work revision" }
+        target = new { document = plan.Document?.Title, plan.RevitVersion, plan.TargetFramework }
     };
 
     /// <summary>The authored bytes (the pod bundle, or the inline text), then the normalized sources and project that compiled.</summary>
