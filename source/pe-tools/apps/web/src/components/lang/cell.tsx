@@ -249,7 +249,10 @@ export function StateCell(props: StateCellProps) {
                 if (props.onNavigate?.(e.shiftKey ? "left" : "right")) e.preventDefault();
               } else if (e.key === "Escape") {
                 e.currentTarget.value = initial.current;
-                e.currentTarget.blur();
+                // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
+                const td = e.currentTarget.closest<HTMLElement>("[data-master-cell]");
+                if (td) td.focus();
+                else e.currentTarget.blur();
               }
             }}
             onBlur={(e) => commit(e.currentTarget)}

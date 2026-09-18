@@ -89,3 +89,21 @@ test("a focused table cell fires a / d / u through the hotkey registry", async (
   expect(unstage.run).toHaveBeenCalledOnce();
   expect(accept.run).not.toHaveBeenCalled();
 });
+
+test("Escape in the input restores the value and hands focus back to the td, where a accepts", async () => {
+  const accept = t("accept");
+  const commit = vi.fn();
+  const { container } = inTable(
+    <StateCell value="10in" scale="row" onCommit={commit} transitions={[accept]} />,
+  );
+  const td = container.querySelector<HTMLElement>("td")!;
+  const input = container.querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "12in" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
+  expect(input.value).toBe("10in");
+  expect(document.activeElement).toBe(td);
+  await act(async () => fireEvent.keyDown(td, { key: "a", code: "KeyA" }));
+  expect(accept.run).toHaveBeenCalledOnce();
+  expect(commit).not.toHaveBeenCalled();
+});
