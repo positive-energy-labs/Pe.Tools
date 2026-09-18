@@ -125,7 +125,7 @@ test("an invalidation supersedes a held initial thread fetch", async () => {
     await firstHeld;
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("persist while hydration is held");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     await expect
       .poll(
         async () =>

@@ -59,7 +59,8 @@ export async function createRuntimeLibSqlStorage(
   if (localPath) await mkdir(dirname(localPath), { recursive: true });
 
   // LibSQLStore builds stores.threadState (ThreadStateLibSQL) by default.
-  return new LibSQLStore(config);
+  const store = new LibSQLStore(config);
+  return store;
 }
 
 export function createMastraCodeStorageProfile(

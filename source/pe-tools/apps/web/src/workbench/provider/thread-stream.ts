@@ -1,12 +1,63 @@
-import type { AgentControllerEvent, MastraClient } from "@mastra/client-js";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { emptyChatState, type ChatDisplay, type ChatState } from "../chat-state";
+import { previousOf } from "#/readings";
+import type { Reading } from "@pe/agent-contracts";
+import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { Cause, Effect } from "effect";
+import { useEffect, useMemo, useState } from "react";
+import {
+  emptyChatState,
+  isUserTurn,
+  type ChatDisplay,
+  type ChatState,
+  type ThreadBody,
+} from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
 type SessionClient = ReturnType<ControllerClient["session"]>;
 
 const EMPTY = emptyChatState();
+const EMPTY_BODY: ThreadBody = (() => {
+  const { display: _display, ...body } = EMPTY;
+  return body;
+})();
+const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY_BODY));
+type LiveThread = {
+  key: string | null;
+  frame: ChatDisplay | null;
+  sent: MastraDBMessage[];
+  fault: Error | null;
+  turnFailure: Error | null;
+  turnFailed: boolean;
+};
+
+const emptyLive = () => ({
+  frame: null,
+  sent: [] as MastraDBMessage[],
+  fault: null,
+  turnFailure: null,
+  turnFailed: false,
+});
+
+const bodyAtoms = Atom.family((key: string) => {
+  const [origin, threadId] = JSON.parse(key) as [string, string];
+  return Atom.make(
+    Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId)}`, {
+          signal,
+        });
+        if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
+        return response.json() as Promise<ThreadBody>;
+      },
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    }),
+  ).pipe(Atom.autoDispose);
+});
+
+export const threadBodyAtom = (origin: string, threadId: string) =>
+  bodyAtoms(JSON.stringify([origin, threadId]));
 
 const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
   "message_end",
@@ -16,65 +67,88 @@ const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
   "mode_changed",
 ]);
 
+/**
+ * Whether the chat is still waiting for its thread body. Decided by what has arrived, not by
+ * request states: the host status Reading starts `absent` (never `loading`) until its first frame,
+ * and until it lands there is no session, so no thread fetch either. A failed host status ends the
+ * wait. Read as "loaded and empty" too early, the lens dropped a `?turn` it could not yet find.
+ */
+export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean): boolean {
+  const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
+  return !hostKnown || threadPending;
+}
+
 export const threadQueryKey = (origin: string, threadId: string | null) =>
   ["pe-thread", origin, threadId] as const;
 
 export function useThreadStream(options: {
   origin: string;
-  queryClient: QueryClient;
   thread: { id: string; session: SessionClient } | null;
 }) {
-  const { origin, queryClient, thread } = options;
+  const { origin, thread } = options;
   const threadId = thread?.id ?? null;
   const session = thread?.session;
-  const queryKey = threadQueryKey(origin, threadId);
-  const query = useQuery({
-    queryKey,
-    queryFn: async (): Promise<ChatState> => {
-      const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId ?? "")}`);
-      if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
-      return response.json() as Promise<ChatState>;
-    },
-    enabled: threadId !== null,
-    staleTime: Infinity,
-  });
-  // The stream is the only source of display: the server opens every attach with a snapshot
-  // frame, so no fetch ever competes with it and no clock is needed.
-  const [frame, setFrame] = useState<ChatDisplay | null>(null);
-  const [streamFault, setStreamFault] = useState<Error | null>(null);
-
-  useEffect(() => {
-    setFrame(null);
-    setStreamFault(null);
-  }, [threadId]);
+  const key = threadId === null ? null : JSON.stringify([origin, threadId]);
+  const bodyAtom = useMemo(
+    () => (threadId === null ? emptyBodyAtom : threadBodyAtom(origin, threadId)),
+    [origin, threadId],
+  );
+  const body = useAtomValue(bodyAtom);
+  // Live state is one current-thread slot, never a retained thread map. Reset during the
+  // selection render so B cannot briefly project A while React waits to run an effect.
+  const [live, setLive] = useState<LiveThread>(() => ({ key, ...emptyLive() }));
+  if (live.key !== key) setLive({ key, ...emptyLive() });
+  const current = live.key === key ? live : emptyLive();
 
   // The one refetch path: cancel kills a fetch that left before the change, so an older body
-  // can never land after a newer one.
-  const invalidate = useCallback(async () => {
-    const key = threadQueryKey(origin, threadId);
-    await queryClient.cancelQueries({ queryKey: key });
-    await queryClient.invalidateQueries({ queryKey: key });
-  }, [queryClient, origin, threadId]);
-
+  // can never land after a newer one. It closes over `refresh` ALONE — `query` is a fresh object
+  // every render, and an `invalidate` that changed identity per render tore the SSE subscription
+  // down and reopened it on every render, dropping whatever `message_end` fired in the gap.
+  const invalidate = useAtomRefresh(bodyAtom);
   useEffect(() => {
-    if (!session || !query.isSuccess) return;
+    if (!session) return;
     let stopped = false;
     const accept = (event: AgentControllerEvent) => {
       if (stopped) return;
-      if (event.type === "display_state_changed") {
-        setFrame(event.displayState as ChatDisplay);
-        setStreamFault(null);
-      }
-      if (event.type === "error" || (event.type === "agent_end" && event.reason === "error")) {
-        setStreamFault(
-          event.type === "error"
-            ? event.error instanceof Error
-              ? event.error
-              : new Error(String(event.error))
-            : new Error("Run failed."),
+      const started = event.type === "message_start" ? (event.message as MastraDBMessage) : null;
+      if (started && isUserTurn(started)) {
+        setLive((previous) =>
+          previous.key !== key || previous.sent.some((item) => item.id === started.id)
+            ? previous
+            : { ...previous, sent: [...previous.sent, started] },
         );
       }
-      if (invalidatingEvents.has(event.type)) void invalidate();
+      if (event.type === "display_state_changed") {
+        const frame = event.displayState as ChatDisplay;
+        setLive((previous) =>
+          previous.key !== key
+            ? previous
+            : {
+                ...previous,
+                frame,
+                fault: frame.isRunning ? null : previous.fault,
+                turnFailure: frame.isRunning ? null : previous.turnFailure,
+                turnFailed: frame.isRunning ? false : previous.turnFailed,
+              },
+        );
+      }
+      if (event.type === "error" || (event.type === "agent_end" && event.reason === "error")) {
+        setLive((previous) =>
+          previous.key !== key
+            ? previous
+            : {
+                ...previous,
+                turnFailure:
+                  event.type === "error"
+                    ? event.error instanceof Error
+                      ? event.error
+                      : new Error(String(event.error))
+                    : previous.turnFailure,
+                turnFailed: true,
+              },
+        );
+      }
+      if (invalidatingEvents.has(event.type)) invalidate();
     };
 
     let unsubscribe: (() => void) | undefined;
@@ -82,9 +156,14 @@ export function useThreadStream(options: {
       .subscribe({
         onEvent: accept,
         reconnect: true,
-        onReconnect: () => void invalidate(),
+        onReconnect: () => invalidate(),
         onError: (error) => {
-          if (!stopped) setStreamFault(error instanceof Error ? error : new Error(String(error)));
+          if (!stopped)
+            setLive((previous) =>
+              previous.key === key
+                ? { ...previous, fault: error instanceof Error ? error : new Error(String(error)) }
+                : previous,
+            );
         },
       })
       .then((subscription) => {
@@ -92,24 +171,46 @@ export function useThreadStream(options: {
         else unsubscribe = subscription.unsubscribe;
       })
       .catch((error) => {
-        if (!stopped) setStreamFault(error instanceof Error ? error : new Error(String(error)));
+        if (!stopped)
+          setLive((previous) =>
+            previous.key === key
+              ? { ...previous, fault: error instanceof Error ? error : new Error(String(error)) }
+              : previous,
+          );
       });
 
     return () => {
       stopped = true;
       unsubscribe?.();
     };
-  }, [invalidate, query.isSuccess, session, threadId]);
+  }, [invalidate, key, session]);
 
-  const chat = useMemo<ChatState>(
-    () => (query.data ? { ...query.data, display: frame ?? {} } : EMPTY),
-    [query.data, frame],
-  );
+  const chat = useMemo<ChatState>(() => {
+    if (body._tag !== "Success" && current.sent.length === 0 && current.frame === null)
+      return EMPTY;
+    const stored = body._tag === "Success" ? body.value : EMPTY_BODY;
+    const known = new Set(stored.messages.map((message) => message.id));
+    const unstored = current.sent.filter((message) => !known.has(message.id));
+    const messages = unstored.length ? [...stored.messages, ...unstored] : stored.messages;
+    return { ...stored, messages, display: current.frame ?? EMPTY.display };
+  }, [body, current]);
+  const error = useMemo(() => {
+    if (body._tag !== "Failure") return current.fault;
+    const fault = Cause.squash(body.cause);
+    return fault instanceof Error ? fault : new Error(Cause.pretty(body.cause));
+  }, [body, current.fault]);
 
   return {
     chat,
-    pending: threadId !== null && query.isPending,
-    error: query.error ?? streamFault,
+    // Pending exactly while a named thread has no body and no failure. Not `query.isPending`:
+    // that is false on the first render after the thread appears (the fetch starts in an
+    // effect), and true again on every refetch over a thread already on screen.
+    pending: threadId !== null && body._tag === "Initial" && body.waiting,
+    error,
+    displayKnown: current.frame !== null,
+    turnFailure: current.turnFailure,
+    turnFailed: current.turnFailed,
     invalidate,
+    bodyAtom,
   };
 }

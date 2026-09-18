@@ -1,11 +1,15 @@
 import { createContext } from "react";
 import { MastraClient, type PlanResume } from "@mastra/client-js";
-import type { PeaWorldDescriptor } from "@pe/agent-contracts";
+import type { PeaSessionDescriptor } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
 import { type AccessLevel, type ChatState } from "../chat-state";
-import { type ChatPageStore, type WorkbenchAttachment } from "../store";
+import { type ChatPageStore } from "../store";
+import { type WorkbenchAttachment } from "../prompt";
+import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import type { ThreadBody } from "../chat-state";
 
-export type { WorkbenchAttachment } from "../store";
+export type { WorkbenchAttachment } from "../prompt";
 
 export interface StoredThreadSummary {
   id: string;
@@ -22,13 +26,28 @@ export type SessionClient = ReturnType<ReturnType<MastraClient["getAgentControll
 export interface WorkbenchContextValue {
   store: ChatPageStore;
   config: WorkbenchEndpointConfig;
+  /**
+   * The live session client, or undefined until the host answers. The chat MANIFEST's two actions
+   * refuse without it, and the provider never handed it out — so `chat/manifest.ts`'s `send` and
+   * `cancel` were unreachable from the route shell, refusing "Session is not ready" forever while
+   * the composer's own copy of the same two actions ran. One session, one owner.
+   */
+  session?: SessionClient;
   chat: ChatState;
+  /** The selected thread body; only the transcript reads it with Suspense. */
+  bodyAtom: Atom.Atom<AsyncResult.AsyncResult<ThreadBody, Error>>;
   loading: boolean;
   error?: string;
   threads: StoredThreadSummary[];
   currentThreadId: string;
+  turn?: number;
+  prompt?: string;
+  /** A fetched body or live display frame has established this thread's send gate. */
+  displayKnown: boolean;
+  turnFailure: Error | null;
+  turnFailed: boolean;
   revit?: boolean;
-  world?: PeaWorldDescriptor;
+  world?: PeaSessionDescriptor;
   isRunning: boolean;
   operationError?: string;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
@@ -37,7 +56,8 @@ export interface WorkbenchContextValue {
   forkThread: () => Promise<void>;
   openThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => void | Promise<void>;
-  deleteThread: (threadId: string) => Promise<void>;
+  deleteThread: (threadId: string) => Promise<boolean>;
+  patchThreadView: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
   resolveApproval: (toolCallId: string, response?: ToolResume) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   /** Store a provider API key in the host's auth.json and refresh the model choices. */

@@ -1,6 +1,6 @@
+import { CHAT_ACTIONS } from "../actions";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
 import type { ToolResume } from "./thread-summary";
 import { resolveWorkbenchConfig } from "../config";
@@ -10,29 +10,39 @@ import {
   PERMISSION_LEVELS,
   type AccessLevel,
 } from "../chat-state";
-import { usePeInfo } from "#/host/info";
-import { appAtomRegistry } from "#/state/registry";
-import { useRouteStore } from "#/state/use-route-store";
-import { createChatPageStore, type WorkbenchAttachment } from "../store";
+import { previousOf, useHostStatus } from "#/readings";
+import { appAtomRegistry } from "#/route";
+import { useRouteOwner } from "#/route";
+import { createChatPageStore } from "../store";
+import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
-import { useThreadStream } from "./thread-stream";
+import { chatLoading, useThreadStream } from "./thread-stream";
+import { saveApiKey } from "./host";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { CHAT_SEEDS } from "#/chat/seeds";
 import {
   errorMessage,
   forkSessionThread,
-  rejectApproval,
   resumeDataForSuspension,
-  toFiles,
   toSummaries,
 } from "./use-workbench";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
-  const queryClient = useQueryClient();
   const navigate = useNavigate({ from: "/chat" });
   const search = useSearch({ from: "/chat" });
-  const [currentThreadId] = useState(() => search.thread ?? crypto.randomUUID());
-  const store = useRouteStore(() =>
+  const [initialThreadId] = useState(() => search.thread ?? crypto.randomUUID());
+  const currentThreadId = search.thread ?? initialThreadId;
+  useEffect(() => {
+    if (!search.thread)
+      void navigate({
+        search: (previous) => ({ ...previous, thread: currentThreadId }),
+        replace: true,
+      });
+  }, [currentThreadId, navigate, search.thread]);
+  const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
       search: {
@@ -43,19 +53,31 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
   );
 
-  const infoQuery = usePeInfo(config);
-  const info = infoQuery.data;
+  // The one `host-status` Reading. Its own lifecycle is the freshness claim; `previousOf` keeps
+  // the last good answer through loading and failure so the surface never invents one.
+  const hostStatus = useHostStatus();
+  const info = previousOf(hostStatus);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [error, setError] = useState<string>();
   const settlingApprovalsRef = useRef(new Set<string>());
 
+  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched (the route's
+  // `useRoute` mounts the same seed for its readings). No session, so every action refuses.
+  const [demo] = useState(() =>
+    typeof location === "undefined"
+      ? undefined
+      : CHAT_SEEDS[new URLSearchParams(location.search).get("demo") as keyof typeof CHAT_SEEDS]
+          ?.work,
+  );
+  const controllerId = info?.controllerId;
+  const resourceId = info?.resourceId;
   const session = useMemo(() => {
-    if (!info) return undefined;
+    if (demo || !controllerId || !resourceId) return undefined;
     const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
-      info.controllerId,
+      controllerId,
     );
-    return controller.session(info.resourceId, currentThreadId);
-  }, [config.origin, currentThreadId, info]);
+    return controller.session(resourceId, currentThreadId);
+  }, [config.origin, currentThreadId, controllerId, resourceId, demo]);
 
   const refreshThreads = useCallback(async () => {
     if (!session) return;
@@ -66,17 +88,25 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
   }, [session]);
 
+  const stream = useThreadStream({
+    origin: config.origin,
+    thread: session ? { id: currentThreadId, session } : null,
+  });
   const {
-    chat,
     pending: threadPending,
     error: streamFault,
     invalidate,
-  } = useThreadStream({
-    origin: config.origin,
-    queryClient,
-    thread: session ? { id: currentThreadId, session } : null,
-  });
-  const loading = infoQuery.isPending || threadPending;
+    displayKnown,
+    turnFailure,
+    turnFailed,
+  } = stream;
+  const chat = demo ?? stream.chat;
+  const bodyAtom = useMemo(() => {
+    if (!demo) return stream.bodyAtom;
+    const { display: _display, ...body } = demo;
+    return Atom.make(AsyncResult.success(body));
+  }, [demo, stream.bodyAtom]);
+  const loading = demo ? false : chatLoading(hostStatus, threadPending);
 
   const status = selectRunStatus(chat);
   const isRunning = status !== "idle";
@@ -95,25 +125,30 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
-      if ((!prompt && !attachments?.length) || !session) return;
-      const files = toFiles(attachments);
+      if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
+      if (!session) throw Error("Session is not ready");
+      if (!displayKnown) throw Error("Thread state is loading");
       try {
         setError(undefined);
         // The host admits the turn under the thread's Scope; the browser names no target.
-        await session.sendMessage({ content: prompt, files });
-        if (threadPending) await invalidate();
+        const context = { session, display: chat.display };
+        const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
+        if (refusal) throw Error(refusal);
+        await CHAT_ACTIONS.send.run(context, { text, attachments });
+        if (threadPending) invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
+        throw caught;
       }
     },
-    [invalidate, session, threadPending],
+    [displayKnown, invalidate, session, store, threadPending, chat.display],
   );
 
   const cancel = useCallback(() => {
     if (!session) return;
-    for (const approval of selectApprovals(chat.display))
-      void rejectApproval(session, approval).catch((caught) => setError(errorMessage(caught)));
-    void session.abort().catch((caught) => setError(errorMessage(caught)));
+    void CHAT_ACTIONS.cancel
+      .run({ session, display: chat.display })
+      .catch((caught: unknown) => setError(errorMessage(caught)));
   }, [chat.display, session]);
 
   const newThread = useCallback(() => {
@@ -152,14 +187,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const deleteThread = useCallback(
     async (threadId: string) => {
-      if (!session) return;
+      if (!session) return false;
       try {
         await session.deleteThread(threadId);
         setThreads((previous) => previous.filter((item) => item.id !== threadId));
         if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
         else await refreshThreads();
+        return true;
       } catch (caught) {
         setError(errorMessage(caught));
+        return false;
       }
     },
     [currentThreadId, gotoThread, refreshThreads, session],
@@ -194,16 +231,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const addApiKey = useCallback(
     async (provider: string, apiKey: string) => {
-      const response = await fetch(
-        `${config.origin}/pe/credentials/${encodeURIComponent(provider)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ apiKey }),
-        },
-      );
-      if (!response.ok) throw new Error(`credentials ${response.status}`);
-      await invalidate();
+      await saveApiKey(config.origin, provider, apiKey);
+      invalidate();
     },
     [config.origin, invalidate],
   );
@@ -229,7 +258,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             category as ToolCategory,
             policy as PermissionPolicy,
           );
-        await invalidate();
+        invalidate();
       } catch (caught) {
         setError(errorMessage(caught));
       }
@@ -237,19 +266,32 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [invalidate, session],
   );
 
+  const patchThreadView = useCallback(
+    (partial: { turn?: number }, replace = false) =>
+      navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
+    [navigate],
+  );
+
   const operationError =
-    error ?? (infoQuery.error ? errorMessage(infoQuery.error) : streamFault?.message);
+    error ?? (hostStatus.state === "failed" ? hostStatus.message : streamFault?.message);
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       store,
       config,
+      session,
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
       currentThreadId,
+      turn: search.turn,
+      prompt: search.prompt,
+      displayKnown,
+      turnFailure,
+      turnFailed,
       revit: info?.capabilities.revit,
-      world: info?.world,
+      world: info?.world as WorkbenchContextValue["world"],
       isRunning,
       operationError,
       sendPrompt,
@@ -259,6 +301,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      patchThreadView,
       resolveApproval,
       setModel,
       addApiKey,
@@ -267,15 +310,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       chat,
+      bodyAtom,
       loading,
       error,
       threads,
       currentThreadId,
+      search.turn,
+      search.prompt,
+      displayKnown,
+      turnFailure,
+      turnFailed,
       info,
       isRunning,
       operationError,
       store,
       config,
+      session,
+      patchThreadView,
     ],
   );
 
