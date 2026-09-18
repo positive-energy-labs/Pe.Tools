@@ -53,6 +53,7 @@ import type { RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { postRouteWrite } from "./host";
+import { useThreadScope } from "#/chat/scope";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
@@ -317,8 +318,16 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
   return store;
 }
 
-/** Route search preserves the target string; parseTarget validates its exact request or shorthand. */
-export function routeSearch(search: Record<string, unknown>): { target?: string; work?: string } {
+/**
+ * Route search preserves the target string; parseTarget validates its exact request or shorthand.
+ * `thread` names the thread whose head is the route's target store; the root retains it on every
+ * link, so the URL carries the thread.
+ */
+export function routeSearch(search: Record<string, unknown>): {
+  target?: string;
+  work?: string;
+  thread?: string;
+} {
   // The router JSON-parses search values, so an exact `?target={"kind":"open",...}` arrives as an
   // object. It is re-serialized here so `parseTarget` always reads the one string grammar; left as
   // an object it threw in render, and the SSR stream hung on the throw instead of finishing.
@@ -330,7 +339,12 @@ export function routeSearch(search: Record<string, unknown>): { target?: string;
         ? JSON.stringify(raw)
         : "";
   const work = typeof search.work === "string" ? search.work.trim() : "";
-  return { ...(target ? { target } : {}), ...(work ? { work } : {}) };
+  const thread = typeof search.thread === "string" ? search.thread.trim() : "";
+  return {
+    ...(target ? { target } : {}),
+    ...(work ? { work } : {}),
+    ...(thread ? { thread } : {}),
+  };
 }
 
 /* ── Work ──────────────────────────────────────────────────────────────────── */
@@ -486,8 +500,15 @@ export interface RouteOutcome<A extends string> {
 export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly manifest: RouteManifest<W, R, P, A>;
   readonly resolution: TargetResolution;
-  /** Explicit target request or session/address shorthand; null inherits the thread head. */
+  /** The `?target` pin: a view over one document, never written by the route; null reads the head. */
   readonly chosen: string | null;
+  /** The thread head, the one target store; null on a route that names no thread. */
+  readonly head: {
+    readonly thread: string;
+    /** Move the thread's target; the head refuses when stale or while a turn holds it. */
+    readonly set: ReturnType<typeof useThreadScope>["set"];
+    readonly refusal: string | null;
+  } | null;
   readonly work: {
     readonly key: WorkKey;
     readonly doc: W | null;
@@ -553,6 +574,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     work?: string | ((page: P, target: Address | null) => string | undefined);
     page?: Partial<P>;
     provided?: Partial<Record<R, Reading<unknown>>>;
+    /** The thread whose head is this route's default target. */
+    thread?: string;
   } = {},
 ): RouteHandle<W, R, P, A> {
   const demo = useMemo(frozenDemo, []);
@@ -592,18 +615,25 @@ export function useRoute<W, R extends string, P, A extends string>(
    */
   const headRequest = useMemo(
     () =>
-      Object.values(manifest.readings ?? {}).find(
-        (request) =>
-          typeof request !== "function" &&
-          (request as ReadingRequest | undefined)?.kind === "thread-head",
-      ) as ReadingRequest | undefined,
-    [manifest.readings],
+      (options.thread
+        ? { kind: "thread-head", thread: options.thread }
+        : Object.values(manifest.readings ?? {}).find(
+            (request) =>
+              typeof request !== "function" &&
+              (request as ReadingRequest | undefined)?.kind === "thread-head",
+          )) as Extract<ReadingRequest, { kind: "thread-head" }> | undefined,
+    [manifest.readings, options.thread],
   );
   const headAtom = useMemo(
     () => (!seed && headRequest ? readingAtom(headRequest, peReadings) : null),
     [headRequest, seed],
   );
   const headResult = useOwned(owner.registry, headAtom) as Reading<unknown> | null;
+  const scope = useThreadScope(
+    headRequest?.thread ?? "",
+    headResult !== null,
+    headResult ?? { state: "absent" },
+  );
   const defaultDocument = useMemo(
     () =>
       threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data
@@ -997,6 +1027,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     manifest,
     resolution,
     chosen: target,
+    head: headRequest && headResult ? { thread: headRequest.thread, ...scope } : null,
     work: workHandle,
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,

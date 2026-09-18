@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { entitySearch, routeSearch, type EntitySearch } from "#/route";
+import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
 import { FamilyRouteView } from "#/route/family/live";
 import { familyManifest } from "#/route/family/manifest";
 
@@ -11,7 +11,6 @@ export const familySearch = (
   search: Record<string, unknown>,
 ): ReturnType<typeof routeSearch> &
   EntitySearch & {
-    thread?: string;
     demo?: string;
     capture?: boolean;
   } => ({
@@ -19,8 +18,6 @@ export const familySearch = (
   // A deep link (`/pods`, a chat pane) names the stage and member the route opens on.
   ...entitySearch(search),
   capture: search.capture === true || search.capture === "true" ? true : undefined,
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   /** `?demo=<action>` mounts one seed of `manifest.seeds`. */
   demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
 });
@@ -31,7 +28,8 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  const { target, thread, capture, stage, pod, path } = Route.useSearch();
+  const { target, capture, stage, pod, path } = Route.useSearch();
+  const thread = useRouteThread();
   return (
     <FamilyRouteView
       target={target ?? null}

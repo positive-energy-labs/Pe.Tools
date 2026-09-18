@@ -3,7 +3,6 @@ import {
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
-  documentRefSchema,
   type ActionStatus,
   type ScheduleGridDocument,
   type WorkKey,
@@ -31,7 +30,6 @@ export type ScheduleGridAction = "catalog" | "refresh" | "push";
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
-  target: z.infer<typeof documentRefSchema> | null;
   /** The last push's run, as one line: outcome, where its receipt lives, cells before → after. */
   pushRun: string;
 }
@@ -39,7 +37,6 @@ export interface ScheduleGridPage {
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
-  target: documentRefSchema.nullable().default(null),
   pushRun: z.string().default(""),
 });
 
@@ -145,7 +142,6 @@ export const schedulesManifest = () =>
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
-              target: reading.target,
             });
           },
         },
@@ -182,7 +178,6 @@ export const schedulesManifest = () =>
               ctx.setPage({
                 workspaceId: reading.workspaceId,
                 captureId: reading.id,
-                target: reading.target,
               });
             }
             if (result.failures?.length || result.readbackError)

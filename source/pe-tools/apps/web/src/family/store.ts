@@ -216,18 +216,7 @@ export function useFamilyStore(options: {
   // The build refusals read the member's authored state, which is only known after the member's
   // Work mounts below; the manifest takes the facts one render later.
   const [facts, setFacts] = useState<FamilyAuthoringFacts>(absentFacts);
-  const routeManifest = useMemo(() => {
-    const declared = familyManifest(facts);
-    return {
-      ...declared,
-      readings: {
-        ...declared.readings,
-        ...(options.thread
-          ? { head: { kind: "thread-head" as const, thread: options.thread } }
-          : {}),
-      },
-    } as typeof declared;
-  }, [facts, options.thread]);
+  const routeManifest = useMemo(() => familyManifest(facts), [facts]);
 
   // The member: the page's pod and path. Its Work, bytes and readings are all keyed by it.
   const [pageForMember, setPageForMember] = useState<PodMember | null>(null);
@@ -239,6 +228,7 @@ export function useFamilyStore(options: {
   );
   const handle = useRoute(routeManifest, {
     target: options.target ?? null,
+    thread: options.thread,
     work,
     page: options.initial as Partial<FamilyPage & EntityPage> | undefined,
     provided,

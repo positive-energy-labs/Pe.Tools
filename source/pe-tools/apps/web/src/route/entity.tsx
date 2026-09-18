@@ -87,7 +87,7 @@ export function EntityRouteView({
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];
   const member = pod?.members.find((row) => row.path === page.path);
   const outcome = handle.outcome;
-  const confirming = Boolean(def.plan && page.confirming);
+  const confirming = Boolean((def.plan || def.staged) && page.confirming);
   const view = confirming
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
@@ -149,14 +149,22 @@ export function EntityRouteView({
           handle={handle}
           target={{ session: ladder.sessionWord, document: ladder.docWord }}
           health={health}
-          // The commit verb is the next step, wherever the route stands.
-          commit={confirming || !def.plan ? "apply" : "plan"}
+          // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
+          // commits by planning.
+          commit={def.plan || def.staged ? "plan" : "apply"}
           band={band}
           sentence={
             <>
               {subject ?? def.entity}
               {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
-              <Picker levels={ladder.levels} disabled={handle.busy !== null} />, filed to {podCell}.
+              <Picker levels={ladder.levels} disabled={handle.busy !== null} />
+              {ladder.refusal ? (
+                <span role="status" data-tone="caution">
+                  {" "}
+                  ({ladder.refusal})
+                </span>
+              ) : null}
+              , filed to {podCell}.
             </>
           }
           ledger={[

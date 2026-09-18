@@ -6,7 +6,7 @@
  * The lamp is one `host-status` Reading at 5s (ruling Q5) and the route gate reads the same value.
  * Installer/update UI is NOT here — it moved to `routes/__root.tsx` (ruling Q3).
  */
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -169,6 +169,27 @@ export function useChooseTarget(): [string | null, (target: string | null) => vo
     [navigate],
   );
   return [search.target ?? null, choose];
+}
+
+/**
+ * The thread this page's target lives on, from `?thread`. A page opened without one mints a fresh
+ * thread and writes it into the URL, the way `/chat` opens an empty thread; the root retains it on
+ * every link after that. (Re-openable: "latest thread" instead of a fresh one.)
+ */
+export function useRouteThread(): string {
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { thread?: string };
+  const [minted] = useState(() => crypto.randomUUID());
+  const thread = search.thread ?? minted;
+  useEffect(() => {
+    if (!search.thread)
+      void navigate({
+        to: ".",
+        search: (previous: Record<string, unknown>) => ({ ...previous, thread }),
+        replace: true,
+      });
+  }, [navigate, search.thread, thread]);
+  return thread;
 }
 
 export function RouteShell<W, R extends string, P, A extends string>(

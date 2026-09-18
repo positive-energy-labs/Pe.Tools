@@ -15,7 +15,16 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { PickList } from "#/components/lang/pick-list";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
-import { defineRoute, isSpecOf, type MemberRef, type PodRow } from "#/route";
+import {
+  defineRoute,
+  isSpecOf,
+  useRoute,
+  useRouteThread,
+  type MemberRef,
+  type PodRow,
+} from "#/route";
+import { Picker } from "#/route/picker";
+import { useDocumentLadder } from "#/route/situation";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
@@ -34,7 +43,13 @@ import {
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
 
-export const manifest = defineRoute({ key: "pods", name: "Pods", seeds: PODS_SEEDS });
+/** `/pods` acts on no document; it reads the thread head so field options and links carry it. */
+export const manifest = defineRoute({
+  key: "pods",
+  name: "Pods",
+  needs: "document",
+  seeds: PODS_SEEDS,
+});
 
 /** Every entity route definition; `/family` joins when it is on the kernel. */
 const PRODUCT_ROUTES = [
@@ -85,24 +100,40 @@ export const Route = createFileRoute("/pods")({
 
 function PodsRoute() {
   const search = Route.useSearch();
+  const thread = useRouteThread();
   const navigate = useNavigate();
   const select = (ref: MemberRef) =>
     void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }), replace: true });
   // The live demo lane browses the demo owner's pods through the live path.
-  return <PodsRouteContent {...search} demo={frozenDemo() ?? undefined} select={select} />;
+  return (
+    <PodsRouteContent {...search} thread={thread} demo={frozenDemo() ?? undefined} select={select} />
+  );
 }
 
 export function PodsRouteContent({
   pod,
   path,
+  target,
+  thread,
   demo,
   select,
 }: {
   pod?: string;
   path?: string;
+  /** A `?target` pin; the root carries it out through `open in <Route>`. */
+  target?: string;
+  /** The thread whose head is the target store; the root carries it out through every link. */
+  thread?: string;
   demo?: string;
   select: (ref: MemberRef) => void;
 }) {
+  const handle = useRoute(manifest, { target: target ?? null, thread });
+  const ladder = useDocumentLadder(handle);
+  // Field options read the thread's document; choosing one here moves the thread (ledger 2026-09-17).
+  const optionsFrom =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
   const [live, refresh] = usePodList(!demo);
   const pods: readonly PodRow[] = demo
     ? DEMO_BROWSE
@@ -124,13 +155,22 @@ export function PodsRouteContent({
       <AddressingBar
         name="pods"
         sentence={
-          member ? (
-            <span className="face-mono">
-              {row!.name} · {member.path}
-            </span>
-          ) : (
-            <Provenance>no member open</Provenance>
-          )
+          <>
+            {member ? (
+              <span className="face-mono">
+                {row!.name} · {member.path}
+              </span>
+            ) : (
+              <Provenance>no member open</Provenance>
+            )}{" "}
+            options from <Picker levels={ladder.levels} />
+            {ladder.refusal ? (
+              <span role="status" data-tone="caution">
+                {" "}
+                · {ladder.refusal}
+              </span>
+            ) : null}
+          </>
         }
         facts={
           <>
@@ -224,6 +264,7 @@ export function PodsRouteContent({
                     key={member ? `${row!.id}${SEP}${member.path}` : ""}
                     member={member ? { pod: row!.id, path: member.path } : null}
                     schema={member?.schema ?? null}
+                    optionsFrom={optionsFrom}
                     fixture={
                       demo && member
                         ? DEMO_MEMBER_SPECS.get(`${row!.id}${SEP}${member.path}`)

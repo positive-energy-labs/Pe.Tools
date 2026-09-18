@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { entitySearch, routeSearch, type EntitySearch } from "#/route";
+import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { schedulesManifest } from "#/route/schedules/manifest";
 
@@ -9,11 +9,14 @@ export const manifest = schedulesManifest();
 
 export const schedulesSearch = (
   search: Record<string, unknown>,
-): ReturnType<typeof routeSearch> & EntitySearch & { thread?: string } => ({
+): ReturnType<typeof routeSearch> & EntitySearch & { schedule?: string } => ({
   ...routeSearch(search),
   ...entitySearch(search),
-  thread:
-    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  /** The open schedule's reading (`workspaceId`), so a reload reopens it. */
+  schedule:
+    typeof search.schedule === "string" && search.schedule.trim()
+      ? search.schedule.trim()
+      : undefined,
 });
 
 export const Route = createFileRoute("/schedules")({
@@ -22,6 +25,15 @@ export const Route = createFileRoute("/schedules")({
 });
 
 function SchedulesRoute() {
-  const { target, stage, pod, path } = Route.useSearch();
-  return <LiveScheduleGridWorkspace framed target={target ?? null} entry={{ stage, pod, path }} />;
+  const { target, schedule, stage, pod, path } = Route.useSearch();
+  const thread = useRouteThread();
+  return (
+    <LiveScheduleGridWorkspace
+      framed
+      target={target ?? null}
+      thread={thread}
+      workspaceId={schedule}
+      entry={{ stage, pod, path }}
+    />
+  );
 }

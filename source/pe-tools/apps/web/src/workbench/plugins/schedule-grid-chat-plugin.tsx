@@ -30,6 +30,7 @@ export function ScheduleGridChatPlugin({ args, sessionState }: RouteChatPluginVi
         <LiveScheduleGridWorkspace
           key={workspaceId}
           workspaceId={workspaceId}
+          thread={currentThreadId}
           render={(state) => <ScheduleGridReview state={state} />}
         />
       ) : (

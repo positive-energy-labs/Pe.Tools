@@ -136,23 +136,11 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
 export function useFamiliesStore(
   options: { target?: string; thread?: string; entry?: EntitySearch } = {},
 ) {
-  const routeManifest = useMemo(
-    () =>
-      ({
-        ...manifest,
-        readings: {
-          ...manifest.readings,
-          ...(options.thread
-            ? { head: { kind: "thread-head" as const, thread: options.thread } }
-            : {}),
-        },
-      }) as typeof manifest,
-    [options.thread],
-  );
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
-  const handle = useRoute(routeManifest, {
+  const handle = useRoute(manifest, {
     target: options.target ? (options.target as never) : null,
+    thread: options.thread,
     provided: { pods },
     page: options.entry as never,
   });
@@ -314,7 +302,7 @@ export function useFamiliesStore(
 
   return {
     handle,
-    manifest: routeManifest,
+    manifest,
     target,
     documentScope,
     excludedIds,

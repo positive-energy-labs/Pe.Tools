@@ -90,13 +90,14 @@ function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
   if (spec.route === "families") return <FamiliesRouteContent thread={currentThreadId} />;
   if (spec.route === "takeoffs") return <TakeoffsPane key={workKey(work)} scope={work} />;
   if (spec.route === scheduleGridRouteState.route)
-    return <LiveScheduleGridWorkspace key={workKey(work)} />;
+    return <LiveScheduleGridWorkspace key={workKey(work)} thread={currentThreadId} />;
   if (spec.route === "instances")
     return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
   return <ParameterLinksRouteContent />;
 }
 
 function PodsPane() {
+  const { currentThreadId } = useWorkbench();
   const [ref, select] = useState<{ pod?: string; path?: string }>({});
-  return <PodsRouteContent {...ref} select={select} />;
+  return <PodsRouteContent {...ref} thread={currentThreadId} select={select} />;
 }

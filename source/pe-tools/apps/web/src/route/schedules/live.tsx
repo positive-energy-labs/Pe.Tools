@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
   scheduleCatalogSchema,
@@ -30,14 +31,17 @@ export function LiveScheduleGridWorkspace({
   render,
   framed,
   target: chosen = null,
+  thread,
   entry,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
   /** `/schedules` draws the entity route around the grid; a chat pane draws the grid alone. */
   framed?: boolean;
-  /** The route's `?target`, used until a schedule reading names its own document. */
+  /** The route's `?target` pin; absent, the thread head names the document. */
   target?: string | null;
+  /** The thread whose head is the target store. */
+  thread?: string;
   /** The route's URL page state (stage, pod, path), read once at mount. */
   entry?: EntitySearch;
 }) {
@@ -51,8 +55,8 @@ export function LiveScheduleGridWorkspace({
       ...(workspaceId === undefined ? {} : { workspaceId }),
       ...Object.fromEntries(Object.entries(entry ?? {}).filter(([, value]) => value)),
     },
-    // The reading's document wins once a schedule is read; before that the Situation's pick does.
-    target: (page) => (page.target ? JSON.stringify({ kind: "open", ref: page.target }) : chosen),
+    target: chosen,
+    thread,
     work: (page, target) => (target ? page.workspaceId || undefined : undefined),
   });
   const [page, setPage] = handle.page;
@@ -77,6 +81,20 @@ export function LiveScheduleGridWorkspace({
     if (workspaceId !== undefined) setPage({ workspaceId });
   }, [setPage, workspaceId]);
 
+  // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!framed) return;
+    void navigate({
+      to: ".",
+      search: (previous: Record<string, unknown>) => ({
+        ...previous,
+        schedule: page.workspaceId || undefined,
+      }),
+      replace: true,
+    } as never);
+  }, [framed, navigate, page.workspaceId]);
+
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
   const retained = valueOf(handle.readings.work, scheduleReadingSchema);
@@ -84,15 +102,6 @@ export function LiveScheduleGridWorkspace({
   const receipts = (previousOf(handle.readings.receipts) as ActionStatus[] | undefined) ?? [];
   const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.staged || cell.proposal);
   const basisId = work.doc?.basis?.captureId;
-
-  useEffect(() => {
-    if (
-      retained &&
-      (page.target?.session !== retained.target.session ||
-        page.target.openId !== retained.target.openId)
-    )
-      setPage({ target: retained.target });
-  }, [page.target, retained, setPage]);
 
   useEffect(() => {
     if (hasWork && basisId && page.captureId !== basisId) setPage({ captureId: basisId });
