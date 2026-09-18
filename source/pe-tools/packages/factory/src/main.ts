@@ -488,7 +488,7 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
   );
   const readings = rows(database)
     .filter((row) => row.kind === "reading")
-    .map((row) => ({ sha: row.sha, ...(JSON.parse(row.payload) as object) }))
+    .map((row) => ({ sha: row.sha, ts: row.ts, ...(JSON.parse(row.payload) as object) }))
     .sort(
       (a, b) =>
         (order.get(a.sha) ?? Number.MAX_SAFE_INTEGER) -
@@ -511,6 +511,7 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
     return {
       loop,
       sha: error?.sha,
+      measured: error ? { ts: error.ts, sha: error.sha } : null,
       values: error
         ? (JSON.parse(error.payload) as { values: Record<string, number | null> }).values
         : {},
@@ -547,6 +548,7 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
     });
   }
   return {
+    tip: git(repo, "rev-parse", config.factory.ref),
     readings,
     loops,
     runs: [...runs.values()],

@@ -49,6 +49,14 @@
       .error {
         color: #c43d3d;
       }
+      .stale {
+        opacity: 0.55;
+      }
+      .measured {
+        display: block;
+        font-size: 10px;
+        margin-top: 3px;
+      }
       .path {
         display: block;
         font-size: 11px;
@@ -123,20 +131,22 @@
         return `${Math.floor(seconds / 86400)}d ago`;
       };
       const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
-      const latestValue = (key, seq) => {
+      const latestReading = (key, seq) => {
         const [sensor, field] = key.split(".");
         return events
           .filter(
             (event) =>
               event.kind === "reading" && event.seq < seq && payload(event).sensor === sensor,
           )
-          .map((event) => payload(event).values[field])
-          .filter((value) => value !== undefined)
+          .map((event) => ({ event, value: payload(event).values[field] }))
+          .filter(({ value }) => value !== undefined)
           .at(-1);
       };
-      const chart = (key, rule, triggers) => {
+      const latestValue = (key, seq) => latestReading(key, seq)?.value;
+      const chart = (key, rule, triggers, tip) => {
         const [sensor, field] = key.split(".");
         let last;
+        const sources = [];
         const points = triggers.map((trigger) => {
           const reading = events.find(
             (event) =>
@@ -144,7 +154,10 @@
               event.sha === trigger.sha &&
               payload(event).sensor === sensor,
           );
-          if (reading) last = payload(reading).values[field];
+          if (reading) {
+            last = payload(reading).values[field];
+            sources.push(reading);
+          } else sources.push(undefined);
           return last;
         });
         const setpoints = points.map((value, index) =>
@@ -171,10 +184,10 @@
         );
         return `<div class="chart"><strong>${esc(key)}</strong> <span class="mono">${esc(rule)}</span><svg viewBox="0 0 800 170" role="img" aria-label="${esc(key)} control chart">
           <line x1="44" y1="145" x2="764" y2="145" stroke="#1d1d1b" opacity=".35"/>
-          ${triggers.map((trigger, index) => `<line x1="${x(index)}" y1="145" x2="${x(index)}" y2="151" stroke="#1d1d1b"/><text x="${x(index)}" y="165" text-anchor="middle" font-family="monospace" font-size="9">${trigger.sha.slice(0, 7)}</text>`).join("")}
+          ${triggers.map((trigger, index) => `<line x1="${x(index)}" y1="145" x2="${x(index)}" y2="151" stroke="#1d1d1b"/><text class="${trigger.sha === tip ? "" : "stale"}" x="${x(index)}" y="165" text-anchor="middle" font-family="monospace" font-size="9">${trigger.sha.slice(0, 7)}</text>`).join("")}
           ${limit ? `<polyline points="${limit}" fill="none" stroke="#1d1d1b" stroke-dasharray="4 4" opacity=".55"/>` : ""}
           <polyline points="${line}" fill="none" stroke="#1d1d1b" stroke-width="2"/>
-          ${points.map((value, index) => (Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"/>` : "")).join("")}
+          ${points.map((value, index) => (Number.isFinite(value) ? `<circle class="${triggers[index].sha === tip ? "" : "stale"}" cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"><title>${sources[index] ? `measured ${relative(sources[index].ts)} at ${sources[index].sha.slice(0, 7)}` : "carried forward"}</title></circle>` : "")).join("")}
         </svg></div>`;
       };
       const renderDeclaration = (declaration) => {
@@ -204,12 +217,12 @@
                 const errorEvent = [...events]
                   .reverse()
                   .find((event) => event.kind === "error" && event.loop === loop.loop);
-                return `<tr><td>${esc(loop.loop)}</td><td>${esc(loop.state)}${loop.stderr ? `<br><span class="error">${esc(loop.stderr)}</span>` : ""}</td><td class="mono">${loop.lastRun ? `<span title="${esc(loop.lastRun.ts)}">${relative(loop.lastRun.ts)}</span><br>${loop.lastRun.sha.slice(0, 7)}` : "-"}</td><td>${esc(loop.next)}</td><td class="mono">${
+                return `<tr class="${loop.sha && loop.sha !== state.tip ? "stale" : ""}"><td>${esc(loop.loop)}</td><td>${esc(loop.state)}${loop.stderr ? `<br><span class="error">${esc(loop.stderr)}</span>` : ""}</td><td class="mono">${loop.lastRun ? `<span title="${esc(loop.lastRun.ts)}">${relative(loop.lastRun.ts)}</span><br>${loop.lastRun.sha.slice(0, 7)}` : "-"}</td><td>${esc(loop.next)}</td><td class="mono">${
                   Object.entries(loop.values)
-                    .map(
-                      ([key, error]) =>
-                        `${esc(key)} ${esc(errorEvent ? (latestValue(key, errorEvent.seq) ?? "-") : "-")} <span class="${error > 0 ? "error" : ""}">${esc(error)}</span>`,
-                    )
+                    .map(([key, error]) => {
+                      const reading = errorEvent ? latestReading(key, errorEvent.seq) : undefined;
+                      return `${esc(key)} ${esc(reading?.value ?? "-")} <span class="${error > 0 ? "error" : ""}">${esc(error)}</span>${reading ? `<span class="measured" title="${esc(reading.event.ts)}">measured ${relative(reading.event.ts)} at ${reading.event.sha.slice(0, 7)}</span>` : ""}`;
+                    })
                     .join("<br>") || "no setpoints"
                 }</td></tr>`;
               })
@@ -273,7 +286,7 @@
         const triggers = events.filter((event) => event.kind === "triggered");
         document.querySelector("#charts").innerHTML = Object.keys(setpoints).length
           ? Object.entries(setpoints)
-              .map(([key, rule]) => chart(key, rule, triggers))
+              .map(([key, rule]) => chart(key, rule, triggers, state.tip))
               .join("")
           : "no events yet";
         document.querySelector("#events").innerHTML = events.length
