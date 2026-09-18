@@ -18,7 +18,7 @@ namespace Pe.Revit.DocumentData.Parameters;
 ///     </para>
 /// </summary>
 public static class ParameterValueApplier {
-    public const int MaxEditsPerCall = 500;
+    public const int MaxEditsPerCall = ParameterValueApplyBounds.MaxEditsPerCall;
     public const string DefaultTransactionName = "Pe Apply Parameter Values";
 
     public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) {

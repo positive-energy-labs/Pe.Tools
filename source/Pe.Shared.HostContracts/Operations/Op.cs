@@ -406,7 +406,7 @@ public sealed record HostOpsCatalogData(
     ///     The live catalog and the offline `pe-dev ops-catalog` both call this, so they agree.
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() =>
-        new[] { typeof(Scripting.ScriptPodSourceBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
+        new[] { typeof(Scripting.ScriptPodSourceBounds), typeof(Pe.Shared.RevitData.ParameterValueApplyBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
             type => CamelCase(type.Name),
             type => (IReadOnlyDictionary<string, object>)type
                 .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

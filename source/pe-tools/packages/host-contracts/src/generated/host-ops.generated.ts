@@ -5643,6 +5643,11 @@ export namespace TakeoffsSnapshot {
 }
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const parameterValueApplyBounds = {
+  "maxEditsPerCall": 500
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const scriptPodSourceBounds = {
   "maxFileBytes": 524288,
   "maxTotalBytes": 4194304,
