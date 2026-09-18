@@ -1524,7 +1524,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var (_, error) = contexts.Single().OperationLogs;
             if (!companyMapping) {
                 Assert.That(error?.ToString(), Does.Contain("SourceValue='N/A'").And.Contain("PE_G_Perf_Horsepower"));
-                Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(FamilyModelJson.Serialize(before)));
+                Assert.That(JToken.DeepEquals(JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())),
+                    JToken.Parse(FamilyModelJson.Serialize(before))), Is.True,
+                    "Refusal must preserve the captured model; JSON object property order is not semantic.");
                 return;
             }
             Assert.That(error, Is.Null, error?.Message);
