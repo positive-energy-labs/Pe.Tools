@@ -101,7 +101,7 @@ wants to be bounds-first with `zoneViewport` as a convenience on top.
   visible "paired by name — pre-key package" caveat chip.
 - **#3 Room disposition is a persisted TSV column.** The promoted TSV's `ROOM` lines now carry an
   8th column (`accepted`), written because `TakeoffPromotion.Close` marks the result
-  (`TakeoffResult.DispositionsResolved`); raw detector TSVs stay 7-column and honestly
+  (the raster-era `TakeoffResult.DispositionsResolved`, since deleted with its writer; the reader in `TakeoffTsv.cs` stays); raw detector TSVs stay 7-column and honestly
   disposition-less. Held rooms were ALREADY persisted per-room as `META residue … rejected` lines
   (`MoveToRejectedResidue` keeps id + geometry; `HeldRooms` is literally the count of Rejected
   residues), and both renderers already drew them in the held tone — the round-2 ledger
