@@ -6,7 +6,6 @@ import type {
   Session,
   WireDisplayState,
 } from "@mastra/core/agent-controller";
-import { createSignal, type AgentSignalInput } from "@mastra/core/agent";
 import { Buffer } from "node:buffer";
 import {
   askExpiryOf,
@@ -114,34 +113,21 @@ export function expireAsks(
 }
 
 /**
- * Every turn start funnels through `sendSignal` (Mastra's sendMessage, steer and followUp call it;
- * Pea's admitTurn does too); a resume does not. The parked run still owns the thread, and a signal
- * sent into it hangs. So a new turn expires the asks, cancels the parked run (which ends `aborted`)
- * and sends once that run's stream has torn down.
+ * A new turn over a parked ask expires the ask and cancels the parked run (it ends `aborted`); the
+ * run still owns the thread, so a signal sent before its stream detaches is lost. Returns that
+ * teardown, undefined when nothing is parked. No timer: an `onBeforeAgentEnd` handler may take as
+ * long as it needs, and the run resets before the stream detaches, so only the stream's end counts.
  */
-export function expireAsksOnNewTurn(session: Session): void {
-  const sendSignal = session.sendSignal.bind(session);
-  session.sendSignal = ((input, options) => {
-    if (!session.suspensions.hasPending()) return sendSignal(input, options);
-    expireAsks(session, "new-turn");
-    session.abort();
-    const torndown = new AbortController();
-    const idle = Promise.race([
-      session.stream.waitForTeardown(torndown.signal),
-      // Bounded as Mastra bounds its own waitForStreamIdle; teardown lands well inside it.
-      new Promise((resolve) => setTimeout(resolve, 1000)),
-    ]).finally(() => torndown.abort());
-    const signal = createSignal(
-      "content" in input
-        ? { type: "user", tagName: "user", contents: input.content }
-        : (input as AgentSignalInput),
-    );
-    return {
-      id: signal.id,
-      type: signal.type,
-      accepted: idle.then(() => sendSignal(input, options).accepted),
-    };
-  }) as typeof session.sendSignal;
+export function endParkedTurn(
+  session: Pick<Session, "suspensions" | "emit" | "abort" | "stream">,
+): Promise<void> | undefined {
+  if (!session.suspensions.hasPending()) return undefined;
+  expireAsks(session, "new-turn");
+  const torndown = session.stream.isOpen()
+    ? session.stream.waitForTeardown(new AbortController().signal)
+    : Promise.resolve();
+  session.abort();
+  return torndown;
 }
 
 export function projectThreadMessages(messages: ThreadMessage[]): {
