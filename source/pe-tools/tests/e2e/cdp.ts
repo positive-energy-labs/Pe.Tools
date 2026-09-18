@@ -344,8 +344,65 @@ export async function requireRevit(page: Page) {
     throw new Error("PRECONDITION: no Revit bridge; this journey runs in the joint-hold slot");
 }
 
-/** Setup, not a journey step: pick a model this machine can sign (Anthropic login expired 09-07). */
-export async function pickModel(page: Page, model = process.env.E2E_MODEL ?? "gpt-5.6-terra") {
-  await page.click("Model");
-  await page.click(new RegExp(`^${model.replaceAll(".", "\\.")}\\s`));
+/** A chip's label: the visible combobox named `name` in the composer (Model, Access). */
+const chip = (page: Page, name: string) =>
+  page.read<string>(
+    `[...document.querySelectorAll('[role=combobox][aria-label="${name}"]')].find((e) => e.getClientRects().length)?.innerText.trim() ?? ""`,
+  );
+
+/** Before any Pea step (README): an OpenAI model and Trusted access, read off the chips, else BLOCKED. */
+export async function requirePea(page: Page) {
+  // "model" is the chip's placeholder until the catalog loads.
+  const model = await page.until(
+    async () => {
+      const label = await chip(page, "Model");
+      return label && label !== "model" ? label : null;
+    },
+    "the Model chip to name a model",
+    30_000,
+  );
+  if (!/^(gpt|o\d|codex)/i.test(model))
+    throw new Error(`BLOCKED: Chat model is "${model}", not an OpenAI model`);
+  const access = await chip(page, "Access");
+  if (access !== "Trusted") throw new Error(`BLOCKED: access is "${access}", not "Trusted"`);
+}
+
+const COMPOSER = 'textarea[aria-label="Message"]';
+const CREDIT = /quota|credit|billing|insufficient|rate.?limit|not logged in|not supported|model/i;
+
+/**
+ * Send one Chat message as a person does, and wait for the turn to settle. Send is refused
+ * while a turn runs (intended), so wait for it, then cancel through the real control. A failed
+ * turn whose status names credit or model is BLOCKED with that exact message, not a product fail.
+ */
+export async function sendChat(page: Page, text: string, ms = 300_000) {
+  const working = () =>
+    page.read<boolean>(
+      `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "send" && b.title === "Pea is working")`,
+    );
+  if (await working()) {
+    await page
+      .until(async () => !(await working()), "the running turn to settle", 60_000)
+      .catch(async () => {
+        await page.click("cancel");
+        await page.until(async () => !(await working()), "cancel to settle", 30_000);
+      });
+  }
+  await page.clickAt(COMPOSER);
+  await page.type(text);
+  await page.press("Enter");
+  await page.waitText(text, 30_000);
+  const end = await page.until(
+    async () => /\b(READY|FAILED|WAITING FOR YOU)\b/.exec(await page.text())?.[1],
+    "the turn to settle",
+    ms,
+  );
+  if (end === "FAILED") {
+    const detail = await page.textOf('[data-testid="composer-status-detail"]');
+    throw new Error(
+      CREDIT.test(detail)
+        ? `BLOCKED: ${detail}`
+        : `ASSERT the turn completes: FAILED — ${detail || "(no status detail)"}`,
+    );
+  }
 }

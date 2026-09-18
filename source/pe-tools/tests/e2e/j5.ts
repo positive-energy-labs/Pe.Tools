@@ -1,6 +1,6 @@
 // E2E-J5 · An ask lives exactly as long as its turn. Real host, real Pea; no Revit.
 // Red break: drop the `new-turn` expiry → the old question stays in the head after the new message.
-import { expectText, journey, pickModel, WEB } from "./cdp.ts";
+import { expectText, journey, requirePea, sendChat, WEB } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
 const COMPOSER = 'textarea[aria-label="Message"]';
@@ -10,15 +10,13 @@ await journey("J5", async (page, step) => {
   await page.open(`${WEB}/chat`);
   await page.click("new");
   await page.waitText("NO MESSAGES IN THIS THREAD YET");
-  step("pick a signable model in the Model picker");
-  await pickModel(page);
+  await requirePea(page);
 
   step("type an ask-provoking message + Enter");
-  await page.clickAt(COMPOSER);
-  await page.type(
+  await sendChat(
+    page,
     'Call the ask_user tool once with question "red or blue?" and options ["red", "blue"]. Then wait for my answer.',
   );
-  await page.press("Enter");
   await page.until(
     async () => (await page.textOf(HEAD)).includes("Ask User"),
     "Ask User in the Chat head",
@@ -44,6 +42,7 @@ await journey("J5", async (page, step) => {
     );
 
   step("type a new message + Enter instead of answering");
+  // Not sendChat: sending over the parked ask, without cancelling it, is the journey's act.
   await page.clickAt(COMPOSER);
   await page.type("Never mind the question; just say hi.");
   await page.press("Enter");

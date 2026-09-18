@@ -1,10 +1,9 @@
 // E2E-J2 · A group accept never overwrites the person. Chat + families pane, real Revit (slot).
 // E2E_ROWS = 3 rows of one group; E2E_PARAM; E2E_VALUE = Pea's value; E2E_MINE = the person's.
 // Red break: remove the `contested` skip from aggregate accept → the cell shows Pea's value staged.
-import { expectText, journey, pickModel, requireRevit, revit } from "./cdp.ts";
+import { expectText, journey, requirePea, requireRevit, revit, sendChat } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
-const COMPOSER = 'textarea[aria-label="Message"]';
 const { rows, param, value: pea } = revit;
 const mine = process.env.E2E_MINE ?? "e2e-mine";
 const ask = `propose ${param} = ${pea} on ${rows.map(([family, type]) => `${family} (${type})`).join(", ")}`;
@@ -16,7 +15,7 @@ await journey("J2", async (page, step) => {
   await page.open(revit.url("/chat?plugin=families"));
   await page.click("new");
   await requireRevit(page);
-  await pickModel(page);
+  await requirePea(page);
 
   step(`type "${mine}" in ${rows[0]!.join("/")} × ${param} + Enter`);
   await page.setCell(rows[0]!, param, mine);
@@ -27,11 +26,7 @@ await journey("J2", async (page, step) => {
   );
 
   step(`ask Pea: "${ask}"`);
-  await page.clickAt(COMPOSER);
-  await page.type(ask);
-  await page.press("Enter");
-  await page.waitText(ask, 30_000);
-  await page.until(async () => /\bREADY\b/.test(await page.text()), "turn end", 300_000);
+  await sendChat(page, ask);
 
   step("click review ▾, then accept on the group");
   await page.click(/^review [▾▴]$/, HEAD);

@@ -1,11 +1,10 @@
 // E2E-J1 · Pea's bulk proposal reaches Revit through the person. Chat + families pane, real
 // Revit (joint-hold slot). E2E_ROWS = 3 [family, type] rows; E2E_PARAM/E2E_VALUE the change.
 // Red break: revert the plan-plugin wiring so `plan` navigates to /families → (d) fails.
-import { expectText, journey, pickModel, requireRevit, revit } from "./cdp.ts";
+import { expectText, journey, requirePea, requireRevit, revit, sendChat } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
 const SHEET = '[aria-label="Confirmation sheet"]';
-const COMPOSER = 'textarea[aria-label="Message"]';
 const { rows, param, value } = revit;
 const n = rows.length;
 const ask = `set ${param} to ${value} on ${rows.map(([family, type]) => `${family} (${type})`).join(", ")}`;
@@ -15,15 +14,10 @@ await journey("J1", async (page, step) => {
   await page.open(revit.url("/chat?plugin=families"));
   await page.click("new");
   await requireRevit(page);
-  await pickModel(page);
+  await requirePea(page);
 
-  step(`type "${ask}" + Enter; wait for the turn to end`);
-  await page.clickAt(COMPOSER);
-  await page.type(ask);
-  await page.press("Enter");
-  await page.waitText(ask, 30_000);
-  // Timing gate: the turn is over when the status line returns to READY.
-  await page.until(async () => /\bREADY\b/.test(await page.text()), "turn end", 300_000);
+  step(`type "${ask}" + Enter; wait for the turn to settle`);
+  await sendChat(page, ask);
 
   step("(a) transcript: the proposal record, and no accept/deny outside the head");
   expectText(await page.text(), `Pea proposed ${n} changes in Families`, "(a) transcript record");
