@@ -66,35 +66,54 @@ public sealed class SameNameSharedReplacementTests {
         : new JObject { ["Depth"] = Shared(SpecTypeId.Length), ["Height"] = Shared(SpecTypeId.Length), ["Show"] = Shared(SpecTypeId.Boolean.YesNo),
             ["Count"] = Shared(SpecTypeId.Int.Integer) } } };
 
-    /// <summary>Native truth by name: what a replacement must carry across, independent of capture.</summary>
+    /// <summary>
+    ///     Native truth by name: what a replacement must carry across, independent of capture. Every read is guarded by selection,
+    ///     never by catch: a missing parameter or element reads as a named absence, which the equality assertions then report.
+    /// </summary>
     private static JObject Observe(Document document) {
         var fm = document.FamilyManager;
+        double? Real(FamilyType type, string name) => fm.FindParameter(name) is { } p ? type.AsDouble(p) : null;
+        int? Integer(FamilyType type, string name) => fm.FindParameter(name) is { } p ? type.AsInteger(p) : null;
+        // GetAssociatedFamilyParameter rejects a null element parameter, so a missing slot is named rather than passed through.
+        string Associated(Parameter? slot, string missing) => slot is null ? missing : fm.GetAssociatedFamilyParameter(slot)?.Definition.Name ?? "<none>";
         var cells = new JObject();
         foreach (var type in fm.Types.Cast<FamilyType>().OrderBy(type => type.Name, StringComparer.Ordinal))
             cells[type.Name] = new JObject {
-                ["Depth"] = type.AsDouble(fm.FindParameter("Depth")), ["Height"] = type.AsDouble(fm.FindParameter("Height")),
-                ["Half Depth"] = type.AsDouble(fm.FindParameter("Half Depth")), ["Show"] = type.AsInteger(fm.FindParameter("Show")),
-                ["Count"] = type.AsInteger(fm.FindParameter("Count")),
-                ["Looked Up"] = fm.FindParameter("Looked Up") is { } lookedUp ? type.AsDouble(lookedUp) : null
+                ["Depth"] = Real(type, "Depth"), ["Height"] = Real(type, "Height"), ["Half Depth"] = Real(type, "Half Depth"),
+                ["Show"] = Integer(type, "Show"), ["Count"] = Integer(type, "Count"), ["Looked Up"] = Real(type, "Looked Up")
             };
         return new JObject {
             ["cells"] = cells,
             ["formulas"] = new JObject { ["Height"] = fm.FindParameter("Height")?.Formula, ["Half Depth"] = fm.FindParameter("Half Depth")?.Formula,
                 ["Looked Up"] = fm.FindParameter("Looked Up")?.Formula },
-            ["labels"] = new JArray(new FilteredElementCollector(document).OfClass(typeof(Dimension)).Cast<Dimension>()
-                .Select(dimension => dimension.FamilyLabel?.Definition.Name).OfType<string>().OrderBy(name => name, StringComparer.Ordinal)),
+            // Dimension.FamilyLabel throws InvalidOperationException ("This dimension can not be labeled") on a dimension that cannot carry a
+            // label; this family holds at least one (native, exec-guid v2 1292539, which element is unrecorded; the repo guards the same read
+            // at ParameterDependencyGraph.cs:101). The API offers no labelability predicate, so read only the dimension this fixture
+            // authored: the non-constraint dimension whose references are exactly the two planes of `dimensions.depth`.
+            ["labels"] = new JArray(AuthoredDepthDimensions(document).Select(dimension => dimension.FamilyLabel?.Definition.Name ?? "<none>")),
             ["visibility"] = new JArray(new FilteredElementCollector(document).OfClass(typeof(CurveElement)).OfType<SymbolicCurve>()
-                .Select(curve => fm.GetAssociatedFamilyParameter(curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))?.Definition.Name ?? "<none>")
+                .Select(curve => Associated(curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM), "<no IS_VISIBLE_PARAM>"))
                 .OrderBy(name => name, StringComparer.Ordinal)),
-            ["arrays"] = new JArray(new FilteredElementCollector(document).OfClass(typeof(LinearArray)).Cast<LinearArray>()
+            // BaseArray is not a native class filter (GetAssociated.cs:34); the repo scans elements the same way (ParameterDependencyGraph.cs:107).
+            ["arrays"] = new JArray(new FilteredElementCollector(document).WhereElementIsNotElementType().OfType<LinearArray>()
                 .Select(array => array.Label?.Definition.Name ?? "<none>").OrderBy(name => name, StringComparer.Ordinal)),
             // Every arrayed member carries the association; count them per name so a member that loses it shows.
             ["nested"] = new JArray(new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
                 .Where(instance => instance.Symbol.Family.Name == "vane")
-                .Select(instance => fm.GetAssociatedFamilyParameter(instance.LookupParameter("_vane length"))?.Definition.Name ?? "<none>")
+                .Select(instance => Associated(instance.LookupParameter("_vane length"), "<no _vane length>"))
                 .OrderBy(name => name, StringComparer.Ordinal))
         };
     }
+
+    private static readonly string[] DepthPlanes = ["Center (Front/Back)", "back"];
+
+    private static List<Dimension> AuthoredDepthDimensions(Document document) =>
+        new FilteredElementCollector(document).OfClass(typeof(Dimension)).Cast<Dimension>()
+            .Where(dimension => dimension is not SpotDimension && dimension.Category?.Id.Value() != (long)BuiltInCategory.OST_Constraints)
+            .Where(dimension => dimension.References.Cast<Reference>()
+                .Select(reference => (document.GetElement(reference.ElementId) as ReferencePlane)?.Name)
+                .OrderBy(name => name, StringComparer.Ordinal).SequenceEqual(DepthPlanes.OrderBy(name => name, StringComparer.Ordinal)))
+            .ToList();
 
     private static JToken Section(FamilyModel model, Func<FamilyModel, object> section) =>
         JToken.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(section(model), FamilyModelJson.Settings));
