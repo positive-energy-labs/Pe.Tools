@@ -6,10 +6,11 @@ using System.Globalization;
 namespace Pe.Revit.DocumentData.Parameters;
 
 /// <summary>
-///     Bounded project-document parameter mutation core (doc-in/data-out, testable): redeems binding
-///     handles (element id + parameter id) from the schedule cell-binding surface. Dry runs resolve,
-///     validate, and parse every edit without opening a transaction; wet runs apply all edits in one
-///     host-owned transaction (one Revit undo step) with dialog-suppressed failure handling.
+///     Bounded project-document parameter mutation core (doc-in/data-out). Every edit resolves its exact target and
+///     reads <see cref="ParameterTarget" /> evidence; <see cref="ParameterEditPlan" /> judges it (Expected vs
+///     Current, admission groups, alias conflicts, coalescing) before anything is written. Dry runs read, judge and
+///     parse without opening a transaction and return Current per edit; wet runs write in one host-owned transaction
+///     (one Revit undo step) with dialog-suppressed failure handling.
 ///     <para>
 ///         Writability gates on <see cref="Parameter.IsReadOnly" /> ONLY. Never consult
 ///         <see cref="Parameter.UserModifiable" /> — it reports false for writable built-ins like
@@ -18,29 +19,38 @@ namespace Pe.Revit.DocumentData.Parameters;
 ///     </para>
 /// </summary>
 public static class ParameterValueApplier {
-    public const int MaxEditsPerCall = ParameterValueApplyBounds.MaxEditsPerCall;
     public const string DefaultTransactionName = "Pe Apply Parameter Values";
 
-    public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) {
+    /// <summary>Each edit is its own admission group. Over the cap throws an ArgumentException; nothing is processed.</summary>
+    public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) =>
+        Run(document, request, request.DryRun ? ParameterEditPlan.Evidence.IfGiven : ParameterEditPlan.Evidence.Required);
+
+    /// <summary>
+    ///     The script door: writes WITHOUT dry-run evidence, for in-process scripts that own their own review. Pea
+    ///     and web write through <c>revit.apply.parameter-values</c> (<see cref="Apply" />), which requires it; this
+    ///     has no op and is not host-facing. Everything else holds: edits name exact parameter ids, a read-only
+    ///     document throws and a read-only parameter refuses, identical edits to one parameter write once, differing
+    ///     ones refuse together, and a given Expected is still checked.
+    /// </summary>
+    public static ParameterValueApplyData WriteWithoutEvidence(
+        Document document, IReadOnlyList<ParameterValueEdit> edits, string? transactionName = null
+    ) {
+        if (document.IsReadOnly) throw new InvalidOperationException("The document is read-only.");
+        return Run(document, new ParameterValueApplyRequest(edits, false, transactionName), ParameterEditPlan.Evidence.IfGiven);
+    }
+
+    private static ParameterValueApplyData Run(Document document, ParameterValueApplyRequest request, ParameterEditPlan.Evidence evidence) {
         var edits = request.Edits ?? [];
+        if (edits.Count > ParameterValueApplyBounds.MaxEditsPerCall)
+            throw new ArgumentException(
+                $"Edit count {edits.Count} exceeds the {ParameterValueApplyBounds.MaxEditsPerCall}-edit cap per call. Split the batch and retry.",
+                nameof(request));
         if (edits.Count == 0)
             return new ParameterValueApplyData(0, request.DryRun, []);
 
-        if (edits.Count > MaxEditsPerCall) {
-            // Cap violation rejects the whole call — no partial processing.
-            return new ParameterValueApplyData(0, request.DryRun, [
-                new ParameterValueEditResult(
-                    0,
-                    false,
-                    $"Edit count {edits.Count} exceeds the {MaxEditsPerCall}-edit cap per call. Split the batch and retry.")
-            ]);
-        }
-
-        if (request.DryRun) {
-            // Reads and parsing need no transaction; nothing is written.
-            var dryResults = ApplyInCurrentTransaction(document, edits, dryRun: true, exactParameterId: false);
-            return new ParameterValueApplyData(0, true, dryResults);
-        }
+        var groups = edits.Select(edit => (IReadOnlyList<ParameterValueEdit>)[edit]).ToList();
+        if (request.DryRun)
+            return new ParameterValueApplyData(0, true, Flatten(ApplyGroups(document, groups, dryRun: true, evidence)));
 
         using var sandbox = DocumentSandbox.BeginCommit(
             document,
@@ -51,7 +61,7 @@ public static class ParameterValueApplier {
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
-        var results = ApplyInCurrentTransaction(document, edits, dryRun: false, exactParameterId: false).ToList();
+        var results = Flatten(ApplyGroups(document, groups, dryRun: false, evidence)).ToList();
         var applied = results.Count(result => result.Ok);
 
         if (applied > 0)
@@ -63,91 +73,101 @@ public static class ParameterValueApplier {
         return new ParameterValueApplyData(applied, false, results);
     }
 
-    internal static IReadOnlyList<ParameterValueEditResult> ApplyInCurrentTransaction(
+    /// <summary>
+    ///     Judges and writes (or, dry, validates) grouped edits in the caller's transaction. A group is admitted whole.
+    ///     Result [g][k] answers groups[g][k], with Index = k. Coalesced writes over the cap throw before any write.
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<ParameterValueEditResult>> ApplyGroups(
         Document document,
-        IReadOnlyList<ParameterValueEdit> edits,
+        IReadOnlyList<IReadOnlyList<ParameterValueEdit>> groups,
         bool dryRun,
-        bool exactParameterId
+        ParameterEditPlan.Evidence evidence
     ) {
-        var results = new List<ParameterValueEditResult>(edits.Count);
-        for (var i = 0; i < edits.Count; i++)
-            results.Add(ProcessEdit(document, edits[i], i, dryRun, exactParameterId));
+        var flat = groups.SelectMany((group, g) => group.Select((edit, k) => (Group: g, Slot: k, Edit: edit))).ToList();
+        var resolved = flat.Select(item => Resolve(document, item.Edit, dryRun)).ToList();
+        var plan = ParameterEditPlan.Build(
+            flat.Select((item, i) => new ParameterEditPlan.Edit(item.Group, item.Edit, resolved[i].Current, resolved[i].Refusal)).ToList(),
+            evidence);
+        if (plan.Writes.Count > ParameterValueApplyBounds.MaxEditsPerCall)
+            throw new ArgumentException(
+                $"Coalesced native write count {plan.Writes.Count} exceeds the {ParameterValueApplyBounds.MaxEditsPerCall}-write cap.");
+
+        var answers = new ParameterValueEditResult?[flat.Count];
+        foreach (var write in plan.Writes) {
+            var done = Write(document, resolved[write.Edit].Parameter!, flat[write.Edit].Edit, dryRun);
+            foreach (var i in write.Edits) answers[i] = done;
+        }
+        var results = groups.Select(group => new ParameterValueEditResult[group.Count]).ToArray();
+        for (var i = 0; i < flat.Count; i++) {
+            var (group, slot, _) = flat[i];
+            var answer = answers[i] ?? new ParameterValueEditResult(slot, false, plan.Refusals[i]);
+            results[group][slot] = answer with { Index = slot, Current = resolved[i].Current };
+        }
         return results;
     }
 
-    private static ParameterValueEditResult ProcessEdit(
-        Document document,
-        ParameterValueEdit edit,
-        int index,
-        bool dryRun,
-        bool exactParameterId
+    private static IReadOnlyList<ParameterValueEditResult> Flatten(IReadOnlyList<IReadOnlyList<ParameterValueEditResult>> groups) =>
+        groups.SelectMany(group => group).Select((result, index) => result with { Index = index }).ToList();
+
+    /// <summary>
+    ///     A parameterId resolves exactly: negative as a BuiltInParameter, positive against the element's own
+    ///     parameter ids. A name resolves only on a dry run (discovery); a wet run must say which parameter it means.
+    /// </summary>
+    private static (Parameter? Parameter, ParameterTarget? Current, string? Refusal) Resolve(
+        Document document, ParameterValueEdit edit, bool dryRun
     ) {
         try {
-            if (edit.ParameterId == null && string.IsNullOrWhiteSpace(edit.ParameterName))
-                return new ParameterValueEditResult(index, false,
-                    "Edit requires parameterId (preferred: the binding handle) or parameterName.");
-
             var element = document.GetElement(edit.ElementId.ToElementId());
             if (element == null)
-                return new ParameterValueEditResult(index, false,
-                    $"Element {edit.ElementId} was not found in the active document.");
+                return (null, null, $"Element {edit.ElementId} was not found in the active document.");
 
-            var parameter = ResolveParameter(document, element, edit, exactParameterId);
-            if (parameter == null)
-                return new ParameterValueEditResult(index, false,
-                    $"Parameter '{DescribeParameterReference(edit)}' was not found on element {edit.ElementId}.");
+            Parameter? parameter;
+            if (edit.ParameterId is { } parameterId)
+                parameter = ExactParameter(element, parameterId);
+            else if (!dryRun)
+                return (null, null, "A wet run addresses the parameter by exact parameterId; parameterName is dry-run discovery only.");
+            else if (string.IsNullOrWhiteSpace(edit.ParameterName))
+                return (null, null, "Edit requires parameterId, or parameterName on a dry run.");
+            else
+                parameter = element.LookupParameter(edit.ParameterName);
 
+            return parameter == null
+                ? (null, null, $"Parameter '{DescribeParameterReference(edit)}' was not found on element {edit.ElementId}.")
+                : (parameter, ParameterTargets.Read(element, parameter, edit.Expected?.ParameterName ?? edit.ParameterName), null);
+        } catch (Exception ex) {
+            return (null, null, ex.Message);
+        }
+    }
+
+    private static Parameter? ExactParameter(Element element, long parameterId) {
+        if (parameterId < 0) {
+            try {
+                return element.get_Parameter((BuiltInParameter)parameterId);
+            } catch {
+                return null;
+            }
+        }
+        return element.Parameters.Cast<Parameter>().FirstOrDefault(parameter => parameter.Id.Value() == parameterId);
+    }
+
+    private static ParameterValueEditResult Write(Document document, Parameter parameter, ParameterValueEdit edit, bool dryRun) {
+        try {
             // IsReadOnly is the ONLY writability gate; UserModifiable lies for writable built-ins.
             if (parameter.IsReadOnly)
-                return new ParameterValueEditResult(index, false,
+                return new ParameterValueEditResult(0, false,
                     $"Parameter '{parameter.Definition?.Name ?? DescribeParameterReference(edit)}' is read-only on element {edit.ElementId}.");
 
             var (parsedRaw, parsedDisplay, write) = ParseValue(document, parameter, edit);
             if (!dryRun && !write())
-                return new ParameterValueEditResult(index, false,
+                return new ParameterValueEditResult(0, false,
                     $"Revit rejected value '{edit.Value}' for parameter '{parameter.Definition?.Name}' on element {edit.ElementId}.",
                     parsedRaw, parsedDisplay);
 
-            return new ParameterValueEditResult(index, true, null, parsedRaw, parsedDisplay);
+            return new ParameterValueEditResult(0, true, null, parsedRaw, parsedDisplay);
         } catch (Exception ex) {
-            return new ParameterValueEditResult(index, false, ex.Message);
+            return new ParameterValueEditResult(0, false, ex.Message);
         }
     }
-
-    /// <summary>
-    ///     Mirrors ScheduleParameterResolutionCache semantics: negative raw id resolves as a
-    ///     BuiltInParameter; positive ids match the element's own parameter ids; otherwise the
-    ///     ParameterElement's name (or the request's name) falls back to LookupParameter.
-    /// </summary>
-    private static Parameter? ResolveParameter(Document document, Element element, ParameterValueEdit edit, bool exactParameterId) {
-        var fallbackName = edit.ParameterName;
-        if (edit.ParameterId is not { } rawParameterId)
-            return LookupByName(element, fallbackName);
-
-        if (rawParameterId < 0) {
-            try {
-                return element.get_Parameter((BuiltInParameter)rawParameterId)
-                    ?? (exactParameterId ? null : LookupByName(element, fallbackName));
-            } catch {
-                return exactParameterId ? null : LookupByName(element, fallbackName);
-            }
-        }
-
-        var exactMatch = element.Parameters
-            .Cast<Parameter>()
-            .FirstOrDefault(parameter => parameter.Id.Value() == rawParameterId);
-        if (exactMatch != null)
-            return exactMatch;
-
-        if (exactParameterId)
-            return null;
-
-        var parameterElementName = document.GetElement(rawParameterId.ToElementId())?.Name;
-        return LookupByName(element, parameterElementName ?? fallbackName);
-    }
-
-    private static Parameter? LookupByName(Element element, string? name) =>
-        string.IsNullOrWhiteSpace(name) ? null : element.LookupParameter(name);
 
     /// <summary>
     ///     Parses the wire value for the parameter's storage type (invariant culture) and returns the

@@ -624,33 +624,6 @@ export namespace FamilyCapture {
   }
 }
 
-/** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
-export namespace FamilyEditorApply {
-  export namespace Req {
-    export interface Request {
-      edits: FamilyEditorApplyEdit[];
-      dryRun?: boolean;
-    }
-    export interface FamilyEditorApplyEdit {
-      paramName: string;
-      typeName?: null | string;
-      value?: null | string;
-      formula?: null | string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      applied: number;
-      results: FamilyEditorApplyEditResult[];
-    }
-    export interface FamilyEditorApplyEditResult {
-      index: number;
-      ok: boolean;
-      error?: null | string;
-    }
-  }
-}
-
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
 export namespace FamilyEditorOpen {
   export namespace Req {
@@ -1174,14 +1147,16 @@ export namespace RevitApplyParameterLinks {
   }
 }
 
-/** Apply parameter values to project elements in one host-owned transaction, redeeming binding handles (target element id + parameter id) returned by revit.detail.schedules projection.includeBindings. */
+/** Write element parameter values in one transaction, including parameters no schedule shows. Read first: a dry run resolves each edit (parameterId exactly, or parameterName for discovery) and returns its current evidence (element, parameter, storage, read-only, hasValue, raw value). A wet run addresses each edit by parameterId and carries that evidence as expected; stale or missing evidence refuses the edit, identical edits to one parameter write once, and differing edits to one parameter refuse together. */
 export namespace RevitApplyParameterValues {
   export namespace Req {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+
     /**
-     * Bounded project-document parameter mutation contracts. Edits redeem "binding handles"
-     * (target element id + parameter id) produced by the schedule cell-binding surface
-     * (revit.detail.schedules projection.includeBindings), so ParameterId is the preferred
-     * addressing form; ParameterName is a fallback for name-only callers.
+     * Bounded project-document parameter mutation contracts. A wet edit names its exact target (element id +
+     * parameter id) and carries the ParameterTarget evidence it was reviewed against; a stale or
+     * missing Expected refuses. A dry run is the evidence read: it returns Current per edit, and is the only place
+     * ParameterName resolves (discovery for callers that do not yet know the parameter id).
      *
      */
     export interface Request {
@@ -1196,9 +1171,26 @@ export namespace RevitApplyParameterValues {
       value?: null | string;
       unit?: null | string;
       rawInternal?: boolean;
+      expected?: null | ParameterTarget;
+    }
+    /**
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
+     */
+    export interface ParameterTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
     }
   }
   export namespace Res {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+
     export interface Response {
       applied: number;
       dryRun: boolean;
@@ -1210,6 +1202,21 @@ export namespace RevitApplyParameterValues {
       error?: null | string;
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
+      current?: null | ParameterTarget;
+    }
+    /**
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
+     */
+    export interface ParameterTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
     }
   }
 }
@@ -2884,6 +2891,10 @@ export namespace RevitContextViewImage {
       | "Schedule"
       | "Category"
       | "Family";
+    /**
+     * Why a view image carries no RevitViewImageRegistration.
+     */
+    export type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees";
 
     export interface Response {
       view: RevitAgentContextHandle;
@@ -2894,6 +2905,7 @@ export namespace RevitContextViewImage {
       modelRect?: null | RevitViewImageModelRect;
       sheetNumber?: null | string;
       registration?: null | RevitViewImageRegistration;
+      registrationRefusal?: null | RevitViewImageRegistrationRefusal;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -2916,7 +2928,7 @@ export namespace RevitContextViewImage {
     /**
      * Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
      * corners, so a rotated crop stays honest. ImageSha256 binds it to exactly this file.
-     * Absent when the view has no active crop or the image's aspect disagrees with the crop's.
+     * When absent, RegistrationRefusal says why.
      *
      */
     export interface RevitViewImageRegistration {
@@ -3843,14 +3855,16 @@ export namespace RevitDetailSchedules {
       displayValue?: null | string;
       isTypeParameter: boolean;
       isEditable: boolean;
-      targets: ScheduleCellBindingTarget[];
+      targets: ParameterTarget[];
       blocker: ScheduleCellBindingBlocker;
       hasMixedValues: boolean;
     }
     /**
-     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
      */
-    export interface ScheduleCellBindingTarget {
+    export interface ParameterTarget {
       elementId: number;
       parameterId: number;
       parameterName?: null | string;
@@ -5051,14 +5065,16 @@ export namespace ScheduleCellsApply {
       displayValue?: null | string;
       isTypeParameter: boolean;
       isEditable: boolean;
-      targets: ScheduleCellBindingTarget[];
+      targets: ParameterTarget[];
       blocker?: ScheduleCellBindingBlocker;
       hasMixedValues?: boolean;
     }
     /**
-     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
      */
-    export interface ScheduleCellBindingTarget {
+    export interface ParameterTarget {
       elementId: number;
       parameterId: number;
       parameterName?: null | string;
@@ -5115,14 +5131,16 @@ export namespace ScheduleCellsApply {
       displayValue?: null | string;
       isTypeParameter: boolean;
       isEditable: boolean;
-      targets: ScheduleCellBindingTarget[];
+      targets: ParameterTarget[];
       blocker: ScheduleCellBindingBlocker;
       hasMixedValues: boolean;
     }
     /**
-     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
      */
-    export interface ScheduleCellBindingTarget {
+    export interface ParameterTarget {
       elementId: number;
       parameterId: number;
       parameterName?: null | string;
@@ -5137,6 +5155,7 @@ export namespace ScheduleCellsApply {
       error?: null | string;
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
+      current?: null | ParameterTarget;
     }
     export interface RevitDataIssue {
       code: string;
@@ -5685,7 +5704,6 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
-  "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
@@ -5758,7 +5776,6 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
-  "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
   "family.plan",

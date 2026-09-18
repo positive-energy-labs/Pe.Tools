@@ -1,5 +1,7 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
 
@@ -57,7 +59,8 @@ internal static class FamilyPreparation {
             return new PreparedFamily(original, patch, null, null, parsed.Diagnostics);
 
         var desired = ResolveNativeFormulas(source.Resolve(parsed.Value, patch.Patch), document, formulaCache);
-        var diagnostics = SharedTooltipDiagnostics(original, desired, authoredPatch.Patch);
+        IReadOnlyList<FamilyModelDiagnostic> diagnostics = SharedTooltipDiagnostics(original, desired, authoredPatch.Patch)
+            .Concat(GroupedIdentityDiagnostics(document, original, desired, authoredPatch.Patch)).ToList();
         if (diagnostics.Count == 0)
             diagnostics = FamilyModelUnitValidation.Validate(desired, patch.Patch, source.GetDefinition);
         if (diagnostics.Count > 0)
@@ -83,6 +86,32 @@ internal static class FamilyPreparation {
                         ? $"Explicit tooltip for existing shared parameter '{parameter.Name}' cannot be verified because its native tooltip could not be read."
                         : $"Explicit tooltip for existing shared parameter '{parameter.Name}' is '{(string?)tooltip}', but its captured native tooltip is '{existing.Tooltip ?? ""}'. Shared tooltip replacement is unsupported."));
             }
+        return diagnostics;
+    }
+
+    /// <summary>
+    ///     A shared parameter changing identity (another GUID, or back to a family parameter) leaves through
+    ///     <c>FamilyManager.ReplaceParameter(shared → family)</c> (NormalizeParameter.cs ReplaceDefinition). When the parameter drives a
+    ///     grouped element (a nested member of an array) or labels an array, Revit refuses that edit at commit: "Changes to groups are allowed
+    ///     only in group edit mode" (native, domains-guid hold 2026-09-18; the same hop converged once the array was removed). Refusing here
+    ///     makes preview and apply agree instead of apply failing after a clean preview.
+    /// </summary>
+    private static IReadOnlyList<FamilyModelDiagnostic> GroupedIdentityDiagnostics(Document document, FamilyModel current, FamilyModel desired, JObject authored) {
+        var diagnostics = new List<FamilyModelDiagnostic>();
+        foreach (var name in (authored["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name) ?? []) {
+            if (!current.Parameters.TryGetValue(name, out var existing) || existing.Shared != true ||
+                !desired.Parameters.TryGetValue(name, out var target) || target.Shared != false && target.SharedGuid == existing.SharedGuid) continue;
+            if (document.FamilyManager.FindParameter(name) is not { } parameter) continue;
+            var grouped = parameter.AssociatedParameters.Cast<Parameter>()
+                .Where(slot => slot.Element?.GroupId is { } group && group != ElementId.InvalidElementId)
+                .Select(slot => $"{slot.Element.Name}.{slot.Definition.Name}").Distinct(StringComparer.Ordinal).ToList();
+            var arrays = parameter.AssociatedArrays(new FamilyDocument(document)).Count();
+            if (grouped.Count == 0 && arrays == 0) continue;
+            diagnostics.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.IdentityChangeThroughGroup,
+                $"$.parameters.{name}.{(target.Shared == false ? "shared" : "sharedGuid")}",
+                $"Shared parameter '{name}' cannot change identity natively while it drives grouped array members" +
+                $"{(grouped.Count == 0 ? "" : $" ({string.Join(", ", grouped)})")}{(arrays == 0 ? "" : $" or labels {arrays} array(s)")}; Revit allows that edit only in group edit mode."));
+        }
         return diagnostics;
     }
 
