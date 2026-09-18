@@ -18,7 +18,9 @@ public static class HostProtocol {
     // 39: parameter-values unit-aware conversion (value + unit canonical; bare numerals on
     //     measurable doubles rejected as ambiguous; parsedDisplay round-trip echo)
     // 40: model-owned parameter-link detail/apply operations and shared profile language
-    public const int ContractVersion = 40;
+    // 41: parameter-values wet edits require exact parameterId + expected ParameterTarget evidence (dry run
+    //     returns it as current); stale/missing evidence, admission groups and aliases judged by ParameterEditPlan
+    public const int ContractVersion = 41;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
