@@ -28,6 +28,7 @@ import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
+import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
@@ -130,6 +131,11 @@ const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
   path: "/design-system/arming",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
+  id: "/design-system_/band",
+  path: "/design-system/band",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   id: "/design-system_/popovers",
   path: "/design-system/popovers",
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
+  "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
@@ -266,6 +275,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
+    | "/design-system/band"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
     | "/design-system/swatch"
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
+    | "/design-system/band"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
     | "/design-system/swatch"
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system_/arming"
+    | "/design-system_/band"
     | "/design-system_/popovers"
     | "/design-system_/proposal-flow"
     | "/design-system_/swatch"
@@ -348,6 +360,7 @@ export interface RootRouteChildren {
   TakeoffsRoute: typeof TakeoffsRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
+  DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
@@ -490,6 +503,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemArmingRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/band": {
+      id: "/design-system_/band";
+      path: "/design-system/band";
+      fullPath: "/design-system/band";
+      preLoaderRoute: typeof DesignSystemBandRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/popovers": {
       id: "/design-system_/popovers";
       path: "/design-system/popovers";
@@ -566,6 +586,7 @@ const rootRouteChildren: RootRouteChildren = {
   TakeoffsRoute: TakeoffsRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
+  DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,

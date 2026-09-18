@@ -22,6 +22,7 @@ import { Gauge } from "lucide-react";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { WorkBand, workBandWord } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
@@ -635,11 +636,13 @@ export function Situation({
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
-  const nounOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
   const commitAction = commit ? handle.actions[commit] : undefined;
-  const workWord = `${handle.work.revision === null ? "unwritten" : `r${handle.work.revision}`}${
-    staged ? ` · ${nounOf(staged.count, staged.noun)} staged` : ""
-  }${handle.work.conflict ? " · changed elsewhere" : ""}`;
+  const workWord = workBandWord({
+    revision: handle.work.revision,
+    count: staged?.count ?? 0,
+    noun: staged?.noun ?? "edit",
+    conflict: handle.work.conflict,
+  });
   // The band's own state, beside the verbs: a conflicting writer and the runner's last refusal
   // when no verb flag says it (a Work write and a late result after a stop have no button to grow a flag from).
   const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
@@ -695,63 +698,29 @@ export function Situation({
             </p>
             <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
             {staged ? (
-              <div className="hairline-t flex flex-col gap-1 py-1.5 t-prose">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="w-[9rem]">
-                    <Label>staged</Label>
-                  </span>
-                  <span>
-                    <b className="font-semibold text-ink">{nounOf(staged.count, staged.noun)}</b>
-                    {staged.read ? (
-                      <span className="face-mono text-ink-mute"> · read {staged.read}</span>
-                    ) : null}
-                  </span>
-                  <span className="ml-auto flex items-baseline gap-2">
-                    <Press
-                      frame="line"
-                      tone="quiet"
-                      size="value"
-                      state={handle.busy ? "disabled" : "rest"}
-                      disabled={handle.busy !== null}
-                      onClick={() => void staged.discard()}
-                    >
-                      discard
-                    </Press>
-                    {commitAction ? (
-                      // The same verb as the row's; its flag grows from the row button, not here.
-                      <Press
-                        frame="line"
-                        tone="neutral"
-                        size="value"
-                        state={commitAction.refusal !== null || handle.busy ? "disabled" : "rest"}
-                        disabled={commitAction.refusal !== null || handle.busy !== null}
-                        title={commitAction.refusal ?? commitAction.says}
-                        onClick={() => void commitAction.run()}
-                      >
-                        {commitAction.label}
-                      </Press>
-                    ) : null}
-                  </span>
-                </div>
-                {staged.body}
-              </div>
-            ) : null}
-            {unresolved.length ? (
-              <div
-                className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"
-                data-tone="caution"
-                role="status"
-              >
-                <span className="w-[9rem]">
-                  <Label>unresolved</Label>
-                </span>
-                <span>{unresolved.join(" · ")}</span>
-                {handle.work.conflict ? (
-                  <Press frame="line" tone="quiet" size="value" onClick={handle.work.reload}>
-                    reload
-                  </Press>
-                ) : null}
-              </div>
+              <WorkBand
+                count={staged.count}
+                noun={staged.noun}
+                revision={handle.work.revision}
+                read={staged.read}
+                conflict={handle.work.conflict}
+                busy={handle.busy !== null}
+                discard={() => void staged.discard()}
+                commit={
+                  commitAction
+                    ? {
+                        label: commitAction.label,
+                        reason: commitAction.refusal ?? commitAction.says,
+                        disabled: commitAction.refusal !== null,
+                        run: () => void commitAction.run(),
+                      }
+                    : undefined
+                }
+                unresolved={unresolved as string[]}
+                reload={handle.work.reload}
+                body={staged.body}
+                showRevision={false}
+              />
             ) : null}
             {band}
           </div>
