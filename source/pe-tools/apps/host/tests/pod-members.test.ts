@@ -118,8 +118,29 @@ test("runs list newest first, by member, and a run with no receipt still says so
     }),
   );
 
+  // A native run writes its input before any effect; a crash after that leaves input and no receipt.
+  await mkdir(join(root, "Runs", "output", "run-2"), { recursive: true });
+  const source = {
+    kind: "pod-composition",
+    origin: "SavedMember",
+    pod: "runs",
+    path: "settings/file.json",
+    sha256: "def",
+  };
+  await writeFile(
+    join(root, "Runs", "output", "run-2", "input.json"),
+    JSON.stringify({ operation: "schedule.apply", source, files: [] }),
+  );
+
   const { runs } = await run(listRuns({ pod: "runs" }, ctx()));
   expect(runs).toEqual([
+    {
+      runId: "run-2",
+      receiptPath: "output/run-2/receipt.json",
+      receipt: null,
+      source,
+      error: "The run holds its input but no receipt.json; its outcome is unresolved.",
+    },
     {
       runId: "run-1",
       receiptPath: "output/run-1/receipt.json",
@@ -134,8 +155,10 @@ test("runs list newest first, by member, and a run with no receipt still says so
     },
   ]);
   expect(
-    (await run(listRuns({ pod: "runs", path: "settings/file.json" }, ctx()))).runs,
-  ).toHaveLength(1);
+    (await run(listRuns({ pod: "runs", path: "settings/file.json" }, ctx()))).runs.map(
+      (r) => r.runId,
+    ),
+  ).toEqual(["run-2", "run-1"]);
   expect((await run(listRuns({ pod: "runs", path: "other.json" }, ctx()))).runs).toEqual([]);
 });
 

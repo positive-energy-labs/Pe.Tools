@@ -188,6 +188,20 @@ export const podReceiptSchema = Schema.Struct({
 });
 export type PodReceipt = Schema.Schema.Type<typeof podReceiptSchema>;
 
+/**
+ * What a run consumed, from its `input.json`: a pod composition (saved member or supplied draft), a pod
+ * script bundle, or operation input with no member. The consumed bytes stay in the run folder.
+ */
+export const podRunSourceSchema = Schema.Struct({
+  kind: Schema.String,
+  origin: Schema.optional(Schema.String),
+  pod: Schema.optional(Schema.NullOr(Schema.String)),
+  path: Schema.optional(Schema.NullOr(Schema.String)),
+  sha256: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type PodRunSource = Schema.Schema.Type<typeof podRunSourceSchema>;
+
 export const podRunsResponseSchema = Schema.Struct({
   runs: Schema.Array(
     Schema.Struct({
@@ -195,6 +209,8 @@ export const podRunsResponseSchema = Schema.Struct({
       receiptPath: Schema.String,
       /** Null exactly when the run folder holds no readable receipt; `error` says why. */
       receipt: Schema.NullOr(podReceiptSchema),
+      /** Absent when the run holds no readable `input.json`. */
+      source: Schema.optional(podRunSourceSchema),
       error: Schema.NullOr(Schema.String),
     }),
   ),

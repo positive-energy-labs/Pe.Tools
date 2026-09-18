@@ -16,13 +16,13 @@ public sealed class PodRunInputTests {
 
     [Test]
     public void Family_apply_success_changes_native_state_and_retains_exact_input(UIApplication ui) {
-        var (pod, source) = NewPod(ApplySpec);
+        var (pod, source, applySpec) = NewPod(ApplySpec);
         Document? document = null;
         try {
             document = NewTwoTypeFamily(ui.Application, "Input apply success");
             var familyId = document.OwnerFamily.Id.Value();
-            var plan = FamilyFoundryBridgeOps.PlanFamilies(ApplySpec, document).Families.Single();
-            var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", ApplySpec, source,
+            var plan = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single();
+            var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
                 new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null);
             var proof = document.FamilyManager.get_Parameter("Proof");
             Assert.Multiple(() => {
@@ -31,33 +31,33 @@ public sealed class PodRunInputTests {
                 Assert.That(document.FamilyManager.Types.Size, Is.EqualTo(2));
                 Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Select(type => type.AsString(proof)), Is.All.EqualTo("kept"));
             });
-            AssertRun(result.ReceiptPath!, "Succeeded", ApplySpec, "success");
+            AssertRun(result.ReceiptPath!, "Succeeded", applySpec, "success");
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); }
     }
 
     [Test]
     public void Family_apply_refusal_cancel_and_input_failure_leave_full_native_state_unchanged(UIApplication ui) {
-        var (pod, source) = NewPod(ApplySpec);
-        var (blockedPod, blockedSource) = NewPod(ApplySpec);
+        var (pod, source, applySpec) = NewPod(ApplySpec);
+        var (blockedPod, blockedSource, _) = NewPod(ApplySpec);
         Document? document = null;
         try {
             document = NewTwoTypeFamily(ui.Application, "Input apply refusals");
             var familyId = document.OwnerFamily.Id.Value();
             var baseline = FamilyState(document);
-            var failed = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", ApplySpec, source,
+            var failed = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
                 new Dictionary<long, string> { [familyId] = "wrong-plan-hash" }, document, null);
-            AssertRun(failed.ReceiptPath!, "Failed", ApplySpec, "failure");
+            AssertRun(failed.ReceiptPath!, "Failed", applySpec, "failure");
             AssertUnchanged(document, baseline);
             using var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
-            var cancelledResult = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", ApplySpec, source,
+            var cancelledResult = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
                 new Dictionary<long, string> { [familyId] = "not-read-before-cancellation" }, document, null, cancellationToken: cancelled.Token);
             Assert.That(cancelledResult.Receipts, Is.Empty);
-            AssertRun(cancelledResult.ReceiptPath!, "Cancelled", ApplySpec, "cancelled");
+            AssertRun(cancelledResult.ReceiptPath!, "Cancelled", applySpec, "cancelled");
             AssertUnchanged(document, baseline);
-            var validPlanHash = FamilyFoundryBridgeOps.PlanFamilies(ApplySpec, document).Families.Single().PlanHash;
+            var validPlanHash = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single().PlanHash;
             File.WriteAllText(Path.Combine(blockedPod, "output"), "block run directory creation");
-            Assert.Throws<IOException>(() => FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", ApplySpec, blockedSource,
+            Assert.Throws<IOException>(() => FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, blockedSource,
                 new Dictionary<long, string> { [familyId] = validPlanHash }, document, null));
             AssertUnchanged(document, baseline);
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); DeletePod(blockedPod); }
@@ -66,10 +66,10 @@ public sealed class PodRunInputTests {
     [Test]
     public void Family_build_success_retains_exact_input_and_saved_native_value(UIApplication ui) {
         const string spec = "{\r\n  \"family\": { \"name\": \"Input build proof\", \"category\": \"GenericModels\", \"template\": \"Generic Model\", \"placement\": \"OneLevelBased\" },\r\n  \"parameters\": { \"Proof\": { \"dataType\": \"Text\", \"value\": \"built\" } },\r\n  \"types\": { \"A\": {}, \"B\": {} }, \"datums\": { \"Ref. Level\": { \"normal\": \"Z\", \"isLevel\": true } }\r\n}";
-        var (pod, source) = NewPod(spec);
+        var (pod, source, composed) = NewPod(spec);
         Document? reopened = null;
         try {
-            var result = FamilyFoundryBridgeOps.BuildWithReceipt(ui.Application, new FamilyBuildRequest(spec, source));
+            var result = FamilyFoundryBridgeOps.BuildWithReceipt(ui.Application, new FamilyBuildRequest(composed, source));
             reopened = ui.Application.OpenDocumentFile(result.OutputPath);
             var proof = reopened.FamilyManager.get_Parameter("Proof");
             Assert.Multiple(() => {
@@ -77,26 +77,26 @@ public sealed class PodRunInputTests {
                 Assert.That(reopened.FamilyManager.Types.Size, Is.EqualTo(2));
                 Assert.That(reopened.FamilyManager.Types.Cast<FamilyType>().Select(type => type.AsString(proof)), Is.All.EqualTo("built"));
             });
-            AssertRun(result.ReceiptPath, "Succeeded", spec, "build-success");
+            AssertRun(result.ReceiptPath!, "Succeeded", composed, "build-success");
         } finally { RevitFamilyFixtureHarness.CloseDocument(reopened); DeletePod(pod); }
     }
 
     [Test]
     public void Schedule_apply_success_creates_native_schedule_and_retains_exact_input(UIApplication ui) {
         const string specJson = "{\r\n  \"name\": \"Input proof schedule\",\r\n  \"categoryName\": \"Generic Models\",\r\n  \"fields\": []\r\n}";
-        var (pod, source) = NewPod(specJson);
+        var (pod, source, composed) = NewPod(specJson);
         Document? document = null;
         try {
             document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
-            var profile = ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(specJson, specJson, "input-proof:settings/input.json");
-            var applied = ScheduleBridgeOps.ApplySpec(document, profile, specJson, source);
+            var profile = ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(composed, composed, "input-proof:settings/input.json");
+            var applied = ScheduleBridgeOps.ApplySpec(document, profile, composed, source);
             var schedule = document.GetElement(new ElementId(applied.Data.ScheduleId)) as ViewSchedule;
             Assert.Multiple(() => {
                 Assert.That(schedule, Is.Not.Null);
                 Assert.That(schedule!.Name, Is.EqualTo("Input proof schedule"));
                 Assert.That(applied.Result.Schedule.Id.Value(), Is.EqualTo(applied.Data.ScheduleId));
             });
-            AssertRun(applied.Data.ReceiptPath, "Succeeded", specJson, "schedule-success");
+            AssertRun(applied.Data.ReceiptPath!, "Succeeded", composed, "schedule-success");
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); }
     }
 
@@ -139,33 +139,47 @@ public sealed class PodRunInputTests {
         Assert.That(FamilyState(document), Is.EqualTo(baseline));
     });
 
-    private static (string Folder, PodMemberSource Source) NewPod(string spec) {
+    /// <summary>
+    ///     A pod whose member presets its first section from a dependency, so the run must keep the root and the
+    ///     dependency bytes. The composed JSON is the effective input every caller passes.
+    /// </summary>
+    private static (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
         var pods = new ScriptPodPreparationService();
         var id = "input-proof-" + Guid.NewGuid().ToString("N");
         var folder = Path.Combine(pods.PodsRoot, id);
         Directory.CreateDirectory(Path.Combine(folder, "settings"));
         File.WriteAllText(Path.Combine(folder, "pod.json"), $$"""{"schemaVersion":2,"id":"{{id}}","name":"Input proof","version":"1"}""");
-        var member = Path.Combine(folder, "settings", "input.json");
-        File.WriteAllText(member, spec, new UTF8Encoding(false));
-        return (folder, new PodMemberSource(id, "settings/input.json", ScriptPodPreparationService.Sha256(File.ReadAllBytes(member))));
+        var member = JObject.Parse(spec);
+        var first = member.Properties().First();
+        first.Remove();
+        member.AddFirst(new JProperty("$preset", "@local/base.json"));
+        File.WriteAllText(Path.Combine(folder, "settings", "base.json"), new JObject(first) + "  \r\n", new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(folder, "settings", "input.json"), member.ToString(), new UTF8Encoding(false));
+        var composition = pods.Compose(id, "settings/input.json", null);
+        Assert.That(composition.Composed, Is.Not.Null, string.Join("; ", composition.Diagnostics.Select(d => d.Message)));
+        return (folder, composition.ToSource(), composition.Composed!);
     }
 
     private static void AssertRun(string receiptPath, string outcome, string exact, string sample) {
         var run = Path.GetDirectoryName(receiptPath)!;
         var receipt = JObject.Parse(File.ReadAllText(receiptPath));
         var metadata = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
+        var pod = Path.GetDirectoryName(Path.GetDirectoryName(run))!;
         Assert.Multiple(() => {
             Assert.That(receipt["outcome"]!.Value<string>(), Is.EqualTo(outcome));
-            Assert.That(receipt["outputs"]!.Values<string>(), Does.Contain("input.json").And.Contain("effective-input.json"));
+            Assert.That(receipt["outputs"]!.Values<string>(), Is.SupersetOf(new[] { "input.json", "effective-input.json", "source/00-input.json", "source/01-base.json" }));
             Assert.That(metadata["operation"]?.Value<string>(), Is.Not.Empty);
-            Assert.That(metadata["source"]?["pod"]?.Value<string>(), Is.Not.Empty);
+            Assert.That(metadata["source"]?["origin"]?.Value<string>(), Is.EqualTo("SavedMember"));
             Assert.That(metadata["target"]?["process"]?["processId"]?.Value<int>(), Is.GreaterThan(0));
             Assert.That(File.ReadAllBytes(Path.Combine(run, "effective-input.json")), Is.EqualTo(Encoding.UTF8.GetBytes(exact)));
+            Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-input.json")), Is.EqualTo(File.ReadAllBytes(Path.Combine(pod, "settings", "input.json"))));
+            Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "01-base.json")), Is.EqualTo(File.ReadAllBytes(Path.Combine(pod, "settings", "base.json"))));
         });
         if (Environment.GetEnvironmentVariable("PE_RUN_INPUT_PROOF_ROOT") is { } root) {
             var destination = Path.Combine(root, sample);
             Directory.CreateDirectory(destination);
-            foreach (var path in Directory.EnumerateFiles(run)) File.Copy(path, Path.Combine(destination, Path.GetFileName(path)), true);
+            foreach (var path in Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories))
+                File.Copy(path, Path.Combine(destination, Path.GetRelativePath(run, path).Replace(Path.DirectorySeparatorChar, '_')), true);
         }
     }
 

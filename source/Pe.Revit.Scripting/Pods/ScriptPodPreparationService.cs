@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Bcl.Compat;
 using Pe.Revit.Scripting.Storage;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
@@ -45,7 +46,12 @@ public sealed record PodMemberComposition(
     PodCapturedSource Source,
     IReadOnlyList<ScriptDiagnostic> Diagnostics,
     IReadOnlyList<PodConsumedDependency> Dependencies
-);
+) {
+    /// <summary>The consumed bytes as wire data: what a run keeps and what the bridge returns.</summary>
+    public PodComposedSource ToSource() => new(
+        new PodCapturedSourceData(this.Source.Id, this.Source.Path, this.Source.Sha256, Convert.ToBase64String(this.Source.Bytes), this.Source.Origin),
+        [.. this.Dependencies.Select(d => new PodConsumedSourceData(d.PodId, d.Path, d.Sha256, Convert.ToBase64String(d.Bytes)))]);
+}
 
 public sealed record PodCapturedSource(
     string Id,
@@ -153,11 +159,6 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
                 return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
             }
         }
-    }
-
-    public (string Content, string Sha256) ReadMember(string podId, string path) {
-        var bytes = ReadBoundedFile(this.MemberFullPath(podId, path));
-        return (Encoding.UTF8.GetString(bytes), Sha256(bytes));
     }
 
     internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {

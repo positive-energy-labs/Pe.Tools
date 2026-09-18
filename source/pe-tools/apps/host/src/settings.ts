@@ -14,6 +14,7 @@ import type {
   PodMemberWritten,
   PodReceipt,
   PodRuns,
+  PodRunSource,
   PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
 import type {
@@ -85,24 +86,54 @@ export const listRuns = Effect.fnUntraced(function* (
     const receiptPath = `output/${entry.name}/receipt.json`;
     const read = yield* readText(join(folder, receiptPath), "pod.runs");
     const receipt = read === null ? null : parseReceipt(read.content);
+    const input = yield* readText(join(folder, "output", entry.name, "input.json"), "pod.runs");
+    const source = input === null ? undefined : parseRunSource(input.content);
     runs.push({
       runId: entry.name,
       receiptPath,
       receipt: typeof receipt === "string" ? null : receipt,
+      ...(source ? { source } : {}),
       error:
         read === null
-          ? "The run folder holds no receipt.json."
+          ? source
+            ? "The run holds its input but no receipt.json; its outcome is unresolved."
+            : "The run folder holds no receipt.json."
           : typeof receipt === "string"
             ? receipt
             : null,
     });
   }
   return {
-    runs: request.path ? runs.filter((run) => run.receipt?.memberPath === request.path) : runs,
+    runs: request.path
+      ? runs.filter((run) => (run.source?.path ?? run.receipt?.memberPath) === request.path)
+      : runs,
   } satisfies PodRuns;
 });
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** What `input.json` says the run consumed; undefined when it is unreadable. */
+function parseRunSource(content: string): PodRunSource | undefined {
+  try {
+    const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
+    if (!isRecord(value) || !isRecord(value.source) || typeof value.source.kind !== "string")
+      return undefined;
+    const field = (name: string) => {
+      const item = (value.source as Record<string, unknown>)[name];
+      return typeof item === "string" ? { [name]: item } : {};
+    };
+    return {
+      kind: value.source.kind,
+      ...field("origin"),
+      ...field("pod"),
+      ...field("path"),
+      ...field("sha256"),
+      ...field("name"),
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 /** The receipt, or the reason it could not be read. A crashed apply leaves that state on disk. */
 function parseReceipt(content: string): PodReceipt | string {

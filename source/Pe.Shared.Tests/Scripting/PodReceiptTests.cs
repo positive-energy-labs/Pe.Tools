@@ -56,29 +56,19 @@ public sealed class PodReceiptTests {
     }
 
     [Test]
-    public void Run_input_preserves_exact_utf8_bytes_and_cannot_be_rewritten() {
+    public void Run_input_cannot_be_rewritten_by_a_receipt_output_or_a_script_artifact() {
         var pod = Path.Combine(Path.GetTempPath(), "pe-pod-input-" + Guid.NewGuid().ToString("N"));
         try {
-            var run = PodRuns.NewRunFolder(pod);
-            var exact = "{\r\n  \"name\": \"café\"  \r\n}";
-            var outputs = PodRuns.WriteInputIn(run, new { operation = "test", evidence = "available" }, exact);
+            var writer = new ScriptArtifactWriter(pod);
+            writer.WriteInput(new { operation = "test" }, [new PodRunInputFile("inline-script", null, "inline", "source/00-inline.csx", [1, 2, 3])]);
+            var run = Path.GetDirectoryName(writer.WriteReceipt(new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null)).FullPath)!;
 
             Assert.Multiple(() => {
-                Assert.That(File.ReadAllBytes(Path.Combine(run, "effective-input.json")), Is.EqualTo(System.Text.Encoding.UTF8.GetBytes(exact)));
-                Assert.That(outputs, Is.EqualTo(new[] { "input.json", "effective-input.json" }));
-                Assert.Throws<IOException>(() => PodRuns.WriteInputIn(run, new { operation = "other" }, "{}"));
+                Assert.That(writer.Inputs, Is.EqualTo(new[] { "input.json", "source/00-inline.csx" }));
+                Assert.Throws<ArgumentException>(() => writer.WriteText("source/00-inline.csx", "forged"));
                 Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
-                    [("effective-input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
-                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
-                    [("Input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
-                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
-                    [("Effective-Input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
-                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
-                    [("EFFECTIVE-INPUT.JSON", System.Text.Encoding.UTF8.GetBytes("changed"))]));
+                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null), [("input.json", [0])]));
+                Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-inline.csx")), Is.EqualTo(new byte[] { 1, 2, 3 }));
             });
         } finally {
             if (Directory.Exists(pod)) Directory.Delete(pod, true);

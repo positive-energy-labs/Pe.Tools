@@ -170,6 +170,8 @@ export namespace DocumentTemporaryStatus {
 /** Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod. */
 export namespace FamiliesApply {
   export namespace Req {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+
     /**
      * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.
      */
@@ -178,16 +180,30 @@ export namespace FamiliesApply {
       expectedPlanHashes: {
         [k: string]: string;
       };
-      source: PodMemberSource;
+      source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
     }
     /**
-     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
+     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     *
      */
-    export interface PodMemberSource {
-      pod: string;
+    export interface PodComposedSource {
+      root: PodCapturedSourceData;
+      dependencies: PodConsumedSourceData[];
+    }
+    export interface PodCapturedSourceData {
+      id: string;
       path: string;
       sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
+    }
+    export interface PodConsumedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
     }
     /**
      * Serializable execution behavior authored beside a Family Foundry profile.
@@ -402,6 +418,8 @@ export namespace FamiliesPlan {
 /** Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod. */
 export namespace FamilyApply {
   export namespace Req {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+
     /**
      * Apply a saved spec to the active family document; the family's `expectedPlanHash` from family.plan
      * gates drift. One key, the active document's owner family — the same shape `families.apply` takes, so
@@ -413,16 +431,30 @@ export namespace FamilyApply {
       expectedPlanHashes: {
         [k: string]: string;
       };
-      source: PodMemberSource;
+      source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
     }
     /**
-     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
+     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     *
      */
-    export interface PodMemberSource {
-      pod: string;
+    export interface PodComposedSource {
+      root: PodCapturedSourceData;
+      dependencies: PodConsumedSourceData[];
+    }
+    export interface PodCapturedSourceData {
+      id: string;
       path: string;
       sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
+    }
+    export interface PodConsumedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
     }
     /**
      * Serializable execution behavior authored beside a Family Foundry profile.
@@ -506,6 +538,8 @@ export namespace FamilyApply {
 /** Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths. */
 export namespace FamilyBuild {
   export namespace Req {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+
     /**
      * Build a new family from a saved family model spec on its header's template; nested models resolve
      * from `modelDirectory`. There is no output path: every build lands in a fresh run folder in the source
@@ -514,16 +548,30 @@ export namespace FamilyBuild {
      */
     export interface Request {
       specJson: string;
-      source: PodMemberSource;
+      source: PodComposedSource;
       modelDirectory?: null | string;
     }
     /**
-     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
+     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     *
      */
-    export interface PodMemberSource {
-      pod: string;
+    export interface PodComposedSource {
+      root: PodCapturedSourceData;
+      dependencies: PodConsumedSourceData[];
+    }
+    export interface PodCapturedSourceData {
+      id: string;
       path: string;
       sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
+    }
+    export interface PodConsumedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
     }
   }
   export namespace Res {
@@ -534,7 +582,8 @@ export namespace FamilyBuild {
       templatePath: string;
       converged: boolean;
       residueCount: number;
-      receiptPath: string;
+      receiptPath?: null | string;
+      outputError?: null | string;
     }
     export interface Reading {
       at: string;
@@ -4862,20 +4911,36 @@ export namespace RevitResolveReferences {
 /** Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule. */
 export namespace ScheduleApply {
   export namespace Req {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+
     /**
      * Create a new schedule from a saved spec. Apply never edits an existing schedule.
      */
     export interface Request {
       specJson: string;
-      source: PodMemberSource;
+      source: PodComposedSource;
     }
     /**
-     * The saved pod member an apply ran from: manifest id, pod-relative path, SHA-256 of the saved bytes.
+     * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
+     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     *
      */
-    export interface PodMemberSource {
-      pod: string;
+    export interface PodComposedSource {
+      root: PodCapturedSourceData;
+      dependencies: PodConsumedSourceData[];
+    }
+    export interface PodCapturedSourceData {
+      id: string;
       path: string;
       sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
+    }
+    export interface PodConsumedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
     }
   }
   export namespace Res {
@@ -4885,7 +4950,7 @@ export namespace ScheduleApply {
       appliedFieldCount: number;
       skipped: string[];
       warnings: string[];
-      receiptPath: string;
+      receiptPath?: null | string;
     }
   }
 }

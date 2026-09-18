@@ -40,7 +40,7 @@ public class ProfileListItem : IPaletteListItem {
     public WpfColor? ItemColor => null;
 
     /// <summary>The composed member as authored; the family edge reads its `$schema`.</summary>
-    internal (string SpecJson, PodMemberSource Source) LoadSpec() {
+    internal (string SpecJson, PodComposedSource Source) LoadSpec() {
         if (this.Kind == FoundryFileKind.Patch) {
             var (_, composed, source) = this.Member.Load<FamilyPatch>(this.Pod);
             return (composed, source);

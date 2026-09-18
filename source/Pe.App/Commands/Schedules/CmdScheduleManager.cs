@@ -268,7 +268,7 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        // Load the member fresh for execution; the apply edge refuses it if the bytes change underneath.
+        // Load the member fresh for execution; the run keeps the exact bytes this one read consumed.
         SharedScheduleProfile scheduleProfile;
         ScheduleCreationResult result;
         string receiptPath;
@@ -277,7 +277,7 @@ public class CmdScheduleManager : IExternalCommand {
             scheduleProfile = spec;
             var applied = ScheduleBridgeOps.ApplySpec(ctx.Doc, spec, composed, source);
             result = applied.Result;
-            receiptPath = applied.Data.ReceiptPath;
+            receiptPath = applied.Data.ReceiptPath ?? applied.Data.Warnings[^1];
         } catch (Exception ex) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
@@ -446,7 +446,7 @@ public class CmdScheduleManager : IExternalCommand {
                     var applied = ScheduleBridgeOps.ApplySpec(context.Doc, spec, composed, source);
                     results.Add((member.Path, true, string.Empty));
                     createdSchedules.Add(applied.Result.ScheduleName);
-                    receipts.Add(applied.Data.ReceiptPath);
+                    receipts.Add(applied.Data.ReceiptPath ?? applied.Data.Warnings[^1]);
                 } catch (Exception ex) {
                     results.Add((member.Path, false, ex.Message));
                 }

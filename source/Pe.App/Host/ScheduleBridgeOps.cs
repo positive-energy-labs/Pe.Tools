@@ -36,12 +36,12 @@ internal static class ScheduleBridgeOps {
     private static Task<ScheduleSpecApplyData> Apply(ScheduleSpecApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             try {
-                var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(request.SpecJson, request.SpecJson, $"{request.Source.Pod}:{request.Source.Path}");
+                var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(request.SpecJson, request.SpecJson, $"{request.Source.Root.Id}:{request.Source.Root.Path}");
                 return ApplySpec(document.Value, spec, request.SpecJson, request.Source).Data;
             } catch (JsonValidationException exception) {
                 throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, exception.ValidationErrors));
-            } catch (Exception exception) when (exception is InvalidDataException or DirectoryNotFoundException or FileNotFoundException) {
-                throw BridgeOperationExceptions.Conflict(exception.Message);
+            } catch (InvalidDataException exception) {
+                throw BridgeOperationExceptions.BadRequest(exception.Message);
             }
         }, cancellationToken);
 
@@ -53,16 +53,14 @@ internal static class ScheduleBridgeOps {
     }
 
     /// <summary>The one apply edge for bridge op and palette: new schedule, then the run in the source pod.</summary>
-    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, string specJson, PodMemberSource source) {
-        var podFolder = PodMembers.VerifiedFolder(source);
+    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, string specJson, PodComposedSource composed) {
         EngineEdge.RequireReachableCentral(document);
-        var run = PodRuns.NewRunFolder(podFolder);
-        var inputOutputs = PodRuns.WriteInputIn(run, new {
+        var (run, inputOutputs) = PodRuns.StartComposedRun(composed, new {
             operation = "schedule.apply",
-            source,
             target = DocumentTarget(document),
-            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+            unavailableEvidence = new[] { "reviewed Work revision" }
         }, specJson);
+        var source = composed.Root;
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
@@ -81,7 +79,8 @@ internal static class ScheduleBridgeOps {
                 return created;
             });
         } catch (Exception exception) {
-            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Failed", inputOutputs, exception.Message),
+            // The transaction rolled back; an unsaved failure receipt must not replace the failure itself.
+            _ = PodRuns.SettleReceiptIn(run, new PodReceipt(source.Id, source.Path, source.Sha256, "schedule.apply", null, "Failed", inputOutputs, exception.Message),
                 EngineEdge.WarningsOutput(handled));
             throw;
         }
@@ -91,10 +90,11 @@ internal static class ScheduleBridgeOps {
             .Concat(result.FilterBySheetSkipped is { } sheet ? [$"Filter by sheet: {sheet}"] : [])
             .ToList();
         var resultJson = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ResultReport(result), Formatting.Indented));
-        var receiptPath = PodRuns.WriteReceiptIn(run,
-            new PodReceipt(source.Pod, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [.. inputOutputs, $"schedule:{result.Schedule.Id.Value()}"], null),
+        var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run,
+            new PodReceipt(source.Id, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [.. inputOutputs, $"schedule:{result.Schedule.Id.Value()}"], null),
             [("result.json", resultJson), .. EngineEdge.WarningsOutput(handled)]);
-        return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped, result.Warnings, receiptPath), result);
+        return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped,
+            unsaved is null ? result.Warnings : [.. result.Warnings, unsaved], receiptPath), result);
     }
 
     private static object DocumentTarget(Document document) {

@@ -147,21 +147,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
         var captured = request.Source is null ? null : ScriptPodPreparationService.CaptureComposeSource(request);
         var result = this._pods.Compose(request.Pod, request.Path, request.Content, captured);
-        return Task.FromResult(new PodMemberComposeData(
-            result.Composed,
-            new PodCapturedSourceData(
-                result.Source.Id,
-                result.Source.Path,
-                result.Source.Sha256,
-                Convert.ToBase64String(result.Source.Bytes),
-                result.Source.Origin),
-            result.Diagnostics.ToList(),
-            result.Dependencies.Select(dependency => new PodConsumedSourceData(
-                dependency.PodId,
-                dependency.Path,
-                dependency.Sha256,
-                Convert.ToBase64String(dependency.Bytes))).ToList()
-        ));
+        var source = result.ToSource();
+        return Task.FromResult(new PodMemberComposeData(result.Composed, source.Root, result.Diagnostics.ToList(), source.Dependencies));
     }
 
     [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]

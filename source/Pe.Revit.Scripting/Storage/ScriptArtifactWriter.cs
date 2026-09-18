@@ -23,8 +23,14 @@ public sealed class ScriptArtifactWriter {
 
     public IReadOnlyList<ScriptArtifactData> Artifacts => this._artifacts;
 
-    /// <summary>Claimed on first write, so a run that produces nothing leaves no empty folder behind.</summary>
+    /// <summary>The run-relative names of the consumed input, written before compilation.</summary>
+    public IReadOnlyList<string> Inputs { get; private set; } = [];
+
     private string RunRoot => this._resolvedRunRoot ??= PodRuns.NewRunFolder(this._podFolder);
+
+    /// <summary>Writes the exact consumed script source before anything compiles or runs; a failure throws before any effect.</summary>
+    internal void WriteInput(object metadata, IReadOnlyList<PodRunInputFile> files) =>
+        this.Inputs = PodRuns.WriteInputIn(this.RunRoot, metadata, files);
 
     internal ScriptArtifactData WriteReceipt(PodReceipt receipt) {
         var path = PodRuns.WriteReceiptIn(this.RunRoot, receipt, []);
@@ -84,6 +90,8 @@ public sealed class ScriptArtifactWriter {
         // The run owns its receipt; a script must not be able to forge or overwrite one.
         if (string.Equals(Path.GetFileName(normalized), "receipt.json", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("receipt.json is the run's own file; name the artifact something else.", nameof(relativePath));
+        if (this.Inputs.Any(input => string.Equals(input, normalized, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"{normalized} is the run's consumed input; name the artifact something else.", nameof(relativePath));
 
         var root = Path.GetFullPath(this.RunRoot);
         var fullPath = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
