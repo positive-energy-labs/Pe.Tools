@@ -302,9 +302,8 @@ export function ProposalCell({
   const proposal = cell?.proposal;
   const staged = cell?.staged;
   const shown = staged?.value.value ?? proposal?.value.value ?? current;
-  const author = (by: "pea" | "human") => (by === "pea" ? "Pea" : "you");
   const note = proposal
-    ? `${author(proposal.by)} proposed ${current || "(blank)"} → ${proposal.value.value}${
+    ? `Pea proposed ${current || "(blank)"} → ${proposal.value.value}${
         staged?.value.value === proposal.value.value
           ? "; staged — plan will include it"
           : staged
@@ -315,7 +314,7 @@ export function ProposalCell({
       ? `You staged ${current || "(blank)"} → ${staged.value.value}. Nothing has reached Revit.`
       : reason;
   return (
-    <span data-proposal={proposal?.by} data-staged={staged ? "" : undefined}>
+    <span data-proposal={proposal ? "pea" : undefined} data-staged={staged ? "" : undefined}>
       <StateCell
         {...cellFromTrichotomy(
           cell ?? { proposal: null, staged: null },

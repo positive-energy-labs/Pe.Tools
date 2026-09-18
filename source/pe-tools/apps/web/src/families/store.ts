@@ -23,6 +23,14 @@ import {
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
+  fanOut,
+  transitionBinding,
+  transitionPatches,
+  type FanOutKind,
+  type RouteStatePatch,
+  type SkipReason,
+  type Transition,
+  type TransitionKind,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
@@ -31,6 +39,7 @@ import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
+import type { Refusal } from "#/route/refusal";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
@@ -133,6 +142,13 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
   };
 }
 
+/** A cell write's outcome, per address: one refusal covers every address the write covered. */
+export interface CellWrite {
+  covered: string[];
+  skipped: { key: string; reason: SkipReason }[];
+  refused?: Refusal & { addresses: string[] };
+}
+
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
@@ -173,15 +189,45 @@ export function useFamiliesStore(
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
   const cells = doc?.cells ?? NO_CELLS;
   /*
-   * Every cell verb writes only the rungs it names, so a write can never carry an older copy of a
-   * cell it did not touch. Accept and deny act on the proposal the person saw, so they bind the
-   * revision they saw it at (the queue rebases that over this owner's own landed writes only);
-   * unstage and typing touch human-only staged values and stay unbound.
+   * Every cell verb is one transition of the shared cell machine, written as one Work write of its
+   * rung patches. Bound kinds (accept, deny) carry the rendered revision, which the queue rebases
+   * over this owner's own landed writes only. One address is the cell's own control; more is an
+   * aggregate fan-out, which skips keys the kind is not open on (and contested keys, for accept).
    */
-  const rung = (address: FamilyCellAddress, name: "proposal" | "staged", value: unknown) => ({
-    path: ["cells", familyCellKey(address), name],
-    value,
-  });
+  const writeCells = async (
+    kind: TransitionKind,
+    covered: string[],
+    skipped: { key: string; reason: SkipReason }[],
+    patches: RouteStatePatch[],
+  ): Promise<CellWrite> => {
+    if (!patches.length) return { covered, skipped };
+    const refusal = await handle.work.write(
+      patches,
+      transitionBinding(kind) === "bound" ? handle.work.revision : undefined,
+    );
+    return {
+      covered,
+      skipped,
+      ...(refusal ? { refused: { ...refusal, addresses: covered } } : {}),
+    };
+  };
+  const transition = (address: FamilyCellAddress, change: Transition) => {
+    const key = familyCellKey(address);
+    return writeCells(
+      change.kind,
+      [key],
+      [],
+      transitionPatches(["cells"], key, cells[key] ?? {}, change),
+    );
+  };
+  const aggregate = (addresses: readonly FamilyCellAddress[], kind: FanOutKind) => {
+    if (addresses.length === 1) return transition(addresses[0]!, { kind });
+    const out = fanOut(cells, addresses.map(familyCellKey), kind, {
+      cellsPath: ["cells"],
+      actor: "human",
+    });
+    return writeCells(kind, out.covered, out.skipped, out.patches);
+  };
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -256,34 +302,25 @@ export function useFamiliesStore(
         setMemory((current) => ({ ...current, table: next(value, current.table) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
-      /** A typed human value stages directly. Pea's standing proposal remains as a counter. */
+      /**
+       * A typed value stages; Pea's standing proposal remains as a counter. This route's codec:
+       * an emptied cell unstages, and the baseline is the family's current value.
+       */
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
-        handle.work.write([
-          rung(
-            address,
-            "staged",
-            value.value === "" || value.value === current
-              ? null
-              : { value: { familyName: value.familyName, value: value.value } },
-          ),
-        ]),
-      /** Accept stages the proposal on screen, bound to the revision it was seen at. */
-      accept: (addresses: readonly FamilyCellAddress[]) =>
-        handle.work.write(
-          addresses.flatMap((address) => {
-            const proposal = cells[familyCellKey(address)]?.proposal;
-            return proposal ? [rung(address, "staged", { value: proposal.value })] : [];
-          }),
-          handle.work.revision,
+        transition(
+          address,
+          value.value === ""
+            ? { kind: "unstage" }
+            : {
+                kind: "stage",
+                rung: { value: { familyName: value.familyName, value: value.value } },
+                baseline: { value: { familyName: value.familyName, value: current } },
+              },
         ),
+      accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
       /** Deny clears the proposal on screen only; an independently staged value survives. */
-      deny: (addresses: readonly FamilyCellAddress[]) =>
-        handle.work.write(
-          addresses.map((address) => rung(address, "proposal", null)),
-          handle.work.revision,
-        ),
-      unstage: (addresses: readonly FamilyCellAddress[]) =>
-        handle.work.write(addresses.map((address) => rung(address, "staged", null))),
+      deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
+      unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);

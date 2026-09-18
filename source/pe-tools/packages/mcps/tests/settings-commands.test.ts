@@ -27,7 +27,7 @@ const composition = (
 });
 const work = (): SettingsRouteDocument => ({
   basis: { member: member(), rawContent: '{"x":1}', sha256: "v1" },
-  fields: { "/x": { staged: { value: 2 }, proposal: { value: 3, by: "pea" } } },
+  fields: { "/x": { staged: { value: 2 }, proposal: { value: 3 } } },
 });
 const context = (document: SettingsRouteDocument) => ({
   target: null,

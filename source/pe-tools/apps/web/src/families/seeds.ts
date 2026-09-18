@@ -143,20 +143,18 @@ const peaModel = {
   typeName: "FCU-1",
   parameter: "PE_G___Model",
   value: "FXMQ20",
-  by: "pea",
 } as const;
 const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
   excludedIds: [],
   cells: {
     [familyCellKey(peaModel)]: {
-      proposal: { value: { familyName: peaModel.familyName, value: peaModel.value }, by: "pea" },
+      proposal: { value: { familyName: peaModel.familyName, value: peaModel.value } },
       staged: { value: { familyName: peaModel.familyName, value: peaModel.value } },
     },
     [familyCellKey({ familyId: 3102, typeName: "HP-1", parameter: "PE_G___Manufacturer" })]: {
       proposal: {
         value: { familyName: "Heat Pump - Split", value: "Mitsubishi" },
-        by: "human",
       },
       staged: null,
     },

@@ -52,11 +52,11 @@ const cells = (
 ): Record<string, FamilyCellState> =>
   Object.fromEntries(rows.map(({ address, cell }) => [familyCellKey(address), cell]));
 const proposal = (row: typeof fcu | typeof hp): FamilyCellState => ({
-  proposal: { value: { familyName: row.familyName, value: row.value }, by: "pea" },
+  proposal: { value: { familyName: row.familyName, value: row.value } },
   staged: null,
 });
 const staged = (row: typeof fcu | typeof hp): FamilyCellState => ({
-  proposal: { value: { familyName: row.familyName, value: row.value }, by: "pea" },
+  proposal: { value: { familyName: row.familyName, value: row.value } },
   staged: { value: { familyName: row.familyName, value: row.value } },
 });
 const ctx = (workCells: Record<string, FamilyCellState>) => ({
@@ -110,7 +110,7 @@ test("a counter-proposal renders beside the staged human value", () => {
       current="FXMQ12"
       reason=""
       cell={{
-        proposal: { value: { familyName: fcu.familyName, value: "FXMQ24" }, by: "pea" },
+        proposal: { value: { familyName: fcu.familyName, value: "FXMQ24" } },
         staged: { value: { familyName: fcu.familyName, value: "FXMQ20" } },
       }}
       onCommit={() => {}}

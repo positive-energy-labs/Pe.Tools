@@ -23,7 +23,7 @@ test("a parameter on the only scoped family remains visible as common", () => {
       showUncommon: false,
       totalFamilies: 1,
       cells: {},
-      propose: () => Promise.resolve(null),
+      propose: () => Promise.resolve({ covered: [], skipped: [] }),
     }),
   );
   expect(result.current.uncommonCount).toBe(0);

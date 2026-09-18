@@ -24,7 +24,7 @@ describe("staged family cells", () => {
   it("looks up the full address and retains proposal plus staged values", () => {
     const address = { familyId: 1, typeName: "T1", parameter: "P" };
     const state: FamilyCellState = {
-      proposal: { value: { familyName: "A", value: "pea" }, by: "pea" },
+      proposal: { value: { familyName: "A", value: "pea" } },
       staged: { value: { familyName: "A", value: "human" } },
     };
     const document = { [familyCellKey(address)]: state };
@@ -44,7 +44,7 @@ describe("staged family cells", () => {
     const open: ReturnType<typeof entry> = {
       address: { familyId: 3, typeName: "O-1", parameter: "PE_G___Model" },
       cell: {
-        proposal: { value: { familyName: "Open", value: "ignored" }, by: "pea" },
+        proposal: { value: { familyName: "Open", value: "ignored" } },
         staged: null,
       },
     };

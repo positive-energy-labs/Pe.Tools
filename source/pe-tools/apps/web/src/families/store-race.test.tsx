@@ -82,7 +82,6 @@ const z = { familyId: 2, typeName: "T", parameter: "Z" };
 const human = (value: string) => ({ familyName: "F", value });
 const pea = (value: string): FamilyCellState["proposal"] => ({
   value: { familyName: "F", value },
-  by: "pea",
 });
 const cell = (address: typeof x) => server.envelope.doc.cells[familyCellKey(address)];
 
@@ -216,11 +215,11 @@ test("without a rendered revision, accept and deny refuse instead of writing unb
   const before = server.envelope;
   let refusals!: unknown[];
   await act(async () => {
-    refusals = [await actions().accept([x]), await actions().deny([x])];
+    refusals = [(await actions().accept([x])).refused, (await actions().deny([x])).refused];
   });
   expect(refusals).toEqual([
-    expect.objectContaining({ code: "not-ready" }),
-    expect.objectContaining({ code: "not-ready" }),
+    expect.objectContaining({ code: "not-ready", addresses: [familyCellKey(x)] }),
+    expect.objectContaining({ code: "not-ready", addresses: [familyCellKey(x)] }),
   ]);
   expect(server.envelope).toBe(before);
 });
@@ -231,9 +230,9 @@ test("type then quick accept or deny lands; a foreign write between them refuses
     [familyCellKey(y)]: { proposal: pea("Q"), staged: null },
   });
   const quick = actions(); // rendered before anything below lands
-  expect(await act(() => quick.propose(z, human("T"), "base"))).toBeNull();
-  expect(await act(() => quick.accept([x]))).toBeNull();
-  expect(await act(() => quick.deny([y]))).toBeNull();
+  expect((await act(() => quick.propose(z, human("T"), "base"))).refused).toBeUndefined();
+  expect((await act(() => quick.accept([x]))).refused).toBeUndefined();
+  expect((await act(() => quick.deny([y]))).refused).toBeUndefined();
   expect(cell(x)?.staged?.value.value).toBe("P");
   expect(cell(y)?.proposal ?? null).toBeNull();
 
@@ -241,8 +240,28 @@ test("type then quick accept or deny lands; a foreign write between them refuses
   const late = again();
   await act(() => late.propose(z, human("T"), "base"));
   external([{ path: ["cells", familyCellKey(y), "proposal"], value: pea("F") }]);
-  expect(await act(() => late.accept([x]))).toMatchObject({ code: "stale-revision" });
-  expect(await act(() => late.deny([x]))).toMatchObject({ code: "stale-revision" });
+  expect((await act(() => late.accept([x]))).refused).toMatchObject({ code: "stale-revision" });
+  expect((await act(() => late.deny([x]))).refused).toMatchObject({ code: "stale-revision" });
   expect(cell(x)).toMatchObject({ proposal: { value: { value: "P" } } });
   expect(cell(x)?.staged ?? null).toBeNull();
+});
+
+test("an aggregate accept skips a contested cell and refuses once for every covered cell", async () => {
+  const { actions } = start({
+    [familyCellKey(x)]: { proposal: pea("P"), staged: null },
+    [familyCellKey(y)]: {
+      proposal: pea("Q"),
+      staged: { value: { familyName: "F", value: "mine" } },
+    },
+    [familyCellKey(z)]: { proposal: pea("R"), staged: null },
+  });
+  const all = actions();
+  external([{ path: ["cells", familyCellKey(x), "proposal"], value: pea("NEWER") }]);
+  const out = await act(() => all.accept([x, y, z]));
+  expect(out.skipped).toEqual([{ key: familyCellKey(y), reason: "contested" }]);
+  expect(out.refused).toMatchObject({
+    code: "stale-revision",
+    addresses: [familyCellKey(x), familyCellKey(z)],
+  });
+  expect(cell(y)?.staged?.value.value).toBe("mine");
 });

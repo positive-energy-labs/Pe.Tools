@@ -50,7 +50,7 @@ test("a staged family cell preserves the proposal and carries set/delete semanti
     reading,
     cells: {
       [width]: {
-        proposal: { value: "3in", by: "pea" },
+        proposal: { value: "3in" },
         staged: { value: "2in" },
       },
     },

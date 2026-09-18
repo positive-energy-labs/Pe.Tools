@@ -265,7 +265,7 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
     ...(proposed
       ? {
           [proposed]: {
-            proposal: { value: "6in", by: "pea", note: "office standard", confidence: "low" },
+            proposal: { value: "6in", note: "office standard", confidence: "low" },
             staged: null,
           },
         }

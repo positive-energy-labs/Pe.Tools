@@ -16,6 +16,7 @@ import {
   settingsFieldDirectives,
   settingsFieldSegments,
   settingsCandidate,
+  transitionPatches,
   type FamilyCapture,
   type FamilyDocument,
   type FamilyDraft,
@@ -411,8 +412,9 @@ export function useFamilyStore(options: {
         }
         if (!lane.document) return "Read the family before editing fields.";
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
+        // A cleared proposal is a deny: the edit buffer binds it to the revision it was seen at.
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
-          patches.push({ path: ["fields", id, "proposal"] });
+          patches.push(...transitionPatches(["fields"], id, fields[id] ?? {}, { kind: "deny" }));
         if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
         edits.stage(nextDraft, patches, draftRevision);

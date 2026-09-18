@@ -264,14 +264,6 @@ export function FamiliesProposalsBand() {
                 Pea proposes {proposal.value.value}
               </FactChip>
             ) : null}
-            {proposal ? (
-              <FactChip
-                tone={proposal.by === "pea" ? "pea" : "caution"}
-                title="Who proposed this value."
-              >
-                by {proposal.by === "pea" ? "Pea" : "you"}
-              </FactChip>
-            ) : null}
             <FactChip
               tone={isOpen ? "pea" : "caution"}
               title="Open waits for you; staged goes into plan."
