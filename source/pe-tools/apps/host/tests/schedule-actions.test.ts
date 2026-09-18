@@ -9,8 +9,8 @@ import {
   controlAction,
   readScopedActionStatuses,
 } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { detailResponse } from "./schedule-fixture.ts";
-import { setup } from "./schedule-test-fixture.ts";
+import { detailResponse, target } from "./schedule-fixture.ts";
+import { cellsApplied, setup } from "./schedule-test-fixture.ts";
 
 test("actual HTTP Work + journal consumes fanout only after positive acknowledgments; readback is independent", async () => {
   const f = await setup();
@@ -39,18 +39,35 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
             before: "100 VA",
             after: "100 VA",
             error: null,
+            writes: [{ index: 0, ok: true }],
           },
         ],
       },
     },
   });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
-  expect(f.reads()).toBe(3); // initial, binding validation, actual post-effect readback
-  expect(
-    JSON.parse(await readFile(join(f.dir, "actions.json"), "utf8")).actions[0].steps[0],
-  ).toMatchObject({ state: "succeeded", result: { applied: 2 } });
+  // Initial read and actual post-effect readback; the domain compares bindings inside its transaction.
+  expect(f.reads()).toBe(2);
+  // The reviewed binding goes back unchanged, targets and raw values included; the journal seals it.
+  const request = f.sent.find((s) => s.key === "schedule.cells.apply")!.input;
+  expect(request).toEqual({
+    scheduleId: 42,
+    scheduleUniqueId: "uid-42",
+    edits: [
+      {
+        rowNumber: 1,
+        columnNumber: 2,
+        expectedBinding: f.reading.snapshot.rows[0]!.bindings[0],
+        value: "150 VA",
+      },
+    ],
+    transactionName: "Schedule grid push",
+  });
+  expect(request.edits[0].expectedBinding.targets).toEqual([target(7), target(8)]);
+  const step = JSON.parse(await readFile(join(f.dir, "actions.json"), "utf8")).actions[0].steps[0];
+  expect(step).toMatchObject({ state: "succeeded", input: request, result: { appliedCells: 1 } });
 });
 
 test("a pathless document refuses its schedule reading in one sentence", async () => {
@@ -62,52 +79,30 @@ test("a pathless document refuses its schedule reading in one sentence", async (
 });
 
 test.each([
-  ["missing", { applied: 0, dryRun: false, results: [] }],
-  [
-    "partial fanout",
-    {
-      applied: 1,
-      dryRun: false,
-      results: [
-        { index: 0, ok: true },
-        { index: 1, ok: false, error: "read only" },
-      ],
-    },
-  ],
+  ["missing", cellsApplied([])],
+  ["refused", cellsApplied([[1, 2, false, "read only"]])],
   [
     "duplicate",
     {
-      applied: 2,
-      dryRun: false,
+      ...cellsApplied([[1, 2, true]]),
       results: [
-        { index: 0, ok: true },
-        { index: 0, ok: true },
-      ],
+        ...cellsApplied([
+          [1, 2, true],
+          [1, 2, true],
+        ]).results,
+      ].map((r) => ({ ...r, index: 0 })),
     },
   ],
   [
     "malformed",
     {
-      applied: 2,
-      dryRun: false,
-      results: [
-        { index: 0, ok: "true" },
-        { index: 1, ok: true },
-      ],
+      ...cellsApplied([[1, 2, true]]),
+      results: [{ index: 0, rowNumber: 1, columnNumber: 2, ok: "true" }],
     },
   ],
-  [
-    "dry run",
-    {
-      applied: 0,
-      dryRun: true,
-      results: [
-        { index: 0, ok: true },
-        { index: 1, ok: true },
-      ],
-    },
-  ],
-])("%s keeps the expanded cell staged", async (_name, response) => {
+  ["another cell at the index", cellsApplied([[2, 2, true]])],
+  ["dry run", cellsApplied([[1, 2, true]], { dryRun: true })],
+])("%s keeps the staged cell", async (_name, response) => {
   const f = await setup();
   f.setResponse(response);
   const result = await f.submit();
@@ -115,13 +110,19 @@ test.each([
   expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
 });
 
-test("real 501-edit native cap refusal keeps every cell; diagnostic indices are not cells", async () => {
+test("501 staged cells refuse before dispatch and keep every cell", async () => {
   const f = await setup();
   const detail = detailResponse();
   detail.entries[0].rows = Array.from({ length: 501 }, (_, index) => ({
     ...detail.entries[0].rows[0],
     rowNumber: index,
-    bindings: [{ ...detail.entries[0].rows[0].bindings[0], targetElementIds: [index + 1] }],
+    bindings: [
+      {
+        ...detail.entries[0].rows[0].bindings[0],
+        targetElementIds: [index + 1],
+        targets: [target(index + 1)],
+      },
+    ],
   }));
   f.setDetail(detail);
   const reading = await f.read();
@@ -134,33 +135,22 @@ test("real 501-edit native cap refusal keeps every cell; diagnostic indices are 
       ),
     },
   ]);
-  f.setResponse({
-    applied: 0,
-    dryRun: false,
-    results: [{ index: 0, ok: false, error: "Edit count 501 exceeds the 500-edit cap per call." }],
-  });
-  const result = await f.submit();
-  expect(result.result.applied).toBe(0);
+  expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
   expect(Object.values((await f.view()).doc.cells).filter((c) => c.staged)).toHaveLength(501);
-  expect(f.sent.find((s) => s.key === "revit.apply.parameter-values")?.input.edits).toHaveLength(
-    501,
-  );
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
 
 test("extra transaction diagnostics retain native evidence without negating positive cell acknowledgments", async () => {
   const f = await setup();
-  f.setResponse({
-    applied: 2,
-    dryRun: false,
-    results: [
-      { index: 0, ok: true },
-      { index: 1, ok: true },
-      { index: 4, ok: false, error: "transaction warning" },
-    ],
-  });
+  const warning = {
+    code: "ScheduleCellApplyCommitFailure",
+    severity: "Warning",
+    message: "transaction warning",
+  };
+  f.setResponse(cellsApplied([[1, 2, true]], { diagnostics: [warning] }));
   expect(await f.submit()).toMatchObject({
     state: "succeeded",
-    result: { applied: 1, diagnostics: [{ index: 4, ok: false }] },
+    result: { applied: 1, diagnostics: [warning] },
   });
 });
 
@@ -170,7 +160,9 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   detail.entries[0].rows.push({
     ...detail.entries[0].rows[0],
     rowNumber: 2,
-    bindings: [{ ...detail.entries[0].rows[0].bindings[0], targetElementIds: [9] }],
+    bindings: [
+      { ...detail.entries[0].rows[0].bindings[0], targetElementIds: [9], targets: [target(9)] },
+    ],
   });
   f.setDetail(detail);
   const reading = await f.read();
@@ -178,15 +170,12 @@ test("partial native outcome clears only a completely acknowledged cell and keep
     { path: ["basis"], value: { captureId: reading.id } },
     { path: ["cells", "2::2"], value: { staged: { value: "200 VA" } } },
   ]);
-  f.setResponse({
-    applied: 2,
-    dryRun: false,
-    results: [
-      { index: 0, ok: true },
-      { index: 1, ok: true },
-      { index: 2, ok: false, error: "read only" },
-    ],
-  });
+  f.setResponse(
+    cellsApplied([
+      [1, 2, true],
+      [2, 2, false, "read only"],
+    ]),
+  );
   expect(await f.submit()).toMatchObject({
     result: { applied: 1, failures: [{ key: "2::2", error: "read only" }] },
   });
@@ -199,9 +188,7 @@ test("Work edits finish while native execution waits and settlement preserves la
   f.hold();
   const admission = await f.admission();
   await f.post("/actions", admission);
-  await vi.waitFor(() =>
-    expect(f.sent.some((s) => s.key === "revit.apply.parameter-values")).toBe(true),
-  );
+  await vi.waitFor(() => expect(f.sent.some((s) => s.key === "schedule.cells.apply")).toBe(true));
   expect(
     await f.patch([
       { path: ["cells", "1::2", "staged"], value: { value: "200 VA" } },
@@ -244,7 +231,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
       original.id,
     ),
   ).toMatchObject({ id: original.id, state: "succeeded" });
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
 test("lost native outcome remains staged, original receipt recovers without a fresh-ID retry", async () => {
@@ -258,7 +245,7 @@ test("lost native outcome remains staged, original receipt recovers without a fr
   await controlAction("action.recover", { id: original.id }, "", "human");
   await controlAction("action.resume", { id: original.id }, "", "human");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
 test("same document in A/B has exact independent lifetimes; subject change and reopen cannot redeem old cells", async () => {
@@ -277,7 +264,7 @@ test("same document in A/B has exact independent lifetimes; subject change and r
   f.setDetail(detailResponse());
   f.reopen();
   expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(0);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
 
 test("readback failure is explicit and original resume performs only a read, never another apply", async () => {
@@ -292,21 +279,36 @@ test("readback failure is explicit and original resume performs only a read, nev
   f.failReadback(false);
   await controlAction("action.resume", { id: result.id }, "", "human");
   expect(await f.owner().wait(result.id)).toMatchObject({ state: "succeeded" });
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
-test("changed binding refuses before effects and stale/agent admission cannot consume Work", async () => {
+test("stale Work and agent admission refuse before dispatch; a stale binding is the domain's per-cell answer", async () => {
   const f = await setup();
   const original = await f.admission();
   expect((await f.post("/actions", { ...original, actor: "agent" })).status).toBe(409);
   await f.patch([{ path: ["cells", "1::2", "staged"], value: { value: "175 VA" } }]);
   expect(await f.submit(original)).toMatchObject({ state: "failed", notDispatched: true });
-  const changed = detailResponse();
-  changed.entries[0].rows[0].bindings[0].targetElementIds = [999];
-  f.setDetail(changed);
-  expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
+  f.setResponse(cellsApplied([[1, 2, false, "Reviewed schedule cell evidence is stale."]]));
+  expect(await f.submit()).toMatchObject({
+    result: {
+      applied: 0,
+      failures: [{ key: "1::2", error: "Reviewed schedule cell evidence is stale." }],
+    },
+  });
   expect((await f.view()).doc.cells["1::2"].staged.value).toBe("175 VA");
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(0);
+  // One dispatch, never a retry through another parameter path.
+  expect(f.sent.map((s) => s.key).filter((k) => k !== "revit.detail.schedules")).toEqual([
+    "schedule.cells.apply",
+  ]);
+});
+
+test("a binding without per-target evidence never becomes a reading", async () => {
+  const f = await setup();
+  const old = detailResponse();
+  delete (old.entries[0].rows[0].bindings[0] as { targets?: unknown }).targets;
+  f.setDetail(old);
+  await expect(f.read()).rejects.toThrow();
 });
 
 test("unresolved original Work action survives another lifetime and is discoverable by subject", async () => {
@@ -328,27 +330,20 @@ test("unresolved original Work action survives another lifetime and is discovera
       })
     ).status,
   ).toBe(409);
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
 test("missing acknowledgments recover the same native receipt before original resume; no fresh dispatch", async () => {
   const f = await setup();
-  f.setResponse({ applied: 0, dryRun: false, results: [] });
+  f.setResponse(cellsApplied([]));
   const original = await f.admission();
   expect(await f.submit(original)).toMatchObject({ state: "incomplete" });
-  f.setResponse({
-    applied: 2,
-    dryRun: false,
-    results: [
-      { index: 0, ok: true },
-      { index: 1, ok: true },
-    ],
-  });
+  f.setResponse(cellsApplied([[1, 2, true]]));
   await controlAction("action.recover", { id: original.id }, "", "human");
   await controlAction("action.resume", { id: original.id }, "", "human");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
 
 test("retired Family Types has no route or capabilities; current Schedule admission replays by exact ID", async () => {
