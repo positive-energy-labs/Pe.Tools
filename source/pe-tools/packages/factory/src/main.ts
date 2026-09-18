@@ -110,6 +110,14 @@ const append = (
     )
     .run(new Date().toISOString(), id, loop, kind, sha, JSON.stringify(payload));
 
+const captured = (name: "stdout" | "stderr", value: string) => {
+  // ponytail: 64 KiB keeps SQLite inspectable; move large streams to artifacts if real actuators need them.
+  const bytes = Buffer.from(value);
+  return bytes.length <= 65_536
+    ? { [name]: value }
+    : { [name]: bytes.subarray(0, 65_536).toString("utf8"), [`${name}Truncated`]: true };
+};
+
 const rows = (database: DatabaseSync, since = 0) =>
   database.prepare("SELECT * FROM events WHERE seq > ? ORDER BY seq").all(since) as EventRow[];
 
@@ -198,7 +206,18 @@ const sense = (
         ) {
           throw new Error("sensor stdout is not one flat JSON object of numbers");
         }
-        append(database, "reading", sha, { sensor: name, values }, null, `${name}@${sha}`);
+        append(
+          database,
+          "reading",
+          sha,
+          {
+            sensor: name,
+            values,
+            ...(result.stderr ? captured("stderr", result.stderr) : {}),
+          },
+          null,
+          `${name}@${sha}`,
+        );
       } catch (error) {
         append(database, "failed", sha, {
           sensor: name,
@@ -330,8 +349,14 @@ const act = (
   if (!loop.act) return false;
   const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
   const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
-  const fail = (actuator: string, stderr: string) => {
-    append(database, "failed", sha, { actuator, stderr }, loopName);
+  const fail = (actuator: string, stderr: string, stdout = "") => {
+    append(
+      database,
+      "failed",
+      sha,
+      { actuator, ...captured("stdout", stdout), ...captured("stderr", stderr) },
+      loopName,
+    );
     cleanupRun(repo, branch, worktree);
     return false;
   };
@@ -404,10 +429,14 @@ const act = (
       shell: true,
     });
     if (result.status !== 0) {
-      return fail(loop.act, result.stderr.trim() || `actuator exited ${result.status}`);
+      return fail(loop.act, result.stderr.trim() || `actuator exited ${result.status}`, result.stdout);
     }
     if (!git(worktree, "status", "--porcelain")) {
-      return fail(loop.act, "actuator changed nothing");
+      return fail(
+        loop.act,
+        `actuator changed nothing${result.stderr ? `\n${result.stderr}` : ""}`,
+        result.stdout,
+      );
     }
     requireRunWorktree(worktree);
     git(worktree, "add", "-A");
@@ -415,7 +444,19 @@ const act = (
     git(worktree, "commit", "-m", `factory: ${loopName} at ${sha.slice(0, 7)}`);
     const head = git(worktree, "rev-parse", "HEAD");
     const shortstat = git(worktree, "diff", "--shortstat", `${sha}..${head}`);
-    append(database, "proposed", sha, { branch, head, shortstat }, loopName);
+    append(
+      database,
+      "proposed",
+      sha,
+      {
+        branch,
+        head,
+        shortstat,
+        ...captured("stdout", result.stdout),
+        ...captured("stderr", result.stderr),
+      },
+      loopName,
+    );
     if (loop.gate === "human") {
       append(database, "gated", sha, {}, loopName);
       return false;
