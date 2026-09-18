@@ -145,7 +145,13 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             using (var transaction = new Transaction(document, "Seed formula")) {
                 transaction.Start();
                 var fm = document.FamilyManager;
-                fm.AddParameter("PE_E___Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
+                var voltage = fm.AddParameter("PE_E___Voltage", GroupTypeId.Electrical, SpecTypeId.ElectricalPotential, false);
+                var types = fm.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B").ToList();
+                Assert.That(types, Has.Count.EqualTo(2));
+                foreach (var type in types) {
+                    fm.CurrentType = type;
+                    fm.Set(voltage, UnitUtils.ConvertToInternalUnits(type.Name == "A" ? 120 : 208, UnitTypeId.Volts));
+                }
                 var poles = fm.AddParameter("PE_E___NumberOfPoles", GroupTypeId.Electrical, SpecTypeId.Int.NumberOfPoles, false);
                 fm.SetFormula(poles, raw);
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
@@ -162,6 +168,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var before = FamilyModelJson.Serialize(current);
             var currentType = document.FamilyManager.CurrentType.Name;
             var modified = document.IsModified;
+            var originalPoles = document.FamilyManager.Types.Cast<FamilyType>()
+                .Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsInteger(document.FamilyManager.FindParameter("PE_E___NumberOfPoles")));
+            Assert.That(originalPoles, Has.Count.EqualTo(2));
+            Assert.That(originalPoles["A"], Is.EqualTo(1));
+            Assert.That(originalPoles["B"], Is.EqualTo(2));
             FamilyPatch Patch(string formula) => new() { Patch = new JObject {
                 ["parameters"] = new JObject { ["PE_E___NumberOfPoles"] = new JObject { ["formula"] = formula } }
             } };
@@ -183,9 +195,13 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(apply.LastReceipt?.Converged, Is.True);
             Assert.That(apply.LastReceipt?.PlanHash, Is.EqualTo(changed.PlanHash));
             Assert.That(applied.Parameters["PE_E___NumberOfPoles"].Formula, Does.Contain("208"));
-            var poles = document.FamilyManager.FindParameter("PE_E___NumberOfPoles");
-            Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Select(type => type.AsInteger(poles)),
-                Is.All.Not.Null);
+            var appliedPoles = document.FamilyManager.FindParameter("PE_E___NumberOfPoles");
+            var values = document.FamilyManager.Types.Cast<FamilyType>()
+                .Where(type => type.Name is "A" or "B")
+                .ToDictionary(type => type.Name, type => type.AsInteger(appliedPoles));
+            Assert.That(values, Has.Count.EqualTo(2));
+            Assert.That(values["A"], Is.EqualTo(2));
+            Assert.That(values["B"], Is.EqualTo(1));
         } finally { document.Close(false); }
     }
 
