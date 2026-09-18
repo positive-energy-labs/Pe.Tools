@@ -339,11 +339,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         className={tone}
       >
         <span>⌗ {toolTitle(call.title)}</span>
-        {expired ? (
-          <span className="t-small text-ink-2">
-            {" — expired, unanswered"}
-          </span>
-        ) : null}
+        {expired ? <span className="t-small text-ink-2">{" — expired, unanswered"}</span> : null}
         {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
           <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
