@@ -20,10 +20,10 @@ const client = vi.hoisted(() => ({
 }));
 vi.mock("../../../../../packages/mcps/src/shared/takeoff-action-client", () => client);
 
-import { settingsFieldPointer, type FamilyDraft } from "@pe/agent-contracts";
+import { familyDraftRouteState, settingsFieldPointer, type FamilyDraft } from "@pe/agent-contracts";
 
 import { familyFixtures } from "#/family/authored-families";
-import { draftSpec, familyManifest, familySpec, proposeOnDraft } from "./manifest";
+import { draftSpec, familyManifest, familySpec } from "./manifest";
 
 const width = settingsFieldPointer(["parameters", "Width", "value"]);
 const reading = JSON.stringify({
@@ -45,37 +45,46 @@ const ctx = (doc: FamilyDraft, pod = "") => {
   };
 };
 
-test("a person's edit on a family parameter is an accept, and the draft spec carries it", () => {
-  const draft = proposeOnDraft(
-    { reading, edits: [{ pointer: width, value: "3in", by: "pea" }], accepted: [] },
-    [{ path: ["fields", width, "staged"], value: { value: "2in" } }],
-  );
-  expect(draft.edits).toEqual([]);
-  expect(draft.accepted).toEqual([{ pointer: width, value: "2in", by: "human" }]);
+test("a staged family cell preserves the proposal and carries set/delete semantics", () => {
+  const draft: FamilyDraft = {
+    reading,
+    cells: {
+      [width]: {
+        proposal: { value: "3in" },
+        staged: { value: "2in" },
+      },
+    },
+  };
   expect(JSON.parse(draftSpec(draft)!).parameters.Width.value).toBe("2in");
-  // A deny clears the proposal and accepts nothing.
-  const denied = proposeOnDraft(
-    { reading, edits: [{ pointer: width, value: "3in", by: "pea" }], accepted: [] },
-    [{ path: ["fields", width, "proposal"] }],
-  );
-  expect(denied).toMatchObject({ edits: [], accepted: [] });
+  expect(
+    JSON.parse(
+      draftSpec({ reading, cells: { [width]: { proposal: null, staged: { delete: true } } } })!,
+    ).parameters.Width.value,
+  ).toBeUndefined();
+  expect(draft.cells[width]).toMatchObject({
+    proposal: { value: "3in" },
+    staged: { value: "2in" },
+  });
+});
+
+test("family Work rejects legacy persisted arrays", () => {
+  expect(() => familyDraftRouteState.schema.parse({ reading, edits: [], accepted: [] })).toThrow();
 });
 
 test("the live family reads into a draft with no pod: read needs none, capture asks for one", () => {
   const manifest = familyManifest();
-  const { ctx: live } = ctx({ reading: familyFixtures.box, edits: [], accepted: [] });
+  const { ctx: live } = ctx({ reading: familyFixtures.box, cells: {} });
   expect(manifest.actions!.read.ready(live, undefined as never)).toBeNull();
   expect(manifest.actions!.capture.ready(live, undefined as never)).toBe(
     "choose the pod the capture lands in",
   );
 });
 
-test("an accepted proposal plans: save files the draft as a member, the plan names it", async () => {
+test("a staged cell plans: save files the draft as a member, the plan names it", async () => {
   client.runSemanticAction.mockClear();
   const doc: FamilyDraft = {
     reading,
-    edits: [],
-    accepted: [{ pointer: width, value: "2in", by: "human" }],
+    cells: { [width]: { proposal: null, staged: { value: "2in" } } },
   };
   const { ctx: c, pages } = ctx(doc, "p");
   expect(familySpec.staged!.count(c)).toBe(1);

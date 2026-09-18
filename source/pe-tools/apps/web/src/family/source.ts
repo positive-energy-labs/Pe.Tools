@@ -26,7 +26,7 @@ export function familySource(
   fields: Record<string, SettingsFieldState> = {},
   spec?: FamilyDocument["doc"],
 ): FamilySource {
-  const relativePath = snapshot?.member.path ?? "";
+  const relativePath = snapshot?.member?.path ?? "";
   let projected: FamilyPageModel | null = null;
   let model: FamilyModel | null = null;
   let parseError: string | null = null;

@@ -4,6 +4,7 @@ import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell"
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { NavStateCell } from "#/family/marks";
+import { parameterText } from "#/family/family-model";
 import {
   MARK_TITLE,
   agreementOf,
@@ -121,6 +122,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               // derivation written a second time.
               proposalCell([], isUnsavedAt(world, draft, saved, row, typeName) ? literal : null),
               { value: literal },
+              parameterText,
             )}
             note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
               isUnsavedAt(world, draft, saved, row, typeName)
@@ -186,6 +188,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           {...cellFromTrichotomy(
             proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
             facts,
+            parameterText,
           )}
           onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
         />

@@ -1,34 +1,34 @@
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
  * authored scope, its cells open to proposals; capture files one spec member per picked family;
- * plan reads the page's member, or generates one member per family from accepted proposals, and
- * apply sends the sheet's included hashes. Work holds the scope, the proposals and their accepts,
+ * plan reads the page's member, or generates one member per family from staged cells, and
+ * apply sends the sheet's included hashes. Work holds the scope and keyed cells,
  * and the rows a person held back.
  */
 import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
+  stagedEntries,
   type FamiliesRouteDocument,
-  type FamilyCellEdit,
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import {
   admissionPlan,
+  byPlan,
   entityRoute,
   workflow,
   type EntityPage,
   type EntityRouteDef,
-  type MemberSource,
   type PlanEntry,
 } from "#/route";
 import { podHost } from "#/route/pods";
 
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import { isAccepted, stagedMembers } from "./staged";
+import { stagedMembers } from "./staged";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
@@ -78,21 +78,21 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
     },
     /**
-     * The editable table's half. Plan takes ACCEPTED proposals only, generates one patch member per
+     * The editable table's half. Plan takes staged cells only, generates one patch member per
      * family from them, files each in the page's pod through the same host writer capture uses, and
      * plans each through `families.plan` over exactly that family's id; apply sends each included
      * row's hash back to the member that produced it. The person never named, saved, or opened a
      * file — but one exists, the sheet names it per row, and the receipt names it.
      */
     staged: {
-      count: (ctx) => (ctx.work.doc?.accepted ?? []).length,
+      count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
         if (!ctx.page.pod) throw Error("choose the pod the generated spec lands in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
-        const generated = stagedMembers(doc.accepted, new Date(), stagedSchema());
+        const generated = stagedMembers(doc.cells, new Date(), stagedSchema());
         for (const member of generated) {
           const source = await podHost.write(
             { pod: ctx.page.pod, path: member.path },
@@ -118,48 +118,23 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
           // The sheet names the member each family applies from.
           for (const plan of [result.plan].flat()) {
             const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
-            entries.push({ ...row, detail: `${row.detail} · from ${member.path}`, source });
+            entries.push({
+              ...row,
+              detail: `${row.detail} · from ${member.path}`,
+              source,
+              plan: String(result.id),
+            });
           }
         }
         return { entries };
       },
+      // Each member's plan sealed its bytes and the staged cells it consumed; the host retires
+      // those cells after proven native success, only where they are still unchanged.
       apply: async (ctx, included) => {
-        const doc = ctx.work.doc;
-        const byMember = new Map<string, { source: MemberSource; rows: PlanEntry[] }>();
-        for (const row of included) {
-          if (!row.source) throw Error(`the planned row for ${row.name} names no saved member`);
-          const key = `${row.source.pod}:${row.source.path}`;
-          const bucket = byMember.get(key);
-          if (bucket) bucket.rows.push(row);
-          else byMember.set(key, { source: row.source, rows: [row] });
-        }
-        for (const { source, rows } of byMember.values())
-          await workflow(
-            "families.apply",
-            {
-              source,
-              ...(doc?.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-              expectedPlanHashes: Object.fromEntries(rows.map((r) => [r.id, r.planHash])),
-            },
-            ctx,
-          );
-        // Applied proposals are spent: the run receipt is the record from here, and leaving them
-        // standing would offer the same change again over a model that already took it. Proposals
-        // nobody accepted, and families held back from this apply, stay.
-        const applied = new Set(included.map((row) => Number(row.id)));
-        const spent = (edit: FamilyCellEdit) => applied.has(edit.familyId);
-        await ctx.write([
-          {
-            path: ["edits"],
-            value: (doc?.edits ?? []).filter(
-              (edit) => !spent(edit) || !isAccepted(doc!.accepted, edit),
-            ),
-          },
-          { path: ["accepted"], value: (doc?.accepted ?? []).filter((edit) => !spent(edit)) },
-        ]);
+        for (const input of byPlan(included)) await workflow("families.apply", input, ctx);
       },
     },
-    docs: "Audit loaded families over a scope, propose values in the cells a patch can express and accept or deny each, capture picked families into a pod as specs, then plan a spec — saved, or generated from the accepted proposals — and apply exactly the families it changes.",
+    docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or generated staged cells and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<

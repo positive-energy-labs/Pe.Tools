@@ -161,7 +161,19 @@ export interface PlanEntry {
    * to the member that produced them.
    */
   source?: MemberSource;
+  /** The plan action this row came from; apply names it, and the host consumes its sealed input. */
+  plan?: string;
 }
+
+/** Apply each plan action's included rows, one host apply per plan, as `{ plan, hashes }`. */
+export const byPlan = (included: readonly PlanEntry[]) => {
+  const plans = new Map<string, Record<string, string>>();
+  for (const row of included) {
+    if (!row.plan) throw Error(`the planned row for ${row.name} names no plan`);
+    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.id] = row.planHash;
+  }
+  return [...plans].map(([plan, expectedPlanHashes]) => ({ plan, expectedPlanHashes }));
+};
 
 /** The plan apply confirms (dogma law 9), as the plan workflow returned it. */
 export interface PlanSheet {
@@ -337,19 +349,13 @@ export const admissionPlan = <W, R extends string, P>(
     read: async (ctx, source) => {
       const { input, bases } = workOf(ctx);
       const result = await workflow(keys.plan, { source, ...input }, ctx, bases);
-      return { entries: [result.plan].flat().map(row) };
+      return {
+        entries: [result.plan].flat().map((plan) => ({ ...row(plan), plan: String(result.id) })),
+      };
     },
-    apply: async (ctx, included, source) => {
-      const { executionOptions } = workOf(ctx).input;
-      await workflow(
-        keys.apply,
-        {
-          source,
-          ...(executionOptions ? { executionOptions } : {}),
-          expectedPlanHashes: Object.fromEntries(included.map((r) => [r.id, r.planHash])),
-        },
-        ctx,
-      );
+    // The plan sealed the source and options; apply names that plan and the hashes it confirms.
+    apply: async (ctx, included) => {
+      for (const input of byPlan(included)) await workflow(keys.apply, input, ctx);
     },
   };
 };

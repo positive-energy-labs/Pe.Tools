@@ -11,7 +11,11 @@ import { createSettingsCommandHandlers, executionContent } from "../src/pea/sett
 
 afterEach(() => vi.restoreAllMocks());
 const member = (path = "settings/a.json") => ({ pod: "pe-standards", path });
-const reading = (content = '{"x":1}', sha256 = "v1") => ({ content, sha256 });
+const reading = (content = '{"x":1}', sha256 = "v1") => ({
+  content,
+  sha256,
+  bytesBase64: Buffer.from(content).toString("base64"),
+});
 const composition = (
   composed: string | null,
   diagnostics: MemberIssue[] = [],
@@ -20,6 +24,13 @@ const composition = (
   schemaUrl: null,
   schemaJson: null,
   composed,
+  source: {
+    id: "pe-standards",
+    path: "settings/a.json",
+    sha256: "v1",
+    bytesBase64: Buffer.from('{"x":1}').toString("base64"),
+    origin: "SavedMember",
+  },
   diagnostics,
   dependencies: [],
   schemaValidation: "no-schema",
@@ -27,7 +38,7 @@ const composition = (
 });
 const work = (): SettingsRouteDocument => ({
   basis: { member: member(), rawContent: '{"x":1}', sha256: "v1" },
-  fields: { "/x": { staged: { value: 2 }, proposal: { value: 3, by: "pea" } } },
+  fields: { "/x": { staged: { value: 2 }, proposal: { value: 3 } } },
 });
 const context = (document: SettingsRouteDocument) => ({
   target: null,

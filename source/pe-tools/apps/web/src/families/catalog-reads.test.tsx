@@ -49,7 +49,7 @@ vi.mock("#/lib/token", async (importOriginal) => ({
 import { FamiliesRouteContent } from "#/routes/families";
 
 const SESSION = "session-553a4c85413fe3ae";
-const doc = familiesRouteState.schema.parse({ profilePath: "C:Profiles\review.ffprofile" });
+const doc = familiesRouteState.schema.parse({});
 
 class WireSource {
   onmessage: ((event: { data: string }) => void) | null = null;

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { draftProposals } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
+import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -94,28 +94,94 @@ export const FAMILY_SCOPE_LIMIT = 5000;
  * Revit parameter name, because that is what a Family Foundry patch keys on
  * (`patch.types.<typeName>.<parameter>`).
  */
-export const familyCellEditSchema = z.object({
-  familyId: z.number(),
+export const familyCellValueSchema = z.object({
   familyName: z.string(),
-  typeName: z.string(),
-  parameter: z.string(),
   value: z.string(),
-  by: z.enum(["pea", "human"]),
 });
-export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
+export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
+export const familyCellStateSchema = trichotomyCellSchema(familyCellValueSchema);
+export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
+
+export interface FamilyCellAddress {
+  familyId: number;
+  typeName: string;
+  parameter: string;
+}
+
+const familyCellAddressTupleSchema = z.tuple([z.number(), z.string(), z.string()]);
+
+/** JSON tuple encoding is collision-free even when names contain separators. */
+export const familyCellKey = ({ familyId, typeName, parameter }: FamilyCellAddress): string =>
+  JSON.stringify(familyCellAddressTupleSchema.parse([familyId, typeName, parameter]));
+
+export const familyCellAddress = (key: string): FamilyCellAddress => {
+  const [familyId, typeName, parameter] = familyCellAddressTupleSchema.parse(JSON.parse(key));
+  return { familyId, typeName, parameter };
+};
+
+const familyCellKeySchema = z.string().refine(
+  (key) => {
+    try {
+      return familyCellKey(familyCellAddress(key)) === key;
+    } catch {
+      return false;
+    }
+  },
+  { error: "a family cell key must be a canonical [familyId,typeName,parameter] JSON tuple" },
+);
+
+/** A typed cell value as the Family Foundry patch writes it: a JSON scalar stays one. */
+export const patchValue = (text: string): string | number | boolean =>
+  text === "true"
+    ? true
+    : text === "false"
+      ? false
+      : text.trim() !== "" && Number.isFinite(Number(text))
+        ? Number(text)
+        : text;
+
+/**
+ * The patch member one family's staged cells generate, without its `$schema`, and the cell keys it
+ * consumed. Web files it; the host proves a planned member is exactly this before a plan may retire
+ * those cells. Null when the family has nothing staged.
+ */
+export function familyStagedPatch(
+  cells: Record<string, FamilyCellState>,
+  familyId: number,
+): {
+  familyName: string;
+  spec: { select: { names: string[] }; patch: { types: Record<string, Record<string, unknown>> } };
+  keys: string[];
+} | null {
+  const types: Record<string, Record<string, unknown>> = {};
+  const keys: string[] = [];
+  let familyName: string | null = null;
+  for (const [key, cell] of Object.entries(cells)) {
+    const address = familyCellAddress(key);
+    if (address.familyId !== familyId || !cell.staged) continue;
+    familyName ??= cell.staged.value.familyName;
+    (types[address.typeName] ??= {})[address.parameter] = patchValue(cell.staged.value.value);
+    keys.push(key);
+  }
+  return familyName === null
+    ? null
+    : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
+}
 
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
- * (one address, sent as `source`) or, for accepted proposals, the members plan generates from them;
- * plans and receipts are results. This document holds only the scope, the cell proposals and their
- * accepts, and what a human or pea held back.
+ * (one address, sent as `source`) or the members plan generates from staged cells;
+ * plans and receipts are results. This document holds only the scope, keyed proposal/staged cells,
+ * and what a human or pea held back.
  */
-const familiesDocumentSchema = z.object({
-  scope: appliedScopeSchema.nullable().default(null),
-  excludedIds: z.array(z.number()).default([]),
-  ...draftProposals(familyCellEditSchema),
-  executionOptions: familyExecutionOptionsSchema.optional(),
-});
+const familiesDocumentSchema = z
+  .object({
+    scope: appliedScopeSchema.nullable().default(null),
+    excludedIds: z.array(z.number()).default([]),
+    cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
+    executionOptions: familyExecutionOptionsSchema.optional(),
+  })
+  .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
 /** The included plan hashes an apply must reproduce exactly. Server and client share this. */
@@ -138,11 +204,10 @@ export const familiesRouteState = {
   route: "families",
   title: "Families",
   description:
-    "Family Foundry: author a scope, propose cell values, accept or deny them, plan a spec member, exclude, apply.",
+    "Family Foundry: author a scope and propose through cells.*.proposal. A person stages reviewed cells before plan or apply; exclusions and execution options remain separate Work.",
   schema: familiesDocumentSchema,
-  // Pea proposes into `edits` exactly as a person does; `accepted` is human-only, so a proposal
-  // reaches a plan only through a person's accept.
-  agentWriteMask: [["scope"], ["excludedIds"], ["edits"], ["executionOptions"]],
+  // Pea writes proposals only. A staged value reaches plan only through a person's review.
+  agentWriteMask: [["scope"], ["excludedIds"], ...trichotomyAgentMask(), ["executionOptions"]],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},

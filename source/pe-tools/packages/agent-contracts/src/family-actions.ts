@@ -62,15 +62,16 @@ export const familyActions = {
     input: z.object({ source: podMemberSourceSchema }),
   },
   "family.apply": {
-    says: "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
+    says: "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
     needs: "family-document",
     actor: "human",
     dirties: ["family", "pods"],
     executors: ["pod.member.compose", "family.apply"],
     description:
-      "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
+      "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
     input: z.object({
-      source: podMemberSourceSchema,
+      /** The succeeded `family.plan` action this applies; its sealed preparation is the input. */
+      plan: z.string().min(1),
       // The families shape; a family document plans exactly one family.
       expectedPlanHashes: z
         .record(z.string(), z.string().min(1))
@@ -104,17 +105,17 @@ export const familyActions = {
     }),
   },
   "families.apply": {
-    says: "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
+    says: "Apply the exact family plans a succeeded families.plan action returned (named by that action id), from the spec bytes that plan sealed; each family's plan hash gates drift. Staged cells a successful family consumed retire only if unchanged.",
     needs: "project-document",
     actor: "human",
     dirties: ["families", "pods"],
     executors: ["pod.member.compose", "families.apply"],
     description:
-      "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
+      "Apply the exact family plans a succeeded families.plan action returned (named by that action id), from the spec bytes that plan sealed; each family's plan hash gates drift. Staged cells a successful family consumed retire only if unchanged.",
     input: z.object({
-      source: podMemberSourceSchema,
+      /** The succeeded `families.plan` action this applies; its sealed preparation is the input. */
+      plan: z.string().min(1),
       expectedPlanHashes: z.record(z.string(), z.string()),
-      executionOptions: familyExecutionOptionsSchema.optional(),
     }),
   },
   "parameter-links.apply": {
