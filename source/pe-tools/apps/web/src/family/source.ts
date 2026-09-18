@@ -127,7 +127,7 @@ export function familySource(
     seedKey: model
       ? `${relativePath}@${versionToken ?? ""}`
       : evidence && "modelJson" in evidence
-        ? `capture:${evidence.reading.observedAt}`
+        ? `capture:${evidence.observedAt}`
         : `empty:${relativePath}`,
   };
 }

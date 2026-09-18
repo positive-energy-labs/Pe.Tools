@@ -5,7 +5,7 @@ namespace Pe.Shared.HostContracts.Operations;
 public sealed record FamilyCaptureRequest;
 
 public sealed record FamilyCaptureData(
-    Reading Reading,
+    string ObservedAt,
     string FamilyName,
     string ModelJson,
     int UnmodeledCount,

@@ -537,7 +537,7 @@ export namespace FamilyCapture {
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
-      reading: Reading;
+      observedAt: string;
       familyName: string;
       modelJson: string;
       unmodeledCount: number;
@@ -545,11 +545,6 @@ export namespace FamilyCapture {
         [k: string]: string;
       };
       issues: RevitDataIssue[];
-    }
-    export interface Reading {
-      at: string;
-      version?: null | string;
-      observedAt: string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -4871,14 +4866,8 @@ export namespace ScheduleCapture {
   }
   export namespace Res {
     export interface Response {
-      reading: Reading;
       scheduleName: string;
       specJson: string;
-    }
-    export interface Reading {
-      at: string;
-      version?: null | string;
-      observedAt: string;
     }
   }
 }

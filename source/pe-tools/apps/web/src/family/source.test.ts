@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { address } from "@pe/agent-contracts";
 import type { FamilySnapshot } from "#/family/host";
 import { familySource } from "#/family/source";
 import { buildSheet, inches, type FamilyModel } from "#/family/family-model";
@@ -73,11 +72,7 @@ test("native capture projects only read values and gates missing claims on cover
     '{"family":{"name":"Box"},"parameters":{"Width":{},"Missing":{},"Derived":{}},"types":{"Standard":{}}}',
   );
   const evidence = {
-    reading: {
-      at: address("C:\\Models\\Box.rfa"),
-      version: "v1",
-      observedAt: "2026-09-06T00:00:00Z",
-    },
+    observedAt: "2026-09-06T00:00:00Z",
     familyName: "Box",
     origin: "capture" as const,
     unmodeledCount: 1,
@@ -119,11 +114,7 @@ test("native capture without an authored file renders a read-only family lane", 
     unmodeledCount: 0,
     issues: [],
     origin: "capture" as const,
-    reading: {
-      at: address("C:\\Models\\Opened.rfa"),
-      version: "v1",
-      observedAt: "2026-09-07T00:00:00Z",
-    },
+    observedAt: "2026-09-07T00:00:00Z",
   };
   const lane = familySource(null, evidence);
   expect(lane.document).toBeNull();

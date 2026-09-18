@@ -27,7 +27,7 @@ internal static class ScheduleBridgeOps {
         PaletteThreading.RunRevitAsync(() => {
             if (document.Value.GetElement(request.ScheduleId.ToElementId()) is not ViewSchedule schedule)
                 throw BridgeOperationExceptions.BadRequest($"Element id {request.ScheduleId} is not a schedule.");
-            return new ScheduleSpecCaptureData(DocumentReading.Here(document.Value), schedule.Name, CaptureSpec(schedule));
+            return new ScheduleSpecCaptureData(schedule.Name, CaptureSpec(schedule));
         }, cancellationToken);
 
     [Op("schedule.apply", Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
