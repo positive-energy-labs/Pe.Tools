@@ -16,12 +16,25 @@ import { useChatPluginHost } from "./route-panes";
 import { createChatPageStore, type ChatSearch } from "./store";
 
 const plan = vi.hoisted(() => ({ release: () => {}, mounts: 0, unmounts: 0, runs: 0 }));
-vi.mock("#/route/schedules/live", () => ({ LiveScheduleGridWorkspace: () => null }));
-vi.mock("#/route/family/live", () => ({ FamilyRouteView: () => null }));
-vi.mock("#/routes/pods", () => ({ PodsRouteContent: () => null }));
-vi.mock("#/routes/parameter-links", () => ({ ParameterLinksRouteContent: () => null }));
-vi.mock("#/takeoff/pane", () => ({ TakeoffsPane: () => null }));
-vi.mock("#/instances/route", () => ({ InstancesPage: () => null }));
+// Each stub records the props the host handed its route view.
+const seen = vi.hoisted(() => {
+  const props: Record<string, Record<string, unknown>> = {};
+  return {
+    props,
+    stub: (name: string) => (p: Record<string, unknown>) => {
+      props[name] = p;
+      return null;
+    },
+  };
+});
+vi.mock("#/route/schedules/live", () => ({ LiveScheduleGridWorkspace: seen.stub("schedules") }));
+vi.mock("#/route/family/live", () => ({ FamilyRouteView: seen.stub("family") }));
+vi.mock("#/routes/pods", () => ({ PodsRouteContent: seen.stub("pods") }));
+vi.mock("#/takeoff/pane", () => ({ TakeoffsPane: seen.stub("takeoffs") }));
+vi.mock("#/instances/route", () => ({ InstancesPage: seen.stub("instances") }));
+vi.mock("#/routes/parameter-links", () => ({
+  ParameterLinksRouteContent: seen.stub("parameter-links"),
+}));
 vi.mock("#/routes/families", async () => {
   const { useContext, useEffect } = await import("react");
   const { z } = await import("zod");
@@ -48,6 +61,7 @@ vi.mock("#/routes/families", async () => {
   });
   return {
     FamiliesRouteContent: function Families({ thread }: { thread: string }) {
+      seen.props.families = { thread };
       const handle = useRoute(manifest, { thread });
       const hosted = useContext(ChatHosted);
       useChatPlanIntent(handle, handle.actions.plan);
