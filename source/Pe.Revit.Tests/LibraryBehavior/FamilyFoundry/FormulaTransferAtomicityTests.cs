@@ -4,6 +4,7 @@ using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Tests;
 
@@ -83,7 +84,10 @@ public sealed class FormulaTransferAtomicityTests {
         try {
             var before = Snapshot(document);
             var (error, converged) = Reconcile(document, "Area");
+            // User ruling R1 (2026-09-18): Revit would accept this as `Base * 2'` (area), silently re-reading the bare 2 in project units.
             AssertNamesCause(error, document, "Base * 2", SpecTypeId.Length, "type", SpecTypeId.Area, "type");
+            Assert.That(error!.ToString(), Does.Contain(FamilyModelDiagnosticCodes.FormulaCopyDataType)
+                .And.Contain("mapping strategy 'CoerceByStorageType' does not convert through units"));
             Assert.That(converged, Is.False);
             Assert.That(Snapshot(document), Is.EqualTo(before), "a refused transfer changes nothing");
         } finally { document.Close(false); }
@@ -127,6 +131,95 @@ public sealed class FormulaTransferAtomicityTests {
         } finally { document.Close(false); }
     }
 
+    // User ruling R2 (2026-09-18): the mapping's coercion strategy is the door across a data-type change. The formula is not copied; each
+    // type's evaluated value is coerced, and preview, receipt and log all name it.
+    [Test]
+    public void Voltage_text_formula_is_evaluated_and_coerced_by_CoerceElectrical() {
+        var document = this.NewFamily("FF formula voltage", "\"208/230V\"", createTarget: true,
+            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.ElectricalPotential);
+        try {
+            var note = "formula `\"208/230V\"` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceElectrical";
+            var (error, converged, preview, receipt) = ReconcileWithPreview(document, "ElectricalPotential", "CoerceElectrical");
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(converged, Is.True);
+            AssertNamed(note, preview, receipt);
+            var manager = document.FamilyManager;
+            Assert.That(manager.FindParameter("Source"), Is.Null);
+            var target = manager.FindParameter("Target")!;
+            Assert.That(target.Formula, Is.Null.Or.Empty);
+            foreach (var type in manager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B"))
+                Assert.That(UnitUtils.ConvertFromInternalUnits(type.AsDouble(target)!.Value, UnitTypeId.Volts), Is.EqualTo(208d).Within(1e-9), type.Name);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Force_formula_into_a_number_is_evaluated_per_type_by_CoerceMeasurableToNumber() {
+        var document = this.NewFamily("FF formula weight", "if(Base > 1', 20 lbf, 10 lbf)", createTarget: true,
+            sourceSpec: SpecTypeId.Force, targetSpec: SpecTypeId.Number);
+        try {
+            var note = "formula `if(Base > 1', 20 lbf, 10 lbf)` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceMeasurableToNumber";
+            var (error, converged, preview, receipt) = ReconcileWithPreview(document, "Number", "CoerceMeasurableToNumber");
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(converged, Is.True);
+            AssertNamed(note, preview, receipt);
+            var manager = document.FamilyManager;
+            Assert.That(manager.FindParameter("Source"), Is.Null);
+            var target = manager.FindParameter("Target")!;
+            Assert.That(target.Formula, Is.Null.Or.Empty);
+            AssertValues(manager, target, 10d, 20d); // lbf evaluated per type: Base is 1 ft in A, 2 ft in B
+        } finally { document.Close(false); }
+    }
+
+    // User ruling R3 (2026-09-18): `Source = Model` where cleanup backlinks the built-in `Model = Target`: Source equals Target in every type,
+    // so the circular copy is skipped, not refused (Old_template: 86 of 136 refusals).
+    [Test]
+    public void Source_aliasing_the_destination_through_a_backlinked_built_in_transfers_losslessly() {
+        var document = this.NewFamily("FF formula built-in alias", "Model", createTarget: true,
+            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.String.Text);
+        try {
+            var patch = Patch("Text", null, "Model", "Source");
+            var operation = new ReconcileFamily(patch);
+            Exception? error;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                (_, error) = contexts.Single().OperationLogs;
+            }
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(operation.LastReceipt?.Converged, Is.True);
+            var manager = document.FamilyManager;
+            Assert.That(manager.FindParameter("Source"), Is.Null);
+            var target = manager.FindParameter("Target")!;
+            Assert.That(target.Formula, Is.Null.Or.Empty, "the destination keeps its own values, not a circular formula");
+            foreach (var type in manager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B"))
+                Assert.That(type.AsString(target), Is.EqualTo($"T-{type.Name}"));
+            Assert.That(manager.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.Formula, Is.EqualTo("Target"), "the built-in reads the destination");
+        } finally { document.Close(false); }
+    }
+
+    private static void AssertNamed(string note, FamilyPreview preview, FamilyReceipt? receipt) {
+        Assert.That(preview.Diagnostics, Is.Empty);
+        Assert.That(preview.RunEffects, Has.Member(note), "preview names the evaluated coercion");
+        Assert.That(receipt?.RunEffects, Has.Member(note), "the receipt names it");
+        Assert.That(receipt?.Outcomes.Select(o => o.Message ?? ""), Has.Some.Contains(note), "the source log names it");
+    }
+
+    private static FamilyPatch Patch(string dataType, string? strategy, params string[] wasNamed) {
+        var target = new JObject { ["dataType"] = dataType, ["wasNamed"] = new JArray(wasNamed.Cast<object>().ToArray()) };
+        if (strategy is not null) target["mappingStrategy"] = strategy;
+        return new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["Target"] = target } } };
+    }
+
+    private static (Exception? Error, bool Converged, FamilyPreview Preview, FamilyReceipt? Receipt) ReconcileWithPreview(
+        Document document, string dataType, string strategy) {
+        var patch = Patch(dataType, strategy, "Source");
+        var preview = document.PreviewFamily(patch);
+        var operation = new ReconcileFamily(patch, expectedPlanHash: preview.PlanHash);
+        using var processor = new OperationProcessor(document);
+        var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+        var (_, error) = contexts.Single().OperationLogs;
+        return (error, operation.LastReceipt?.Converged == true, preview, operation.LastReceipt);
+    }
+
     private static void AssertNamesCause(Exception? error, Document document, string formula,
         ForgeTypeId sourceSpec, string sourceScope, ForgeTypeId targetSpec, string targetScope) {
         Assert.That(error, Is.Not.Null);
@@ -142,19 +235,20 @@ public sealed class FormulaTransferAtomicityTests {
     }
 
     private Document NewFamily(string name, string? sourceFormula, bool createTarget, bool labelSource = false,
-        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false) {
+        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false, ForgeTypeId? sourceSpec = null) {
         var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_GenericModel, name);
         using var transaction = new Transaction(document, "Seed formula transfer");
         transaction.Start();
         var manager = document.FamilyManager;
         var basis = manager.AddParameter("Base", GroupTypeId.Geometry, SpecTypeId.Length, false);
         if (sourceInstance) manager.AddParameter("Inst", GroupTypeId.Geometry, SpecTypeId.Length, true);
-        var source = manager.AddParameter("Source", GroupTypeId.Geometry, SpecTypeId.Length, sourceInstance);
+        var source = manager.AddParameter("Source", GroupTypeId.Geometry, sourceSpec ?? SpecTypeId.Length, sourceInstance);
         var target = createTarget ? manager.AddParameter("Target", GroupTypeId.Geometry, targetSpec ?? SpecTypeId.Length, false) : null;
         foreach (var (typeName, basisValue, targetValue) in new[] { ("A", 1d, 9d), ("B", 2d, 10d) }) {
             manager.CurrentType = manager.NewType(typeName);
             manager.Set(basis, basisValue);
-            if (target is not null) manager.Set(target, targetValue);
+            if (target?.StorageType == StorageType.String) manager.Set(target, $"T-{typeName}");
+            else if (target is not null) manager.Set(target, targetValue);
             if (sourceFormula is null) manager.Set(source, basisValue + 4d);
         }
         if (sourceFormula is not null) manager.SetFormula(source, sourceFormula);
