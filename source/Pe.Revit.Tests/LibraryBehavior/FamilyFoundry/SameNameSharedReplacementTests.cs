@@ -27,13 +27,15 @@ public sealed class SameNameSharedReplacementTests {
               "parameters": {
                 "Depth": { "dataType": "Length" }, "Show": { "dataType": "YesNo" },
                 "Height": { "dataType": "Length", "formula": "Depth * 2" }, "Half Depth": { "dataType": "Length", "formula": "Depth / 2" },
-                "Count": { "dataType": "Integer" }, "Looked Up": { "dataType": "Number", "formula": "size_lookup(Depths, \"Out\", 0, Depth)" } },
+                "Count": { "dataType": "Integer" }, "Looked Up": { "dataType": "Number", "formula": "size_lookup(LookupTableName, \"Out\", 0, Depth)" },
+                "LookupTableName": { "dataType": "Text", "value": "Depths" } },
               "types": { "A": { "Depth": "1ft", "Show": "Yes", "Count": "2" }, "B": { "Depth": "2ft", "Show": "No", "Count": "3" } },
               "lookupTables": { "Depths": { "csv": ",Key##length##feet,Out##number##general\nr1,1,10\nr2,2,20\n" } },
               "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
-              "refPlanes": { "left": { "normal": "PlusX", "at": "-1ft" }, "right": { "normal": "PlusX", "at": "1ft" }, "back": { "normal": "PlusY", "at": "1ft" } },
+              "refPlanes": { "left": { "normal": "PlusX", "at": "-1ft" }, "right": { "normal": "PlusX", "at": "1ft" }, "back": { "normal": "PlusY", "at": "1ft" },
+                             "front": { "normal": "PlusY", "at": "-1ft" } },
               "dimensions": { "depth": { "between": ["Center (Front/Back)", "back"], "label": "Depth", "view": "RefLevel" } },
-              "details": { "Outline": { "view": "RefLevel", "curves": [{ "curves": [{"kind":"Line","on":"left"},{"kind":"Line","on":"back"},{"kind":"Line","on":"right"}] }], "visible": "param:Show" } },
+              "details": { "Outline": { "view": "RefLevel", "curves": [{ "curves": [{"kind":"Line","on":"left"},{"kind":"Line","on":"back"},{"kind":"Line","on":"right"},{"kind":"Line","on":"front"}] }], "visible": "param:Show" } },
               "nested": { "vane": { "family": "vane", "type": "type one", "host": "Ref. Level",
                 "align": [ { "instance": "Center (Left/Right)", "to": "Center (Left/Right)" }, { "instance": "Center (Front/Back)", "to": "Center (Front/Back)" } ],
                 "associate": { "_vane length": "param:Depth" } } },
@@ -95,7 +97,7 @@ public sealed class SameNameSharedReplacementTests {
             document = this.Build();
             var original = Observe(document);
             Assert.That(original["labels"]!.Values<string>(), Is.EqualTo(new[] { "Depth" }), "fixture: Depth labels the driving dimension");
-            Assert.That(original["visibility"]!.Values<string>(), Is.EqualTo(new[] { "Show", "Show", "Show" }), "fixture: Show drives every outline curve");
+            Assert.That(original["visibility"]!.Values<string>(), Is.EqualTo(new[] { "Show", "Show", "Show", "Show" }), "fixture: Show drives every outline curve");
             Assert.That(original["cells"]!["A"]!["Height"]!.Value<double>(), Is.EqualTo(2d), "fixture: Height reads its formula");
             Assert.That(original["arrays"]!.Values<string>(), Is.EqualTo(new[] { "Count" }), "fixture: Count labels the vane array");
             Assert.That(original["nested"]!.Values<string>(), Is.Not.Empty.And.All.EqualTo("Depth"), "fixture: every vane associates _vane length to Depth");
