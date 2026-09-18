@@ -37,7 +37,7 @@ const newAction = {
 
 function mount({
   skills = [] as { name: string; description: string }[],
-  send = vi.fn(async () => ({ ok: true })),
+  send = vi.fn(async (): Promise<{ code: "not-ready"; message: string } | null> => null),
 } = {}) {
   workbench.value = {
     chat: { ...emptyChatState(), inspect: { skills } },
@@ -77,7 +77,7 @@ function mount({
 }
 
 test("composer Pane lists its real keys without replacing textarea Enter", () => {
-  const send = vi.fn(async () => ({ ok: true }));
+  const send = vi.fn(async () => null);
   const lane = mount({ send });
   const pane = lane.container.querySelector<HTMLElement>("[data-pane-id='composer']")!;
   const box = screen.getByRole<HTMLTextAreaElement>("textbox");
@@ -121,6 +121,18 @@ test("composer Pane lists its real keys without replacing textarea Enter", () =>
   expect(send).toHaveBeenCalledOnce();
   expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", shiftKey: true })).toBe(true);
   expect(send).toHaveBeenCalledOnce();
+});
+
+test("refused Enter records the refusal and keeps the draft", async () => {
+  const refusal = { code: "not-ready", message: "Session is not ready" } as const;
+  const send = vi.fn(async () => refusal);
+  mount({ send });
+  const box = screen.getByRole<HTMLTextAreaElement>("textbox");
+  fireEvent.change(box, { target: { value: "keep this" } });
+  fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
+  await settle();
+  expect(send).toHaveBeenCalledWith({ text: "keep this", attachments: undefined });
+  expect(box.value).toBe("keep this");
 });
 
 const png = (name = "shot.png", bytes = 8) =>

@@ -91,6 +91,8 @@ export function ComposerHead({
   const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
+  const refusal =
+    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
   );
@@ -177,9 +179,9 @@ export function ComposerHead({
                 }
               />
             </SituationCell>
-            {head.refusal ? (
+            {refusal ? (
               <span className="ml-3 t-small" data-tone="caution">
-                {head.refusal}
+                {refusal}
               </span>
             ) : null}
             {status ? (

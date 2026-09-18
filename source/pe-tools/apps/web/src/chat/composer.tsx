@@ -113,9 +113,6 @@ export function Composer({
   const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
 
   const sendCurrent = () => {
-    // Enter is the same verb as the head's Send; a refused verb stays quiet here, as it always
-    // has, and the head's button is where the refusal speaks.
-    if (send.refusal) return;
     void send.run();
   };
 
