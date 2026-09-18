@@ -51,12 +51,21 @@ export const writeFileStringAtomic = Effect.fnUntraced(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const tempPath = `${path}.${randomUUID()}.tmp`;
-  yield* fs
-    .writeFileString(tempPath, content)
-    .pipe(Effect.mapError((error) => new LocalOpError(operationKey, error.message)));
-  return yield* fs
-    .rename(tempPath, path)
-    .pipe(Effect.mapError((error) => new LocalOpError(operationKey, error.message)));
+  let owned = false;
+  const write = Effect.scoped(
+    Effect.gen(function* () {
+      const file = yield* fs.open(tempPath, { flag: "wx" });
+      owned = true;
+      yield* file.writeAll(new TextEncoder().encode(content));
+    }),
+  );
+  yield* write.pipe(
+    Effect.flatMap(() => fs.rename(tempPath, path)),
+    Effect.mapError((error) => localOpFileError(operationKey, error)),
+    Effect.ensuring(
+      Effect.suspend(() => (owned ? fs.remove(tempPath).pipe(Effect.ignore) : Effect.void)),
+    ),
+  );
 });
 
 export const makeDirectory = Effect.fnUntraced(function* (path: string, operationKey: string) {
@@ -99,7 +108,7 @@ export const readDirectoryEntriesOrEmpty = Effect.fnUntraced(function* (
   return entries.filter((entry): entry is DirectoryEntryInfo => entry != null);
 });
 
-function localOpFileError(operationKey: string, error: unknown): LocalOpError {
+export function localOpFileError(operationKey: string, error: unknown): LocalOpError {
   return new LocalOpError(operationKey, errorMessage(error), isNotFound(error) ? 404 : undefined);
 }
 

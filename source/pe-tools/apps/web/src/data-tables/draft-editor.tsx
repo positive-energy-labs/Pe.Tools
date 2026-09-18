@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Tag } from "#/components/lang/chip";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
@@ -122,7 +122,7 @@ export function DraftEditor({
                 </th>
               ))}
               <th className="px-1">
-                <Verb
+                <ActionButton
                   label="col"
                   icon={Plus}
                   onClick={addColumn}
@@ -164,7 +164,7 @@ export function DraftEditor({
             ))}
             <tr>
               <td colSpan={draft.columns.length + 2} className="px-1 py-0.5">
-                <Verb
+                <ActionButton
                   label="add row"
                   icon={Plus}
                   onClick={addRow}

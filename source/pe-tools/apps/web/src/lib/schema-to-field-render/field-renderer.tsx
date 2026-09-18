@@ -1,6 +1,11 @@
 import { lazy, Suspense } from "react";
 import { resolveCustomRenderer } from "./custom-renderer-registry";
+import type { RenderSchemaNode } from "@pe/schema-core";
 import { type FieldRendererProps, useResolvedFieldNode } from "./shared";
+
+/** A record's value schema: `additionalProperties` as a schema, keys chosen by the author. */
+export const recordValueNode = (node: RenderSchemaNode) =>
+  typeof node.additionalProperties === "object" ? node.additionalProperties : undefined;
 
 const ArrayField = lazy(() =>
   import("./array-field").then((module) => ({ default: module.ArrayField })),
@@ -21,7 +26,8 @@ export function FieldRenderer(props: FieldRendererProps) {
     <Suspense fallback={<div className="h-16" />}>
       {CustomRenderer ? (
         <CustomRenderer {...nextProps} />
-      ) : resolved.nodeType === "object" && resolved.effectiveNode.properties ? (
+      ) : resolved.nodeType === "object" &&
+        (resolved.effectiveNode.properties || recordValueNode(resolved.effectiveNode)) ? (
         <ObjectField {...nextProps} />
       ) : resolved.nodeType === "array" ? (
         <ArrayField {...nextProps} />

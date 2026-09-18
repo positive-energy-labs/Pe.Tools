@@ -1,134 +1,155 @@
-import { expect, test } from "vite-plus/test";
-import { address, type SettingsRouteDocument } from "@pe/agent-contracts";
-import { createSettingsCommandHandlers } from "../src/pea/settings-commands.ts";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import {
+  settingsRouteState,
+  settingsCandidate,
+  type SettingsRouteDocument,
+} from "@pe/agent-contracts";
+import type { MemberIssue, PodMemberComposeResponse } from "@pe/host-contracts/operation-types";
+import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
+import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
+import { createSettingsCommandHandlers, executionContent } from "../src/pea/settings-commands.ts";
 
-const DOCUMENT_ID = { moduleKey: "m", rootKey: "r", relativePath: "settings.json" };
-const DOCUMENT_PATH = "C:\\Settings\\settings.json";
-const DOCUMENT_ADDRESS = address("C:\\Models\\A.rvt");
-
-function openResponse(rawContent: string, version = "v1") {
-  return {
-    capabilityHints: {},
-    composedContent: `composed:${rawContent}`,
-    dependencies: [],
-    metadata: {
-      documentId: { ...DOCUMENT_ID, stableId: DOCUMENT_PATH },
-      kind: "Authoring",
-      modifiedUtc: "2026-07-13T00:00:00Z",
-      versionToken: { value: version },
-    },
-    rawContent,
-    validation: { isValid: true, issues: [] },
-  };
-}
-
-async function withHost(
-  responder: (key: string, request: unknown) => unknown,
-  run: (calls: Array<{ key: string; request: unknown; target: string | null }>) => Promise<void>,
-) {
-  const originalFetch = globalThis.fetch;
-  const calls: Array<{ key: string; request: unknown; target: string | null }> = [];
-  globalThis.fetch = async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (new URL(url).pathname !== "/call") throw new Error(`unexpected fetch to ${url}`);
-    if (typeof init?.body !== "string") throw new Error("expected JSON request body");
-    const body = JSON.parse(init.body) as { key: string; request: unknown };
-    calls.push({
-      ...body,
-      target: new Headers(init.headers).get("x-pe-bridge-session-id"),
-    });
-    return new Response(JSON.stringify(responder(body.key, body.request)), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  };
-  try {
-    await run(calls);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-}
-
-function context(document: SettingsRouteDocument) {
-  return {
-    scope: { kind: "document" as const, document: DOCUMENT_ADDRESS },
-    getDoc: () => document,
-    setDoc: async (next: SettingsRouteDocument) => void Object.assign(document, next),
-  };
-}
-
-test("settings opens with no world bound and persists no file snapshot", async () => {
-  await withHost(
-    (key) => {
-      if (key !== "settings.document.open") throw new Error(`unexpected operation ${key}`);
-      return openResponse('{"x":1}');
-    },
-    async (calls) => {
-      const document: SettingsRouteDocument = {
-        bindings: {},
-        documentId: null,
-        fields: {},
-        savedAt: null,
-      };
-      await createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }).open(
-        { documentId: DOCUMENT_ID },
-        context(document),
-      );
-
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.target).toBeNull();
-      expect(document).toMatchObject({
-        bindings: {
-          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH },
-        },
-        documentId: DOCUMENT_ID,
-      });
-      expect(document).not.toHaveProperty("snapshot");
-    },
-  );
+afterEach(() => vi.restoreAllMocks());
+const member = (path = "settings/a.json") => ({ pod: "pe-standards", path });
+const reading = (content = '{"x":1}', sha256 = "v1") => ({ content, sha256 });
+const composition = (
+  composed: string | null,
+  diagnostics: MemberIssue[] = [],
+): PodMemberComposeResponse => ({
+  sha256: "v1",
+  schemaUrl: null,
+  schemaJson: null,
+  composed,
+  diagnostics,
+  dependencies: [],
+  schemaValidation: "no-schema",
+  semanticValidation: "not-run",
+});
+const work = (): SettingsRouteDocument => ({
+  basis: { member: member(), rawContent: '{"x":1}', sha256: "v1" },
+  fields: { "/x": { staged: { value: 2 }, proposal: { value: 3, by: "pea" } } },
+});
+const context = (document: SettingsRouteDocument) => ({
+  target: null,
+  work: "pods:a",
+  getDoc: () => structuredClone(document),
+  setDoc: async (next: SettingsRouteDocument) => {
+    Object.assign(document, next);
+  },
 });
 
-test("settings save refetches and uses the file version without persisting it", async () => {
-  await withHost(
-    (key, request) => {
-      if (key === "settings.document.open") return openResponse('{"x":1}', "v2");
-      if (key === "settings.document.save") {
-        expect(request).toMatchObject({
-          documentId: DOCUMENT_ID,
-          rawContent: expect.stringContaining('"x": 2'),
-          expectedVersionToken: { value: "v2" },
-        });
-        return {
-          conflictDetected: false,
-          writeApplied: true,
-          validation: { isValid: true, issues: [] },
-        };
-      }
-      throw new Error(`unexpected operation ${key}`);
-    },
-    async (calls) => {
-      const document: SettingsRouteDocument = {
-        bindings: {
-          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH },
-        },
-        documentId: DOCUMENT_ID,
-        fields: {
-          "/x": { proposal: null, staged: { value: 2 } },
-        },
-        savedAt: null,
-      };
-      await createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }).save(
-        {},
-        context(document),
-      );
-
-      expect(calls.map(({ key }) => key)).toEqual([
-        "settings.document.open",
-        "settings.document.save",
-      ]);
-      expect(calls.every(({ target }) => target === null)).toBe(true);
-      expect(document.fields["/x"]).toEqual({});
-      expect(document).not.toHaveProperty("snapshot");
-    },
+test("refresh and conflicts preserve pending work; adoption requires the reviewed disk version", async () => {
+  const document = work(),
+    before = structuredClone(document);
+  const call = vi
+    .spyOn(HostRpcCaller.prototype, "call")
+    .mockImplementation(async () => reading("{}", "v2") as never);
+  const handlers = createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" });
+  await handlers.refresh({}, context(document));
+  expect(call).toHaveBeenCalledWith("pod.member.read", member());
+  expect(document).toEqual(before);
+  await expect(handlers.open({ member: member() }, context(document))).rejects.toThrow(
+    "Pending work",
   );
+  await expect(
+    handlers.adopt({ member: member(), sha256: "v1" }, context(document)),
+  ).rejects.toThrow("changed after review");
+  await expect(
+    handlers.adopt({ member: member("settings/b.json"), sha256: "v2" }, context(document)),
+  ).rejects.toThrow("bound member");
+  await handlers.adopt({ member: member(), sha256: "v2" }, context(document));
+  expect(document.fields).toEqual({});
+  expect(document.basis?.sha256).toBe("v2");
+});
+
+test("validate composes the staged draft of the bound member", async () => {
+  const compose = vi.fn(async () => composition("{}"));
+  const handlers = createSettingsCommandHandlers({
+    pods: { read: async () => reading(), compose },
+  });
+  await handlers.validate({}, context(work()));
+  expect(compose).toHaveBeenCalledWith({ ...member(), content: JSON.stringify({ x: 2 }, null, 2) });
+});
+
+test("execution refuses a composition with non-info diagnostics or no composed JSON", () => {
+  const issue = (severity: MemberIssue["severity"]) => [
+    { code: "x", path: "/x", message: "bad", severity },
+  ];
+  expect(executionContent(composition('{"x":1}', issue("info")))).toBe('{"x":1}');
+  expect(() => executionContent(composition('{"x":1}', issue("error")))).toThrow("/x: bad");
+  expect(() => executionContent(composition('{"x":1}', issue("warning")))).toThrow("/x: bad");
+  expect(() => executionContent(composition(null))).toThrow("needs a Revit session");
+});
+
+test("malformed raw stays exact; structured splicing refuses without loss", () => {
+  const raw = "﻿{ broken\r\n";
+  expect(settingsCandidate(raw, {})).toBe(raw);
+  expect(() => settingsCandidate(raw, { "/x": { staged: { value: 1 } } })).toThrow();
+  expect(settingsCandidate(raw, { "": { staged: { value: raw + "!" } } })).toBe(raw + "!");
+  expect(() =>
+    settingsCandidate('{"x":{"$include":"a"}}', { "/x/a": { staged: { value: 1 } } }),
+  ).toThrow("shared fragment");
+});
+
+test("real Work runtime keeps two members and two panes separate and rejects stale reviewed revision", async () => {
+  const rows = new Map<string, unknown>();
+  vi.spyOn(HostRpcCaller.prototype, "call").mockImplementation(async () => reading() as never);
+  const runtime = new RouteWorkspace({
+    registrations: [
+      {
+        spec: settingsRouteState,
+        handlers: createSettingsCommandHandlers({ hostBaseUrl: "http://host.test" }),
+      },
+    ],
+    store: {
+      getState: async ({ targetKey, route }) => rows.get(targetKey + route),
+      setState: async ({ targetKey, route, value }) => {
+        rows.set(targetKey + route, structuredClone(value));
+      },
+    },
+  });
+  const a = { route: "pods", target: null, work: "pods:a" },
+    b = { route: "pods", target: null, work: "pods:b" };
+  expect((await runtime.command(a, "pods", "human", "open", { member: member() }, 0)).ok).toBe(
+    true,
+  );
+  expect(
+    (
+      await runtime.apply(
+        a,
+        "pods",
+        "human",
+        [{ path: ["fields", "/x", "staged"], value: { value: 9 } }],
+        1,
+      )
+    ).ok,
+  ).toBe(true);
+  expect(
+    (await runtime.command(b, "pods", "human", "open", { member: member("settings/b.json") }, 0))
+      .ok,
+  ).toBe(true);
+  expect(
+    (
+      await runtime.command(
+        a,
+        "pods",
+        "human",
+        "adopt",
+        { member: member("settings/b.json"), sha256: "v1" },
+        2,
+      )
+    ).ok,
+  ).toBe(false);
+  expect(
+    (await runtime.command(a, "pods", "human", "adopt", { member: member(), sha256: "v1" }, 1)).ok,
+  ).toBe(false);
+  const pane1 = await runtime.read(a, "pods"),
+    pane2 = await runtime.read(a, "pods");
+  expect(pane1).toEqual(pane2);
+  expect(pane1).toMatchObject({
+    doc: { basis: { member: member() }, fields: { "/x": { staged: { value: 9 } } } },
+  });
+  expect(await runtime.read(b, "pods")).toMatchObject({
+    doc: { basis: { member: member("settings/b.json") }, fields: {} },
+  });
 });

@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
-import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import type {
   NormalizedRenderFieldOptionDependency,
   RenderSchemaNode,
@@ -17,14 +17,29 @@ export type ParameterCatalogEntry = SettingsParameterCatalog.Res.ParameterCatalo
 
 export type SettingsValues = Record<string, unknown>;
 
+/**
+ * How a field with `x-options` (resolver "remote") asks for its value domain. Settings answers
+ * through `settings.field-options`; a route may inject another answerer (ops asks Revit).
+ */
+export type RemoteOptionsHook = (
+  request: FieldOptionsRequest,
+  enabled: boolean,
+) => {
+  data?: { items: readonly FieldOptionItem[]; mode?: string; allowsCustomValue?: boolean };
+  pending?: boolean;
+  isPending?: boolean;
+  error?: unknown;
+};
+
 export interface SchemaToFieldRenderProps {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   schema: RenderSchemaNode;
-  moduleKey: string;
-  rootKey?: string;
+  schemaUrl: string;
   baselineValues: SettingsValues;
-  validationResult?: SettingsValidationResult;
+  /** The host's diagnostics on these values; each lands beside the field its path names. */
+  issues?: readonly MemberIssue[];
+  useRemoteOptions?: RemoteOptionsHook;
 }
 
 export interface FieldRendererProps {
@@ -63,11 +78,11 @@ export interface ResolvedFieldRendererProps extends FieldRendererProps {
 export interface SchemaRenderContextValue {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
-  errors: ReadonlyMap<string, string[]>;
-  moduleKey: string;
-  rootKey?: string;
+  errors: ReadonlyMap<string, MemberIssue[]>;
+  schemaUrl: string;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
+  useRemoteOptions?: RemoteOptionsHook;
 }
 
 export const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
@@ -77,18 +92,18 @@ export function SchemaRenderProvider({
   onChange,
   errors,
   schemaDocument,
-  moduleKey,
-  rootKey,
+  schemaUrl,
   fieldChanges,
+  useRemoteOptions,
   children,
 }: {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
-  errors: ReadonlyMap<string, string[]>;
+  errors: ReadonlyMap<string, MemberIssue[]>;
   schemaDocument: SchemaDocument;
-  moduleKey: string;
-  rootKey?: string;
+  schemaUrl: string;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
+  useRemoteOptions?: RemoteOptionsHook;
   children: ReactNode;
 }) {
   const contextValue = useMemo(
@@ -96,12 +111,12 @@ export function SchemaRenderProvider({
       values,
       onChange,
       errors,
-      moduleKey,
-      rootKey,
+      schemaUrl,
       schemaDocument,
       fieldChanges,
+      useRemoteOptions,
     }),
-    [errors, fieldChanges, moduleKey, onChange, rootKey, schemaDocument, values],
+    [errors, fieldChanges, onChange, schemaDocument, schemaUrl, values, useRemoteOptions],
   );
 
   return (

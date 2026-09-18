@@ -1,4 +1,4 @@
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import {
@@ -254,7 +254,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                       defaultValue={columnKey}
                       onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
                     />
-                    <Verb
+                    <ActionButton
                       label="remove"
                       reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
                       onClick={() => removeColumn(columnKey)}
@@ -308,7 +308,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                     );
                   })}
                   <td className="px-3 py-2 text-right">
-                    <Verb
+                    <ActionButton
                       label="remove"
                       reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
                       onClick={() => field.remove(rowIndex)}
@@ -335,12 +335,12 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         </span>
         <FieldOptionsMetadata options={primaryColumnOptions} />
         <div className="flex items-center gap-2">
-          <Verb
+          <ActionButton
             label="add column"
             reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
             onClick={addColumn}
           />
-          <Verb
+          <ActionButton
             label="add row"
             reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
             onClick={addRow}

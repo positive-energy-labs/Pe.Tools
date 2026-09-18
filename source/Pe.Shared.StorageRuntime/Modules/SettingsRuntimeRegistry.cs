@@ -70,11 +70,17 @@ public sealed class SettingsRuntimeRegistry {
     public IReadOnlyList<StructuralSettingsModuleDescriptor> GetModules() =>
         this._modules.Values.ToList();
 
-    public bool TryResolveRootBinding(string moduleKey, string rootKey, out ISettingsRootBinding binding) =>
-        this._bindings.TryGetValue((moduleKey, rootKey), out binding!);
+    /// <summary>The binding a spec's `$schema` URL names; absolute or host-relative URLs both resolve.</summary>
+    public ISettingsRootBinding ResolveSchemaUrl(string schemaUrl) {
+        var path = Uri.UnescapeDataString(Uri.TryCreate(schemaUrl, UriKind.Absolute, out var uri) ? uri.AbsolutePath : schemaUrl);
+        return this._bindings.Values.FirstOrDefault(binding =>
+                   path.EndsWith(SettingsSchemaUrl.Path(binding), StringComparison.OrdinalIgnoreCase))
+               ?? throw new ArgumentException($"No settings library serves $schema '{schemaUrl}'.");
+    }
+}
 
-    public ISettingsRootBinding ResolveRootBinding(string moduleKey, string rootKey) =>
-        this.TryResolveRootBinding(moduleKey, rootKey, out var binding)
-            ? binding
-            : throw new ArgumentException($"Unknown settings root binding '{moduleKey}/{rootKey}'.");
+/// <summary>The `$schema` URL shape: `/schemas/settings/{module}/{root}.json`. A spec's only identity claim.</summary>
+public static class SettingsSchemaUrl {
+    public static string Path(ISettingsRootBinding binding) =>
+        $"/schemas/settings/{binding.Module.ModuleKey}/{binding.RootKey}.json";
 }

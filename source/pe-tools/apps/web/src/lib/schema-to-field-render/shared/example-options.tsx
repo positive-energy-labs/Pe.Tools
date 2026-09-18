@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/host/queries";
+import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/readings";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import { normalizeFieldOptionMode, readPathValue } from "@pe/schema-core";
 import type {
@@ -8,6 +8,7 @@ import type {
   FieldOptionsRequest,
   FieldRendererProps,
   ParameterCatalogEntry,
+  RemoteOptionsHook,
 } from "./field-option";
 import {
   buildContextValues,
@@ -66,6 +67,9 @@ export function projectParameterCatalogItems(
   return toLocalItems(dedupedValues);
 }
 
+const useSettingsRemoteOptions: RemoteOptionsHook = (request, enabled) =>
+  useFieldOptionsQuery(request, { enabled });
+
 export function useFieldOptions({
   node,
   providerNode,
@@ -75,20 +79,19 @@ export function useFieldOptions({
   providerNode?: SchemaNodeRef;
   fieldPath: string;
 }) {
-  const { moduleKey, values: allValues } = useSchemaRenderContext();
-  const { rootKey } = useSchemaRenderContext();
+  const { schemaUrl, values: allValues, useRemoteOptions } = useSchemaRenderContext();
+  const useRemote = useRemoteOptions ?? useSettingsRemoteOptions;
   const effectiveProviderNode = providerNode ?? node;
   const requestPath = effectiveProviderNode.providerPath();
   const remoteSource = useMemo(() => effectiveProviderNode.optionSource(), [effectiveProviderNode]);
   const request = useMemo<FieldOptionsRequest>(() => {
     return {
-      moduleKey,
-      rootKey: rootKey ?? "",
+      schemaUrl,
       propertyPath: requestPath,
       sourceKey: remoteSource?.key ?? "",
       contextValues: buildContextValues(remoteSource?.dependsOn ?? [], fieldPath, allValues),
     };
-  }, [allValues, fieldPath, moduleKey, remoteSource, requestPath, rootKey]);
+  }, [allValues, fieldPath, remoteSource, requestPath, schemaUrl]);
   const contextValues = request.contextValues ?? {};
   const dependencyStates = useMemo(
     () =>
@@ -102,11 +105,9 @@ export function useFieldOptions({
   const dataset = remoteSource?.dataset;
   const usesRemoteResolver = resolver === "remote";
   const usesParameterCatalogDataset = resolver === "dataset" && dataset === "parametercatalog";
-  const remoteQuery = useFieldOptionsQuery(request, {
-    enabled: usesRemoteResolver,
-  });
+  const remoteQuery = useRemote(request, usesRemoteResolver);
   const parameterCatalogQuery = useParameterCatalogQuery(
-    { moduleKey, contextValues },
+    { contextValues },
     { enabled: usesParameterCatalogDataset },
   );
   const enumItems = useMemo(() => {
@@ -183,7 +184,7 @@ export function useFieldOptions({
     });
   }
 
-  if (usesRemoteResolver && remoteSource && (remoteQuery.isPending || remoteQuery.isFetching)) {
+  if (usesRemoteResolver && remoteSource && (remoteQuery.isPending || remoteQuery.pending)) {
     return createState({
       items: [] as FieldOptionItem[],
       mode: remoteSource.mode,
@@ -200,7 +201,7 @@ export function useFieldOptions({
   if (
     usesParameterCatalogDataset &&
     remoteSource &&
-    (parameterCatalogQuery.isPending || parameterCatalogQuery.isFetching)
+    (parameterCatalogQuery.isPending || parameterCatalogQuery.pending)
   ) {
     return createState({
       items: [] as FieldOptionItem[],

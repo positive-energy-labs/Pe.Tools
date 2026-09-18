@@ -6,11 +6,7 @@ namespace Pe.Revit.SettingsRuntime.Modules.AutoTag;
 public static class AutoTagSettingsRegistration {
     public static StructuralSettingsModuleDescriptor Module { get; } = new(
         "AutoTag",
-        "autotag",
-        [new SettingsRootDescriptor("autotag", "autotag")],
-        SettingsStorageModuleOptions.Empty,
-        SettingsModuleHostScope.ActiveDocument,
-        SettingsModuleActiveDocumentKind.ProjectOnly
+        [new SettingsRootDescriptor("autotag", "autotag")]
     );
 
     public static ISettingsRootBinding<AutoTagSettings> Root { get; } = new SettingsRootBinding<AutoTagSettings>(

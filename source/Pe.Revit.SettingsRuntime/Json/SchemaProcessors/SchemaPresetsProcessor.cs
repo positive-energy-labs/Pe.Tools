@@ -58,7 +58,8 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
     }
 
     private static JsonSchema CreatePresetDirectiveObjectSchema(string fragmentSchemaName) {
-        var schema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = false };
+        // Inline fields override the preset; the composed object receives full provider validation.
+        var schema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = true };
 
         var normalizedRoot = IncludableFragmentRoots.NormalizeRoot(fragmentSchemaName);
 
@@ -67,7 +68,7 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
         };
         presetProperty.ExtensionData ??= new Dictionary<string, object?>();
         presetProperty.ExtensionData["examples"] = new List<string> {
-            $"@local/{normalizedRoot}/my-preset", $"@global/{normalizedRoot}/my-preset"
+            $"@local/{normalizedRoot}/my-preset"
         };
 
         schema.Properties["$preset"] = presetProperty;
