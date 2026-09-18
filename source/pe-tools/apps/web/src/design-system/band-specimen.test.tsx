@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, expect, test } from "vite-plus/test";
 
 import { fanOutWord, type FanOutOutcome } from "#/components/lang/band";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
 
 import { applyPatches, cellKey, MATRIX, MATRIX_CELLS } from "./band-matrix";
 import {
@@ -34,15 +34,13 @@ function Specimen() {
   const matrix: Matrix = (latest = { cells, wire, outcome: null });
   return (
     <>
-      <MasterTable
+      <Table
         rows={matrixRows(matrix)}
         columns={MATRIX_COLUMNS}
         rowKey={(r) => r.key}
-        scopeLabel="family types"
-        actions={
-          <button onClick={() => void acceptVoltage(matrix).then((o) => (said = o))}>all</button>
-        }
+        label="family types"
       />
+      <button onClick={() => void acceptVoltage(matrix).then((o) => (said = o))}>all</button>
       <section aria-label="form">
         <TypeForm row={MATRIX.find((r) => r.key === "HP-2")!} matrix={matrix} />
       </section>

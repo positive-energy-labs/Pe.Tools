@@ -9,7 +9,7 @@ import { familyCellKey, type FamilyCellAddress, type FamilyCellState } from "@pe
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
 
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "./matrix-columns";
 
@@ -63,11 +63,11 @@ function Matrix({ inlineClick = false }: { inlineClick?: boolean }) {
       }) as never,
   });
   return (
-    <MasterTable
+    <Table
       rows={ROWS}
       columns={columns}
       rowKey={(r) => r.key}
-      scopeLabel="families"
+      label="families"
       // The real matrix passes a fresh arrow each render, so every render re-renders every row.
       onRowClick={inlineClick ? () => {} : undefined}
     />

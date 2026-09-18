@@ -5,7 +5,9 @@ import type {
 } from "@pe/host-contracts/generated";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance } from "#/components/lang/section";
-import { type Column, DataTable, KVGrid } from "#/ops/primitives";
+import { type Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { KVGrid } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine } from "./schedules";
 import { linkValueText } from "./sheets";
@@ -25,17 +27,17 @@ export function ParameterLinksView({ data }: OpViewProps) {
   const columns: Column<RevitDetailParameterLinks.Res.ParameterLinkWrite>[] = [
     {
       key: "target",
-      header: "target",
+      label: "target",
       cell: (w) => (
         <span title={w.targetElementUniqueId}>
           {w.targetElementName ?? w.targetElementId} <span className="">{w.targetElementId}</span>
         </span>
       ),
     },
-    { key: "parameter", header: "target parameter", cell: (w) => w.targetParameter.name },
+    { key: "parameter", label: "target parameter", cell: (w) => w.targetParameter.name },
     {
       key: "source",
-      header: "source",
+      label: "source",
       cell: (w) => {
         const def = defs.get(w.definitionId);
         if (!def) return <span className="">{w.definitionId}</span>;
@@ -44,14 +46,14 @@ export function ParameterLinksView({ data }: OpViewProps) {
     },
     {
       key: "current",
-      header: "current",
-      numeric: true,
+      label: "current",
+      right: true,
       cell: (w) => linkValueText(w.currentValue),
     },
     {
       key: "proposed",
-      header: "proposed",
-      numeric: true,
+      label: "proposed",
+      right: true,
       cell: (w) => (
         <span style={{ color: w.changed ? token("caution") : undefined }}>
           {linkValueText(w.proposedValue)}
@@ -60,7 +62,7 @@ export function ParameterLinksView({ data }: OpViewProps) {
     },
     {
       key: "issue",
-      header: "issue",
+      label: "issue",
       cell: (w) => {
         const issue = issueByTarget.get(w.targetElementUniqueId);
         return issue ? (
@@ -96,8 +98,10 @@ export function ParameterLinksView({ data }: OpViewProps) {
         ]}
       />
       {writes.length > 0 ? (
-        <DataTable
-          title="proposed writes (nothing applied)"
+        <Table
+          label="proposed writes"
+          caption="proposed writes (nothing applied)"
+          maxHeight="28rem"
           columns={columns}
           rows={writes}
           rowKey={(w) => `${w.assignmentId}:${w.targetElementUniqueId}:${w.targetParameter.key}`}
@@ -136,7 +140,7 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
   const columns: Column<RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot>[] = [
     {
       key: "parameter",
-      header: "parameter",
+      label: "parameter",
       cell: (p) => (
         <span title={p.definition.identity.key}>
           {p.definition.identity.name}{" "}
@@ -148,8 +152,8 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
     },
     ...typeNames.map((typeName) => ({
       key: `t:${typeName}`,
-      header: typeName,
-      numeric: true,
+      label: typeName,
+      right: true,
       cell: (p: RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot) => {
         const value = p.valuesPerType[typeName];
         const hasFormula = p.formulaState === "Present";
@@ -166,8 +170,10 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
   ];
   return (
     <div>
-      <DataTable
-        title={`${family.familyName}${family.categoryName ? ` — ${family.categoryName}` : ""}`}
+      <Table
+        label={family.familyName}
+        maxHeight="28rem"
+        caption={`${family.familyName}${family.categoryName ? ` — ${family.categoryName}` : ""}`}
         columns={columns}
         rows={family.parameters}
         rowKey={(p) => p.definition.identity.key}

@@ -14,7 +14,9 @@ import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import { applyPatches, MATRIX, MATRIX_CELLS } from "#/design-system/band-matrix";
 import {
   ChatScale,
@@ -32,6 +34,7 @@ import { SituationCell } from "#/route/situation";
 export const Route = createFileRoute("/design-system_/band")({ component: BandRoute });
 
 function BandRoute() {
+  const [tableState, setTableState] = useTableState();
   const [cells, setCells] = useState(MATRIX_CELLS);
   const [picked, setPicked] = useState("HP-2");
   const [ask, setAsk] = useState<Ask>("live");
@@ -92,14 +95,14 @@ function BandRoute() {
                 )}
               />
               <div className="h-[26rem]">
-                <MasterTable
+                <TableFrame
+                  label="family types"
                   rows={rows}
                   columns={MATRIX_COLUMNS}
                   rowKey={(r) => r.key}
-                  scopeLabel="family types"
+                  state={tableState}
+                  onStateChange={setTableState}
                   searchPlaceholder="search families, types, values…"
-                  activeKey={picked}
-                  onRowClick={(r) => setPicked(r.key)}
                   actions={
                     <ActionButton
                       tone="agent"
@@ -108,7 +111,18 @@ function BandRoute() {
                       onClick={() => aggregate(acceptVoltage(matrix))}
                     />
                   }
-                />
+                >
+                  <Table
+                    rows={rows}
+                    columns={MATRIX_COLUMNS}
+                    rowKey={(r) => r.key}
+                    label="family types"
+                    state={tableState}
+                    onStateChange={setTableState}
+                    activeKey={picked}
+                    onRowClick={(r) => setPicked(r.key)}
+                  />
+                </TableFrame>
               </div>
               {outcome ? (
                 <OutcomeLine

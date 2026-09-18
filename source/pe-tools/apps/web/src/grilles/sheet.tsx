@@ -5,7 +5,9 @@
  * Row density is a MasterTable gap owned by the design-system ledger; this consumer uses it as-is.
  */
 import { NumberCell } from "#/components/master-table/cells";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import { Tag } from "#/components/lang/chip";
 
@@ -72,6 +74,7 @@ export function Sheet({
   picked: ReadonlySet<string>;
   onPickedChange: (next: ReadonlySet<string>) => void;
 }) {
+  const [tableState, setTableState] = useTableState();
   const columns: Column<SheetRow>[] = [
     num("boardLength", "L", "Board length, inches", set),
     num("endBorder", "end", "End border, each end", set),
@@ -117,30 +120,41 @@ export function Sheet({
     ),
   ];
   return (
-    <MasterTable
+    <TableFrame
+      label="grille profiles"
       rows={rows}
       columns={columns}
       rowKey={(r) => r.id}
-      scopeLabel="grille profiles"
-      activeKey={active}
-      onRowClick={(r) => onActive(r.id)}
-      selectedKeys={picked}
-      onSelectedKeysChange={onPickedChange}
-      gutter={(r) =>
-        r.slack < -1e-9
-          ? {
-              count: 1,
-              title: `middle is over by ${frac(-r.slack)}″ — does not fit`,
-              tone: "alarm",
-            }
-          : null
-      }
+      state={tableState}
+      onStateChange={setTableState}
       summary={
         <Press type="button" tone="quiet" size="label" onClick={add}>
           + profile
         </Press>
       }
-    />
+      selection={{ selected: picked, onChange: onPickedChange }}
+    >
+      <Table
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.id}
+        label="grille profiles"
+        state={tableState}
+        onStateChange={setTableState}
+        selection={{ selected: picked, onChange: onPickedChange }}
+        activeKey={active}
+        onRowClick={(r) => onActive(r.id)}
+        gutter={(r) =>
+          r.slack < -1e-9
+            ? {
+                count: 1,
+                title: `middle is over by ${frac(-r.slack)}″ — does not fit`,
+                tone: "alarm",
+              }
+            : null
+        }
+      />
+    </TableFrame>
   );
 }
 

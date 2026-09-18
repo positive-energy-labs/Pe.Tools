@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { StateCell, type CellTransition } from "#/components/lang/cell";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
 
 afterEach(cleanup);
 
@@ -17,11 +17,11 @@ const t = (
 /** Row scale inside the real MasterTable: one row, one column drawing the cell. */
 const inTable = (node: React.ReactNode) => {
   const view = render(
-    <MasterTable
+    <Table
       rows={[{ key: "r" }]}
       columns={[{ key: "c", label: "c", cell: () => node }]}
       rowKey={(row) => row.key}
-      scopeLabel="cells"
+      label="cells"
     />,
   );
   return { ...view, cell: within(view.container.querySelector<HTMLElement>(".dl-cell")!) };

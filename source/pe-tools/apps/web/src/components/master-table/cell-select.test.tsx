@@ -9,7 +9,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { StateCell, type CellTransition } from "#/components/lang/cell";
 import { CellSelect } from "#/components/master-table/cells";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
 
 afterEach(cleanup);
 
@@ -23,7 +23,7 @@ function mount() {
   const accept: CellTransition = { kind: "accept", run: vi.fn(async () => null) };
   const onChange = vi.fn();
   const view = render(
-    <MasterTable
+    <Table
       rows={[{ key: "r" }]}
       columns={[
         {
@@ -38,7 +38,7 @@ function mount() {
         },
       ]}
       rowKey={(row) => row.key}
-      scopeLabel="cells"
+      label="cells"
     />,
   );
   const [selectTd, valueTd] = [

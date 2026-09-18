@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import type { RevitDetailSchedules, RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance } from "#/components/lang/section";
-import { type Column, DataTable, type VizIndex, vizVar } from "#/ops/primitives";
+import { type Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { type VizIndex, vizVar } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { contentViewport, fitFrame } from "#/lib/affine-frame";
 
@@ -65,8 +67,8 @@ export function SchedulesView({ data }: OpViewProps) {
           entry.columns ?? []
         ).map((col, colIndex) => ({
           key: col.key || String(col.columnNumber),
-          header: col.headerText || col.fieldName,
-          numeric: columnIsNumeric(values, colIndex),
+          label: col.headerText || col.fieldName,
+          right: columnIsNumeric(values, colIndex),
           cell: (row) => {
             const v = row.values[colIndex] ?? "";
             return row.kind === "GroupFooter" ? <span className="">{v}</span> : v;
@@ -74,8 +76,10 @@ export function SchedulesView({ data }: OpViewProps) {
         }));
         return (
           <div key={entry.scheduleUniqueId}>
-            <DataTable
-              title={entry.scheduleName}
+            <Table
+              label={entry.scheduleName}
+              caption={entry.scheduleName}
+              maxHeight="28rem"
               columns={columns}
               rows={bodyRows}
               rowKey={(row) => String(row.rowNumber)}

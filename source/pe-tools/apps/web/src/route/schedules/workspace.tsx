@@ -14,7 +14,9 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import { PickList } from "#/components/lang/pick-list";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
@@ -65,6 +67,7 @@ export function ScheduleGridWorkspace({
 }: {
   state: ScheduleGridState;
 }) {
+  const [tableState, setTableState] = useTableState();
   const document = slice;
   const cells = document?.cells ?? {};
 
@@ -278,25 +281,13 @@ export function ScheduleGridWorkspace({
             <section className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col">
                 {snapshot ? (
-                  <MasterTable
+                  <TableFrame
+                    label="schedule rows"
                     rows={snapshot.rows}
                     columns={gridColumns}
                     rowKey={(row) => String(row.rowNumber)}
-                    gutter={(row) => {
-                      const owed = snapshot.columns.filter(
-                        (column) =>
-                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
-                          null,
-                      ).length;
-                      return owed > 0
-                        ? {
-                            count: owed,
-                            tone: "caution" as const,
-                            title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
-                          }
-                        : null;
-                    }}
-                    scopeLabel="schedule rows"
+                    state={tableState}
+                    onStateChange={setTableState}
                     searchPlaceholder="find in cells"
                     filters={<OutcomeStrip busy={busy} failure={failure} />}
                     actions={
@@ -308,16 +299,39 @@ export function ScheduleGridWorkspace({
                         onClick={() => runCommand("refresh", { scheduleId: snapshot.scheduleId })}
                       />
                     }
-                    activeKey={activeRow}
-                    empty={
-                      <EmptyState
-                        story="scope"
-                        exit="re-read the schedule, or pick another from the rail"
-                      >
-                        this schedule has no rows
-                      </EmptyState>
-                    }
-                  />
+                  >
+                    <Table
+                      rows={snapshot.rows}
+                      columns={gridColumns}
+                      rowKey={(row) => String(row.rowNumber)}
+                      label="schedule rows"
+                      state={tableState}
+                      onStateChange={setTableState}
+                      activeKey={activeRow}
+                      gutter={(row) => {
+                        const owed = snapshot.columns.filter(
+                          (column) =>
+                            cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                            null,
+                        ).length;
+                        return owed > 0
+                          ? {
+                              count: owed,
+                              tone: "caution" as const,
+                              title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                            }
+                          : null;
+                      }}
+                      empty={
+                        <EmptyState
+                          story="scope"
+                          exit="re-read the schedule, or pick another from the rail"
+                        >
+                          this schedule has no rows
+                        </EmptyState>
+                      }
+                    />
+                  </TableFrame>
                 ) : (
                   <div className="grid h-full place-items-center p-6">
                     {hydrated ? (

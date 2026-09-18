@@ -13,7 +13,7 @@ import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import { labelOf } from "#/components/master-table/master-table-header";
 import type { Column, TableState } from "#/components/master-table/model";
-import type { TableSelection } from "#/components/master-table/table";
+import { selectableKeys, type TableSelection } from "#/components/master-table/table";
 import { visibleRows } from "#/components/master-table/view";
 
 export interface TableFrameProps<Row extends RowData> {
@@ -54,7 +54,8 @@ export function TableFrame<Row extends RowData>({
   children,
 }: TableFrameProps<Row>) {
   const shown = visibleRows(rows, columns, state).map(rowKey);
-  const selectedShown = selection ? shown.filter((key) => selection.selected.has(key)).length : 0;
+  const reach = selection ? selectableKeys(selection, shown) : [];
+  const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
   const filtered = columns.filter((column) => state.filters[column.key]);
   const setFilter = (key: string, value: string | null) => {
     const next = { ...state.filters };
@@ -92,19 +93,19 @@ export function TableFrame<Row extends RowData>({
             </div>
           )}
           {modes}
-          {selection && shown.length > 0 && (
+          {selection && reach.length > 0 && (
             <Press
               type="button"
               tone="quiet"
               size="label"
               onClick={() => {
                 const next = new Set(selection.selected);
-                if (selectedShown === shown.length) for (const key of shown) next.delete(key);
-                else for (const key of shown) next.add(key);
+                if (selectedShown === reach.length) for (const key of reach) next.delete(key);
+                else for (const key of reach) next.add(key);
                 selection.onChange(next);
               }}
             >
-              {selectedShown === shown.length ? `clear ${shown.length}` : `select ${shown.length}`}
+              {selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`}
             </Press>
           )}
           {actions}

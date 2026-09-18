@@ -37,6 +37,8 @@ interface MasterRowProps<Row extends RowData> {
   row: Row;
   active: boolean;
   selected?: boolean;
+  /** Present, the row refuses selection and says why. */
+  refusal?: string | null;
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
@@ -51,6 +53,7 @@ function MasterRowView<Row extends RowData>({
   row,
   active,
   selected,
+  refusal,
   activeRowRef,
   className,
   onRowClick,
@@ -64,6 +67,7 @@ function MasterRowView<Row extends RowData>({
       ref={active ? activeRowRef : undefined}
       active={active}
       selected={selected}
+      refusal={refusal}
       className={className}
       onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
       onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
@@ -85,6 +89,7 @@ const MasterRow = memo(
     previous.row === next.row &&
     previous.active === next.active &&
     previous.selected === next.selected &&
+    previous.refusal === next.refusal &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
     previous.onSelect === next.onSelect &&
@@ -102,6 +107,7 @@ export function MasterTableBody<Row extends RowData>({
   rowClassName,
   onRowClick,
   selectedKeys,
+  refusalOf,
   onSelect,
   onRowHover,
   gutter,
@@ -114,6 +120,7 @@ export function MasterTableBody<Row extends RowData>({
   rowClassName?: (row: Row) => string | undefined;
   onRowClick?: (row: Row) => void;
   selectedKeys?: ReadonlySet<string>;
+  refusalOf?: (key: string) => string | null | undefined;
   onSelect?: (key: string, range: boolean) => void;
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
@@ -184,6 +191,7 @@ export function MasterTableBody<Row extends RowData>({
             row={tableRow.original}
             active={activeKey === key}
             selected={selectedKeys ? selectedKeys.has(key) : undefined}
+            refusal={refusalOf?.(key)}
             activeRowRef={activeRowRef}
             className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
             onRowClick={onRowClick}

@@ -18,7 +18,9 @@ import { Press } from "#/components/lang/press";
 import { Input } from "#/components/lang/input";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import type { Inventory } from "#/readings";
 import { timeAgo } from "#/lib/utils";
@@ -145,6 +147,8 @@ export function InstancesCluster({
   onDocument,
   requestedDocument,
 }: ClusterProps) {
+  const [tableState, setTableState] = useTableState();
+  const [docsState, setDocsState] = useTableState();
   const route = handle;
   const work = route.work;
   const workspaceId = work.key.work!;
@@ -478,30 +482,41 @@ export function InstancesCluster({
             }
           >
             <div className="flex max-h-[40vh] flex-col">
-              <MasterTable
+              <TableFrame
+                label="fleet — pick a session to filter documents"
                 rows={visibleWorlds}
                 columns={fleetColumns}
                 rowKey={(world) => world.id}
-                scopeLabel="fleet — pick a session to filter documents"
+                state={tableState}
+                onStateChange={setTableState}
                 searchPlaceholder="search sessions"
-                activeKey={pickedWorld?.id}
-                onRowClick={(world) => {
-                  const id = sessionTarget(world);
-                  setTarget(target === id ? "" : id);
-                }}
-                empty={
-                  isLoading ? (
-                    <OutcomeLine kind="busy" label="reading the fleet" />
-                  ) : (
-                    <EmptyState
-                      story="scope"
-                      exit="stage a document below — it starts its own session"
-                    >
-                      no live sessions
-                    </EmptyState>
-                  )
-                }
-              />
+              >
+                <Table
+                  rows={visibleWorlds}
+                  columns={fleetColumns}
+                  rowKey={(world) => world.id}
+                  label="fleet — pick a session to filter documents"
+                  state={tableState}
+                  onStateChange={setTableState}
+                  activeKey={pickedWorld?.id}
+                  onRowClick={(world) => {
+                    const id = sessionTarget(world);
+                    setTarget(target === id ? "" : id);
+                  }}
+                  empty={
+                    isLoading ? (
+                      <OutcomeLine kind="busy" label="reading the fleet" />
+                    ) : (
+                      <EmptyState
+                        story="scope"
+                        exit="stage a document below — it starts its own session"
+                      >
+                        no live sessions
+                      </EmptyState>
+                    )
+                  }
+                />
+              </TableFrame>
             </div>
           </Pane>
         }
@@ -512,31 +527,46 @@ export function InstancesCluster({
             start={
               <Pane kind="content" title="documents" flush>
                 <div className="flex max-h-[60vh] flex-col">
-                  <MasterTable
-                    rows={visibleDocs}
-                    columns={docColumns}
-                    rowKey={(document) => document.id}
-                    scopeLabel={
+                  <TableFrame
+                    label={
                       pickedWorld
                         ? `documents openable in ${sessionLabel(pickedWorld)}`
                         : "documents — pick a session explicitly, or stage a new session"
                     }
+                    rows={visibleDocs}
+                    columns={docColumns}
+                    rowKey={(document) => document.id}
+                    state={docsState}
+                    onStateChange={setDocsState}
                     searchPlaceholder="search documents"
-                    activeKey={staged?.doc?.id}
-                    onRowClick={stageDoc}
-                    empty={
-                      recentsLoading || isLoading ? (
-                        <OutcomeLine kind="busy" label="reading recents and the fleet" />
-                      ) : (
-                        <EmptyState
-                          story="scope"
-                          exit="open a document in Revit, or clear the fleet pick"
-                        >
-                          no documents known
-                        </EmptyState>
-                      )
-                    }
-                  />
+                  >
+                    <Table
+                      rows={visibleDocs}
+                      columns={docColumns}
+                      rowKey={(document) => document.id}
+                      label={
+                        pickedWorld
+                          ? `documents openable in ${sessionLabel(pickedWorld)}`
+                          : "documents — pick a session explicitly, or stage a new session"
+                      }
+                      state={docsState}
+                      onStateChange={setDocsState}
+                      activeKey={staged?.doc?.id}
+                      onRowClick={stageDoc}
+                      empty={
+                        recentsLoading || isLoading ? (
+                          <OutcomeLine kind="busy" label="reading recents and the fleet" />
+                        ) : (
+                          <EmptyState
+                            story="scope"
+                            exit="open a document in Revit, or clear the fleet pick"
+                          >
+                            no documents known
+                          </EmptyState>
+                        )
+                      }
+                    />
+                  </TableFrame>
                 </div>
               </Pane>
             }

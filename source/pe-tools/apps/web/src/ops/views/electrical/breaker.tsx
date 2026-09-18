@@ -2,7 +2,8 @@ import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { type Column, DataTable } from "#/ops/primitives";
+import { type Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
 import {
   asNumber,
   asRecord,
@@ -161,17 +162,18 @@ function SectionGrid({ section }: { section: Rec }) {
   }
   const columns: Column<Rec>[] = columnNumbers.map((col) => ({
     key: String(col),
-    header: headers.get(col) ?? `c${col}`,
+    label: headers.get(col) ?? `c${col}`,
     cell: (row) => {
       const cell = asRecords(row.cells).find((c) => asNumber(c.columnNumber) === col);
       return cell && cell.isBlank !== true ? (asString(cell.displayText) ?? "") : "";
     },
   }));
   return (
-    <DataTable<Rec>
+    <Table
+      label="panel schedule cells"
       columns={columns}
       rows={rows}
-      rowKey={(row, i) => String(asNumber(row.rowNumber) ?? i)}
+      rowKey={(row) => String(asNumber(row.rowNumber) ?? rows.indexOf(row))}
       maxHeight="36rem"
     />
   );

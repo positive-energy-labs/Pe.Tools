@@ -37,11 +37,17 @@ const GUTTER_PX = 18;
 export interface TableSelection {
   selected: ReadonlySet<string>;
   onChange: (next: ReadonlySet<string>) => void;
+  /** A row that refuses selection, and why: clicks, ranges and select-all all skip it. */
+  refusal?: (key: string) => string | null | undefined;
 }
+
+/** The shown keys a selection may hold: select-all's reach. */
+export const selectableKeys = (selection: TableSelection, shown: readonly string[]) =>
+  selection.refusal ? shown.filter((key) => !selection.refusal!(key)) : shown;
 
 /**
  * The table's selection is the one collection's multi-select over the rows AS SHOWN: click toggles,
- * shift-click extends over the visible order, select-all covers what is shown, Escape clears.
+ * shift-click extends over the visible order, Escape clears (select-all is the frame's).
  */
 export function useTableSelection(selection: TableSelection | undefined, shown: readonly string[]) {
   const collection = useCollection<string>({
@@ -51,6 +57,7 @@ export function useTableSelection(selection: TableSelection | undefined, shown: 
     select: "multi",
     selected: selection ? [...selection.selected] : [],
     onSelectedChange: (keys) => selection?.onChange(new Set(keys)),
+    refusalOf: selection?.refusal,
     region: "table",
     // The cells own the keyboard in a table; the collection owns the selection only.
     target: null,
@@ -76,17 +83,7 @@ export function useTableSelection(selection: TableSelection | undefined, shown: 
   );
   useHotkeys(clear);
   if (!selection) return null;
-  const count = shown.filter((key) => selection.selected.has(key)).length;
-  return {
-    count,
-    toggle: (key: string, range: boolean) => collection.pick(key, range),
-    toggleAll: () => {
-      const next = new Set(selection.selected);
-      if (count === shown.length) for (const key of shown) next.delete(key);
-      else for (const key of shown) next.add(key);
-      selection.onChange(next);
-    },
-  };
+  return { toggle: (key: string, range: boolean) => collection.pick(key, range) };
 }
 
 export interface TableProps<Row extends RowData> {
@@ -111,6 +108,8 @@ export interface TableProps<Row extends RowData> {
   empty?: ReactNode;
   /** A self-bounded scroll height (a readout in a card); absent, the table fills its parent. */
   maxHeight?: string;
+  /** A readout's title, said as the grid's native caption. */
+  caption?: ReactNode;
 }
 
 export function Table<Row extends RowData>({
@@ -129,6 +128,7 @@ export function Table<Row extends RowData>({
   gutter,
   empty,
   maxHeight,
+  caption,
 }: TableProps<Row>) {
   const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
   const [own, setOwn] = useState(emptyTableState);
@@ -233,6 +233,7 @@ export function Table<Row extends RowData>({
           // `border-b border-l` with `first:border-l-0`, so nothing doubles (annotation, 2026-08-31).
           className="w-full border-separate border-spacing-0 t-small"
         >
+          {caption != null && <caption className="px-2 py-1">{caption}</caption>}
           <MasterTableHeader
             table={table}
             columnByKey={columnByKey}
@@ -253,6 +254,7 @@ export function Table<Row extends RowData>({
             rowClassName={rowClassName}
             onRowClick={onRowClick}
             selectedKeys={selection?.selected}
+            refusalOf={selection?.refusal}
             onSelect={select?.toggle}
             onRowHover={onRowHover}
             gutter={gutter}

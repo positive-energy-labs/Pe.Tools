@@ -7,7 +7,9 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import { Gap } from "#/design-system/exhibit";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/specimens-data";
@@ -15,6 +17,7 @@ import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/s
 const noop = () => {};
 
 export function RealTable() {
+  const [tableState, setTableState] = useTableState();
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() => new Set());
   const columns = useMemo<Column<ParamRow>[]>(
     () => [
@@ -144,31 +147,42 @@ export function RealTable() {
       >
         {/* MasterTable is `flex min-h-0 flex-1 flex-col` internally and expects a bounded parent. */}
         <div className="flex h-[26rem] flex-col">
-          <MasterTable
+          <TableFrame
+            label="params in scope"
             rows={PARAM_ROWS}
             columns={columns}
             rowKey={(r) => r.key}
-            scopeLabel="params in scope"
-            searchPlaceholder="search params…"
-            selectedKeys={selectedKeys}
-            onSelectedKeysChange={setSelectedKeys}
+            state={tableState}
+            onStateChange={setTableState}
             summary={<>13 params · 3 types</>}
-            // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
-            // person must act on — count in the tone's ink, sentence in the title, no verb.
-            // The locked param column offsets past it, which is the lock interaction the prop
-            // documents, exercised here on purpose.
-            gutter={(r) =>
-              r.agree === "drift"
-                ? {
-                    count: 1,
-                    title: "the model disagrees — a person must pick the real value",
-                    tone: "alarm",
-                  }
-                : r.stage === "staged"
-                  ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
-                  : null
-            }
-          />
+            searchPlaceholder="search params…"
+            selection={{ selected: selectedKeys, onChange: setSelectedKeys }}
+          >
+            <Table
+              rows={PARAM_ROWS}
+              columns={columns}
+              rowKey={(r) => r.key}
+              label="params in scope"
+              state={tableState}
+              onStateChange={setTableState}
+              selection={{ selected: selectedKeys, onChange: setSelectedKeys }}
+              // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
+              // person must act on — count in the tone's ink, sentence in the title, no verb.
+              // The locked param column offsets past it, which is the lock interaction the prop
+              // documents, exercised here on purpose.
+              gutter={(r) =>
+                r.agree === "drift"
+                  ? {
+                      count: 1,
+                      title: "the model disagrees — a person must pick the real value",
+                      tone: "alarm",
+                    }
+                  : r.stage === "staged"
+                    ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
+                    : null
+              }
+            />
+          </TableFrame>
         </div>
         {/* GAP (ArtifactFrame): the key belongs "inside the frame of the thing it describes", and
             the only place it fits is last-child-by-authorship. The `foot` slot is a flex control

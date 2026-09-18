@@ -1,6 +1,7 @@
 import { token } from "#/lib/token";
 import { useEffect, useMemo, useState } from "react";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum, type Column, type TableState } from "#/components/master-table/model";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { cn } from "#/lib/utils";
@@ -339,19 +340,28 @@ export function LedgerDock(props: {
           {rows === null ? (
             <div className="p-4">loading the run ledger…</div>
           ) : (
-            <MasterTable
+            <TableFrame
+              label="runs in pool"
               rows={rows}
               columns={columns}
               rowKey={(row) => row.id}
-              scopeLabel="runs in pool"
-              searchPlaceholder="label / hash…"
+              state={tableState}
+              onStateChange={setTableState}
               summary={`${rows.length} runs`}
-              empty="No runs in the pool yet — run the zone-bounded detect harness once and it will auto-persist here."
-              activeKey={curId}
-              onRowClick={(row) => onPickCur(row.id)}
-              tableState={tableState}
-              onTableStateChange={setTableState}
-            />
+              searchPlaceholder="label / hash…"
+            >
+              <Table
+                rows={rows}
+                columns={columns}
+                rowKey={(row) => row.id}
+                label="runs in pool"
+                state={tableState}
+                onStateChange={setTableState}
+                activeKey={curId}
+                onRowClick={(row) => onPickCur(row.id)}
+                empty="No runs in the pool yet — run the zone-bounded detect harness once and it will auto-persist here."
+              />
+            </TableFrame>
           )}
         </div>
       )}

@@ -5,9 +5,9 @@ import { useState } from "react";
 
 import { NumberCell } from "#/components/master-table/cells";
 import { Press } from "#/components/lang/press";
-import { MasterTable } from "#/components/master-table/master-table";
-import { Table } from "#/components/master-table/table";
-import { visibleRows } from "#/components/master-table/view";
+import { Table, type TableProps } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState, visibleRows } from "#/components/master-table/view";
 import type { Column, TableState } from "#/components/master-table/model";
 
 interface Fam {
@@ -71,25 +71,77 @@ const emptyState: TableState = { filters: {}, sorts: [], query: "" };
 
 afterEach(cleanup);
 
-function table(props: Partial<React.ComponentProps<typeof MasterTable<Fam>>> = {}) {
+/** A route's framed table, composed as routes compose it: the frame's chrome around the grid. */
+interface FramedProps {
+  rows?: Fam[];
+  columns?: Column<Fam>[];
+  tableState?: TableState;
+  onTableStateChange?: (state: TableState) => void;
+  selectedKeys?: ReadonlySet<string>;
+  onSelectedKeysChange?: (next: ReadonlySet<string>) => void;
+  refusal?: (key: string) => string | null;
+  activeKey?: string | null;
+  empty?: React.ReactNode;
+  chips?: { label: string; onClear: () => void }[];
+  modes?: React.ReactNode;
+  actions?: React.ReactNode;
+  summary?: React.ReactNode;
+  gutter?: TableProps<Fam>["gutter"];
+}
+function Framed(props: FramedProps) {
+  const [own, setOwn] = useTableState();
+  const state = props.tableState ?? own;
+  const onStateChange = (next: TableState) => {
+    if (props.tableState === undefined) setOwn(next);
+    props.onTableStateChange?.(next);
+  };
+  const selection =
+    props.selectedKeys && props.onSelectedKeysChange
+      ? {
+          selected: props.selectedKeys,
+          onChange: props.onSelectedKeysChange,
+          refusal: props.refusal,
+        }
+      : undefined;
+  const shown = props.rows ?? rows;
+  const cols = props.columns ?? columns;
   return (
-    <MasterTable
-      rows={rows}
-      columns={columns}
+    <TableFrame
+      label="families in scope"
+      rows={shown}
+      columns={cols}
       rowKey={(row) => row.id}
-      scopeLabel="families in scope"
+      state={state}
+      onStateChange={onStateChange}
       searchPlaceholder="search families"
-      {...props}
-    />
+      selection={selection}
+      chips={props.chips}
+      modes={props.modes}
+      actions={props.actions}
+      summary={props.summary}
+    >
+      <Table
+        rows={shown}
+        columns={cols}
+        rowKey={(row) => row.id}
+        label="families in scope"
+        state={state}
+        onStateChange={onStateChange}
+        selection={selection}
+        activeKey={props.activeKey}
+        empty={props.empty}
+        gutter={props.gutter}
+      />
+    </TableFrame>
   );
+}
+function table(props: FramedProps = {}) {
+  return <Framed {...props} />;
 }
 
 const renderTable = (props: Parameters<typeof table>[0] = {}) => render(table(props));
 
-function SelectedTable({
-  initial = [],
-  ...props
-}: { initial?: string[] } & Partial<React.ComponentProps<typeof MasterTable<Fam>>>) {
+function SelectedTable({ initial = [], ...props }: { initial?: string[] } & FramedProps) {
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() => new Set(initial));
   return table({ ...props, selectedKeys, onSelectedKeysChange: setSelectedKeys });
 }
@@ -107,6 +159,22 @@ test("controlled selection toggles rows and leaves uncontrolled tables unchanged
   expect(screen.queryByRole("button", { name: /select 3/i })).toBeNull();
   fireEvent.click(rowFor("VAV Box"));
   expect(rowFor("VAV Box").getAttribute("aria-selected") === "true").toBe(false);
+});
+
+test("a refused row says why and is skipped by click and select-all", () => {
+  render(
+    <SelectedTable
+      refusal={(key) => (rows.find((r) => r.id === key)?.name === "Diffuser" ? "flagged" : null)}
+    />,
+  );
+  expect(rowFor("Diffuser").getAttribute("aria-disabled")).toBe("true");
+  expect(rowFor("Diffuser").getAttribute("title")).toBe("flagged");
+  fireEvent.click(rowFor("Diffuser"));
+  expect(rowFor("Diffuser").getAttribute("aria-selected")).toBe("false");
+  fireEvent.click(screen.getByRole("button", { name: /select 2/i }));
+  expect(rowFor("VAV Box").getAttribute("aria-selected")).toBe("true");
+  expect(rowFor("Panelboard").getAttribute("aria-selected")).toBe("true");
+  expect(rowFor("Diffuser").getAttribute("aria-selected")).toBe("false");
 });
 
 test("shift-click selects a range in sorted row order", () => {

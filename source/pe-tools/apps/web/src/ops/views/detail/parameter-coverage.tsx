@@ -6,7 +6,9 @@ import type {
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { type Column, DataTable, KVGrid, VizChip } from "#/ops/primitives";
+import { type Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { KVGrid, VizChip } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { MAX_TYPE_COLUMNS } from "./parameter-links";
 import { issueLine, pageNote } from "./schedules";
@@ -131,7 +133,7 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
   const columns: Column<FamilyEditorSnapshot.Res.FamilyEditorParameterSnapshot>[] = [
     {
       key: "name",
-      header: "parameter",
+      label: "parameter",
       cell: (p) => (
         <span title={p.identity?.key}>
           {p.name}{" "}
@@ -145,11 +147,12 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
     },
     {
       key: "formula",
-      header: "formula",
+      label: "formula",
       cell: (p) => (p.formula ? <span className="">= {p.formula}</span> : ""),
     },
     ...typeNames.map((typeName) => ({
       key: `t:${typeName}`,
+      label: typeName,
       header:
         typeName === res.currentTypeName ? (
           <span>
@@ -158,7 +161,7 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
         ) : (
           typeName
         ),
-      numeric: true,
+      right: true,
       cell: (p: FamilyEditorSnapshot.Res.FamilyEditorParameterSnapshot) =>
         p.valuesPerType[typeName] ?? "∅",
     })),
@@ -175,7 +178,9 @@ export function FamilyEditorSnapshotView({ data }: OpViewProps) {
           { label: "parameters", value: res.parameters.length },
         ]}
       />
-      <DataTable
+      <Table
+        label="family parameters by type"
+        maxHeight="28rem"
         columns={columns}
         rows={res.parameters}
         rowKey={(p) => p.identity?.key ?? p.name}
