@@ -35,11 +35,13 @@ export function keyDirection(key: string, shift: boolean): CellMove | null {
   return null;
 }
 
+/** A cell's text editor. A hidden form proxy (base-ui renders one inside every Combobox) is never
+ * the editor. */
+export const CELL_EDITOR =
+  'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])';
+
 export function editCell(cell: HTMLTableCellElement, replacement?: string): boolean {
-  const editor = cell.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-    // A hidden form proxy (base-ui renders one inside every Combobox) is never the editor.
-    'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])',
-  );
+  const editor = cell.querySelector<HTMLInputElement | HTMLTextAreaElement>(CELL_EDITOR);
   if (!editor) {
     // A native select is edited by focusing it; its own typeahead and arrows take over.
     const select = cell.querySelector<HTMLSelectElement>("select:not([disabled])");

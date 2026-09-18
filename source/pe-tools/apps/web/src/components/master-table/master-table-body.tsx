@@ -16,6 +16,7 @@ import { Row } from "#/components/lang/row";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
 import {
+  CELL_EDITOR,
   editCell,
   isInteractive,
   isTypingKey,
@@ -235,10 +236,7 @@ export function MasterTableBody<Row extends RowData>({
                         // first printable key then replaces the value, and a double-click, F2 or
                         // Enter edits in place.
                         const target = event.target as HTMLElement;
-                        if (
-                          target.matches("input.dl-cell-input") &&
-                          document.activeElement !== target
-                        ) {
+                        if (target.matches(CELL_EDITOR) && document.activeElement !== target) {
                           event.preventDefault();
                           event.currentTarget.focus();
                         }
