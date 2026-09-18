@@ -27,8 +27,6 @@ reconciler lowers to; scripts and Pods may call those verbs directly, but they a
   documents, and the operation model the reconciler lowers into.
 - `Operations/`, `OperationGroups/` — the ops library: the verbs `FamilyReconciler.Lower` emits and scripts reuse.
 - `Apply/FamilyModelBuild.cs` — build a new family document from a template plus a `FamilyModel`.
-- `Apply/FamilyProfileConverter.cs` — one-shot converter for the 45 frozen company profiles. Scaffolding with an
-  expiry date; it retires with them.
 - `ProcessingResultBuilder.cs` — the run and per-family artifact writer (`run-summary.json`, `family-report.json`,
   `plan.json`, `receipt.json`).
 - `FamilyModelSettingsRegistration.cs`, `SchemaDefinitions/FamilyFoundrySchemaDefinitions.cs` — the `FamilyFoundry`

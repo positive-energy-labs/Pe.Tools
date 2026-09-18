@@ -90,54 +90,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
-    public void Company_standard_replaces_archived_horsepower_with_active_definition_and_preserves_type_values() {
-        const string retired = "PE_G___Horsepower", active = "PE_G_Perf_Horsepower";
-        var document = this.NewFamily("Company horsepower migration");
-        try {
-            using (var transaction = new Transaction(document, "Seed retired horsepower")) {
-                transaction.Start();
-                var parameter = document.FamilyManager.AddParameter(retired, GroupTypeId.Data, SpecTypeId.Number, false);
-                foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
-                    document.FamilyManager.CurrentType = type;
-                    document.FamilyManager.Set(parameter, type.Name == "A" ? 1.5 : 3.0);
-                }
-                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
-            }
-            var definitions = CompanyCorpusDefinitions();
-            var settings = JObject.Parse("""{"FilterApsParams":{"IncludeNames":{"Equaling":["PE_G___Horsepower"]}}}""");
-            var patch = FamilyProfileConverter.Convert(settings, definitions, document.GetUnits()).Patch;
-            using var processor = new OperationProcessor(document);
-            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            _ = processor.ProcessQueue(new OperationQueue().Add(operation));
-            Assert.That(operation.LastReceipt?.Converged, Is.True);
-            Assert.That(document.FamilyManager.get_Parameter(retired), Is.Null);
-            var target = document.FamilyManager.get_Parameter(active);
-            Assert.That(target.GUID, Is.EqualTo(definitions.Single(d => d.Name == active).DownloadOptions.GetGuid()));
-            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
-                Assert.That(type.AsDouble(target), Is.EqualTo(type.Name == "A" ? 1.5 : 3.0));
-            var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            _ = processor.ProcessQueue(new OperationQueue().Add(repeated));
-            Assert.That(repeated.LastReceipt?.Converged, Is.True);
-            Assert.That(repeated.LastPlan!.Changes, Is.Empty);
-        } finally { document.Close(false); }
-    }
-
-    private static JObject GeometryInput(JObject settings, params string[] operations) {
-        var input = new JObject();
-        foreach (var name in new[] { "FilterApsParams", "AddAndMapSharedParams", "AddFamilyParams" }.Concat(operations))
-            if (settings[name] is { } value) input[name] = value.DeepClone();
-        return input;
-    }
-
-    private static JObject AddKnownTemplateContext(string profilePath, JObject native) {
-        if (!profilePath.EndsWith("Modine HHD Series.json", StringComparison.Ordinal)) return native;
-        var datums = (JObject)native["datums"]!;
-        datums["Left"] = new JObject { ["normal"] = "X" };
-        datums["Right"] = new JObject { ["normal"] = "X" };
-        return native;
-    }
-
-    [Test]
     public void Native_formula_canonicalization_is_rollback_only_and_distinguishes_changed_literal() {
         const string raw = "if(PE_E___Voltage = 120, 1, 2)";
         var document = this.NewFamily("Formula canonicalization");
@@ -293,527 +245,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var receipt = FamilyModelBuild.Reconcile(document, current, options);
             Assert.That(receipt?.PlanHash, Is.EqualTo(nondefault.LastPlan?.PlanHash));
         } finally { document.Close(false); }
-    }
-
-    [TestCase(false, false)]
-    [TestCase(true, false)]
-    [TestCase(false, true)]
-    public void Product_export_retains_conditional_mapping_and_explicit_state_wins(bool sourceExists, bool explicitValue) {
-        var definition = CompanyDefinitions().Single(d => d.Name == "PE_G_Dim_Width1");
-        var exported = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.ExportSharedMappings(
-            new Pe.Revit.FamilyFoundry.OperationSettings.MapParamsSettings { MappingData = [new() {
-                NewName = definition.Name!, CurrNames = [sourceExists ? "Width" : "Absent source"], OnlyAddIfSourceExists = true }] }, [definition]);
-        Assert.That(exported.Patch["parameters"]![definition.Name!], Is.Null);
-        Assert.That(exported.Run!.ParametersIfSourceExists, Contains.Key(definition.Name!));
-        var patch = FamilyPatch.Parse(JsonConvert.SerializeObject(exported, FamilyPatch.Settings));
-        if (explicitValue) {
-            var explicitParameter = JObject.FromObject(patch.Run!.ParametersIfSourceExists![definition.Name!], JsonSerializer.Create(FamilyModelJson.Settings));
-            explicitParameter["value"] = "3ft";
-            patch.Patch["parameters"]![definition.Name!] = explicitParameter;
-        }
-        var document = this.NewFamily("Conditional exported mapping");
-        try {
-            using var processor = new OperationProcessor(document);
-            for (var pass = 0; pass < (explicitValue ? 1 : 2); pass++) {
-                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, []));
-                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
-                var (_, error) = contexts.Single().OperationLogs;
-                Assert.That(error, Is.Null, error?.Message);
-                Assert.That(operation.LastReceipt?.Converged, Is.True);
-                var target = document.FamilyManager.get_Parameter(definition.Name);
-                Assert.That(target is not null, Is.EqualTo(sourceExists || explicitValue));
-                if (target is not null) {
-                    Assert.That(target.GUID, Is.EqualTo(definition.DownloadOptions.GetGuid()));
-                    foreach (var type in document.FamilyManager.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B"))
-                        Assert.That(type.AsDouble(target), Is.EqualTo(explicitValue ? 3d : type.Name == "A" ? 1d : 2d));
-                }
-                if (pass == 1) Assert.That(operation.LastPlan!.Changes, Is.Empty);
-            }
-        } finally { document.Close(false); }
-    }
-
-    public static IEnumerable<string> CompanyProfiles() => JArray.Parse(File.ReadAllText(
-        RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).Select(p => (string)p["source"]!);
-
-    [Test]
-    public void Public_converter_selects_name_patterns_exclusions_and_native_category_identity() {
-        var project = RevitFamilyFixtureHarness.CreateProjectDocument(this._application);
-        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Public_converter_selects_name_patterns_exclusions_and_native_category_identity));
-        var loadedFamilyIds = new HashSet<ElementId>();
-        try {
-            foreach (var (name, category) in new[] {
-                         ("Exact Pump", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Prefix Fan Keep", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Prefix Fan Blocked", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Middle Coil Keep", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Middle Coil Remove", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Prefix Reject Start", BuiltInCategory.OST_MechanicalEquipment),
-                         ("Prefix Generic Keep", BuiltInCategory.OST_GenericModel)
-                     }) {
-                var familyDocument = this.NewFamily(name, category);
-                string path;
-                try {
-                    if (name is "Prefix Fan Keep" or "Exact Pump" or "Middle Coil Keep") {
-                        using var transaction = new Transaction(familyDocument, "Seed condition selector");
-                        transaction.Start();
-                        var manager = familyDocument.FamilyManager;
-                        var keep = manager.get_Parameter("Keep");
-                        if (name != "Prefix Fan Keep") {
-                            manager.RemoveParameter(keep);
-                            keep = name == "Exact Pump"
-                                ? RevitFamilyFixtureHarness.AddSharedFamilyParameter(familyDocument,
-                                    new SharedDefinitionSpec("Keep", SpecTypeId.String.Text,
-                                        Guid: new Guid("8be6c9e0-ce6e-43d3-a536-2b83e60ce7de")), GroupTypeId.Data, false)
-                                : manager.AddParameter("Keep", GroupTypeId.Data, SpecTypeId.String.Text, true);
-                        }
-                        foreach (var type in familyDocument.FamilyManager.Types.Cast<FamilyType>()) {
-                            manager.CurrentType = type;
-                            manager.Set(keep, name == "Prefix Fan Keep" && type.Name == "A" ? "other" : "selected");
-                        }
-                        Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
-                    }
-                    path = RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, output, name);
-                }
-                finally { familyDocument.Close(false); }
-                var loaded = RevitFamilyFixtureHarness.LoadFamilyIntoProject(this._application, project, path);
-                Assert.Multiple(() => {
-                    Assert.That(loaded.Name, Is.EqualTo(name));
-                    Assert.That(loaded.FamilyCategory?.Id.Value(), Is.EqualTo((long)category));
-                });
-                loadedFamilyIds.Add(loaded.Id);
-            }
-            Assert.That(new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
-                    .Where(instance => loadedFamilyIds.Contains(instance.Symbol.Family.Id)), Is.Empty,
-                "IncludeUnusedFamilies=true must retain unplaced loaded families.");
-            WriteLocalConditionSelectorProbe(project, output);
-            var settings = JObject.Parse("""
-                {"FilterFamilies":{
-                  "IncludeUnusedFamilies":true,
-                  "IncludeCategoriesEqualing":["Mechanical Equipment"],
-                  "IncludeNames":{"Equaling":["Exact Pump"],"Containing":["Coil"],"StartingWith":["Prefix"]},
-                  "ExcludeNames":{"Equaling":["Prefix Fan Blocked"],"Containing":["Remove"],"StartingWith":["Prefix Reject"]},
-                  "IncludeByCondition":{"FieldName":"","FilterType":2,"Value":""}
-                }}
-                """);
-            var converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
-            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name), Is.EqualTo(new[] {
-                "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
-            }));
-
-            settings["FilterFamilies"]!["IncludeByCondition"] = JValue.CreateNull();
-            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
-            Assert.That(converted.Patch.Select.IncludeByCondition, Is.Null);
-            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name), Is.EqualTo(new[] {
-                "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep"
-            }));
-
-            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject {
-                ["FieldName"] = "Keep", ["FilterType"] = "Equal", ["Value"] = "selected"
-            };
-            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
-            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
-                Is.EqualTo(new[] { "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep" }),
-                "Local type, local instance-default, and shared fields with one name must all participate.");
-
-            settings["FilterFamilies"]!["IncludeByCondition"] = new JObject {
-                ["FieldName"] = "Keep", ["FilterType"] = "BeginsWith", ["Value"] = "sel"
-            };
-            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
-            Assert.That(project.FamiliesMatching(converted.Patch.Select).Select(f => f.Name),
-                Is.EqualTo(new[] { "Exact Pump", "Middle Coil Keep", "Prefix Fan Keep" }),
-                "A native local string rule must retain any-type semantics without a placed instance.");
-
-            settings["FilterFamilies"]!["IncludeByCondition"]!["FieldName"] = "Missing condition field";
-            converted = FamilyProfileConverter.Convert(settings, [], project.GetUnits());
-            Assert.That(() => project.FamiliesMatching(converted.Patch.Select),
-                Throws.InvalidOperationException.With.Message.Contains("could not apply every filter"));
-        } finally { project.Close(false); }
-    }
-
-    private static void WriteLocalConditionSelectorProbe(Document project, string output) {
-        const string familyName = "Prefix Fan Keep";
-        const string fieldName = "Keep";
-        const string expected = "selected";
-        var evidence = new JObject { ["family"] = familyName, ["field"] = fieldName, ["expected"] = expected };
-        using var transaction = new Transaction(project, "Probe local family condition selection");
-        transaction.Start();
-        try {
-            var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
-                .Single(candidate => candidate.Name == familyName);
-            var rows = new JArray();
-            evidence["symbols"] = rows;
-            foreach (var symbol in family.GetFamilySymbolIds().Select(project.GetElement).OfType<FamilySymbol>()
-                         .OrderBy(candidate => candidate.Name, StringComparer.Ordinal)) {
-                if (!symbol.IsActive) symbol.Activate();
-                var instance = project.Create.NewFamilyInstance(XYZ.Zero, symbol,
-                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
-                project.Regenerate();
-                var row = new JObject {
-                    ["symbolId"] = symbol.Id.Value(),
-                    ["symbolName"] = symbol.Name,
-                    ["symbolParameter"] = ParameterFacts(symbol.LookupParameter(fieldName)),
-                    ["instanceId"] = instance.Id.Value(),
-                    ["instanceParameter"] = ParameterFacts(instance.LookupParameter(fieldName))
-                };
-                rows.Add(row);
-                try {
-                    var parameter = symbol.LookupParameter(fieldName)
-                                    ?? throw new InvalidOperationException($"Loaded symbol '{symbol.Name}' has no '{fieldName}' parameter.");
-                    var rule = ParameterFilterRuleFactory.CreateEqualsRule(parameter.Id, expected);
-                    var filter = new ElementParameterFilter(rule);
-                    row["filterRuleSymbolPasses"] = rule.ElementPasses(symbol);
-                    row["filterRuleInstancePasses"] = rule.ElementPasses(instance);
-                    row["elementFilterSymbolPasses"] = filter.PassesFilter(project, symbol.Id);
-                    row["elementFilterInstancePasses"] = filter.PassesFilter(project, instance.Id);
-                } catch (Exception exception) {
-                    row["filterError"] = exception.ToString();
-                }
-            }
-
-            var categoryId = Category.GetCategory(project, BuiltInCategory.OST_MechanicalEquipment).Id;
-            var schedule = ViewSchedule.CreateSchedule(project, categoryId);
-            var fields = schedule.Definition.GetSchedulableFields();
-            evidence["schedulableFieldCount"] = fields.Count;
-            evidence["schedulableMatches"] = new JArray(fields
-                .Where(field => field.GetName(project).Equals(fieldName, StringComparison.OrdinalIgnoreCase))
-                .Select(field => new JObject {
-                    ["name"] = field.GetName(project),
-                    ["parameterId"] = field.ParameterId.Value(),
-                    ["fieldType"] = field.FieldType.ToString()
-                }));
-        } catch (Exception exception) {
-            evidence["probeError"] = exception.ToString();
-        } finally {
-            if (transaction.GetStatus() == TransactionStatus.Started) transaction.RollBack();
-            File.WriteAllText(Path.Combine(output, "local-condition-selector-prerequisites.json"), evidence.ToString());
-        }
-
-        static JObject ParameterFacts(Parameter? parameter) {
-            if (parameter is null) return new JObject { ["missing"] = true };
-            var builtIn = (parameter.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID;
-            return new JObject {
-                ["id"] = parameter.Id.Value(),
-                ["builtInParameter"] = builtIn.ToString(),
-                ["name"] = parameter.Definition.Name,
-                ["storage"] = parameter.StorageType.ToString(),
-                ["spec"] = parameter.Definition.GetDataType().TypeId,
-                ["shared"] = parameter.IsShared,
-                ["readOnly"] = parameter.IsReadOnly,
-                ["value"] = parameter.AsValueString() ?? parameter.AsString()
-            };
-        }
-    }
-
-    [TestCase("CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json", 4, 4)]
-    [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 4, 4)]
-    [TestCase("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json", 7, 7)]
-    [TestCase("CmdFFManager/profiles/SavedEquip/Modine HHD Series.json", 7, 7)]
-    public void Public_converter_maps_corpus_reference_plane_intent(string profilePath, int planeCount, int dimensionCount) {
-        var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-            .Single(p => (string)p["source"]! == profilePath)["settings"]!;
-        var document = this.NewFamily("Reference plane conversion proof");
-        try {
-            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
-                GeometryInput(settings, "MakeRefPlaneAndDims"), CompanyCorpusDefinitions(), document.GetUnits()).Patch;
-            Assert.That(((JObject)patch.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount));
-            Assert.That(((JObject)patch.Patch["dimensions"]!).Count, Is.EqualTo(dimensionCount));
-            var merged = AddKnownTemplateContext(profilePath,
-                FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), patch.Patch));
-            Assert.That(FamilyModelJson.Parse(merged.ToString()).Diagnostics, Is.Empty);
-        } finally { document.Close(false); }
-    }
-
-    [Test]
-    public void Public_converter_preserves_all_real_param_driven_solids() {
-        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-            .Where(p => p["settings"]!["ParamDrivenSolids"] is not null).ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
-        var document = this.NewFamily("Param driven solids conversion proof");
-        try {
-            FamilyPatch Convert(string source) {
-                var settings = (JObject)profiles[source]["settings"]!;
-                return Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
-                    GeometryInput(settings, "ParamDrivenSolids"), CompanyCorpusDefinitions(), document.GetUnits()).Patch;
-            }
-
-            var box = Convert("CmdFFManager/profiles/SavedEquip/Constrained Box.json");
-            Assert.That(((JObject)box.Patch["forms"]!).Properties().Single().Name, Is.EqualTo("Box"));
-            Assert.That(((JObject)box.Patch["refPlanes"]!).Properties().Select(p => p.Name), Is.EquivalentTo(
-                new[] { "width (Back)", "width (Front)", "length (Left)", "length (Right)", "top" }));
-            var merged = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), box.Patch);
-            Assert.That(FamilyModelJson.Parse(merged.ToString()).Diagnostics, Is.Empty);
-
-            var hpwh = Convert("CmdFFMigrator/profiles/PlumbEquip/HPWH.json");
-            Assert.That(hpwh.Patch["forms"], Is.Null, "The frozen empty HPWH operation is a validated no-op.");
-
-            foreach (var (source, planeCount, formCount, connectorCount) in new[] {
-                         ("CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json", 6, 4, 1),
-                         ("CmdFFManager/profiles/SavedEquip/Zehnder ComfoAir 550 R Luxe ERV.json", 15, 5, 4)
-                     }) {
-                var converted = Convert(source);
-                Assert.That(((JObject)converted.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount), source);
-                Assert.That(((JObject)converted.Patch["forms"]!).Count, Is.EqualTo(formCount), source);
-                Assert.That(((JObject)converted.Patch["connectors"]!).Count, Is.EqualTo(connectorCount), source);
-                var native = FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch);
-                Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics, Is.Empty, source);
-            }
-
-            foreach (var (source, planeCount, formCount, connectorCount) in new[] {
-                         ("CmdFFManager/profiles/SavedEquip/Modine HHD Series.json", 15, 4, 3),
-                         ("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Indoor Unit.json", 17, 6, 5),
-                         ("CmdFFManager/profiles/SavedEquip/Wine Guardian DS050 Outdoor Condenser.json", 11, 3, 2)
-                     }) {
-                var settings = profiles[source]["settings"]!;
-                var converted = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
-                    GeometryInput((JObject)settings, "MakeRefPlaneAndDims", "ParamDrivenSolids"),
-                    CompanyCorpusDefinitions(), document.GetUnits()).Patch;
-                Assert.That(((JObject)converted.Patch["refPlanes"]!).Count, Is.EqualTo(planeCount), source);
-                Assert.That(((JObject)converted.Patch["forms"]!).Count, Is.EqualTo(formCount), source);
-                Assert.That(((JObject)converted.Patch["connectors"]!).Count, Is.EqualTo(connectorCount), source);
-                var native = AddKnownTemplateContext(source,
-                    FamilyPatch.Apply(JObject.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), converted.Patch));
-                Assert.That(FamilyModelJson.Parse(native.ToString()).Diagnostics.Any(d => d.Code == FamilyModelDiagnosticCodes.InvalidJson), Is.False, source);
-            }
-            var power = (JObject)Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
-                ["ParamDrivenSolids"] = profiles["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"]["settings"]!["ParamDrivenSolids"]!.DeepClone()
-            }, [], document.GetUnits()).Patch.Patch["connectors"]!["Power"]!;
-            Assert.That((string)power["systemType"]!, Is.EqualTo("PowerBalanced"));
-            Assert.That((string)power["associate"]!["Voltage"]!, Is.EqualTo("param:PE_E___Voltage"));
-            Assert.That((string)power["associate"]!["Number of Poles"]!, Is.EqualTo("param:PE_E___NumberOfPoles"));
-            Assert.That(power["diameter"], Is.Null, "Electrical connector size belongs to its retained stub form.");
-
-            var demandProfile = (JObject)profiles["CmdFFManager/profiles/SavedEquip/Modine HHD Series.json"]
-                ["settings"]!["ParamDrivenSolids"]!.DeepClone();
-            demandProfile["Connectors"]![0]!["Config"]!["Pipe"]!["FlowConfiguration"] = "Demand";
-            var demand = (JObject)Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject {
-                ["ParamDrivenSolids"] = demandProfile
-            }, [], document.GetUnits()).Patch.Patch["connectors"]!["SupplyWater"]!;
-            Assert.That((string)demand["flowConfiguration"]!, Is.EqualTo("Demand"),
-                "Legacy pipe connector conversion must retain explicitly authored Demand intent.");
-
-            var grinderLookup = profiles["CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json"]["settings"]!["SetLookupTables"]!;
-            var lookup = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(new JObject { ["SetLookupTables"] = grinderLookup.DeepClone() }, [], document.GetUnits()).Patch;
-            Assert.That(lookup.Patch["lookupTables"], Is.Null, "The frozen active Tables:[] operation is a validated no-op.");
-        } finally { document.Close(false); }
-    }
-
-    [Test]
-    public void Company_profiles_export_all_nineteen_connector_rules_and_omit_all_nine_disabled_rules() {
-        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-            .OfType<JObject>().Where(profile => profile["settings"]?["MakeElectricalConnector"] is JObject).ToList();
-        var enabled = profiles.Where(HasEnabledConnectorRule).ToList();
-        Assert.Multiple(() => {
-            Assert.That(enabled, Has.Count.EqualTo(19));
-            Assert.That(profiles.Except(enabled).Count(), Is.EqualTo(9));
-        });
-        var definitions = CompanyCorpusDefinitions();
-        var document = this.NewFamily("Company connector conversion census");
-        try {
-            foreach (var profile in profiles)
-                AssertConnectorRule(profile, CompanyNormalizationFixture.ConvertProfileParameters((JObject)profile["settings"]!, document, definitions).Patch);
-            var sample = (JObject)enabled[0]["settings"]!.DeepClone();
-            void Reject(JToken connector) {
-                var malformed = (JObject)sample.DeepClone();
-                malformed["MakeElectricalConnector"] = connector;
-                Assert.Throws<InvalidOperationException>(() => CompanyNormalizationFixture.ConvertProfileParameters(malformed, document, definitions));
-            }
-            Reject("not an object");
-            var unknownSetting = (JObject)sample["MakeElectricalConnector"]!.DeepClone();
-            unknownSetting["Unexpected"] = true;
-            Reject(unknownSetting);
-            var unknownSource = (JObject)sample["MakeElectricalConnector"]!.DeepClone();
-            unknownSource["SourceParameterNames"]!["Unexpected"] = "PE_E___MCA";
-            Reject(unknownSource);
-        } finally { document.Close(false); }
-    }
-
-    [TestCaseSource(nameof(CompanyProfiles))]
-    [Category("CompanyCorpus")]
-    public void Each_company_profile_parameter_intent_uses_public_reconciler(string profilePath) {
-        var profile = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-            .Single(p => (string)p["source"]! == profilePath);
-        var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
-            RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!;
-        var connectorRule = HasEnabledConnectorRule((JObject)profile);
-        var document = this.NewFamily("Company profile parameter proof",
-            connectorRule ? BuiltInCategory.OST_MechanicalEquipment : BuiltInCategory.OST_GenericModel);
-        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Each_company_profile_parameter_intent_uses_public_reconciler));
-        var evidence = new JObject { ["profile"] = profilePath, ["composedSettings"] = profile["settings"]!.DeepClone() };
-        try {
-            var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(profilePath, (JObject)profile["settings"]!);
-            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, document, definitions);
-            var patch = conversion.Patch;
-            AssertConnectorRule((JObject)profile, patch);
-            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json")
-                Assert.That(patch.Patch["parameters"]!["PE_G___SoundLevel"]!.Value<string>("value"), Is.EqualTo("4"));
-            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/Grinder Pump Basin.json") {
-                var original = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath(
-                    Path.Combine("company-20260906", profilePath))));
-                var sourceValue = original["SetKnownParams"]!["GlobalAssignments"]!.Single(assignment =>
-                    (string)assignment["Parameter"]! == "PE_G___SoundLevel").Value<string>("Value");
-                Assert.Multiple(() => {
-                    Assert.That(sourceValue, Is.EqualTo("80 dBi alarm"), "The frozen company profile remains immutable.");
-                    Assert.That(settings["SetKnownParams"]!["GlobalAssignments"]!.Single(assignment =>
-                        (string)assignment["Parameter"]! == "PE_G___SoundLevel").Value<string>("Value"), Is.EqualTo("80"));
-                    Assert.That(patch.Patch["parameters"]!["PE_G___SoundLevel"]!.Value<string>("value"), Is.EqualTo("80"));
-                });
-            }
-            if (profilePath.Contains("/WaterFurnace-", StringComparison.Ordinal)) {
-                Assert.That(patch.Patch["parameters"]!["Model"]!["isInstance"], Is.Null,
-                    "Omitted legacy scope must preserve the built-in parameter's current scope.");
-                Assert.That(patch.Patch["parameters"]!["Manufacturer"]!.Value<bool?>("isInstance"), Is.False,
-                    "Explicit legacy scope remains authoritative.");
-            }
-            if (profilePath.EndsWith("/AprilAire 800 Series.json", StringComparison.Ordinal)) {
-                var url = (JObject)patch.Patch["parameters"]!["PE_G___URL"]!;
-                var definition = definitions.Single(d => d.Name == "PE_G___URL");
-                Assert.That(patch.Patch["parameters"]!["PE_G___Url"], Is.Null);
-                Assert.That(url.Value<bool>("shared"), Is.True);
-                Assert.That(url.Value<string>("sharedGuid"), Is.EqualTo(definition.DownloadOptions.GetGuid().ToString()));
-                Assert.That(url.Value<string>("value"), Does.StartWith("https://"));
-            }
-            if (profilePath.EndsWith("/Modine HHD Series.json", StringComparison.Ordinal)) {
-                var literal = patch.Patch["types"]!["HHD45"]!["PE_M_PerfHeat_FluidEWT"]!.Value<string>()!;
-                Assert.That(literal, Does.Contain(" "), "Converted temperature must retain an explicit unit symbol.");
-                Assert.That(ParameterStringIo.TryParseMeasuredValue(document.GetUnits(), SpecTypeId.HvacTemperature, literal, out var parsed), Is.True);
-                Assert.That(parsed, Is.EqualTo(UnitUtils.ConvertToInternalUnits(180, UnitTypeId.Fahrenheit)).Within(1e-9));
-            }
-            evidence["parameterPatch"] = patch.Patch.DeepClone();
-            var before = document.CaptureFamilyModel();
-            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            using var processor = new OperationProcessor(document, conversion.Options);
-            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
-            var (_, error) = contexts.Single().OperationLogs;
-            evidence["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt);
-            evidence["error"] = error?.ToString();
-            if (error is not null) {
-                var after = document.CaptureFamilyModel();
-                Assert.That(JToken.DeepEquals(JToken.Parse(FamilyModelJson.Serialize(after)), JToken.Parse(FamilyModelJson.Serialize(before))),
-                    Is.True, "Failed parameter migration must fully roll back.");
-            }
-            Assert.That(error, Is.Null, error?.Message);
-            Assert.That(operation.LastReceipt?.Converged, Is.True);
-            if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/Constrained Box.json") {
-                Assert.That(document.CaptureFamilyModel().Forms.Values.Single().Start, Is.EqualTo("Reference Plane"));
-                var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-                var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
-                var (_, repeatedError) = repeatedContexts.Single().OperationLogs;
-                Assert.That(repeatedError, Is.Null, repeatedError?.Message);
-                Assert.That(repeated.LastReceipt?.Converged, Is.True);
-                Assert.That(repeated.LastPlan!.Changes, Is.Empty);
-            }
-            foreach (var parameter in ((JObject)patch.Patch["parameters"]!).Properties().Where(p => p.Value.Value<bool?>("shared") == true)) {
-                var actual = document.FamilyManager.get_Parameter(parameter.Name);
-                Assert.That(actual?.IsShared, Is.True, parameter.Name);
-                Assert.That(actual!.GUID, Is.EqualTo(definitions.Single(d => d.Name == parameter.Name).DownloadOptions.GetGuid()));
-            }
-            AssertCompanyLiteral(profilePath, document);
-            if (connectorRule) {
-                var rule = patch.Run!.ElectricalConnectorParameters!;
-                Assert.That(document.FamilyManager.get_Parameter(rule.MinimumCircuitAmpacity), Is.Not.Null);
-                var connectors = new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
-                    .Where(connector => connector.Domain == Domain.DomainElectrical).ToList();
-                Assert.That(connectors, Is.Not.Empty);
-                foreach (var connector in connectors)
-                    foreach (var (target, source) in new Dictionary<BuiltInParameter, string> {
-                                 [BuiltInParameter.RBS_ELEC_VOLTAGE] = rule.Voltage,
-                                 [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = rule.NumberOfPoles,
-                                 [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = rule.ApparentPower })
-                        Assert.That(document.FamilyManager.GetAssociatedFamilyParameter(connector.get_Parameter(target))?.Definition.Name,
-                            Is.EqualTo(source), $"{profilePath}: {target}");
-                var connectorIds = connectors.Select(connector => connector.Id.Value()).ToList();
-                var repeated = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-                var (repeatedContexts, _) = processor.ProcessQueue(new OperationQueue().Add(repeated));
-                var (repeatedLogs, repeatedError) = repeatedContexts.Single().OperationLogs;
-                Assert.That(repeatedError, Is.Null, repeatedError?.Message);
-                Assert.That(repeated.LastReceipt?.Converged, Is.True);
-                Assert.That(repeated.LastPlan!.Changes, Is.Empty);
-                Assert.That(repeatedLogs!.SelectMany(log => log.Entries)
-                    .Single(entry => entry.Name == "Electrical connectors").Status, Is.EqualTo(LogStatus.Skipped));
-                Assert.That(new FilteredElementCollector(document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>()
-                    .Where(connector => connector.Domain == Domain.DomainElectrical).Select(connector => connector.Id.Value()), Is.EqualTo(connectorIds));
-            }
-        } catch (Exception error) { evidence["failure"] = error.ToString(); throw; }
-        finally {
-            File.WriteAllText(Path.Combine(output, "company-profile-parameters.json"), evidence.ToString());
-            document.Close(false);
-        }
-    }
-
-    private static bool HasEnabledConnectorRule(JObject profile) =>
-        profile["settings"]?["MakeElectricalConnector"] is JObject settings && settings.Value<bool?>("Enabled") != false;
-
-    [Test, Category("CompanyCorpus")]
-    public void Public_converter_preserves_all_real_local_parameter_group_intent() {
-        var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-            .OfType<JObject>().Where(profile => profile["settings"]?["AddFamilyParams"] is JObject).ToList();
-        var document = this.NewFamily("Company local parameter group conversion");
-        try {
-            foreach (var profile in profiles) {
-                var settings = new JObject { ["AddFamilyParams"] = profile["settings"]!["AddFamilyParams"]!.DeepClone() };
-                var patch = CompanyNormalizationFixture.ConvertProfileParameters(settings, document, []).Patch;
-                AssertLocalParameterGroups(settings, patch);
-            }
-        } finally { document.Close(false); }
-    }
-
-    private static void AssertLocalParameterGroups(JObject settings, FamilyPatch patch) {
-        if (settings["AddFamilyParams"] is not JObject add || add.Value<bool?>("Enabled") == false) return;
-        foreach (var local in add["Parameters"] ?? new JArray()) {
-            var parameter = patch.Patch["parameters"]![(string)local["Name"]!]!;
-            Assert.That(parameter["propertiesGroup"]?.Value<string>(),
-                Is.EqualTo(local["PropertiesGroup"] is { Type: not JTokenType.Null } group
-                    ? SetParamMetadata.Group(((string?)group)!).TypeId
-                    : null),
-                $"{local["Name"]}: omitted group must remain omitted; explicit Other must remain Revit's empty group id.");
-        }
-    }
-
-    private static void AssertConnectorRule(JObject profile, FamilyPatch patch) {
-        var settings = profile["settings"]?["MakeElectricalConnector"] as JObject;
-        if (!HasEnabledConnectorRule(profile)) {
-            Assert.That(patch.Run?.ElectricalConnectorParameters, Is.Null, (string?)profile["source"]);
-            return;
-        }
-        var source = (JObject)settings!["SourceParameterNames"]!;
-        var rule = patch.Run?.ElectricalConnectorParameters;
-        Assert.That(rule, Is.Not.Null, (string?)profile["source"]);
-        Assert.Multiple(() => {
-            Assert.That(rule!.Voltage, Is.EqualTo((string)source["Voltage"]!));
-            Assert.That(rule.NumberOfPoles, Is.EqualTo((string)source["NumberOfPoles"]!));
-            Assert.That(rule.ApparentPower, Is.EqualTo((string)source["ApparentPower"]!));
-            Assert.That(rule.MinimumCircuitAmpacity, Is.EqualTo((string)source["MinimumCircuitAmpacity"]!));
-            foreach (var name in new[] { rule.Voltage, rule.NumberOfPoles, rule.ApparentPower, rule.MinimumCircuitAmpacity })
-                Assert.That(patch.Patch["parameters"]?[name] is not null || patch.Run?.ParametersIfSourceExists?.ContainsKey(name) == true,
-                    Is.True, $"{profile["source"]}: {name} must remain governed by exported parameter intent.");
-        });
-    }
-
-    private static void AssertCompanyLiteral(string profilePath, Document document) {
-        if (profilePath.Replace('\\', '/') == "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json") {
-            var sound = document.FamilyManager.get_Parameter("PE_G___SoundLevel");
-            Assert.That(sound.Definition.GetDataType(), Is.EqualTo(SpecTypeId.Number));
-            foreach (var type in document.FamilyManager.Types.Cast<FamilyType>())
-                Assert.That(type.AsDouble(sound), Is.EqualTo(4d).Within(1e-9), $"{profilePath}: {type.Name}/PE_G___SoundLevel");
-        }
-        var expected = profilePath.Replace('\\', '/') switch {
-            "CmdFFManager/profiles/SavedEquip/DBF-DEDPV.json" => (Name: "PE_M_Fan_ExternalStaticPressure", Type: (string?)null,
-                Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.2, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
-            "CmdFFManager/profiles/SavedEquip/Build Equinox CERV2.json" => (Name: "PE_M_Fan_ExternalStaticPressure", Type: "CERV2",
-                Spec: SpecTypeId.HvacPressure, Value: UnitUtils.ConvertToInternalUnits(0.4, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
-            "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json" => (Name: "PE_G___Weight", Type: "E130",
-                Spec: SpecTypeId.Number, Value: 98d),
-            "CmdFFManager/profiles/SavedEquip/Modine HHD Series.json" => (Name: "PE_M_PerfHeat_FluidEWT", Type: "HHD45",
-                Spec: SpecTypeId.HvacTemperature, Value: UnitUtils.ConvertToInternalUnits(180, UnitTypeId.Fahrenheit)),
-            _ => default
-        };
-        if (expected.Name is null) return;
-        var parameter = document.FamilyManager.get_Parameter(expected.Name);
-        Assert.That(parameter.StorageType, Is.EqualTo(StorageType.Double), expected.Name);
-        Assert.That(parameter.Definition.GetDataType(), Is.EqualTo(expected.Spec), expected.Name);
-        var types = document.FamilyManager.Types.Cast<FamilyType>().Where(type => expected.Type is null || type.Name == expected.Type).ToList();
-        Assert.That(types, Is.Not.Empty, $"{profilePath}: {expected.Type}");
-        foreach (var type in types)
-            Assert.That(type.AsDouble(parameter), Is.EqualTo(expected.Value).Within(1e-9), $"{profilePath}: {type.Name}/{expected.Name}");
     }
 
     [Test]
@@ -1044,33 +475,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
-    // Freezes the converted input of the AprilAire test below before FamilyProfileConverter is deleted (domains-purge, domains-opus Q2
-    // ruling 1). Writes aprilaire-dimension-labels.patch.json to the test output directory; the hold copies it into Fixtures/FamilyModel/.
-    [Test, Timeout(600000)]
-    public void Freeze_AprilAire_converted_patch() {
-        const string profilePath = "CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json";
-        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Freeze_AprilAire_converted_patch));
-        var copy = Path.Combine(output, "Old_Template.rvt");
-        File.Copy(RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt"), copy);
-        var project = this._application.OpenDocumentFile(copy);
-        try {
-            var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-                .Single(profile => (string)profile["source"]! == profilePath)["settings"]!;
-            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, project, CompanyCorpusDefinitions());
-            var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
-            var frozen = new JObject {
-                ["source"] = profilePath,
-                ["patch"] = JToken.FromObject(conversion.Patch, serializer),
-                ["options"] = JToken.FromObject(conversion.Options, serializer)
-            };
-            Assert.That(JToken.DeepEquals(JToken.FromObject(FamilyPatch.Parse(frozen["patch"]!.ToString()), serializer), frozen["patch"]), Is.True,
-                "the frozen patch re-reads to itself");
-            var path = Path.Combine(output, "aprilaire-dimension-labels.patch.json");
-            File.WriteAllText(path, frozen.ToString(Formatting.Indented));
-            TestContext.WriteLine($"[FROZEN] {path}");
-        } finally { project.Close(false); }
-    }
-
     [TestCase("800 - 120v - 11.5 gal/day")]
     [TestCase("800 - 120v - 16 gal/day")]
     [TestCase("800 - 240v - 23.3 gal/day")]
@@ -1086,9 +490,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         File.Copy(original, copy);
         var project = this._application.OpenDocumentFile(copy);
         try {
-            var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-                .Single(profile => (string)profile["source"]! == profilePath)["settings"]!;
-            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, project, CompanyCorpusDefinitions());
+            // The AprilAire 800 profile as FamilyProfileConverter lowered it, frozen before the converter retired.
+            var frozen = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("aprilaire-dimension-labels.patch.json")));
+            Assert.That((string)frozen["source"]!, Is.EqualTo(profilePath));
+            var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
+            var patch = frozen["patch"]!.ToObject<FamilyPatch>(serializer)!;
+            var options = frozen["options"]!.ToObject<ExecutionOptions>(serializer)!;
             var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(candidate => candidate.Name == familyName);
             string CurrentTypeName(Family target) {
                 var document = project.EditFamily(target);
@@ -1106,9 +513,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(CurrentTypeName(family), Is.EqualTo(currentType));
 
             ReconcileFamily Apply(Family target) {
-                var operation = new ReconcileFamily(conversion.Patch,
+                var operation = new ReconcileFamily(patch,
                     sharedSource: document => new FamilySharedParameterSource(document, CompanyCorpusDefinitions()));
-                using var processor = new OperationProcessor(project, conversion.Options);
+                using var processor = new OperationProcessor(project, options);
                 var (contexts, _) = processor.SelectFamilies(() => [target]).ProcessQueue(new OperationQueue().Add(operation));
                 var (_, error) = contexts.Single().OperationLogs;
                 Assert.That(error, Is.Null, error?.Message);
@@ -1279,204 +686,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         }
     }
 
-    [Test, Timeout(3600000), Category("CompanyCorpus")]
-    public void Old_template_plans_every_composed_company_profile_against_its_authored_selector() {
-        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
-        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_plans_every_composed_company_profile_against_its_authored_selector));
-        var checkpointPath = Path.Combine(output, "company-profile-plan-census.json");
-        var copy = Path.Combine(output, "Old_Template.rvt");
-        File.Copy(original, copy);
-        var evidence = new JObject { ["status"] = "starting", ["profiles"] = new JArray() };
-        var failures = new List<string>();
-        var project = this._application.OpenDocumentFile(copy);
-        try {
-            var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>().ToList();
-            var definitions = CompanyCorpusDefinitions();
-            var eligible = project.FamiliesMatching(new PatchSelect());
-            var mechanical = eligible.Where(f => f.FamilyCategory?.BuiltInCategory == BuiltInCategory.OST_MechanicalEquipment).ToList();
-            var placed = new FilteredElementCollector(project).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
-                .GroupBy(instance => instance.Symbol.Family.Id).ToDictionary(group => group.Key, group => group.Count());
-            evidence["status"] = "running";
-            evidence["eligible"] = new JArray(eligible.Select(f => new JObject {
-                ["familyId"] = f.Id.Value(), ["familyName"] = f.Name, ["category"] = f.FamilyCategory?.Name,
-                ["placedInstanceCount"] = placed.TryGetValue(f.Id, out var count) ? count : 0
-            }));
-            evidence["mechanical81"] = new JArray(mechanical.Select(f => f.Name));
-            WriteCheckpoint(checkpointPath, evidence);
-            Assert.That(mechanical, Has.Count.EqualTo(81), "The frozen Old Template Mechanical Equipment census changed.");
-            Assert.That(profiles, Has.Count.EqualTo(45), "The frozen composed company corpus changed.");
-            foreach (var profile in profiles) {
-                var source = (string)profile["source"]!;
-                var row = new JObject { ["source"] = source };
-                ((JArray)evidence["profiles"]!).Add(row);
-                try {
-                    var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(source, (JObject)profile["settings"]!);
-                    var conversion = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(settings, definitions, project.GetUnits());
-                    row["select"] = JObject.FromObject(conversion.Patch.Select, JsonSerializer.Create(FamilyModelJson.Settings));
-                    row["patchSections"] = new JArray(((JObject)conversion.Patch.Patch).Properties().Select(p => p.Name));
-                    row["hasRun"] = conversion.Patch.Run is not null;
-                    var selected = project.FamiliesMatching(conversion.Patch.Select);
-                    row["selected"] = new JArray(selected.Select(f => f.Name));
-                    var plans = new JArray();
-                    row["plans"] = plans;
-                    foreach (var family in selected) {
-                        var pair = new JObject { ["familyId"] = family.Id.Value(), ["familyName"] = family.Name };
-                        plans.Add(pair);
-                        try {
-                            var plan = FamilyFoundryBridgeOps.PlanFamilies(
-                                JsonConvert.SerializeObject(conversion.Patch), project, [family.Id.Value()]);
-                            pair["plan"] = JObject.FromObject(plan);
-                            if (plan.Diagnostics.Count > 0 || plan.Families.Any(f => f.Refusals.Count > 0))
-                                failures.Add($"{source} -> {family.Name}: native plan diagnostics");
-                        } catch (Exception exception) {
-                            pair["error"] = exception.ToString();
-                            failures.Add($"{source} -> {family.Name}: {exception.Message}");
-                        }
-                        WriteCheckpoint(checkpointPath, evidence);
-                    }
-                } catch (Exception exception) {
-                    row["error"] = exception.ToString();
-                    failures.Add($"{source}: {exception.Message}");
-                }
-                WriteCheckpoint(checkpointPath, evidence);
-            }
-            evidence["status"] = failures.Count == 0 ? "passed" : "failed";
-            evidence["failures"] = new JArray(failures);
-            WriteCheckpoint(checkpointPath, evidence);
-            Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
-        } finally {
-            try {
-                if (evidence.Value<string>("status") is "starting" or "running") evidence["status"] = "interrupted";
-                WriteCheckpoint(checkpointPath, evidence);
-            } finally { project.Close(false); }
-        }
-    }
-
-    /// <summary>
-    ///     Rung 5b (kaitpw 2026-09-08): the converted company profiles themselves, applied natively. Formulas, connector creation, tag values,
-    ///     clean, sort and the -1 sentinel, then an empty second plan. Three profiles are the agreed guarantee; HP is cut to two families.
-    /// </summary>
-    [Test, Timeout(3600000)]
-    public void Old_template_applies_composed_company_profiles_natively() {
-        var profileFamilies = new Dictionary<string, string[]?>(StringComparer.Ordinal) {
-            ["CmdFFMigrator/profiles/MechEquip/SH.json"] = null,
-            // FV-0511VK2 rolls back on "Constraints are not satisfied" once run.clean purges its planes (LEDGER 2026-09-08); named out until diagnosed.
-            ["CmdFFMigrator/profiles/MechEquip/Fan.json"] = ["Tamarack Technologies Dragon Garage Fan", "Thunderbird Dryer Vent", "Panasonic - WhisperGreen Select - FV-0511VKSL2 - Exhaust Fan Light",
-                "Panasonic - WhisperLine - Remote Mount In-Line Fan - Exhaust Fan", "Panasonic - WhisperValue DC - FV-0510VS1 - Exhaust Fan",
-                "Panasonic - WhisperRecessed LED Designer Fan - FV-08VRE2 - Exhaust Fan Light", "Fantech - prioAir 6 EC Inline Fan", "Fantech - prioAir 10 EC Inline Fan BETA"],
-            // PVFY is out until the unbalanced two-pole connector has a ruling (LEDGER 2026-09-08).
-            ["CmdFFMigrator/profiles/MechEquip/HP.json"] = ["Mitsubishi_PKA-HA", "Mitsubishi_SLZ-KA"]
-        };
-        var original = RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt");
-        var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original));
-        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Old_template_applies_composed_company_profiles_natively));
-        var checkpointPath = Path.Combine(output, "company-profile-apply.json");
-        var copy = Path.Combine(output, "Old_Template.rvt");
-        File.Copy(original, copy);
-        var project = this._application.OpenDocumentFile(copy);
-        var evidence = new JObject { ["status"] = "running", ["families"] = new JArray() };
-        var failures = new List<string>();
-        var saveDir = Environment.GetEnvironmentVariable("PE_FF_OLD_TEMPLATE_SAVE_DIR") is { Length: > 0 } root ? Directory.CreateDirectory(Path.Combine(root, "profiles")).FullName : null;
-        try {
-            var profiles = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json"))).OfType<JObject>()
-                .ToDictionary(p => (string)p["source"]!, StringComparer.Ordinal);
-            var definitions = CompanyCorpusDefinitions();
-            VerifyCompanyDefinitions(definitions, evidence, checkpointPath);
-            foreach (var (source, only) in profileFamilies) {
-                var settings = CompanyNormalizationFixture.ApplyNativeProfileOverride(source, (JObject)profiles[source]["settings"]!);
-                var patch = FamilyProfileConverter.Convert(settings, definitions, project.GetUnits()).Patch;
-                var authored = ((JObject)patch.Patch["parameters"]!).Properties().Where(p => p.Value is JObject).ToList();
-                var formulas = authored.Where(p => p.Value["formula"]?.Type == JTokenType.String).ToDictionary(p => p.Name, p => (string)p.Value["formula"]!, StringComparer.Ordinal);
-                var values = authored.Where(p => p.Value["value"]?.Type == JTokenType.String).ToDictionary(p => p.Name, p => (string)p.Value["value"]!, StringComparer.Ordinal);
-                var rule = patch.Run?.ElectricalConnectorParameters;
-                var sentinelSpecs = (patch.Run?.BlanksBecome ?? []).SelectMany(r => r.Specs).Select(SetParamMetadata.Spec).ToList();
-                foreach (var family in project.FamiliesMatching(patch.Select).Where(f => only is null || only.Contains(f.Name)).OrderBy(f => f.Name, StringComparer.Ordinal).ToList()) {
-                    var familyName = family.Name;
-                    var row = new JObject { ["profile"] = source, ["familyName"] = familyName };
-                    ((JArray)evidence["families"]!).Add(row);
-                    var familyFailures = new List<string>();
-                    try {
-                        var familyPatch = familyName == "Mitsubishi_PVFY-NAMU-E1" ? WithFailures(patch, new() { ["constraintsNotSatisfied"] = FailureAction.Resolve }) : patch;
-                        var operation = new ReconcileFamily(familyPatch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-                        using var processor = new OperationProcessor(project);
-                        var (contexts, _) = processor.SelectFamilies(() => [family]).ProcessQueue(new OperationQueue().Add(operation));
-                        var (_, error) = contexts.Single().OperationLogs;
-                        row["receipt"] = operation.LastReceipt is null ? null : JObject.FromObject(operation.LastReceipt);
-                        row["complexity"] = contexts.Single().Complexity?.ToString();
-                        if (error is not null || operation.LastReceipt?.Converged != true) { familyFailures.Add(error?.Message ?? "no converged receipt"); continue; }
-                        var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == familyName);
-                        var inspect = new List<(bool IsError, string Message)>();
-                        Pe.Revit.Tasks.RevitFailureScope.Execute(project, accessor => FamilyFailurePolicy.Reject.Apply(accessor, inspect), () => {
-                            var document = new FamilyDocument(project.EditFamily(loaded));
-                            try {
-                                var fm = document.FamilyManager;
-                                var types = fm.Types.Cast<FamilyType>().ToList();
-                                if (rule is not null) {
-                                    var power = new FilteredElementCollector(document.Document).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>().Where(c => c.IsPowerConnector()).ToList();
-                                    row["powerConnectors"] = power.Count;
-                                    if (power.Count == 0) familyFailures.Add("no power connector after the profile's connector rule");
-                                    foreach (var connector in power)
-                                        foreach (var (slot, name) in new[] { (BuiltInParameter.RBS_ELEC_VOLTAGE, rule.Voltage), (BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES, rule.NumberOfPoles), (BuiltInParameter.RBS_ELEC_APPARENT_LOAD, rule.ApparentPower) })
-                                            if (fm.GetAssociatedFamilyParameter(connector.AssociableSlot(slot))?.Definition.Name != name)
-                                                familyFailures.Add($"connector {connector.Id.Value()} slot {slot} is not associated to {name}");
-                                }
-                                foreach (var (name, formula) in formulas) {
-                                    var actual = fm.get_Parameter(name)?.Formula;
-                                    row[$"formula:{name}"] = actual;
-                                    if (string.IsNullOrEmpty(actual)) familyFailures.Add($"{name} has no formula; the profile authored '{formula}'");
-                                }
-                                foreach (var (name, value) in values) {
-                                    var parameter = fm.get_Parameter(name);
-                                    var actual = parameter is null ? null : types.Select(t => t.AsString(parameter) ?? t.AsValueString(parameter)).FirstOrDefault();
-                                    row[$"value:{name}"] = actual;
-                                    if (actual != value) familyFailures.Add($"{name} reads '{actual}'; the profile authored '{value}'");
-                                }
-                                var numeric = fm.GetParameters().Where(p => string.IsNullOrEmpty(p.Formula) && !p.IsReadOnly && sentinelSpecs.Contains(p.Definition.GetDataType())).ToList();
-                                var blank = numeric.SelectMany(p => types.Where(t => !document.HasValue(t, p)).Select(t => $"{p.Definition.Name}@{t.Name}")).ToList();
-                                row["blankNumericCells"] = new JArray(blank);
-                                row["numericValues"] = new JObject(numeric.Select(p => new JProperty(p.Definition.Name, types.Select(t => t.AsValueString(p)).FirstOrDefault())));
-                                if (blank.Count > 0) familyFailures.Add($"{blank.Count} numeric cells still blank after run.blanksBecome: {string.Join(", ", blank.Take(5))}");
-                                if (saveDir is { Length: > 0 })
-                                    document.SaveAs(Path.Combine(saveDir, string.Concat(familyName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".rfa"),
-                                        new SaveAsOptions { OverwriteExistingFile = true, Compact = true });
-                            } finally { _ = document.Close(false); }
-                            return true;
-                        });
-                        familyFailures.AddRange(inspect.Where(d => d.IsError).Select(d => $"inspect: {d.Message}"));
-                        // Second plan through the library, not Pe.App.Host: an installed Pe.App beside the test DLL wins the type load (rung 7).
-                        var dry = new ReconcileFamily(familyPatch, dryRun: true, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-                        using (var replanner = new OperationProcessor(project))
-                            _ = replanner.SelectFamilies(() => [loaded]).ProcessQueue(new OperationQueue().Add(dry), loadAndSaveOptions: new LoadAndSaveOptions { LoadFamily = false });
-                        var replan = dry.LastPlan;
-                        row["replanChanges"] = new JArray((replan?.Changes ?? []).Select(c => new JObject { ["change"] = $"{c.Section}:{c.Key} {c.Kind}",
-                            ["before"] = c.Before is null ? null : JToken.FromObject(c.Before), ["after"] = c.After is null ? null : JToken.FromObject(c.After) }));
-                        if (replan is null) familyFailures.Add("second plan was not produced");
-                        else if (replan.Changes.Count > 0 || replan.Refusals.Count > 0) familyFailures.Add($"second plan is not empty: {replan.Changes.Count} changes, {replan.Refusals.Count} refusals");
-                    } catch (Exception exception) {
-                        familyFailures.Add(exception.Message);
-                        row["error"] = exception.ToString();
-                    } finally {
-                        row["result"] = familyFailures.Count == 0 ? "passed" : "failed";
-                        row["failures"] = new JArray(familyFailures);
-                        failures.AddRange(familyFailures.Select(f => $"{familyName}: {f}"));
-                        WriteCheckpoint(checkpointPath, evidence);
-                    }
-                }
-            }
-            evidence["status"] = failures.Count == 0 ? "passed" : "completedWithFailures";
-            WriteCheckpoint(checkpointPath, evidence);
-            Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
-        } finally {
-            WriteCheckpoint(checkpointPath, evidence);
-            project.Close(false);
-            Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(original)), Is.EqualTo(originalHash), "Original template fixture was modified.");
-        }
-    }
-
-    private static FamilyPatch WithFailures(FamilyPatch patch, Dictionary<string, FailureAction> failures) => new() { Select = patch.Select, Patch = patch.Patch,
-        Run = new PatchRun { ParametersIfSourceExists = patch.Run?.ParametersIfSourceExists, ElectricalConnectorParameters = patch.Run?.ElectricalConnectorParameters,
-            BlanksBecome = patch.Run?.BlanksBecome, Clean = patch.Run?.Clean, Sort = patch.Run?.Sort, Failures = failures } };
-
     private static void WriteCheckpoint(string path, JObject evidence) {
         var pending = path + ".pending";
         File.WriteAllText(pending, evidence.ToString());
@@ -1541,9 +750,20 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             }
             var definitions = CompanyCorpusDefinitions();
             var definition = definitions.Single(item => item.Name == "PE_G_Perf_Horsepower");
-            var mappings = companyMapping ? CompanyNormalizationFixture.OldTemplateHorsepowerOverride().Mappings : CompanyNormalizationFixture.MechanicalMappings();
-            var patch = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.ExportSharedMappings(mappings, [definition]);
-            Assert.That(patch.Patch["parameters"]![definition.Name!]!["sourceValuesTreatedAsMissing"] is not null, Is.EqualTo(companyMapping));
+            var options = definition.DownloadOptions;
+            var parameter = new JObject {
+                ["shared"] = true, ["sharedGuid"] = options.GetGuid().ToString(), ["sharedSpecId"] = options.GetSpecTypeId().TypeId,
+                ["sharedVisible"] = options.Visible, ["sharedUserModifiable"] = !definition.ReadOnly,
+                ["isInstance"] = options.IsInstance, ["propertiesGroup"] = options.GetGroupTypeId().TypeId, ["tooltip"] = definition.Description,
+                ["wasNamed"] = new JArray("Horsepower (HP)", "Pump HP", "PE_G___Horsepower"),
+                ["mappingStrategy"] = "CoerceByStorageType", ["fillBlanksFromSources"] = false
+            };
+            // The Old_template overlay is the only mapping that authors N/A as a missing source value.
+            if (companyMapping) parameter["sourceValuesTreatedAsMissing"] = new JArray("N/A");
+            var patch = new FamilyPatch {
+                Patch = new JObject { ["parameters"] = new JObject { [definition.Name!] = parameter } },
+                Run = new PatchRun { BlanksBecome = [new BlankRule { Specs = [DataType.Number], Value = PortableValue.Parse("-1") }] }
+            };
             var before = document.CaptureFamilyModel();
             var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
             using var processor = new OperationProcessor(document);
@@ -1561,7 +781,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(document.FamilyManager.FindParameter("Horsepower (HP)"), Is.Null);
             var target = document.FamilyManager.FindParameter(definition.Name!);
             Assert.That(target, Is.Not.Null);
-            // kaitpw 2026-09-08 (FamilyProfileConverter Sentinels): a created numeric parameter with nothing to say reads -1, never a silent 0.
+            // kaitpw 2026-09-08 (blank sentinels): a created numeric parameter with nothing to say reads -1, never a silent 0.
             foreach (var type in document.FamilyManager.Types.Cast<FamilyType>()) {
                 Assert.That(type.HasValue(target), Is.True, $"{type.Name}: the missing source leaves the created target at the -1 sentinel (kaitpw 2026-09-08).");
                 Assert.That(type.AsDouble(target), Is.Not.EqualTo(0d), $"{type.Name}: never a silent 0 (kaitpw 2026-09-08).");
@@ -1854,21 +1074,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     [Test]
-    public void Company_numeric_literals_use_known_legacy_units_and_number_stays_unitless() {
-        var assignments = new Pe.Revit.FamilyFoundry.OperationSettings.SetKnownParamsSettings {
-            GlobalAssignments = [new() { Parameter = "Voltage", Kind = Pe.Revit.FamilyFoundry.OperationSettings.ParamAssignmentKind.Value, Value = "480" },
-                new() { Parameter = "Ratio", Kind = Pe.Revit.FamilyFoundry.OperationSettings.ParamAssignmentKind.Value, Value = "1.5" }]
-        };
-        var specs = new Dictionary<string, ForgeTypeId> { ["Voltage"] = SpecTypeId.ElectricalPotential, ["Ratio"] = SpecTypeId.Number };
-        Assert.Throws<InvalidOperationException>(() => CompanyNormalizationFixture.Convert(new(), [], assignments, specs: specs));
-        var units = new Units(UnitSystem.Metric);
-        units.SetFormatOptions(SpecTypeId.ElectricalPotential, new FormatOptions(UnitTypeId.Volts));
-        var patch = CompanyNormalizationFixture.Convert(new(), [], assignments, specs: specs, legacyUnits: units);
-        Assert.That(patch.Patch["parameters"]!["Voltage"]!["value"]!.ToString(), Does.Contain("V"));
-        Assert.That(patch.Patch["parameters"]!["Ratio"]!["value"]!.ToString(), Is.EqualTo("1.5"));
-    }
-
-    [Test]
     public void Explicit_units_are_independent_of_display_units_and_implicit_literals_fail_before_writes() {
         foreach (var displayUnit in new[] { UnitTypeId.Feet, UnitTypeId.Millimeters }) {
             var document = this.NewFamily("FF explicit units");
@@ -2009,15 +1214,10 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var document = this.NewFamily("FF normalization rollback");
         try {
             var operation = WidthPatch();
-            var options = new ExecutionOptions();
-            if (!singleTransaction) {
-                var profile = JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
-                    .Single(p => (string)p["source"]! == "CmdFFManager/profiles/SavedEquip/Constrained Box.json");
-                options = Pe.Revit.FamilyFoundry.Apply.FamilyProfileConverter.Convert(
-                    new JObject { ["ExecutionOptions"] = profile["settings"]!["ExecutionOptions"]!.DeepClone() }, [], document.GetUnits()).Options;
-                Assert.That(options.SingleTransaction, Is.False);
-                Assert.That(options.OptimizeTypeOperations, Is.False);
-            }
+            // The per-operation shape is the execution options the Constrained Box profile authored.
+            var options = singleTransaction
+                ? new ExecutionOptions()
+                : new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
             using var processor = new OperationProcessor(document, options);
             var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation).Add(new FailFamily()));
             var (_, error) = contexts.Single().OperationLogs;
