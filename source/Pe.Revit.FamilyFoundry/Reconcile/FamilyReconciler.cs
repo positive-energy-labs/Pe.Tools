@@ -60,53 +60,6 @@ public static class FamilyReconciler {
     private const double Tolerance = 1e-9;
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(FamilyModelJson.Settings);
 
-    /// <summary>Ask Revit to canonicalize formulas without retaining any document mutation. Missing add-then-formula references remain authored until apply.</summary>
-    public static FamilyModel ResolveNativeFormulas(FamilyModel desired, Document document,
-        IDictionary<(string Parameter, string Formula), string>? cache = null) {
-        var fm = document.FamilyManager;
-        var pending = desired.Parameters.Where(p => p.Value.Formula is not null)
-            .Select(p => (p.Key, p.Value, Target: fm.FindParameter(p.Key)))
-            .Where(p => p.Target is not null && p.Target.Formula != p.Value.Formula).ToList();
-        if (pending.Count == 0) return desired;
-        var json = JObject.Parse(FamilyModelJson.Serialize(desired));
-        // One Execute asks three times; canonicalizing (parameter, formula) costs a regenerate each, and the answer does not move.
-        var reused = false;
-        if (cache is not null) {
-            foreach (var (name, parameter, _) in pending.ToList())
-                if (cache.TryGetValue((name, parameter.Formula!), out var canonical)) {
-                    json["parameters"]![name]!["formula"] = canonical;
-                    pending.RemoveAll(p => p.Key == name);
-                    reused = true;
-                }
-            if (pending.Count == 0) return reused ? FamilyModelJson.Parse(json.ToString()).Value! : desired;
-        }
-        Transaction? transaction = null;
-        SubTransaction? subTransaction = null;
-        var started = false;
-        try {
-            if (document.IsModifiable) { subTransaction = new SubTransaction(document); subTransaction.Start(); }
-            else { transaction = new Transaction(document, "Interpret family formulas"); transaction.Start(); }
-            started = true;
-            foreach (var (name, parameter, target) in pending) {
-                if (FamilyModelValidator.FormulaNames(parameter.Formula!).Any(reference => fm.FindParameter(reference) is null)) continue;
-                fm.SetFormula(target!, parameter.Formula);
-                document.Regenerate();
-                var canonical = target!.Formula
-                    ?? throw new InvalidOperationException($"Revit did not retain formula for '{name}'.");
-                json["parameters"]![name]!["formula"] = canonical;
-                if (cache is not null) cache[(name, parameter.Formula!)] = canonical;
-            }
-        } finally {
-            if (started) {
-                if (subTransaction is not null) subTransaction.RollBack();
-                else transaction!.RollBack();
-            }
-            subTransaction?.Dispose();
-            transaction?.Dispose();
-        }
-        return FamilyModelJson.Parse(json.ToString()).Value!;
-    }
-
     public static FamilyPlan Reconcile(FamilyModel desired, FamilyModel current, UnitResolver units, PatchRun? run = null,
         Func<string, ExternalDefinition?>? sharedSource = null, JObject? authored = null, object? sharedDefinitions = null,
         ExecutionOptions? executionOptions = null) {

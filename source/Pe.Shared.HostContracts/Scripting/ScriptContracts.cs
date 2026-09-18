@@ -76,9 +76,19 @@ public record PodReceipt(
     public string? Reason { get => this._reason; init => this._reason = value is "" ? null : value; }
 }
 
-public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);
+public record PodMemberComposeRequest(string Pod, string Path, string? Content = null, PodCapturedSourceData? Source = null);
 
-public record PodMemberComposeData(string? Composed, List<ScriptDiagnostic> Diagnostics, List<PodDependencyData> Dependencies);
+public record PodMemberComposeData(string? Composed, PodCapturedSourceData Source, List<ScriptDiagnostic> Diagnostics, List<PodConsumedSourceData> Dependencies);
+
+public record PodCapturedSourceData(string Id, string Path, string Sha256, string BytesBase64, PodSourceOrigin Origin);
+
+public record PodConsumedSourceData(string Id, string Path, string Sha256, string BytesBase64);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum PodSourceOrigin {
+    SavedMember,
+    SuppliedDraft
+}
 
 public record PodDependencyData(string Id, string Path, string Sha256);
 
