@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { FAMILY_SCOPE_LIMIT, type FfReceipt } from "@pe/agent-contracts";
 
 import type { Verdict } from "#/components/master-table/model";
@@ -18,6 +19,7 @@ import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
+import { keyMeta } from "#/route/keys";
 
 /**
  * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
@@ -119,17 +121,26 @@ function useFamiliesWorkspaceModel(
   /* Esc drops the table's selection — the one piece of route state a stray click can build up.
      It is deliberately ONE step and never touches scope, plan, or exclusions: those are
      commitments, and a commitment should not fall out of the app on a keystroke. */
-  useEffect(() => {
-    if (pickedIds.size === 0) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input,select,textarea,[contenteditable=true]")) return;
-      setPickedIds(new Set());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pickedIds]);
+  const clearSelectionKey = useMemo(
+    () => [
+      {
+        hotkey: "Escape" as const,
+        callback: () => setPickedIds(new Set()),
+        options: {
+          enabled: pickedIds.size > 0,
+          ignoreInputs: true,
+          meta: keyMeta({
+            name: "clear selection",
+            description: "drop the selected families",
+            tier: "pane",
+            region: "families table",
+          }),
+        },
+      },
+    ],
+    [pickedIds.size, setPickedIds],
+  );
+  useHotkeys(clearSelectionKey);
 
   // ── table model ──────────────────────────────────────────────────────────────────────────────
   const { rows, params } = useMemo(() => {
