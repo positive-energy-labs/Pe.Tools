@@ -4,7 +4,7 @@ import {
   type ActionReceipt,
 } from "@pe/agent-contracts";
 import { submitAction, readAction, type DetachedAction } from "./takeoff-action-client.ts";
-import { admissionDestination } from "./admission.ts";
+import { admissionDestination, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
 export type ResolvedTarget = { session: string | null; document: string | null };
@@ -189,7 +189,8 @@ export class HostRpcCaller {
       ? await readAction(this.options.requestId, this.options.hostBaseUrl).catch(() => undefined)
       : undefined;
     // Original receipt is the replay authority; no live metadata/target dependency on this branch.
-    const operation = prior ? undefined : await this.getOperation(key);
+    // op.cancel never waits on the catalog: see readCapabilityIntent.
+    const operation = prior || key === CANCEL_KEY ? undefined : await this.getOperation(key);
     if (prior || operation?.intent === "Mutate") {
       const actor = this.options.actor;
       if (!actor) throw Error("Mutation caller must supply its initiating actor");

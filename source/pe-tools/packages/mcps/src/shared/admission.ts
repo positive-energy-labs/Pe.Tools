@@ -89,6 +89,9 @@ export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
 ): Promise<CapabilityIntent> {
+  // The host answers op.cancel itself, outside every gate (apps/host/src/bridge.ts cancelRequest).
+  // The session catalog is served on the Revit thread the op being cancelled holds (w8-revit 4c).
+  if (key === CANCEL_KEY) return { kind: "operation", needs: "nothing", mutates: false };
   const prior =
     context.actionId && !context.bridgeSessionId
       ? await readAction(context.actionId, context.hostBaseUrl)
@@ -124,6 +127,8 @@ export async function readCapabilityIntent(
       : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea host operations search\`.`,
   );
 }
+
+export const CANCEL_KEY = "op.cancel";
 
 const caller = (context: AdmissionContext) =>
   new HostRpcCaller({

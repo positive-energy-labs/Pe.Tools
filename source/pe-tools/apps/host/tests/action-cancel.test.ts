@@ -185,3 +185,34 @@ test("a cancel for a request still behind the host gate never reaches Revit", ()
       expect(yield* Queue.size(outgoing)).toBe(0);
     }),
   ));
+
+test("Revit answering 'not in flight' is a refusal the stop control can print, not a stop", () =>
+  lane(({ owner, outgoing, post, answer, fixture }) =>
+    Effect.gen(function* () {
+      const intent = fixture.intent("already-gone");
+      expect((yield* post("/actions", intent)).status).toBe(202);
+      const preparation = yield* Queue.take(outgoing);
+      yield* answer(preparation.request!.requestId, {
+        ok: true,
+        statusCode: 200,
+        payloadJson: JSON.stringify({ remaining: [] }),
+      });
+      const running = yield* Queue.take(outgoing);
+      const blocked = running.request!.requestId;
+
+      const stopping = yield* Effect.forkScoped(post("/actions/cancel", { id: intent.id }));
+      const cancel = yield* Queue.take(outgoing);
+      const message = `Request '${blocked}' is not in flight; nothing to cancel.`;
+      yield* answer(cancel.request!.requestId, {
+        ok: true,
+        statusCode: 200,
+        payloadJson: JSON.stringify({ cancelled: false, requestId: blocked, message }),
+      });
+      const response = yield* Fiber.join(stopping);
+      expect(response.status).toBe(409);
+      expect(yield* Effect.promise(() => response.json())).toEqual({ error: message });
+
+      yield* answer(blocked, { ok: true, statusCode: 200, payloadJson: "{}" });
+      yield* Effect.promise(() => owner.wait(intent.id));
+    }),
+  ));

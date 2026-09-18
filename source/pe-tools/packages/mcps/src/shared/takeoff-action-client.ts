@@ -69,7 +69,15 @@ export async function cancelAction(id: string, base = "") {
     body: JSON.stringify({ id }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw Error(await response.text());
+  if (!response.ok) {
+    // The host refuses with `{ error }`; anything else (a dev server's 404 page) never reached it.
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    throw Error(
+      typeof body?.error === "string"
+        ? body.error
+        : `The stop did not reach the host (${response.status} ${response.statusText}).`,
+    );
+  }
   return actionReceiptSchema.parse(await response.json());
 }
 
