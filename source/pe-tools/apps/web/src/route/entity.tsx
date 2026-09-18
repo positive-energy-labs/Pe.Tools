@@ -5,7 +5,7 @@
  * implementations. Stage, pod and path live in the URL so `/pods` can deep-link a spec.
  */
 import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
@@ -164,7 +164,23 @@ export function EntityRouteView({
                   ({ladder.refusal})
                 </span>
               ) : null}
-              , filed to {podCell}.
+              , filed to {podCell}
+              {member ? (
+                <>
+                  {" "}
+                  (
+                  <Link
+                    to="/pods"
+                    // The root carries the thread and any `?target` pin with it.
+                    search={{ pod: page.pod, path: page.path } as never}
+                    title="Open this member in the pods browser"
+                  >
+                    open in Pods
+                  </Link>
+                  )
+                </>
+              ) : null}
+              .
             </>
           }
           ledger={[
