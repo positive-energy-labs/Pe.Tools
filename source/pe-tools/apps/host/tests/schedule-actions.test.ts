@@ -21,6 +21,27 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
       applied: 1,
       failures: [],
       readback: { snapshot: { rows: [{ values: ["P-1", "100 VA"] }] } },
+      // No pod bound: the run receipt lives in this action record (host state), not in a pod.
+      run: null,
+      receipt: {
+        podId: null,
+        operation: "schedule.grid.push",
+        outcome: "Succeeded",
+        reason: null,
+        scheduleId: 42,
+        // This fixture's readback does not move, so after reads what Revit reported: unchanged.
+        cells: [
+          {
+            cell: "1::2",
+            elementIds: [7, 8],
+            parameterId: 555,
+            value: "150 VA",
+            before: "100 VA",
+            after: "100 VA",
+            error: null,
+          },
+        ],
+      },
     },
   });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
@@ -30,6 +51,14 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
   expect(
     JSON.parse(await readFile(join(f.dir, "actions.json"), "utf8")).actions[0].steps[0],
   ).toMatchObject({ state: "succeeded", result: { applied: 2 } });
+});
+
+test("a pathless document refuses its schedule reading in one sentence", async () => {
+  const f = await setup();
+  f.unsave();
+  await expect(f.read()).rejects.toThrow(
+    "Save 'Same' to a file before reading its schedules; it has no path.",
+  );
 });
 
 test.each([
@@ -193,7 +222,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
   f.lose();
   expect(
     await runSemanticAction(
-      "schedule-grid.apply",
+      "schedule.grid.push",
       {},
       f.b,
       original.bases,
@@ -206,7 +235,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
   await f.restart();
   expect(
     await runSemanticAction(
-      "schedule-grid.apply",
+      "schedule.grid.push",
       {},
       f.b,
       original.bases,
@@ -287,7 +316,7 @@ test("unresolved original Work action survives another lifetime and is discovera
   await f.submit(original);
   await f.restart();
   expect(
-    await readScopedActionStatuses({ kind: "schedule-grid", workspaceId: f.scope.work }),
+    await readScopedActionStatuses({ kind: "schedules", workspaceId: f.scope.work }),
   ).toMatchObject([{ id: original.id, state: "unknown" }]);
   const a = await f.read(f.a);
   await f.patch([{ path: ["basis"], value: { captureId: a.id } }]);
@@ -333,7 +362,7 @@ test("retired Family Types has no route or capabilities; current Schedule admiss
     skills: [],
   });
   expect(rows.some((r) => r.key.includes("family-types"))).toBe(false);
-  expect(rows.find((r) => r.key === "workflow:schedule-grid.apply")).toMatchObject({
+  expect(rows.find((r) => r.key === "workflow:schedule.grid.push")).toMatchObject({
     actor: "human",
   });
   const f = await setup();

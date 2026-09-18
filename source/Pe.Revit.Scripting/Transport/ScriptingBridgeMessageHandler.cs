@@ -1,4 +1,4 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
@@ -19,6 +19,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     private const int MaxTimeoutSeconds = 3600;
 
     private readonly ScriptWorkspaceBootstrapService _bootstrapService;
+    private readonly ScriptPodPreparationService _pods = new();
     private readonly ScriptPodArchiveService _podArchiveService;
     private readonly RevitScriptExecutionService _executionService;
     private readonly ExternalEvent _externalEvent;
@@ -37,7 +38,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         var csProjReader = new CsProjReader();
         var projectGenerator = new ScriptProjectGenerator(csProjReader);
         this._bootstrapService = new ScriptWorkspaceBootstrapService(projectGenerator);
-        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator);
+        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator, this._pods);
         this._executionService = RevitScriptExecutionService.CreateDefault(uiApplicationAccessor, notificationSink);
         this._externalEvent = ExternalEvent.Create(this);
     }
@@ -100,10 +101,9 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     ) {
         var executionId = Guid.NewGuid().ToString("N");
         var timeoutSeconds = NormalizeTimeoutSeconds(request.TimeoutSeconds);
-        using var cancelSource = new CancellationTokenSource();
         using var timeoutSource = new CancellationTokenSource();
+        // The request's own token is the cancel path: op.cancel <requestId> fires it.
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
-            cancelSource.Token,
             timeoutSource.Token,
             cancellationToken
         );
@@ -117,7 +117,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             "execute script",
             () => {
                 lock (this._sync)
-                    this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow, cancelSource);
+                    this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow);
                 // The timeout clock starts when the script actually starts, not while it waits in line.
                 timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
                 var stopwatch = Stopwatch.StartNew();
@@ -143,77 +143,37 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         ).ConfigureAwait(false);
     }
 
-    [Op("scripting.cancel", Does = "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted.", Title = "Cancel Revit Script", Finds = ["script", "cancel", "stop", "timeout", "revit"], Tier = OpTier.Expert)]
-    public Task<ScriptCancelData> CancelAsync(
-        ScriptCancelRequest request,
-        CancellationToken cancellationToken
-    ) {
-        // Never enqueued: the whole point is reaching a script that is hogging the execution slot.
-        lock (this._sync) {
-            var running = this._runningExecution;
-            if (running == null)
-                return Task.FromResult(new ScriptCancelData(false, null, "No script execution is currently running."));
-
-            if (!string.IsNullOrWhiteSpace(request.ExecutionId)
-                && !string.Equals(request.ExecutionId, running.ExecutionId, StringComparison.OrdinalIgnoreCase))
-                return Task.FromResult(new ScriptCancelData(
-                    false,
-                    running.ExecutionId,
-                    $"Execution '{request.ExecutionId}' is not running; the current execution is '{running.ExecutionId}'."
-                ));
-
-            running.CancelSource.Cancel();
-            return Task.FromResult(new ScriptCancelData(
-                true,
-                running.ExecutionId,
-                $"Cancellation signalled to execution '{running.ExecutionId}'. The script stops at its next cooperative checkpoint (ct / ThrowIfCancelled)."
-            ));
-        }
+    [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
+    public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
+        var result = this._pods.Compose(request.Pod, request.Path, request.Content);
+        return Task.FromResult(new PodMemberComposeData(
+            result.Composed,
+            result.Diagnostics.ToList(),
+            result.Dependencies.Select(dependency => new PodDependencyData(dependency.PodId, dependency.Path, dependency.Sha256)).ToList()
+        ));
     }
 
-    [Op("scripting.pod.import", Does = "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces.", Title = "Import Script Pod", Finds = ["script", "pod", "import", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
-    public Task<ScriptPodImportData> ImportPodAsync(
-        ScriptPodImportRequest request,
-        CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        "import script pod",
+    [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    public Task<PodExportData> ExportPodAsync(PodExportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
+        "export pod",
+        () => this._podArchiveService.Export(request, RevitRuntimeTargetFramework.Resolve(this.RequireUiApplication().Application.VersionNumber ?? "unknown")),
+        cancellationToken
+    );
+
+    [Op("pod.import", Does = "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date.", Title = "Import Pod", Finds = ["pod", "import", "install", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    public Task<PodImportData> ImportPodAsync(PodImportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
+        "import pod",
         () => {
-            var uiApplication = this.RequireUiApplication();
-            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
-            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
-            var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
+            var revitVersion = this.RequireUiApplication().Application.VersionNumber ?? "unknown";
             return this._podArchiveService.Import(
                 request,
                 revitVersion,
-                targetFramework,
-                runtimeAssemblyPath
+                RevitRuntimeTargetFramework.Resolve(revitVersion),
+                RevitRuntimeTargetFramework.GetRuntimeAssemblyPath()
             );
         },
         cancellationToken
     );
-
-    [Op("scripting.pod.export", Does = "Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path.", Title = "Export Script Pod", Finds = ["script", "pod", "export", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
-    public Task<ScriptPodExportData> ExportPodAsync(
-        ScriptPodExportRequest request,
-        CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        "export script pod",
-        () => {
-            var uiApplication = this.RequireUiApplication();
-            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
-            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
-            return this._podArchiveService.Export(request, targetFramework, revitVersion);
-        },
-        cancellationToken
-    );
-
-    [Op("scripting.pod.list", Does = "List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix.", Title = "List Script Pods", Finds = ["script", "pod", "list", "workspace", "entrypoints", "catalog"], Tier = OpTier.Expert)]
-    public Task<ScriptPodListData> ListPodsAsync(
-        ScriptPodListRequest request,
-        CancellationToken cancellationToken
-    ) =>
-        // Pure disk IO — no Revit API access, so it never waits behind the execution slot.
-        Task.FromResult(ScriptPodCatalogService.List());
 
     private async Task<T> EnqueueAsync<T>(
         string operationName,
@@ -259,7 +219,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
                 : (int)(DateTimeOffset.UtcNow - running.StartedUtc).TotalSeconds;
             return running == null
                 ? $"Revit scripting is busy with another request; waited {AdmissionWaitSeconds}s for it to finish. Retry shortly."
-                : $"Revit scripting is busy: execution '{running.ExecutionId}' has been running for {runningSeconds}s; waited {AdmissionWaitSeconds}s for it to finish. Cancel it with scripting.cancel or retry.";
+                : $"Revit scripting is busy: execution '{running.ExecutionId}' has been running for {runningSeconds}s; waited {AdmissionWaitSeconds}s for it to finish. Cancel it with op.cancel on that execution's requestId, or retry.";
         }
     }
 
@@ -278,10 +238,10 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     private static int NormalizeTimeoutSeconds(int timeoutSeconds) =>
         timeoutSeconds <= 0 ? DefaultTimeoutSeconds : Math.Min(timeoutSeconds, MaxTimeoutSeconds);
 
+    /// <summary>Busy-message diagnostics only; cancellation lives in the bridge pump's in-flight table.</summary>
     private sealed record RunningExecution(
         string ExecutionId,
-        DateTimeOffset StartedUtc,
-        CancellationTokenSource CancelSource
+        DateTimeOffset StartedUtc
     );
 
     private sealed class PendingRequest(

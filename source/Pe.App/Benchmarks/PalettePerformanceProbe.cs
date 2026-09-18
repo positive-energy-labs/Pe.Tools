@@ -69,10 +69,6 @@ internal static class PalettePerformanceProbe {
                     "Alpha", output, verify);
                 await Measure("commands", iteration, () => new PostableCommandHelper(
                     StorageClient.Default.Module("CmdPltCommands")).GetAllCommands(), "view", output, verify);
-                await Measure("json-profiles", iteration, () => Directory.GetFiles(
-                    Path.Combine(fixturesDirectory, "Profiles"), "*.json",
-                    SearchOption.AllDirectories).Select(p => new ProfileListItem(p,
-                        Path.GetFileName(p), FoundryFileKind.FamilyModel)).ToList(), "family", output, verify);
             }
         } finally {
             await PaletteThreading.RunRevitAsync(() => doc.Close(false), CancellationToken.None);

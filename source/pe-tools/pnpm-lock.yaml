@@ -375,6 +375,9 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
+      '@pe/host-contracts':
+        specifier: workspace:*
+        version: link:../host-contracts
       '@pe/mcps':
         specifier: workspace:*
         version: link:../mcps

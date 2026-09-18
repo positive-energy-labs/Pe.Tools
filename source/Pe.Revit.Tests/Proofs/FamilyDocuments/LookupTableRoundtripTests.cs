@@ -55,7 +55,7 @@ public sealed class LookupTableRoundtripTests {
                 Assert.That(capturedTable.Csv, Does.Contain("ResultVoltage"));
             });
 
-            File.WriteAllText(Path.Combine(outputDirectory, "source.family.json"), FamilyModelJson.Serialize(snapshot));
+            File.WriteAllText(Path.Combine(outputDirectory, "source.json"), FamilyModelJson.Serialize(snapshot));
             WriteValues(sourceDocument, outputDirectory, "source-values.json");
             var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(snapshot));
             Assert.That(parsed.Diagnostics, Is.Empty);
@@ -75,7 +75,7 @@ public sealed class LookupTableRoundtripTests {
                                 $"Failed to open saved lookup roundtrip family '{savedFamilyPath}'.");
 
             WriteValues(savedDocument, outputDirectory, "reopened-values.json");
-            File.WriteAllText(Path.Combine(outputDirectory, "reopened.family.json"),
+            File.WriteAllText(Path.Combine(outputDirectory, "reopened.json"),
                 FamilyModelJson.Serialize(savedDocument.CaptureFamilyModel()));
             var savedTables = RevitFamilyFixtureHarness.ExportFamilySizeTables(
                 savedDocument,

@@ -474,13 +474,11 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.apply.schedule", Does = "Create or update a schedule in one host-owned transaction. Two lanes: 'table' upserts a synthetic data table (a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes); 'profile' creates a regular element-driven schedule from an authored schedule profile. Either lane can also place the schedule on a sheet.", Title = "Apply Schedule", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
+    [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        if ((request.Table == null) == (request.Profile == null)) {
-            throw BridgeOperationExceptions.BadRequest(
-                "Exactly one of 'table' or 'profile' must be set.");
-        }
+        if (request.Table is null)
+            throw BridgeOperationExceptions.BadRequest("'table' is required.");
 
         if (!request.DryRun && document.IsReadOnly) {
             throw BridgeOperationExceptions.Conflict(
@@ -496,26 +494,8 @@ internal sealed class RevitDataRequestService {
             using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Schedule");
             var warnings = new List<string>();
 
-            ScheduleApplyData result;
-            ViewSchedule schedule;
-            if (request.Table != null) {
-                result = DataTableEngine.Apply(document, request.Table, warnings);
-                schedule = (ViewSchedule)document.GetElement(result.Table!.ScheduleId.ToElementId());
-            } else {
-                var creation = ScheduleHelper.CreateSchedule(document, request.Profile!);
-                schedule = creation.Schedule;
-                warnings.AddRange(creation.Warnings);
-                result = new ScheduleApplyData {
-                    Profile = new ScheduleApplyProfileSummary(
-                        creation.ScheduleName,
-                        schedule.Id.Value(),
-                        schedule.UniqueId) {
-                        AppliedFields = creation.AppliedFields.Select(field => field.ParameterName).ToList(),
-                        SkippedFields = creation.SkippedFields
-                    },
-                    Warnings = warnings
-                };
-            }
+            var result = DataTableEngine.Apply(document, request.Table, warnings);
+            var schedule = (ViewSchedule)document.GetElement(result.Table!.ScheduleId.ToElementId());
 
             if (request.Placement != null)
                 result = result with { Placement = DataTableEngine.Place(document, schedule, request.Placement) };

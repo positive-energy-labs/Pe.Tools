@@ -27,12 +27,12 @@ import {
   latestBuildStatus,
   type FamilyAuthoringFacts,
   type FamilyBuildReview,
-} from "./manifest.ts";
+} from "#/route/family/manifest";
 import { useRoute } from "#/route";
 
 /** A live lane with a saved, valid, bound, unarmed document — the one state that may arm. */
 const CLEAN: BuildFacts = {
-  relativePath: "models/fcu.family.json",
+  relativePath: "models/fcu.json",
   versionToken: "7",
   validation: { isValid: true, issues: [] },
   unsavedCount: 0,
@@ -45,7 +45,7 @@ const codes = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refus
 const says = (facts: BuildFacts) => buildRefusals(facts).map((refusal) => refusal.says);
 
 const authoring = (current = true): FamilyAuthoringFacts => ({
-  relativePath: "refline.family.json",
+  relativePath: "refline.json",
   versionToken: "fixture-native-v1",
   validation: { isValid: true, issues: [] },
   unsavedCount: 0,
@@ -71,7 +71,6 @@ const buildManifest = (current = true) => {
 describe("build ActionHandles — declaration, and the seeded lane's read-only floor", () => {
   it("declares document-needing actions and refuses every one of them under a frozen seed", async () => {
     const declared = buildManifest();
-    expect(declared.needs).toBe("document");
     expect(declared.actions?.["prepare-build"].needs).toBe("document");
     expect(declared.actions?.build.needs).toBe("document");
     const familyReading = declared.readings?.family;
@@ -112,13 +111,7 @@ describe("build receipt projection", () => {
   const target = { session: "revit-a", openId: "family-a" };
   const review: FamilyBuildReview = {
     target,
-    documentId: {
-      moduleKey: "FamilyFoundry",
-      rootKey: "models",
-      relativePath: "refline.family.json",
-    },
-    workspaceId: "demo",
-    fileVersion: "v7",
+    source: { pod: "demo", path: "settings/family/refline.json", sha256: "7".repeat(64) },
     reason: "release candidate",
   };
   const status = (id: string, startedAt: string, request = review) => ({
@@ -141,7 +134,7 @@ describe("build receipt projection", () => {
           status("older", "2026-09-14T01:00:00.000Z"),
           status("other-version", "2026-09-14T03:00:00.000Z", {
             ...review,
-            fileVersion: "v8",
+            source: { ...review.source, sha256: "8".repeat(64) },
           }),
           status("current", "2026-09-14T02:00:00.000Z"),
         ],
@@ -295,11 +288,9 @@ describe("buildRefusals — the ceremony's whole safety model", () => {
 
 describe("the arming preview — which family, from which document, to which .rfa", () => {
   it("names the source and the admitted action output pattern", () => {
-    expect(buildOutputPath("models/fcu.family.json")).toBe(
-      ".artifacts/tmp/family/<action-id-sha256>.rfa",
-    );
+    expect(buildOutputPath("models/fcu.json")).toBe(".artifacts/tmp/family/<action-id-sha256>.rfa");
     expect(buildTarget(CLEAN, "Fan Coil Unit")).toBe(
-      "Fan Coil Unit · models/fcu.family.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
+      "Fan Coil Unit · models/fcu.json → .artifacts/tmp/family/<action-id-sha256>.rfa",
     );
   });
 

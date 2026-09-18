@@ -28,7 +28,6 @@ const PLACEMENT_NOTES: Record<LoadedFamilyPlacement, string> = {
 export function FamiliesFilterBand() {
   const {
     fixture,
-    selectedProfileQuery,
     placement,
     setPlacement,
     draftCategories,
@@ -42,16 +41,6 @@ export function FamiliesFilterBand() {
   } = useFamiliesWorkspace();
   return (
     <>
-      {selectedProfileQuery?.error && (
-        <div className="px-4 py-1.5">
-          <OutcomeLine
-            kind="error"
-            label="profile read failed"
-            says={(selectedProfileQuery.error as Error).message}
-          />
-        </div>
-      )}
-
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>
@@ -86,11 +75,8 @@ export function FamiliesFilterBand() {
           </div>
         ) : categories.length === 0 ? (
           <div className="min-w-0 flex-1">
-            <EmptyState
-              story="scope"
-              exit="load a family in Revit, or bind a different world in the sentence above"
-            >
-              no loaded families in this project — the catalog read succeeded and reported nothing
+            <EmptyState story="scope" exit="bind a different world in the sentence above">
+              no categories — the category-names read succeeded and reported none
             </EmptyState>
           </div>
         ) : (
@@ -111,9 +97,11 @@ export function FamiliesFilterBand() {
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
-                  : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
-                    ? "resolving families…"
-                    : "no families resolved"
+                  : draftFamilyNames.length > 0
+                    ? `pick from ${draftFamilyNames.length} resolved families`
+                    : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
+                      ? "resolving families…"
+                      : "no families resolved"
               }
               ariaLabel="draft families"
               title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."

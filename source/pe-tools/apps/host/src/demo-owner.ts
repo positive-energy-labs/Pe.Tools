@@ -12,10 +12,12 @@ import {
   demoSeedSchema,
   exportSeed,
   importSeed,
+  memberWork,
   settingsRouteState,
   takeoffsRouteState,
   familiesRouteState,
   parameterLinksRouteState,
+  scheduleGridRouteState,
   type WorkKey,
   type TakeoffSnapshot,
 } from "@pe/agent-contracts";
@@ -29,12 +31,67 @@ import { createSettingsCommandHandlers } from "../../../packages/mcps/src/pea/se
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import { readFamily } from "./family-actions.ts";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 const unsupported = (key: string) =>
   new BridgeError(`Unsupported demo scenario: ${key}. No native execution.`, 409, {
     notDispatched: true,
   });
 const json = (value: unknown, status = 200) => Response.json(value, { status });
+
+/** Native reads the browser reaches through `/call` on a project owner. */
+/**
+ * What a capture sees but cannot execute. The real engine emits these for every family with a
+ * sketch line it cannot name; the member never carries them, the capture's run does.
+ */
+const SIMULATED_UNMODELED = [
+  { reason: "SketchLineUnlocked", path: "$.forms", facts: { simulated: "true" } },
+  { reason: "PlaneNotNamed", path: "$.refPlanes.0", facts: { simulated: "true" } },
+];
+
+const SIMULATED_READS = [
+  "revit.catalog.field-options",
+  "revit.catalog.loaded-families",
+  "revit.matrix.loaded-families",
+];
+
+type RunSource = { pod: string; path: string; sha256: string };
+
+/** The simulated project's schedules: supplied facts, never a read of a real model. */
+const DEMO_SCHEDULES = [
+  { scheduleId: 481223, name: "DX Fan Coil Unit Schedule", categoryName: "Mechanical Equipment" },
+  { scheduleId: 481310, name: "Air Terminal Schedule", categoryName: "Air Terminals" },
+];
+const DEMO_COLUMNS = ["TAG", "REFRIGERANT", "NOTES"];
+const DEMO_ROWS = [
+  ["IU-1", "R-410A", ""],
+  ["IU-2", "R-32", "Ceiling cassette"],
+];
+
+/** One loaded family as the matrix and catalog report it; ids are the seed's 1-based order. */
+const loadedFamily = (familyId: number, familyName: string) => ({
+  familyId,
+  familyUniqueId: `demo-family-${familyId}`,
+  familyName,
+  categoryName: "Mechanical Equipment",
+  typeNames: ["Type 1"],
+  parameters: [
+    {
+      definition: {
+        identity: { key: "name:PE_G___Model", kind: "NameFallback", name: "PE_G___Model" },
+        isInstance: false,
+      },
+      kind: "FamilyParameter",
+      scope: "Family",
+      storageType: "String",
+      formulaState: "None",
+      valuesPerType: { "Type 1": `${familyName} model` },
+    },
+  ],
+  issues: [],
+  isPartial: false,
+  placedInstanceCount: 1,
+});
 
 /** One same-host owner. No production singleton, proxy, SDK process, or environment selection. */
 export async function createDemoOwner(parent: string, raw: unknown) {
@@ -64,9 +121,18 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         takeoffsRouteState,
         familiesRouteState,
         parameterLinksRouteState,
+        scheduleGridRouteState,
       ].map((spec) => ({
         spec,
-        handlers: spec.route === "settings" ? createSettingsCommandHandlers({ settings }) : {},
+        handlers:
+          spec.route === settingsRouteState.route
+            ? createSettingsCommandHandlers({
+                pods: {
+                  read: (member) => settings.readMember(member),
+                  compose: (request) => settings.composeMember(request),
+                },
+              })
+            : {},
       })),
       store: {
         async getState({ targetKey, route }) {
@@ -106,37 +172,29 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         : seed.route === "families" || seed.route === "parameter-links"
           ? []
           : seed.files;
-    const files = originalFiles.map((file) => ({
-      ...file,
-      documentId: {
-        moduleKey: file.documentId.moduleKey,
-        rootKey: file.documentId.rootKey,
-        relativePath: file.documentId.relativePath,
-      },
-    }));
-    for (const file of files) {
-      const result = await settings.saveSettings({
-        documentId: file.documentId,
-        mode: "file",
-        rawContent: file.rawContent,
-        expected: { kind: "missing" },
+    // Seed pod ids are citations; every member lands in this instance's own pod.
+    const local = (member: { path: string }) => ({ pod: id, path: member.path });
+    const files = originalFiles.map((file) => ({ ...file, member: local(file.member) }));
+    // The families profile is supplied JSON; it becomes the member the page confirms.
+    if (seed.route === "families")
+      files.push({
+        member: local(seed.readings.member),
+        rawContent: JSON.stringify(seed.readings.profile),
       });
-      if (result.kind !== "written") throw Error("Demo file materialization conflicted");
-    }
+    await settings.ensurePod(id);
+    for (const file of files)
+      await settings.writeMember({ ...file.member, content: file.rawContent });
     const opened =
       seed.route === "family"
-        ? await settings.openSettings({
-            documentId: files[0]!.documentId,
-            mode: "file",
-            includeComposedContent: true,
-          })
+        ? { ...(await settings.readMember(files[0]!.member)), member: files[0]!.member }
         : null;
+    const openedPath = opened ? await settings.memberPath(opened.member) : null;
     const scope: WorkKey = opened
-      ? { route: "settings", target: null, work: opened.metadata.workspaceId }
+      ? { route: settingsRouteState.route, target: null, work: memberWork(opened.member) }
       : { route: seed.route, target: at };
     const route =
       seed.route === "family"
-        ? "settings"
+        ? settingsRouteState.route
         : seed.route === "families" || seed.route === "parameter-links"
           ? seed.route
           : "takeoffs";
@@ -145,10 +203,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         ? {
             ...seed.work.candidate,
             basis: {
-              documentId: files[0]!.documentId,
-              path: opened!.metadata.documentId.stableId!,
-              rawContent: opened!.rawContent,
-              versionToken: opened!.metadata.versionToken!.value,
+              member: opened!.member,
+              rawContent: opened!.content,
+              sha256: opened!.sha256,
             },
           }
         : seed.work.candidate;
@@ -160,8 +217,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       0,
     );
     if (!initial.ok) throw Error(initial.error);
-    if (seed.route === "family" && seed.scenario === "token-conflict")
-      await writeFile(opened!.metadata.documentId.stableId!, `${opened!.rawContent}\n`);
+    // A stale plan and a token conflict are the same fact now: the member changed after review.
+    if (
+      seed.route === "family" &&
+      (seed.scenario === "token-conflict" || seed.scenario === "stale-plan")
+    )
+      await writeFile(openedPath!, `${opened!.content}\n`);
     let snapshot = seed.route === "takeoffs" ? structuredClone(seed.readings.snapshot) : null;
     const localSnapshot = (value: TakeoffSnapshot): TakeoffSnapshot => ({
       ...structuredClone(value),
@@ -179,8 +240,50 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       },
     });
     let r10Failed = false;
-    let nativeModel = opened?.composedContent ?? "{}";
-    let simulatedPlan: { hash: string; patchJson: string } | undefined;
+    let nativeModel = opened?.content ?? "{}";
+    // The simulated schedule's cells; a push edits them so the readback shows the new value.
+    const rows = DEMO_ROWS.map((row) => [...row]);
+    let simulatedPlan: { hash: string; spec: string } | undefined;
+    // Every owner but `family` holds a project document, so the project engines answer there.
+    const project = seed.route !== "family";
+    /**
+     * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
+     * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
+     */
+    const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
+      const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
+      const file = await settings.memberPath({
+        pod: source.pod,
+        path: `output/${runId}/receipt.json`,
+      });
+      await mkdir(join(file, ".."), { recursive: true });
+      // Succeeded means `reason: null`; the simulation is an output the receipt lists.
+      await writeFile(
+        join(file, "..", "simulated.json"),
+        JSON.stringify({
+          simulated: true,
+          note: "simulated demo engine; nothing was written to Revit",
+        }),
+      );
+      await writeFile(
+        file,
+        JSON.stringify(
+          {
+            podId: source.pod,
+            memberPath: source.path,
+            memberSha256: source.sha256,
+            operation,
+            planHash,
+            outcome: "Succeeded",
+            outputs: ["simulated.json"],
+            reason: null,
+          },
+          null,
+          2,
+        ),
+      );
+      return file;
+    };
     let retired = false;
     let disposal: Promise<void> | undefined;
     const pending = new Set<Promise<Response>>();
@@ -211,8 +314,20 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       invoke: (key: string, input: unknown, session?: string, openId?: string) =>
         Effect.tryPromise({
           try: async () => {
-            if (retired || session !== id || openId !== target.openId)
-              throw unsupported("production destination");
+            if (retired || session !== id) throw unsupported("production destination");
+            // The session catalog `/call` consults before a read: only the reads this owner simulates.
+            if (key === "host.ops.catalog" && openId === null)
+              return {
+                value: {
+                  operations: SIMULATED_READS.map((read) => ({
+                    key: read,
+                    intent: "Read",
+                    needs: "project-document",
+                  })),
+                },
+                target: { session: id, document: at },
+              };
+            if (openId !== target.openId) throw unsupported("production destination");
             let value: unknown;
             if (key === "takeoffs.initialize-carrier" && seed.route === "takeoffs")
               value = { remaining: [], simulated: true };
@@ -264,31 +379,19 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 if (write) room.r10 = write.link;
               }
               value = { simulated: true, writes };
-            } else if (key === "settings.document.open" && seed.route === "families") {
-              const composed = JSON.stringify(seed.readings.profile);
-              value = {
-                rawContent: composed,
-                composedContent: composed,
-                validation: { isValid: true, issues: [] },
-                metadata: {
-                  versionToken: { value: "demo-v1" },
-                  documentId: { stableId: "demo-profile.json" },
-                },
-                simulated: true,
-              };
-            } else if (key === "familyfoundry.plan" && seed.route === "families") {
-              const patchJson = (input as { patchJson: string }).patchJson;
-              const planned = {
-                hash: createHash("sha256").update(patchJson).digest("hex"),
-                patchJson,
-              };
+            } else if (key === "settings.schema") {
+              value = { schemaJson: "", simulated: true };
+            } else if (key === "families.plan" && seed.route === "families") {
+              const spec = (input as { specJson: string }).specJson;
+              const planned = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
-                families: seed.readings.families.map((familyName, index) => ({
-                  familyId: index + 1,
-                  familyName,
-                  planHash: `${planned.hash}:${index + 1}`,
+                // The engine plans exactly the ids the target resolved.
+                families: (input as { familyIds: number[] }).familyIds.map((familyId) => ({
+                  familyId,
+                  familyName: seed.readings.families[familyId - 1],
+                  planHash: `${planned.hash}:${familyId}`,
                   changes: [{ section: "types", key: "Width", kind: "set" }],
                   runEffects: [],
                   warnings: [],
@@ -305,12 +408,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 })),
                 simulated: true,
               };
-            } else if (key === "familyfoundry.apply" && seed.route === "families") {
+            } else if (key === "families.apply" && seed.route === "families") {
               const expected = (input as { expectedPlanHashes: Record<string, string> })
                 .expectedPlanHashes;
               if (!simulatedPlan || !Object.keys(expected).length)
                 throw new BridgeError("No reviewed simulated plan", 409, { notDispatched: true });
               value = {
+                receiptPath: await fileRun(
+                  "families.apply",
+                  (input as { source: RunSource }).source,
+                  simulatedPlan.hash,
+                ),
                 diagnostics: [],
                 receipts: Object.entries(expected).map(([familyId, planHash]) => ({
                   familyId: Number(familyId),
@@ -364,26 +472,27 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                     : 0,
                 simulated: true,
               };
-            } else if (key === "revit.detail.family-model" && seed.route === "family") {
+            } else if (key === "family.capture" && seed.route === "family") {
               value = {
-                reading: {
-                  at,
-                  version: createHash("sha256").update(nativeModel).digest("hex"),
-                  observedAt: new Date().toISOString(),
-                },
+                observedAt: new Date().toISOString(),
                 familyName: "Simulated demo family",
-                modelJson: nativeModel,
-                unmodeledCount: 0,
+                // The native engine captures a bare model; the host names what it is. A real capture
+                // always sees facts it cannot execute, so the simulation does too.
+                modelJson: JSON.stringify({
+                  ...JSON.parse(nativeModel),
+                  $schema: undefined,
+                  unmodeled: SIMULATED_UNMODELED,
+                }),
+                unmodeledCount: SIMULATED_UNMODELED.length,
                 coverage: { simulation: "Supplied demo model only; no native capture" },
                 issues: [],
                 simulated: true,
               };
-            } else if (key === "familyfoundry.plan" && seed.route === "family") {
-              const patchJson = (input as { patchJson: string }).patchJson;
-              simulatedPlan = {
-                hash: createHash("sha256").update(patchJson).digest("hex"),
-                patchJson,
-              };
+            } else if (key === "family.plan" && seed.route === "family") {
+              if (seed.scenario === "plan-refusal")
+                throw unsupported("Supplied simulated native refusal");
+              const spec = (input as { specJson: string }).specJson;
+              simulatedPlan = { hash: createHash("sha256").update(spec).digest("hex"), spec };
               value = {
                 diagnostics: [],
                 families: [
@@ -393,30 +502,20 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                     planHash: simulatedPlan.hash,
                     changes: [],
                     runEffects: ["Simulated outcome only"],
+                    refusals: [],
                     warnings: [],
-                    refusals:
-                      seed.scenario === "plan-refusal"
-                        ? [
-                            {
-                              code: "DemoRefusal",
-                              path: "/",
-                              message: "Supplied simulated native refusal",
-                            },
-                          ]
-                        : [],
                   },
                 ],
                 simulated: true,
               };
-            } else if (key === "familyfoundry.apply" && seed.route === "family") {
-              if (
-                !simulatedPlan ||
-                (input as { expectedPlanHashes: Record<string, string> }).expectedPlanHashes[
-                  "1"
-                ] !== simulatedPlan.hash
-              )
+            } else if (key === "family.apply" && seed.route === "family") {
+              const expected = Object.values(
+                (input as { expectedPlanHashes: Record<string, string> }).expectedPlanHashes,
+              );
+              if (!simulatedPlan || expected.length !== 1 || expected[0] !== simulatedPlan.hash)
                 throw unsupported("simulated native plan changed");
-              nativeModel = JSON.stringify(JSON.parse(simulatedPlan.patchJson).patch);
+              const planned = JSON.parse(simulatedPlan.spec) as { patch?: unknown };
+              nativeModel = planned.patch ? JSON.stringify(planned.patch) : simulatedPlan.spec;
               value = {
                 diagnostics: [],
                 receipts: [
@@ -431,18 +530,156 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                     artifactDirectory: null,
                   },
                 ],
+                receiptPath: await fileRun(
+                  "family.apply",
+                  (input as { source: RunSource }).source,
+                  simulatedPlan.hash,
+                ),
                 simulated: true,
-                proof: "No Revit mutation or RFA output",
+                proof: "No Revit mutation or RFA output; the run receipt is simulated",
               };
-            } else if (key === "revit.apply.family-model" && seed.route === "family") {
+            } else if (key === "schedule.apply" && project) {
+              const { source } = input as { source: RunSource };
+              value = {
+                scheduleId: 900001,
+                scheduleName: "Simulated demo schedule",
+                appliedFieldCount: 3,
+                skipped: [],
+                warnings: [],
+                receiptPath: await fileRun("schedule.apply", source, null),
+                simulated: true,
+              };
+            } else if (key === "schedule.capture" && project) {
+              const schedule = DEMO_SCHEDULES.find(
+                (row) => row.scheduleId === (input as { scheduleId: number }).scheduleId,
+              );
+              if (!schedule) throw unsupported("unknown simulated schedule");
+              value = {
+                scheduleName: schedule.name,
+                specJson: JSON.stringify({
+                  $schema: `${hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/CmdScheduleManager/schedules.json`,
+                  Name: schedule.name,
+                  CategoryName: schedule.categoryName,
+                  Fields: DEMO_COLUMNS.map((column) => ({ ParameterName: column })),
+                }),
+                simulated: true,
+              };
+            } else if (key === "revit.apply.parameter-values" && project) {
+              const edits = (
+                input as { edits: { elementId: number; parameterName: string; value: string }[] }
+              ).edits;
+              for (const edit of edits)
+                rows[edit.elementId - 1]![DEMO_COLUMNS.indexOf(edit.parameterName)] = edit.value;
+              value = {
+                applied: edits.length,
+                dryRun: false,
+                results: edits.map((_, index) => ({ index, ok: true })),
+                simulated: true,
+              };
+            } else if (key === "revit.catalog.schedules" && project) {
+              value = {
+                entries: DEMO_SCHEDULES.map((row) => ({
+                  ...row,
+                  isTemplate: false,
+                  visibleBodyRowCount: DEMO_ROWS.length,
+                  isPlacedOnSheet: true,
+                })),
+                simulated: true,
+              };
+            } else if (key === "revit.detail.schedules" && project) {
+              const query = (input as { query: { scheduleIds?: number[] } }).query;
+              const schedule =
+                DEMO_SCHEDULES.find((row) => row.scheduleId === query.scheduleIds?.[0]) ??
+                DEMO_SCHEDULES[0]!;
+              value = {
+                documentTitle: "Isolated demo (simulated)",
+                entries: [
+                  {
+                    scheduleId: schedule.scheduleId,
+                    scheduleUniqueId: `demo-schedule-${schedule.scheduleId}`,
+                    scheduleName: schedule.name,
+                    columns: DEMO_COLUMNS.map((fieldName, columnNumber) => ({
+                      columnNumber,
+                      headerText: fieldName,
+                      fieldName,
+                    })),
+                    rows: rows.map((values, index) => ({
+                      rowNumber: index + 1,
+                      values,
+                      // Element id = row number; the column's field is the parameter.
+                      bindings: DEMO_COLUMNS.map((parameterName, columnNumber) => ({
+                        columnNumber,
+                        targetElementIds: [index + 1],
+                        parameterName,
+                        storageType: "String",
+                        isEditable: true,
+                      })),
+                    })),
+                  },
+                ],
+                page: { isTruncated: false },
+                simulated: true,
+              };
+            } else if (
+              key === "revit.catalog.field-options" &&
+              (input as { sourceKey: string }).sourceKey === "category-names" &&
+              seed.route === "families"
+            ) {
+              // The one category every simulated family carries (`loadedFamily`).
+              value = {
+                sourceKey: "category-names",
+                mode: "Suggestion",
+                allowsCustomValue: false,
+                items: [{ value: "Mechanical Equipment", label: "Mechanical Equipment" }],
+                simulated: true,
+              };
+            } else if (
+              (key === "revit.catalog.loaded-families" || key === "revit.matrix.loaded-families") &&
+              seed.route === "families"
+            ) {
+              const names = (input as { filter?: { familyNames?: string[] } }).filter?.familyNames;
+              value = {
+                summary: { truncated: false },
+                families: seed.readings.families
+                  .map((familyName, index) => loadedFamily(index + 1, familyName))
+                  .filter((family) => !names?.length || names.includes(family.familyName)),
+                simulated: true,
+              };
+            } else if (key === "families.capture" && seed.route === "families") {
+              value = {
+                diagnostics: [],
+                families: (input as { familyIds: number[] }).familyIds.map((familyId) => {
+                  const familyName = seed.readings.families[familyId - 1];
+                  return {
+                    familyId,
+                    familyName,
+                    success: familyName !== undefined,
+                    modelJson: familyName
+                      ? JSON.stringify({
+                          family: { name: familyName },
+                          types: {},
+                          parameters: {},
+                          unmodeled: SIMULATED_UNMODELED,
+                        })
+                      : null,
+                    coverage: { simulation: "Supplied demo profile only; no native capture" },
+                    unmodeledCount: SIMULATED_UNMODELED.length,
+                    issues: [],
+                    error: familyName ? null : "Unknown simulated family",
+                  };
+                }),
+                simulated: true,
+              };
+            } else if (key === "family.build" && seed.route === "family") {
               if (seed.scenario === "native-unknown")
                 throw new BridgeError("Simulated lost native result", 503);
-              const path = await assertDemoPath(root, (input as { outputPath: string }).outputPath);
               value = {
                 familyName: "Demo",
-                outputPath: path,
+                // The build lands in the run folder; the simulated engine names the same shape.
+                outputPath: `output/${new Date().toISOString().replace(/[:.]/g, "-")}/Demo.rfa`,
                 converged: true,
                 residueCount: 0,
+                receiptPath: null,
                 simulated: true,
                 proof: "No RFA was created",
               };
@@ -456,10 +693,6 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         }),
     } as unknown as RevitBridge["Service"];
     // Preparation may materialize a fresh read, never an imported action or receipt.
-    if (seed.route === "families" && seed.readings.preparePlan)
-      await readFamily({ key: "families.plan", scope, target, input: {} }, captures, bridge, {
-        workspace: work,
-      });
     if (seed.route === "parameter-links" && seed.readings.prepareEvaluation)
       await readFamily(
         { key: "parameter-links.read", scope, target, input: { evaluate: true } },
@@ -467,34 +700,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         bridge,
         { workspace: work },
       );
-    if (seed.route === "family" && seed.readings.preparePlan) {
-      await readFamily(
-        {
-          key: "family.plan",
-          scope,
-          target,
-          input: {
-            documentId: files[0]!.documentId,
-            workspaceId: scope.work!,
-            fileVersion: opened!.metadata.versionToken!.value,
-          },
-        },
-        captures,
-        bridge,
-        settings,
-      );
-      if (seed.scenario === "stale-plan")
-        await writeFile(opened!.metadata.documentId.stableId!, `${opened!.rawContent}\n`);
-    }
     const dispatch: CallRouteDispatch = (key, request) =>
       Effect.tryPromise({
         try: async () => {
-          if (key === "settings.tree")
-            return settings.settingsTree(request as Parameters<typeof settings.settingsTree>[0]);
-          if (key === "settings.document.open")
-            return settings.openSettings(request as Parameters<typeof settings.openSettings>[0]);
-          if (key === "settings.document.save")
-            throw unsupported("direct save; use settings.write");
+          if (key === "pod.list") return settings.listPods();
+          if (key === "pod.runs")
+            return settings.listRuns(request as Parameters<typeof settings.listRuns>[0]);
+          if (key === "pod.member.read")
+            return settings.readMember(request as Parameters<typeof settings.readMember>[0]);
+          if (key === "pod.member.compose")
+            return settings.composeMember(request as Parameters<typeof settings.composeMember>[0]);
+          if (key === "pod.member.write") throw unsupported("direct write; use settings.write");
           if (key === "bridge.sessions.list")
             return { sessions: sessions.map((s) => ({ ...s, ...s.state })) };
           if (key === "rhvac.list") {
@@ -551,17 +767,18 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           fileVersion: rhvac.fileVersion,
           openFile: rhvac.openFile,
           syncFile: rhvac.syncFile,
-          saveSettings: async (request) => {
-            const result = await settings.saveSettings(request);
+          // ponytail: the publication-refusal scenario races Work after the first member write.
+          runPods: async (effect) => {
+            const result = await settings.runPods(effect);
             if (
               seed.route === "family" &&
               seed.scenario === "publication-refusal" &&
-              result.kind === "written"
+              isMemberWrite(result)
             ) {
-              const current = await work.read(scope, "settings");
+              const current = await work.read(scope, settingsRouteState.route);
               await work.apply(
                 scope,
-                "settings",
+                settingsRouteState.route,
                 "human",
                 [
                   {
@@ -575,15 +792,28 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             return result;
           },
         },
-        { forwardBase: null, dispatch, local: rhvac.local, captureHostOp: () => {} },
+        {
+          forwardBase: null,
+          dispatch,
+          // An admitted host-local write lands in THIS owner's pod root, never the user's
+          // Documents: `/families` files the member its staged edits generate through this.
+          local: (key, input) =>
+            key === "pod.member.write"
+              ? settings.writeMember(input as Parameters<typeof settings.writeMember>[0])
+              : rhvac.local(key, input),
+          captureHostOp: () => {},
+        },
       ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true, memoMap: Layer.makeMemoMapUnsafe() },
     );
     const streams = new Set<AbortController>();
+    // One-shot readings (a schedule reading, scoped receipts) read this owner's own surface.
     const hostObserve = hostResourceObserver(
       bridge,
       () => journal,
       () => captures,
+      "http://demo",
+      (url, init) => handle(new Request(url, init)),
     );
     // A work reading key is the flattened WorkKey plus `kind`, so compare the Work key's own
     // fields, never the whole request object.
@@ -592,13 +822,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     const localScope = (value: WorkKey) =>
       canonicalRouteInput(workKeyOf(value)) === canonicalRouteInput(workKeyOf(scope)) ||
       value.target === at;
+    const routes = new Set([route, scheduleGridRouteState.route]);
     const observe: ResourceObserver = (request, publish) => {
       const targetMatches = (ref: typeof target) =>
         ref.session === id && ref.openId === target.openId;
       const allowed =
         request.kind === "inventory" ||
         request.kind === "world" ||
-        (request.kind === "work" && request.route === route && localScope(request)) ||
+        request.kind === "host-status" ||
+        (request.kind === "work" && routes.has(request.route) && localScope(request)) ||
+        (request.kind === "schedule-reading" &&
+          (request.subject !== "catalog" || targetMatches(request.target!))) ||
         (request.kind === "family-readings" && localScope(request.work)) ||
         (request.kind === "takeoff-reading" && targetMatches(request.target)) ||
         (request.kind === "receipts" &&
@@ -635,7 +869,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       at,
       scope,
       route,
-      documentId: files[0]?.documentId,
+      member: files[0]?.member,
       simulated: true,
     };
     releaseHandler = () => web.dispose();
@@ -656,6 +890,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         return resourceResponse(new Request(request, { signal: controller.signal }), observe);
       }
       if (url.pathname === "/description") return json(description);
+      // The lamp's read: this owner is the host, and its simulated session is the attached Revit.
+      if (url.pathname === "/host/status")
+        return json({
+          controllerId: id,
+          capabilities: { revit: true },
+          bridgeIsConnected: true,
+          simulated: true,
+        });
       if (url.pathname === "/work" && request.method === "GET")
         return json(await work.read(scope, route));
       if (url.pathname === "/work" && request.method === "PATCH") {
@@ -690,32 +932,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         if (!current) return json({ kind: "incomplete", missing: ["Work owner"] });
         const exportedFiles = [];
         const missing: string[] = [];
-        const materializedPaths = new Set(
-          await Promise.all(
-            files.map(async (file) =>
-              (await settings.settingsAddress(file.documentId)).path.toLowerCase(),
-            ),
-          ),
-        );
-        for (const file of files) {
+        for (const file of originalFiles) {
           try {
-            const reading = await settings.openSettings({
-              documentId: file.documentId,
-              mode: "file",
-              includeComposedContent: true,
-            });
-            exportedFiles.push({ documentId: file.documentId, rawContent: reading.rawContent });
-            for (const dependency of reading.dependencies)
-              if (
-                !materializedPaths.has(
-                  (await settings.settingsAddress(dependency.documentId)).path.toLowerCase(),
-                )
-              )
-                missing.push(`file dependency ${dependency.directivePath}`);
-            if (reading.validation.issues.some((issue) => issue.code === "CompositionError"))
-              missing.push(`composition ${file.documentId.relativePath}`);
+            const reading = await settings.readMember(local(file.member));
+            exportedFiles.push({ member: file.member, rawContent: reading.content });
           } catch {
-            missing.push(`file ${file.documentId.relativePath}`);
+            missing.push(`member ${file.member.pod}/${file.member.path}`);
           }
         }
         if (missing.length) return json({ kind: "incomplete", missing });
@@ -769,13 +991,41 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           );
       }
       if (url.pathname === "/family/readings" && request.method === "POST") {
-        const body = (await request.clone().json()) as { key: string; target?: typeof target };
-        if (
-          !["family.capture", "family.plan", "family.saved"].includes(body.key) ||
-          (body.key !== "family.saved" &&
-            (body.target?.session !== id || body.target?.openId !== target.openId))
-        )
+        const body = (await request.clone().json()) as { key: string };
+        if (body.key !== "family.saved")
           return json({ error: "Unsupported or nonlocal Family reading" }, 409);
+      }
+      // The browser's Work writes (`/pe/route-state/<route>/<apply|command>`), fenced to this owner.
+      const write = /^\/pe\/route-state\/([^/]+)\/(apply|command)$/.exec(url.pathname);
+      if (write && request.method === "POST") {
+        const [, written, operation] = write as unknown as [string, string, "apply" | "command"];
+        const target = url.searchParams.get("target");
+        const workId = url.searchParams.get("work");
+        const key: WorkKey = {
+          route: written,
+          target: target ? address(target) : null,
+          ...(workId ? { work: workId } : {}),
+        };
+        if (!routes.has(written) || !localScope(key))
+          return json({ ok: false, kind: "error", error: "Work belongs outside this demo" }, 403);
+        const body = (await request.json()) as {
+          patches: Parameters<RouteWorkspace["apply"]>[3];
+          command: string;
+          input?: unknown;
+          expectedRevision: number;
+        };
+        return json(
+          operation === "apply"
+            ? await work.apply(key, written, "human", body.patches, body.expectedRevision)
+            : await work.command(
+                key,
+                written,
+                "human",
+                body.command,
+                body.input,
+                body.expectedRevision,
+              ),
+        );
       }
       const response = await web.handler(request, Context.empty() as never);
       if (response.status === 404)
@@ -815,6 +1065,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     throw error;
   }
 }
+
+const isMemberWrite = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  "pod" in value &&
+  "sha256" in value &&
+  !("content" in value);
 
 /** Explicit routes are more specific than the production /pe/* tenant; no second listener. */
 export function demoRoutes(parent = resolve(".artifacts/tmp/demos")) {

@@ -9,10 +9,11 @@ const routes = () =>
 test("route registry lists exactly the retained collaborative routes", () => {
   expect([...routes()].sort()).toEqual([
     "families",
+    "family",
     "instances",
     "parameter-links",
-    "schedule-grid",
-    "settings",
+    "pods",
+    "schedules",
     "takeoffs",
   ]);
 });
@@ -34,7 +35,7 @@ test("a route needs no bespoke handlers to be collaborative", () => {
   const takeoffs = registrations.find((entry) => entry.spec.route === "takeoffs");
   expect(takeoffs).toBeTruthy();
   expect(Object.keys(takeoffs!.handlers ?? {})).toEqual([]);
-  // Schedule Grid is host-owned now: it stays collaborative but carries no CLI command handlers.
-  const schedule = registrations.find((entry) => entry.spec.route === "schedule-grid");
+  // Schedules is host-owned now: it stays collaborative but carries no CLI command handlers.
+  const schedule = registrations.find((entry) => entry.spec.route === "schedules");
   expect(Object.keys(schedule!.handlers ?? {})).toEqual([]);
 });

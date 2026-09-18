@@ -19,7 +19,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       [
         "call",
         "--key",
-        "op:schedule-grid.snapshot",
+        "op:schedule.grid.snapshot",
         "--bridge-session-id",
         "B",
         "--open-document-id",
@@ -39,7 +39,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       [
         "call",
         "--key",
-        "workflow:schedule-grid.apply",
+        "workflow:schedule.grid.push",
         "--bridge-session-id",
         "B",
         "--open-document-id",
@@ -54,10 +54,8 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       command,
       { subCommands: command.subCommands },
     );
-    expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({
-      id: "cli-schedule-original",
-      state: "succeeded",
-    });
+    // The admission builder returns the succeeded receipt's result; a failure names the id.
+    expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({ applied: 1, failures: [] });
     expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
     expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   } finally {
@@ -83,7 +81,7 @@ test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only a
   const start = f.sent.length;
   for (const target of [undefined, { kind: "open", ref: f.b }, undefined]) {
     const result = await run(peRead, {
-      key: "op:schedule-grid.snapshot",
+      key: "op:schedule.grid.snapshot",
       input: { scheduleId: 42 },
       target,
       timeoutSeconds: 5,
@@ -102,7 +100,7 @@ test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only a
   ]);
   expect(
     await run(peDo, {
-      key: "workflow:schedule-grid.apply",
+      key: "workflow:schedule.grid.push",
       input: { bases: (await f.admission()).bases },
       timeoutSeconds: 5,
     }),

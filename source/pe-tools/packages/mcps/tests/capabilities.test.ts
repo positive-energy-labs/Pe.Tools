@@ -1,3 +1,4 @@
+import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { familiesRouteState } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
@@ -36,30 +37,28 @@ const ops = [
 ];
 
 const pods = {
-  workspacesRootPath: "C:/pods",
   pods: [
     {
-      workspaceKey: "sheets",
-      workspaceRootPath: "C:/pods/sheets",
-      isValid: true,
-      manifest: {
-        schemaVersion: 1,
-        id: "sheets",
-        name: "Sheet tools",
-        version: "1.0.0",
-        entrypoints: [{ id: "rename", sourcePath: "src/Rename.cs", name: "Rename sheets" }],
-      },
+      id: "sheets",
+      name: "Sheet tools",
+      version: "1.0.0",
+      folder: "sheets",
+      entrypoints: [{ id: "rename", sourcePath: "src/Rename.cs", name: "Rename sheets" }],
+      members: [],
       diagnostics: [],
     },
     {
-      workspaceKey: "broken",
-      workspaceRootPath: "C:/pods/broken",
-      isValid: false,
-      manifest: null,
-      diagnostics: [{ stage: "manifest", severity: "Error" as const, message: "bad json" }],
+      id: "broken",
+      name: "Broken",
+      version: "0.1.0",
+      folder: "broken",
+      entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+      members: [],
+      diagnostics: [{ code: "Manifest", path: "pod.json", severity: "error", message: "bad json" }],
     },
   ],
-};
+  unreadable: [],
+} satisfies PodList;
 
 function catalog(): CapabilityCatalog {
   return {
@@ -95,9 +94,9 @@ test("every source projects into one row shape with no hidden tier", () => {
   expect(
     rows.some((row) => row.kind === "route-command" && row.key.startsWith("route:instances")),
   ).toBe(false);
-  expect(keys.some((key) => key.startsWith("route:pods") || key.startsWith("route:ops"))).toBe(
-    false,
-  );
+  // /pods is the member editor that replaced /settings; /ops stays a read-only projection.
+  expect(keys).toContain("route:pods");
+  expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
   // Only valid pods become buttons; invalid ones are absent, not hidden.
   expect(rows.filter((row) => row.kind === "pod").map((row) => row.key)).toEqual([
     "pod:sheets.rename",
@@ -368,7 +367,7 @@ test("the doors ride the host under the turn Target and name the revision and re
         operations: [
           ...ops,
           { key: "scripting.execute", intent: "Mutate", needs: "document" },
-          { key: "scripting.pod.list", intent: "Read", needs: "nothing" },
+          { key: "pod.list", intent: "Read", needs: "nothing" },
         ],
       });
     if (url.pathname === "/actions") {
@@ -391,15 +390,8 @@ test("the doors ride the host under the turn Target and name the revision and re
         result: { success: true },
       });
     }
-    if (typeof init?.body === "string" && JSON.parse(init.body).key === "scripting.pod.list")
-      return Response.json({
-        pods: [
-          {
-            workspaceKey: "sheets",
-            manifest: { entrypoints: [{ id: "rename", sourcePath: "src/Rename.cs" }] },
-          },
-        ],
-      });
+    if (typeof init?.body === "string" && JSON.parse(init.body).key === "pod.list")
+      return Response.json(pods);
 
     if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
       return Response.json({
@@ -540,13 +532,9 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
             },
           } as never,
         );
-      const documentId = {
-        moduleKey: "FamilyFoundry",
-        rootKey: route === "family" ? "models" : "patches",
-        relativePath: "ff-route-proof",
-      };
+      const member = { pod: "pe-standards", path: "settings/ff-route-proof.json" };
       expect(
-        await scoped({ key: "route:settings", workspaceId: "settings:resolved-file", input: {} }),
+        await scoped({ key: "route:pods", workspaceId: "settings:resolved-file", input: {} }),
       ).toMatchObject({ ok: true, target: { session: null, document: null } });
       expect(await scoped({ key: "op:settings.write", input: {} })).toMatchObject({
         isError: true,
@@ -564,7 +552,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
       const proposal =
         route === "family"
           ? {
-              key: "route:settings.propose",
+              key: "route:pods.propose",
               patches: [
                 {
                   path: ["fields", "/parameters/FF_Route_Proof_Count", "proposal"],
@@ -574,7 +562,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
             }
           : {
               key: "route:families.propose",
-              patches: [{ path: ["work", "profilePath"], value: documentId.relativePath }],
+              patches: [{ path: ["work", "profilePath"], value: member.path }],
             };
       expect(
         await scoped({
@@ -586,7 +574,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
         }),
       ).toMatchObject({ ok: true });
       expect(writes.at(-1)?.url.pathname).toBe(
-        `/pe/agent/route-state/${route === "family" ? "settings" : "families"}/apply`,
+        `/pe/agent/route-state/${route === "family" ? "pods" : "families"}/apply`,
       );
       expect(writes.at(-1)?.body).toEqual({ patches: proposal.patches, expectedRevision: 12 });
       const before = writes.length;

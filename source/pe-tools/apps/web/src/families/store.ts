@@ -3,28 +3,34 @@
  *
  * The owner, the registry, the Target resolution, busy, refusals and the host caller all live in
  * `useRoute` now; the Work doc, the Readings and the two applies live in `families/manifest.ts`.
- * What is left here is what only Families knows: which plan reading still describes the authored
- * basis, what the last apply receipt said, and which picker is open. Plain values, no atoms.
+ * What is left here is what only Families knows: what the last capture saw, what the last apply
+ * receipt said, and which picker is open. Plain values, no atoms.
  */
-import { useCallback, useMemo, useState } from "react";
+import { frozenDemo } from "#/host/demo-client";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
   diagnosticSchema,
-  familiesBasis,
+  familiesCaptureEvidenceSchema,
   ffReceiptSchema,
+  podMemberSourceSchema,
+  type ActionStatus,
+  type FamilyCellEdit,
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
-import type { FfProjectData } from "#/host/familyfoundry";
 import { useHostCall, previousOf, useReading } from "#/readings";
-import { useRoute } from "#/route";
+import { useRoute, type EntityPage, type EntitySearch } from "#/route";
+import { usePodList } from "#/route/pods";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
-import { latestPlanOf, manifest, type FamiliesPage } from "#/families/manifest";
+import { drop, put } from "#/families/staged";
+import { manifest, type FamiliesPage } from "#/families/manifest";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
@@ -35,22 +41,19 @@ export type PickerState = {
 };
 
 export interface FamiliesPageMemory {
-  readonly pickedIds: ReadonlySet<number>;
-  readonly projection: FfProjectData | null;
   readonly showUncommon: boolean;
   readonly table: MasterTableState;
   readonly picker: PickerState;
 }
 
 const EMPTY_MEMORY: FamiliesPageMemory = {
-  pickedIds: new Set<number>(),
-  projection: null,
   showUncommon: false,
   table: { filters: {}, sorts: [], query: "" },
   picker: { open: null, level: null, query: "" },
 };
 
 const NO_EXCLUDED: readonly number[] = [];
+const NO_EDITS: readonly FamilyCellEdit[] = [];
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -77,14 +80,29 @@ const asFeed = (call: {
 
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
-const latestApplyStatusOf = (statuses: unknown) =>
+const latestStatusOf = (statuses: unknown, key: ActionStatus["key"]) =>
   statuses
     ? (actionStatusSchema
         .array()
         .parse(statuses)
-        .filter((entry) => entry.key === "families.apply" && entry.state === "succeeded")
+        .filter((entry) => entry.key === key && entry.state === "succeeded")
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null)
     : null;
+const latestApplyStatusOf = (statuses: unknown) => latestStatusOf(statuses, "families.apply");
+
+/**
+ * What the last capture saw, from its original receipt: the members it filed and, per family,
+ * coverage, unmodeled facts and failures. Null when the receipt is not a finished capture.
+ */
+export function captureEvidenceOf(receipts: unknown, id: string) {
+  const row = (receipts as { id: string; result?: unknown }[] | undefined)?.find(
+    (entry) => entry.id === id,
+  );
+  const result = z
+    .object({ members: z.array(podMemberSourceSchema), evidence: familiesCaptureEvidenceSchema })
+    .safeParse(row?.result);
+  return result.success ? result.data : null;
+}
 
 /** The last succeeded `families.apply` receipt, projected. Never Work: the receipt is the record. */
 export function applyDataOf(statuses: unknown, receipts: unknown) {
@@ -95,7 +113,7 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
     .parse(receipts)
     .find((entry) => entry.id === row.id);
   const step = parsed?.steps.find(
-    (entry) => entry.key === "familyfoundry.apply" && entry.state === "succeeded",
+    (entry) => entry.key === "families.apply" && entry.state === "succeeded",
   );
   if (!parsed || !step || step.state !== "succeeded") return null;
   const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };
@@ -115,31 +133,23 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
 
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
-export function useFamiliesStore(options: { target?: string; thread?: string } = {}) {
-  const routeManifest = useMemo(
-    () => ({
-      ...manifest,
-      readings: {
-        ...manifest.readings,
-        ...(options.thread
-          ? { head: { kind: "thread-head" as const, thread: options.thread } }
-          : {}),
-      },
-    }),
-    [options.thread],
-  );
-  const handle = useRoute(routeManifest, {
+export function useFamiliesStore(
+  options: { target?: string; thread?: string; entry?: EntitySearch } = {},
+) {
+  const demo = useMemo(() => frozenDemo() !== null, []);
+  const [pods, refreshPods] = usePodList(!demo);
+  const handle = useRoute(manifest, {
     target: options.target ? (options.target as never) : null,
+    thread: options.thread,
+    provided: { pods },
+    page: options.entry as never,
   });
   const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
-  // The draft is Page: the `scope` verb reads it as `ctx.page.draft`, so it lives on the handle.
-  const page = handle.page[0] as FamiliesPage;
-  const setPage = handle.page[1] as (next: Partial<FamiliesPage>) => void;
+  // The draft and the selection are Page: the verbs read them off `ctx.page`.
+  const page = handle.page[0] as FamiliesPage & EntityPage;
+  const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
+  const pickedIds = useMemo(() => new Set(page.selection.map(Number)), [page.selection]);
   const draft = page.draft;
-  const patch = useCallback(
-    (value: Partial<FamiliesPageMemory>) => setMemory((current) => ({ ...current, ...value })),
-    [],
-  );
 
   const host = useMemo(() => createLiveFamiliesHost(), []);
   const documentTarget =
@@ -156,19 +166,38 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
   );
 
   const doc = handle.work.doc as FamiliesRouteDocument | null;
-  const profilePath = doc?.profilePath ?? null;
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
+  const edits = doc?.edits ?? NO_EDITS;
+  const accepted = doc?.accepted ?? NO_EDITS;
+  /*
+   * Two cells typed back to back are two Work writes, and the second must build on the first even
+   * though the Work reading has not come back yet — otherwise the later write erases the earlier
+   * cell. `asked` is what we last wrote; it yields to Work the moment Work agrees, so Work stays
+   * the only authority and this is a queue, never a second copy of the document.
+   */
+  type Cells = { edits: readonly FamilyCellEdit[]; accepted: readonly FamilyCellEdit[] };
+  const observed = useRef<Cells>({ edits, accepted });
+  observed.current = { edits, accepted };
+  const asked = useRef<Cells | null>(null);
+  if (asked.current && JSON.stringify(asked.current) === JSON.stringify(observed.current))
+    asked.current = null;
+  const writeCells = useCallback(
+    (change: (cells: Cells) => Cells) => {
+      const nextCells = change(asked.current ?? observed.current);
+      asked.current = nextCells;
+      return handle.work.write([
+        { path: ["edits"], value: [...nextCells.edits] },
+        { path: ["accepted"], value: [...nextCells.accepted] },
+      ]);
+    },
+    [handle.work],
+  );
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
-  const familyReadings = handle.readings.families as Reading<unknown>;
-  const latestPlan = useMemo(() => latestPlanOf(previousOf(familyReadings)), [familyReadings]);
-  const plan = useMemo(
-    () =>
-      latestPlan && doc && latestPlan.value.basis === familiesBasis(doc) ? latestPlan.value : null,
-    [latestPlan, doc],
-  );
+  // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
+  const plan = page.sheet;
   const receipts = handle.readings.receipts as Reading<unknown>;
   const receiptStatuses = previousOf(receipts);
   const applyStatus = useMemo(() => latestApplyStatusOf(receiptStatuses), [receiptStatuses]);
@@ -178,25 +207,44 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
   const applyData = useMemo(() => {
     return applyDataOf(receiptStatuses, previousOf(applyReceipt));
   }, [receiptStatuses, applyReceipt]);
+  const captureStatus = useMemo(
+    () => latestStatusOf(receiptStatuses, "families.capture"),
+    [receiptStatuses],
+  );
+  const captureReceipt = useReading(
+    !handle.demo && captureStatus ? { kind: "receipts", id: captureStatus.id } : null,
+  );
+  const captured = useMemo(
+    () => (captureStatus ? captureEvidenceOf(previousOf(captureReceipt), captureStatus.id) : null),
+    [captureStatus, captureReceipt],
+  );
 
+  /*
+   * Keyed on the ref's strings, never the ref: the resolution rebuilds it whenever the inventory
+   * reading moves, and a catalog dispatch moves it, so an object key re-read on its own result.
+   */
   const categoryCall = useHostCall(
     () => host.categories(documentTarget!),
-    ["categories", documentTarget],
+    ["categories", documentTarget?.session, documentTarget?.openId],
     documentTarget !== null,
   );
   const familyCall = useHostCall(
     () => (draft.categories.length ? host.families(documentTarget!, draft) : Promise.resolve([])),
-    ["families", documentTarget, draft.placement, draft.categories.join("|")],
+    [
+      "families",
+      documentTarget?.session,
+      documentTarget?.openId,
+      draft.placement,
+      draft.categories.join("|"),
+    ],
     documentTarget !== null,
   );
-  const profileCall = useHostCall(() => host.profiles(), ["profiles"]);
   // FOOTGUN: base-ui `Combobox items` must keep identity between renders; a fresh `options`
   // array each render re-runs its store effect and React throws "Maximum update depth exceeded".
   const feeds = useMemo(
     () => ({
       category: asFeed(categoryCall),
       family: asFeed(familyCall),
-      profile: asFeed(profileCall),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the call objects are rebuilt each render; their fields are the identity
     [
@@ -206,9 +254,6 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
       familyCall.data,
       familyCall.error,
       familyCall.isPending,
-      profileCall.data,
-      profileCall.error,
-      profileCall.isPending,
     ],
   );
 
@@ -216,38 +261,42 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
     () => ({
       setDraft: (value: Setter<FamiliesDraft>) => setPage({ draft: next(value, draft) }),
       setPickedIds: (value: Setter<Set<number>>) =>
-        setMemory((current) => ({
-          ...current,
-          pickedIds: next(value, current.pickedIds as Set<number>),
-        })),
-      setProjection: (value: Setter<FfProjectData | null>) =>
-        setMemory((current) => ({ ...current, projection: next(value, current.projection) })),
+        setPage({ selection: [...next(value, pickedIds)].map(String) }),
       setShowUncommon: (value: Setter<boolean>) =>
         setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
       setTable: (value: Setter<MasterTableState>) =>
         setMemory((current) => ({ ...current, table: next(value, current.table) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
-      setProfile: (profile: string) =>
-        handle.work.write([
-          { path: ["profilePath"], value: profile },
-          { path: ["excludedIds"], value: [] },
-        ]),
+      /**
+       * A typed value is a proposal, the same shape Pea writes, told apart by `by`. It replaces
+       * whatever stood on the cell, and any accept there, since that accept was for another value.
+       * An empty commit, or the value Revit already holds, denies the cell instead.
+       */
+      propose: (edit: FamilyCellEdit, current: string) =>
+        writeCells((cells) => ({
+          edits:
+            edit.value === "" || edit.value === current
+              ? drop(cells.edits, edit)
+              : put(cells.edits, edit),
+          accepted: drop(cells.accepted, edit),
+        })),
+      /** Accept the proposals standing on these cells, value and author as proposed. */
+      accept: (proposals: readonly FamilyCellEdit[]) =>
+        writeCells((cells) => ({
+          edits: cells.edits,
+          accepted: proposals.reduce(put, cells.accepted),
+        })),
+      /** Deny: the proposal and any accept on these cells are gone; the cell shows Revit again. */
+      deny: (cellsToDeny: readonly Pick<FamilyCellEdit, "familyId" | "typeName" | "parameter">[]) =>
+        writeCells((cells) => ({
+          edits: cellsToDeny.reduce(drop, cells.edits),
+          accepted: cellsToDeny.reduce(drop, cells.accepted),
+        })),
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
         return handle.work.write([{ path: ["excludedIds"], value: [...set] }]);
-      },
-      project: async () => {
-        if (!documentScope) throw Error("Select an exact available project document");
-        const ids = [...memory.pickedIds];
-        if (!ids.length) return;
-        const result = await callHostRpc(
-          "familyfoundry.project",
-          { familyIds: ids },
-          documentScope,
-        );
-        patch({ projection: result });
       },
       openFamily: (familyId: number) => {
         if (!documentScope)
@@ -258,23 +307,25 @@ export function useFamiliesStore(options: { target?: string; thread?: string } =
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, draft, setPage, memory.pickedIds, excludedIds, target, documentScope, patch],
+    [handle.work, draft, setPage, pickedIds, excludedIds, writeCells, target, documentScope],
   );
 
   return {
     handle,
-    manifest: routeManifest,
+    manifest,
     target,
     documentScope,
-    profilePath,
     excludedIds,
+    edits,
+    accepted,
     applied,
     plan,
-    latestPlan,
     applyData,
+    captured,
     draft,
-    pickedIds: memory.pickedIds as Set<number>,
-    projection: memory.projection,
+    pickedIds,
+    demo,
+    refreshPods,
     showUncommon: memory.showUncommon,
     table: memory.table,
     picker: memory.picker,

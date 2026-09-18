@@ -9,14 +9,10 @@ public static class ScheduleManagerSettingsRegistration {
 
     public static StructuralSettingsModuleDescriptor Module { get; } = new(
         ModuleKey,
-        RootKeys.Schedules,
         [
             new SettingsRootDescriptor(RootKeys.Schedules, RootKeys.Schedules),
             new SettingsRootDescriptor(RootKeys.Batch, RootKeys.Batch)
-        ],
-        SettingsStorageProfiles.SharedAuthoring,
-        SettingsModuleHostScope.Session,
-        SettingsModuleActiveDocumentKind.Any
+        ]
     );
 
     public static ISettingsRootBinding<ScheduleProfile> Profiles { get; } =

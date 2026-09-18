@@ -1,8 +1,7 @@
 import { z } from "zod";
 
+import { draftProposals } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import { canonicalRouteInput } from "./route-doc.ts";
-import { observationSchema } from "./reading.ts";
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -47,6 +46,25 @@ export const ffReceiptSchema = z.object({
 });
 export type FfReceipt = z.infer<typeof ffReceiptSchema>;
 
+/** What `families.capture` saw, per family, beside the members it filed; a failure files nothing. */
+export const familiesCaptureEvidenceSchema = z.object({
+  diagnostics: z.array(diagnosticSchema),
+  families: z.array(
+    z.object({
+      familyId: z.number(),
+      familyName: z.string().nullish(),
+      success: z.boolean(),
+      coverage: z.record(z.string(), z.string()).default({}),
+      unmodeledCount: z.number().default(0),
+      issues: z.array(revitDataIssueSchema).default([]),
+      error: z.string().nullish(),
+      /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */
+      run: z.string().nullish(),
+    }),
+  ),
+});
+export type FamiliesCaptureEvidence = z.infer<typeof familiesCaptureEvidenceSchema>;
+
 export const familyExecutionOptionsSchema = z
   .object({
     singleTransaction: z.boolean().optional(),
@@ -63,46 +81,46 @@ const appliedScopeSchema = z.object({
   placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
 });
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
+/**
+ * One page of families a scope may resolve to. The band's matrix and the host's plan both read the
+ * scope at this budget, so they count the same families; a larger scope refuses rather than pages.
+ */
+export const FAMILY_SCOPE_LIMIT = 5000;
 
 /**
- * The Families route document is authored Work and nothing else. Native plans, receipts and
- * every other host reading live with the host owners that produce them; this document holds
- * only what a human or pea typed.
+ * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
+ * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
+ * authored Work, not a result — it survives a reload. The address is a family, a type and the EXACT
+ * Revit parameter name, because that is what a Family Foundry patch keys on
+ * (`patch.types.<typeName>.<parameter>`).
+ */
+export const familyCellEditSchema = z.object({
+  familyId: z.number(),
+  familyName: z.string(),
+  typeName: z.string(),
+  parameter: z.string(),
+  value: z.string(),
+  by: z.enum(["pea", "human"]),
+});
+export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
+
+/**
+ * The Families route document is authored Work and nothing else. The spec is the page's member
+ * (one address, sent as `source`) or, for accepted proposals, the members plan generates from them;
+ * plans and receipts are results. This document holds only the scope, the cell proposals and their
+ * accepts, and what a human or pea held back.
  */
 const familiesDocumentSchema = z.object({
-  profilePath: z.string().nullable().default(null),
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
+  ...draftProposals(familyCellEditSchema),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-/**
- * The exact authored basis a plan was read against. Exclusions are deliberately excluded:
- * excluding a family narrows an existing plan, it does not invalidate the native reading.
- */
-export const familiesBasis = (work: FamiliesRouteDocument): string =>
-  canonicalRouteInput({
-    profilePath: work.profilePath,
-    scope: work.scope,
-    executionOptions: work.executionOptions ?? null,
-  });
-
-/** A host reading, stored by the capture owner. It never lands in the document above. */
-export const familiesPlanReadingSchema = z.object({
-  basis: z.string().min(1),
-  workRevision: z.number().int().nonnegative(),
-  reading: observationSchema,
-  fileVersion: z.string().nullable(),
-  composedDigest: z.string().min(1),
-  entries: z.array(ffPlanEntrySchema),
-  executionOptions: familyExecutionOptionsSchema.optional(),
-});
-export type FamiliesPlanReading = z.infer<typeof familiesPlanReadingSchema>;
-
 /** The included plan hashes an apply must reproduce exactly. Server and client share this. */
 export const familiesIncluded = (
-  plan: Pick<FamiliesPlanReading, "entries">,
+  plan: { entries: readonly FfPlanEntry[] },
   excludedIds: readonly number[],
 ): Record<string, string> =>
   Object.fromEntries(
@@ -119,10 +137,13 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: author a profile and scope, read a native plan, exclude, apply.",
+  description:
+    "Family Foundry: author a scope, propose cell values, accept or deny them, plan a spec member, exclude, apply.",
   schema: familiesDocumentSchema,
-  agentWriteMask: [["profilePath"], ["scope"], ["excludedIds"], ["executionOptions"]],
-  // Reading a plan is `family.plan`-style host read; applying it is the `families.apply`
-  // semantic action. Neither is a route command, so neither can write into authored Work.
+  // Pea proposes into `edits` exactly as a person does; `accepted` is human-only, so a proposal
+  // reaches a plan only through a person's accept.
+  agentWriteMask: [["scope"], ["excludedIds"], ["edits"], ["executionOptions"]],
+  // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
+  // a route command, so neither can write into authored Work.
   commands: {},
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

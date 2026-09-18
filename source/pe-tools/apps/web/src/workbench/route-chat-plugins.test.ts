@@ -26,13 +26,13 @@ test("route chat plugins select registered routes from pe_read and pe_do route k
     expect(selectRouteChatPlugin("pe_do", { key })?.spec.route).toBe("parameter-links");
   }
   expect(selectRouteChatPlugin("pe_read", { key: "route:family-types" })).toBeNull();
-  expect(selectRouteChatPlugin("pe_do", { key: "workflow:schedule-grid.apply" })?.spec.route).toBe(
-    "schedule-grid",
+  expect(selectRouteChatPlugin("pe_do", { key: "workflow:schedule.grid.push" })?.spec.route).toBe(
+    "schedules",
   );
-  expect(selectRouteChatPlugin("pe_read", { key: "op:schedule-grid.snapshot" })?.spec.route).toBe(
-    "schedule-grid",
+  expect(selectRouteChatPlugin("pe_read", { key: "op:schedule.grid.snapshot" })?.spec.route).toBe(
+    "schedules",
   );
-  expect(selectRouteChatPlugin("pe_do", { key: "route:pods.run" })).toBeNull();
+  expect(selectRouteChatPlugin("pe_do", { key: "route:pods.open" })?.spec.route).toBe("pods");
 });
 
 test("route chat plugins ignore unregistered routes, other tools, and non-route keys", () => {

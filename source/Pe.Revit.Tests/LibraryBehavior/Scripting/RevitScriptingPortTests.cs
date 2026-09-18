@@ -12,6 +12,34 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class RevitScriptingPortTests {
     [Test]
+    public void Captured_pod_script_writes_readable_output_and_a_matching_receipt(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        var workspaceKey = "pod-output-proof-" + Guid.NewGuid().ToString("N");
+        var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Assert.That(Directory.Exists(root), Is.False);
+        ScriptPodSourceFile FileBytes(string path, string text) => new(path, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)));
+        var bundle = new ScriptPodSourceBundle([
+            FileBytes("pod.json", """{"schemaVersion":2,"id":"output-proof-lineage","name":"Output proof","version":"1","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}"""),
+            FileBytes("src/Main.cs", """using Pe.Revit.Scripting.Context; public sealed class Main : PeScriptContainer { public override void Execute() { Artifacts.WriteJson("result.json", new { check = "pod-output" }); } }""")
+        ]);
+        try {
+            var result = CreateExecutionService(uiApplication).Execute(document,
+                new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey,
+                    SourceBundle: bundle), workspaceKey);
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+            var output = result.Artifacts.Single(artifact => artifact.Name == "result.json");
+            var receipt = result.Artifacts.Single(artifact => artifact.Name == "receipt.json");
+            Assert.That(File.ReadAllText(output.FullPath), Does.Contain("pod-output"));
+            Assert.That(Path.GetDirectoryName(output.FullPath), Is.EqualTo(Path.GetDirectoryName(receipt.FullPath)));
+            // The run is output/<runId>/ in this pod, the same shape every apply writes.
+            Assert.That(Path.GetDirectoryName(Path.GetDirectoryName(receipt.FullPath)), Is.EqualTo(Path.Combine(root, "output")));
+            Assert.That(File.ReadAllText(receipt.FullPath), Does.Contain("output-proof-lineage").And.Contain("src/Main.cs").And.Contain("scripting.execute"));
+        } finally {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
     public void Project_generation_preserves_user_references_and_packages() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
@@ -128,9 +156,14 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Workspace_bootstrap_creates_workspace_guidance_files() {
         var workspaceKey = $"test-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var root = Path.Combine(Path.GetTempPath(), $"pe-pod-bootstrap-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "Pods", workspaceKey);
         try {
-            var bootstrapService = new ScriptWorkspaceBootstrapService(CreateProjectGenerator());
+            var bootstrapService = new ScriptWorkspaceBootstrapService(
+                CreateProjectGenerator(),
+                key => Path.Combine(root, "Pods", key),
+                Path.Combine(root, "Pe.Tools")
+            );
             var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
 
             var result = bootstrapService.Bootstrap(
@@ -141,7 +174,7 @@ public sealed class RevitScriptingPortTests {
                 runtimeAssemblyPath
             );
 
-            var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
+            var agentsPath = Path.Combine(workspaceRoot, "AGENTS.md");
             Assert.That(File.Exists(agentsPath), Is.True);
             Assert.That(File.ReadAllText(agentsPath),
                 Does.Contain("Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable."));
@@ -157,9 +190,12 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src/SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
                 Does.Contain("Keep exactly one non-abstract PeScriptContainer per entrypoint file"));
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "settings")), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "assets")), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "output")), Is.True);
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
         } finally {
-            DeleteWorkspace(workspaceRoot);
+            DeleteWorkspace(root);
         }
     }
 
@@ -188,11 +224,11 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default");
 
         Assert.That(
-            basePath.EndsWith(Path.Combine("Pe.Tools", "workspaces"), StringComparison.OrdinalIgnoreCase),
+            basePath.EndsWith(Path.Combine("Pe.Tools", "Pods"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
         Assert.That(
-            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "workspaces", "default"),
+            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "Pods", "default"),
                 StringComparison.OrdinalIgnoreCase),
             Is.True
         );
@@ -208,7 +244,7 @@ public sealed class RevitScriptingPortTests {
             Is.EqualTo(Path.Combine(workspaceRoot, "PeScripts.csproj"))
         );
         Assert.That(
-            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "inline-scripts"), StringComparison.OrdinalIgnoreCase),
+            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "Pods", "default", "output", "inline"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
 
@@ -1358,7 +1394,7 @@ public sealed class RevitScriptingPortTests {
                 RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
                 $$"""
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "id": "{{workspaceKey}}",
                   "name": "{{workspaceKey}}",
                   "version": "1.0.0",
@@ -1454,7 +1490,7 @@ public sealed class RevitScriptingPortTests {
 
         return $$"""
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "{{workspaceKey}}",
               "name": "{{workspaceKey}}",
               "version": "1.0.0",

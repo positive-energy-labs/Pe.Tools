@@ -2,7 +2,7 @@
  * The projection, both directions, against the SHOWCASE model.
  *
  * The fixture below is `source/Pe.Revit.Tests/Fixtures/Profiles/family-model/
- * family-model-showcase.family.json` transcribed as a typed `FamilyModel`. Transcribed rather than
+ * family-model-showcase.json` transcribed as a typed `FamilyModel`. Transcribed rather than
  * imported because this project does not enable `resolveJsonModule` — and typed rather than `any`,
  * so a schema change that would break the real document breaks this file first.
  *
@@ -13,63 +13,15 @@
  * file that will still parse.
  */
 import { describe, expect, it } from "vite-plus/test";
-import { address, type ActionStatus, type FamilyCapture } from "@pe/agent-contracts";
+import { address } from "@pe/agent-contracts";
 
 import { buildSheet, planeGeos, type FamilyModel } from "./family-model.ts";
 import type { EvidenceSlice } from "./host.ts";
 import { buildFamilyPageModel, ghostRows, initialDraft, type Draft } from "./model.ts";
 import { familyEditBuffer } from "./edit-buffer";
 import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
-import { projectReadings } from "./manifest.ts";
 
 const L = "Length (Common)";
-
-const PLAN_ID = "a".repeat(64);
-const PLAN_TARGET = { session: "session-a", openId: "family-a" };
-const PLAN_CAPTURE: FamilyCapture = {
-  id: PLAN_ID,
-  key: { route: "family", target: address("C:\\Models\\Example.rfa") },
-  capturedAt: "2026-09-14T00:00:00Z",
-  provenance: { kind: "live", target: PLAN_TARGET },
-  reading: {
-    kind: "plan",
-    value: {
-      target: PLAN_TARGET,
-      documentId: {
-        moduleKey: "FamilyFoundry",
-        rootKey: "models",
-        relativePath: "example.family.json",
-      },
-      workspaceId: "workspace-a",
-      path: "C:\\Models\\example.family.json",
-      fileVersion: "version-a",
-      composedDigest: "b".repeat(64),
-      patchJson: "[]",
-      entry: {
-        familyId: 1,
-        familyName: "Example",
-        planHash: "plan-a",
-        changes: [],
-        runEffects: [],
-        refusals: [],
-        warnings: [],
-      },
-    },
-  },
-};
-
-const appliedStatus = (openId: string): ActionStatus => ({
-  kind: "operation",
-  id: `apply-${openId}`,
-  key: "family.apply",
-  actor: "human",
-  destination: { kind: "document", ref: { session: PLAN_TARGET.session, openId } },
-  request: { planId: PLAN_ID },
-  bases: {},
-  startedAt: "2026-09-14T00:01:00Z",
-  publication: { state: "unrequested" },
-  state: "succeeded",
-});
 
 const SHOWCASE: FamilyModel = {
   family: {
@@ -162,7 +114,7 @@ const SHOWCASE: FamilyModel = {
 };
 
 const world = () =>
-  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" }));
+  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" }));
 
 /** The page's own edit channel, condensed: clone the baseline and mutate it like a verb would. */
 function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
@@ -172,22 +124,10 @@ function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
   return { draft, baseline };
 }
 
-describe("projectReadings — reviewed plan lifetime", () => {
-  it("retires an applied plan only for the exact document lifetime", () => {
-    expect(projectReadings([PLAN_CAPTURE], PLAN_TARGET).plan?.captureId).toBe(PLAN_ID);
-    expect(
-      projectReadings([PLAN_CAPTURE], PLAN_TARGET, [appliedStatus(PLAN_TARGET.openId)]).plan,
-    ).toBe(null);
-    expect(
-      projectReadings([PLAN_CAPTURE], PLAN_TARGET, [appliedStatus("family-b")]).plan?.captureId,
-    ).toBe(PLAN_ID);
-  });
-});
-
 describe("projectFamilyModel — document → page world", () => {
   it("carries the family's identity onto the profile the sentence names", () => {
-    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" });
-    expect(proto.profile.path).toBe("showcase-spike.family.json");
+    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" });
+    expect(proto.profile.path).toBe("showcase-spike.json");
     expect(proto.profile.familyName).toBe("PE Family Model Showcase");
     expect(proto.profile.category).toBe("Generic Models");
     expect(proto.profile.placement).toBe("Unhosted");

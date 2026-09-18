@@ -1,18 +1,13 @@
-import { mkdtemp, readFile, rm, writeFile, symlink, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile, symlink, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import {
-  address,
-  exportSeed,
-  importSeed,
-  familyCaptureSchema,
-  type DemoSeed,
-} from "@pe/agent-contracts";
+import { address, exportSeed, importSeed, type DemoSeed } from "@pe/agent-contracts";
 import { Context, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
-import { readingKey, settingsRouteState } from "@pe/agent-contracts";
+import { readingKey, scheduleGridRouteState, settingsRouteState } from "@pe/agent-contracts";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
@@ -38,8 +33,10 @@ const family = (
     captures: [],
     files: [
       {
-        documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "box" },
+        member: { pod: "demo", path: "settings/models/box.json" },
         rawContent: JSON.stringify({
+          // The page's origin, as the web lane seeds it; capture must not echo it.
+          $schema: "http://localhost:3000/schemas/settings/FamilyFoundry/models.json",
           family: {
             name: "Box",
             category: "Generic Models",
@@ -101,22 +98,15 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
   });
 });
 async function save(f: Awaited<ReturnType<typeof setup>>) {
-  const work = await f.owner.work.read(f.owner.scope, "settings");
-  const basis = (
-    work!.doc as { basis: { path: string; documentId: unknown; versionToken: string } }
-  ).basis;
+  const work = await f.owner.work.read(f.owner.scope, settingsRouteState.route);
+  const basis = (work!.doc as { basis: { member: unknown; sha256: string } }).basis;
   const response = await f.fetch("/actions", {
     id: `${f.owner.id}:save`,
     kind: "workflow",
     key: "settings.write",
     actor: "human",
     destination: { kind: "host" },
-    input: {
-      path: basis.path,
-      documentId: basis.documentId,
-      workspaceId: f.owner.scope.work,
-      write: { kind: "save", versionToken: basis.versionToken },
-    },
+    input: { member: basis.member, write: { kind: "save", sha256: basis.sha256 } },
     bases: { work: { key: f.owner.scope, revision: work!.revision } },
   });
   expect(response.status).toBeLessThan(300);
@@ -134,51 +124,42 @@ test.each(["success", "token-conflict", "publication-refusal"] as const)(
           ? "failed"
           : "incomplete",
     );
-    const path = (await f.owner.settings.settingsAddress(f.owner.documentId!)).path;
+    const path = await f.owner.settings.memberPath(f.owner.member!);
     const file = JSON.parse(await readFile(path, "utf8"));
     expect(file.family.name).toBe(scenario === "token-conflict" ? "Box" : "Saved Demo");
     const stored = JSON.parse(await readFile(join(f.owner.root, "journal.json"), "utf8"));
     expect(JSON.stringify(stored)).toContain(`${f.owner.id}:save`);
     if (scenario === "publication-refusal")
-      expect(JSON.stringify(await f.owner.work.read(f.owner.scope, "settings"))).toContain(
-        "Later local edit",
-      );
+      expect(
+        JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route)),
+      ).toContain("Later local edit");
   },
 );
 test("Build freezes original saved/composed basis and labels simulated outcome; production output is refused", async () => {
   const seed = family();
   if (seed.route === "family") seed.work.candidate.fields = {};
   const f = await setup(seed);
-  const opened = await f.owner.settings.openSettings({
-    documentId: f.owner.documentId!,
-    mode: "file",
-    includeComposedContent: true,
-  });
-  const build = (suffix: string, outputPath?: string) =>
+  const opened = await f.owner.settings.readMember(f.owner.member!);
+  const build = (suffix: string) =>
     f.fetch("/actions", {
       id: `${f.owner.id}:${suffix}`,
       kind: "workflow",
       key: "family.build",
       actor: "human",
       destination: { kind: "document", ref: f.owner.target },
-      input: {
-        documentId: f.owner.documentId,
-        workspaceId: f.owner.scope.work,
-        fileVersion: opened.metadata.versionToken!.value,
-        ...(outputPath ? { outputPath } : {}),
-      },
+      input: { source: { ...f.owner.member!, sha256: opened.sha256 } },
       bases: {},
     });
   expect((await build("build")).status).toBeLessThan(300);
   const row = await f.owner.journal.wait(`${f.owner.id}:build`);
   expect(row.state).toBe("succeeded");
   expect(JSON.stringify(row)).toContain("No RFA was created");
-  expect(JSON.stringify(row)).toContain(opened.metadata.versionToken!.value);
-  await build("escape", join(f.parent, "production.rfa"));
-  const escaped = await f.owner.journal.wait(`${f.owner.id}:escape`);
-  expect(escaped.state).toBe("failed");
+  expect(JSON.stringify(row)).toContain(opened.sha256);
+  // A build names no path, so there is no path to escape with: the .rfa lands in the pod's own run.
+  expect(JSON.stringify(row)).toMatch(/output\/[^"]+\.rfa/);
+  expect(JSON.stringify(row)).not.toContain("production.rfa");
 });
-test("resolved links, file-mode Settings, request identity and dispose cannot cross root", async () => {
+test("resolved links, pod members, request identity and dispose cannot cross root", async () => {
   const f = await setup();
   const production = join(f.parent, "production");
   await mkdir(production);
@@ -187,12 +168,7 @@ test("resolved links, file-mode Settings, request identity and dispose cannot cr
   await expect(
     assertDemoPath(f.owner.root, join(f.owner.root, "link/keep.json")),
   ).rejects.toThrow();
-  await expect(
-    f.owner.settings.openSettings({
-      documentId: { moduleKey: "link", rootKey: "", relativePath: "keep" },
-      mode: "file",
-    }),
-  ).rejects.toThrow();
+  await expect(f.owner.settings.readMember({ pod: "link", path: "keep.json" })).rejects.toThrow();
   expect(
     (await f.fetch("/actions", { id: "production-unknown", destination: { kind: "host" } })).status,
   ).toBe(409);
@@ -214,80 +190,161 @@ test("typed seed codec preserves dates/maps/sets and unknown original evidence; 
   expect(f.owner.at).not.toBe(seed.seedAddress);
 });
 
-test("demo Family reads and Apply use immutable local plan hash and composed-basis policy", async () => {
+test("demo Family capture files a new member and returns what the capture saw", async () => {
+  // Defect 2: the member's schema origin is the host that is running, not the preferred port.
+  process.env[hostProcessIdentity.hostBaseUrlVariable] = "http://127.0.0.1:57296";
+  cleanup.push(async () => void delete process.env[hostProcessIdentity.hostBaseUrlVariable]);
+  const f = await setup();
+  const response = await f.fetch("/actions", {
+    id: `${f.owner.id}:capture`,
+    kind: "workflow",
+    key: "family.capture",
+    actor: "agent",
+    destination: { kind: "document", ref: f.owner.target },
+    input: { pod: f.owner.member!.pod },
+    bases: {},
+  });
+  expect(response.status).toBeLessThan(300);
+  const row = await f.owner.journal.wait(`${f.owner.id}:capture`);
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  const result = (
+    row as {
+      result: {
+        member: { pod: string; path: string; sha256: string };
+        evidence: {
+          coverage: Record<string, string>;
+          unmodeledCount: number;
+          origin: string;
+          run: string;
+        };
+      };
+    }
+  ).result;
+  expect(result.member.path).toMatch(/^settings\/family\/Simulated-demo-family-.*\.json$/);
+  expect(result.evidence).toMatchObject({ origin: "capture", unmodeledCount: 2 });
+  expect(result.evidence.coverage.simulation).toBeTruthy();
+  const written = JSON.parse(
+    await readFile(await f.owner.settings.memberPath(result.member), "utf8"),
+  );
+  // The host names what the member is, never the opened member's origin.
+  expect(written.$schema).toBe("http://127.0.0.1:57296/schemas/settings/FamilyFoundry/models.json");
+  // The unmodeled facts left the member for the capture's run (user verdict 2026-09-17), so the
+  // member passes its own confirm and the evidence is still on disk after a reload.
+  expect(written.unmodeled).toBeUndefined();
+  const runFile = (name: string) =>
+    f.owner.settings.memberPath({ pod: result.member.pod, path: `${result.evidence.run}/${name}` });
+  expect(JSON.parse(await readFile(await runFile("unmodeled.json"), "utf8"))).toHaveLength(2);
+  expect(JSON.parse(await readFile(await runFile("receipt.json"), "utf8"))).toMatchObject({
+    memberPath: result.member.path,
+    memberSha256: result.member.sha256,
+    operation: "family.capture",
+    outcome: "Succeeded",
+    outputs: ["unmodeled.json"],
+  });
+});
+
+test("demo Family capture with no pod reads the live spec and files nothing; with a draft it files the draft", async () => {
+  const f = await setup();
+  const capture = async (suffix: string, input: object) => {
+    await f.fetch("/actions", {
+      id: `${f.owner.id}:${suffix}`,
+      kind: "workflow",
+      key: "family.capture",
+      actor: "agent",
+      destination: { kind: "document", ref: f.owner.target },
+      input,
+      bases: {},
+    });
+    const row = await f.owner.journal.wait(`${f.owner.id}:${suffix}`);
+    expect(row.state, JSON.stringify(row)).toBe("succeeded");
+    return (row as { result: Record<string, unknown> }).result;
+  };
+  const pod = f.owner.member!.pod;
+  const folder = dirname(
+    await f.owner.settings.memberPath({ pod, path: "settings/family/x.json" }),
+  );
+  const files = async () => (await readdir(folder).catch(() => [])).length;
+  const before = await files();
+  const read = (await capture("read", {})) as { spec: string; member?: unknown };
+  expect(read.member).toBeUndefined();
+  expect(JSON.parse(read.spec).unmodeled).toBeUndefined();
+  expect(await files()).toBe(before);
+  // The draft the person edited is what lands, and the run beside it is the capture's.
+  const draft = { ...JSON.parse(read.spec), $schema: "elsewhere", note: "edited in the draft" };
+  const saved = (await capture("save", { pod, spec: JSON.stringify(draft) })) as {
+    member: { pod: string; path: string };
+    evidence: { run: string };
+  };
+  const written = JSON.parse(
+    await readFile(await f.owner.settings.memberPath(saved.member), "utf8"),
+  );
+  expect(written.note).toBe("edited in the draft");
+  expect(written.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+  expect(saved.evidence.run).toBeTruthy();
+});
+
+test("demo Family plan returns a hash, apply sends that exact hash, and changed bytes refuse", async () => {
   const seed = family();
   if (seed.route !== "family") throw Error("Family seed expected");
   seed.work.candidate.fields = {};
-  seed.readings.files[0]!.rawContent =
-    '{"family":{"$include":"@local/fragments/details"},"parameters":{},"types":{}}';
-  seed.readings.files.push({
-    documentId: { ...seed.readings.files[0]!.documentId, relativePath: "fragments/details" },
-    rawContent:
-      '{"name":"Box","category":"Generic Models","template":"Generic Model","placement":"Unhosted"}',
-  });
   const f = await setup(seed);
-  const opened = await f.owner.settings.openSettings({
-    documentId: f.owner.documentId!,
-    mode: "file",
-    includeComposedContent: true,
-  });
-  const planned = await f.fetch("/family/readings", {
-    key: "family.plan",
-    scope: f.owner.scope,
-    target: f.owner.target,
-    input: {
-      documentId: f.owner.documentId,
-      workspaceId: f.owner.scope.work,
-      fileVersion: opened.metadata.versionToken!.value,
-    },
-  });
-  expect(planned.status).toBe(200);
-  const plan = familyCaptureSchema.parse(await planned.json());
-  if (plan.provenance.kind !== "live" || plan.reading.kind !== "plan")
-    throw Error("Live plan expected");
-  expect(plan.provenance.target).toEqual(f.owner.target);
-  expect(plan.reading.value.entry.planHash).toMatch(/^[a-f0-9]{64}$/);
-  const apply = async (suffix: string, hash: string) => {
+  const opened = await f.owner.settings.readMember(f.owner.member!);
+  const source = { ...f.owner.member!, sha256: opened.sha256 };
+  const apply = async (suffix: string, planHash?: string) => {
     expect(
       (
         await f.fetch("/actions", {
           id: `${f.owner.id}:${suffix}`,
           kind: "workflow",
-          key: "family.apply",
+          key: planHash ? "family.apply" : "family.plan",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
-          input: { planId: plan.id, expectedPlanHash: hash },
+          input: { source, ...(planHash ? { expectedPlanHashes: { "1": planHash } } : {}) },
           bases: {},
         })
       ).status,
     ).toBeLessThan(300);
     return f.owner.journal.wait(`${f.owner.id}:${suffix}`);
   };
-  const wrongHash = await apply("wrong-hash", "wrong");
-  expect(wrongHash.state).toBe("failed");
-  expect(wrongHash.steps).toEqual([]);
-  const success = await apply("applied", plan.reading.value.entry.planHash);
+  const planned = await apply("planned");
+  expect(planned.state).toBe("succeeded");
+  // Planning is its own workflow: it reads, and nothing in it can mutate.
+  expect(planned.steps.map((step) => step.key)).toEqual(["family.plan"]);
+  const planHash = (planned as { result: { plan: { planHash: string } } }).result.plan.planHash;
+  expect(planHash).toMatch(/^[a-f0-9]{64}$/);
+  expect((planned as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
+  expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
+  const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");
-  expect(JSON.stringify(success)).toContain("No Revit mutation or RFA output");
-  const dependency = await f.owner.settings.settingsAddress(seed.readings.files[1]!.documentId);
-  await writeFile(dependency.path, '{"name":"Changed dependency"}');
-  const stale = await apply("stale-composition", plan.reading.value.entry.planHash);
+  // The simulated engine files the run in the source pod, as the real one does (law 10).
+  const { receiptPath } = (success as { result: { native: { receiptPath: string } } }).result
+    .native;
+  expect(JSON.parse(await readFile(receiptPath, "utf8"))).toMatchObject({
+    podId: source.pod,
+    memberPath: source.path,
+    memberSha256: source.sha256,
+    operation: "family.apply",
+    planHash,
+    outcome: "Succeeded",
+    // User verdict 2026-09-17: succeeded means `reason: null`; the simulation is a listed output.
+    outputs: ["simulated.json"],
+    reason: null,
+  });
+  expect(
+    JSON.parse(await readFile(join(receiptPath, "..", "simulated.json"), "utf8")),
+  ).toMatchObject({ simulated: true });
+  await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
+  const stale = await apply("stale-member", planHash);
   expect(stale.state).toBe("failed");
   expect(stale.steps).toEqual([]);
-  expect(JSON.stringify(stale)).toContain("original file/composed plan basis changed");
-  const mainAfter = await f.owner.settings.openSettings({
-    documentId: f.owner.documentId!,
-    mode: "file",
-    includeComposedContent: true,
-  });
-  expect(mainAfter.metadata.versionToken).toEqual(opened.metadata.versionToken);
+  expect(JSON.stringify(stale)).toContain("changed after it was reviewed");
 });
 
 test("same HTTP router separates production Work and two demo resource owners; reset cannot retire production", async () => {
   const parent = await mkdtemp(join(tmpdir(), "pe-demo-namespaces-"));
   cleanup.push(() => rm(parent, { recursive: true, force: true }));
   const productionFile = join(parent, "production-work.json");
-  const scope = { route: "settings", target: null, work: "production" };
+  const scope = { route: settingsRouteState.route, target: null, work: "production" };
   const production = new RouteWorkspace({
     registrations: [{ spec: settingsRouteState, handlers: {} }],
     store: {
@@ -306,7 +363,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
   });
   await production.apply(
     scope,
-    "settings",
+    settingsRouteState.route,
     "human",
     [{ path: ["fields"], value: { "/private": { staged: { value: "production sentinel" } } } }],
     0,
@@ -368,4 +425,102 @@ test("same HTTP router separates production Work and two demo resource owners; r
   expect((await send(a.base, { method: "DELETE" })).status).toBe(200);
   expect(await reading(b.base, b.scope)).toMatchObject({ kind: "snapshot" });
   expect(await readFile(productionFile, "utf8")).toBe(before);
+});
+
+test("demo schedule push files a run in the bound pod with values before and after", async () => {
+  const f = await setup({
+    version: 1,
+    namespace: "isolated-demo",
+    route: "families",
+    seedAddress: address("C:/production/project.rvt"),
+    failure: { kind: "none" },
+    originalEvidence: { id: "production-unknown", state: "unknown" },
+    work: {
+      key: { route: "families", target: null, work: "production" },
+      revision: 0,
+      candidate: {},
+    },
+    readings: {
+      profile: { family: { name: "Box" } },
+      member: { pod: "demo", path: "settings/families/box.json" },
+      families: ["Box"],
+    },
+    page: { armed: true },
+    scenario: "success",
+  } as unknown as DemoSeed);
+  const read = await f.fetch("/schedules/readings", {
+    key: "schedule.grid.snapshot",
+    input: { scheduleId: 481223 },
+    target: f.owner.target,
+  });
+  expect(read.status, await read.clone().text()).toBe(200);
+  const reading = (await read.json()) as { id: string; workspaceId: string };
+  const key = { route: "schedules", target: null, work: reading.workspaceId };
+  const route = scheduleGridRouteState.route;
+  const staged = await f.owner.work.apply(
+    key,
+    route,
+    "human",
+    [
+      { path: ["basis"], value: { captureId: reading.id } },
+      { path: ["cells", "2::1"], value: { staged: { value: "R-454B" } } },
+    ],
+    (await f.owner.work.read(key, route))?.revision ?? 0,
+  );
+  expect(staged.ok).toBe(true);
+  const pod = f.owner.member!.pod;
+  const push = async (id: string, input: Record<string, unknown>) => {
+    await f.fetch("/actions", {
+      id,
+      kind: "workflow",
+      key: "schedule.grid.push",
+      actor: "human",
+      destination: { kind: "document", ref: f.owner.target },
+      input,
+      bases: { work: { key, revision: (await f.owner.work.read(key, route))!.revision } },
+    });
+    return (await f.owner.journal.wait(id)) as {
+      state: string;
+      result: { run: string | null; receipt: Record<string, unknown> };
+    };
+  };
+  const row = await push(`${f.owner.id}:push`, { pod });
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  expect(row.result.run).toMatch(/^output\/.+$/);
+  const receipt = {
+    podId: pod,
+    operation: "schedule.grid.push",
+    outcome: "Succeeded",
+    reason: null,
+    scheduleId: 481223,
+    cells: [
+      {
+        cell: "2::1",
+        elementIds: [2],
+        parameterName: "REFRIGERANT",
+        before: "R-32",
+        after: "R-454B",
+        error: null,
+      },
+    ],
+  };
+  const file = await f.owner.settings.memberPath({ pod, path: `${row.result.run}/receipt.json` });
+  expect(JSON.parse(await readFile(file, "utf8"))).toMatchObject(receipt);
+  // No pod bound: the same receipt lives only in the action journal (host state).
+  await f.owner.work.apply(
+    key,
+    route,
+    "human",
+    [{ path: ["cells", "1::2"], value: { staged: { value: "Wall unit" } } }],
+    (await f.owner.work.read(key, route))!.revision,
+  );
+  const bare = await push(`${f.owner.id}:push-bare`, {});
+  expect(bare.state, JSON.stringify(bare)).toBe("succeeded");
+  expect(bare.result.run).toBeNull();
+  expect(bare.result.receipt).toMatchObject({
+    podId: null,
+    outcome: "Succeeded",
+    reason: null,
+    cells: [{ cell: "1::2", before: "", after: "Wall unit" }],
+  });
 });

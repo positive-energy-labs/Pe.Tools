@@ -33,17 +33,18 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   }, [threadId, enabled]);
 
   const current: ThreadHead = head ?? { defaultTarget: null, revision: 0 };
-  const set = async (defaultTarget: DocumentRequest | null) => {
+  /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
+  const set = async (defaultTarget: DocumentRequest | null): Promise<boolean> => {
     const attempt = ++generation.current;
     setRefusal(null);
     if (!enabled) {
       setRefusal("target changes are unavailable in this view");
-      return;
+      return false;
     }
     if (reading.state !== "ready" || !parsed.success) {
       peReadings.dirty(request);
       setRefusal("the target is not current; wait for it to reload");
-      return;
+      return false;
     }
     try {
       const response = await fetch(scopeUrl(threadId), {
@@ -52,7 +53,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
         body: JSON.stringify({ defaultTarget, expectedRevision: parsed.data.revision }),
       });
       const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
-      if (attempt !== generation.current) return;
+      if (attempt !== generation.current) return false;
       peReadings.dirty(request);
       if (!result) {
         setRefusal(`target outcome unknown (${response.status}); reading the current target again`);
@@ -63,12 +64,14 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
           "pea is mid-turn; the turn keeps the target it was admitted under. Wait or stop it.",
         );
       }
+      return result?.ok === true;
     } catch (error) {
-      if (attempt !== generation.current) return;
+      if (attempt !== generation.current) return false;
       peReadings.dirty(request);
       setRefusal(
         `target outcome unknown; reading the current target again. ${error instanceof Error ? error.message : String(error)}`,
       );
+      return false;
     }
   };
   return {

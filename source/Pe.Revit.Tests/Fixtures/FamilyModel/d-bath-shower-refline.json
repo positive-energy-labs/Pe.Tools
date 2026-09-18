@@ -1,0 +1,47 @@
+{
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
+  "family": { "name": "PE Bath-Shower (hinge)", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBasedHosted" },
+  "parameters": {
+    "_conn angle":            { "dataType": "Angle",  "value": "90deg", "isInstance": true },
+    "_conn reach":            { "dataType": "Length", "value": "4in" },
+    "_conn size":             { "dataType": "Length", "value": "3/4in", "isInstance": true },
+    "_conn x offset between": { "dataType": "Length", "value": "6in", "isInstance": true },
+    "_conn z offset":         { "dataType": "Length", "value": "1/2in", "isInstance": true },
+    "_hot conn visible":      { "dataType": "YesNo",  "value": "Yes" }
+  },
+  "types": { "Bathtub Floor Mounted": {} },
+  "datums": {
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" }
+  },
+  "refPlanes": {
+    "Center (Front/Back)": { "normal": "PlusY", "at": "0in" },
+    "conn (left)":  { "normal": "PlusX", "at": "-3in" },
+    "conn (right)": { "normal": "PlusX", "at": "3in" },
+    "conn level":   { "normal": "PlusZ", "at": "1/2in" }
+  },
+  "dimensions": {
+    "conn-eq": { "between": ["conn (left)", "Center (Left/Right)", "conn (right)"], "equality": true },
+    "conn-x":  { "between": ["conn (left)", "conn (right)"], "label": "_conn x offset between" },
+    "conn-z":  { "between": ["Ref. Level", "conn level"], "label": "_conn z offset", "view": "PlacementSide" }
+  },
+  "refLines": {
+    "line-1": { "on": "conn level", "from": ["conn (left)",  "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" },
+    "line-2": { "on": "conn level", "from": ["conn (right)", "Center (Front/Back)"], "length": "param:_conn reach", "angleFrom": "Center (Front/Back)", "angle": "param:_conn angle" }
+  },
+  "nested": {
+    "conn-cold": {
+      "family": "stub", "type": "default", "host": "line:line-1.end",
+      "associate": { "_diameter": "param:_conn size" }
+    },
+    "conn-hot": {
+      "family": "stub", "type": "default", "host": "line:line-2.end",
+      "associate": { "_diameter": "param:_conn size" },
+      "visible": "param:_hot conn visible"
+    }
+  },
+  "connectors": {
+    "cold": { "domain": "Pipe", "systemType": "DomesticColdWater", "on": "conn level", "at": ["conn (left)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In" },
+    "hot":  { "domain": "Pipe", "systemType": "DomesticHotWater",  "on": "conn level", "at": ["conn (right)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In" }
+  }
+}

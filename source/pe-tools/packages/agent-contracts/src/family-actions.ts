@@ -1,25 +1,10 @@
 import { z } from "zod";
 import { documentRefSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
-import { settingsDocumentIdSchema } from "./settings.ts";
-import {
-  familiesPlanReadingSchema,
-  familyExecutionOptionsSchema,
-  ffPlanEntrySchema,
-} from "./families.ts";
+import { podMemberSchema, podMemberSourceSchema } from "./settings.ts";
+import { familyExecutionOptionsSchema } from "./families.ts";
 import { parameterLinksReadingSchema } from "./parameter-links.ts";
 
-export const familyPlanReadingSchema = z.object({
-  target: documentRefSchema,
-  documentId: settingsDocumentIdSchema,
-  workspaceId: z.string().min(1),
-  path: z.string().min(1),
-  fileVersion: z.string().min(1),
-  composedDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  patchJson: z.string(),
-  entry: ffPlanEntrySchema,
-  executionOptions: familyExecutionOptionsSchema.optional(),
-});
 export const familyCaptureSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{64}$/),
   key: workKeySchema,
@@ -29,58 +14,107 @@ export const familyCaptureSchema = z.object({
     z.object({ kind: z.literal("file") }),
   ]),
   reading: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("plan"), value: familyPlanReadingSchema }),
     // Route readings live beside Family's, in the same owner, under the route's own WorkKey.
-    z.object({ kind: z.literal("families-plan"), value: familiesPlanReadingSchema }),
     z.object({ kind: z.literal("parameter-links"), value: parameterLinksReadingSchema }),
-    z.object({ kind: z.literal("capture"), value: z.unknown() }),
     z.object({ kind: z.literal("spec"), value: z.unknown() }),
   ]),
 });
 export type FamilyCapture = z.infer<typeof familyCaptureSchema>;
+/** Where a capture lands: the route's current pod, and a new member path the host may choose. */
+const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional() };
 export const familyActions = {
   "settings.write": {
-    says: "Save reviewed Settings Work or create exact raw bytes through the host conditional writer.",
+    says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     needs: "nothing",
     actor: "human",
-    dirties: ["settings"],
-    executors: ["settings.document.save"],
+    dirties: ["pods"],
+    executors: ["pod.member.write", "pod.member.save"],
     description:
-      "Save reviewed Settings Work or create exact raw bytes through the host conditional writer.",
+      "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
     input: z.object({
-      path: z.string().min(1),
-      documentId: settingsDocumentIdSchema,
-      workspaceId: z.string().min(1),
+      member: podMemberSchema,
       write: z.discriminatedUnion("kind", [
-        z.object({ kind: z.literal("save"), versionToken: z.string().min(1) }),
+        z.object({ kind: z.literal("save"), sha256: z.string().min(1) }),
         z.object({ kind: z.literal("create"), rawContent: z.string() }),
       ]),
     }),
   },
+  "family.capture": {
+    says: "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
+    needs: "family-document",
+    actor: "any",
+    dirties: ["pods"],
+    executors: ["family.capture", "pod.member.write"],
+    description:
+      "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
+    input: z
+      .object({ ...captureInto, pod: captureInto.pod.optional(), spec: z.string().optional() })
+      .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
+  },
+  "family.plan": {
+    says: "Plan a saved family spec against the open family and return the plan; changes nothing.",
+    needs: "family-document",
+    actor: "any",
+    dirties: [],
+    executors: ["pod.member.compose", "family.plan"],
+    description:
+      "Plan a saved family spec against the open family and return the plan; changes nothing.",
+    input: z.object({ source: podMemberSourceSchema }),
+  },
   "family.apply": {
-    says: "Apply an immutable reviewed Family plan to its exact document lifetime; preserve native diagnostics.",
+    says: "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
     needs: "family-document",
     actor: "human",
-    dirties: ["family"],
-    executors: ["familyfoundry.apply"],
+    dirties: ["family", "pods"],
+    executors: ["pod.member.compose", "family.apply"],
     description:
-      "Apply an immutable reviewed Family plan to its exact document lifetime; preserve native diagnostics.",
+      "Apply the exact family plan family.plan returned (its one-entry `included` record), from the same saved spec bytes, and write a run receipt.",
     input: z.object({
-      planId: z.string().regex(/^[a-f0-9]{64}$/),
-      expectedPlanHash: z.string().min(1),
+      source: podMemberSourceSchema,
+      // The families shape; a family document plans exactly one family.
+      expectedPlanHashes: z
+        .record(z.string(), z.string().min(1))
+        .refine((hashes) => Object.keys(hashes).length === 1, "Send exactly one family plan hash"),
+    }),
+  },
+  "families.capture": {
+    says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
+    needs: "project-document",
+    actor: "any",
+    dirties: ["pods"],
+    executors: ["families.capture", "pod.member.write"],
+    description:
+      "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
+    input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
+  },
+  "families.plan": {
+    says: "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
+    needs: "project-document",
+    actor: "any",
+    dirties: [],
+    executors: ["pod.member.compose", "families.plan"],
+    description:
+      "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
+    input: z.object({
+      source: podMemberSourceSchema,
+      /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
+      familyIds: z.array(z.number().int()).nonempty().optional(),
+      excludedIds: z.array(z.number().int()).default([]),
+      executionOptions: familyExecutionOptionsSchema.optional(),
     }),
   },
   "families.apply": {
-    says: "Apply the reviewed loaded-family plan reading, minus its authored exclusions, to the exact planned document and profile bytes.",
+    says: "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
     needs: "project-document",
     actor: "human",
-    dirties: ["families"],
-    executors: ["familyfoundry.apply"],
+    dirties: ["families", "pods"],
+    executors: ["pod.member.compose", "families.apply"],
     description:
-      "Apply the reviewed loaded-family plan reading, minus its authored exclusions, to the exact planned document and profile bytes.",
+      "Apply the exact family plans families.plan returned, from the same saved spec bytes; each family's plan hash gates drift.",
     input: z.object({
-      planId: z.string().regex(/^[a-f0-9]{64}$/),
+      source: podMemberSourceSchema,
       expectedPlanHashes: z.record(z.string(), z.string()),
+      executionOptions: familyExecutionOptionsSchema.optional(),
     }),
   },
   "parameter-links.apply": {
@@ -94,17 +128,15 @@ export const familyActions = {
     input: z.object({ readingId: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "family.build": {
-    says: "Build frozen composed saved JSON to an admitted output path. The target is execution context, not the new family.",
+    says: "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
     needs: "document",
     actor: "human",
     dirties: ["family"],
-    executors: ["revit.apply.family-model"],
+    executors: ["pod.member.compose", "family.build"],
     description:
-      "Build frozen composed saved JSON to an admitted output path. The target is execution context, not the new family.",
+      "Build a saved composed family spec to an admitted output path. The target is execution context, not the new family.",
     input: z.object({
-      documentId: settingsDocumentIdSchema,
-      workspaceId: z.string().min(1),
-      fileVersion: z.string().min(1),
+      source: podMemberSourceSchema,
       outputPath: z.string().optional(),
       modelDirectory: z.string().optional(),
     }),
@@ -120,29 +152,6 @@ export const familyReads = {
       "Read an immutable saved Family reading, including historical citation IDs, without Revit.",
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
-  "family.plan": {
-    says: "Read a plan against an exact family lifetime and original saved JSON token, without changing Work.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
-    needs: "family-document",
-    actor: "any",
-    description:
-      "Read a plan against an exact family lifetime and original saved JSON token, without changing Work.",
-    input: z.object({
-      documentId: settingsDocumentIdSchema,
-      workspaceId: z.string().min(1),
-      fileVersion: z.string().min(1),
-      executionOptions: familyExecutionOptionsSchema.optional(),
-    }),
-  },
-  "families.plan": {
-    says: "Read a native plan for the authored Families profile and scope into a durable reading; changes no Work.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
-    needs: "project-document",
-    actor: "any",
-    description:
-      "Read a native plan for the authored Families profile and scope into a durable reading; changes no Work.",
-    input: z.object({}),
-  },
   "parameter-links.read": {
     says: "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
     dirties: [], // TODO(fold-1): name the Readings this action invalidates
@@ -151,14 +160,6 @@ export const familyReads = {
     description:
       "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
     input: z.object({ evaluate: z.boolean().default(false) }),
-  },
-  "family.capture": {
-    says: "Capture exact family evidence without changing Work or resolving mutations.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
-    needs: "family-document",
-    actor: "any",
-    description: "Capture exact family evidence without changing Work or resolving mutations.",
-    input: z.object({}),
   },
   "family.parse-spec": {
     says: "Read parsed spec blocks and image citations into a durable immutable reading.",

@@ -59,7 +59,7 @@ public sealed class OpRegistryTests {
     public void Registration_rejects_request_examples_that_drifted_from_the_request_type() {
         var attribute = new OpAttribute("test.stale.example") {
             Does = "Example JSON with a member the DTO no longer has.",
-            Example = """{ "moduleKey": "M", "rootKys": "r" }"""
+            Example = """{ "schemaUri": "/schemas/settings/M/r.json" }"""
         };
 
         var exception = Assert.Throws<InvalidOperationException>(() =>

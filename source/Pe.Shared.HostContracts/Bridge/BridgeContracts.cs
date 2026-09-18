@@ -20,6 +20,13 @@ public enum BridgeFrameKind {
     Disconnect
 }
 
+/// <summary>
+///     One open document as the bridge reads it live on every snapshot.
+///     <c>OpenId</c> is the payload tracker's id (SDK <c>TrackedDocument.OpenId</c>): the only id a route
+///     <c>?target=</c> accepts. It is not the id <c>pe-revit doc open</c> prints.
+///     <c>Address</c> is the cloud model GUID or absolute path; null until the document is saved
+///     (detached, new, or opened by <c>EditFamily</c>). The address follows SaveAs; <c>OpenId</c> does not change.
+/// </summary>
 public sealed record BridgeDocumentSnapshot(
     string OpenId,
     string Title,
@@ -44,8 +51,7 @@ public sealed record BridgeStateSnapshot(
     long ActiveDocumentObservedAtUnixMs,
     string? SharedParametersFilename,
     List<BridgeDocumentSnapshot> OpenDocuments,
-    List<HostRuntimeAssemblyData> RuntimeAssemblies,
-    List<HostModuleDescriptor> AvailableModules
+    List<HostRuntimeAssemblyData> RuntimeAssemblies
 );
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to it.

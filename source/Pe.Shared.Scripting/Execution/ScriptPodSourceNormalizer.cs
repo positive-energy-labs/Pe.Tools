@@ -7,28 +7,30 @@ public sealed record NormalizedPodSource(ScriptSourceSet SourceSet, PodManifest 
 
 /// <summary>Decodes captured authored inputs only. References and explicit script file reads remain runtime inputs.</summary>
 public static class ScriptPodSourceNormalizer {
-    public const int MaxFiles = 200;
-    public const int MaxFileBytes = 512 * 1024;
+    private const int MaxFiles = ScriptPodSourceBounds.MaxFileCount;
+    private const int MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
     public const int MaxSourceBytes = 2 * 1024 * 1024;
 
     public static NormalizedPodSource Normalize(ScriptPodSourceBundle bundle, string workspaceKey, string sourcePath) {
-        if (bundle is null || bundle.Project is null || bundle.Sources is null)
-            throw new ArgumentException("Pod source bundle requires manifest, project presence, and sources.");
+        if (bundle?.Files is null)
+            throw new ArgumentException("Pod source bundle requires captured files.");
         var selected = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Pod entrypoint");
-        var manifest = PodManifestValidator.ValidateJson(Decode(bundle.ManifestBase64, out _), workspaceKey);
+        var captured = bundle.Files.ToDictionary(file => file.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+        if (!captured.TryGetValue("pod.json", out var manifestFile))
+            throw new ArgumentException("Captured Pod lacks pod.json.", PodManifestValidator.DiagnosticStage);
+        var manifest = PodManifestValidator.ValidateJson(Decode(manifestFile.BytesBase64, out _));
         if (!manifest.Success || manifest.Manifest is null)
             throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(d => d.Message)), PodManifestValidator.DiagnosticStage);
         if (!manifest.Manifest.Entrypoints.Any(e => string.Equals(e.SourcePath, selected, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("pod.json does not declare the requested entrypoint.", PodManifestValidator.DiagnosticStage);
-        if (bundle.Project.Present != (bundle.Project.BytesBase64 is not null))
-            throw new ArgumentException("Project presence must agree with captured project bytes.");
-        var project = bundle.Project.Present ? Decode(bundle.Project.BytesBase64!, out _) : null;
-        if (bundle.Sources.Count is < 1 or > MaxFiles)
+        var project = captured.TryGetValue("PeScripts.csproj", out var projectFile) ? Decode(projectFile.BytesBase64, out _) : null;
+        var sources = bundle.Files.Where(file => file.Path.Replace('\\', '/').StartsWith("src/", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (sources.Count is < 1 or > MaxFiles)
             throw new ArgumentException($"Pod source requires 1 to {MaxFiles} files.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<ScriptSourceFile>();
         var total = 0;
-        foreach (var file in bundle.Sources) {
+        foreach (var file in sources) {
             if (file is null) throw new ArgumentException("Pod source file cannot be null.");
             if (file.Path is null || file.Path.Length > 1024)
                 throw new ArgumentException("Pod source path exceeds 1024 characters.");

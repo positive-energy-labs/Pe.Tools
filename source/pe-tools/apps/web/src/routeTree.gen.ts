@@ -16,17 +16,15 @@ import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
-import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
 import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as LabRouteImport } from "./routes/lab";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RunsRouteImport } from "./routes/runs";
-import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
@@ -72,16 +70,6 @@ const FamilyRoute = FamilyRouteImport.update({
   path: "/family",
   getParentRoute: () => rootRouteImport,
 } as any);
-const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
-  id: "/family-editor-proto",
-  path: "/family-editor-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
-  id: "/family-review-proto",
-  path: "/family-review-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const GrillesRoute = GrillesRouteImport.update({
   id: "/grilles",
   path: "/grilles",
@@ -112,19 +100,19 @@ const ParameterLinksRoute = ParameterLinksRouteImport.update({
   path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PodsRoute = PodsRouteImport.update({
+  id: "/pods",
+  path: "/pods",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const RunsRoute = RunsRouteImport.update({
   id: "/runs",
   path: "/runs",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ScheduleGridRoute = ScheduleGridRouteImport.update({
-  id: "/schedule-grid",
-  path: "/schedule-grid",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
+const SchedulesRoute = SchedulesRouteImport.update({
+  id: "/schedules",
+  path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
 const TakeoffsRoute = TakeoffsRouteImport.update({
@@ -182,17 +170,15 @@ export interface FileRoutesByFullPath {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
@@ -211,17 +197,15 @@ export interface FileRoutesByTo {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
@@ -241,17 +225,15 @@ export interface FileRoutesById {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-editor-proto": typeof FamilyEditorProtoRoute;
-  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pods": typeof PodsRoute;
   "/runs": typeof RunsRoute;
-  "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings": typeof SettingsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
@@ -272,17 +254,15 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
@@ -301,17 +281,15 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
@@ -330,17 +308,15 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
-    | "/family-editor-proto"
-    | "/family-review-proto"
     | "/grilles"
     | "/instances"
     | "/lab"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pods"
     | "/runs"
-    | "/schedule-grid"
-    | "/settings"
+    | "/schedules"
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system_/arming"
@@ -360,17 +336,15 @@ export interface RootRouteChildren {
   DocLabRoute: typeof DocLabRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
-  FamilyEditorProtoRoute: typeof FamilyEditorProtoRoute;
-  FamilyReviewProtoRoute: typeof FamilyReviewProtoRoute;
   GrillesRoute: typeof GrillesRoute;
   InstancesRoute: typeof InstancesRoute;
   LabRoute: typeof LabRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
+  PodsRoute: typeof PodsRoute;
   RunsRoute: typeof RunsRoute;
-  ScheduleGridRoute: typeof ScheduleGridRoute;
-  SettingsRoute: typeof SettingsRoute;
+  SchedulesRoute: typeof SchedulesRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
@@ -432,20 +406,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof FamilyRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/family-editor-proto": {
-      id: "/family-editor-proto";
-      path: "/family-editor-proto";
-      fullPath: "/family-editor-proto";
-      preLoaderRoute: typeof FamilyEditorProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-review-proto": {
-      id: "/family-review-proto";
-      path: "/family-review-proto";
-      fullPath: "/family-review-proto";
-      preLoaderRoute: typeof FamilyReviewProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/grilles": {
       id: "/grilles";
       path: "/grilles";
@@ -488,6 +448,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/pods": {
+      id: "/pods";
+      path: "/pods";
+      fullPath: "/pods";
+      preLoaderRoute: typeof PodsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/runs": {
       id: "/runs";
       path: "/runs";
@@ -495,18 +462,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof RunsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/schedule-grid": {
-      id: "/schedule-grid";
-      path: "/schedule-grid";
-      fullPath: "/schedule-grid";
-      preLoaderRoute: typeof ScheduleGridRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/settings": {
-      id: "/settings";
-      path: "/settings";
-      fullPath: "/settings";
-      preLoaderRoute: typeof SettingsRouteImport;
+    "/schedules": {
+      id: "/schedules";
+      path: "/schedules";
+      fullPath: "/schedules";
+      preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/takeoffs": {
@@ -594,17 +554,15 @@ const rootRouteChildren: RootRouteChildren = {
   DocLabRoute: DocLabRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
-  FamilyEditorProtoRoute: FamilyEditorProtoRoute,
-  FamilyReviewProtoRoute: FamilyReviewProtoRoute,
   GrillesRoute: GrillesRoute,
   InstancesRoute: InstancesRoute,
   LabRoute: LabRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
+  PodsRoute: PodsRoute,
   RunsRoute: RunsRoute,
-  ScheduleGridRoute: ScheduleGridRoute,
-  SettingsRoute: SettingsRoute,
+  SchedulesRoute: SchedulesRoute,
   TakeoffsRoute: TakeoffsRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,

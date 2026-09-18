@@ -4,6 +4,7 @@
  * a resolution, its Work, its Readings, its Page, and one handle per action. Public handles return
  * structured Refusals (`route/refusal.ts`).
  */
+import { frozenDemo } from "#/host/demo-client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   addressSchema,
@@ -52,6 +53,8 @@ import type { RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { postRouteWrite } from "./host";
+import { useThreadScope } from "#/chat/scope";
+import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
 const targetHeaders = (target: ExecutionTarget) =>
@@ -151,6 +154,8 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     work: () => Promise<Refusal | null>,
     keys?: readonly string[],
     onStopped?: () => void,
+    /** The word on the button. The log says what the user pressed, never the action key. */
+    label = key,
   ): Promise<Refusal | null> => {
     if (inFlight) {
       const refusal = refuse("busy", `${key} refused; another action is running`);
@@ -179,20 +184,39 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       inFlight = false;
       if (!disposed) write(key, "busy", () => registry.set(busy, null));
     };
-    // The stop cancels the WAIT, not the call: `/call` has no cancel lane, so the host may still
-    // finish. The log says so, and the late result lands as its own row when it does.
+    // The stop reaches the RUNNING OP: the host sends `op.cancel` outside its per-session gate,
+    // so Revit stops at the operation's next checkpoint and the row settles `cancelled`. The wait
+    // is released only once the host said yes; a refusal leaves the op running and says why.
+    // A late result still lands as its own row.
     const stopped = new Promise<"stopped">((resolve) => {
-      stopper = () => resolve("stopped");
+      stopper = () => {
+        void cancelRunningAdmissions().then((settled) => {
+          const refused = settled.flatMap((one) =>
+            one.status === "rejected"
+              ? [one.reason instanceof Error ? one.reason.message : String(one.reason)]
+              : [],
+          );
+          if (!settled.length)
+            refused.push("Nothing this page started is running on the host yet.");
+          if (refused.length) note("verb", label, `stop refused · ${refused.join(" ")}`, true);
+          else resolve("stopped");
+        });
+      };
     });
     try {
       const running = work();
       const result = await Promise.race([running, stopped]);
       if (result === "stopped") {
-        note("verb", key, "stopped · the wait was cancelled; the host may still finish", true);
+        note(
+          "verb",
+          label,
+          "stopped · cancel signalled; the op stops at its next checkpoint",
+          true,
+        );
         const late = (says: string, refusal: Refusal | null) => {
           if (disposed) return;
           write(key, "failure", () => registry.set(failure, refusal));
-          note("verb", key, `late · ${says}`, Boolean(refusal));
+          note("verb", label, `late · ${says}`, Boolean(refusal));
           if (!refusal) invalidateKeys();
         };
         running
@@ -207,13 +231,13 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return null;
       }
       write(key, "failure", () => registry.set(failure, result));
-      note("verb", key, result ? `refused · ${result.message}` : "ran", Boolean(result));
+      note("verb", label, result ? `refused · ${result.message}` : "ran", Boolean(result));
       if (!result) invalidateKeys();
       return result;
     } catch (cause) {
       const refusal = refusalOf(cause);
       write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", key, `failed · ${refusal.message}`, true);
+      note("verb", label, `failed · ${refusal.message}`, true);
       return refusal;
     } finally {
       if (!detached) finish();
@@ -247,7 +271,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     },
     write,
     runAction,
-    /** Stop waiting on the running action. No-op when nothing runs. */
+    /** Stop the running action: signal the host, then release the wait. No-op when nothing runs. */
     stop: () => stopper?.(),
     busy,
     failure,
@@ -299,8 +323,16 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
   return store;
 }
 
-/** Route search preserves the target string; parseTarget validates its exact request or shorthand. */
-export function routeSearch(search: Record<string, unknown>): { target?: string; work?: string } {
+/**
+ * Route search preserves the target string; parseTarget validates its exact request or shorthand.
+ * `thread` names the thread whose head is the route's target store; the root retains it on every
+ * link, so the URL carries the thread.
+ */
+export function routeSearch(search: Record<string, unknown>): {
+  target?: string;
+  work?: string;
+  thread?: string;
+} {
   // The router JSON-parses search values, so an exact `?target={"kind":"open",...}` arrives as an
   // object. It is re-serialized here so `parseTarget` always reads the one string grammar; left as
   // an object it threw in render, and the SSR stream hung on the throw instead of finishing.
@@ -312,7 +344,12 @@ export function routeSearch(search: Record<string, unknown>): { target?: string;
         ? JSON.stringify(raw)
         : "";
   const work = typeof search.work === "string" ? search.work.trim() : "";
-  return { ...(target ? { target } : {}), ...(work ? { work } : {}) };
+  const thread = typeof search.thread === "string" ? search.thread.trim() : "";
+  return {
+    ...(target ? { target } : {}),
+    ...(work ? { work } : {}),
+    ...(thread ? { thread } : {}),
+  };
 }
 
 /* ── Work ──────────────────────────────────────────────────────────────────── */
@@ -468,8 +505,15 @@ export interface RouteOutcome<A extends string> {
 export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly manifest: RouteManifest<W, R, P, A>;
   readonly resolution: TargetResolution;
-  /** Explicit target request or session/address shorthand; null inherits the thread head. */
+  /** The `?target` pin: a view over one document, never written by the route; null reads the head. */
   readonly chosen: string | null;
+  /** The thread head, the one target store; null on a route that names no thread. */
+  readonly head: {
+    readonly thread: string;
+    /** Move the thread's target; the head refuses when stale or while a turn holds it. */
+    readonly set: ReturnType<typeof useThreadScope>["set"];
+    readonly refusal: string | null;
+  } | null;
   readonly work: {
     readonly key: WorkKey;
     readonly doc: W | null;
@@ -485,6 +529,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
+  /** The bridge inventory the resolution reads; a seed's `inventory` reading when seeded. */
+  readonly inventory: Reading<unknown>;
   readonly page: readonly [P, (next: Partial<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
@@ -533,13 +579,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     work?: string | ((page: P, target: Address | null) => string | undefined);
     page?: Partial<P>;
     provided?: Partial<Record<R, Reading<unknown>>>;
+    /** The thread whose head is this route's default target. */
+    thread?: string;
   } = {},
 ): RouteHandle<W, R, P, A> {
-  const demo = useMemo(
-    () =>
-      typeof location === "undefined" ? null : new URLSearchParams(location.search).get("demo"),
-    [],
-  );
+  const demo = useMemo(frozenDemo, []);
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
   const owner = useRouteOwner(() =>
     createRouteOwner(
@@ -576,18 +620,25 @@ export function useRoute<W, R extends string, P, A extends string>(
    */
   const headRequest = useMemo(
     () =>
-      Object.values(manifest.readings ?? {}).find(
-        (request) =>
-          typeof request !== "function" &&
-          (request as ReadingRequest | undefined)?.kind === "thread-head",
-      ) as ReadingRequest | undefined,
-    [manifest.readings],
+      (options.thread
+        ? { kind: "thread-head", thread: options.thread }
+        : Object.values(manifest.readings ?? {}).find(
+            (request) =>
+              typeof request !== "function" &&
+              (request as ReadingRequest | undefined)?.kind === "thread-head",
+          )) as Extract<ReadingRequest, { kind: "thread-head" }> | undefined,
+    [manifest.readings, options.thread],
   );
   const headAtom = useMemo(
     () => (!seed && headRequest ? readingAtom(headRequest, peReadings) : null),
     [headRequest, seed],
   );
   const headResult = useOwned(owner.registry, headAtom) as Reading<unknown> | null;
+  const scope = useThreadScope(
+    headRequest?.thread ?? "",
+    headResult !== null,
+    headResult ?? { state: "absent" },
+  );
   const defaultDocument = useMemo(
     () =>
       threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data
@@ -934,6 +985,7 @@ export function useRoute<W, R extends string, P, A extends string>(
               () => {
                 stopped = true;
               },
+              action.label,
             );
             setOutcome({ key: name, label: action.label, refusal, stopped, at: Date.now() });
             return refusal;
@@ -980,8 +1032,10 @@ export function useRoute<W, R extends string, P, A extends string>(
     manifest,
     resolution,
     chosen: target,
+    head: headRequest && headResult ? { thread: headRequest.thread, ...scope } : null,
     work: workHandle,
     readings,
+    inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
     page: [page, setPage] as const,
     actions,
     busy,

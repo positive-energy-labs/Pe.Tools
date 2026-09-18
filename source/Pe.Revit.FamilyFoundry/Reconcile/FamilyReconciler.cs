@@ -43,7 +43,9 @@ public sealed record FamilyReceipt(
     IReadOnlyList<string> RunEffects,
     IReadOnlyList<FamilyChange> Residue,
     IReadOnlyList<FamilyModelUnmodeledFact> Unmodeled,
-    bool Converged
+    bool Converged,
+    string? ObservedParametersDigest = null,
+    IReadOnlyList<string>? ObservedResourceIds = null
 );
 
 /// <summary>
@@ -122,6 +124,10 @@ public static class FamilyReconciler {
                 "Room calculation point offset requires an explicit length; parameter binding is not supported."));
         if (refusals.Count > 0) return new FamilyPlan([], new OperationQueue(), refusals, [], Hash([], executionOptions: executionOptions));
         var changes = Diff(desired, current, units);
+        // A change apply cannot verify refuses here, with its reason, so the plan never admits an apply that must fail.
+        var unverifiable = changes.Where(c => c.Kind == ChangeKind.Unverifiable)
+            .Select(c => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.Unverifiable, $"$.{c.Section}.{c.Key}", WhyUnverifiable(c, current, desired)!)).ToList();
+        if (unverifiable.Count > 0) return new FamilyPlan(changes, new OperationQueue(), unverifiable, [], Hash(changes, current, run, desired, authored, sharedDefinitions, executionOptions));
         var names = (authored?["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name).ToList() ?? [];
         var mappings = desired.Parameters.Where(p => names.Contains(p.Key) && NeedsNormalization(p.Key, p.Value, current, names)).ToList();
         IEnumerable<string> routeTargets = run?.ElectricalConnectorParameters is { } connectorRule
@@ -248,7 +254,7 @@ public static class FamilyReconciler {
         }
 
         Cascade(changes, desired);
-        return Verifiability(changes, current);
+        return changes.Select(c => WhyUnverifiable(c, current, desired) is null ? c : c with { Kind = ChangeKind.Unverifiable }).ToList();
     }
 
     public static string ConnectorKey(FamilyModelConnector c) =>
@@ -392,44 +398,54 @@ public static class FamilyReconciler {
         bool Dies(string? name) => name is not null && (dying.Contains(name) ||
             (name.StartsWith("line:", StringComparison.Ordinal) && name.LastIndexOf('.') > 5 && dying.Contains(name[5..name.LastIndexOf('.')])));
 
-        void Mark<T>(string section, IReadOnlyDictionary<string, T> entries, Func<T, IEnumerable<string?>> refs) where T : class {
-            foreach (var (slug, e) in entries) {
-                if (recreated.Contains($"{section}:{slug}") || !refs(e).Any(Dies)) continue;
-                var i = changes.FindIndex(c => c.Section == section && c.Key == slug);
-                if (i >= 0) changes[i] = changes[i] with { Kind = ChangeKind.Recreate };
-                else changes.Add(new FamilyChange(section, slug, ChangeKind.Recreate, null, e, e));
-                recreated.Add($"{section}:{slug}");
-                if (section is "refLines") dying.Add(slug);
-                if (section is "nested") dying.Add("nested:" + slug);
-            }
+        foreach (var (section, slug, entry, refs) in References(d)) {
+            if (recreated.Contains($"{section}:{slug}") || !refs.Any(Dies)) continue;
+            var i = changes.FindIndex(c => c.Section == section && c.Key == slug);
+            if (i >= 0) changes[i] = changes[i] with { Kind = ChangeKind.Recreate };
+            else changes.Add(new FamilyChange(section, slug, ChangeKind.Recreate, null, entry, entry));
+            recreated.Add($"{section}:{slug}");
+            if (section is "refLines") dying.Add(slug);
+            if (section is "nested") dying.Add("nested:" + slug);
         }
-
-        Mark("refLines", d.RefLines, l => new[] { l.On, l.AngleFrom }.Concat(l.From));
-        Mark("dimensions", d.Dimensions, x => x.Between);
-        Mark("forms", d.Forms, f => new[] { f.SketchPlane, f.Start, f.End }
-            .Concat(f.Profile?.SelectMany(l => l.Curves).SelectMany(c => new[] { c.On }.Concat(c.Center ?? [])) ?? []));
-        Mark("nested", d.Nested, n => new[] { n.Host }.Concat(n.Align?.Select(a => a.To) ?? []));
-        Mark("arrays", d.Arrays, a => new[] { a.SpacingPlane, "nested:" + a.Member });
-        Mark("connectors", d.Connectors, c => new[] { c.On }.Concat(c.At));
-        Mark("details", d.Details, x => (x.Align?.Select(a => a.To) ?? []).Concat(x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? []));
     }
 
-    /// <summary>F6/F9: a change in a section capture did not read is Unverifiable by construction; in a Partial
-    /// section only the keys an unmodeled fact names are Unverifiable (2026-09-06 ruling: key-level, never section-level).</summary>
-    private static List<FamilyChange> Verifiability(List<FamilyChange> changes, FamilyModel current) {
-        if (current.Coverage.Count == 0) return changes; // authored current: fully stated
-        var unmodeled = current.Unmodeled.Select(fact => fact.Path).ToList();
-        return changes.Select(c => {
-            var section = c.Section == "types.cell" ? "types" : c.Section;
-            var state = current.Coverage.TryGetValue(section, out var s) ? s : CoverageState.NotRead;
-            if (state == CoverageState.Read) return c;
-            if (state == CoverageState.NotRead) return c with { Kind = ChangeKind.Unverifiable };
-            var whole = $"$.{section}";
+    /// <summary>Every desired entry that names a plane, line or nested instance, in the order a cascade must visit them (lines first).</summary>
+    private static IEnumerable<(string Section, string Slug, object Entry, IEnumerable<string?> Refs)> References(FamilyModel d) {
+        static IEnumerable<(string, string, object, IEnumerable<string?>)> Of<T>(string section, IReadOnlyDictionary<string, T> entries,
+            Func<T, IEnumerable<string?>> refs) where T : class => entries.Select(e => (section, e.Key, (object)e.Value, refs(e.Value)));
+        return Of("refLines", d.RefLines, l => new[] { l.On, l.AngleFrom }.Concat(l.From))
+            .Concat(Of("dimensions", d.Dimensions, x => x.Between))
+            .Concat(Of("forms", d.Forms, f => new[] { f.SketchPlane, f.Start, f.End }
+                .Concat(f.Profile?.SelectMany(l => l.Curves).SelectMany(c => new[] { c.On }.Concat(c.Center ?? [])) ?? [])))
+            .Concat(Of("nested", d.Nested, n => new[] { n.Host }.Concat(n.Align?.Select(a => a.To) ?? [])))
+            .Concat(Of("arrays", d.Arrays, a => new[] { a.SpacingPlane, "nested:" + a.Member }))
+            .Concat(Of("connectors", d.Connectors, c => new[] { c.On }.Concat(c.At)))
+            .Concat(Of("details", d.Details, x => (x.Align?.Select(a => a.To) ?? []).Concat(x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? [])));
+    }
+
+    /// <summary>
+    ///     Why apply could not verify <paramref name="c" />, or null when it can. F6/F9: a change in a section capture did not
+    ///     read is unverifiable by construction; in a Partial section only the keys an unmodeled fact names are (2026-09-06
+    ///     ruling: key-level, never section-level). A change that places against a plane capture named by position
+    ///     (`PlaneNotNamed`) is unverifiable too: apply finds planes by their Revit name, and that plane has none.
+    /// </summary>
+    private static string? WhyUnverifiable(FamilyChange c, FamilyModel current, FamilyModel desired) {
+        if (current.Coverage.Count == 0) return null; // authored current: fully stated
+        var section = c.Section == "types.cell" ? "types" : c.Section;
+        var state = current.Coverage.TryGetValue(section, out var s) ? s : CoverageState.NotRead;
+        if (state == CoverageState.NotRead) return $"Capture does not read {section}, so apply could not verify this change.";
+        if (state == CoverageState.Partial) {
             // A cell's key is "<Type>/<Parameter>"; its path is the dotted one capture emits.
             var key = c.Cell is { } cell ? $"$.types.{cell.Type}.{cell.Parameter}" : $"$.{section}.{c.Key}";
-            var named = unmodeled.Any(path => path == whole || path == key || path.StartsWith(key + ".", StringComparison.Ordinal));
-            return named ? c with { Kind = ChangeKind.Unverifiable } : c;
-        }).ToList();
+            var fact = current.Unmodeled.FirstOrDefault(f => f.Path == $"$.{section}" || f.Path == key || f.Path.StartsWith(key + ".", StringComparison.Ordinal));
+            if (fact is not null) return $"Capture reads this only in part ({fact.Reason}), so apply could not verify it.";
+        }
+        if (c.Kind == ChangeKind.Delete) return null;
+        var positional = References(desired).Where(r => r.Section == c.Section && r.Slug == c.Key).SelectMany(r => r.Refs)
+            .Where(name => current.Unmodeled.Any(f => f.Reason == UnmodeledReason.PlaneNotNamed && f.Path == $"$.refPlanes.{name}"))
+            .Distinct().ToList();
+        return positional.Count == 0 ? null
+            : $"It places against {string.Join(", ", positional)}, a plane Revit leaves unnamed; name it in the family so apply can find it.";
     }
 
     // ── equality through units ──

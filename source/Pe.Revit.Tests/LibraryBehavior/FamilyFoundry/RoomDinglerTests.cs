@@ -140,7 +140,7 @@ public sealed class RoomDinglerTests {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Generated_grd_opens_into_the_room_and_exports_visual_proof));
         var familyDocument = FamilyModelBuild.Build(application, parsed,
-            modelDirectory: Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json"))).Document;
+            modelDirectory: Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.json"))).Document;
         Document? projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         UIDocument? activeProject = null;
 

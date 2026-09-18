@@ -208,7 +208,7 @@ public sealed class FamilyModelRoundtripTests {
     [Test]
     public void Native_stub_circle_roundtrips_and_remains_diameter_driven() {
         var artifact = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
-            this._ui.Application, "stub.family.json", "native-roundtrip-stub-circle");
+            this._ui.Application, "stub.json", "native-roundtrip-stub-circle");
         Document? readback = null;
         try {
             var capturedCircle = artifact.CapturedFromA.Forms.Values.Single().Profile!.Single().Curves.Single();
@@ -270,7 +270,7 @@ public sealed class FamilyModelRoundtripTests {
 
     [Test]
     public void Bath_nested_instances_follow_authored_host_geometry() {
-        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
+        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.json"));
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Bath_nested_instances_follow_authored_host_geometry));
         WritePipeFixtureUnitsAssociationProbe(this._ui.Application, output);
         Document? bath = null;
@@ -470,7 +470,7 @@ public sealed class FamilyModelRoundtripTests {
 
     [Test]
     public void Nested_alignment_positions_a_named_child_reference_offset_from_its_origin() {
-        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.family.json"));
+        var directory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("c-bath-shower.json"));
         var authored = RevitFamilyFixtureHarness.LoadFamilyModelFixture("c-bath-shower");
         Document? bath = null;
         Document? puck = null;
@@ -523,7 +523,7 @@ public sealed class FamilyModelRoundtripTests {
     [TestCase("d-bath-shower-refline")]
     public void Authored_family_survives_capture_rebuild_and_reopen(string fixture) {
         var artifact = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
-            this._ui.Application, $"{fixture}.family.json", $"native-roundtrip-{fixture}");
+            this._ui.Application, $"{fixture}.json", $"native-roundtrip-{fixture}");
         try {
             AssertNativeContent(artifact.ReopenedA, artifact.Authored);
             AssertNativeContent(artifact.ReopenedB, artifact.Authored);
@@ -601,7 +601,7 @@ public sealed class FamilyModelRoundtripTests {
 
     [Test]
     public void Grd_values_and_driven_opening_planes_are_correct_before_arrays() {
-        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
+        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.json");
         var json = JObject.Parse(File.ReadAllText(fixturePath));
         foreach (var section in new[] { "forms", "nested", "arrays", "connectors" }) json.Remove(section);
         var parsed = FamilyModelJson.Parse(json.ToString());
@@ -631,7 +631,7 @@ public sealed class FamilyModelRoundtripTests {
 
     [Test]
     public void Grd_arrays_own_independent_nested_seeds_under_count_and_spacing_perturbation() {
-        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json");
+        var fixturePath = RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.json");
         var json = JObject.Parse(File.ReadAllText(fixturePath));
         var parameters = (JObject)json["parameters"]!;
         parameters["_back count"] = JObject.Parse("""{"dataType":"Integer","value":3}""");

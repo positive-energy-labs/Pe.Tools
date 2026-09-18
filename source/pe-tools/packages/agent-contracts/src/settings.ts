@@ -1,14 +1,14 @@
 /**
- * /settings document — collaborative state for schema-backed host settings authoring.
+ * Member document — collaborative state for authoring one schema-backed pod member.
  *
  * Third instance of the proposal → staged → committed trichotomy (after parameter-links
  * cells and parameter-links draft/preview/apply). Fields are addressed by RFC 6901
- * JSON Pointers into the settings document's parsed raw content (e.g.
+ * JSON Pointers into the member's parsed raw content (e.g.
  * "/revit/units/length") — pointer escaping means property names may contain periods
  * and slashes (spec-sheet values like "M.2 Depth" address cleanly).
  * Pea proposes field values; the human stages them; the human-only `settings.write` action
- * splices staged values into the raw content and writes through `settings.document.save`
- * with the content version explicitly adopted as its edit basis.
+ * splices staged values into the raw content and writes through `pod.member.write`
+ * with the member sha256 explicitly adopted as its edit basis.
  */
 import { z } from "zod";
 import { type RouteStateSpec } from "./route-state.ts";
@@ -53,14 +53,18 @@ export const settingsFieldStateSchema = z.object({
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
-/* ── Ephemeral file read (settings.document.open / refresh) ───────────────── */
+/* ── Ephemeral member read (pod.member.read / pod.member.compose) ─────────── */
 
-export const settingsDocumentIdSchema = z.object({
-  moduleKey: z.string(),
-  rootKey: z.string(),
-  relativePath: z.string(),
+/** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
+export const podMemberSchema = z.object({ pod: z.string().min(1), path: z.string().min(1) });
+export type PodMember = z.infer<typeof podMemberSchema>;
+/** The exact member bytes an apply consumed. */
+export const podMemberSourceSchema = podMemberSchema.extend({
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
-export type SettingsDocumentId = z.infer<typeof settingsDocumentIdSchema>;
+export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
+/** The Work key of an authored member: derived from its address, never stored beside it. */
+export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;
 
 export const settingsValidationIssueSchema = z.looseObject({
   message: z.string(),
@@ -75,32 +79,28 @@ const settingsValidationSchema = z.object({
 export type SettingsValidation = z.infer<typeof settingsValidationSchema>;
 
 export const settingsSnapshotSchema = z.object({
-  documentId: settingsDocumentIdSchema,
-  path: z.string(),
-  workspaceId: z.string().optional(),
-  versionToken: z.string().nullable(),
+  member: podMemberSchema,
+  sha256: z.string().nullable(),
   observedAt: z.iso.datetime().optional(),
-  /** Raw JSON text as stored on disk — the save target. */
+  /** Raw JSON text as stored in the pod — the save target. */
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
+  /** The fragments composition consumed, by installed pod id. */
   dependencies: z
-    .array(z.object({ directivePath: z.string(), documentId: settingsDocumentIdSchema }))
+    .array(z.object({ id: z.string(), path: z.string(), sha256: z.string() }))
     .optional(),
-  modifiedUtc: z.string().nullish(),
   validation: settingsValidationSchema.nullish(),
 });
 export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-export const settingsBasisSchema = settingsSnapshotSchema
-  .pick({
-    documentId: true,
-    path: true,
-    rawContent: true,
-  })
-  .extend({ versionToken: z.string() });
+export const settingsBasisSchema = z.object({
+  member: podMemberSchema,
+  rawContent: z.string(),
+  sha256: z.string().min(1),
+});
 export type SettingsBasis = z.infer<typeof settingsBasisSchema>;
 const settingsRouteDocumentSchema = z.object({
   basis: settingsBasisSchema.nullable().default(null),
@@ -109,27 +109,26 @@ const settingsRouteDocumentSchema = z.object({
 export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;
 
 export const settingsRouteState = {
-  route: "settings",
-  title: "Settings",
-  description: "Review, validate, and save proposed changes to a typed settings document.",
+  route: "pods",
+  title: "Pods",
+  description: "Review, validate, and save proposed changes to one pod member.",
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
   commands: {
     open: {
       description:
-        "Explicitly adopt a file reading as the edit basis. Refuses pending edits; use adopt after reviewing a conflict.",
-      input: z.object({ documentId: settingsDocumentIdSchema }),
+        "Explicitly adopt a member reading as the edit basis. Refuses pending edits; use adopt after reviewing a conflict.",
+      input: z.object({ member: podMemberSchema }),
       actor: "any",
     },
     adopt: {
       description:
         "Adopt the reviewed disk content version and discard the old field edits/proposals explicitly. Refuses if the disk changed again.",
-      input: z.object({ documentId: settingsDocumentIdSchema, versionToken: z.string() }),
+      input: z.object({ member: podMemberSchema, sha256: z.string() }),
       actor: "human",
     },
     refresh: {
-      description:
-        "Re-read the bound settings document. Proposals and staged values are preserved.",
+      description: "Re-read the bound member. Proposals and staged values are preserved.",
       input: z.object({}),
       actor: "any",
     },
@@ -185,6 +184,16 @@ export function settingsFieldPointer(segments: string[]): string {
     .join("");
 }
 
+/** Whether every segment names an existing object property or array index. */
+const resolves = (root: unknown, segments: string[]) => {
+  let cursor = root;
+  for (const key of segments) {
+    if (cursor === null || typeof cursor !== "object" || !Object.hasOwn(cursor, key)) return false;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return cursor !== null && typeof cursor === "object";
+};
+
 /** One pure candidate builder for the command, Settings form and Family projection. */
 export function settingsCandidate(
   rawContent: string,
@@ -194,23 +203,30 @@ export function settingsCandidate(
   const edits = Object.entries(fields).filter(
     ([, field]) => field.staged || (includeProposals && field.proposal),
   );
-  if (!edits.length) return rawContent;
-  const raw = edits.find(([pointer]) => pointer === "");
-  if (raw) {
-    if (edits.length !== 1)
-      throw new Error(
-        "Review either raw text or structured edits; clear the other staged edits first.",
-      );
-    const edit = raw[1].staged ?? raw[1].proposal!;
-    if (edit.delete || typeof edit.value !== "string")
-      throw new Error("The root edit must contain exact raw text.");
-    return edit.value;
-  }
-  const root: unknown = JSON.parse(rawContent.replace(/^\uFEFF/, ""));
+  // A root edit is the person's raw text: it replaces the basis, and pointer edits apply on top.
+  const raw = edits.find(([pointer]) => pointer === "")?.[1];
+  const rootEdit = raw ? (raw.staged ?? raw.proposal!) : null;
+  if (rootEdit && (rootEdit.delete || typeof rootEdit.value !== "string"))
+    throw new Error("The root edit must contain exact raw text.");
+  const base = rootEdit ? (rootEdit.value as string) : rawContent;
+  const pointers = edits.filter(([pointer]) => pointer !== "");
+  if (!pointers.length) return base;
+  const parse = (text: string): unknown => JSON.parse(text.replace(/^\uFEFF/, ""));
+  const root = parse(base);
   if (root === null || typeof root !== "object" || Array.isArray(root))
     throw new Error("The authored JSON must be an object before fields can be edited.");
-  for (const [pointer, field] of edits) {
+  let basisRoot: unknown;
+  try {
+    basisRoot = rootEdit ? parse(rawContent) : root;
+  } catch {
+    basisRoot = undefined;
+  }
+  for (const [pointer, field] of pointers) {
     const segments = settingsFieldSegments(pointer);
+    // A staged field whose container the person's raw edit removed has nowhere to land.
+    const parent = segments.slice(0, -1);
+    if (rootEdit && resolves(basisRoot, parent) && !resolves(root, parent))
+      throw new Error(`Staged field ${pointer} no longer resolves in the edited draft.`);
     if (
       !segments.length ||
       segments.some((key) => ["__proto__", "constructor", "prototype"].includes(key))

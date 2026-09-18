@@ -44,6 +44,8 @@ import {
   message,
   parsePodKey,
   parseRouteKey,
+  scheduleGridRouteState,
+  settingsRouteState,
   putTargetResultSchema,
   putTargetSchema,
   turnOf,
@@ -165,7 +167,7 @@ const runInputSchema = z.object({
     .max(200)
     .optional()
     .describe(
-      "Work address: Settings uses metadata.workspaceId; Schedule Grid takes workspaceId from its schedule reading; Instances defaults to the shared instances workspace.",
+      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading; Instances defaults to the shared instances workspace.",
     ),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
@@ -231,10 +233,12 @@ async function runCapability(
         const preparation =
           original.preparation.state === "ready"
             ? (original.preparation.value as {
-                script?: { sourceBundle?: { manifestBase64: string } };
+                script?: { sourceBundle?: { files?: { path: string; bytesBase64: string }[] } };
               })
             : undefined;
-        const encoded = preparation?.script?.sourceBundle?.manifestBase64;
+        const encoded = preparation?.script?.sourceBundle?.files?.find(
+          (file) => file.path === "pod.json",
+        )?.bytesBase64;
         if (
           !pod ||
           !encoded ||
@@ -525,10 +529,10 @@ async function dispatch(
         actor: "agent",
         timeoutMs: input.timeoutSeconds * 1000,
       });
-      const pods = await caller.call("scripting.pod.list", {});
+      const pods = await caller.call("pod.list");
       const sourcePath = pods.pods
-        .find((value) => value.workspaceKey === pod.workspace)
-        ?.manifest?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
+        .find((value) => value.folder === pod.workspace)
+        ?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
       if (!sourcePath) throw Error("Declared Pod entrypoint unavailable");
       const result = await caller.callOperation("scripting.execute", {
         ...payload,
@@ -545,16 +549,21 @@ async function dispatch(
     case "route-command": {
       const parsed = parseRouteKey(row.key);
       if (!parsed) throw new Error(`Malformed route key '${row.key}'.`);
-      if (parsed.route === "schedule-grid" && !input.workspaceId)
+      if (parsed.route === scheduleGridRouteState.route && !input.workspaceId)
         throw new Error(
-          "Read op:schedule-grid.snapshot and pass its workspaceId for subject Work.",
+          "Read op:schedule.grid.snapshot and pass its workspaceId for subject Work.",
         );
-      if (parsed.route === "settings" && !input.workspaceId)
+      if (parsed.route === settingsRouteState.route && !input.workspaceId)
         throw new Error(
-          "Open the file with op:settings.document.open in file mode and supply metadata.workspaceId for Settings Work.",
+          "Supply workspaceId for the member's Work, then open it with { member: { pod, path } }.",
         );
-      if (input.workspaceId && !["settings", "instances"].includes(parsed.route))
-        throw new Error("workspaceId targets Settings or Instances Work only.");
+      if (
+        input.workspaceId &&
+        ![settingsRouteState.route, scheduleGridRouteState.route, "instances"].includes(
+          parsed.route,
+        )
+      )
+        throw new Error("workspaceId targets Pods, Schedules, or Instances Work only.");
       const workspaceId =
         parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId;
       if (parsed.member === undefined) {

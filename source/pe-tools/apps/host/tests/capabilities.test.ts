@@ -78,14 +78,15 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     expect(catalog.sources["route registry"]).toBe("ok");
     expect(catalog.sources.skills).toBe("ok");
     expect(catalog.sources.catalog).toMatch(/bridge catalog unavailable/);
-    expect(catalog.sources["pod.json"]).toMatch(/did not answer/);
+    // pod.list is host-local: the pods answer with Revit closed.
+    expect(catalog.sources["pod.json"]).toBe("ok");
     expect(catalog.sessions).toEqual([]);
     const keys = catalog.capabilities.map((row) => row.key);
     expect(keys).toContain("op:host.shell.open");
     expect(keys).toContain("workflow:instances.start");
-    expect(keys.some((key) => key.startsWith("route:pods") || key.startsWith("route:ops"))).toBe(
-      false,
-    );
+    expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
+    // The member Work route is named for the pods its members live in.
+    expect(keys).toContain("route:pods.open");
     expect(keys).toContain("skill:build-pod");
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 

@@ -702,7 +702,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     [Test]
     public void Authored_form_view_flags_survive_build_save_and_reopen() {
-        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.family.json")));
+        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.json")));
         var flags = JObject.Parse("""{"planRcp":false,"frontBack":false,"leftRight":true,"onlyWhenCut":false,"coarse":false,"medium":true,"fine":true}""");
         foreach (var form in ((JObject)json["forms"]!).Properties()) form.Value["visibility"] = flags.DeepClone();
         var model = FamilyModelJson.Parse(json.ToString()).Value!;
@@ -1181,7 +1181,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                         plans.Add(pair);
                         try {
                             var plan = FamilyFoundryBridgeOps.PlanFamilies(
-                                new FamilyFoundryPlanRequest(JsonConvert.SerializeObject(conversion.Patch), family.Id.Value()), project);
+                                JsonConvert.SerializeObject(conversion.Patch), project, [family.Id.Value()]);
                             pair["plan"] = JObject.FromObject(plan);
                             if (plan.Diagnostics.Count > 0 || plan.Families.Any(f => f.Refusals.Count > 0))
                                 failures.Add($"{source} -> {family.Name}: native plan diagnostics");

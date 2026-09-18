@@ -3,14 +3,11 @@ using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.SettingsStorage;
 
-public record SchemaRequest(
-    string ModuleKey,
-    string RootKey
-);
+/// <summary>A settings library addressed by the `$schema` URL its specs carry.</summary>
+public record SchemaRequest(string SchemaUrl);
 
 public record FieldOptionsRequest(
-    string ModuleKey,
-    string RootKey,
+    string SchemaUrl,
     string PropertyPath,
     string SourceKey,
     Dictionary<string, string>? ContextValues
@@ -25,15 +22,9 @@ public record ValueDomainOptionsRequest(
     Dictionary<string, string>? ContextValues = null
 );
 
-public record ValidateSettingsRequest(
-    string ModuleKey,
-    string SettingsJson
-);
-
-public record ValidateSettingsDocumentSemanticsRequest(
-    string ModuleKey,
-    string RootKey,
-    string RelativePath,
+/// <summary>Semantic validation of one spec by the library its `$schema` names; structural validation stays in the host.</summary>
+public record SettingsValidateRequest(
+    string SchemaUrl,
     string RawContent,
     string ComposedContent
 );
@@ -77,7 +68,7 @@ public record ValidationData(
     List<ValidationIssue> Issues
 );
 
-public record SettingsDocumentSemanticValidationData(
+public record SettingsValidateData(
     bool IsConfigured,
     List<ValidationIssue> Issues
 );

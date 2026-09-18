@@ -20,6 +20,7 @@ internal sealed record ScriptExecutionPlan(
     ScriptSourceSet SourceSet,
     ScriptWorkspaceExecutionMode ExecutionMode,
     PodManifest? PodManifest,
+    PodReceipt? Attribution,
     string ProjectContent,
     bool RequireSingleContainer
 );
@@ -31,7 +32,7 @@ internal enum ScriptWorkspaceExecutionMode {
 
 /// <summary>
 ///     Cooperative cancellation for one script execution: the linked token fires on caller cancel,
-///     scripting.cancel, or timeout; <see cref="IsTimeout" /> distinguishes the timeout source.
+///     op.cancel, or timeout; <see cref="IsTimeout" /> distinguishes the timeout source.
 /// </summary>
 public sealed class ScriptCancellationScope(
     CancellationToken token,

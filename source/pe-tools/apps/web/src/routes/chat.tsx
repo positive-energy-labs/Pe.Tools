@@ -20,14 +20,8 @@ export const PROMPT_MAX = 200;
 
 const DEFAULTS = { mode: "threads" as const };
 
-const filePaneSearch = z
-  .object({ module: z.string(), root: z.string(), file: z.string() })
-  .optional();
-
 export const chatSearchSchema = z.object({
   variant: z.enum(["A", "B", "C"]).optional().catch(undefined),
-  settingsFile: filePaneSearch,
-  familyFile: filePaneSearch,
   thread: z.string().optional(),
   // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
   mode: z

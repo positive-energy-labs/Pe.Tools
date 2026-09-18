@@ -1,22 +1,22 @@
 import { expect, test } from "vite-plus/test";
 import { semanticActions } from "@pe/agent-contracts";
 
-import { manifest as family } from "#/family/manifest";
+import { manifest as family } from "#/routes/family";
 import { manifest as families } from "#/families/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
-import { scheduleGridManifest } from "#/schedule-grid/manifest";
-import { settingsManifest } from "#/settings/manifest";
+import { schedulesManifest } from "#/route/schedules/manifest";
+import { memberWorkManifest } from "#/route/spec-editor";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
 test("browser semantic mutations project shared prose, actor, and target need", () => {
-  const settings = settingsManifest({ scope: { route: "settings", target: null, work: "test" } });
+  const settings = memberWorkManifest();
   const pairs = [
     [settings.actions!.save, "settings.write"],
     [family.actions!.build, "family.build"],
     [family.actions!.apply, "family.apply"],
     [families.actions!.apply, "families.apply"],
     [parameterLinks.actions!.apply, "parameter-links.apply"],
-    [scheduleGridManifest().actions!.push, "schedule-grid.apply"],
+    [schedulesManifest().actions!.push, "schedule.grid.push"],
     [takeoffs.actions!["commit-sync"], "takeoffs.sync"],
   ] as const;
   const needs = {

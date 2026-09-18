@@ -23,7 +23,7 @@ export const specDocSchema = z.object({
 });
 export type SpecDoc = z.infer<typeof specDocSchema>;
 
-import { settingsDocumentIdSchema } from "./settings.ts";
+import { podMemberSourceSchema } from "./settings.ts";
 import { observationSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
@@ -72,7 +72,9 @@ const fixtureEvidenceSchema = z.object({
 });
 export const familyEvidenceSchema = z.union([
   z.object({
-    reading: observationSchema,
+    // A capture is scoped by the action's exact document lifetime, never by address: an
+    // Edit Family document has no path until it is saved.
+    observedAt: z.iso.datetime(),
     familyName: z.string(),
     modelJson: z.string(),
     unmodeledCount: z.number(),
@@ -80,6 +82,8 @@ export const familyEvidenceSchema = z.union([
     issues: z.array(revitDataIssueSchema),
     origin: z.literal("capture"),
     rfaPath: z.string().nullish(),
+    /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */
+    run: z.string().nullish(),
   }),
   fixtureEvidenceSchema,
 ]);
@@ -102,8 +106,8 @@ export const familyProjectionSchema = z.object({
   plan: z
     .object({
       captureId: z.string().optional(),
-      documentId: settingsDocumentIdSchema,
-      patchJson: z.string(),
+      source: podMemberSourceSchema,
+      spec: z.string(),
       entry: ffPlanEntrySchema,
       executionOptions: familyExecutionOptionsSchema.optional(),
     })

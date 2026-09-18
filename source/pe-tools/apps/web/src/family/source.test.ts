@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { address } from "@pe/agent-contracts";
 import type { FamilySnapshot } from "#/family/host";
 import { familySource } from "#/family/source";
 import { buildSheet, inches, type FamilyModel } from "#/family/family-model";
@@ -8,9 +7,8 @@ import { initialDraft, rowAgreement } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 
 const snapshot = (rawContent: string, composedContent = rawContent): FamilySnapshot => ({
-  documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "test" },
-  path: "test.json",
-  versionToken: "1",
+  member: { pod: "demo", path: "test" },
+  sha256: "1",
   observedAt: "2026-09-06T00:00:00Z",
   rawContent,
   composedContent,
@@ -20,10 +18,7 @@ const snapshot = (rawContent: string, composedContent = rawContent): FamilySnaps
 test("native fixtures project parameters without inventing fixture content and author native paths", () => {
   for (const name of ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"]) {
     const raw = readFileSync(
-      new URL(
-        `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.family.json`,
-        import.meta.url,
-      ),
+      new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
       "utf8",
     );
     const input = snapshot(raw);
@@ -74,11 +69,7 @@ test("native capture projects only read values and gates missing claims on cover
     '{"family":{"name":"Box"},"parameters":{"Width":{},"Missing":{},"Derived":{}},"types":{"Standard":{}}}',
   );
   const evidence = {
-    reading: {
-      at: address("C:\\Models\\Box.rfa"),
-      version: "v1",
-      observedAt: "2026-09-06T00:00:00Z",
-    },
+    observedAt: "2026-09-06T00:00:00Z",
     familyName: "Box",
     origin: "capture" as const,
     unmodeledCount: 1,
@@ -120,11 +111,7 @@ test("native capture without an authored file renders a read-only family lane", 
     unmodeledCount: 0,
     issues: [],
     origin: "capture" as const,
-    reading: {
-      at: address("C:\\Models\\Opened.rfa"),
-      version: "v1",
-      observedAt: "2026-09-07T00:00:00Z",
-    },
+    observedAt: "2026-09-07T00:00:00Z",
   };
   const lane = familySource(null, evidence);
   expect(lane.document).toBeNull();
@@ -137,10 +124,7 @@ test("native source geometry resolves macros and authored seeds without solving 
   const source = (name: string): FamilyModel =>
     JSON.parse(
       readFileSync(
-        new URL(
-          `../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.family.json`,
-          import.meta.url,
-        ),
+        new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
         "utf8",
       ),
     );

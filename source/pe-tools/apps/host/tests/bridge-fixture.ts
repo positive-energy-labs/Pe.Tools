@@ -32,7 +32,6 @@ export const connectTestBridge = () =>
             activeDocumentIsModelInCloud: false,
             activeDocumentIsWorkshared: false,
             activeDocumentObservedAtUnixMs: 1,
-            availableModules: [],
             hasActiveDocument: true,
             activeDocumentPath: "C:/model.rvt",
             openDocuments: [

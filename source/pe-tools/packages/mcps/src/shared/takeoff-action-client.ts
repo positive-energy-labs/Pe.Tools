@@ -51,6 +51,40 @@ function retain(key: string, value?: ActionAdmission) {
     /* the process reference still retains identity */
   }
 }
+/**
+ * Admissions this client has posted and not yet seen settle, so a stop control can name them.
+ * Keyed by id; the value is the endpoint that owns the journal row.
+ */
+const inFlight = new Map<string, string>();
+export const runningAdmissions = () => [...inFlight].map(([id, base]) => ({ id, base }));
+
+/**
+ * Stop a running action: the host signals its in-flight bridge request past the session gate, and
+ * the row settles `cancelled` at the operation's next checkpoint. Work already written stands.
+ */
+export async function cancelAction(id: string, base = "") {
+  const response = await fetch(`${base}/actions/cancel`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    // The host refuses with `{ error }`; anything else (a dev server's 404 page) never reached it.
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    throw Error(
+      typeof body?.error === "string"
+        ? body.error
+        : `The stop did not reach the host (${response.status} ${response.statusText}).`,
+    );
+  }
+  return actionReceiptSchema.parse(await response.json());
+}
+
+/** Stop everything this client still has in flight. Each refusal is the caller's to report. */
+export const cancelRunningAdmissions = () =>
+  Promise.allSettled(runningAdmissions().map(({ id, base }) => cancelAction(id, base)));
+
 export async function readActionStatuses(target: DocumentRef, base = "", signal?: AbortSignal) {
   const response = await fetch(`${base}/actions`, {
     headers: {
@@ -78,10 +112,17 @@ export async function runSemanticAction(
   waitMs = Infinity,
 ): Promise<ActionReceipt | DetachedAction> {
   const storageKey = retentionKey(base, key, target, input.path);
-  const prior = typeof id === "string" ? undefined : getRetained(storageKey);
+  let prior = typeof id === "string" ? undefined : getRetained(storageKey);
   // Reuse the admitted bases as well as ID after lost acceptance/remount, before reading newer Work/file state.
-  if (prior && canonicalRouteInput(prior.input) !== canonicalRouteInput(input))
-    throw Error(`Recover action '${prior.id}' before changing its input`);
+  if (prior && canonicalRouteInput(prior.input) !== canonicalRouteInput(input)) {
+    // A retained admission that already settled is history, not a conflict: discard it and admit
+    // the new input. Only a STILL RUNNING one refuses, and it names the control that ends it.
+    const live = await readAction(prior.id, base).catch(() => undefined);
+    if (live?.state === "running")
+      throw Error(`Action '${prior.id}' is still running; stop it before changing its input`);
+    retain(storageKey);
+    prior = undefined;
+  }
   let admission = prior;
   if (!admission) {
     const consumed = { ...bases };
@@ -119,7 +160,7 @@ export async function runSemanticAction(
     if (typeof id !== "string") retain(storageKey, admission);
   }
   const row = await submitAction(admission, base, waitMs);
-  if (row.state === "succeeded" || row.state === "failed" || row.state === "incomplete")
+  if (row.state !== "running" && row.state !== "unknown" && row.state !== "detached")
     retain(storageKey);
   return row;
 }
@@ -131,6 +172,13 @@ export async function submitAction(
 ): Promise<ActionReceipt | DetachedAction> {
   const deadline = Date.now() + waitMs;
   const signal = () => AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now())));
+  /*
+   * The POST answers once the host has prepared the action, which waits its turn on the Revit
+   * queue; aborting it abandoned a plan the host went on to finish (w8-revit trip 10). It waits
+   * as long as the caller does; the caller's verb reads running meanwhile.
+   */
+  const admitted = () =>
+    Number.isFinite(deadline) ? AbortSignal.timeout(Math.max(1, deadline - Date.now())) : undefined;
   const detached = (acceptance: DetachedAction["acceptance"]): DetachedAction => ({
     state: "detached",
     kind: admission.kind,
@@ -145,7 +193,7 @@ export async function submitAction(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(admission),
-      signal: signal(),
+      signal: admitted(),
     });
   } catch (error) {
     if (Date.now() >= deadline) return detached("unknown");
@@ -160,27 +208,32 @@ export async function submitAction(
     row = actionReceiptSchema.parse(await response.json());
   }
   if (!row) throw Error(`Action '${admission.id}' has no receipt`);
-  if (
-    row.kind !== admission.kind ||
-    row.key !== admission.key ||
-    row.actor !== admission.actor ||
-    canonicalRouteInput(row.request) !== canonicalRouteInput(admission.input) ||
-    canonicalRouteInput(row.destination) !== canonicalRouteInput(admission.destination) ||
-    canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
-  )
-    throw Error(`Action '${admission.id}' receipt conflicts with the requested intent`);
-  while (row.state === "running") {
-    if (Date.now() >= deadline) return detached("admitted");
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const next = await readAction(admission.id, base, signal()).catch((error) => {
-      if (Date.now() >= deadline) return undefined;
-      throw error;
-    });
-    if (!next && Date.now() >= deadline) return detached("admitted");
-    row = next;
-    if (!row) throw Error(`Action '${admission.id}' lost its durable receipt`);
+  inFlight.set(admission.id, base);
+  try {
+    if (
+      row.kind !== admission.kind ||
+      row.key !== admission.key ||
+      row.actor !== admission.actor ||
+      canonicalRouteInput(row.request) !== canonicalRouteInput(admission.input) ||
+      canonicalRouteInput(row.destination) !== canonicalRouteInput(admission.destination) ||
+      canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
+    )
+      throw Error(`Action '${admission.id}' receipt conflicts with the requested intent`);
+    while (row.state === "running") {
+      if (Date.now() >= deadline) return detached("admitted");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const next = await readAction(admission.id, base, signal()).catch((error) => {
+        if (Date.now() >= deadline) return undefined;
+        throw error;
+      });
+      if (!next && Date.now() >= deadline) return detached("admitted");
+      row = next;
+      if (!row) throw Error(`Action '${admission.id}' lost its durable receipt`);
+    }
+    return row;
+  } finally {
+    inFlight.delete(admission.id);
   }
-  return row;
 }
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {
   if (row.state !== "succeeded")
@@ -253,10 +306,8 @@ export async function saveSettingsAction(
 ) {
   if (scope.work === undefined || !document.basis) throw Error("An adopted file Work is required");
   const input = semanticActions["settings.write"].input.parse({
-    path: document.basis.path,
-    documentId: document.basis.documentId,
-    workspaceId: scope.work,
-    write: { kind: "save", versionToken: document.basis.versionToken },
+    member: document.basis.member,
+    write: { kind: "save", sha256: document.basis.sha256 },
   });
   return runSemanticAction(
     "settings.write",

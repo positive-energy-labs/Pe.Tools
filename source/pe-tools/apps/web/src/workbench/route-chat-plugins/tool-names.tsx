@@ -122,9 +122,9 @@ export const CHAT_PLUGIN_ROUTES = [
   "takeoffs",
   "family",
   "families",
-  "settings",
+  "pods",
   "parameter-links",
-  "schedule-grid",
+  "schedules",
 ] as const;
 
 export type ChatPluginRoute = (typeof CHAT_PLUGIN_ROUTES)[number];
@@ -135,6 +135,10 @@ export function chatPluginTitle(route: string): string {
     (route === "family" ? "Family" : route === "families" ? "Families" : route)
   );
 }
+
+/** An action key's first segment names its entity; a few entities live on a differently named route. */
+const keyRoute = (entity: string) =>
+  ({ schedule: "schedules", settings: "pods", pod: "pods" })[entity] ?? entity;
 
 export function selectRouteChatPlugin(
   toolName: string,
@@ -151,7 +155,7 @@ export function selectRouteChatPlugin(
       Object.hasOwn(actionControls, args.key.replace(/^(op|workflow):/, "")))
   )
     return (
-      routeChatPlugins[args.key.replace(/^(op|workflow):/, "").split(".")[0]] ??
+      routeChatPlugins[keyRoute(args.key.replace(/^(op|workflow):/, "").split(".")[0]!)] ??
       routeChatPlugins.takeoffs
     );
   const call = routeCallOf(toolName, args);
@@ -420,8 +424,8 @@ function TakeoffsReceiptPlugin(props: RouteChatPluginViewProps) {
             plugin:
               registration?.spec.route === "family"
                 ? "family"
-                : registration?.spec.route === "settings"
-                  ? "settings"
+                : registration?.spec.route === "pods"
+                  ? "pods"
                   : "takeoffs",
           })}
         >

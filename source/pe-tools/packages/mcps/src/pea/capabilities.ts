@@ -5,6 +5,7 @@ import {
   semanticActions,
   familyReads,
   actionBasesSchema,
+  settingsRouteState,
 } from "@pe/agent-contracts";
 /**
  * The one capability catalog. Every door pea has (ops, route documents, route commands, pod
@@ -22,6 +23,7 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   type HostOpResponse,
+  type PodList,
 } from "@pe/host-contracts/operation-types";
 import type { Capability, CapabilityCatalog, RouteStateSpec } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -32,7 +34,7 @@ type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-export type PodList = HostOpResponse<"scripting.pod.list">;
+export type { PodList };
 type Sessions = HostOpResponse<"bridge.sessions.list">["sessions"];
 
 export interface CapabilitySources {
@@ -139,8 +141,8 @@ function opRow(op: OpsCatalogEntry): Capability {
 
 function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   const scopeHint =
-    spec.route === "settings"
-      ? "Supply workspaceId from the file-mode settings.document.open metadata; this is shared file Work independent of Revit."
+    spec.route === settingsRouteState.route
+      ? "Supply workspaceId for the member's Work and open it with { member: { pod, path } }; this is shared file Work independent of Revit."
       : "Runs under this thread's Scope; no target input.";
   const read: Capability = {
     key: `route:${spec.route}`,
@@ -189,15 +191,15 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   return [read, propose, ...commands];
 }
 
+/** Entrypoints only: members are data, reached through route:pods, never executable rows. */
 function podRows(pod: PodList["pods"][number]): Capability[] {
-  if (!pod.isValid || !pod.manifest) return [];
-  const manifest = pod.manifest;
-  return manifest.entrypoints.map((entry) => ({
-    key: `pod:${pod.workspaceKey}.${entry.id}`,
+  if (pod.diagnostics.length) return [];
+  return pod.entrypoints.map((entry) => ({
+    key: `pod:${pod.folder}.${entry.id}`,
     kind: "pod",
-    title: `${manifest.name}: ${entry.name ?? entry.id}`,
+    title: `${pod.name}: ${entry.name ?? entry.id}`,
     description:
-      `${entry.description ?? manifest.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
+      `${entry.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
     needs: "document",
     mutates: true,
     actor: "any",
@@ -277,7 +279,7 @@ export function createCapabilityCatalogSource(options: {
       });
       const [ops, pods, sessions] = await Promise.allSettled([
         fetchOps(base, bridgeSelector),
-        caller.call("scripting.pod.list", {}),
+        caller.call("pod.list"),
         caller.call("bridge.sessions.list"),
       ]);
       const opsValue =

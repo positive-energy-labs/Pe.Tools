@@ -2,19 +2,20 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { makeDirectory } from "./files/index.ts";
 import type {
-  OpenSettingsDocumentRequest,
-  SaveSettingsDocumentRequest,
-  SettingsDocumentId,
-  SettingsTreeRequest,
-  ValidateSettingsDocumentRequest,
+  PodMember,
+  PodMemberComposeRequest,
+  PodMemberWriteRequest,
+  PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
 import {
-  discoverSettingsTree,
-  openSettingsDocument,
-  saveSettingsDocument,
-  settingsDocumentAddress,
-  validateSettingsDocument,
+  composeMember,
+  listPods,
+  listRuns,
+  podFolder,
+  readMember,
+  writeMember,
 } from "./settings.ts";
 
 /** Each existing path component must be owned; links are refused even when their target is local. */
@@ -76,40 +77,39 @@ export async function createDemoSettings(root: string) {
   });
   const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
     Effect.runPromise(effect.pipe(Effect.provideService(FileSystem.FileSystem, guarded)));
-  const settingsAddress = async (id: SettingsDocumentId) => {
-    const address = await run(settingsDocumentAddress(id, storageRoot));
-    await assertDemoPath(storageRoot, address.path);
-    if (id.stableId && resolve(id.stableId).toLowerCase() !== address.path.toLowerCase())
-      throw Error("Original/production Settings address is evidence only");
-    return address;
-  };
+  const podsRoot = resolve(storageRoot, "Pods");
+  const ctx = { podsRoot };
+  const memberPath = async (member: PodMember) =>
+    assertDemoPath(storageRoot, resolve(await run(podFolder(member.pod, ctx)), member.path));
   return {
-    settingsAddress,
-    async validateSettings(request: ValidateSettingsDocumentRequest) {
-      await settingsAddress(request.documentId);
-      return run(validateSettingsDocument(request, { storageRoot }));
-    },
-    async settingsTree(request: SettingsTreeRequest) {
-      return run(discoverSettingsTree(request, { storageRoot }));
-    },
-    async openSettings(request: OpenSettingsDocumentRequest) {
-      await settingsAddress(request.documentId);
-      return run(openSettingsDocument(request, { storageRoot }));
-    },
-    async saveSettings(request: SaveSettingsDocumentRequest) {
-      await settingsAddress(request.documentId);
-      return run(saveSettingsDocument(request, { storageRoot }));
-    },
-    async nativePaths(
-      input: { outputPath?: string; modelDirectory?: string },
-      id: string,
-      file: string,
-    ) {
-      return {
-        outputPath: await assertDemoPath(
-          storageRoot,
-          input.outputPath ?? resolve(storageRoot, "outputs", `${id}.rfa`),
+    podsRoot,
+    runPods: run,
+    memberPath,
+    /** Demo pods are named by their id; production resolves ids by scanning manifests. */
+    async ensurePod(id: string) {
+      await run(makeDirectory(resolve(podsRoot, id), "demo.pod"));
+      await run(
+        Effect.flatMap(FileSystem.FileSystem, (fs) =>
+          fs.writeFileString(resolve(podsRoot, id, "pod.json"), JSON.stringify({ id, name: id })),
         ),
+      );
+    },
+    listPods: () => run(listPods(ctx)),
+    listRuns: (request: PodRunsRequest) => run(listRuns(request, ctx)),
+    async readMember(member: PodMember) {
+      await memberPath(member);
+      return run(readMember(member, ctx));
+    },
+    async composeMember(request: PodMemberComposeRequest) {
+      await memberPath(request);
+      return run(composeMember(request, ctx));
+    },
+    async writeMember(request: PodMemberWriteRequest) {
+      await memberPath(request);
+      return run(writeMember(request, ctx));
+    },
+    async nativePaths(input: { modelDirectory?: string }, _id: string, file: string) {
+      return {
         modelDirectory: await assertDemoPath(storageRoot, input.modelDirectory ?? dirname(file)),
       };
     },

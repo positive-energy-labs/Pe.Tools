@@ -13,9 +13,8 @@ namespace Pe.Revit.Tests;
 public sealed class ScriptPodSourceTests {
     private static string Encode(string content) => Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
     private static ScriptPodSourceBundle Bundle() => new(
-        Encode("""{"schemaVersion":1,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}"""),
-        new ScriptPodProjectSeed(false, null),
-        [new("src/Main.cs", Encode("public static class Main { public static int Run() => Helper.Value; }")),
+        [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}""")),
+         new("src/Main.cs", Encode("public static class Main { public static int Run() => Helper.Value; }")),
          new("src/Helper.cs", Encode("public static class Helper { public const int Value = 42; }"))]);
 
     private static void CompileAndRun(ScriptPodSourceBundle bundle) {
@@ -44,7 +43,7 @@ public sealed class ScriptPodSourceTests {
             var dll = Path.Combine(root, "lib", "2025", "Local.dll");
             File.WriteAllBytes(dll, helper.AssemblyBytes!);
             var seed = "<Project><ItemGroup><Reference Include=\"Local\"><HintPath>lib\\$(RevitYear)\\Local.dll</HintPath></Reference></ItemGroup></Project>";
-            var bundle = Bundle() with { Project = new(true, Encode(seed)), Sources = [Bundle().Sources[0]] };
+            var bundle = Bundle() with { Files = [Bundle().Files[0], Bundle().Files[1], new("PeScripts.csproj", Encode(seed))] };
             var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs");
             var reader = new CsProjReader();
             var canonical = new ScriptProjectGenerator(reader).GenerateProjectContent(normalized.ProjectSeed, root, "2025", "net8.0-windows", typeof(ScriptProjectGenerator).Assembly.Location);
@@ -70,15 +69,12 @@ public sealed class ScriptPodSourceTests {
     public void Bom_project_absence_and_reference_declarations_are_preserved() {
         var bundle = Bundle();
         var source = "public static class Helper { public const int Value = 42; }";
-        bundle.Sources[1] = new("src/Helper.cs", Convert.ToBase64String(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(source)).ToArray()));
+        bundle.Files[2] = new("src/Helper.cs", Convert.ToBase64String(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(source)).ToArray()));
         CompileAndRun(bundle);
         Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs").ProjectSeed, Is.Null);
         var project = "<Project><ItemGroup><Reference Include=\"Local\"><HintPath>lib\\$(RevitYear)\\Local.dll</HintPath></Reference></ItemGroup></Project>";
-        var captured = bundle with { Project = new ScriptPodProjectSeed(true, Encode(project)) };
+        var captured = bundle with { Files = [.. bundle.Files, new("PeScripts.csproj", Encode(project))] };
         Assert.That(ScriptPodSourceNormalizer.Normalize(captured, "sample", "src/Main.cs").ProjectSeed, Is.EqualTo(project));
-        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle with { Project = new(true, null) }, "sample", "src/Main.cs"));
-        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle with { Project = new(false, Encode(project)) }, "sample", "src/Main.cs"));
-        Assert.Throws<JsonSerializationException>(() => JsonConvert.DeserializeObject<ScriptPodProjectSeed>("{}"));
     }
 
     [TestCase("../Main.cs")]
@@ -88,21 +84,21 @@ public sealed class ScriptPodSourceTests {
     [TestCase("src//Main.cs")]
     public void Invalid_paths_are_refused(string path) {
         var bundle = Bundle();
-        bundle.Sources[0] = bundle.Sources[0] with { Path = path };
+        bundle.Files[1] = bundle.Files[1] with { Path = path };
         Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
     }
 
     [Test]
-    public void Duplicates_limits_missing_entrypoint_and_wrong_workspace_are_refused() {
+    public void Duplicates_limits_and_missing_entrypoint_are_refused() {
         void Reject(ScriptPodSourceBundle bundle) => Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
         var bundle = Bundle();
-        Reject(bundle with { Sources = [bundle.Sources[0], bundle.Sources[0] with { Path = "src/main.cs" }] });
-        Reject(bundle with { Sources = [bundle.Sources[1]] });
-        Reject(bundle with { Sources = Enumerable.Range(0, 201).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", "")).ToList() });
-        Reject(bundle with { Sources = [bundle.Sources[0] with { BytesBase64 = Convert.ToBase64String(new byte[512 * 1024 + 1]) }] });
-        Reject(bundle with { Sources = Enumerable.Range(0, 5).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024]))).ToList() });
-        Reject(bundle with { ManifestBase64 = "not base64!" });
-        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "other", "src/Main.cs"));
+        Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1], bundle.Files[1] with { Path = "src/main.cs" }] });
+        Reject(bundle with { Files = [bundle.Files[0], bundle.Files[2]] });
+        Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 201).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", ""))] });
+        Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1] with { BytesBase64 = Convert.ToBase64String(new byte[512 * 1024 + 1]) }] });
+        Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 5).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
+        Reject(bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] });
+        Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "Other Local Copy", "src/Main.cs").Manifest.Id, Is.EqualTo("sample"));
         Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs"));
     }
 }

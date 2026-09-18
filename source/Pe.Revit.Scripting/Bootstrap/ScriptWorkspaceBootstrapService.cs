@@ -1,38 +1,49 @@
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Product;
 
 namespace Pe.Revit.Scripting.Bootstrap;
 
 public sealed class ScriptWorkspaceBootstrapService(
-    ScriptProjectGenerator projectGenerator
+    ScriptProjectGenerator projectGenerator,
+    Func<string, string>? workspaceRootResolver = null,
+    string? productHomePath = null
 ) {
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
+    private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
+    private readonly string _productHomePath = productHomePath ?? RevitScriptingStorageLocations.ResolveProductHomePath();
 
     public ScriptWorkspaceBootstrapData Bootstrap(
         string workspaceKey,
         bool createSampleScript,
         string revitVersion,
         string targetFramework,
-        string runtimeAssemblyPath
+        string runtimeAssemblyPath,
+        bool preserveProject = false
     ) {
         var generatedFiles = new List<string>();
-        var productHomePath = RevitScriptingStorageLocations.ResolveProductHomePath();
-        var productAgentsPath = RevitScriptingStorageLocations.ResolveProductAgentsPath();
-        var productReadmePath = RevitScriptingStorageLocations.ResolveProductReadmePath();
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var projectFilePath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
-        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
-        var vscodeDirectory = RevitScriptingStorageLocations.ResolveGeneratedDirectory(workspaceKey);
-        var sampleScriptPath = RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey);
-        var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
-        var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
-        var joinGuidePath = RevitScriptingStorageLocations.ResolveJoinGuidePath(workspaceKey);
-        var vscodeSettingsPath = RevitScriptingStorageLocations.ResolveVscodeSettingsPath(workspaceKey);
+        var productHomePath = this._productHomePath;
+        var productAgentsPath = Path.Combine(productHomePath, RevitScriptingStorageLocations.AgentsFileName);
+        var productReadmePath = Path.Combine(productHomePath, RevitScriptingStorageLocations.ReadmeFileName);
+        var workspaceRoot = this._workspaceRootResolver(workspaceKey);
+        var projectFilePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ProjectFileName);
+        var sourceDirectory = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.SourceDirectoryName);
+        var settingsDirectory = Path.Combine(workspaceRoot, ProductPathNames.SettingsDirectoryName);
+        var assetsDirectory = Path.Combine(workspaceRoot, ProductPathNames.AssetsDirectoryName);
+        var outputDirectory = Path.Combine(workspaceRoot, ProductPathNames.OutputDirectoryName);
+        var vscodeDirectory = Path.Combine(workspaceRoot, ".vscode");
+        var sampleScriptPath = Path.Combine(sourceDirectory, RevitScriptingStorageLocations.SampleFileName);
+        var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
+        var agentsPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.AgentsFileName);
+        var readmePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ReadmeFileName);
+        var vscodeSettingsPath = Path.Combine(vscodeDirectory, "settings.json");
 
         _ = Directory.CreateDirectory(productHomePath);
         _ = Directory.CreateDirectory(workspaceRoot);
         _ = Directory.CreateDirectory(sourceDirectory);
+        _ = Directory.CreateDirectory(settingsDirectory);
+        _ = Directory.CreateDirectory(assetsDirectory);
+        _ = Directory.CreateDirectory(outputDirectory);
         _ = Directory.CreateDirectory(vscodeDirectory);
 
         var existingProjectContent = File.Exists(projectFilePath)
@@ -45,16 +56,16 @@ public sealed class ScriptWorkspaceBootstrapService(
             targetFramework,
             runtimeAssemblyPath
         );
-        WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
+        if (!preserveProject)
+            WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
 
-        EnsureFile(productAgentsPath, ScriptFileTemplates.CreateProductAgents(), generatedFiles);
-        EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);
-        // AGENTS.md is host-owned agent guidance, not user prose: rewrite it so an existing
-        // workspace picks up corrected guidance on the next bootstrap. README/JOIN_GUIDE stay
-        // create-once because a user may edit them.
-        WriteIfChanged(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
-        EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
-        EnsureFile(joinGuidePath, ScriptFileTemplates.CreateJoinGuide(), generatedFiles);
+        // The root AGENTS.md is the one high-level guide and the only file rewritten: an existing
+        // tree picks corrected guidance up on the next bootstrap. Everything else is create-once,
+        // because a pod's own AGENTS.md and both READMEs are the user's to edit.
+        WriteIfChanged(productAgentsPath, ScriptFileTemplates.CreateRootAgents(), generatedFiles);
+        EnsureFile(productReadmePath, ScriptFileTemplates.CreateRootReadme(), generatedFiles);
+        EnsureFile(agentsPath, ScriptFileTemplates.CreatePodAgents(), generatedFiles);
+        EnsureFile(readmePath, ScriptFileTemplates.CreatePodReadme(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
         if (createSampleScript) {
             EnsureFile(sampleScriptPath, ScriptFileTemplates.CreateSampleScript(), generatedFiles);

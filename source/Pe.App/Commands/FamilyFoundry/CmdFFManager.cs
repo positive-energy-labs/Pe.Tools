@@ -1,18 +1,18 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
-using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.App.Host;
+using Pe.App.Pods;
 using Pe.Revit.Global.Ui;
-using Pe.Shared.StorageRuntime;
+using Pe.Shared.HostContracts.Operations;
+using Pe.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
 
 namespace Pe.App.Commands.FamilyFoundry;
 
-/// <summary>Single-family lane: reconcile the active family document to a family.json, or build a new family from one.</summary>
+/// <summary>Single-family lane: apply a family spec to the active family document, or build a new family from a model.</summary>
 [Transaction(TransactionMode.Manual)]
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
@@ -24,9 +24,9 @@ public class CmdFFManager : IExternalCommand {
         var uiDoc = uiapp.ActiveUIDocument;
         try {
             new FoundryPaletteBuilder(DisplayName, uiDoc.Document, uiDoc)
-                .WithAction("Reconcile active family", HandleReconcile, ctx => ctx.Model is not null && ctx.Doc.IsFamilyDocument)
-                .WithAction("Build new family from template", HandleBuild, ctx => ctx.Model is not null)
-                .WithAction("Dry run (plan only)", HandleDryRun, ctx => ctx.Model is not null && ctx.Doc.IsFamilyDocument)
+                .WithAction("Apply to active family", ctx => Guarded(() => Apply(ctx)), ctx => ctx.PreviewData?.IsValid == true && ctx.Doc.IsFamilyDocument)
+                .WithAction("Build new family from template", ctx => Guarded(() => Build(ctx)), ctx => ctx.Model is not null)
+                .WithAction("Plan only", ctx => Guarded(() => Plan(ctx)), ctx => ctx.PreviewData?.IsValid == true && ctx.Doc.IsFamilyDocument)
                 .Build()
                 .Show();
             return Result.Succeeded;
@@ -36,33 +36,41 @@ public class CmdFFManager : IExternalCommand {
         }
     }
 
-    private static void HandleReconcile(FoundryContext ctx) => Report(ctx, dryRun: false);
-
-    private static void HandleDryRun(FoundryContext ctx) => Report(ctx, dryRun: true);
-
-    private static void Report(FoundryContext ctx, bool dryRun) {
-        var op = new ReconcileFamily(ctx.Model!, dryRun);
-        var runOutput = ctx.Storage.Output().TimestampedSubDir();
-        var writer = new ProcessingResultBuilder(runOutput).WithProfile(ctx.Model!, ctx.SelectedProfile!.TextPrimary).WithReconcile(op);
-        using var processor = new OperationProcessor(ctx.Doc);
-        var (contexts, ms) = processor.WithArtifactWriter(writer, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish)
-            .ProcessQueue(new OperationQueue().Add(op), null, runOutput.DirectoryPath, ctx.OnFinishSettings);
-        var (logs, error) = contexts.Single().OperationLogs;
-        var balloon = new Ballogger();
-        if (error is not null) _ = balloon.Add(LogEventLevel.Error, new StackFrame(), error.Message);
-        else {
-            var plan = op.LastPlan;
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"{(dryRun ? "Plan" : "Reconciled")} {ctx.Doc.Title}: {plan?.Changes.Count ?? 0} changes, {logs?.Sum(l => l.ErrorCount) ?? 0} errors, residue {op.LastReceipt?.Residue.Count.ToString() ?? "n/a"}, {ms:F0}ms. Output: {runOutput.DirectoryPath}");
-        }
-        balloon.Show();
+    internal static void Guarded(Action action) {
+        try { action(); }
+        catch (Exception ex) { new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show(); }
     }
 
-    private static void HandleBuild(FoundryContext ctx) {
-        var model = ctx.Model!;
-        var outputPath = Path.Combine(ctx.Storage.Output().TimestampedSubDir("build").DirectoryPath, $"{model.Family.Name}.rfa");
-        var (receipt, templatePath, _) = FamilyModelBuild.BuildAndSave(ctx.UiDoc.Application.Application, model, outputPath, overwrite: true);
+    private static void Plan(FoundryContext ctx) {
+        var plan = FamilyFoundryBridgeOps.PlanFamilies(ctx.SelectedProfile!.LoadSpec().SpecJson, ctx.Doc).Families.Single();
+        new Ballogger().Add(plan.Refusals.Count == 0 ? LogEventLevel.Information : LogEventLevel.Warning, new StackFrame(),
+            $"Plan {ctx.Doc.Title}: {plan.Changes.Count} changes, {plan.Refusals.Count} refusals. " +
+            string.Join("; ", plan.Refusals.Select(r => $"{r.Path}: {r.Message}").Concat(plan.Changes.Select(c => $"{c.Kind} {c.Section}/{c.Key}")))).Show();
+    }
+
+    /// <summary>Plan, then apply exactly that plan: the plan is apply's confirmation, not a stage.</summary>
+    private static void Apply(FoundryContext ctx) {
+        var (spec, source) = ctx.SelectedProfile!.LoadSpec();
+        var plan = FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc).Families.Single();
+        if (plan.Refusals.Count > 0) {
+            new Ballogger().Add(LogEventLevel.Warning, new StackFrame(),
+                $"Refused: {string.Join("; ", plan.Refusals.Select(r => $"{r.Path}: {r.Message}"))}").Show();
+            return;
+        }
+        var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", spec, source,
+            new Dictionary<long, string> { [plan.FamilyId] = plan.PlanHash }, ctx.Doc, null, ctx.OnFinishSettings);
+        var receipt = result.Receipts.Single();
+        new Ballogger().Add(receipt.Success ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
+            $"Applied {ctx.Doc.Title}: {plan.Changes.Count} changes, {receipt.Errors.Count} errors, residue {receipt.Residue.Count}. {receipt.Error}\nReceipt: {result.ReceiptPath}").Show();
+    }
+
+    /// <summary>Builds into the source pod's `output/&lt;runId&gt;/` beside that run's receipt, from the member's own folder for nested models.</summary>
+    private static void Build(FoundryContext ctx) {
+        var (pod, member) = (ctx.SelectedProfile!.Pod, ctx.SelectedProfile.Member);
+        var (_, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>(pod);
+        var built = FamilyFoundryBridgeOps.BuildWithReceipt(ctx.UiDoc.Application.Application,
+            new FamilyBuildRequest(composed, source, Path.GetDirectoryName(member.FullPath(pod))));
         new Ballogger().Add(LogEventLevel.Information, new StackFrame(),
-            $"Built {model.Family.Name} from {Path.GetFileName(templatePath)} → {outputPath}. Converged: {receipt?.Converged}, residue {receipt?.Residue.Count}.").Show();
+            $"Built {built.FamilyName} from {Path.GetFileName(built.TemplatePath)} → {built.OutputPath}. Converged: {built.Converged}, residue {built.ResidueCount}.\nReceipt: {built.ReceiptPath}").Show();
     }
 }

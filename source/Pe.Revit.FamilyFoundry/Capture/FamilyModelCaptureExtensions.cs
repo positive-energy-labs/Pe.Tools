@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Mechanical;
+﻿using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using DataStorage = Autodesk.Revit.DB.ExtensibleStorage.DataStorage;
 using Pe.Revit.Extensions.FamDocument;
@@ -113,6 +113,7 @@ internal sealed class FamilyModelCapturer {
                 Placement = placement
             },
             Parameters = projected.Parameters,
+            BuiltIns = projected.BuiltIns,
             Types = projected.Types,
             Datums = datums,
             RefPlanes = refPlanes,
@@ -129,6 +130,8 @@ internal sealed class FamilyModelCapturer {
             Unmodeled = this._un,
             CaptureIssues = this._issues
         };
+        // What the executable model cannot express leaves the member and becomes a fact of the run.
+        model.Unmodeled.AddRange(FamilyModelPrune.RefLinesWithoutTwoPlanes(model));
         var incomplete = this._un.Select(fact => fact.Path.Split('.').ElementAtOrDefault(1))
             .OfType<string>().ToHashSet(StringComparer.Ordinal);
         foreach (var section in FamilyModel.SectionNames)
@@ -787,22 +790,11 @@ internal sealed class FamilyModelCapturer {
         return result;
     }
 
-    private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) {
-        var name = classification switch {
-            MEPSystemClassification.SupplyHydronic => "HydronicSupply",
-            MEPSystemClassification.ReturnHydronic => "HydronicReturn",
-            MEPSystemClassification.FireProtectWet => "FireProtectionWet",
-            MEPSystemClassification.FireProtectDry => "FireProtectionDry",
-            MEPSystemClassification.FireProtectPreaction => "FireProtectionPreAction",
-            MEPSystemClassification.FireProtectOther => "FireProtectionOther",
-            _ => classification.ToString()
-        };
-        return Enum.TryParse<ConnectorSystemType>(name, out var v) ? v : null;
-    }
+    private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) =>
+        ConnectorRevitNames.FromRevitName<ConnectorSystemType>(classification.ToString());
 
     private static TOut? EnumOf<TIn, TOut>(Parameter? p) where TIn : struct, Enum where TOut : struct, Enum =>
-        p == null || p.StorageType != StorageType.Integer ? null
-        : Enum.TryParse<TOut>(((TIn)(object)p.AsInteger()).ToString(), out var v) ? v : null;
+        p == null || p.StorageType != StorageType.Integer ? null : ConnectorRevitNames.FromRevitName<TOut>(((TIn)(object)p.AsInteger()).ToString());
 
     private FamilyInstance? NestedHostOf(ConnectorElement connector) => this._nestedSlug.Keys
         .Select(id => this._d.GetElement(id))

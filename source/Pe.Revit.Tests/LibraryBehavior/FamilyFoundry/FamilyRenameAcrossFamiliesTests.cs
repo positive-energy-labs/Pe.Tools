@@ -66,7 +66,7 @@ public sealed class FamilyRenameAcrossFamiliesTests {
 
     /// <summary>Retain the unreferenced text case and cover native width labels, type values and formula references.</summary>
     private static FamilyModel TaggedBox(string familyName, DataType dataType) {
-        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.family.json")));
+        var json = JObject.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("a-box.json")));
         json["family"]!["name"] = familyName;
         ((JObject)json["parameters"]!)[OldName] = new JObject { ["dataType"] = "Text" };
         if (dataType == DataType.Length)

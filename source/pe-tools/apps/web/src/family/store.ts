@@ -1,51 +1,52 @@
 /**
  * Family — the route's projections and its page memory, and nothing else.
  *
- * The owner, the registry, the Target resolution, busy, refusals and the host caller all live in
- * `useRoute` now; the Readings and the four verbs live in `family/manifest.ts`. What is left here
- * is what only Family knows: how the settings Work and the family Readings become one lane, and
- * which page selections the sheet holds while it is open. Plain values — no atoms, no `Scope`.
+ * The owner, the registry, the Target resolution, busy, refusals, the pod and spec selection, and
+ * capture/apply live in the route kernel (`route/family/manifest.ts` over `entityRoute`). What is
+ * left here is what only Family knows: how the draft (the live reading and its proposals), the
+ * capture evidence and the saved member a build needs become one lane, and which selections the
+ * sheet holds while it is open.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   actionReceiptSchema,
   familyCaptureSchema,
   familyProjectionSchema,
-  here,
+  memberWork,
   settingsFieldDirectives,
   settingsFieldSegments,
   settingsWorkSnapshot,
   type FamilyCapture,
   type FamilyDocument,
+  type FamilyDraft,
+  type PodMember,
   type Reading,
-  type SettingsDocumentId,
   type SettingsRouteDocument,
   type SettingsSnapshot,
-  type WorkKey,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
-import {
-  FAMILY_MODULE,
-  createLiveFamilyHost,
-  type EvidenceSlice,
-  type FieldState,
-} from "#/family/host";
+import type { EvidenceSlice, FieldState } from "#/family/host";
 import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { familyEditBuffer } from "./edit-buffer";
 import { draftToPatches } from "#/family/project";
+import { familyEditBuffer } from "./edit-buffer";
 import {
+  captureEvidence,
+  draftFields,
   familyManifest,
+  proposeOnDraft,
   latestApplyStatus,
   latestBuildStatus,
+  latestCaptureStatus,
   projectReadings,
+  type FamilyAuthoringFacts,
   type FamilyPage,
-} from "#/family/manifest";
-import { documentAddress, previousOf, useHostCall, inventoryOf, useReading } from "#/readings";
-import { useRoute } from "#/route";
-import type { SettingsHandle } from "#/settings/manifest";
+} from "#/route/family/manifest";
+import { previousOf, useReading } from "#/readings";
+import { useRoute, type EntityPage } from "#/route";
+import { openMember } from "#/route/spec-editor";
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -98,75 +99,174 @@ const initialMemory = (): FamilyPageMemory => ({
   receipt: null,
 });
 
+const absentFacts: FamilyAuthoringFacts = {
+  relativePath: null,
+  versionToken: null,
+  validation: null,
+  unsavedCount: 0,
+  stagedCount: 0,
+  current: false,
+};
+
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
 /** The last succeeded `family.apply` receipt, folded onto the projection. */
 export function applyOnto(
-  projection: FamilyDocument,
-  rows: readonly FamilyCapture[],
+  projection: Omit<FamilyDocument, "plan">,
   statuses: unknown,
   receipts: unknown,
   target: { session: string; openId: string },
-): FamilyDocument {
+): Omit<FamilyDocument, "plan"> {
   if (!statuses || !receipts) return projection;
-  const status = latestApplyStatus(rows, statuses, target);
+  const status = latestApplyStatus(statuses, target);
   if (!status) return projection;
   const row = actionReceiptSchema
     .array()
     .parse(receipts)
     .find((entry) => entry.id === status.id);
-  if (!row) return projection;
-  const step = row.steps.find(
-    (entry) => entry.key === "familyfoundry.apply" && entry.state === "succeeded",
+  const step = row?.steps.find(
+    (entry) => entry.key === "family.apply" && entry.state === "succeeded",
   );
-  if (step?.state === "succeeded") {
+  if (step?.state === "succeeded")
     projection.apply = familyProjectionSchema.shape.apply.parse(step.result);
-  }
   return projection;
+}
+
+/** The saved member, as the Settings Work reads it: bytes first, then what the host made of them. */
+function useMemberObservation(member: PodMember | null, enabled: boolean) {
+  const [reading, setReading] = useState<Reading<SettingsSnapshot>>({ state: "absent" });
+  const key = member ? memberWork(member) : null;
+  useEffect(() => {
+    if (!enabled || !member) return setReading({ state: "absent" });
+    let live = true;
+    setReading((previous) =>
+      previous.state === "ready"
+        ? { state: "stale", previous: previous.observation, reason: "dirtied" }
+        : { state: "absent" },
+    );
+    openMember(member).then(
+      (observation) => live && setReading({ state: "ready", observation }),
+      (cause: unknown) =>
+        live &&
+        setReading({
+          state: "failed",
+          message: cause instanceof Error ? cause.message : String(cause),
+        }),
+    );
+    return () => {
+      live = false;
+    };
+    // `key` is the member's identity; the object is rebuilt every render.
+  }, [key, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  return reading;
 }
 
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamilyStore(options: {
-  target?: string;
+  target?: string | null;
   thread?: string;
-  /** The settings file Work this page edits; `?mode=file` names it, the route resolves it. */
-  fileKey: WorkKey;
-  /** The FileWorkspace-owned Settings route for this authored file. */
-  settingsHandle: SettingsHandle;
-  /** Current saved-file observation supplied by FileWorkspace; absent only in a seed. */
-  profile?: Reading<SettingsSnapshot>;
-  refreshProfile?: () => Promise<void>;
-  selectFile?: (documentId: SettingsDocumentId) => Promise<void>;
-  initialDocumentId?: SettingsDocumentId;
+  /** The owner's live `pod.list`; the demo lane seeds its own. */
+  pods: Reading<unknown>;
+  /** Where the route arrived pointing (a deep link from `/pods` or a chat pane). */
+  initial?: Partial<EntityPage>;
 }) {
-  const workspaceId = options.fileKey.work;
-  if (!workspaceId) throw Error("Family requires an authored file workspace");
-  const fileKey = options.fileKey;
-  const settingsHandle = options.settingsHandle;
-  const settingsDoc = settingsHandle.work.doc as SettingsRouteDocument | null;
-  const settingsRevision = settingsHandle.work.revision;
+  const demo = useMemo(
+    () => new URLSearchParams(globalThis.location?.search ?? "").has("demo"),
+    [],
+  );
+  // The build refusals read the member's authored state, which is only known after the member's
+  // Work mounts below; the manifest takes the facts one render later.
+  const [facts, setFacts] = useState<FamilyAuthoringFacts>(absentFacts);
+  const routeManifest = useMemo(() => familyManifest(facts), [facts]);
+
+  // The member the draft was opened from or saved as; only build reads its saved bytes.
+  const [pageForMember, setPageForMember] = useState<PodMember | null>(null);
+  const observed = useMemberObservation(pageForMember, !demo);
+  const provided = useMemo(
+    () => (demo ? { pods: options.pods } : { pods: options.pods, profile: observed }),
+    [demo, options.pods, observed],
+  );
+  const handle = useRoute(routeManifest, {
+    target: options.target ?? null,
+    thread: options.thread,
+    page: options.initial as Partial<FamilyPage & EntityPage> | undefined,
+    provided,
+  });
+  const [page, setPage] = handle.page as unknown as readonly [
+    FamilyPage & EntityPage,
+    (next: Partial<FamilyPage & EntityPage>) => void,
+  ];
+  const member = useMemo(
+    () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
+    [page.pod, page.path],
+  );
+  useEffect(() => setPageForMember(member), [member]);
+
+  const profileObservation = previousOf(handle.readings.profile as Reading<SettingsSnapshot>);
+  // The draft: the live reading and the proposals on it, as the route's Work.
+  const draftDoc = handle.work.doc as FamilyDraft | null;
+  const draftRevision = handle.work.revision;
+  /**
+   * The person's input, held per draft until the Work takes it (a refusal keeps it for a retry).
+   * Each write lays its patches on the last draft this buffer wrote, so two quick edits compose.
+   */
+  const lastWritten = useRef<FamilyDraft | null>(null);
+  useEffect(() => {
+    lastWritten.current = null;
+  }, [draftDoc]);
   const edits = useMemo(
-    () => familyEditBuffer(fileKey, settingsHandle.work.write),
-    [fileKey, settingsHandle.work.write],
+    () =>
+      familyEditBuffer(handle.work.key, async (patches, revision) => {
+        const base = lastWritten.current ?? draftDoc;
+        if (!base) throw Error("Read the family first.");
+        const next = proposeOnDraft(base, patches);
+        const refusal = await handle.work.write(
+          [
+            { path: ["edits"], value: next.edits },
+            { path: ["accepted"], value: next.accepted },
+          ],
+          revision,
+        );
+        if (!refusal) lastWritten.current = next;
+        return refusal;
+      }),
+    [handle.work, draftDoc],
   );
   const editState = useSyncExternalStore(edits.subscribe, edits.getSnapshot, edits.getSnapshot);
   useEffect(() => {
-    if (settingsRevision != null) edits.observe(settingsRevision);
-  }, [edits, settingsRevision]);
-  const snapshot = useMemo(
-    () => (settingsDoc ? settingsWorkSnapshot(settingsDoc) : null),
-    [settingsDoc],
+    if (draftRevision != null) edits.observe(draftRevision);
+  }, [edits, draftRevision]);
+  const flush = edits.flush;
+  const fields = useMemo(
+    () => (draftDoc ? draftFields(draftDoc) : {}) as Record<string, FieldState>,
+    [draftDoc],
   );
-  const fields = (settingsDoc?.fields ?? {}) as Record<string, FieldState>;
-  const authoredLane = useMemo(
-    () => familySource(snapshot, null, fields),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapshot, settingsDoc?.fields],
+  const draftWork = useMemo(
+    (): SettingsRouteDocument | null =>
+      draftDoc?.reading == null
+        ? null
+        : {
+            basis: {
+              member: member ?? { pod: "", path: "" },
+              rawContent: draftDoc.reading,
+              sha256: "",
+            },
+            fields: fields as SettingsRouteDocument["fields"],
+          },
+    [draftDoc, fields, member],
   );
-  const authoredDraft = editState.draft ?? initialDraft(authoredLane.world);
+  const snapshot = useMemo(() => (draftWork ? settingsWorkSnapshot(draftWork) : null), [draftWork]);
+  const authoredLane = useMemo(() => familySource(snapshot, null, fields), [snapshot, fields]);
+  const authoredDraft = useMemo(
+    () =>
+      initialDraft(
+        familySource(draftWork ? settingsWorkSnapshot(draftWork, true) : null, null).world,
+      ),
+    [draftWork],
+  );
   const authoringFacts = useMemo(
-    () => ({
+    (): FamilyAuthoringFacts => ({
       relativePath: authoredLane.document?.relativePath ?? null,
       versionToken: authoredLane.document?.versionToken ?? null,
       validation: authoredLane.document ? (snapshot?.validation ?? null) : null,
@@ -178,42 +278,16 @@ export function useFamilyStore(options: {
           ).length
         : 0,
       stagedCount: Object.values(fields).filter((field) => field.staged != null).length,
-      current: settingsHandle.work.current && editState.failure === null,
+      current: handle.work.current,
     }),
-    [
-      authoredLane,
-      authoredDraft,
-      fields,
-      snapshot?.validation,
-      settingsRevision,
-      settingsHandle.work.current,
-      editState.failure,
-    ],
+    [authoredLane, authoredDraft, fields, snapshot?.validation, handle.work.current],
   );
-  const routeManifest = useMemo(() => {
-    const declared = familyManifest(authoringFacts);
-    return {
-      ...declared,
-      readings: {
-        ...declared.readings,
-        ...(options.thread
-          ? { head: { kind: "thread-head" as const, thread: options.thread } }
-          : {}),
-      },
-    };
-  }, [authoringFacts, options.thread]);
-  const profileObservation = options.profile ? previousOf(options.profile) : undefined;
-  const provided = useMemo(
-    () => (options.profile ? { profile: options.profile } : undefined),
-    [options.profile],
-  );
-  const handle = useRoute(routeManifest, {
-    target: options.target ?? null,
-    work: workspaceId,
-    page: profileObservation ? { file: profileObservation.documentId.relativePath } : undefined,
-    provided,
-  });
-  const [page, setPage] = handle.page as readonly [FamilyPage, (next: Partial<FamilyPage>) => void];
+  useEffect(() => {
+    setFacts((previous) =>
+      JSON.stringify(previous) === JSON.stringify(authoringFacts) ? previous : authoringFacts,
+    );
+  }, [authoringFacts]);
+
   const [memory, setMemory] = useState<FamilyPageMemory>(initialMemory);
   const patch = useCallback(
     (value: Partial<FamilyPageMemory>) => setMemory((current) => ({ ...current, ...value })),
@@ -233,76 +307,70 @@ export function useFamilyStore(options: {
     return raw ? familyCaptureSchema.array().parse(raw) : [];
   }, [familyReading]);
   const statuses = previousOf(handle.readings.receipts as Reading<unknown>);
+  const receiptOf = (id: string | undefined) =>
+    !handle.demo && id ? ({ kind: "receipts", id } as const) : null;
   const applyStatus = useMemo(
-    () => (target ? latestApplyStatus(readings, statuses, target) : null),
-    [readings, statuses, target],
+    () => (target ? latestApplyStatus(statuses, target) : null),
+    [statuses, target],
   );
-  const applyReceipt = useReading<unknown>(
-    !handle.demo && applyStatus ? { kind: "receipts", id: applyStatus.id } : null,
+  const applyReceipt = previousOf(useReading<unknown>(receiptOf(applyStatus?.id)));
+  const captureStatus = useMemo(
+    () => (target ? latestCaptureStatus(statuses, target) : null),
+    [statuses, target],
   );
-  const receipt = previousOf(applyReceipt);
+  const captureReceipt = previousOf(useReading<unknown>(receiptOf(captureStatus?.id)));
   const familyDoc = useMemo(() => {
-    const projection = projectReadings(readings, target ?? undefined, statuses);
-    return target ? applyOnto(projection, readings, statuses, receipt, target) : projection;
-  }, [readings, target, statuses, receipt]);
+    const projection = projectReadings(readings, target ?? undefined);
+    return target ? applyOnto(projection, statuses, applyReceipt, target) : projection;
+  }, [readings, target, statuses, applyReceipt]);
   const buildStatus = useMemo(
     () =>
-      target && profileObservation?.workspaceId && profileObservation.versionToken
+      target && profileObservation?.sha256
         ? latestBuildStatus(statuses, target, {
             target,
-            documentId: profileObservation.documentId,
-            workspaceId: profileObservation.workspaceId,
-            fileVersion: profileObservation.versionToken,
+            source: { ...profileObservation.member, sha256: profileObservation.sha256 },
             reason: "",
           })
         : null,
     [profileObservation, statuses, target],
   );
-  const buildReceiptReading = useReading<unknown>(
-    !handle.demo && buildStatus ? { kind: "receipts", id: buildStatus.id } : null,
-  );
+  const buildReceiptReading = useReading<unknown>(receiptOf(buildStatus?.id));
   const buildReceipt = useMemo(
     () =>
       buildStatus ? projectBuildReceipt(previousOf(buildReceiptReading), buildStatus.id) : null,
     [buildReceiptReading, buildStatus],
   );
 
-  const inventory = handle.readings.inventory as Reading<{
-    sessions: Parameters<typeof inventoryOf>[0];
-  }>;
-  const sessions = useMemo(() => inventoryOf(previousOf(inventory)?.sessions ?? []), [inventory]);
-
   /* ── Derived lane ───────────────────────────────────────────────────────── */
-  const review = {
-    revision: settingsRevision,
-    versionToken: settingsDoc?.basis?.versionToken ?? null,
-  };
+  const review = { revision: draftRevision };
+  /**
+   * What the latest capture from this document saw — coverage and unmodeled facts — shown beside
+   * the member it filed. Another member's capture is not this member's evidence.
+   */
+  const captured = useMemo(
+    () => (captureStatus ? captureEvidence(captureReceipt, captureStatus.id) : null),
+    [captureReceipt, captureStatus],
+  );
   const evidence = useMemo((): EvidenceSlice | null => {
-    const value = familyDoc.evidence;
-    if (!value) return null;
-    const session = sessions.find((entry) => entry.sessionId === target?.session);
-    const address = session ? documentAddress(session) : null;
-    return address ? ((here(value, address) as EvidenceSlice | null) ?? null) : null;
-  }, [familyDoc.evidence, sessions, target?.session]);
+    if (!captured || !member) return null;
+    if (captured.member.pod !== member.pod || captured.member.path !== member.path) return null;
+    // captureStatus is already this exact document lifetime; a family may have no path.
+    return captured.evidence;
+  }, [captured, member]);
   const lane = useMemo(
     () => familySource(snapshot, evidence, fields, familyDoc.doc),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapshot, evidence, settingsDoc?.fields, familyDoc.doc],
+    [snapshot, evidence, fields, familyDoc.doc],
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
-  const draft = useMemo(() => {
-    if (editState.draft) return editState.draft;
-    const projected = settingsDoc ? settingsWorkSnapshot(settingsDoc, true) : null;
-    return initialDraft(familySource(projected, evidence).world);
-  }, [editState.draft, settingsDoc, evidence]);
-  const reconciliation = { plan: familyDoc.plan, apply: familyDoc.apply };
-  const profile = settingsDoc?.basis?.documentId?.relativePath ?? "";
-  /** The verbs read the authored file from the page; an opened settings file names it (a seed
-   * names its own, so a demo lane with no settings Work keeps the seeded file). */
-  const openedFile = lane.document?.relativePath ?? null;
-  useEffect(() => {
-    if (openedFile && page.file !== openedFile) setPage({ file: openedFile });
-  }, [page.file, openedFile, setPage]);
+  const draft = useMemo(
+    () =>
+      editState.draft ??
+      initialDraft(
+        familySource(draftWork ? settingsWorkSnapshot(draftWork, true) : null, evidence).world,
+      ),
+    [editState.draft, draftWork, evidence],
+  );
+  const profile = member?.path ?? "";
 
   /* ── Build ──────────────────────────────────────────────────────────────── */
   const buildFacts: BuildFacts = {
@@ -312,10 +380,10 @@ export function useFamilyStore(options: {
     unsavedCount: authoringFacts.unsavedCount,
     stagedCount: authoringFacts.stagedCount,
     boundTarget: targetLabel,
-    armedToken: page.buildReview?.fileVersion ?? null,
+    armedToken: page.buildReview?.source.sha256 ?? null,
   };
   const armedBuild: ArmedBuild = page.buildReview
-    ? { token: page.buildReview.fileVersion, reason: page.buildReview.reason }
+    ? { token: page.buildReview.source.sha256, reason: page.buildReview.reason }
     : null;
   const buildOutcome: BuildRefusal | null =
     handle.outcome?.key === "build" && handle.outcome.refusal
@@ -324,36 +392,6 @@ export function useFamilyStore(options: {
           says: handle.outcome.refusal.message,
         }
       : null;
-
-  /* ── The profile picker's option list ───────────────────────────────────── */
-  const host = useMemo(() => createLiveFamilyHost(), []);
-  const profileCall = useHostCall(
-    () => host.profile(targetLabel),
-    ["family-profiles", targetLabel],
-  );
-  const feeds = {
-    profile: {
-      options: profileCall.data ? profileCall.data.map((id) => ({ id, label: id })) : null,
-      state: profileCall.error
-        ? ("error" as const)
-        : profileCall.isPending
-          ? ("loading" as const)
-          : ("ready" as const),
-      lane: "read" as const,
-      stale: false,
-    },
-  };
-
-  /* ── Staged authored input: coalesced into one settings apply ───────────── */
-  const flush = edits.flush;
-
-  /** The one-shot open of the document the route arrived pointing at. */
-  const opened = useRef(false);
-  useEffect(() => {
-    if (!options.initialDocumentId || opened.current || settingsDoc?.basis) return;
-    opened.current = true;
-    void settingsHandle.actions.open.run({ documentId: options.initialDocumentId });
-  }, [options.initialDocumentId, settingsDoc?.basis, settingsHandle.actions.open]);
 
   const actions = useMemo(
     () => ({
@@ -377,13 +415,13 @@ export function useFamilyStore(options: {
             }
           }
         }
-        if (!lane.document) return "Open a valid authored file before editing fields.";
-        if (settingsRevision == null) return "Wait for the authored file to finish loading.";
+        if (!lane.document) return "Read the family before editing fields.";
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
           patches.push({ path: ["fields", id, "proposal"] });
+        if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
-        edits.stage(nextDraft, patches, settingsRevision);
+        edits.stage(nextDraft, patches, draftRevision);
       },
       setOverlay: (value: Setter<Overlay>) =>
         setMemory((c) => ({ ...c, overlay: next(value, c.overlay) })),
@@ -412,7 +450,6 @@ export function useFamilyStore(options: {
         setMemory((c) => ({ ...c, binding: next(value, c.binding) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((c) => ({ ...c, picker: next(value, c.picker) })),
-      setStage: (stage: FamilyPage["stage"]) => setPage({ stage }),
       armBuild: () => handle.actions["prepare-build"].run({ reason: "" }),
       cancelBuild: () => handle.actions["cancel-build"].run(),
       setBuildReason: (reason: string) =>
@@ -421,35 +458,17 @@ export function useFamilyStore(options: {
         }),
       say: (text: string) => patch({ receipt: { verb: "page", text, at: Date.now() } }),
       flush,
-      openShared: async (documentId: SettingsDocumentId) => {
+      /** Re-read the open family into the draft; the proposals stay on it. */
+      read: () => handle.actions.read.run(),
+      /** Opening a saved member puts its bytes in the draft as the reading; the page names it. */
+      async open(next: PodMember) {
         await flush();
-        return settingsHandle.actions.open.run({ documentId });
+        const { rawContent } = await openMember(next);
+        await handle.work.write([{ path: ["reading"], value: rawContent }]);
+        setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
-      /** Opening a different authored file is a file-Work navigation, never a doc write. */
-      async open(relativePath: string) {
-        await flush();
-        setPage({ buildReview: null });
-        const documentId = { ...FAMILY_MODULE, relativePath };
-        if (options.selectFile) return options.selectFile(documentId);
-        await settingsHandle.actions.open.run({ documentId });
-      },
-      refresh: () => settingsHandle.actions.refresh.run(),
-      adopt: (_documentId: SettingsDocumentId, versionToken: string) =>
-        settingsHandle.actions.adopt.run({ versionToken }),
-      async save(reviewed = review) {
-        if (edits.getSnapshot().draft) {
-          await flush();
-          throw Error("Input staged. Review the updated shared candidate before saving.");
-        }
-        if (reviewed?.revision == null || !reviewed.versionToken)
-          return "Review an adopted file before saving.";
-        if (!settingsDoc) return "Review an adopted file before saving.";
-        const refusal = await settingsHandle.actions.save.run();
-        if (refusal) return refusal.message;
-        await options.refreshProfile?.();
-        return "saved shared settings work";
-      },
-      capture: () => handle.actions.capture.run({}),
+      /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */
+      capture: () => handle.actions.capture.run(),
       async build() {
         const result = await handle.actions.build.run();
         return result?.message ?? null;
@@ -458,32 +477,31 @@ export function useFamilyStore(options: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       handle.actions,
+      handle.work,
       draft,
       lane,
       snapshot,
-      settingsRevision,
-      settingsHandle.actions,
-      flush,
-      patch,
+      draftRevision,
       edits,
       editState.draft,
+      flush,
+      patch,
       page.buildReview,
-      options.refreshProfile,
-      options.selectFile,
     ],
   );
   return {
     handle,
     manifest: routeManifest,
-    scope: fileKey,
+    demo,
+    member,
     // Work + Readings, projected
     ready: familyDoc,
     readings,
     profile,
     target: targetLabel,
     evidence,
-    reconciliation,
-    routeStage: page.stage,
+    captured,
+    reconciliation: { apply: familyDoc.apply },
     lane,
     snapshot,
     review,
@@ -511,10 +529,9 @@ export function useFamilyStore(options: {
     armedBuild,
     sharedEdit: memory.sharedEdit,
     receipt: memory.receipt,
-    busy: settingsHandle.busy ?? handle.busy,
-    failure: editState.failure ?? settingsHandle.failure ?? handle.failure,
+    busy: handle.busy,
+    failure: editState.failure ?? handle.failure,
     editFailure: editState.failure,
-    feeds,
     actions,
   };
 }

@@ -1,3 +1,5 @@
+using Autodesk.Revit.UI.Events;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
@@ -41,6 +43,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 this._documents.Opened -= this.OnOpened;
                 this._documents.Closed -= this.OnClosed;
                 this._documents.ActiveChanged -= this.OnActiveChanged;
+                this._documents.KeyChanged -= this.OnKeyChanged;
                 this._documents.Changed -= this.OnChanged;
             }
 
@@ -60,6 +63,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             this._isReplaying = false;
             this._documents.Closed += this.OnClosed;
             this._documents.ActiveChanged += this.OnActiveChanged;
+            this._documents.KeyChanged += this.OnKeyChanged;
             this._documents.Changed += this.OnChanged;
             this._isInitialized = true;
         }
@@ -72,12 +76,26 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         if (this._isReplaying)
             return;
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Opened);
+        // Revit titles an EditFamily document after DocumentOpened (w8-revit 2c), and nothing else
+        // fires for it. Every open republishes once, on the next idle; the snapshot reads titles live.
+        var uiApplication = RevitUiSession.CurrentUIApplication;
+        EventHandler<IdlingEventArgs>? republish = null;
+        republish = (_, _) => {
+            uiApplication.Idling -= republish;
+            if (!this._disposed)
+                _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+        };
+        uiApplication.Idling += republish;
     }
 
     private void OnClosed(DocumentKey key) =>
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Closed);
 
     private void OnActiveChanged(TrackedDocument? active) =>
+        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+
+    // SaveAs and first save move the address; the host must hear it without waiting for an edit.
+    private void OnKeyChanged(TrackedDocument tracked, DocumentKey previous) =>
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
     private void OnChanged(TrackedDocument tracked, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {

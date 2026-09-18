@@ -1,69 +1,37 @@
 import { Pane } from "#/components/lang/pane";
-import { Surface } from "#/components/lang/surface";
 import { FamiliesMatrix } from "#/families/matrix";
-import { manifest } from "#/families/manifest";
-import { FamiliesReadoutBands } from "#/families/readout-bands";
+import { familiesSpec } from "#/families/manifest";
+import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
+import {
+  FamiliesCaptureBand,
+  FamiliesProposalsBand,
+  FamiliesReceiptsBand,
+} from "#/families/readout-bands";
 import { FamiliesFilterBand } from "#/families/scope-band";
-import { RouteShell } from "#/route";
-import { Picker } from "#/route/picker";
-import { Situation, SituationCell, useDocumentLadder } from "#/route/situation";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { EntityRouteView } from "#/route/entity";
+import { SituationCell } from "#/route/situation";
 
 const noun = (n: number, word: string) =>
   `${n} ${n === 1 ? word : word.endsWith("y") ? `${word.slice(0, -1)}ies` : `${word}s`}`;
 
 /**
- * The Families Situation. Stage word first (Scoping / Reviewing), then the profile slot (a picker
- * over the profile library) and the applied scope's terminal ("12 families"). The scope draft is
- * edited in the band below; the sentence reads what is APPLIED, never the draft.
+ * `/families` on the kernel. The sentence names the applied scope ("families over 12 families");
+ * the audit is the scope draft, the last apply's receipts and the matrix with its pick column.
  */
-function FamiliesHead() {
-  const {
-    store,
-    profilePath,
-    applied,
-    plan,
-    includedPlanned,
-    outsideProfile,
-    matrixIssue,
-    totalFamilies,
-  } = useFamiliesWorkspace();
-  const ladder = useDocumentLadder(store.handle);
-  const document = <Picker levels={ladder.levels} disabled={store.handle.busy !== null} />;
+export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
+  const { store, applied, plan, includedPlanned, outsideProfile, matrixIssue, totalFamilies } =
+    useFamiliesWorkspace();
   // An empty familyNames list means every family the categories resolve to: read the resolved count.
   const scoped = applied ? applied.familyNames.length || totalFamilies : 0;
-  const profileName = profilePath?.split(/[\\/]/).at(-1) ?? null;
-  const warnings = plan?.entries.reduce((sum, entry) => sum + entry.warnings.length, 0) ?? 0;
-  const profile = (
-    <SituationCell io="r" empty={!profilePath}>
-      <Picker
-        title={profilePath ? `${profilePath}; pick to change` : "choose a profile"}
-        levels={[
-          {
-            key: "profile",
-            label: profileName,
-            placeholder: "choose a profile",
-            options: store.feeds.profile.options,
-            note:
-              store.feeds.profile.state === "error"
-                ? "the host did not list its profiles"
-                : "reading profiles…",
-            picked: (id) => id === profilePath,
-            pick: (id) => void store.actions.setProfile(id),
-          },
-        ]}
-      />
-    </SituationCell>
-  );
   const scope = (
-    <SituationCell io={store.page.stage === "review" ? "w" : "r"} empty={!applied}>
-      {/* Read, not operable: no dotted mark. Dashed only while nothing is applied. */}
+    <SituationCell io={store.page.stage === "audit" ? "w" : "r"} empty={!applied}>
       <span
         className={applied ? undefined : "border-b seam-border border-current text-ink-2"}
         title={
           applied
-            ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft below changes it`
-            : "no scope applied; draft one below and apply it"
+            ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft changes it`
+            : "no scope applied; draft one in the audit and apply it"
         }
       >
         {applied ? noun(scoped, "family") : "no scope"}
@@ -71,69 +39,49 @@ function FamiliesHead() {
     </SituationCell>
   );
   return (
-    <Situation
-      handle={store.handle}
-      target={{ session: ladder.sessionWord, document: ladder.docWord }}
+    <EntityRouteView
+      def={familiesSpec}
+      handle={store.handle as never}
+      refreshPods={store.refreshPods}
+      fixture={store.demo ? DEMO_FAMILIES_SPEC : undefined}
+      url={url}
+      subject={<>families over {scope}</>}
       health={matrixIssue ? `${matrixIssue.title} · ${matrixIssue.message}` : null}
-      commit="apply"
-      sentence={
-        <>
-          {profile} over {scope} in {document}.
-        </>
-      }
-      band={
-        plan ? (
-          <div className="hairline-t hairline-b flex items-baseline justify-between gap-6 py-2 t-prose">
-            <span>
-              <b>
-                {includedPlanned.length} / {plan.entries.length} included
-              </b>
-              {store.handle.work.revision !== null ? (
-                <span className="face-mono text-ink-mute"> r{store.handle.work.revision}</span>
-              ) : null}
-            </span>
-            <span className="flex gap-4 text-ink-2">
-              {outsideProfile.length ? <span>{outsideProfile.length} unclaimed</span> : null}
-              {warnings ? <span data-tone="caution">{noun(warnings, "warning")}</span> : null}
-            </span>
-          </div>
-        ) : null
-      }
-      ledger={[
-        ["profile", profilePath ?? "none"],
+      hold={(id) => void store.actions.exclude(Number(id))}
+      facts={[
         [
           "scope",
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${noun(scoped, "family")}`
             : "none applied",
         ],
-        ["plan", plan ? `${noun(plan.entries.length, "entry")} on the current basis` : "none"],
+        [
+          "plan",
+          plan
+            ? `${includedPlanned.length} / ${plan.entries.length} included · ${outsideProfile.length} unclaimed`
+            : "none confirmed",
+        ],
         ["applied", store.applyData ? store.applyData.appliedAt : "never"],
       ]}
-    />
-  );
-}
-
-export function FamiliesWorkspaceView() {
-  const { store } = useFamiliesWorkspace();
-  return (
-    <Surface
-      head={<RouteShell manifest={manifest} handle={store.handle} situation={<FamiliesHead />} />}
     >
-      <div data-slot="readout-band" className="shrink-0 py-1.5">
-        <FamiliesFilterBand />
-        <FamiliesReadoutBands />
+      <div className="flex size-full min-h-0 min-w-0 flex-col">
+        <div data-slot="readout-band" className="shrink-0 py-1.5">
+          <FamiliesFilterBand />
+          <FamiliesProposalsBand />
+          <FamiliesCaptureBand />
+          <FamiliesReceiptsBand />
+        </div>
+        <Pane
+          kind="content"
+          title="families"
+          help="Families and types in the applied scope. Pick rows to capture them; open a row to inspect its family."
+          scroll="clip"
+          flush
+          headerless
+        >
+          <FamiliesMatrix />
+        </Pane>
       </div>
-      <Pane
-        kind="content"
-        title="families"
-        help="Families and types in the applied scope. Filter or open a row to inspect its authored family."
-        scroll="clip"
-        flush
-        headerless
-      >
-        <FamiliesMatrix />
-      </Pane>
-    </Surface>
+    </EntityRouteView>
   );
 }

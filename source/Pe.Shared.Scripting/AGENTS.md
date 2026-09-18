@@ -39,5 +39,5 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 - Static policy is minimum viable safety, not a security proof. Return diagnostics instead of throwing so callers can surface actionable rejection messages.
 - Add future Revit-type-aware rules behind `IScriptPolicyRule`; do not couple those rules into `RevitScriptExecutionService` unless they need live Revit state.
 - `ReadOnly` is the default public contract. `WriteTransaction` is explicit and rejects script-created `Transaction`, `SubTransaction`, and `TransactionGroup` instances. `NoTransaction` explicitly permits script/library-owned transaction boundaries.
-- `pod.json` validation belongs here because it is Revit-neutral. Keep the v1 manifest strict: known fields only, slug ids, non-empty entrypoints, and safe `src/**/*.cs` paths.
+- `pod.json` validation and settings composition belong here because they are Revit-neutral. Keep the v2 manifest strict: known fields only, slug ids, optional entrypoints for settings-only pods, exact release-hash dependencies, and safe `src/**/*.cs` paths.
 - Pod manifests describe shareable source entrypoints; they do not choose sandbox, transaction, or model-mutation permission. Execution requests still own `ScriptPermissionMode`.

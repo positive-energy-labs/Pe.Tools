@@ -3,7 +3,7 @@ import type { ProxyOptions } from "vite-plus";
 /** Product APIs only. TanStack owns documents and server-function routes. */
 export function devHostProxy(target: string): Record<string, ProxyOptions> {
   return {
-    "^/(?:call|events|ops|schemas|host|sessions|doctor|docs|pe)(?:/|\\?|$)|^/api/(?:bridge|agent-controller)(?:/|\\?|$)|^/actions(?:/(?:recover|resume))?(?:\\?|$)|^/(?:family/readings|schedule-grid/readings)(?:\\?|$)":
+    "^/(?:call|events|ops|schemas|host|sessions|doctor|docs|pe|demo)(?:/|\\?|$)|^/api/(?:bridge|agent-controller)(?:/|\\?|$)|^/actions(?:/(?:recover|resume|cancel))?(?:\\?|$)|^/(?:family/readings|schedules/readings)(?:\\?|$)":
       {
         target,
         changeOrigin: true,

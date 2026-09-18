@@ -105,6 +105,13 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
+            outputSink.Attribution = plan.Attribution;
+            // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
+            // in the default pod beside the inline traces.
+            outputSink.Artifacts = new ScriptArtifactWriter(
+                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
+                    ? plan.WorkspaceRoot
+                    : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
@@ -431,6 +438,7 @@ public sealed class RevitScriptExecutionService(
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
             PodManifest? podManifest = null;
+            PodReceipt? preparedAttribution = null;
             string? projectSeed = null;
             if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
@@ -440,12 +448,22 @@ public sealed class RevitScriptExecutionService(
                 );
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
-                var bundle = request.SourceBundle ?? CaptureWorkspaceSource(workspaceKey, request.SourcePath!);
+                var bundle = request.SourceBundle
+                             ?? throw new ArgumentException("A pod execution requires the host-captured sourceBundle.", nameof(request.SourceBundle));
+                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle) switch {
+                    PreparedPod prepared => prepared,
+                    RefusedPod refused => throw new ArgumentException(refused.Reason, PodManifestValidator.DiagnosticStage),
+                    _ => throw new InvalidOperationException("Pod preparation is prepared or refused.")
+                };
                 var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
                 projectSeed = captured.ProjectSeed;
+                var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
+                var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
+                // Outcome and output references are filled when CreateResult observes the final result.
+                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, string.Empty, [], null);
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
@@ -470,6 +488,7 @@ public sealed class RevitScriptExecutionService(
                     sourceSet,
                     executionMode,
                     podManifest,
+                    preparedAttribution,
                     canonicalProjectContent,
                     hasInlineContent
                 ),
@@ -601,38 +620,6 @@ public sealed class RevitScriptExecutionService(
         _ => "Script mode:"
     };
 
-    private static ScriptPodSourceBundle CaptureWorkspaceSource(string workspaceKey, string sourcePath) {
-        var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(workspaceKey,
-            ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath));
-        if (!File.Exists(selectedPath)) throw new IOException($"Workspace source file does not exist: {selectedPath}");
-        var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        if (!File.Exists(manifestPath))
-            throw new ArgumentException($"Workspace '{workspaceKey}' has no pod.json. Run scripting.workspace.bootstrap to create it and declare '{sourcePath}' under entrypoints.", PodManifestValidator.DiagnosticStage);
-        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
-        var paths = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
-        if (paths.Count > ScriptPodSourceNormalizer.MaxFiles)
-            throw new IOException("Pod source may contain at most 200 C# files.");
-        var total = 0;
-        string Read(string path, bool source = false) {
-            if (new FileInfo(path).Length > ScriptPodSourceNormalizer.MaxFileBytes)
-                throw new IOException("Pod file exceeds 512 KiB.");
-            var bytes = File.ReadAllBytes(path);
-            if (bytes.Length > ScriptPodSourceNormalizer.MaxFileBytes)
-                throw new IOException("Pod file exceeds 512 KiB.");
-            if (source && (total += bytes.Length) > ScriptPodSourceNormalizer.MaxSourceBytes)
-                throw new IOException("Pod source exceeds 2 MiB.");
-            return Convert.ToBase64String(bytes);
-        }
-        var manifest = Read(manifestPath);
-        var files = paths.Select(path => new ScriptPodSourceFile(
-            GetRelativePath(root, path).Replace('\\', '/'), Read(path, true))).ToList();
-        var projectPath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
-        var project = File.Exists(projectPath) ? Read(projectPath) : null;
-        return new ScriptPodSourceBundle(manifest, new ScriptPodProjectSeed(project is not null, project), files);
-    }
-
     private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {
         if (document is not null && (!document.IsValidObject ||
             !uiApplication.Application.Documents.Cast<Document>().Any(open => open.Equals(document))))
@@ -713,7 +700,7 @@ public sealed class RevitScriptExecutionService(
             document,
             selection,
             plan.RevitVersion,
-            new ScriptArtifactWriter(plan.ExecutionId),
+            outputSink.Artifacts!,
             cancellationToken,
             outputSink.WriteLine,
             this._notificationSink
@@ -1060,17 +1047,34 @@ public sealed class RevitScriptExecutionService(
         string executionId,
         IReadOnlyList<ScriptArtifactData>? artifacts = null,
         object? data = null
-    ) => new(
+    ) {
+        var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
+            Outcome = status.ToString(),
+            Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
+            Outputs = [.. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
+        };
+        var resultArtifacts = artifacts?.ToList() ?? [];
+        var resultDiagnostics = diagnostics.ToList();
+        if (attribution is not null && outputSink.Artifacts is not null) {
+            try {
+                resultArtifacts.Add(outputSink.Artifacts.WriteReceipt(attribution));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                resultDiagnostics.Add(ScriptDiagnosticFactory.Warning("pod.receipt", $"Execution finished but its receipt could not be saved: {exception.Message}"));
+            }
+        }
+        return new(
         status,
         outputSink.GetBufferedOutput(),
-        diagnostics.ToList(),
+        resultDiagnostics,
         revitVersion,
         targetFramework,
         containerTypeName,
         executionId,
-        artifacts?.ToList() ?? [],
-        data
+        resultArtifacts,
+        data,
+        attribution
     );
+    }
 
     private static void AppendDiagnostic(
         List<ScriptDiagnostic> diagnostics,

@@ -2,7 +2,6 @@ import { expect, test } from "vite-plus/test";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
-import { ScriptingTools } from "../src/shared/scripting.ts";
 
 // Fixture standing in for a live /ops catalog (the caller's only real source).
 const catalog: HostOperationDefinition[] = [
@@ -49,9 +48,7 @@ test("script execution requires an explicit initiating actor before admission", 
     catalogOverride: catalog,
   });
   await expect(
-    new ScriptingTools(client, { workspaceKey: "acceptance" }).execute({
-      scriptContent: 'WriteLine("ok");',
-    }),
+    client.callOperation("scripting.execute", { scriptContent: 'WriteLine("ok");' }),
   ).rejects.toThrow("initiating actor");
 });
 

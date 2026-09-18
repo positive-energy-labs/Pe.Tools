@@ -123,14 +123,9 @@ public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenPro
             );
 
             if (!response.IsSuccessStatusCode) {
-                // On first page failure, throw to avoid caching empty results
-                if (offset == 0) {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException(
-                        $"Failed to fetch parameters. Status: {response.StatusCode}. Response: {errorContent}");
-                }
-
-                break;
+                var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                throw new HttpRequestException(
+                    $"Failed to fetch parameters at offset {offset}. Status: {response.StatusCode}. Response: {errorContent}");
             }
 
             var page = await DeserializeToType<ParametersApi.Parameters>(response);

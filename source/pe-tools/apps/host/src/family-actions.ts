@@ -1,81 +1,206 @@
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
-import { Effect } from "effect";
+import { resolve, win32 } from "node:path";
+import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   actionAdmissionSchema,
   familyActions,
   familyReads,
-  familyPlanReadingSchema,
+  familiesCaptureEvidenceSchema,
   familiesRouteState,
-  familiesBasis,
   familiesIncluded,
-  familiesPlanReadingSchema,
+  memberWork,
   parameterLinksRouteState,
   parameterLinksBasis,
   parameterLinksReadingSchema,
-  sameAddress,
   settingsCandidate,
-  settingsBasisSchema,
   settingsRouteState,
   nativeProcessSchema,
   canonicalRouteInput,
-  addressSchema,
   documentRefSchema,
   workKeySchema,
   type FamilyActionKey,
   type FamilyReadKey,
   type DocumentRef,
+  type PodMember,
+  type PodMemberSource,
   type SettingsRouteDocument,
   type FamilyCapture,
+  type AppliedFilter,
+  FAMILY_SCOPE_LIMIT,
 } from "@pe/agent-contracts";
 import type {
-  OpenSettingsDocumentRequest,
-  SaveSettingsDocumentRequest,
-  SettingsDocumentSnapshot,
-  SaveSettingsDocumentResult,
+  PodMemberSaveRequest,
+  PodMemberWriteRequest,
+  PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
+import type {
+  FamiliesApply,
+  FamiliesCapture,
+  FamiliesPlan,
+  FamilyCapture as NativeFamilyCapture,
+  FamilyPlan,
+  RevitCatalogLoadedFamilies,
+} from "@pe/host-contracts/generated";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
-import { openSettingsDocument, saveSettingsDocument, settingsDocumentAddress } from "./settings.ts";
+import {
+  composedSpec,
+  podFolder,
+  saveMember,
+  writeMember,
+  writeRun,
+  type PodContext,
+} from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { executionContent } from "../../../packages/mcps/src/pea/settings-commands.ts";
+import { LocalOpError } from "./local-error.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-export type FamilyActionDependencies = TakeoffActionDependencies & {
-  settingsAddress?: (
-    id: import("@pe/host-contracts/operation-types").SettingsDocumentId,
-  ) => Promise<{ path: string; workspaceId: string }>;
-  nativePaths?: (
-    input: { outputPath?: string; modelDirectory?: string },
-    id: string,
-    file: string,
-  ) => Promise<{ outputPath: string; modelDirectory: string }>;
-  openSettings?: (request: OpenSettingsDocumentRequest) => Promise<SettingsDocumentSnapshot>;
-  saveSettings?: (request: SaveSettingsDocumentRequest) => Promise<SaveSettingsDocumentResult>;
+
+/** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
+export type PodDependencies = {
+  podsRoot?: string;
+  runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) => Promise<A>;
 };
-const addressFile = (
-  deps: FamilyActionDependencies,
-  id: import("@pe/host-contracts/operation-types").SettingsDocumentId,
+export type FamilyActionDependencies = TakeoffActionDependencies &
+  PodDependencies & {
+    /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
+    nativePaths?: (
+      input: { modelDirectory?: string },
+      id: string,
+      file: string,
+    ) => Promise<{ modelDirectory: string }>;
+  };
+
+/** A conditional member write that refused wrote nothing: a clean refusal, never an unknown effect. */
+export const writeMemberOnce = (
+  deps: PodDependencies,
+  request: PodMemberWriteRequest | PodMemberSaveRequest,
+  pods: PodContext,
+): Promise<PodMemberWritten> =>
+  runPods(
+    deps,
+    "expectedSha256" in request ? saveMember(request, pods) : writeMember(request, pods),
+  ).catch((error: unknown) => {
+    if (error instanceof LocalOpError && error.statusCode === 409) throw refused(error.message);
+    throw error;
+  });
+
+/**
+ * The `$schema` a family model member carries; C# owns the URL shape. The origin is the host that
+ * is running, never the preferred port: another checkout's host must not serve our members' schema.
+ */
+const familyModelSchema = () =>
+  `${process.env[hostProcessIdentity.hostBaseUrlVariable] || hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
+
+/** The composed member as authored; the C# family edge reads its `$schema`. */
+const familySpec = async (deps: PodDependencies, source: PodMemberSource, pods: PodContext) =>
+  (await runPods(deps, composedSpec(source, pods))).spec;
+
+/**
+ * A captured family model becomes a member that says what it is. `unmodeled` is what the engine
+ * saw and cannot execute; it is evidence, so it leaves the member and lands in the capture's run
+ * (user verdict 2026-09-17). A member that kept it would fail its own plan.
+ */
+const familyMember = (modelJson: string) => {
+  const { unmodeled = [], ...model } = JSON.parse(modelJson) as { unmodeled?: unknown[] };
+  return {
+    content: `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}\n`,
+    unmodeled,
+  };
+};
+
+/** A draft saved as a member says what it is, whatever `$schema` it carried. */
+const draftContent = (spec: string) => {
+  const { $schema: _, ...model } = JSON.parse(spec.replace(/^﻿/, "")) as object & {
+    $schema?: string;
+  };
+  return `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}
+`;
+};
+
+export const runPods = <A, E>(
+  deps: PodDependencies,
+  effect: Effect.Effect<A, E, FileSystem.FileSystem>,
 ) =>
-  deps.settingsAddress
-    ? deps.settingsAddress(id)
-    : Effect.runPromise(settingsDocumentAddress(id).pipe(Effect.provide(NodeServices.layer)));
-const openFile = (deps: FamilyActionDependencies, request: OpenSettingsDocumentRequest) =>
-  deps.openSettings
-    ? deps.openSettings(request)
-    : Effect.runPromise(openSettingsDocument(request, {}).pipe(Effect.provide(NodeServices.layer)));
-const writeFile = (deps: FamilyActionDependencies, request: SaveSettingsDocumentRequest) =>
-  deps.saveSettings
-    ? deps.saveSettings(request)
-    : Effect.runPromise(saveSettingsDocument(request, {}).pipe(Effect.provide(NodeServices.layer)));
-async function current(
+  deps.runPods
+    ? deps.runPods(effect)
+    : Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+
+/** Pod context whose composition runs in the exact admitted session and document lifetime. */
+export const podContext = (
+  deps: PodDependencies,
+  bridge: RevitBridge["Service"],
+  target?: DocumentRef,
+): PodContext => ({
+  podsRoot: deps.podsRoot,
+  ...(target
+    ? {
+        invokeBridge: (key: string, payload: unknown) =>
+          Effect.tryPromise({ try: () => invoke(bridge, target, key, payload), catch: (e) => e }),
+      }
+    : {}),
+});
+
+/** The document each workflow runs against: a family, any document (build), or a project. */
+const documentKind = (key: FamilyActionKey): boolean | "project" =>
+  key === "family.capture" || key === "family.plan" || key === "family.apply"
+    ? true
+    : key === "family.build"
+      ? false
+      : "project";
+
+const diagnosticLine = (d: { code: string; path: string; message: string }) =>
+  `${d.code} · ${d.path} — ${d.message}`;
+
+/** A new member path in the route's pod; frozen at preparation so a resume writes the same one. */
+export const capturePath = (entity: string, name: string, at = new Date()) =>
+  `settings/${entity}/${name.replace(/[^\w.-]+/g, "-")}-${at.toISOString().replace(/[:.]/g, "-")}.json`;
+
+/** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
+export const writeCaptureRun = (
+  deps: PodDependencies,
+  pods: PodContext,
+  at: string,
+  written: PodMemberWritten,
+  operation: string,
+  outputs: Readonly<Record<string, string>> = {},
+) =>
+  runPods(
+    deps,
+    writeRun(
+      written.pod,
+      `${at.replace(/[:.]/g, "-")}-${digest(written.path).slice(0, 8)}`,
+      {
+        ...outputs,
+        "receipt.json": `${JSON.stringify(
+          {
+            podId: written.pod,
+            memberPath: written.path,
+            memberSha256: written.sha256,
+            operation,
+            planHash: null,
+            outcome: "Succeeded",
+            outputs: Object.keys(outputs),
+            reason: null,
+          },
+          null,
+          2,
+        )}
+`,
+      },
+      pods,
+    ),
+  );
+
+export async function current(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
-  family: boolean,
+  family: boolean | "project",
   process?: NativeProcess,
 ) {
   const session = (await Effect.runPromise(bridge.list)).find(
@@ -85,7 +210,8 @@ async function current(
   if (
     !session ||
     !doc ||
-    (family && !doc.isFamilyDocument) ||
+    (family === true && !doc.isFamilyDocument) ||
+    (family === "project" && doc.isFamilyDocument) ||
     (process &&
       (session.processId !== process.pid ||
         session.processStartUtcUnixMs !== Date.parse(process.processStartUtc)))
@@ -93,7 +219,7 @@ async function current(
     throw refused("The exact admitted document lifetime/process is no longer available");
   return session;
 }
-async function invoke(
+export async function invoke(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
   key: string,
@@ -106,13 +232,73 @@ async function invoke(
   if (result._tag === "Failure") throw result.failure;
   return result.success.value;
 }
-const basisOf = (snapshot: SettingsDocumentSnapshot) =>
-  settingsBasisSchema.parse({
-    documentId: snapshot.metadata.documentId,
-    path: snapshot.metadata.documentId.stableId,
-    rawContent: snapshot.rawContent,
-    versionToken: snapshot.metadata.versionToken?.value,
+export async function lifetime(
+  bridge: RevitBridge["Service"],
+  target: DocumentRef,
+  family: boolean | "project",
+  deps: TakeoffActionDependencies,
+) {
+  const session = await current(bridge, target, family);
+  if (!session.processId || session.processStartUtcUnixMs == null)
+    throw refused("Original process identity unavailable");
+  const process = await readOriginalProcess(
+    session.processId,
+    session.processStartUtcUnixMs,
+    deps.sdk,
+  );
+  return { session: await current(bridge, target, family, process), process };
+}
+
+type Prepared =
+  | {
+      kind: "settings";
+      document: SettingsRouteDocument;
+      request: PodMemberWriteRequest | PodMemberSaveRequest;
+    }
+  | {
+      kind: "native";
+      process: NativeProcess;
+      nativeKey: string;
+      input: unknown;
+      /**
+       * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` resolves to
+       * family ids before the native plan; null is one family document, which plans exactly one family.
+       */
+      planned?: {
+        scope: AppliedFilter | null;
+        excludedIds: readonly number[];
+        /** A subset of the scope the caller names (one generated member's family); absent = all. */
+        familyIds?: readonly number[];
+      };
+    }
+  | {
+      kind: "capture";
+      process: NativeProcess;
+      nativeKey: string;
+      input: unknown;
+      /** Null: a live read that files nothing. */
+      pod: string | null;
+      path: string | null;
+      /** The draft's text to file instead of what Revit said. */
+      spec: string | null;
+      at: string;
+    };
+
+/**
+ * An apply where no family succeeded changed nothing (each failure rolls back whole), so it settles `failed` with the
+ * receipt's one-sentence reason; one success is a run that changed Revit and settles `succeeded` with per-family receipts.
+ * `notDispatched` is the journal's only settled-failure shape; here it means "no effect", not "never sent".
+ */
+const appliedSomething = (result: unknown) => {
+  const applied = result as FamiliesApply.Res.Response;
+  if (applied.receipts.some((receipt) => receipt.success)) return;
+  if (applied.diagnostics.some((diagnostic) => diagnostic.code === "Cancelled")) return;
+  throw new BridgeError(applied.reason ?? "No family was applied", 422, {
+    notDispatched: true,
+    result,
   });
+};
+
 export async function admitFamilyAction(
   raw: unknown,
   owner: ActionJournal,
@@ -132,132 +318,131 @@ export async function admitFamilyAction(
     throw refused("Wrong action destination");
   if (key !== "settings.write" && admission.destination.kind !== "document")
     throw refused("An exact execution DocumentRef is required");
-  if (key === "settings.write") {
-    const input = familyActions[key].input.parse(admission.input);
-    const canonical = await addressFile(deps, input.documentId);
-    if (
-      canonical.path.toLowerCase() !== input.path.toLowerCase() ||
-      canonical.workspaceId !== input.workspaceId
-    )
-      throw refused("The file address belongs to another Work");
-    // The receipt must echo the submitted intent exactly; Work identity is the exactly
-    // compared workspaceId, and every path comparison below is already case-insensitive.
-    admission.input = input;
-  }
   const target = admission.destination.kind === "document" ? admission.destination.ref : undefined;
   const work = deps.workspace ?? actionWorkspace();
+  const pods = podContext(deps, bridge, target);
   return owner.admit(
     admission,
-    async () => {
+    async (): Promise<Prepared> => {
       if (key === "settings.write") {
         const input = familyActions["settings.write"].input.parse(admission.input);
-        const address = await addressFile(deps, input.documentId);
-        if (
-          address.path.toLowerCase() !== input.path.toLowerCase() ||
-          address.workspaceId !== input.workspaceId
-        )
-          throw refused("The file address belongs to another Work");
         const base = admission.bases.work;
-        if (!base || !work || base.key.work !== input.workspaceId)
-          throw refused("Reviewed Settings Work is required");
-        const view = await work.read(base.key, "settings");
+        if (!base || !work || base.key.work !== memberWork(input.member))
+          throw refused("Reviewed member Work is required");
+        const view = await work.read(base.key, settingsRouteState.route);
         if (!view || view.revision !== base.revision)
-          throw refused("Settings Work changed after review");
+          throw refused("Member Work changed after review");
         const document = settingsRouteState.schema.parse(view.doc);
+        if (input.write.kind === "create") {
+          if (document.basis || Object.keys(document.fields).length)
+            throw refused("Create requires empty reviewed Work");
+          return {
+            kind: "settings",
+            document,
+            request: { ...input.member, content: input.write.rawContent },
+          };
+        }
         if (
-          input.write.kind === "save" &&
-          (!document.basis ||
-            document.basis.path.toLowerCase() !== address.path.toLowerCase() ||
-            document.basis.versionToken !== input.write.versionToken)
+          !document.basis ||
+          canonicalRouteInput(document.basis.member) !== canonicalRouteInput(input.member) ||
+          document.basis.sha256 !== input.write.sha256
         )
-          throw refused("The original file basis changed");
-        if (
-          input.write.kind === "create" &&
-          (document.basis || Object.keys(document.fields).length)
-        )
-          throw refused("Create requires empty reviewed Work");
+          throw refused("The original member basis changed");
         return {
           kind: "settings",
           document,
           request: {
-            documentId: input.documentId,
-            workspaceId: input.workspaceId,
-            mode: "file",
-            rawContent:
-              input.write.kind === "create"
-                ? input.write.rawContent
-                : settingsCandidate(document.basis!.rawContent, document.fields),
-            expected:
-              input.write.kind === "create"
-                ? { kind: "missing" }
-                : { kind: "present", version: input.write.versionToken },
+            ...input.member,
+            content: settingsCandidate(document.basis.rawContent, document.fields),
+            expectedSha256: input.write.sha256,
           },
-          path: address.path,
         };
       }
-      const session = await current(bridge, target!, key === "family.apply");
-      if (!session.processId || session.processStartUtcUnixMs == null)
-        throw refused("Original process identity unavailable");
-      const process = await readOriginalProcess(
-        session.processId,
-        session.processStartUtcUnixMs,
-        deps.sdk,
-      );
-      await current(bridge, target!, key === "family.apply", process);
-      if (key === "families.apply" || key === "parameter-links.apply") {
+      const { process } = await lifetime(bridge, target!, documentKind(key), deps);
+      if (key === "family.capture" || key === "families.capture") {
+        const input = admission.input as {
+          pod?: string;
+          path?: string;
+          spec?: string;
+          familyIds?: number[];
+        };
+        if (input.pod) await runPods(deps, podFolder(input.pod, pods));
+        return {
+          kind: "capture",
+          process,
+          nativeKey: key,
+          input: key === "families.capture" ? { familyIds: input.familyIds } : {},
+          pod: input.pod ?? null,
+          path: input.path ?? null,
+          spec: input.spec ?? null,
+          at: new Date().toISOString(),
+        };
+      }
+      if (key === "family.plan" || key === "family.apply") {
+        const { source } = familyActions["family.plan"].input.parse(admission.input);
+        const specJson = await familySpec(deps, source, pods);
+        return key === "family.apply"
+          ? {
+              kind: "native",
+              process,
+              nativeKey: "family.apply",
+              input: {
+                specJson,
+                expectedPlanHashes: familyActions[key].input.parse(admission.input)
+                  .expectedPlanHashes,
+                source,
+              },
+            }
+          : {
+              kind: "native",
+              process,
+              nativeKey: "family.plan",
+              input: { specJson },
+              planned: { scope: null, excludedIds: [] },
+            };
+      }
+      if (key === "families.plan") {
+        const input = familyActions[key].input.parse(admission.input);
+        // The scope is authored Work; the plan is a result and never lands there.
+        const base = admission.bases.work;
+        const view = base && work ? await work.read(base.key, familiesRouteState.route) : null;
+        if (!view || view.revision !== base!.revision)
+          throw refused("Current reviewed Families Work is required");
+        const { scope } = familiesRouteState.schema.parse(view.doc);
+        if (!scope) throw refused("Author a scope before planning");
+        return {
+          kind: "native",
+          process,
+          nativeKey: "families.plan",
+          input: {
+            specJson: await familySpec(deps, input.source, pods),
+            ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+          },
+          planned: {
+            scope,
+            excludedIds: input.excludedIds,
+            ...(input.familyIds ? { familyIds: input.familyIds } : {}),
+          },
+        };
+      }
+      if (key === "families.apply") {
+        const input = familyActions[key].input.parse(admission.input);
+        if (!Object.keys(input.expectedPlanHashes).length)
+          throw refused("No included family has changes to apply");
+        // The saved bytes must still be the ones planned; the engine gates each family's hash.
+        return {
+          kind: "native",
+          process,
+          nativeKey: "families.apply",
+          input: { ...input, specJson: await familySpec(deps, input.source, pods) },
+        };
+      }
+      if (key === "parameter-links.apply") {
         const base = admission.bases.work;
         if (!base || !work) throw refused("Reviewed Work is required");
-        const route = key === "families.apply" ? "families" : "parameter-links";
-        const view = await work.read(base.key, route);
+        const view = await work.read(base.key, "parameter-links");
         if (!view || view.revision !== base.revision)
           throw refused("Work changed after review; review the current basis again");
-        const at = addressSchema.safeParse(
-          session.state?.openDocuments.find((d) => d.openId === target!.openId)?.address,
-        ).data;
-        if (!at) throw refused("The admitted document has no resolvable address");
-        if (key === "families.apply") {
-          const input = familyActions[key].input.parse(admission.input);
-          const document = familiesRouteState.schema.parse(view.doc);
-          const capture = await captures.family(input.planId);
-          if (
-            capture.reading.kind !== "families-plan" ||
-            capture.provenance.kind !== "live" ||
-            canonicalRouteInput(capture.provenance.target) !== canonicalRouteInput(target)
-          )
-            throw refused("The reviewed plan is not live evidence for the selected lifetime");
-          const plan = familiesPlanReadingSchema.parse(capture.reading.value);
-          // Staleness is a basis mismatch, never a cleared field: the reading still exists.
-          if (plan.basis !== familiesBasis(document))
-            throw refused("The authored profile or scope changed after the plan; plan again");
-          if (!sameAddress(plan.reading.at, at))
-            throw refused("The plan was read against another document");
-          const included = familiesIncluded(plan, document.excludedIds);
-          if (canonicalRouteInput(included) !== canonicalRouteInput(input.expectedPlanHashes))
-            throw refused("The reviewed family plans or exclusions changed");
-          if (!Object.keys(included).length)
-            throw refused("No included family has changes to apply");
-          const opened = (await invoke(bridge, target!, "settings.document.open", {
-            documentId: {
-              moduleKey: "FamilyFoundry",
-              rootKey: "patches",
-              relativePath: document.profilePath!,
-            },
-            includeComposedContent: true,
-          })) as SettingsDocumentSnapshot;
-          const patchJson = executionContent(opened);
-          if (digest(patchJson) !== plan.composedDigest)
-            throw refused("The reviewed profile bytes changed after the plan; plan again");
-          return {
-            kind: "native",
-            process,
-            nativeKey: "familyfoundry.apply",
-            input: {
-              patchJson,
-              expectedPlanHashes: included,
-              ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
-            },
-          };
-        }
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
         if (!document.draft) throw refused("Author a draft profile before applying");
@@ -280,129 +465,196 @@ export async function admitFamilyAction(
           input: { profile: document.draft, previewOnly: false, reconcile: true },
         };
       }
-      if (key === "family.apply") {
-        const input = familyActions["family.apply"].input.parse(admission.input);
-        const capture = await captures.family(input.planId);
-        if (
-          capture.provenance.kind !== "live" ||
-          canonicalRouteInput(capture.provenance.target) !== canonicalRouteInput(target) ||
-          capture.reading.kind !== "plan"
-        )
-          throw refused("Plan is not live evidence for the selected lifetime");
-        const plan = familyPlanReadingSchema.parse(capture.reading.value);
-        if (
-          canonicalRouteInput(plan.target) !== canonicalRouteInput(target) ||
-          plan.entry.planHash !== input.expectedPlanHash ||
-          plan.entry.refusals.length
-        )
-          throw refused("Review the original valid native plan hash");
-        const opened = await openFile(deps, {
-          documentId: plan.documentId,
-          workspaceId: plan.workspaceId,
-          mode: "file",
-          includeComposedContent: true,
-        });
-        if (
-          opened.metadata.versionToken?.value !== plan.fileVersion ||
-          digest(executionContent(opened)) !== plan.composedDigest
-        )
-          throw refused("The original file/composed plan basis changed");
-        return {
-          kind: "native",
-          process,
-          nativeKey: "familyfoundry.apply",
-          input: {
-            patchJson: plan.patchJson,
-            expectedPlanHashes: { [plan.entry.familyId]: input.expectedPlanHash },
-            ...(plan.executionOptions ? { executionOptions: plan.executionOptions } : {}),
-          },
-        };
-      }
       const input = familyActions["family.build"].input.parse(admission.input);
-      const opened = await openFile(deps, {
-        documentId: input.documentId,
-        workspaceId: input.workspaceId,
-        mode: "file",
-        includeComposedContent: true,
-      });
-      if (opened.metadata.versionToken?.value !== input.fileVersion)
-        throw refused("The original saved file token changed");
-      const path = opened.metadata.documentId.stableId;
-      if (!path) throw refused("Canonical file path unavailable");
+      const spec = await familySpec(deps, input.source, pods);
+      const file = win32.join(
+        await runPods(deps, podFolder(input.source.pod, pods)),
+        input.source.path,
+      );
       return {
         kind: "native",
         process,
-        nativeKey: "revit.apply.family-model",
-        fileVersion: input.fileVersion,
-        composedDigest: digest(executionContent(opened)),
+        nativeKey: "family.build",
         input: {
-          modelJson: executionContent(opened),
+          specJson: spec,
+          source: input.source,
+          // No output path: family.build lands the .rfa in its own run folder in the source pod.
           ...(deps.nativePaths
-            ? await deps.nativePaths(input, admission.id, path)
-            : {
-                outputPath: resolve(
-                  input.outputPath ?? `.artifacts/tmp/family/${digest(admission.id)}.rfa`,
-                ),
-                modelDirectory: resolve(input.modelDirectory ?? dirname(path)),
-              }),
+            ? await deps.nativePaths(input, admission.id, file)
+            : { modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)) }),
         },
       };
     },
     async (execution) => {
-      const prepared = execution.prepared as
-        | {
-            kind: "settings";
-            document: SettingsRouteDocument;
-            request: SaveSettingsDocumentRequest;
-          }
-        | { kind: "native"; process: NativeProcess; nativeKey: string; input: unknown };
-      if (prepared.kind === "native") {
-        const result = await execution.step(
-          "native",
-          prepared.nativeKey,
-          prepared.input,
-          async (id) => {
-            await current(
-              bridge,
-              target!,
-              key === "family.apply",
-              nativeProcessSchema.parse(prepared.process),
-            );
-            return invoke(bridge, target!, prepared.nativeKey, prepared.input, id);
+      const prepared = execution.prepared as Prepared;
+      const native = (nativeKey: string, input: unknown, process: NativeProcess) =>
+        execution.step("native", nativeKey, input, async (id) => {
+          await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
+          const result = await invoke(bridge, target!, nativeKey, input, id);
+          if (nativeKey === "family.apply" || nativeKey === "families.apply")
+            appliedSomething(result);
+          return result;
+        });
+      const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
+        const catalog = (await native(
+          "revit.catalog.loaded-families",
+          { filter: scope, budget: { maxEntries: FAMILY_SCOPE_LIMIT } },
+          process,
+        )) as RevitCatalogLoadedFamilies.Res.Response;
+        if (catalog.summary.truncated)
+          throw refused(`The scope resolves more than ${FAMILY_SCOPE_LIMIT} families; narrow it`);
+        if (!catalog.families.length) throw refused("The scope resolves no loaded family");
+        return catalog.families.map((family) => family.familyId);
+      };
+      if (prepared.kind === "capture") {
+        const captured = await native(prepared.nativeKey, prepared.input, prepared.process);
+        const at = new Date(prepared.at);
+        const specs =
+          prepared.nativeKey === "families.capture"
+            ? (captured as FamiliesCapture.Res.Response).families.flatMap((f) =>
+                f.success && f.modelJson
+                  ? [
+                      {
+                        familyId: f.familyId,
+                        ...familyMember(f.modelJson),
+                        path: capturePath("families", f.familyName ?? `family-${f.familyId}`, at),
+                      },
+                    ]
+                  : [],
+              )
+            : [
+                {
+                  familyId: 0,
+                  ...familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
+                  // Saving a draft files the draft's text; the run still holds what Revit said.
+                  ...(prepared.spec ? { content: draftContent(prepared.spec) } : {}),
+                  path:
+                    prepared.path ??
+                    capturePath(
+                      "family",
+                      (captured as NativeFamilyCapture.Res.Response).familyName,
+                      at,
+                    ),
+                },
+              ];
+        // No pod: the live read the audit drafts from. Nothing is filed.
+        if (!prepared.pod)
+          return {
+            executionContext: target,
+            spec: specs[0]!.content,
+            evidence: { ...(captured as object), origin: "capture", rfaPath: null, run: null },
+          };
+        const pod = prepared.pod;
+        const members: PodMemberWritten[] = [];
+        // Each captured member gets its own run, so `/pods` lists it against that member like any
+        // other run; the run holds the unmodeled facts the member cannot carry.
+        const runs = new Map<number, string>();
+        for (const { familyId, content, unmodeled, path } of specs) {
+          const request = { pod, path, content };
+          const written = (await execution.step("file", "pod.member.write", request, () =>
+            writeMemberOnce(deps, request, pods),
+          )) as PodMemberWritten;
+          members.push(written);
+          runs.set(
+            familyId,
+            await writeCaptureRun(deps, pods, prepared.at, written, prepared.nativeKey, {
+              "unmodeled.json": `${JSON.stringify(unmodeled, null, 2)}
+`,
+            }),
+          );
+        }
+        // The captured members plus what the capture saw: coverage and the unmodeled ledger, which
+        // is a file in the run the panel can still read after a reload.
+        if (prepared.nativeKey === "families.capture") {
+          const { families, diagnostics } = captured as FamiliesCapture.Res.Response;
+          return {
+            executionContext: target,
+            members,
+            evidence: familiesCaptureEvidenceSchema.parse({
+              diagnostics,
+              families: families.map(({ modelJson: _, ...family }) => ({
+                ...family,
+                run: runs.get(family.familyId) ?? null,
+              })),
+            }),
+          };
+        }
+        return {
+          executionContext: target,
+          member: members[0],
+          evidence: {
+            ...(captured as object),
+            origin: "capture",
+            rfaPath: null,
+            run: runs.get(0) ?? null,
           },
+        };
+      }
+      if (prepared.kind === "native") {
+        const scope = prepared.planned?.scope;
+        // The target resolves to family ids once, here; the engine plans exactly those ids.
+        const resolved = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
+        // A caller naming ids narrows the scope; it never widens it.
+        const outside = prepared.planned?.familyIds?.filter((id) => !resolved?.includes(id)) ?? [];
+        if (outside.length)
+          throw refused(`Families ${outside.join(", ")} are outside the reviewed scope`);
+        const familyIds = prepared.planned?.familyIds ?? resolved;
+        const result = await native(
+          prepared.nativeKey,
+          familyIds ? { ...(prepared.input as object), familyIds } : prepared.input,
+          prepared.process,
         );
+        if (prepared.planned) {
+          const { excludedIds } = prepared.planned;
+          const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
+          if (scope) {
+            if (planned.diagnostics.length)
+              throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
+            return {
+              executionContext: target,
+              plan: planned.families,
+              included: familiesIncluded({ entries: planned.families }, excludedIds),
+            };
+          }
+          // One family document plans exactly one family, or it refuses.
+          const plan = planned.families[0];
+          if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)
+            throw refused(
+              [...planned.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
+                "Expected one family plan",
+            );
+          return {
+            executionContext: target,
+            plan,
+            included: { [String(plan!.familyId)]: plan!.planHash },
+          };
+        }
         return {
           executionContext: target,
           native: result,
           ...(key === "family.build"
-            ? { outputPath: (prepared.input as { outputPath: string }).outputPath }
+            ? { outputPath: (result as { outputPath?: string }).outputPath }
             : {}),
         };
       }
-      const result = await execution.step(
-        "file",
-        "settings.document.save",
-        prepared.request,
-        async () => {
-          const result = await writeFile(deps, prepared.request);
-          if (result.kind === "conflict")
-            throw refused(
-              "Original file token/create precondition conflicted; no file write occurred",
-            );
-          return result;
-        },
-      );
-      if (result.kind !== "written") throw refused("Expected original written file outcome");
+      const writer = "expectedSha256" in prepared.request ? "pod.member.save" : "pod.member.write";
+      const written = (await execution.step("file", writer, prepared.request, () =>
+        writeMemberOnce(deps, prepared.request, pods),
+      )) as PodMemberWritten;
       const base = admission.bases.work!;
-      if (!work) throw new ActionIncomplete("File succeeded; Work unavailable", result);
+      if (!work) throw new ActionIncomplete("Member write succeeded; Work unavailable", written);
       const fields = structuredClone(prepared.document.fields);
       for (const field of Object.values(fields)) delete field.staged;
+      const member: PodMember = { pod: written.pod, path: written.path };
       const publication = await work.apply(
         base.key,
-        "settings",
+        settingsRouteState.route,
         admission.actor,
         [
-          { path: ["basis"], value: basisOf(result.snapshot) },
+          {
+            path: ["basis"],
+            value: { member, rawContent: prepared.request.content, sha256: written.sha256 },
+          },
           { path: ["fields"], value: fields },
         ],
         base.revision,
@@ -410,10 +662,10 @@ export async function admitFamilyAction(
       await execution.publish(publication);
       if (!publication.ok)
         throw new ActionIncomplete(
-          "File succeeded; original Work revision publication refused. Later edits retained.",
-          { file: result, publication },
+          "Member write succeeded; original Work revision publication refused. Later edits retained.",
+          { file: written, publication },
         );
-      return { file: result, publication };
+      return { file: written, publication };
     },
     resume,
   );
@@ -473,11 +725,10 @@ export async function readFamily(
     };
   } else {
     const target = documentRefSchema.parse(raw.target);
-    // The Families and Parameter Links routes read a project document, not a family document.
-    const familyDocument = key !== "families.plan" && key !== "parameter-links.read";
-    const original = await current(bridge, target, familyDocument);
+    // Parameter Links reads a project document, not a family document.
+    const original = await current(bridge, target, "project");
     const fence = async () => {
-      const next = await current(bridge, target, familyDocument);
+      const next = await current(bridge, target, "project");
       if (
         next.processId !== original.processId ||
         next.processStartUtcUnixMs !== original.processStartUtcUnixMs
@@ -491,131 +742,33 @@ export async function readFamily(
       await fence();
       return result;
     };
-    if (key === "families.plan" || key === "parameter-links.read") {
-      if (!deps.workspace) throw refused("Route Work is unavailable");
-      const view = await deps.workspace.read(
-        scope,
-        key === "families.plan" ? "families" : "parameter-links",
-      );
-      if (!view) throw refused("Author this route's Work before reading it");
-      if (key === "families.plan") {
-        const document = familiesRouteState.schema.parse(view.doc);
-        if (!document.profilePath || !document.scope)
-          throw refused("Author a profile and a scope before planning");
-        const opened = (await native("settings.document.open", {
-          documentId: {
-            moduleKey: "FamilyFoundry",
-            rootKey: "patches",
-            relativePath: document.profilePath,
-          },
-          includeComposedContent: true,
-        })) as SettingsDocumentSnapshot;
-        const patchJson = executionContent(opened);
-        const result = (await native("familyfoundry.plan", {
-          patchJson,
-          ...(document.executionOptions ? { executionOptions: document.executionOptions } : {}),
-        })) as { diagnostics: { code: string; path: string; message: string }[]; families: [] };
-        if (result.diagnostics.length)
-          throw refused(
-            result.diagnostics.map((d) => `${d.code} · ${d.path} — ${d.message}`).join(" · "),
-          );
-        // The engine plans every loaded family; authored family names are the only scope
-        // narrowing this contract can honestly claim. Placement scope is not a native filter.
-        const allowed = new Set(document.scope.familyNames);
-        reading = {
-          kind: "families-plan",
-          value: familiesPlanReadingSchema.parse({
-            basis: familiesBasis(document),
-            workRevision: view.revision,
-            reading: {
-              at: addressSchema.parse(
-                original.state?.openDocuments.find((d) => d.openId === target.openId)?.address,
-              ),
-              version: opened.metadata.versionToken?.value ?? null,
-              observedAt: new Date().toISOString(),
-            },
-            fileVersion: opened.metadata.versionToken?.value ?? null,
-            composedDigest: digest(patchJson),
-            entries: (result.families as { familyName: string }[]).filter((entry) =>
-              allowed.has(entry.familyName),
-            ),
-            executionOptions: document.executionOptions,
-          }),
-        };
-      } else {
-        const document = parameterLinksRouteState.schema.parse(view.doc);
-        const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
-        if (evaluate && !document.draft)
-          throw refused("Author a draft profile before evaluating it");
-        const data = evaluate
-          ? await native("revit.apply.parameter-links", {
-              profile: document.draft,
-              previewOnly: true,
-              reconcile: false,
-            })
-          : await native("revit.detail.parameter-links", { includeEvaluation: false });
-        reading = {
-          kind: "parameter-links",
-          value: parameterLinksReadingSchema.parse({
-            ...(data as object),
-            basis: parameterLinksBasis(document),
-            workRevision: view.revision,
-            evaluated: evaluate,
-            // What Revit holds arrives as `profile`; `stored` names it for what it is.
-            stored: (data as { profile?: unknown }).profile ?? null,
-            // A stored-profile read observes Revit, never the authored draft: it carries no
-            // evaluation, so it can never arm an apply of a draft it did not evaluate.
-            evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
-          }),
-        };
-      }
-    } else if (key === "family.capture") {
-      reading = {
-        kind: "capture",
-        value: {
-          ...((await native("revit.detail.family-model", {})) as object),
-          origin: "capture",
-          rfaPath: null,
-        },
-      };
-    } else {
-      const request = familyReads["family.plan"].input.parse(input);
-      // The Work key names its workspace `work`; the reading input still says `workspaceId`.
-      if (scope.work !== request.workspaceId)
-        throw refused("Plan reading belongs to another file Work");
-      const opened = await openFile(deps, {
-        documentId: request.documentId,
-        workspaceId: request.workspaceId,
-        mode: "file",
-        includeComposedContent: true,
-      });
-      if (opened.metadata.versionToken?.value !== request.fileVersion)
-        throw refused("The reviewed file token changed");
-      const composed = executionContent(opened);
-      const patchJson = JSON.stringify({ patch: JSON.parse(composed) });
-      const result = (await native("familyfoundry.plan", {
-        patchJson,
-        ...(request.executionOptions ? { executionOptions: request.executionOptions } : {}),
-      })) as { diagnostics: { message: string }[]; families: unknown[] };
-      if (result.diagnostics.length || result.families.length !== 1)
-        throw refused(
-          result.diagnostics.map((d) => d.message).join("; ") || "Expected one family plan",
-        );
-      reading = {
-        kind: "plan",
-        value: familyPlanReadingSchema.parse({
-          target,
-          documentId: request.documentId,
-          workspaceId: request.workspaceId,
-          path: opened.metadata.documentId.stableId,
-          fileVersion: request.fileVersion,
-          composedDigest: digest(composed),
-          patchJson,
-          entry: result.families[0],
-          executionOptions: request.executionOptions,
-        }),
-      };
-    }
+    if (!deps.workspace) throw refused("Route Work is unavailable");
+    const view = await deps.workspace.read(scope, "parameter-links");
+    if (!view) throw refused("Author this route's Work before reading it");
+    const document = parameterLinksRouteState.schema.parse(view.doc);
+    const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
+    if (evaluate && !document.draft) throw refused("Author a draft profile before evaluating it");
+    const data = evaluate
+      ? await native("revit.apply.parameter-links", {
+          profile: document.draft,
+          previewOnly: true,
+          reconcile: false,
+        })
+      : await native("revit.detail.parameter-links", { includeEvaluation: false });
+    reading = {
+      kind: "parameter-links",
+      value: parameterLinksReadingSchema.parse({
+        ...(data as object),
+        basis: parameterLinksBasis(document),
+        workRevision: view.revision,
+        evaluated: evaluate,
+        // What Revit holds arrives as `profile`; `stored` names it for what it is.
+        stored: (data as { profile?: unknown }).profile ?? null,
+        // A stored-profile read observes Revit, never the authored draft: it carries no
+        // evaluation, so it can never arm an apply of a draft it did not evaluate.
+        evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
+      }),
+    };
     await fence();
     provenance = { kind: "live", target };
   }

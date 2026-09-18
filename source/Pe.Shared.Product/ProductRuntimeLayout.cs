@@ -31,9 +31,10 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
     public string ApsAuthStatePath => Path.Combine(this.RootPath, "aps-auth");
     public string ApsTokenStorePath => Path.Combine(this.ApsAuthStatePath, "tokens.json");
+    public string ApsCredentialsPath => Path.Combine(this.ApsAuthStatePath, "credentials.json");
 
-    public string ResolveModuleStatePath(string moduleKey) =>
-        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));
+    public string ResolveModuleStatePath(string module) =>
+        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, module, nameof(module));
 }
 
 public sealed record ProductRuntimeLogLayout(string RootPath) {
@@ -42,6 +43,6 @@ public sealed record ProductRuntimeLogLayout(string RootPath) {
 }
 
 public sealed record ProductRuntimeCacheLayout(string RootPath) {
-    public string ResolveModuleCachePath(string moduleKey) =>
-        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));
+    public string ResolveModuleCachePath(string module) =>
+        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, module, nameof(module));
 }

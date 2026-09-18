@@ -1,42 +1,26 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { familiesBasis, familiesIncluded, familiesRouteState } from "./families.ts";
+import { familiesIncluded, familiesRouteState } from "./families.ts";
 
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      profilePath: null,
       scope: null,
       excludedIds: [],
+      edits: [],
+      accepted: [],
     });
-    // The whole document is agent-writable because the whole document is authored input.
+    // Everything but `accepted` is agent-writable: Pea proposes, only a person accepts.
     expect(familiesRouteState.agentWriteMask).toEqual([
-      ["profilePath"],
       ["scope"],
       ["excludedIds"],
+      ["edits"],
       ["executionOptions"],
     ]);
   });
 
   it("advertises no route command at all: reading and applying are host ports", () => {
     expect(Object.keys(familiesRouteState.commands)).toEqual([]);
-  });
-
-  it("stamps the basis on the planning inputs, and only those", () => {
-    const work = familiesRouteState.schema.parse({
-      profilePath: "desk.json",
-      scope: { categoryNames: ["Ducts"], familyNames: ["Box"], placementScope: "AllLoaded" },
-    });
-    const excluded = { ...work, excludedIds: [7] };
-    // Excluding a family narrows a plan; it does not invalidate the native reading.
-    expect(familiesBasis(excluded)).toBe(familiesBasis(work));
-    expect(familiesBasis({ ...work, profilePath: "other.json" })).not.toBe(familiesBasis(work));
-    expect(
-      familiesBasis({
-        ...work,
-        scope: { ...work.scope!, placementScope: "PlacedOnly" as const },
-      }),
-    ).not.toBe(familiesBasis(work));
   });
 
   it("includes only unexcluded entries that have an effect and no refusal", () => {

@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Shared.RevitData.Families;
 
@@ -9,10 +10,10 @@ public sealed class FamilyModelDependencyTests {
     public void Sibling_models_precede_native_files_and_nested_families_survive_save(UIApplication ui) {
         var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory("dependencies");
         var leaf = Model("leaf");
-        File.WriteAllText(Path.Combine(directory, "leaf.family.json"), FamilyModelJson.Serialize(leaf));
+        File.WriteAllText(Path.Combine(directory, "leaf.json"), Member(leaf));
         File.WriteAllText(Path.Combine(directory, "leaf.rfa"), "Invalid native file must not be opened when JSON exists.");
         var branch = Model("branch", "leaf");
-        File.WriteAllText(Path.Combine(directory, "branch.family.json"), FamilyModelJson.Serialize(branch));
+        File.WriteAllText(Path.Combine(directory, "branch.json"), Member(branch));
         var before = ui.Application.Documents.Cast<Document>().ToArray();
         var output = Path.Combine(directory, "parent.rfa");
         var built = FamilyModelBuild.BuildAndSave(ui.Application, Model("parent", "branch"), output, modelDirectory: directory);
@@ -34,7 +35,7 @@ public sealed class FamilyModelDependencyTests {
         _ = native.Close(false);
         Assert.That(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(output)), Is.EqualTo(hash));
         Assert.That(ui.Application.Documents.Cast<Document>(), Is.EquivalentTo(before));
-        File.WriteAllText(Path.Combine(directory, "leaf.family.json"), "{}");
+        File.WriteAllText(Path.Combine(directory, "leaf.json"), $$"""{ "$schema": "{{SchemaPath}}", "family": { "name": "leaf" } }""");
         File.WriteAllText(Path.Combine(directory, "leaf.rfa"), "Must not fall back after invalid JSON.");
         Assert.That(Assert.Throws<InvalidOperationException>(() => FamilyModelBuild.Build(ui.Application, Model("parent", "leaf"), modelDirectory: directory))!.Message,
             Does.Contain("Invalid dependency"));
@@ -45,19 +46,28 @@ public sealed class FamilyModelDependencyTests {
     public void Cycles_missing_dependencies_and_missing_types_close_all_child_documents(UIApplication ui) {
         var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory("dependency-refusals");
         var before = ui.Application.Documents.Cast<Document>().ToArray();
-        File.WriteAllText(Path.Combine(directory, "A.family.json"), FamilyModelJson.Serialize(Model("A", "B")));
-        File.WriteAllText(Path.Combine(directory, "B.family.json"), FamilyModelJson.Serialize(Model("B", "A")));
+        File.WriteAllText(Path.Combine(directory, "A.json"), Member(Model("A", "B")));
+        File.WriteAllText(Path.Combine(directory, "B.json"), Member(Model("B", "A")));
         var cycle = Assert.Throws<InvalidOperationException>(() => FamilyModelBuild.Build(ui.Application, Model("A", "B"), modelDirectory: directory));
         Assert.That(cycle!.Message, Does.Contain("A -> B -> A"));
         Assert.That(ui.Application.Documents.Cast<Document>(), Is.EquivalentTo(before));
         Assert.Throws<FileNotFoundException>(() => FamilyModelBuild.Build(ui.Application, Model("missing", "absent"), modelDirectory: directory));
         Assert.That(ui.Application.Documents.Cast<Document>(), Is.EquivalentTo(before));
-        File.WriteAllText(Path.Combine(directory, "leaf.family.json"), FamilyModelJson.Serialize(Model("leaf")));
+        File.WriteAllText(Path.Combine(directory, "leaf.json"), Member(Model("leaf")));
         var missingType = Model("parent", "leaf");
         missingType.Nested["child"] = new FamilyModelNested { Family = "leaf", Type = "absent", Host = "Ref. Level" };
         Assert.That(Assert.Throws<InvalidOperationException>(() => FamilyModelBuild.Build(ui.Application, missingType, modelDirectory: directory))!.Message,
             Does.Contain("has no type 'absent'"));
         Assert.That(ui.Application.Documents.Cast<Document>(), Is.EquivalentTo(before));
+    }
+
+    private const string SchemaPath = "/schemas/settings/FamilyFoundry/models.json";
+
+    /// <summary>A family model member: nested resolution finds it by `$schema` and `family.name`, never by filename.</summary>
+    private static string Member(FamilyModel model) {
+        var member = JObject.Parse(FamilyModelJson.Serialize(model));
+        member.AddFirst(new JProperty("$schema", SchemaPath));
+        return member.ToString();
     }
 
     private static FamilyModel Model(string name, string? child = null) {

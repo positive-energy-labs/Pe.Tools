@@ -71,8 +71,12 @@ const outPath = argValue("--out", DEFAULT_OUT);
 const catalogPath = argValue("--catalog", "");
 const checkMode = process.argv.includes("--check");
 
+/** Contract constants: C# public consts, keyed by camel-cased class then field name. */
+type CatalogConstants = Record<string, Record<string, unknown>>;
+
 let catalogSource: string;
 let operations: CatalogEntry[];
+let constants: CatalogConstants = {};
 
 if (catalogPath) {
   // Offline lane: the catalog file is `pe-dev ops-catalog` output. Deterministic — a missing
@@ -85,8 +89,9 @@ if (catalogPath) {
     );
     process.exit(1);
   }
-  const catalog = JSON.parse(raw) as { operations: CatalogEntry[] };
+  const catalog = JSON.parse(raw) as { operations: CatalogEntry[]; constants?: CatalogConstants };
   operations = [...catalog.operations].sort((a, b) => a.key.localeCompare(b.key));
+  constants = catalog.constants ?? {};
   if (operations.length === 0) {
     console.error(`host-typegen: catalog file ${catalogPath} contains no operations.`);
     process.exit(1);
@@ -105,8 +110,10 @@ if (catalogPath) {
   }
   const catalog = (await response.json()) as {
     operations: CatalogEntry[];
+    constants?: CatalogConstants;
     bridgeSessionId?: string;
   };
+  constants = catalog.constants ?? {};
   operations = [...catalog.operations]
     .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
     .sort((a, b) => a.key.localeCompare(b.key));
@@ -165,6 +172,13 @@ for (const op of operations) {
   );
   mapEntries.push(`  "${op.key}": { request: ${ns}.Req.Request; response: ${ns}.Res.Response };`);
 }
+
+for (const [name, fields] of Object.entries(constants).sort(([a], [b]) => a.localeCompare(b)))
+  chunks.push(
+    "/** Contract constants shared with C#; read these instead of re-typing the numbers. */",
+    `export const ${name} = ${JSON.stringify(fields, null, 2)} as const;`,
+    "",
+  );
 
 chunks.push(
   "/** Key → request/response types for every bridge op the generating session supported. */",

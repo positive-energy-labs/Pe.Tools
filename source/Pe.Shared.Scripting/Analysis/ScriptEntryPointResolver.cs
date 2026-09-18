@@ -23,8 +23,12 @@ public sealed class ScriptEntryPointResolver(
     }
 
     public bool ContainsContainerDeclaration(string sourceContent) {
+        return this.ResolveContainerTypeNames(sourceContent).Count > 0;
+    }
+
+    public IReadOnlyList<string> ResolveContainerTypeNames(string sourceContent) {
         var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
-        return ResolveContainerDeclarations(root).Any();
+        return ResolveContainerDeclarations(root).Select(GetFullTypeName).ToList();
     }
 
     public bool ContainsTypeDeclaration(string sourceContent) {

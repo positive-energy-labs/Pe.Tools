@@ -89,6 +89,16 @@ public sealed class FamilyModel {
     public Dictionary<string, FamilyModelParameter> Parameters { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    ///     The family's built-in family parameters, by exact Revit name, in the order Revit reports them.
+    ///     The engine never creates or deletes one — the template owns them — but a formula may name one
+    ///     (`Length` on a line-based family, `Width` on a door), so the document must declare the vocabulary
+    ///     its own formulas resolve against. Capture censuses the document; an author lists only what a
+    ///     formula names. An unlisted name in a formula stays a `formula-unknown-name` refusal.
+    /// </summary>
+    [JsonProperty("builtIns")]
+    public List<string> BuiltIns { get; init; } = [];
+
+    /// <summary>
     ///     Family type name → (exact parameter name → per-type value). Per-type OBJECTS: empty and uniform
     ///     types stay visible. The first in document order is the preview type. A canonical `family.json`
     ///     carries no deletion tombstones; patch semantics belong to <see cref="FamilyPatch" />.
@@ -297,6 +307,19 @@ public enum DataType {
     Length, Area, Volume, Angle, Integer, Number, YesNo, Text, Url, Material, MultilineText,
     ElectricalPotential, Current, ApparentPower, Wattage, NumberOfPoles, AirFlow, Pressure, Temperature,
     PipingFlow, PipeSize, DuctSize, HvacVelocity, Slope, Currency, LoadClassification
+}
+
+public static class DataTypes {
+    /// <summary>
+    ///     The token a slot compares by: what the spec measures, not which spec it is. A dimension label or
+    ///     connector size slot needs a length, and Revit measures `SpecTypeId.PipeSize` and
+    ///     `SpecTypeId.DuctSize` in length units (internal feet, `UnitUtils.GetValidUnits` offers feet,
+    ///     inches, millimeters) exactly like `SpecTypeId.Length`. Census of this enum through
+    ///     `ParamOps.Spec` against the Revit spec table: those three are the only length-measured members;
+    ///     every other member measures itself. `DataTypeMeasureCensusTests` in `Pe.Revit.Tests` pins the census
+    ///     against `UnitUtils` in a session.
+    /// </summary>
+    public static DataType Measure(this DataType dt) => dt is DataType.PipeSize or DataType.DuctSize ? DataType.Length : dt;
 }
 
 // ───────────────────────────── datums and planes ─────────────────────────────
@@ -560,7 +583,7 @@ public sealed class FamilyModelVisibilityViews {
 // ───────────────────────────── nested, arrays, connectors, details ─────────────────────────────
 
 /// <summary>
-///     One nested `FamilyInstance`. <see cref="Family" /> names a sibling `&lt;Family&gt;.family.json` built
+///     One nested `FamilyInstance`. <see cref="Family" /> names a family model in the model directory (a JSON member whose `$schema` is the family model schema and whose `family.name` is <see cref="Family" />) built
 ///     first, or in the bulk lane a family already loaded by that name, else refuse (VERDICTS-R1 §5).
 ///     <see cref="Host" /> is the work plane (a datum, a ref plane, or `line:&lt;Name&gt;.end`, position only);
 ///     <see cref="FamilyModelAlign" /> locks the instance's own named reference planes to host planes (the puck method,
@@ -719,6 +742,36 @@ public enum FlowConfiguration { Preset, Calculated, System, Demand }
 public enum LossMethod { NotDefined, Coefficient, SpecificLoss, Table }
 
 /// <summary>
+///     The one mapping between the connector enums above and Revit's enum member names, with its inverse. Capture
+///     reads a Revit value through <see cref="FromRevitName{T}" />; apply writes one through <see cref="RevitName" />.
+///     Only the names below differ; every other member of <see cref="ConnectorSystemType" />, <see cref="FlowDirection" />,
+///     <see cref="FlowConfiguration" /> and <see cref="LossMethod" /> is spelled as Revit's `DuctSystemType`, `PipeSystemType`,
+///     `ElectricalSystemType`, `FlowDirectionType`, `*FlowConfigurationType` and `*LossMethodType` spell it.
+///     `MEPSystemClassification` agrees with the domain enums except `DataCircuit`, which is <see cref="ConnectorSystemType.Data" />.
+/// </summary>
+public static class ConnectorRevitNames {
+    private static readonly Dictionary<ConnectorSystemType, string> Renamed = new() {
+        [ConnectorSystemType.HydronicSupply] = "SupplyHydronic",
+        [ConnectorSystemType.HydronicReturn] = "ReturnHydronic",
+        [ConnectorSystemType.FireProtectionWet] = "FireProtectWet",
+        [ConnectorSystemType.FireProtectionDry] = "FireProtectDry",
+        [ConnectorSystemType.FireProtectionPreAction] = "FireProtectPreaction",
+        [ConnectorSystemType.FireProtectionOther] = "FireProtectOther"
+    };
+
+    public static string RevitName<T>(T value) where T : struct, Enum =>
+        value is ConnectorSystemType s && Renamed.TryGetValue(s, out var name) ? name : value.ToString();
+
+    /// <summary>The contract value Revit's member <paramref name="revitName" /> maps to; null when the contract has none.</summary>
+    public static T? FromRevitName<T>(string revitName) where T : struct, Enum {
+        if (typeof(T) == typeof(ConnectorSystemType) && revitName == "DataCircuit") revitName = nameof(ConnectorSystemType.Data);
+        foreach (T value in Enum.GetValues(typeof(T)))
+            if (RevitName(value) == revitName) return value;
+        return null;
+    }
+}
+
+/// <summary>
 ///     One detail element in one stock view: a nested Detail Item family instance (<see cref="Family" /> set)
 ///     or a loop of symbolic lines locked to planes (<see cref="Curves" /> set). Exactly one of the two.
 /// </summary>
@@ -863,6 +916,7 @@ public enum UnmodeledReason {
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     FormulaNameNotDeclared,
+    RefLineStartNotTwoPlanes,        // the start is fixed by `on` crossed with two planes; capture found other than two
     ParameterMetadataUnreadable,
     ParameterValueUnreadable,        // a type row the capture produced no cell for; the value lane cannot claim to have read it
     LookupTableUnreadable,
@@ -1134,6 +1188,27 @@ public static class FamilyModelJson {
     }
 
     public static string Serialize(FamilyModel model) => JsonConvert.SerializeObject(model, Settings);
+
+    /// <summary>
+    ///     The one JSON member in <paramref name="directory" /> whose `$schema` ends with <paramref name="schemaPath" />
+    ///     and whose `family.name` is <paramref name="name" />; null when none. Two matches refuse and name both files.
+    /// </summary>
+    public static string? FindModel(string directory, string name, string schemaPath) {
+        var matches = Directory.EnumerateFiles(directory, "*.json").Where(path => {
+            try {
+                return JToken.Parse(File.ReadAllText(path)) is JObject o
+                       && o["$schema"] is JValue { Value: string schema } && schema.EndsWith(schemaPath, StringComparison.OrdinalIgnoreCase)
+                       && o["family"] is JObject family && family["name"] is JValue { Value: string declared } && declared == name;
+            } catch (JsonException) {
+                return false; // not JSON, so not a family model: plain data beside it never hides a sibling
+            }
+        }).OrderBy(path => path, StringComparer.Ordinal).ToList();
+        return matches.Count switch {
+            0 => null,
+            1 => matches[0],
+            _ => throw new InvalidOperationException($"Nested family '{name}' matches {matches.Count} family models: {string.Join(", ", matches.Select(Path.GetFileName))}.")
+        };
+    }
 }
 
 /// <summary>

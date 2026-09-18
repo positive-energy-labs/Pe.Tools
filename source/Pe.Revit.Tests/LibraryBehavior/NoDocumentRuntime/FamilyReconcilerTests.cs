@@ -129,7 +129,7 @@ public sealed class FamilyReconcilerTests {
     private static string FixturePath(string name) {
         var dir = Path.GetDirectoryName(typeof(FamilyReconcilerTests).Assembly.Location)!;
         for (var probe = new DirectoryInfo(dir); probe is not null; probe = probe.Parent) {
-            var candidate = Path.Combine(probe.FullName, "Fixtures", "FamilyModel", $"{name}.family.json");
+            var candidate = Path.Combine(probe.FullName, "Fixtures", "FamilyModel", $"{name}.json");
             if (File.Exists(candidate)) return candidate;
         }
         throw new FileNotFoundException(name);
@@ -300,6 +300,31 @@ public sealed class FamilyReconcilerTests {
             Assert.That(changes.Where(c => c.Section is not ("parameters" or "types" or "types.cell")), Is.Not.Empty);
             Assert.That(changes.Where(c => c.Section is not ("parameters" or "types" or "types.cell")).Select(c => c.Kind), Has.All.EqualTo(ChangeKind.Unverifiable));
         });
+    }
+
+    [Test]
+    public void An_unverifiable_change_refuses_at_plan_with_its_reason_and_queues_nothing() {
+        var desired = Load("a-box");
+        var current = Parse($$"""{ "family": { "name": "PE Box", "category": "ElectricalEquipment", "template": "Electrical Equipment", "placement": "OneLevelBased" }, "coverage": { "parameters": "Read", "types": "Read" } }""");
+        var plan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable);
+        Assert.Multiple(() => {
+            Assert.That(plan.Queue.Operations, Is.Empty);
+            Assert.That(plan.Refusals, Is.Not.Empty);
+            Assert.That(plan.Refusals.Select(r => r.Code), Has.All.EqualTo(FamilyModelDiagnosticCodes.Unverifiable));
+            Assert.That(plan.Refusals.Count, Is.EqualTo(plan.Changes.Count(c => c.Kind == ChangeKind.Unverifiable)));
+            Assert.That(plan.Refusals[0].Message, Does.StartWith("Capture does not read"));
+        });
+    }
+
+    /// <summary>w8-revit trip: a dimension between planes capture named by position failed at apply in `FamilyRefs.Resolve`.</summary>
+    [Test]
+    public void A_change_placed_against_a_positional_plane_refuses_at_plan() {
+        const string planes = """ "refPlanes": { "plane-1": { "normal": "PlusX", "at": "1ft" }, "Right": { "normal": "PlusX", "at": "2ft" } } """;
+        var desired = Parse($$"""{ {{Header}}, {{planes}}, "dimensions": { "w": { "between": ["plane-1", "Right"] } } }""");
+        var current = Parse($$"""{ {{Header}}, {{planes}}, "coverage": { "refPlanes": "Partial", "dimensions": "Read" }, "unmodeled": [ { "reason": "PlaneNotNamed", "path": "$.refPlanes.plane-1" } ] }""");
+        var plan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Portable);
+        Assert.That(plan.Refusals.Select(r => (r.Path, r.Code)), Is.EqualTo(new[] { ("$.dimensions.w", FamilyModelDiagnosticCodes.Unverifiable) }));
+        Assert.That(plan.Refusals.Single().Message, Does.Contain("plane-1"));
     }
 
     [TestCaseSource(nameof(Fixtures))]

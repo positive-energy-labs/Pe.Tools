@@ -18,7 +18,7 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductRuntimeLayout` — LocalAppData state/log/cache trees, including APS tokens. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\...` settings, workspaces, inline scripts, and output.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
 - `ProductPathing` — safe subdirectory resolution and LocalAppData lookup.
 
 ## Hard Dependency Rule
@@ -40,16 +40,13 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
 Documents\Pe.Tools\
   AGENTS.md
   README.md
-  settings\<module>\<root>\
-  settings\Global\{settings.json,fragments\,schemas\}
-  workspaces\<slug>\{pod.json?,AGENTS.md,README.md,PeScripts.csproj,src\,.vscode\}
-  inline-scripts\
-  output\
+  preferences.json
+  Pods\<local-folder>\{pod.json,settings\,src\,assets\,output\,AGENTS.md,README.md,PeScripts.csproj,.vscode\}
 ```
 
 The installer also lays binaries under the product root; their names and shape come from `product.payloads.json`, not this package.
 
-Settings stay flattened as `settings/<module>/<root>/`. Workspace keys are one user-facing slug: `default` or lowercase ASCII letters/digits with hyphen separators. Do not add legacy path fallbacks or dual-read/dual-write behavior here.
+The local folder is a filesystem address, not pod identity. Authored JSON, scripts, assets, and useful output stay inside that pod folder. Do not add legacy path fallbacks or dual-read/dual-write behavior here.
 
 ## Consumer Guidance
 

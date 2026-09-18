@@ -3,7 +3,7 @@ import sourceCatalog from "./fixtures/operation-source-catalog.json" with { type
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { test, expect, vi } from "vite-plus/test";
-import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Queue, Fiber } from "effect";
@@ -214,7 +214,7 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
       (
         await web.call(
           "/call",
-          { key: "settings.document.save", request: {} },
+          { key: "pod.member.write", request: {} },
           { "x-pe-action-id": "bypass", "x-pe-action-actor": "agent" },
         )
       ).status,
@@ -681,7 +681,7 @@ test("crash before source seal retains unprepared identity and refuses recapture
   const directory = await mkdtemp(join(tmpdir(), "script-unsealed-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
-  const workspace = join(productUserContentRootPath(), "workspaces", "sample");
+  const workspace = join(productUserContentRootPath(), "Pods", "sample");
   await mkdir(join(workspace, "src"), { recursive: true });
   await writeFile(join(workspace, "pod.json"), "{}");
   await writeFile(join(workspace, "src/Main.cs"), "first");
@@ -729,6 +729,104 @@ test("crash before source seal retains unprepared identity and refuses recapture
   } finally {
     release();
     await owner.wait("unsealed");
+    if (oldRoot === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
+    else process.env.PE_TOOLS_DOCUMENTS_ROOT = oldRoot;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("source seal captures the positive pod set and exact dependency bytes once", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "script-portable-"));
+  const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
+  const workspaces = join(productUserContentRootPath(), "Pods");
+  const root = join(workspaces, "sample");
+  const dependency = join(workspaces, "library");
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await mkdir(join(root, "settings"), { recursive: true });
+    await mkdir(join(dependency, "settings"), { recursive: true });
+    await writeFile(
+      join(root, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "sample",
+        name: "Sample",
+        version: "1.0.0",
+        entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
+      }),
+    );
+    await writeFile(join(root, "src/Main.cs"), "first");
+    await writeFile(join(root, "settings/main.settings.json"), '{"value":1}');
+    await writeFile(
+      join(dependency, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "library",
+        name: "Library",
+        version: "1.0.0",
+        entrypoints: [],
+      }),
+    );
+    await writeFile(join(dependency, "settings/base.settings.json"), '{"base":1}');
+
+    const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
+    await writeFile(join(root, "src/Main.cs"), "changed after seal");
+
+    expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
+      "pod.json",
+      "settings/main.settings.json",
+      "src/Main.cs",
+    ]);
+    expect(
+      Buffer.from(
+        sealed!.sourceBundle.files.find((file) => file.path === "src/Main.cs")!.bytesBase64,
+        "base64",
+      ).toString("utf8"),
+    ).toBe("first");
+  } finally {
+    if (oldRoot === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
+    else process.env.PE_TOOLS_DOCUMENTS_ROOT = oldRoot;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("source seal carries only authored pod bytes, never outputs or stray trees", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "script-seal-"));
+  const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
+  const workspaces = join(productUserContentRootPath(), "Pods");
+  const root = join(workspaces, "sample");
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await mkdir(join(root, "output", "run-1"), { recursive: true });
+    await mkdir(join(root, "stray"), { recursive: true });
+    await writeFile(
+      join(root, "pod.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        id: "sample",
+        name: "Sample",
+        version: "1.0.0",
+        entrypoints: [{ id: "main", sourcePath: "src/Main.cs" }],
+      }),
+    );
+    await writeFile(join(root, "src/Main.cs"), "source");
+    await writeFile(join(root, "output/run-1/receipt.json"), '{"outcome":"Succeeded"}');
+    await writeFile(join(root, "stray/notes.json"), "[]");
+    await writeFile(join(root, "notes.json"), "{}");
+    const outsideLibrary = join(directory, "outside-library");
+    await mkdir(outsideLibrary, { recursive: true });
+    await writeFile(join(outsideLibrary, "pod.json"), "not json");
+    await symlink(outsideLibrary, join(workspaces, "missing-library"), "junction");
+
+    const sealed = await freezeScript({ workspaceKey: "sample", sourcePath: "src/Main.cs" });
+
+    expect(sealed?.sourceBundle.files.map((file) => file.path)).toEqual([
+      "pod.json",
+      "src/Main.cs",
+    ]);
+  } finally {
     if (oldRoot === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
     else process.env.PE_TOOLS_DOCUMENTS_ROOT = oldRoot;
     await rm(directory, { recursive: true, force: true });

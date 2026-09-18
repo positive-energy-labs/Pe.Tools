@@ -77,7 +77,7 @@ export function projectFamilyModel(
   const lengthType = lengthDataType(model);
   return {
     profile: {
-      path: options.path ?? `${model.family.name}.family.json`,
+      path: options.path ?? `${model.family.name}.json`,
       familyName: model.family.name,
       category: model.family.category,
       template: model.family.template,
@@ -352,7 +352,7 @@ function projectEvidence(
     return {
       familyName: evidence.familyName,
       worldLabel: evidence.rfaPath ?? evidence.origin,
-      readAgo: timeAgo(evidence.reading.observedAt) || "just now",
+      readAgo: timeAgo(evidence.observedAt) || "just now",
       typeNames: Object.keys(captured.types ?? {}),
       values,
       extraParams: Object.keys(reported).filter((name) => !authored.has(name)),

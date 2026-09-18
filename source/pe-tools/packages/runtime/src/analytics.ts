@@ -1,13 +1,13 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { userDocumentsPath } from "@pe/host-contracts/product-paths";
 
 /**
  * PostHog usage analytics for the internal beta: prompts, tool calls, host ops,
  * boots, and errors from coworkers' machines land in one PostHog project.
  *
- * Configured via `Documents\Pe.Tools\settings\Global\settings.json`:
+ * The installed product manifest carries the key; a checkout reads `Documents\Pe.Tools\preferences.json`:
  *   { "posthog": { "apiKey": "phc_...", "host": "https://us.i.posthog.com" } }
  * No key → every call is a no-op. The key is a public write-only ingest key,
  * so shipping it in settings/binaries is by design (no auth).
@@ -104,14 +104,14 @@ function baseProperties(): Record<string, unknown> {
 function loadConfig(): AnalyticsConfig | null {
   // The installed product manifest is AUTHORITATIVE: the key rides the release
   // (product.payloads.json, copied into the installed root by the SDK apply kernel), so
-  // installed machines need zero settings-file seeding. settings.json stays as the
+  // installed machines need zero seeding. preferences.json stays as the
   // dev/override fallback for checkouts without an installed product.
   type PostHogShape = { apiKey?: string; host?: string };
   const manifest = readJson(installedManifestPath()) as
     | { telemetry?: { posthog?: PostHogShape } }
     | undefined;
-  const settings = readJson(globalSettingsPath()) as { posthog?: PostHogShape } | undefined;
-  return fromShape(manifest?.telemetry?.posthog) ?? fromShape(settings?.posthog);
+  const preferences = readJson(preferencesPath()) as { posthog?: PostHogShape } | undefined;
+  return fromShape(manifest?.telemetry?.posthog) ?? fromShape(preferences?.posthog);
 }
 
 function fromShape(
@@ -131,42 +131,15 @@ function readJson(path: string): unknown {
 }
 
 // Mirrors the SDK's installed layout (%LOCALAPPDATA%\<vendor>\<product>\product.payloads.json).
-// Kept local for the same reason as globalSettingsPath: runtime cannot import host code.
+// Kept local for the same reason as preferencesPath: runtime cannot import host code.
 function installedManifestPath(): string {
   const localAppData =
     process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "", "AppData", "Local");
   return join(localAppData, "Positive Energy", "Pe.Tools", "product.payloads.json");
 }
 
-// Mirrors apps/host/src/product-paths.ts (Documents may be OneDrive-redirected on
-// coworkers' machines, so the known-folder lookup matters). Kept local: runtime
-// cannot import host code.
-function globalSettingsPath(): string {
-  return join(userDocumentsPath(), "Pe.Tools", "settings", "Global", "settings.json");
-}
-
-function userDocumentsPath(): string {
-  const override = process.env.PE_TOOLS_DOCUMENTS_ROOT?.trim();
-  if (override) return override;
-  if (process.platform === "win32") {
-    try {
-      const output = execFileSync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          "[Environment]::GetFolderPath('MyDocuments')",
-        ],
-        { encoding: "utf8", timeout: 1_000, windowsHide: true },
-      ).trim();
-      if (output) return output;
-    } catch {
-      /* fall through */
-    }
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
-  return join(home, "Documents");
+// The one Documents resolver lives in @pe/host-contracts/product-paths; Documents may be
+// OneDrive-redirected, and a second copy here is a second answer.
+function preferencesPath(): string {
+  return join(userDocumentsPath(), "Pe.Tools", "preferences.json");
 }

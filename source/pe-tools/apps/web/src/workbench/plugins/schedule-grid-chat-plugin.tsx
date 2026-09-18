@@ -1,9 +1,9 @@
 import { splitScheduleCellKey, scheduleReadingSchema } from "@pe/agent-contracts";
-import { LiveScheduleGridWorkspace } from "#/schedule-grid/live";
-import type { ScheduleGridState } from "#/schedule-grid/workspace";
+import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
+import type { ScheduleGridState } from "#/route/schedules/workspace";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "../provider";
-import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
+import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 import { InlineRoutePlugin } from "../route-chat-plugins";
 import type { RouteChatPluginViewProps } from "../route-chat-plugins/tool-names";
 import { ValueDiff } from "#/components/lang/value-diff";
@@ -30,6 +30,7 @@ export function ScheduleGridChatPlugin({ args, sessionState }: RouteChatPluginVi
         <LiveScheduleGridWorkspace
           key={workspaceId}
           workspaceId={workspaceId}
+          thread={currentThreadId}
           render={(state) => <ScheduleGridReview state={state} />}
         />
       ) : (

@@ -1,3 +1,4 @@
+import { NodeServices } from "@effect/platform-node";
 import { test, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
@@ -23,7 +24,7 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = dir;
   configurePeaProductToolContext({ hostBaseUrl: "http://pod-consumer" });
-  const workspace = join(productUserContentRootPath(), "workspaces", "sample");
+  const workspace = join(productUserContentRootPath(), "Pods", "sample");
   await mkdir(join(workspace, "src"), { recursive: true });
   const manifest = {
     id: "sample",
@@ -44,11 +45,21 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
       needs: "document" as const,
       requestSchemaJson: '{"type":"object"}',
     },
-    { key: "scripting.pod.list", intent: "Read" as const, needs: "nothing" as const },
   ];
+  // pod.list is host-local: the host reads this folder itself.
   const pods = {
-    workspacesRootPath: workspace,
-    pods: [{ workspaceKey: "sample", isValid: true, manifest }],
+    pods: [
+      {
+        id: "sample",
+        name: "Sample",
+        version: "",
+        folder: "sample",
+        entrypoints: manifest.entrypoints,
+        members: [],
+        diagnostics: [],
+      },
+    ],
+    unreadable: [],
   };
   const sessions = ["A", "B"].map((sessionId) => ({
     connected: true,
@@ -81,14 +92,10 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
           expect(openId).toBeNull();
           return { value: { operations } };
         }
-        if (key === "scripting.pod.list") {
-          expect(openId).toBeNull();
-          return { value: pods };
-        }
         effects.push({ session, openId, requestId });
         expect(
           await readFile(
-            join(productUserContentRootPath(), "workspaces", input.workspaceKey, input.sourcePath),
+            join(productUserContentRootPath(), "Pods", input.workspaceKey, input.sourcePath),
             "utf8",
           ),
         ).toBe("// authored pod source");
@@ -116,13 +123,16 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
               capabilities: buildCapabilities({
                 ops: operations,
                 routes: registrations.map(({ spec }) => spec),
-                pods: pods as never,
+                pods,
                 skills: [],
               }),
             }),
           ),
         ),
-      ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      ).pipe(
+        Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+        Layer.provideMerge(NodeServices.layer),
+      ),
       { disableLogger: true },
     );
   let web = makeWeb();
@@ -156,7 +166,6 @@ test("actual pod:key Pea caller uses public script admission with frozen A/overr
       { agent: { toolCallId: id }, requestContext: { [turnContextKey]: turn } } as never,
     );
   try {
-    expect(registrations.some(({ spec }) => spec.route === "pods")).toBe(false);
     for (const [id, target] of [
       ["pod-A1", undefined],
       ["pod-B", { kind: "open", ref: { session: "B", openId: "open-B" } }],

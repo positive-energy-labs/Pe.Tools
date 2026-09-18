@@ -29,7 +29,7 @@ public sealed class FamilyModelCaptureTests {
             var model = document.CaptureFamilyModel();
             var captured = Path.Combine(TestContext.CurrentContext.WorkDirectory, "captured");
             Directory.CreateDirectory(captured);
-            File.WriteAllText(Path.Combine(captured, Path.GetFileNameWithoutExtension(fixture) + ".family.json"), FamilyModelJson.Serialize(model));
+            File.WriteAllText(Path.Combine(captured, Path.GetFileNameWithoutExtension(fixture) + ".json"), FamilyModelJson.Serialize(model));
             return model;
         } finally {
             document.Close(false);
@@ -88,7 +88,7 @@ public sealed class FamilyModelCaptureTests {
     public void Native_connector_host_probe_compares_plane_with_coincident_nested_face() {
         var host = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
         var dependency = RevitFamilyFixtureHarness.LoadFamilyModelFixture("vane");
-        var modelDirectory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.family.json"));
+        var modelDirectory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.json"));
         var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_connector_host_probe_compares_plane_with_coincident_nested_face));
         Document? document = null;
         try {

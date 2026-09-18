@@ -1,11 +1,11 @@
-using Pe.Shared.RevitData;
+﻿using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public sealed record FamilyModelCaptureRequest;
+public sealed record FamilyCaptureRequest;
 
-public sealed record FamilyModelCaptureData(
-    Reading Reading,
+public sealed record FamilyCaptureData(
+    string ObservedAt,
     string FamilyName,
     string ModelJson,
     int UnmodeledCount,
@@ -13,18 +13,25 @@ public sealed record FamilyModelCaptureData(
     IReadOnlyList<RevitDataIssue> Issues
 );
 
-public sealed record FamilyModelBuildRequest(
-    string ModelJson,
-    string OutputPath,
-    string? ModelDirectory = null,
-    bool Overwrite = false
+/// <summary>
+///     Build a new family from a saved family model spec on its header's template; nested models resolve
+///     from `modelDirectory`. There is no output path: every build lands in a fresh run folder in the source
+///     pod beside its receipt (user verdict, 2026-09-17), so nothing overwrites and nothing escapes the pod.
+/// </summary>
+public sealed record FamilyBuildRequest(
+    string SpecJson,
+    PodMemberSource Source,
+    string? ModelDirectory = null
 );
 
-public sealed record FamilyModelBuildData(
+public sealed record FamilyBuildData(
     Reading Reading,
     string FamilyName,
+
+    /// <summary>The built `.rfa`, inside this build's run folder.</summary>
     string OutputPath,
     string TemplatePath,
     bool Converged,
-    int ResidueCount
+    int ResidueCount,
+    string ReceiptPath
 );

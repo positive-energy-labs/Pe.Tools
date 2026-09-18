@@ -1,7 +1,9 @@
+import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
+import { isSpecOf } from "#/route/manifest";
 import { useMemo, type ComponentProps } from "react";
 import { ActionReceipts } from "#/actions/receipt";
 import { useRoute } from "#/route/use-route";
-import { settingsManifest } from "#/settings/manifest";
+import { memberWorkManifest } from "#/route/spec-editor";
 import { Link } from "@tanstack/react-router";
 
 import { cellSummary, settingsRouteState } from "@pe/agent-contracts";
@@ -13,7 +15,7 @@ import {
   type RouteChatPluginProps,
   actionLabel,
 } from "../route-chat-plugins";
-import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
+import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
 
 export function SettingsChatPlugin(props: RouteChatPluginProps) {
   const args =
@@ -22,18 +24,12 @@ export function SettingsChatPlugin(props: RouteChatPluginProps) {
   return workspaceId ? (
     <FileSettingsChatPlugin key={workspaceId} {...props} workspaceId={workspaceId} />
   ) : (
-    <Link to="/settings" search={{ mode: "file" }}>
-      Open file Work
-    </Link>
+    <Link to="/pods">Open pods</Link>
   );
 }
 
 function FileSettingsChatPlugin(props: RouteChatPluginProps & { workspaceId: string }) {
-  const scope = useMemo(
-    () => ({ route: settingsRouteState.route, target: null, work: props.workspaceId }),
-    [props.workspaceId],
-  );
-  const manifest = useMemo(() => settingsManifest({ scope }), [scope]);
+  const manifest = useMemo(() => memberWorkManifest(), []);
   const route = useRoute(manifest, { work: props.workspaceId });
   if (!route.work.current || !route.work.doc) return null;
   return (
@@ -69,9 +65,9 @@ function SettingsReview({
   onCommit: () => Promise<unknown>;
 }) {
   const document = recordedRouteDoc(sessionState, settingsRouteState);
-  const isFamilyModel =
-    document?.basis?.documentId.moduleKey === "FamilyFoundry" &&
-    document.basis?.documentId.rootKey === "models";
+  const member = document?.basis?.member;
+  // `$schema` is the only thing that says what a member is for.
+  const isFamilyModel = declaresSchema(document?.basis?.rawContent, FAMILY_MODEL_SCHEMA);
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -91,18 +87,20 @@ function SettingsReview({
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
-        <Link
-          className="ml-auto"
-          to={isFamilyModel ? "/family" : "/settings"}
-          search={{
-            mode: "file",
-            module: document?.basis?.documentId.moduleKey,
-            root: document?.basis?.documentId.rootKey,
-            file: document?.basis?.documentId.relativePath,
-          }}
-        >
-          Open workspace
-        </Link>
+        {isFamilyModel ? (
+          <Link className="ml-auto" to="/family" search={{ pod: member?.pod, path: member?.path }}>
+            Open workspace
+          </Link>
+        ) : (
+          <Link
+            className="ml-auto"
+            to="/pods"
+            search={{ pod: member?.pod, path: member?.path }}
+            title="The pods editor shows these proposals beside the member."
+          >
+            Open in pods
+          </Link>
+        )}
       </div>
 
       {active && reviewable ? (
@@ -125,4 +123,12 @@ function displaySettingsValue(value: unknown): string {
   if (value === undefined) return "—";
   if (typeof value === "string") return value;
   return JSON.stringify(value);
+}
+
+function declaresSchema(raw: string | undefined, schema: string) {
+  try {
+    return isSpecOf((JSON.parse(raw ?? "") as { $schema?: string }).$schema, schema);
+  } catch {
+    return false;
+  }
 }

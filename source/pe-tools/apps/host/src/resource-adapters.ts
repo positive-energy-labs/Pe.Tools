@@ -20,13 +20,13 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
   "ops-catalog": (r: { session?: string }) => [
     `/ops${r.session ? `?session=${encodeURIComponent(r.session)}` : ""}`,
   ],
-  "schedule-grid-reading": (r: { subject: string; id?: string; target?: unknown }) => [
-    "/schedule-grid/readings",
+  "schedule-reading": (r: { subject: string; id?: string; target?: unknown }) => [
+    "/schedules/readings",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        key: `schedule-grid.${r.subject}`,
+        key: `schedule.grid.${r.subject}`,
         input:
           r.subject === "work" ? { workspaceId: r.id } : r.subject === "saved" ? { id: r.id } : {},
         target: r.target,
@@ -49,6 +49,7 @@ export function hostResourceObserver(
   journal: () => ActionJournal = hostActionJournal,
   captures: () => TakeoffCaptures = hostTakeoffCaptures,
   origin = "http://127.0.0.1",
+  read: (url: URL, init?: RequestInit) => Promise<Response> = fetch,
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();
   return (request, publish) => {
@@ -64,7 +65,7 @@ export function hostResourceObserver(
       const pump = () =>
         Promise.all(
           paths.map(async ([path, init]) => {
-            const response = await fetch(new URL(path, origin), {
+            const response = await read(new URL(path, origin), {
               ...init,
               signal: controller.signal,
             });
@@ -99,7 +100,7 @@ export function hostResourceObserver(
       case "host-status":
       case "capabilities":
       case "ops-catalog":
-      case "schedule-grid-reading":
+      case "schedule-reading":
       case "takeoff-saved":
       case "rhvac-file-version":
         return oneShot(

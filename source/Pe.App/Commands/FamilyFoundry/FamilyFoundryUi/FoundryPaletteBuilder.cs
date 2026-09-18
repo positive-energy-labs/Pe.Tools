@@ -1,17 +1,19 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData.Families;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
+using Pe.App.Host;
+using Pe.App.Pods;
+using Pe.Shared.StorageRuntime.Modules;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
-///     The foundry palette: lists every `*.family.json` and `*.patch.json` in the FamilyFoundry module, parses
+///     The foundry palette: lists every pod member whose `$schema` is a family model or patch, parses
 ///     the selection for the preview, and hands the command its actions. Commands decide what to do with a
 ///     model or a patch; the palette only reads.
 /// </summary>
@@ -25,12 +27,17 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
 
     public EphemeralWindow Build() {
         var storage = RuntimeStorageClient.Default.Module(FamilyModelSettingsRegistration.ModuleKey);
-        var documents = RuntimeStorageClient.Default.Root(FamilyModelSettingsRegistration.Root).Documents();
-        var files = ProfileListItem.Discover(documents);
+        var files = PodMembers.List(FamilyModelSettingsRegistration.Root, FamilyModelSettingsRegistration.PatchRoot)
+            .Select(entry => new ProfileListItem(entry.Pod, entry.Member,
+                entry.Member.Schema!.EndsWith(SettingsSchemaUrl.Path(FamilyModelSettingsRegistration.PatchRoot), StringComparison.OrdinalIgnoreCase)
+                    ? FoundryFileKind.Patch
+                    : FoundryFileKind.FamilyModel))
+            .OrderByDescending(item => item.LastModified)
+            .ToList();
         if (files.Count == 0)
-            throw new InvalidOperationException($"No *.family.json or *.patch.json under {documents.ResolveRootDirectory()}.");
+            throw new InvalidOperationException("No pod member declares a family model or family patch $schema.");
 
-        var context = new FoundryContext { Doc = doc, UiDoc = uiDoc, Storage = storage, Documents = documents };
+        var context = new FoundryContext { Doc = doc, UiDoc = uiDoc, Storage = storage };
         var previewPanel = new ProfilePreviewPanel(async (item, ct) => {
             if (item == null) return null;
             var data = await BuildPreview(item, context, ct);
@@ -43,6 +50,9 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
             Name = a.Name,
             Execute = _ => a.Handler(context),
             CanExecute = _ => a.CanExecute?.Invoke(context) ?? true
+        }).Append(new PaletteAction<ProfileListItem> {
+            Name = "Open in Pods",
+            Execute = item => _ = PeToolsBrowser.TryLaunch(new PodMemberAddress(item.Pod.Manifest.Id, item.Member.Path))
         }).ToList();
 
         return PaletteFactory.Create($"{displayName} - Select family.json or patch", new PaletteOptions<ProfileListItem> {
@@ -61,15 +71,13 @@ public sealed class FoundryPaletteBuilder(string displayName, Document doc, UIDo
         var data = new PreviewData { ProfileName = item.TextPrimary, FilePath = item.FilePath, LineCount = item.LineCount, ModifiedDate = item.LastModified, ProfileJson = json };
         try {
             if (item.Kind == FoundryFileKind.Patch) {
-                var patch = new ModuleSettingsStorage<FamilyPatch>(context.Documents)
-                    .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.PatchRootKey);
+                var patch = item.Member.Load<FamilyPatch>(item.Pod).Spec;
                 var families = await PaletteThreading.RunRevitAsync<List<FamilyInfo>>(() => context.Doc.IsFamilyDocument
                     ? []
                     : context.Doc.FamiliesMatching(patch.Select).Select(f => new FamilyInfo(f.Name, f.FamilyCategory?.Name ?? "?")).ToList(), ct);
                 return data with { Patch = patch, IsValid = true, Families = families, Sections = ((Newtonsoft.Json.Linq.JObject)patch.Patch).Properties().Select(p => $"{p.Name}: {p.Value.Type}").ToList() };
             }
-            var composed = new ModuleSettingsStorage<FamilyModel>(context.Documents)
-                .ReadRequired(item.RelativePath, FamilyModelSettingsRegistration.RootKey);
+            var composed = item.Member.Load<FamilyModel>(item.Pod).Spec;
             var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(composed));
             if (parsed.Value is null || parsed.Diagnostics.Count > 0)
                 return data with { IsValid = false, RemainingErrors = parsed.Diagnostics.Select(d => $"{d.Path}: {d.Code} {d.Message}").ToList() };

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns shared storage/runtime infrastructure over the product layout: structural module descriptors, root bindings, storage path composition, runtime state stores, user output stores, global settings/log storage, APS credential lookup, and small schema metadata contracts exported to host contracts.
+Owns shared storage/runtime infrastructure over the product layout: structural module descriptors, root bindings, storage path composition, runtime state stores, pod output stores, product preferences, APS credential lookup, and small schema metadata contracts exported to host contracts.
 
 ## Purpose
 
@@ -12,10 +12,9 @@ This package is the shared backbone for C# storage identity and product-root com
 
 - `Modules/SettingsRuntimeContracts.cs` and `Modules/SettingsModuleContracts.cs` - structural module + root-binding contract surface.
 - `Modules/SettingsRuntimeRegistry.cs` - central structural-module/root-binding registration and duplicate-key guard.
-- `ModuleStorage.cs` and `GlobalStorage.cs` - composition over settings, runtime state, and user output roots.
-- `ModuleDocumentStorage.cs` - C# storage identity for authored settings documents.
+- `ModuleStorage.cs` and `GlobalStorage.cs` - composition over runtime state and pod output roots.
 - `StateStorage.cs` and `OutputStorage.cs` - filesystem-backed runtime state and user output stores.
-- `SettingsPathing.cs` and `SettingsDiscovery*.cs` - authored settings path discovery and bounded path normalization.
+- `SettingsPathing.cs` - bounded relative-path normalization shared by storage primitives.
 - `Json/` - JSON/CSV file wrappers plus directive marker attributes consumed by settings schema/runtime code.
 - `Capabilities/` - small schema metadata contracts that are exported through host contract codegen.
 
@@ -32,16 +31,16 @@ Authored settings document open/save/validate/composition is TS-owned in `source
 | Term                  | Meaning                                                                         | Prefer / Avoid                                                                  |
 | --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | **module**            | A host-visible structural settings area with storage identity                   | Avoid using it for arbitrary feature folders                                    |
-| **root binding**      | A typed runtime binding for one `(moduleKey, rootKey)` pair                     | Avoid collapsing this back to module-level typing                               |
+| **root binding**      | A typed runtime binding for one `$schema` URL (`/schemas/settings/<module>/<root>.json`) | Avoid collapsing this back to module-level typing                               |
 | **schema definition** | Explicit per-type augmentation registered in `SettingsSchemaDefinitionRegistry` | Avoid describing this as generic attribute reflection                           |
 | **field options**     | Runtime option metadata/items for a specific property                           | Avoid using `examples` and field options interchangeably                        |
-| **state**             | Mutable runtime data under `%LocalAppData%\Positive Energy\Pe.Tools\state`      | Avoid writing state under authored settings except as a legacy migration source |
-| **output**            | User-facing command artifacts under `Documents\Pe.Tools\output`                 | Avoid writing command output under authored settings modules                    |
+| **state**             | Mutable runtime data under `%LocalAppData%\Positive Energy\Pe.Tools\state`      | Never write state under user-authored Pods                                      |
+| **output**            | User-facing command artifacts under `Documents\Pe.Tools\Pods\<folder>\output`  | Exclude output through positive release selection                               |
 
 ## Living Memory
 
 - Prefer explicit metadata contracts over scattering storage and schema assumptions across settings types.
-- `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `(moduleKey, rootKey)` pair maps to the same contract. Reusing a key for a different contract should fail fast.
+- `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `$schema` URL maps to the same contract. Reusing a key for a different contract should fail fast.
 - Host structural schemas and live-document field options are different concerns. Keep those seams obvious.
-- `ModuleStorage` deliberately splits roots: authored settings under `Documents\Pe.Tools\settings`, runtime state under LocalAppData, and user output under `Documents\Pe.Tools\output`.
+- Product preferences live at `Documents\Pe.Tools\preferences.json`; authored settings and useful output live inside ordinary pod folders; runtime state and credentials live under LocalAppData.
 - Product root names belong in `Pe.Shared.Product`; storage runtime composes those layouts rather than defining its own roots.

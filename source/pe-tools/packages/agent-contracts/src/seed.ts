@@ -8,7 +8,7 @@ import { addressSchema, executionTargetSchema, type ExecutionTarget } from "./ta
 import { workKeySchema } from "./route-state.ts";
 import { familiesRouteState } from "./families.ts";
 import { parameterLinkProfileSchema, parameterLinksRouteState } from "./parameter-links.ts";
-import { settingsRouteState, settingsDocumentIdSchema } from "./settings.ts";
+import { settingsRouteState, podMemberSchema } from "./settings.ts";
 import {
   takeoffsRouteState,
   takeoffSnapshotSchema,
@@ -56,10 +56,7 @@ const common = {
   /** Original addresses, tokens, IDs and unknown receipts are citations, never executable authority. */
   originalEvidence: z.unknown(),
 };
-const file = z.object({
-  documentId: settingsDocumentIdSchema.extend({ stableId: z.string().optional() }),
-  rawContent: z.string(),
-});
+const file = z.object({ member: podMemberSchema, rawContent: z.string() });
 export const demoSeedSchema = z.discriminatedUnion("route", [
   z.object({
     ...common,
@@ -132,13 +129,12 @@ export const demoSeedSchema = z.discriminatedUnion("route", [
     /** File-free: the profile the demo plans against is supplied as parsed JSON, never a path. */
     readings: z.object({
       profile: z.record(z.string(), z.unknown()),
+      /** Where the profile lands in the demo pod: the page's member. */
+      member: podMemberSchema,
       families: z.array(z.string()).min(1),
-      preparePlan: z.boolean().optional(),
     }),
     page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
-    scenario: z
-      .enum(["success", "plan-refusal", "stale-basis", "native-unknown"])
-      .default("success"),
+    scenario: z.enum(["success", "plan-refusal", "native-unknown"]).default("success"),
   }),
   z.object({
     ...common,

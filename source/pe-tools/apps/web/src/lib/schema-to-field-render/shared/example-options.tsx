@@ -79,20 +79,19 @@ export function useFieldOptions({
   providerNode?: SchemaNodeRef;
   fieldPath: string;
 }) {
-  const { moduleKey, rootKey, values: allValues, useRemoteOptions } = useSchemaRenderContext();
+  const { schemaUrl, values: allValues, useRemoteOptions } = useSchemaRenderContext();
   const useRemote = useRemoteOptions ?? useSettingsRemoteOptions;
   const effectiveProviderNode = providerNode ?? node;
   const requestPath = effectiveProviderNode.providerPath();
   const remoteSource = useMemo(() => effectiveProviderNode.optionSource(), [effectiveProviderNode]);
   const request = useMemo<FieldOptionsRequest>(() => {
     return {
-      moduleKey,
-      rootKey: rootKey ?? "",
+      schemaUrl,
       propertyPath: requestPath,
       sourceKey: remoteSource?.key ?? "",
       contextValues: buildContextValues(remoteSource?.dependsOn ?? [], fieldPath, allValues),
     };
-  }, [allValues, fieldPath, moduleKey, remoteSource, requestPath, rootKey]);
+  }, [allValues, fieldPath, remoteSource, requestPath, schemaUrl]);
   const contextValues = request.contextValues ?? {};
   const dependencyStates = useMemo(
     () =>
@@ -108,7 +107,7 @@ export function useFieldOptions({
   const usesParameterCatalogDataset = resolver === "dataset" && dataset === "parametercatalog";
   const remoteQuery = useRemote(request, usesRemoteResolver);
   const parameterCatalogQuery = useParameterCatalogQuery(
-    { moduleKey, contextValues },
+    { contextValues },
     { enabled: usesParameterCatalogDataset },
   );
   const enumItems = useMemo(() => {

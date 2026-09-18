@@ -231,7 +231,26 @@ public sealed class FamilyModelContractTests {
         }
     }
 
-    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.family.json").Select(Path.GetFileName)!;
+    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
+
+    [Test]
+    public void Nested_model_resolves_by_schema_and_family_name_not_filename() {
+        const string schema = "/schemas/settings/FamilyFoundry/models.json";
+        var directory = Directory.CreateTempSubdirectory("pe-nested-").FullName;
+        try {
+            File.WriteAllText(Path.Combine(directory, "anything.json"), $$"""{ "$schema": "http://127.0.0.1:5180{{schema}}", "family": { "name": "leaf" } }""");
+            File.WriteAllText(Path.Combine(directory, "leaf.json"), """{ "family": { "name": "leaf" } }"""); // no $schema: plain data
+            File.WriteAllText(Path.Combine(directory, "other.json"), $$"""{ "$schema": "{{schema}}", "family": { "name": "other" } }""");
+            File.WriteAllText(Path.Combine(directory, "broken.json"), "not json");
+            Assert.That(FamilyModelJson.FindModel(directory, "leaf", schema), Is.EqualTo(Path.Combine(directory, "anything.json")));
+            Assert.That(FamilyModelJson.FindModel(directory, "absent", schema), Is.Null, "no match falls to the .rfa");
+            File.WriteAllText(Path.Combine(directory, "twin.json"), $$"""{ "$schema": "{{schema}}", "family": { "name": "leaf" } }""");
+            Assert.That(Assert.Throws<InvalidOperationException>(() => FamilyModelJson.FindModel(directory, "leaf", schema))!.Message,
+                Does.Contain("anything.json").And.Contain("twin.json"));
+        } finally {
+            Directory.Delete(directory, true);
+        }
+    }
 
     [TestCaseSource(nameof(Fixtures))]
     public void Showcase_fixture_parses_clean_and_roundtrips(string file) {
@@ -279,7 +298,7 @@ public sealed class FamilyModelContractTests {
 
     [Test]
     public void Patch_merges_with_omit_null_and_object_rules() {
-        var current = File.ReadAllText(Path.Combine(FixtureDir, "a-box.family.json"));
+        var current = File.ReadAllText(Path.Combine(FixtureDir, "a-box.json"));
         var patch = FamilyPatch.Parse("""
             { "select": { "categories": ["Electrical Equipment"], "placedOnly": true },
               "patch": { "connectors": { "aux": { "domain": "Electrical", "systemType": "PowerCircuit", "on": "body.top", "at": ["body.left", "Center (Front/Back)"] } },
