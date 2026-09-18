@@ -86,7 +86,9 @@ function scenarioRuntime(
           },
         },
         { text: proposeFinalText },
-        { toolCall: { name: "pe_do", input: { key: "route:instances.stop" } } },
+        // Instances lifecycle is a semantic action now, not a route command
+        // (`instancesRouteState.commands` is `{}`); the human-only gate moved with it.
+        { toolCall: { name: "pe_do", input: { key: "workflow:instances.stop" } } },
         { text: stopFinalText },
         { text: abortedText, finishDelayMs: 10_000 },
       ],
@@ -222,11 +224,9 @@ test("the browser walks one durable chat lifecycle", async () => {
         (text: string) => preseeded.find((message) => text.includes(message.text))?.text,
       ),
     ).toEqual(preseeded.map((message) => message.text));
-    // R5: first transcript paint requires only host status, then the thread open/read.
-    expect(bootRequests, "R5 first transcript paint request chain").toEqual([
-      "GET /host/status",
-      `GET ${threadPath}`,
-    ]);
+    // R5: first transcript paint requires only the thread open/read. `GET /host/status` left the
+    // chain when host status became a reading on the one resources stream, not a boot request.
+    expect(bootRequests, "R5 first transcript paint request chain").toEqual([`GET ${threadPath}`]);
 
     const readThread = async () => {
       const response = await fetch(`${baseUrl}${threadPath}`);
@@ -249,13 +249,15 @@ test("the browser walks one durable chat lifecycle", async () => {
     // approve it when it does, and stop when the turn's final text is on the page.
     const driveTurn = async (prompt: string, finalText: string) => {
       await composer.fill(prompt);
-      await page.getByRole("button", { name: "Send message" }).click();
+      await page.getByRole("button", { name: "send", exact: true }).click();
       const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
         if ((await rows.allTextContents()).some((row: string) => row.includes(finalText))) {
           // Settled means the run ended, not just that the text painted; the next send needs that.
           await expect
-            .poll(() => page.getByRole("button", { name: "Stop" }).count(), { timeout: 15_000 })
+            .poll(() => page.getByRole("button", { name: "cancel", exact: true }).count(), {
+              timeout: 15_000,
+            })
             .toBe(0);
           return;
         }
@@ -271,18 +273,21 @@ test("the browser walks one durable chat lifecycle", async () => {
     };
 
     await composer.fill("APPROVAL_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
-    const approvalRow = page.getByRole("region", { name: "Assistant message" }).last();
-    const approve = approvalRow.getByRole("button", { name: "Approve" });
+    await page.getByRole("button", { name: "send", exact: true }).click();
+    // Allow/refuse lives in the composer head's proposals band, not in the stream row
+    // (`web/src/chat/composer-head.tsx`, `web/src/workbench/moments.tsx`): one location for the gate,
+    // the stream stays a record.
+    const proposals = page.locator('[aria-label="Pea proposals"]');
+    const approve = proposals.getByRole("button", { name: "Approve" });
     await approve.waitFor({ timeout: 15_000 });
-    expect(await approvalRow.innerText()).toContain("Scenario Approval");
+    expect(await proposals.innerText()).toContain("Scenario Approval");
     await approve.click();
     await waitForRowText(approvalFinalText);
     // Display is stream-only now: the settled gate is proven by the DOM, not the body.
     await expect
       .poll(
         async () => ({
-          stop: await page.getByRole("button", { name: "Stop" }).count(),
+          stop: await page.getByRole("button", { name: "cancel", exact: true }).count(),
           gates: await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count(),
         }),
         { timeout: 15_000 },
@@ -293,9 +298,11 @@ test("the browser walks one durable chat lifecycle", async () => {
       .toContain(`APPROVED:${approvalToolValue}`);
 
     await composer.fill("QUESTION_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
-    await questionRow.getByRole("button", { name: "Approve" }).click();
+    // `ask_user` asks for permission in the band first; its question then answers in the stream,
+    // beside what it asks about.
+    await proposals.getByRole("button", { name: "Approve" }).click();
     await waitForRowText(questionText);
     expect(await questionRow.innerText()).toContain("Use the current session");
     await questionRow.getByRole("button", { name: questionAnswer }).click();
@@ -304,18 +311,15 @@ test("the browser walks one durable chat lifecycle", async () => {
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(`User answered: ${questionAnswer}`);
 
-    // Scope: the head sets it (PUT), the turn is admitted under that revision, the tool sees it,
-    // and a route document lands under the same Scope key.
+    // Target: the head sets it (PUT), the turn is admitted under that revision, the tool sees it,
+    // and a route document lands under the same Work key.
     const scopeUrl = `${baseUrl}/pe/scope/${encodeURIComponent(threadId)}`;
-    expect(await (await fetch(scopeUrl)).json()).toEqual({
-      scope: { kind: "none" },
-      revision: 0,
-    });
+    expect(await (await fetch(scopeUrl)).json()).toEqual({ defaultTarget: null, revision: 0 });
     const setScope = await fetch(scopeUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
+        defaultTarget: { kind: "named", session: scopeSession, address: scopeDocument },
         expectedRevision: 0,
       }),
     });
@@ -323,21 +327,28 @@ test("the browser walks one durable chat lifecycle", async () => {
       ok: true,
       why: "set",
       head: {
-        scope: { kind: "document", document: scopeDocument, pin: scopeSession },
+        defaultTarget: { kind: "named", session: scopeSession, address: scopeDocument },
         revision: 1,
       },
     });
+    // The head's revision lives in the Situation's ledger now (`route/situation.tsx` `Ledger`),
+    // reached through the route-state gauge; `scope-line.tsx` and its testid are gone.
+    const routeState = page
+      .getByTestId("composer-head")
+      .getByRole("button", { name: "Route state" });
+    await routeState.click();
     await expect
-      .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })
+      .poll(() => page.locator('dt:has-text("target") + dd').innerText(), { timeout: 15_000 })
       .toBe("r1");
-    // pe_find under that Scope: the map, the connected sessions (none), and the silent sources.
+    await page.keyboard.press("Escape");
+    // pe_find under that Target: the map, the connected sessions (none), and the silent sources.
     await driveTurn("FIND_TURN", findFinalText);
     const findBody = JSON.stringify((await readThread()).messages);
-    expect(findBody).toContain(`"pin":"${scopeSession}"`);
+    expect(findBody).toContain(`"session":"${scopeSession}"`);
     expect(findBody).toContain('"revision":1');
     expect(findBody).toContain('"map":{');
     expect(findBody).toContain("route-command");
-    // pe_read route:instances under that Scope: the document lands under the Scope key.
+    // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
     // pe_do route:instances.propose stages a start; the card shows r1 and the resolved target.
@@ -345,65 +356,67 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
       .toBe("r1");
-    // A route write touches no Revit: the card names the Scope's document and no session.
-    expect(await page.getByTestId("tool-target").last().innerText()).toContain(scopeDocument);
+    // A workspace write touches no Target at all: Instances Work is `?work=instances` (spec §7),
+    // the same key `instances/cluster.tsx` reads, so the card names neither session nor document.
+    expect(await page.locator("[data-tool-id]").last().getByTestId("tool-target").count()).toBe(0);
     await expect
       .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
       .toContain("start scenario in Revit 2026");
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
-    const routeQuery = `doc=${encodeURIComponent(scopeDocument)}&pin=${scopeSession}`;
+    const routeQuery = `target=${encodeURIComponent(scopeDocument)}`;
     expect(
-      await (await fetch(`${baseUrl}/pe/route-state/instances?${routeQuery}`)).json(),
+      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
     ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
-    const applied = await fetch(`${baseUrl}/pe/route-state/ops/apply?${routeQuery}`, {
+    // `ops` is no longer a route document; `takeoffs` is the Address-keyed one that is left.
+    const applied = await fetch(`${baseUrl}/pe/route-state/takeoffs/apply?${routeQuery}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        patches: [{ path: ["bindings", "op"], value: { id: "revit.context.summary", label: "s" } }],
+        patches: [{ path: ["staged"], value: [] }],
         expectedRevision: 0,
       }),
     });
     expect(await applied.json()).toMatchObject({ ok: true, revision: 1 });
-    expect(await (await fetch(`${baseUrl}/pe/route-state/ops?${routeQuery}`)).json()).toMatchObject(
-      {
-        revision: 1,
-        doc: { bindings: { op: { id: "revit.context.summary" } } },
-      },
-    );
-    // The pin is a tiebreak, never identity: another pin reads the same document, another
-    // document starts fresh.
+    expect(
+      await (await fetch(`${baseUrl}/pe/route-state/takeoffs?${routeQuery}`)).json(),
+    ).toMatchObject({ revision: 1, doc: { staged: [] } });
+    // The Work key is the Address alone: the same Address reads the same document, another
+    // Address starts fresh.
     expect(
       await (
         await fetch(
-          `${baseUrl}/pe/route-state/ops?pin=other&doc=${encodeURIComponent(scopeDocument)}`,
+          `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent(scopeDocument)}`,
         )
       ).json(),
     ).toMatchObject({ revision: 1 });
+    // Another Address has no envelope at all yet: the read is a 404, not a shared document.
     expect(
-      await (
+      (
         await fetch(
-          `${baseUrl}/pe/route-state/ops?doc=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
+          `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
         )
-      ).json(),
-    ).toMatchObject({ revision: 0 });
+      ).status,
+    ).toBe(404);
 
     await composer.fill("ABORT_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "send", exact: true }).click();
     await waitForRowText(abortedText);
-    await page.getByRole("button", { name: "Stop" }).click();
+    await page.getByRole("button", { name: "cancel", exact: true }).click();
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
       .toContain(abortedText);
     await expect
-      .poll(() => page.getByRole("button", { name: "Stop" }).count(), { timeout: 15_000 })
+      .poll(() => page.getByRole("button", { name: "cancel", exact: true }).count(), {
+        timeout: 15_000,
+      })
       .toBe(0);
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await waitForRowText(abortedText);
     expect(await page.getByRole("button", { name: /^(Approve|Deny)$/ }).count()).toBe(0);
-    expect(await page.getByRole("button", { name: "Stop" }).count()).toBe(0);
+    expect(await page.getByRole("button", { name: "cancel", exact: true }).count()).toBe(0);
     const beforeRestart = (await readThread()).messages;
     const beforeRestartKeys = await rows.evaluateAll((elements: AttributeElement[]) =>
       elements.map((element) => element.getAttribute("data-key")),

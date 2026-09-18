@@ -5,7 +5,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
 import { token } from "#/lib/token";
-import { useWorkbench } from "../provider";
+import { useCurrentThreadView } from "../thread-view";
 import {
   blastOf,
   BLAST_LABEL,
@@ -31,8 +31,9 @@ import {
 } from "./cap";
 import { ContextBudgetBar, whySentence } from "./bar";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code } from "#/components/lang/code";
 
-export function WorldLane({
+export function SessionStrip({
   breakdown,
   cache,
   sendNumber,
@@ -41,9 +42,9 @@ export function WorldLane({
   cache: CacheView;
   sendNumber?: number;
 }) {
-  const { store } = useWorkbench();
-  const { density, diff, open, openItems } = useAtomValue(store.atoms.world);
-  const setWorld = store.actions.setWorld;
+  const view = useCurrentThreadView();
+  const { density, diff, open, openItems } = useAtomValue(view.atoms.world);
+  const setWorld = view.actions.setWorld;
   const inspect = density === "inspect";
   const layers = orderedLayers(breakdown);
   const used = layers.reduce((sum, layer) => sum + layer.tokens, 0) || 1;
@@ -307,11 +308,7 @@ export function ItemRow({
           </span>
         </PressContent>
       </Press>
-      {open && hasBody ? (
-        <pre className="m-0 max-h-[220px] overflow-auto px-[9px] py-2 break-words whitespace-pre-wrap">
-          {item.body}
-        </pre>
-      ) : null}
+      {open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : null}
     </li>
   );
 }
