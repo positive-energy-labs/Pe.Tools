@@ -126,6 +126,16 @@ export async function setup() {
   let response: unknown = cellsApplied([[1, 2, true]]);
   let detail = detailResponse();
   let readCount = 0;
+  // The document's schedules, as Revit lists them; a test's apply may add one.
+  const catalog = [
+    {
+      scheduleId: 42,
+      name: "Panel",
+      isTemplate: false,
+      visibleBodyRowCount: 1,
+      isPlacedOnSheet: false,
+    },
+  ];
   const sent: { key: string; input: any; session: string; openId: string; id?: string }[] = [];
   const sessions = () =>
     [a, b].map((target) => ({
@@ -152,19 +162,7 @@ export async function setup() {
         try: async () => {
           sent.push({ key, input, session, openId, id });
           if (key === "revit.catalog.schedules")
-            return {
-              value: {
-                entries: [
-                  {
-                    scheduleId: 42,
-                    name: "Panel",
-                    isTemplate: false,
-                    visibleBodyRowCount: 1,
-                    isPlacedOnSheet: false,
-                  },
-                ],
-              },
-            };
+            return { value: { entries: structuredClone(catalog) } };
           if (key === "revit.detail.schedules") {
             readCount++;
             if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
@@ -316,6 +314,14 @@ export async function setup() {
       detail = value;
     },
     reads: () => readCount,
+    addSchedule: (scheduleId: number, name: string) =>
+      catalog.push({
+        scheduleId,
+        name,
+        isTemplate: false,
+        visibleBodyRowCount: 0,
+        isPlacedOnSheet: false,
+      }),
     unsave: () => {
       pathless = true;
     },

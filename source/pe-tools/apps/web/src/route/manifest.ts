@@ -258,6 +258,9 @@ export interface EntityRouteDef<W, R extends string, P> {
   capture: SemanticActionKey;
   /** The host workflow that applies a saved spec in one step, when there is no plan. */
   apply: SemanticActionKey;
+  /** The audit Readings an apply changes in Revit (a new schedule joins the catalog): its
+   * completion re-reads them, so the route never shows a pre-apply count. */
+  applies?: readonly R[];
   /** Present = apply is a confirmation over this plan. */
   plan?: ApplyPlan<W, R, P>;
   /**
@@ -468,7 +471,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     // The plan sheet gates apply: its button is the only one (w8-revit trip 5).
     ...(plan || staged ? { sheet: true as const } : {}),
     input: z.void() as unknown as z.ZodType<never>,
-    dirties: ["pods"],
+    dirties: ["pods", ...(def.applies ?? [])],
     count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
     ready: (ctx) => {
       // A staged sheet carries its own generated member per row; the page's member is not sent.
