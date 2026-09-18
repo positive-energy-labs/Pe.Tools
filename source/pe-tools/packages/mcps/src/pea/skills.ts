@@ -203,25 +203,29 @@ When more than a sentence is needed, report what the Pod does in the user's word
 `,
   },
   {
-    name: "author-pe-settings",
+    name: "propose-changes",
     content: String.raw`---
-name: author-pe-settings
-description: Propose, validate, or debug a pod member such as a Family Foundry spec or schedule spec. Use when the user edits a spec or other pod JSON, has the Pods page open, a run produced diagnostics or a receipt to explain, or validation fails. You propose; the human stages and saves.
+name: propose-changes
+description: Propose value changes on a route. Use when the user asks to change values on something a route shows - family parameters, bulk families, schedule cells, a pod member or spec, instances, takeoff rooms, parameter links - or has such a route open, or asks you to fill in, fix, rename, or adjust values. You propose; the person stages and commits.
 ---
 
-# Author Pe Settings
+# Propose Changes
 
-Pod members are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
+Every route works the same way. You write proposals; the person stages them, and staging is their approval; a separate verb that only the person presses commits.
 
 ## Method
 
-1. Read the live route first (pe_read key=route:pods). It answers the bound member { pod, path }, its schema, the agent write mask, and the commands.
-2. Start from diagnostics and artifacts before proposing. Keep authored intent, generated output, and runtime proof distinct.
-3. Propose only inside the write mask (pe_do key=route:pods.propose), then pe_do key=route:pods.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
-4. Stop for review. Saving is human-only; do not refetch, splice, or write the file yourself while it is bound.
-5. Direct file editing is the fallback only when no route binds the member, and you say so before editing. Use host-reported member paths and the member's $schema, then validate through the host.
+1. Read first: pe_read key=route:<route>. It returns the document, its revision, the schema, the agent write mask, and the commands. The mask is the truth about what you may write.
+2. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs only (cells/<key>/proposal on cell routes, fields/<pointer>/proposal on pods), and expectedRevision from your read. Never write staged, and never write a value the person will commit directly. If a route has no proposal rung, do not write its draft or staged value: describe the change in chat and let the person make it.
+3. What the person sees: your proposal appears in the route and in the Chat head band next to the current value, with accept and deny. A person's staged value can stand beside a different proposal of yours. That is a counter-proposal and it is normal; do not overwrite it.
+4. Commit is the person's. Plan, apply, save, push, and open or start Revit are human verbs. Do not press them, and do not ask the person to let you. Tell them which verb to press and what it will consume: the staged values at the current revision. Open proposals are never consumed.
+5. A proposal is not a permission request. Do not use ask_user to get a proposal approved; it waits in the route as Work and survives reload. Use ask_user only for a decision only the person can make. An ask lives only as long as your turn.
 
-When more than a sentence is needed, report the fields proposed, the validation result, diagnostics fixed or remaining, and what the user must stage or decide.
+## Pod members
+
+Validate with pe_do key=route:pods.validate and includeProposals, repair the first diagnostic, and revalidate. Start from diagnostics and artifacts, and keep authored intent, generated output, and runtime proof distinct. Edit a member file directly only when no route binds it, and say so before you do.
+
+When more than a sentence is needed, report the fields proposed, the validation result, and what the person must stage or decide.
 `,
   },
   {
@@ -345,6 +349,7 @@ export const retiredPeaSkillNames: readonly string[] = [
   "author-family-foundry-profile",
   "debug-family-foundry-artifacts",
   "validate-pe-settings-workspace",
+  "author-pe-settings",
 ];
 
 export const peaStandardSkillsRoot = path.join(".agents", "skills");

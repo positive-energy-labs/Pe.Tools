@@ -25,7 +25,7 @@ Practitioner-facing, adapted from the repo stance set: `survey-revit-model` (gro
 `diagnose-revit-behavior` (diagnose, carries the view-visibility cause list), `settle-intent`
 (grill), `prove-revit-change` (prove), `teach-revit-mechanism` (teach),
 `write-revit-csharp-script` (execute for Revit), `build-pod` (demiurge + close + purge, owns the
-Pod definition and adapting an existing Pod), `author-pe-settings` (three former settings/profile skills, proposing through `route:settings`), `place-mep-ducts` (unchanged).
+Pod definition and adapting an existing Pod), `propose-changes` (the one collaboration grammar on every route: propose, the person stages, a human verb commits), `place-mep-ducts` (unchanged).
 Not exposed: index, docs, relay, delegate, goal, mine, reflect, protoui, house.
 
 ## Proof
