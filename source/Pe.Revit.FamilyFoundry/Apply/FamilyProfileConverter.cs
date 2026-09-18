@@ -95,7 +95,8 @@ public static class FamilyProfileConverter {
             }
             var types = new JObject();
             foreach (var (parameter, cells) in assignments.GetPerTypeAssignmentsByParameter())
-                foreach (var (type, value) in cells) {
+                // A blank legacy profile cell meant "no value for this type"; it never meant clear to empty.
+                foreach (var (type, value) in cells.Where(cell => !string.IsNullOrWhiteSpace(cell.Value))) {
                     types[type] ??= new JObject();
                     var canonical = CanonicalParameterName(parameter);
                     types[type]![canonical] = Literal(canonical, value, specs, sourceUnits);
