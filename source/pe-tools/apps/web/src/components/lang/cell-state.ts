@@ -1,4 +1,4 @@
-import { canonicalRouteInput, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { sameValue, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -133,6 +133,9 @@ export interface CellTransition {
   reason?: string;
 }
 
+/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
+const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
+
 /**
  * THE ONE READER (ruled 2026-08-31, proposal-state demiurge). A trichotomy cell —
  * `agent-contracts/src/trichotomy.ts`, proposal → staged → committed — plus the caller's own
@@ -143,16 +146,6 @@ export interface CellTransition {
  * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
  * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
  */
-/**
- * What a rung WRITES: its value and whether it deletes. Rungs are compared as canonical JSON, never
- * by identity — Work is deserialized, so two equal object values are never the same reference.
- */
-const rungPayload = (rung: { value?: unknown; delete?: true }) =>
-  canonicalRouteInput({ value: rung.value, delete: rung.delete === true });
-
-/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
-const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
-
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
   facts: StateCellProps,
@@ -163,14 +156,11 @@ export function cellFromTrichotomy(
   // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
   // staged value is authorship evidence, not a second state.
   const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
-  const stagedBy =
-    staged != null && proposal != null && rungPayload(staged) === rungPayload(proposal)
-      ? "pea"
-      : "you";
+  const stagedBy = sameValue(staged, proposal) ? "pea" : "you";
   // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
   // `counterValue` on StateCellProps.
   const contested =
-    staged != null && proposal != null && rungPayload(proposal) !== rungPayload(staged)
+    staged != null && proposal != null && !sameValue(proposal, staged)
       ? proposal.delete === true
         ? "delete"
         : show(proposal.value)
