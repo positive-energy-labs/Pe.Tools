@@ -527,6 +527,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     ) => Promise<Refusal | null>;
     /** Another writer landed first; the last write was refused. `reload` reads Work again. */
     readonly conflict: boolean;
+    /** The owner's own sentence when Work cannot be read (e.g. saved in an older shape). */
+    readonly refusal: string | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
@@ -1050,13 +1052,14 @@ export function useRoute<W, R extends string, P, A extends string>(
       current: workCurrent,
       write: writeWork,
       conflict: conflictNow,
+      refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
       reload: () => {
         if (seed) return;
         owner.registry.set(owner.conflict, false);
         if (spec) dirty({ ...key, kind: "work" });
       },
     }),
-    [key, doc, workCurrent, writeWork, owner, conflictNow, spec, seed],
+    [key, doc, workCurrent, sliceResult, writeWork, owner, conflictNow, spec, seed],
   );
 
   return {

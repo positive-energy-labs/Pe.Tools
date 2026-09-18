@@ -10,6 +10,7 @@ import {
   refuse,
   type RouteActor,
   type RouteEnvelope,
+  type RouteRefusal,
   type RouteStatePatch,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
@@ -45,6 +46,9 @@ export interface RouteWorkspaceOptions {
 }
 
 const ENVELOPE_VERSION = 1;
+/** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
+export const UNREADABLE_WORK =
+  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
 // ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
@@ -103,7 +107,8 @@ export class RouteWorkspace {
     return this.#serialized(scope, route, async () => {
       const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
-      const envelope = await this.#load(scope, registration.spec);
+      const envelope = await this.#load(scope, registration.spec).catch(unreadable);
+      if ("ok" in envelope) return envelope;
       const landed = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
       if (!landed.ok) {
         await emit({
@@ -145,7 +150,8 @@ export class RouteWorkspace {
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
     return this.#serialized(scope, route, async () => {
-      const envelope = await this.#load(scope, spec);
+      const envelope = await this.#load(scope, spec).catch(unreadable);
+      if ("ok" in envelope) return envelope;
       const reject = async (result: RouteStateWriteResult) => {
         if (!result.ok)
           await this.#publish({
@@ -294,14 +300,25 @@ const envelopeSchema = z.object({
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const parsed = envelopeSchema.safeParse(raw);
-  if (!parsed.success) throw new Error(`invalid persisted envelope for route '${spec.route}'`);
+  if (!parsed.success) throw new Error(UNREADABLE_WORK);
   const doc = spec.schema.safeParse(parsed.data.doc);
-  if (!doc.success) throw new Error(`invalid persisted document for route '${spec.route}'`);
+  if (!doc.success) throw new Error(UNREADABLE_WORK);
   return {
     version: ENVELOPE_VERSION,
     revision: parsed.data.revision,
     doc: doc.data,
   };
+}
+
+/** A write over saved Work the schema refuses answers in the one sentence and writes nothing. */
+function unreadable(error: unknown): RouteRefusal {
+  if (error instanceof Error && error.message === UNREADABLE_WORK)
+    return refuse(
+      "refused",
+      UNREADABLE_WORK,
+      "Nothing was written; the saved Work is kept as it was.",
+    );
+  throw error;
 }
 
 function describeCommands(spec: RouteStateSpec<z.ZodType>) {
