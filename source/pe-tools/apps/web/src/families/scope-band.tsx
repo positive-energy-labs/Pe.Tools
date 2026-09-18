@@ -75,11 +75,8 @@ export function FamiliesFilterBand() {
           </div>
         ) : categories.length === 0 ? (
           <div className="min-w-0 flex-1">
-            <EmptyState
-              story="scope"
-              exit="load a family in Revit, or bind a different world in the sentence above"
-            >
-              no loaded families in this project — the catalog read succeeded and reported nothing
+            <EmptyState story="scope" exit="bind a different world in the sentence above">
+              no categories — the category-names read succeeded and reported none
             </EmptyState>
           </div>
         ) : (

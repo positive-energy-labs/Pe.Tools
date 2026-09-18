@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import type { FfReceipt } from "@pe/agent-contracts";
+import { useEffect, useMemo, useRef } from "react";
+import { FAMILY_SCOPE_LIMIT, type FfReceipt } from "@pe/agent-contracts";
 
 import type { Verdict } from "#/components/master-table/model";
 import type { FamiliesStore } from "#/families/store";
@@ -18,6 +18,24 @@ import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
+
+/**
+ * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
+ * names only the old one, so once an apply settles, whatever its outcome, the audit re-resolves
+ * its scope: rows, picks and the next plan read the new ids. The sheet's hashes closed with it.
+ */
+export function useAfterApply(busy: string | null, reresolve: () => void) {
+  const applying = useRef(false);
+  const latest = useRef(reresolve);
+  latest.current = reresolve;
+  useEffect(() => {
+    if (busy === "apply") applying.current = true;
+    else if (applying.current) {
+      applying.current = false;
+      latest.current();
+    }
+  }, [busy]);
+}
 
 /** The placement filter's vocabulary, and what each choice MEANS for the audit. */
 function useFamiliesWorkspaceModel(
@@ -69,15 +87,15 @@ function useFamiliesWorkspaceModel(
     [fixture, fixtureFamilies, familyFeed.options],
   );
 
-  // Budget sized to the picked family list so nothing truncates silently, and samples lifted so
-  // no type/cell is dropped from the master table.
+  // The plan's budget, so the band counts the families the plan will plan; samples lifted so no
+  // type/cell is dropped from the master table.
   const matrixRequest = useMemo<LoadedFamiliesMatrixRequest | undefined>(
     () =>
       applied
         ? {
             filter: applied,
             budget: {
-              maxEntries: Math.max(applied.familyNames.length, 10),
+              maxEntries: FAMILY_SCOPE_LIMIT,
               maxSamplesPerEntry: 1000,
             },
             includeTempPlacement: true,
@@ -88,6 +106,10 @@ function useFamiliesWorkspaceModel(
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
     enabled: !fixture && connected && scope !== undefined && matrixRequest !== undefined,
+  });
+  useAfterApply(busy, () => {
+    setPickedIds(new Set());
+    matrix.refresh();
   });
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
