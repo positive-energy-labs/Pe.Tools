@@ -20,6 +20,18 @@ const binding = (columnNumber: number, blocker = "None") => ({
   displayValue: "100 VA",
   isEditable: true,
   blocker,
+  // The ruled capture carries per-target evidence (schedule.cells.apply compares it).
+  targets: [
+    {
+      elementId: 11,
+      parameterId: 100 + columnNumber,
+      parameterName: `P${columnNumber}`,
+      storageType: "String",
+      isReadOnly: false,
+      hasValue: true,
+      rawValue: "100 VA",
+    },
+  ],
 });
 const snapshot = scheduleGridSnapshotSchema.parse({
   scheduleId: 1,
