@@ -1078,7 +1078,6 @@ const REQUIRED_RECIPE_GRIDS = new Set([
   ...LANG_RECIPES,
   "dialogRecipe",
   "inputGroupRecipe",
-  "selectRecipe",
 ]);
 const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .filter((name) => RECIPE_GRID_USES.get(name) !== 1)
@@ -1109,7 +1108,6 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/label",
   "#/components/lang/pane",
   "#/components/lang/pick-list",
-  "#/components/lang/select",
   "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",

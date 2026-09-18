@@ -33,17 +33,16 @@
     }
   },
   "escHandler": {
-    "total": 4,
+    "total": 3,
     "byArea": {
       "chat": 1,
-      "components": 2,
-      "runs": 1
+      "components": 2
     }
   },
   "opacityDim": {
-    "total": 19,
+    "total": 17,
     "byArea": {
-      "components": 16,
+      "components": 14,
       "family": 2,
       "route": 1
     }
