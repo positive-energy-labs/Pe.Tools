@@ -108,16 +108,27 @@ export interface FamilyCellAddress {
   parameter: string;
 }
 
+const familyCellAddressTupleSchema = z.tuple([z.number(), z.string(), z.string()]);
+
 /** JSON tuple encoding is collision-free even when names contain separators. */
 export const familyCellKey = ({ familyId, typeName, parameter }: FamilyCellAddress): string =>
-  JSON.stringify([familyId, typeName, parameter]);
+  JSON.stringify(familyCellAddressTupleSchema.parse([familyId, typeName, parameter]));
 
 export const familyCellAddress = (key: string): FamilyCellAddress => {
-  const [familyId, typeName, parameter] = z
-    .tuple([z.number(), z.string(), z.string()])
-    .parse(JSON.parse(key));
+  const [familyId, typeName, parameter] = familyCellAddressTupleSchema.parse(JSON.parse(key));
   return { familyId, typeName, parameter };
 };
+
+const familyCellKeySchema = z.string().refine(
+  (key) => {
+    try {
+      return familyCellKey(familyCellAddress(key)) === key;
+    } catch {
+      return false;
+    }
+  },
+  { error: "a family cell key must be a canonical [familyId,typeName,parameter] JSON tuple" },
+);
 
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
@@ -129,7 +140,7 @@ const familiesDocumentSchema = z
   .object({
     scope: appliedScopeSchema.nullable().default(null),
     excludedIds: z.array(z.number()).default([]),
-    cells: z.record(z.string(), familyCellStateSchema).default({}),
+    cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
   })
   .strict();
