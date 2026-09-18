@@ -2906,6 +2906,12 @@ export namespace RevitContextViewImage {
       sheetNumber?: null | string;
       registration?: null | RevitViewImageRegistration;
       registrationRefusal?: null | RevitViewImageRegistrationRefusal;
+      /**
+       * Host route for exactly the registered PNG, keyed by ImageSha256;
+       * null exactly when Registration is. FilePath stays the host-side record.
+       *
+       */
+      imageUrl?: null | string;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;

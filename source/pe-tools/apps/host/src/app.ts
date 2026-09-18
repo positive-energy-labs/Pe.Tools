@@ -24,6 +24,7 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
+import { viewImageRoute } from "./view-image-route.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -165,6 +166,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       sessionsRoute,
       docsRoute,
       callRoute,
+      viewImageRoute(),
       ServedSessionLive,
     ),
   };
