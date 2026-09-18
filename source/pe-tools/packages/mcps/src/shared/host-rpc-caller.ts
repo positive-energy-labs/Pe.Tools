@@ -1,5 +1,13 @@
+import {
+  actionAdmissionSchema,
+  canonicalRouteInput,
+  type ActionReceipt,
+} from "@pe/agent-contracts";
+import { submitAction, readAction, type DetachedAction } from "./takeoff-action-client.ts";
+import { admissionDestination, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
-import type { ResolvedTarget } from "@pe/agent-contracts";
+/** What a /call response says it actually ran against; headers absent means no Revit session. */
+export type ResolvedTarget = { session: string | null; document: string | null };
 import {
   hostProcessIdentity,
   type HostOperationCostTier,
@@ -10,6 +18,7 @@ import {
 } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HostCallError,
   type OpKey,
   type OpRequestOf,
@@ -20,6 +29,10 @@ import {
 type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
+  requestId?: string;
+  actor?: "human" | "agent";
+  /** Persist caller view identity before submitting a mutation; reads never invoke this. */
+  beforeAdmission?: (id: string) => Promise<void>;
   /** Test seam: skip the live /ops fetch and use this catalog. */
   catalogOverride?: readonly HostOperationDefinition[];
 };
@@ -34,7 +47,7 @@ type OpsCatalogEntry = HostOperationDefinition & {
 };
 
 const CATALOG_TTL_MS = 30_000;
-const catalogCache = new Map<string, { at: number; ops: HostOperationDefinition[] }>();
+const catalogCache = new Map<string, { at: number; catalog: OpsCatalog }>();
 
 function schemaTitle(schemaJson: string | undefined): string | undefined {
   if (!schemaJson) return undefined;
@@ -46,16 +59,16 @@ function schemaTitle(schemaJson: string | undefined): string | undefined {
   }
 }
 
-async function loadCatalog(
-  hostBaseUrl: string,
-  bridgeSessionId?: string,
-): Promise<HostOperationDefinition[]> {
+/** `bridgeCatalogError` set means the session's native half did not answer; never cached. */
+export type OpsCatalog = { ops: HostOperationDefinition[]; bridgeCatalogError?: string };
+
+async function loadCatalog(hostBaseUrl: string, bridgeSessionId?: string): Promise<OpsCatalog> {
   const base = trimTrailingSlash(hostBaseUrl);
   // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
   // operation in the dev session and then invoke it in another session where that contract does not exist.
   const cacheKey = `${base}\0${bridgeSessionId ?? ""}`;
   const cached = catalogCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.ops;
+  if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.catalog;
 
   const headers: Record<string, string> = {};
   if (bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = bridgeSessionId;
@@ -78,14 +91,19 @@ async function loadCatalog(
       { operationKey: "host.ops.catalog", status: response.status },
     );
   }
-  const payload = (await response.json()) as { operations?: OpsCatalogEntry[] };
+  const payload = (await response.json()) as {
+    operations?: OpsCatalogEntry[];
+    bridgeCatalogError?: string;
+  };
   const ops = (payload.operations ?? []).map((entry) => ({
     ...entry,
     requestTypeName: entry.requestTypeName ?? schemaTitle(entry.requestSchemaJson),
     responseTypeName: entry.responseTypeName ?? schemaTitle(entry.responseSchemaJson),
   }));
-  catalogCache.set(cacheKey, { at: Date.now(), ops });
-  return ops;
+  const catalog = { ops, bridgeCatalogError: payload.bridgeCatalogError };
+  // A host-local-only answer under load is not the session's catalog; the next read asks again.
+  if (!catalog.bridgeCatalogError) catalogCache.set(cacheKey, { at: Date.now(), catalog });
+  return catalog;
 }
 
 type HostOperationVerbosity = "compact" | "hints" | "full";
@@ -108,7 +126,7 @@ type HostOperationSearchResult = {
   needs?: HostOperationNeeds;
 };
 
-type HostOperationCallResult =
+export type HostOperationCallResult =
   | {
       ok: true;
       key: string;
@@ -117,6 +135,7 @@ type HostOperationCallResult =
       /** The session and document the host actually resolved to (x-pe-resolved-* headers). */
       resolvedTarget?: ResolvedTarget;
       response: unknown;
+      action?: ActionReceipt | DetachedAction;
     }
   | {
       ok: false;
@@ -126,6 +145,8 @@ type HostOperationCallResult =
       status?: number;
       message: string;
       problem?: unknown;
+      action?: ActionReceipt | DetachedAction;
+      resolvedTarget?: ResolvedTarget;
       bestRequestExample?: HostOperationRequestExample;
       nextSteps: readonly string[];
     };
@@ -146,18 +167,17 @@ export class HostRpcCaller {
     return this.options.hostBaseUrl;
   }
 
-  call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
-    return Effect.runPromise(
-      callHostRpcEffect(key, request, this.options).pipe(
-        Effect.map(({ rawBody }) => rawBody as OpResponseOf<K>),
-      ),
-    );
+  async call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
+    const result = await this.callOperation(key, request);
+    if (!result.ok)
+      throw new HostCallError(result.message, result.status ?? 409, result.problem as never);
+    return result.response as OpResponseOf<K>;
   }
 
   /** Enrichment lookup against the live catalog; undefined when the catalog is unreachable. */
   async getOperation(key: string): Promise<HostOperationDefinition | undefined> {
-    const operations = await this.catalog().catch(() => [] as HostOperationDefinition[]);
-    return operations.find((operation) => operation.key === key);
+    const catalog = await this.catalog().catch(() => undefined);
+    return catalog?.ops.find((operation) => operation.key === key);
   }
 
   async callOperation(
@@ -165,14 +185,81 @@ export class HostRpcCaller {
     request?: unknown,
     verbosity: HostOperationVerbosity = "compact",
   ): Promise<HostOperationCallResult> {
-    const operation = await this.getOperation(key);
+    const prior = this.options.requestId
+      ? await readAction(this.options.requestId, this.options.hostBaseUrl).catch(() => undefined)
+      : undefined;
+    // Original receipt is the replay authority; no live metadata/target dependency on this branch.
+    // op.cancel never waits on the catalog: see readCapabilityIntent.
+    const operation = prior || key === CANCEL_KEY ? undefined : await this.getOperation(key);
+    if (prior || operation?.intent === "Mutate") {
+      const actor = this.options.actor;
+      if (!actor) throw Error("Mutation caller must supply its initiating actor");
+      // One destination builder: the host recomputes this from `needs` and compares it exactly.
+      const destination =
+        prior?.destination ??
+        admissionDestination(key, operation?.needs ?? "document", this.options);
+      const admission = actionAdmissionSchema.parse({
+        id: this.options.requestId ?? crypto.randomUUID(),
+        kind: "operation",
+        key,
+        actor,
+        destination,
+        input: request ?? {},
+        bases: {},
+      });
+      if (
+        prior &&
+        (prior.kind !== "operation" ||
+          prior.key !== key ||
+          prior.actor !== actor ||
+          canonicalRouteInput(prior.request) !== canonicalRouteInput(admission.input))
+      )
+        throw Error("Original operation ID conflicts with the requested intent");
+      if (prior) {
+        const session =
+          prior.destination.kind === "document"
+            ? prior.destination.ref.session
+            : prior.destination.kind === "session"
+              ? prior.destination.session
+              : undefined;
+        const openId =
+          prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
+        if (
+          (this.options.bridgeSessionId && this.options.bridgeSessionId !== session) ||
+          (this.options.openDocumentId && this.options.openDocumentId !== openId)
+        )
+          throw Error("Original operation ID conflicts with the requested destination");
+      }
+      const started = Date.now();
+      await this.options.beforeAdmission?.(admission.id);
+      const action = await submitAction(
+        admission,
+        this.options.hostBaseUrl,
+        this.options.timeoutMs ?? 30_000,
+      );
+      return action.state === "succeeded"
+        ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action }
+        : {
+            ok: false,
+            key,
+            elapsedMs: Date.now() - started,
+            message: `${action.id}: ${action.state}`,
+            problem: action,
+            action,
+            nextSteps: [
+              "Read/recover the original receipt; do not submit a new ID for an uncertain effect.",
+            ],
+          };
+    }
     return Effect.runPromise(
       callHostRpcOperationEffect(this.options, key, operation, request, verbosity),
     );
   }
 
-  private catalog(): Promise<HostOperationDefinition[]> {
-    if (this.options.catalogOverride) return Promise.resolve([...this.options.catalogOverride]);
+  /** The live catalog for this caller's session; a transport failure throws and names the URL. */
+  catalog(): Promise<OpsCatalog> {
+    if (this.options.catalogOverride)
+      return Promise.resolve({ ops: [...this.options.catalogOverride] });
     return loadCatalog(this.options.hostBaseUrl, this.options.bridgeSessionId);
   }
 }
@@ -208,6 +295,10 @@ const callHostRpcOperationEffect = Effect.fnUntraced(function* (
     status: error instanceof HostCallError ? error.status : undefined,
     message: error instanceof Error ? error.message : String(error),
     problem: error instanceof HostCallError ? error.problem : undefined,
+    resolvedTarget:
+      error instanceof HostCallError
+        ? parseResolvedTarget(error.problem?.resolvedTarget)
+        : undefined,
     bestRequestExample: operation?.requestExamples?.[0],
     nextSteps: createFailureNextSteps(operation, error),
   } satisfies HostOperationCallResult;
@@ -248,8 +339,11 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
   return yield* Effect.tryPromise({
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };
+      if (options.requestId) headers["x-pe-action-id"] = options.requestId;
+      if (options.actor) headers["x-pe-action-actor"] = options.actor;
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
+      if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
       const response = await fetch(`${base}/call`, {
         method: "POST",
         headers,
@@ -261,12 +355,13 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
       });
       if (!response.ok) {
         const problem = (await response.json().catch(() => undefined)) as
-          | { kind?: string; message?: string }
+          | { kind?: string; message?: string; [key: string]: unknown }
           | undefined;
         throw new HostCallError(
           `${key}: ${problem?.message ?? response.statusText}`,
           response.status,
           {
+            ...problem,
             kind: problem?.kind,
             operationKey: key,
             title: problem?.message ?? response.statusText,
@@ -290,6 +385,15 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
           }),
   });
 });
+
+function parseResolvedTarget(value: unknown): ResolvedTarget | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { session, document } = value as Record<string, unknown>;
+  return (typeof session === "string" || session === null) &&
+    (typeof document === "string" || document === null)
+    ? { session, document }
+    : undefined;
+}
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;

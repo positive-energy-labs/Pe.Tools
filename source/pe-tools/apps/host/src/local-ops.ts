@@ -17,22 +17,11 @@ import {
   type HostShellOpenData,
   type HostShellOpenRequest,
   type HostSessionSummaryData,
-  type SettingsModuleWorkspaceDescriptor,
-  type SettingsWorkspaceDescriptor,
-  type SettingsWorkspacesData,
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { resolvePeaWorld, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { productSettingsRootPath } from "./product-paths.ts";
-export {
-  discoverSettingsTree,
-  openSettingsDocument,
-  openSettingsDocumentWithModule,
-  saveSettingsDocument,
-  validateSettingsDocument,
-} from "./settings.ts";
 import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
@@ -46,14 +35,6 @@ let agentRuntimeStatus: AgentRuntimeStatus = { available: false, error: null };
 export function setAgentRuntimeStatus(status: AgentRuntimeStatus): void {
   agentRuntimeStatus = status;
 }
-
-type LocalOpContext = {
-  readonly bridge: BridgeSessionView;
-  readonly invokeBridge: (
-    operationKey: string,
-    payload?: unknown,
-  ) => Effect.Effect<unknown, unknown>;
-};
 
 export function getHostStatus(
   bridge: BridgeSessionView,
@@ -103,9 +84,8 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
             title: s.activeDocumentTitle ?? null,
           }
         : null,
-    availableModules: s?.availableModules ?? [],
     bridgeIsConnected: bridge.connected,
-    openDocumentCount: typeof s?.openDocumentCount === "number" ? s.openDocumentCount : 0,
+    openDocumentCount: s?.openDocuments.length ?? 0,
     processId: bridge.processId ?? null,
     revitVersion: s?.revitVersion ?? null,
     runtimeAssemblies: s?.runtimeAssemblies ?? [],
@@ -144,8 +124,8 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         buildStamp: bridge.buildStamp ?? null,
         connected: true,
         lane: bridge.lane ?? null,
-        openDocumentCount:
-          typeof bridge.state?.openDocumentCount === "number" ? bridge.state.openDocumentCount : 0,
+        openDocumentCount: bridge.state?.openDocuments.length ?? 0,
+        openDocuments: bridge.state?.openDocuments ?? null,
         processId: bridge.processId ?? null,
         processStartUtcUnixMs: bridge.processStartUtcUnixMs ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
@@ -155,34 +135,6 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         sessionId: bridge.sessionId!,
       })),
   };
-});
-
-export const getSettingsWorkspaces = Effect.fnUntraced(function* (ctx: LocalOpContext) {
-  const bridgeModules = ctx.bridge.connected
-    ? yield* Effect.result(ctx.invokeBridge("settings.module-catalog"))
-    : undefined;
-  const modules =
-    bridgeModules?._tag === "Success"
-      ? mergeSettingsModules(
-          neutralSettingsModules(),
-          normalizeBridgeModuleCatalog(bridgeModules.success),
-        )
-      : neutralSettingsModules();
-
-  return {
-    workspaces: [
-      {
-        workspaceKey: "default",
-        displayName: "Default Workspace",
-        basePath: defaultSettingsBasePath(),
-        modules: modules.map((module) => ({
-          moduleKey: module.moduleKey,
-          defaultRootKey: module.defaultRootKey,
-          roots: module.roots,
-        })),
-      } satisfies SettingsWorkspaceDescriptor,
-    ],
-  } satisfies SettingsWorkspacesData;
 });
 
 export const tailLogs = Effect.fnUntraced(function* (input: HostLogsRequest) {
@@ -295,35 +247,4 @@ function productLogPaths() {
     hostLogPath: join(rootPath, productPathNames.hostLogFileName),
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),
   };
-}
-
-function neutralSettingsModules(): SettingsModuleWorkspaceDescriptor[] {
-  return [
-    {
-      moduleKey: "Global",
-      defaultRootKey: "fragments",
-      roots: [{ rootKey: "fragments", displayName: "fragments" }],
-    },
-  ];
-}
-
-function normalizeBridgeModuleCatalog(value: unknown): SettingsModuleWorkspaceDescriptor[] {
-  const parsed = value as Partial<{ modules: SettingsModuleWorkspaceDescriptor[] }>;
-  return Array.isArray(parsed.modules) ? parsed.modules : [];
-}
-
-function mergeSettingsModules(
-  localModules: SettingsModuleWorkspaceDescriptor[],
-  bridgeModules: SettingsModuleWorkspaceDescriptor[],
-): SettingsModuleWorkspaceDescriptor[] {
-  const modules = new Map<string, SettingsModuleWorkspaceDescriptor>();
-  for (const module of localModules) modules.set(module.moduleKey.toLowerCase(), module);
-  for (const module of bridgeModules)
-    if (!modules.has(module.moduleKey.toLowerCase()))
-      modules.set(module.moduleKey.toLowerCase(), module);
-  return [...modules.values()];
-}
-
-function defaultSettingsBasePath(): string {
-  return productSettingsRootPath();
 }

@@ -1,3 +1,12 @@
+import {
+  instancesReading,
+  scheduleReads,
+  actionControls,
+  semanticActions,
+  familyReads,
+  actionBasesSchema,
+  settingsRouteState,
+} from "@pe/agent-contracts";
 /**
  * The one capability catalog. Every door pea has (ops, route documents, route commands, pod
  * buttons, skills) projects into `Capability` rows here; `GET /pe/capabilities` serves it,
@@ -12,7 +21,9 @@ import { z } from "zod";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  isTsOnlyOperationKey,
   type HostOpResponse,
+  type PodList,
 } from "@pe/host-contracts/operation-types";
 import type { Capability, CapabilityCatalog, RouteStateSpec } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -23,7 +34,7 @@ type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-export type PodList = HostOpResponse<"scripting.pod.list">;
+export type { PodList };
 type Sessions = HostOpResponse<"bridge.sessions.list">["sessions"];
 
 export interface CapabilitySources {
@@ -37,6 +48,68 @@ export interface CapabilitySources {
 export function buildCapabilities(sources: CapabilitySources): Capability[] {
   return [
     ...sources.ops.map(opRow),
+    {
+      key: "op:instances.read",
+      kind: "op",
+      title: "Instances readings",
+      // Named, not spread: an action row also carries `says`/`dirties`, which a Capability is not.
+      description: instancesReading.description,
+      needs: instancesReading.needs,
+      actor: instancesReading.actor,
+      mutates: instancesReading.mutates,
+      input: z.toJSONSchema(instancesReading.input),
+      source: "SDK reading",
+      rank: 2,
+    },
+    ...Object.entries(semanticActions).map(
+      ([key, action]): Capability => ({
+        key: `workflow:${key}`,
+        kind: "op",
+        title: key,
+        description: action.description,
+        needs: action.needs,
+        actor: action.actor,
+        mutates: true,
+        input: z.toJSONSchema(
+          action.input.extend({
+            bases: actionBasesSchema.optional(),
+            actionId: z.string().optional(),
+          }),
+        ) as Record<string, unknown>,
+        source: "semantic action",
+        rank: 2,
+      }),
+    ),
+    ...Object.entries({ ...familyReads, ...scheduleReads }).map(
+      ([key, reading]): Capability => ({
+        key: `op:${key}`,
+        kind: "op",
+        title: key,
+        description: reading.description,
+        needs: reading.needs,
+        actor: reading.actor,
+        mutates: false,
+        input: z.toJSONSchema(
+          reading.input.extend({ scope: z.record(z.string(), z.unknown()) }),
+        ) as Record<string, unknown>,
+        source: "Family reading",
+        rank: 2,
+      }),
+    ),
+    ...Object.entries(actionControls).map(
+      ([key, action]): Capability => ({
+        key: `op:${key}`,
+        kind: "op",
+        title: key,
+        description: action.description,
+        needs: action.needs,
+        actor: action.actor,
+        mutates: action.mutates,
+        input: z.toJSONSchema(action.input) as Record<string, unknown>,
+        source: "semantic action",
+        rank: 2,
+      }),
+    ),
     ...sources.routes.flatMap(routeRows),
     ...(sources.pods?.pods ?? []).flatMap(podRows),
     ...sources.skills.map(skillRow),
@@ -56,9 +129,9 @@ function opRow(op: OpsCatalogEntry): Capability {
     kind: "op",
     title: op.displayName ?? op.key,
     description: [op.description ?? "", ...(op.callGuidance ?? [])].filter(Boolean).join(" "),
-    needs: op.needs,
-    mutates: op.intent === "Mutate",
-    actor: "any",
+    needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
+    mutates: op.intent !== "Read",
+    actor: (op as { actor?: "any" | "human" | "agent" }).actor ?? "any",
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",
@@ -67,7 +140,10 @@ function opRow(op: OpsCatalogEntry): Capability {
 }
 
 function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
-  const scopeHint = "Runs under this thread's Scope; no target input.";
+  const scopeHint =
+    spec.route === settingsRouteState.route
+      ? "Supply workspaceId for the member's Work and open it with { member: { pod, path } }; this is shared file Work independent of Revit."
+      : "Runs under this thread's Scope; no target input.";
   const read: Capability = {
     key: `route:${spec.route}`,
     kind: "route-doc",
@@ -105,7 +181,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       title: `${spec.title}: ${name}`,
       description: `${command.description} ${scopeHint}`,
       needs: "nothing",
-      mutates: Boolean(command.mutatesExternal),
+      mutates: false,
       actor: command.actor,
       input: z.toJSONSchema(command.input) as Record<string, unknown>,
       source: "route registry",
@@ -115,15 +191,15 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   return [read, propose, ...commands];
 }
 
+/** Entrypoints only: members are data, reached through route:pods, never executable rows. */
 function podRows(pod: PodList["pods"][number]): Capability[] {
-  if (!pod.isValid || !pod.manifest) return [];
-  const manifest = pod.manifest;
-  return manifest.entrypoints.map((entry) => ({
-    key: `pod:${pod.workspaceKey}.${entry.id}`,
+  if (pod.diagnostics.length) return [];
+  return pod.entrypoints.map((entry) => ({
+    key: `pod:${pod.folder}.${entry.id}`,
     kind: "pod",
-    title: `${manifest.name}: ${entry.name ?? entry.id}`,
+    title: `${pod.name}: ${entry.name ?? entry.id}`,
     description:
-      `${entry.description ?? manifest.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through route:pods.run, so the receipt lands in the Pods document. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
+      `${entry.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
     needs: "document",
     mutates: true,
     actor: "any",
@@ -203,7 +279,7 @@ export function createCapabilityCatalogSource(options: {
       });
       const [ops, pods, sessions] = await Promise.allSettled([
         fetchOps(base, bridgeSelector),
-        caller.call("scripting.pod.list", {}),
+        caller.call("pod.list"),
         caller.call("bridge.sessions.list"),
       ]);
       const opsValue =
@@ -229,6 +305,8 @@ export function createCapabilityCatalogSource(options: {
           revitVersion: session.revitVersion,
           activeDocumentTitle: session.activeDocumentTitle,
           activeDocument: session.activeDocumentCloudModelGuid ?? session.activeDocumentPath,
+          openDocuments:
+            session.openDocuments?.map((doc) => ({ ...doc, address: doc.address ?? null })) ?? null,
         })),
         sources,
         capabilities: buildCapabilities({

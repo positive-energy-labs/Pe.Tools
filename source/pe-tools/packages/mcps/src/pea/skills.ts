@@ -1,8 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, platform } from "node:os";
 import path from "node:path";
 import { productIdentity } from "@pe/host-contracts/contracts";
+import { userDocumentsPath } from "@pe/host-contracts/product-paths";
 
 export interface BundledPeaSkill {
   name: string;
@@ -154,7 +153,31 @@ The user supplies intent and ideas; you handle the code. Nothing that does not c
 
 ## What a Pod is
 
-A Pod is a scripting workspace the user runs from Pea and shares as source: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that declares the Pod id and its entrypoints. A workspace without pod.json is loose and runs only the selected file. A Pod validates its manifest, compiles every src/**/*.cs, and runs only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
+A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and any of src/ (scripts), settings/ (JSON members and fragments), assets/, and output/ (runs, never published). pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+
+## Identity: three facts
+
+- The folder path is an address. Renaming or moving it does not change identity. Use the discovered folder when executing; never derive it from the manifest id.
+- The pod.json id names the lineage. Different local copies and versions can share it.
+- Each member's SHA-256 identifies its exact bytes. It is derived on read, never stored. The human version is a label, not an update policy.
+
+Address a member as { pod: <id>, path: <relative path> } everywhere.
+
+## Compose, share, and adapt
+
+$include and $preset compose members. @local/<path> resolves inside the same pod's settings/; @<id>/<path> resolves in the installed pod whose manifest id matches. Two pods with the same id fail and name both folders. There are no hash pins and no precomposed releases.
+
+Publishing vendors: every foreign fragment a member consumes is copied to settings/_vendor/<id>/<path> and its reference is rewritten to @local/_vendor/<id>/<path>, so a published pod composes from its own bytes. Import extracts the archive unchanged and writes one imported.json (archive sha256, locator, date) that nothing validates or gates. Edit vendored copies only when you mean to diverge from the source pod.
+
+Pod preparation gates only pod.json and entrypoint source. Members validate one at a time when used; one bad member never hides its siblings.
+
+The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
+
+A member's $schema URL is the only thing that says what it is for: /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. Filenames and folders select nothing. JSON without $schema is plain data; the consuming operation still owns validation before applying it. Structural schema checks run offline in the host; composition previews and semantic checks need a Revit session and report that reason when none is attached.
+
+APS Parameters Service is the sole authority for shared parameter definitions. Retrieve current definitions only when the selected library operation consumes them. The library validates compatibility; storage validates portable structure. An unrelated member's unavailable service must not block this operation. No bundled or cached authority fallback.
+
+Every apply and every entrypoint run writes output/<runId>/receipt.json in the pod it acted from: pod id, member path, member SHA-256, op id, plan hash, outcome, and output references. Write useful reports with Artifacts.WriteJson/WriteCsv/WriteText; they land in that same run folder, and return values alone are not a durable file. Inspect diagnostic files after Family Foundry or Schedule runs to refine the authored JSON. Outputs, cache, credentials, and installed binaries are not published. Copy the run folder when sharing output with attribution.
 
 ## Every entrypoint is a button
 
@@ -183,20 +206,20 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "author-pe-settings",
     content: String.raw`---
 name: author-pe-settings
-description: Propose, validate, or debug a Pe settings document such as a Family Foundry profile. Use when the user edits profiles or settings, has the settings page open, a run produced diagnostics or artifacts to explain, or validation fails. You propose; the human stages and saves.
+description: Propose, validate, or debug a pod member such as a Family Foundry spec or schedule spec. Use when the user edits a spec or other pod JSON, has the Pods page open, a run produced diagnostics or a receipt to explain, or validation fails. You propose; the human stages and saves.
 ---
 
 # Author Pe Settings
 
-Settings documents are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
+Pod members are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
 
 ## Method
 
-1. Read the live route first (pe_read key=route:settings). It answers the document, its schema, the agent write mask, and the commands.
+1. Read the live route first (pe_read key=route:pods). It answers the bound member { pod, path }, its schema, the agent write mask, and the commands.
 2. Start from diagnostics and artifacts before proposing. Keep authored intent, generated output, and runtime proof distinct.
-3. Propose only inside the write mask (pe_do key=route:settings.propose), then pe_do key=route:settings.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
+3. Propose only inside the write mask (pe_do key=route:pods.propose), then pe_do key=route:pods.validate with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
 4. Stop for review. Saving is human-only; do not refetch, splice, or write the file yourself while it is bound.
-5. Direct file editing is the fallback only when no route binds the document, and you say so before editing. Use host-reported paths and the available schemas, then validate through the host.
+5. Direct file editing is the fallback only when no route binds the member, and you say so before editing. Use host-reported member paths and the member's $schema, then validate through the host.
 
 When more than a sentence is needed, report the fields proposed, the validation result, diagnostics fixed or remaining, and what the user must stage or decide.
 `,
@@ -212,7 +235,7 @@ description: Lay out ductwork in Revit - rough in a supply, return, or exhaust t
 
 You do not hand-draw ducts. You DECLARE intent as JSON; the Pe.Revit.Placement library routes collision-aware paths on a lattice and DRAFTS native placeholder ducts (visible; the user can drag them); you read the report and a plan image, refine the intent, re-SOLVE and read the DIFF; when it is clean you COMMIT real connected ducts and fittings. Use these five words with the user and repeat them when reporting.
 
-Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via pe_do key=route:pods.execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
+Pe.Revit.Placement is an explicit-reference library already available in the scripting environment. Drive it from short scripts via pe_do key=op:scripting.execute - one tiny script per step. Solve, Commit, and Cleanup need permissionMode WriteTransaction; Scout, MapProbe, and ExportPlan are read-only. Every method returns its full report as text: WriteLine it and read it.
 
     using Pe.Revit.Placement;
     var place = new DuctPlacer(doc, "L3");   // level name or id; plan and 3D views auto-resolve
@@ -326,8 +349,6 @@ export const retiredPeaSkillNames: readonly string[] = [
 
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
-const peaDocumentsRootEnvVar = "PE_TOOLS_DOCUMENTS_ROOT";
-let cachedDocumentsPath: string | null = null;
 
 export interface PeaProductHomeOptions {
   productHomePath?: string;
@@ -337,7 +358,7 @@ export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): 
   return path.resolve(
     readEnvPath(options.productHomePath) ??
       readEnvPath(process.env[peaProductHomeEnvVar]) ??
-      path.join(resolveUserDocumentsPath(), productIdentity.productName),
+      path.join(userDocumentsPath(), productIdentity.productName),
   );
 }
 
@@ -348,8 +369,6 @@ export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}
 export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
   return [resolvePeaStandardSkillsRoot(options)];
 }
-
-export const peaSkillPaths = resolvePeaSkillPaths();
 
 export interface MaterializedPeaSkill {
   name: string;
@@ -388,46 +407,6 @@ export async function materializeBundledPeaSkills(
 async function readExisting(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-function resolveUserDocumentsPath(): string {
-  const override = readEnvPath(process.env[peaDocumentsRootEnvVar]);
-  if (override) return override;
-  if (cachedDocumentsPath) return cachedDocumentsPath;
-
-  cachedDocumentsPath = readPlatformDocumentsPath();
-  return cachedDocumentsPath;
-}
-
-function readPlatformDocumentsPath(): string {
-  if (platform() === "win32") {
-    const knownFolder = readWindowsDocumentsKnownFolder();
-    if (knownFolder) return knownFolder;
-  }
-
-  return process.env.USERPROFILE
-    ? path.join(process.env.USERPROFILE, "Documents")
-    : path.join(homedir(), "Documents");
-}
-
-function readWindowsDocumentsKnownFolder(): string | null {
-  try {
-    const output = execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "[Environment]::GetFolderPath('MyDocuments')",
-      ],
-      { encoding: "utf8", timeout: 1_000, windowsHide: true },
-    ).trim();
-    return output || null;
   } catch {
     return null;
   }

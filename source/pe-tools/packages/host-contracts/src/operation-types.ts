@@ -1,5 +1,5 @@
 import {
-  hostModuleDescriptorSchema,
+  bridgeDocumentSnapshotSchema,
   hostRuntimeAssemblyDataSchema,
   type HostOperationDefinition,
 } from "./contracts/index.js";
@@ -70,11 +70,13 @@ export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 // lives below the generated-contract boundary (host-typegen must not import its own output).
 export {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
 } from "./contracts/bridge-protocol.js";
 
 export const hostSessionScopeSchema = Schema.Struct({
   bridgeSessionId: Schema.optional(Schema.String),
+  openDocumentId: Schema.optional(Schema.String),
 });
 
 export type HostSessionScope = Schema.Schema.Type<typeof hostSessionScopeSchema>;
@@ -121,252 +123,138 @@ export const hostShellOpenDataSchema = Schema.Struct({
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
 
-export const SettingsFileKind = {
-  Profile: "Profile",
-  Fragment: "Fragment",
-  Schema: "Schema",
-  Other: "Other",
-} as const;
+// --- Pod members (host-local: the host owns member I/O so the web works offline) -------------
 
-export type SettingsFileKind = (typeof SettingsFileKind)[keyof typeof SettingsFileKind];
+/** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
+export const podMemberSchema = Schema.Struct({ pod: Schema.String, path: Schema.String });
+export type PodMember = Schema.Schema.Type<typeof podMemberSchema>;
 
-export const settingsFileKindSchema = Schema.Literals(["Profile", "Fragment", "Schema", "Other"]);
-
-export const SettingsDirectiveScope = {
-  Local: "Local",
-  Global: "Global",
-} as const;
-
-export type SettingsDirectiveScope =
-  (typeof SettingsDirectiveScope)[keyof typeof SettingsDirectiveScope];
-
-export const settingsDirectiveScopeSchema = Schema.Literals(["Local", "Global"]);
-
-export const SettingsDocumentDependencyKind = {
-  Include: "Include",
-  Preset: "Preset",
-} as const;
-
-export type SettingsDocumentDependencyKind =
-  (typeof SettingsDocumentDependencyKind)[keyof typeof SettingsDocumentDependencyKind];
-
-export const settingsDocumentDependencyKindSchema = Schema.Literals(["Include", "Preset"]);
-
-export type SettingsDocumentId = Schema.Schema.Type<typeof settingsDocumentIdSchema>;
-
-export const settingsDocumentIdSchema = Schema.Struct({
-  moduleKey: Schema.String,
-  relativePath: Schema.String,
-  rootKey: Schema.String,
-  stableId: Schema.optional(Schema.String),
-});
-
-export type SettingsVersionToken = Schema.Schema.Type<typeof settingsVersionTokenSchema>;
-
-export const settingsVersionTokenSchema = Schema.Struct({
-  value: Schema.String,
-});
-
-export type SettingsDocumentMetadata = Schema.Schema.Type<typeof settingsDocumentMetadataSchema>;
-
-export const settingsDocumentMetadataSchema = Schema.Struct({
-  documentId: settingsDocumentIdSchema,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.optional(Schema.NullOr(Schema.String)),
-  versionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
-});
-
-export type SettingsDocumentDependency = Schema.Schema.Type<
-  typeof settingsDocumentDependencySchema
->;
-
-export const settingsDocumentDependencySchema = Schema.Struct({
-  directivePath: Schema.String,
-  documentId: settingsDocumentIdSchema,
-  kind: settingsDocumentDependencyKindSchema,
-  scope: settingsDirectiveScopeSchema,
-});
-
-export type SettingsValidationIssue = Schema.Schema.Type<typeof settingsValidationIssueSchema>;
-
-export const settingsValidationIssueSchema = Schema.Struct({
+export const memberIssueSchema = Schema.Struct({
   code: Schema.String,
   message: Schema.String,
   path: Schema.String,
-  severity: Schema.String,
+  severity: Schema.Literals(["error", "warning", "info"]),
   suggestion: Schema.optional(Schema.NullOr(Schema.String)),
 });
+export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
 
-export type SettingsValidationResult = Schema.Schema.Type<typeof settingsValidationResultSchema>;
-
-export const settingsValidationResultSchema = Schema.Struct({
-  isValid: Schema.Boolean,
-  issues: Schema.Array(settingsValidationIssueSchema),
+export const podListResponseSchema = Schema.Struct({
+  pods: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      name: Schema.String,
+      version: Schema.String,
+      folder: Schema.String,
+      entrypoints: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          sourcePath: Schema.String,
+          name: Schema.optional(Schema.NullOr(Schema.String)),
+          description: Schema.optional(Schema.NullOr(Schema.String)),
+        }),
+      ),
+      members: Schema.Array(
+        Schema.Struct({
+          path: Schema.String,
+          sha256: Schema.String,
+          schema: Schema.NullOr(Schema.String),
+        }),
+      ),
+      diagnostics: Schema.Array(memberIssueSchema),
+    }),
+  ),
+  /** Folders whose `pod.json` could not name a pod; they list nothing else. */
+  unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
 });
+export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
 
-export type SettingsDocumentSnapshot = Schema.Schema.Type<typeof settingsDocumentSnapshotSchema>;
-
-export const settingsDocumentSnapshotSchema = Schema.Struct({
-  capabilityHints: Schema.Record(Schema.String, Schema.String),
-  composedContent: Schema.optional(Schema.NullOr(Schema.String)),
-  dependencies: Schema.Array(settingsDocumentDependencySchema),
-  metadata: settingsDocumentMetadataSchema,
-  rawContent: Schema.String,
-  validation: settingsValidationResultSchema,
+/** Runs of one pod, optionally narrowed to the member a route has open. */
+export const podRunsRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.optional(Schema.NullOr(Schema.String)),
 });
+export type PodRunsRequest = Schema.Schema.Type<typeof podRunsRequestSchema>;
 
-export type OpenSettingsDocumentRequest = Schema.Schema.Type<
-  typeof openSettingsDocumentRequestSchema
->;
-
-export const openSettingsDocumentRequestSchema = Schema.Struct({
-  documentId: settingsDocumentIdSchema,
-  includeComposedContent: Schema.optional(Schema.Boolean),
+/** What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. */
+export const podReceiptSchema = Schema.Struct({
+  podId: Schema.String,
+  memberPath: Schema.String,
+  memberSha256: Schema.String,
+  operation: Schema.String,
+  planHash: Schema.NullOr(Schema.String),
+  outcome: Schema.String,
+  outputs: Schema.Array(Schema.String),
+  reason: Schema.NullOr(Schema.String),
 });
+export type PodReceipt = Schema.Schema.Type<typeof podReceiptSchema>;
 
-export type SaveSettingsDocumentRequest = Schema.Schema.Type<
-  typeof saveSettingsDocumentRequestSchema
->;
-
-export const saveSettingsDocumentRequestSchema = Schema.Struct({
-  createOnly: Schema.optional(Schema.Boolean),
-  documentId: settingsDocumentIdSchema,
-  expectedVersionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
-  rawContent: Schema.String,
+export const podRunsResponseSchema = Schema.Struct({
+  runs: Schema.Array(
+    Schema.Struct({
+      runId: Schema.String,
+      receiptPath: Schema.String,
+      /** Null exactly when the run folder holds no readable receipt; `error` says why. */
+      receipt: Schema.NullOr(podReceiptSchema),
+      error: Schema.NullOr(Schema.String),
+    }),
+  ),
 });
+export type PodRuns = Schema.Schema.Type<typeof podRunsResponseSchema>;
 
-export type ValidateSettingsDocumentRequest = Schema.Schema.Type<
-  typeof validateSettingsDocumentRequestSchema
->;
-
-export const validateSettingsDocumentRequestSchema = Schema.Struct({
-  documentId: settingsDocumentIdSchema,
-  rawContent: Schema.String,
+export const podMemberReadResponseSchema = Schema.Struct({
+  content: Schema.String,
+  sha256: Schema.String,
 });
+export type PodMemberRead = Schema.Schema.Type<typeof podMemberReadResponseSchema>;
 
-export type SaveSettingsDocumentResult = Schema.Schema.Type<
-  typeof saveSettingsDocumentResultSchema
->;
-
-export const saveSettingsDocumentResultSchema = Schema.Struct({
-  conflictDetected: Schema.Boolean,
-  conflictMessage: Schema.optional(Schema.NullOr(Schema.String)),
-  metadata: settingsDocumentMetadataSchema,
-  validation: settingsValidationResultSchema,
-  writeApplied: Schema.Boolean,
+/** Create only: refuses an existing path. */
+export const podMemberWriteRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  content: Schema.String,
 });
+export type PodMemberWriteRequest = Schema.Schema.Type<typeof podMemberWriteRequestSchema>;
 
-export type SettingsRootDescriptor = Schema.Schema.Type<typeof settingsRootDescriptorSchema>;
-
-export const settingsRootDescriptorSchema = Schema.Struct({
-  displayName: Schema.String,
-  rootKey: Schema.String,
+/** Overwrite only the exact bytes the editor read. */
+export const podMemberSaveRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  content: Schema.String,
+  expectedSha256: Schema.String,
 });
+export type PodMemberSaveRequest = Schema.Schema.Type<typeof podMemberSaveRequestSchema>;
 
-export type SettingsModuleWorkspaceDescriptor = Schema.Schema.Type<
-  typeof settingsModuleWorkspaceDescriptorSchema
->;
-
-export const settingsStorageOptionsSchema = Schema.Struct({
-  includeRoots: Schema.optional(Schema.Array(Schema.String)),
-  presetRoots: Schema.optional(Schema.Array(Schema.String)),
+export const podMemberWrittenSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  sha256: Schema.String,
 });
+export type PodMemberWritten = Schema.Schema.Type<typeof podMemberWrittenSchema>;
 
-export const settingsModuleWorkspaceDescriptorSchema = Schema.Struct({
-  defaultRootKey: Schema.String,
-  moduleKey: Schema.String,
-  roots: Schema.Array(settingsRootDescriptorSchema),
-  storageOptions: Schema.optional(settingsStorageOptionsSchema),
-});
-
-export type OpenSettingsDocumentWithModuleRequest = Schema.Schema.Type<
-  typeof openSettingsDocumentWithModuleRequestSchema
->;
-
-export const openSettingsDocumentWithModuleRequestSchema = Schema.Struct({
-  module: settingsModuleWorkspaceDescriptorSchema,
-  request: openSettingsDocumentRequestSchema,
+export const podMemberComposeRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  path: Schema.String,
+  /** The unsaved draft; absent composes the saved bytes. */
+  content: Schema.optional(Schema.NullOr(Schema.String)),
+  /** A schema the editor already holds; lets structural validation run with no session. */
   schemaJson: Schema.optional(Schema.String),
 });
+export type PodMemberComposeRequest = Schema.Schema.Type<typeof podMemberComposeRequestSchema>;
 
-export type SettingsWorkspaceDescriptor = Schema.Schema.Type<
-  typeof settingsWorkspaceDescriptorSchema
->;
-
-export const settingsWorkspaceDescriptorSchema = Schema.Struct({
-  basePath: Schema.String,
-  displayName: Schema.String,
-  modules: Schema.Array(settingsModuleWorkspaceDescriptorSchema),
-  workspaceKey: Schema.String,
+export const podMemberComposeResponseSchema = Schema.Struct({
+  sha256: Schema.String,
+  schemaUrl: Schema.NullOr(Schema.String),
+  /** The schema the host validated against, so the editor can render its form. */
+  schemaJson: Schema.NullOr(Schema.String),
+  composed: Schema.NullOr(Schema.String),
+  diagnostics: Schema.Array(memberIssueSchema),
+  dependencies: Schema.Array(
+    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+  ),
+  schemaValidation: Schema.Literals(["passed", "failed", "not-run", "no-schema", "unavailable"]),
+  semanticValidation: Schema.Literals(["passed", "failed", "not-run", "unavailable"]),
 });
-
-export type SettingsWorkspacesData = Schema.Schema.Type<typeof settingsWorkspacesDataSchema>;
-
-export const settingsWorkspacesDataSchema = Schema.Struct({
-  workspaces: Schema.Array(settingsWorkspaceDescriptorSchema),
-});
-
-export type SettingsFileEntry = Schema.Schema.Type<typeof settingsFileEntrySchema>;
-
-export const settingsFileEntrySchema = Schema.Struct({
-  baseName: Schema.String,
-  directory: Schema.optional(Schema.NullOr(Schema.String)),
-  isFragment: Schema.Boolean,
-  isSchema: Schema.Boolean,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.String,
-  name: Schema.String,
-  path: Schema.String,
-  relativePath: Schema.String,
-  relativePathWithoutExtension: Schema.String,
-});
-
-export type SettingsFileNode = Schema.Schema.Type<typeof settingsFileNodeSchema>;
-
-export const settingsFileNodeSchema = Schema.Struct({
-  id: Schema.String,
-  isFragment: Schema.Boolean,
-  isSchema: Schema.Boolean,
-  kind: settingsFileKindSchema,
-  modifiedUtc: Schema.String,
-  name: Schema.String,
-  relativePath: Schema.String,
-  relativePathWithoutExtension: Schema.String,
-});
-
-export type SettingsDirectoryNode = {
-  readonly directories: readonly SettingsDirectoryNode[];
-  readonly files: readonly SettingsFileNode[];
-  readonly name: string;
-  readonly relativePath: string;
-};
-
-export const settingsDirectoryNodeSchema: Schema.Codec<SettingsDirectoryNode> = Schema.suspend(() =>
-  Schema.Struct({
-    directories: Schema.Array(settingsDirectoryNodeSchema),
-    files: Schema.Array(settingsFileNodeSchema),
-    name: Schema.String,
-    relativePath: Schema.String,
-  }),
-);
-
-export type SettingsDiscoveryResult = Schema.Schema.Type<typeof settingsDiscoveryResultSchema>;
-
-export const settingsDiscoveryResultSchema = Schema.Struct({
-  files: Schema.Array(settingsFileEntrySchema),
-  root: settingsDirectoryNodeSchema,
-});
-
-export type SettingsTreeRequest = Schema.Schema.Type<typeof settingsTreeRequestSchema>;
-
-export const settingsTreeRequestSchema = Schema.Struct({
-  includeFragments: Schema.optional(Schema.Boolean),
-  includeSchemas: Schema.optional(Schema.Boolean),
-  moduleKey: Schema.optional(Schema.String),
-  recursive: Schema.optional(Schema.Boolean),
-  rootKey: Schema.optional(Schema.String),
-  subDirectory: Schema.optional(Schema.NullOr(Schema.String)),
-});
+export type PodMemberComposeResponse = Schema.Schema.Type<typeof podMemberComposeResponseSchema>;
 
 export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
@@ -387,6 +275,7 @@ export const bridgeSessionsListSchema = Schema.Struct({
       custody: Schema.optional(Schema.NullOr(Schema.String)),
       lane: Schema.optional(Schema.NullOr(Schema.String)),
       openDocumentCount: Schema.Number,
+      openDocuments: Schema.NullOr(Schema.Array(bridgeDocumentSnapshotSchema)),
       processId: Schema.optional(Schema.NullOr(Schema.Number)),
       processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
       revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
@@ -493,7 +382,6 @@ export type HostSessionSummaryData = Schema.Schema.Type<typeof hostSessionSummar
 
 export const hostSessionSummaryDataSchema = Schema.Struct({
   activeDocument: Schema.optional(Schema.NullOr(hostActiveDocumentSummarySchema)),
-  availableModules: Schema.Array(hostModuleDescriptorSchema),
   bridgeIsConnected: Schema.Boolean,
   // Observed session metadata (custody/lane/sdkSessionId/buildStamp) — facts as reported, never
   // staleness.
@@ -745,6 +633,16 @@ export const rhvacTakeoffDataSchema = Schema.Struct({
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
 
 export const tsOnlyOperationSchemas = {
+  "takeoffs.saved": {
+    request: Schema.Struct({
+      captureId: Schema.optional(Schema.String),
+      document: Schema.optional(Schema.String),
+      /** With a captureId: return that file's exact stored text and path instead of its data. */
+      text: Schema.optional(Schema.Boolean),
+    }),
+    // Portable capture validation belongs to agent-contracts, beside TakeoffSnapshot.
+    response: Schema.Unknown,
+  },
   "aps.auth.login": {
     request: apsTokenRequestSchema,
     response: apsPersistedTokenStatusSchema,
@@ -804,28 +702,28 @@ export const tsOnlyOperationSchemas = {
     request: rhvacListRequestSchema,
     response: rhvacListDataSchema,
   },
-  "settings.document.open": {
-    request: openSettingsDocumentRequestSchema,
-    response: settingsDocumentSnapshotSchema,
+  "pod.list": {
+    response: podListResponseSchema,
   },
-  "settings.document.open-with-module": {
-    request: openSettingsDocumentWithModuleRequestSchema,
-    response: settingsDocumentSnapshotSchema,
+  "pod.runs": {
+    request: podRunsRequestSchema,
+    response: podRunsResponseSchema,
   },
-  "settings.document.save": {
-    request: saveSettingsDocumentRequestSchema,
-    response: saveSettingsDocumentResultSchema,
+  "pod.member.read": {
+    request: podMemberSchema,
+    response: podMemberReadResponseSchema,
   },
-  "settings.document.validate": {
-    request: validateSettingsDocumentRequestSchema,
-    response: settingsValidationResultSchema,
+  "pod.member.write": {
+    request: podMemberWriteRequestSchema,
+    response: podMemberWrittenSchema,
   },
-  "settings.tree": {
-    request: settingsTreeRequestSchema,
-    response: settingsDiscoveryResultSchema,
+  "pod.member.save": {
+    request: podMemberSaveRequestSchema,
+    response: podMemberWrittenSchema,
   },
-  "settings.workspaces": {
-    response: settingsWorkspacesDataSchema,
+  "pod.member.compose": {
+    request: podMemberComposeRequestSchema,
+    response: podMemberComposeResponseSchema,
   },
 } as const;
 
@@ -869,6 +767,20 @@ export type HostLocalCatalogEntry = HostOperationDefinition & {
  * key — the index test asserts full coverage.
  */
 export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
+  {
+    key: "takeoffs.saved",
+    origin: "host-local",
+    displayName: "Saved Takeoffs captures",
+    description:
+      "Read durable geometry without Revit. With captureId, return that immutable dated capture. Otherwise list capture identities, times and documents; optional document filters the list. Migrated captures explicitly have unknown original target provenance and are never live evidence.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "SavedTakeoffsRequest",
+    responseTypeName: "TakeoffCapture",
+    searchTerms: ["takeoffs", "saved", "capture", "offline", "geometry", "review"],
+  },
   {
     key: "host.shell.open",
     origin: "host-local",
@@ -978,85 +890,87 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
   },
   {
-    key: "settings.workspaces",
+    key: "pod.list",
     origin: "host-local",
-    displayName: "Settings Workspaces",
-    description: "Settings workspaces available to author, with their modules and roots.",
+    displayName: "Pods",
+    description:
+      "Every installed pod under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Members only — runs under output/ answer to pod.runs. Diagnostics cover the manifest only; a bad member never hides its siblings.",
     intent: "Read",
-    visibility: "EscalationVisible",
+    visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
     requestTypeName: "NoRequest",
-    responseTypeName: "SettingsWorkspacesData",
-    searchTerms: ["settings", "workspaces", "modules", "roots"],
+    responseTypeName: "PodList",
+    searchTerms: ["pods", "members", "settings", "specs", "list", "browse"],
   },
   {
-    key: "settings.tree",
+    key: "pod.runs",
     origin: "host-local",
-    displayName: "Settings Tree",
+    displayName: "Pod Runs",
     description:
-      "Browse the settings document tree (profiles, fragments, schemas) for a module and root.",
+      "Run receipts under one pod's output/<runId>/, newest first, optionally narrowed to one member path. A run folder with no readable receipt still lists, with the reason.",
     intent: "Read",
-    visibility: "EscalationVisible",
+    visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
-    requestTypeName: "SettingsTreeRequest",
-    responseTypeName: "SettingsDiscoveryResult",
-    searchTerms: ["settings", "tree", "browse", "documents", "fragments", "schemas"],
+    requestTypeName: "PodRunsRequest",
+    responseTypeName: "PodRuns",
+    searchTerms: ["pod", "runs", "receipts", "output", "apply", "history"],
   },
   {
-    key: "settings.document.open",
+    key: "pod.member.read",
     origin: "host-local",
-    displayName: "Open Settings Document",
+    displayName: "Read Pod Member",
+    description: "Read one pod member's exact text and sha256, addressed as { pod, path }.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PodMember",
+    responseTypeName: "PodMemberRead",
+    searchTerms: ["pod", "member", "read", "open", "spec", "settings"],
+  },
+  {
+    key: "pod.member.write",
+    origin: "host-local",
+    displayName: "Write Pod Member",
     description:
-      "Open a settings document: raw + composed content, metadata, dependencies, and validation.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "OpenSettingsDocumentRequest",
-    responseTypeName: "SettingsDocumentSnapshot",
-    searchTerms: ["settings", "open", "document", "profile", "composed"],
-  },
-  {
-    key: "settings.document.open-with-module",
-    origin: "host-local",
-    displayName: "Open Settings Document (module)",
-    description: "Open a settings document against an explicit module descriptor and schema.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "OpenSettingsDocumentWithModuleRequest",
-    responseTypeName: "SettingsDocumentSnapshot",
-    searchTerms: ["settings", "open", "module", "schema"],
-  },
-  {
-    key: "settings.document.validate",
-    origin: "host-local",
-    displayName: "Validate Settings Document",
-    description: "Validate settings document content against its schema without saving.",
-    intent: "Read",
-    visibility: "EscalationVisible",
-    costTier: "Bounded",
-    needs: "nothing",
-    requestTypeName: "ValidateSettingsDocumentRequest",
-    responseTypeName: "SettingsValidationResult",
-    searchTerms: ["settings", "validate", "lint", "check"],
-  },
-  {
-    key: "settings.document.save",
-    origin: "host-local",
-    displayName: "Save Settings Document",
-    description:
-      "Save a settings document with optimistic concurrency (version token); reports conflicts and validation.",
+      "Create a new pod member; refuses an existing path. Returns the written sha256. Capture and save-as-new use this.",
     intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
-    requestTypeName: "SaveSettingsDocumentRequest",
-    responseTypeName: "SaveSettingsDocumentResult",
-    searchTerms: ["settings", "save", "write", "document", "profile"],
+    requestTypeName: "PodMemberWriteRequest",
+    responseTypeName: "PodMemberWritten",
+    searchTerms: ["pod", "member", "write", "create", "capture", "spec"],
+  },
+  {
+    key: "pod.member.save",
+    origin: "host-local",
+    displayName: "Save Pod Member",
+    description:
+      "Overwrite an existing pod member only when expectedSha256 names its current bytes. Returns the new sha256.",
+    intent: "Mutate",
+    visibility: "EscalationVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodMemberSaveRequest",
+    responseTypeName: "PodMemberWritten",
+    searchTerms: ["pod", "member", "save", "overwrite", "edit", "spec"],
+  },
+  {
+    key: "pod.member.compose",
+    origin: "host-local",
+    displayName: "Compose Pod Member",
+    description:
+      "Validate a member or unsaved draft: JSON schema structure in the host (offline), composition and semantic checks through the Revit session when one is attached. Without a session, $include/$preset members report that composition needs Revit.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    needs: "nothing",
+    requestTypeName: "PodMemberComposeRequest",
+    responseTypeName: "PodMemberComposeResponse",
+    searchTerms: ["pod", "member", "compose", "validate", "schema", "include", "preset"],
   },
   {
     key: "aps.auth.status",
@@ -1203,16 +1117,17 @@ export type OpCallArgs<K extends AnyOperationKey, Options> =
     ? [request?: OpRequestOf<K>, options?: Options]
     : [request: OpRequestOf<K>, options?: Options];
 
-export type HostOpResponse<K extends AnyOperationKey> = K extends HostOperationKey
-  ? HostOps[K]["response"]
-  : K extends TsOnlyOperationKey
-    ? TsOnlyResponse<K>
+// A host-local op is dispatched by the host even when a bridge op shares its key.
+export type HostOpResponse<K extends AnyOperationKey> = K extends TsOnlyOperationKey
+  ? TsOnlyResponse<K>
+  : K extends HostOperationKey
+    ? HostOps[K]["response"]
     : never;
 
-export type HostOpRequest<K extends AnyOperationKey> = K extends HostOperationKey
-  ? HostOps[K]["request"]
-  : K extends TsOnlyOperationKey
-    ? TsOnlyRequest<K>
+export type HostOpRequest<K extends AnyOperationKey> = K extends TsOnlyOperationKey
+  ? TsOnlyRequest<K>
+  : K extends HostOperationKey
+    ? HostOps[K]["request"]
     : never;
 
 export const hostProblemDetailsSchema = Schema.Record(Schema.String, Schema.Unknown);

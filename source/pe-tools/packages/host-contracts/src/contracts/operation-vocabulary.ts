@@ -34,6 +34,7 @@ export const hostErrorKindSchema = Schema.Literals([
   "BridgeBusy",
   "InvalidRequest",
   "Conflict",
+  "CatalogLookup",
   "HostFailure",
 ]);
 export type HostErrorKind = Schema.Schema.Type<typeof hostErrorKindSchema>;

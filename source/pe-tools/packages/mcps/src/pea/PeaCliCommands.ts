@@ -1,7 +1,12 @@
+import { actionBasesSchema } from "@pe/agent-contracts";
+import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
+import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";
 import {
   ScriptingTools,
@@ -58,8 +63,8 @@ export class PeaCliCommands {
         "pea script bootstrap",
         "pea script list",
         "pea script execute --source-path src\\SampleScript.cs",
-        "pea script cancel",
-        "pea script export --workspace panel-audit --output .\\panel-audit.zip",
+        "pea script cancel --request-id <id>",
+        "pea script export --pod panel-audit --output .\\panel-audit.zip",
         "pea script import --archive .\\panel-audit.zip",
       ].join("\n"),
       subCommands: {
@@ -83,6 +88,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
       },
       run: async (ctx) => {
         const client = this.createHostRpcCaller(ctx.values);
@@ -184,6 +192,9 @@ export class PeaCliCommands {
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
         key: {
           type: "string",
           description: "Operation key, with or without the `op:` prefix `search` prints.",
@@ -192,20 +203,50 @@ export class PeaCliCommands {
           type: "string",
           description: "JSON request object. Omit for NoRequest operations.",
         },
+        requestFile: {
+          type: "string",
+          description: "Path to a JSON request object. Cannot be combined with --request.",
+        },
         verbosity: {
           type: "string",
           description: "Output size: compact, hints, or full.",
           default: "compact",
         },
       },
+      toKebab: true,
       run: async (ctx) => {
-        const key = firstNonBlank(ctx.values.key)?.replace(/^op:/, "");
+        const key = firstNonBlank(ctx.values.key)?.replace(/^(op|workflow):/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
-        const request = parseOptionalJson(ctx.values.request);
-        const result = await this.createHostRpcCaller(ctx.values).callOperation(
+        const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
+        const context: AdmissionContext = {
+          hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
+          bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
+          openDocumentId: asOptionalString(ctx.values.openDocumentId),
+          actor:
+            ctx.values.actor === "human" || ctx.values.actor === "agent"
+              ? ctx.values.actor
+              : undefined,
+          actionId: asOptionalString(ctx.values.actionId),
+        };
+        const intent = await readCapabilityIntent(key, context);
+        if (intent.kind === "operation" && !intent.mutates) {
+          // Operation reads keep `/call`'s enriched result, so --verbosity still means something.
+          const result = await this.createHostRpcCaller({
+            ...ctx.values,
+            bridgeSessionId: intent.session ?? context.bridgeSessionId,
+          }).callOperation(key, request, parseOperationVerbosity(ctx.values.verbosity));
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        // A workflow's request may carry the bases it was drafted against.
+        const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
+        const result = await runCapability(
           key,
-          request,
-          parseOperationVerbosity(ctx.values.verbosity),
+          intent.kind === "workflow" ? input : ((request ?? {}) as Record<string, unknown>),
+          intent.kind === "workflow"
+            ? { ...context, bases: actionBasesSchema.parse(bases ?? {}) }
+            : context,
+          intent,
         );
         console.log(JSON.stringify(result, null, 2));
       },
@@ -279,22 +320,25 @@ export class PeaCliCommands {
     return define({
       name: "cancel",
       description:
-        "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint.",
+        "Signal cooperative cancellation to one in-flight bridge request, named by its requestId. The operation stops at its next ct / ThrowIfCancelled checkpoint.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
-        executionId: {
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
+        requestId: {
           type: "string",
-          description: "Optional execution id guard; omit to cancel the current execution.",
+          description: "The requestId the in-flight operation was sent under.",
         },
       },
       toKebab: true,
       run: async (ctx) => {
-        const result = await this.createScriptingTools(ctx.values).cancel({
-          executionId: firstNonBlank(ctx.values.executionId),
-        });
-        console.log(`canceled  ${result.canceled}`);
-        if (result.executionId) console.log(`execution ${result.executionId}`);
+        const requestId = firstNonBlank(ctx.values.requestId);
+        if (requestId == null) throw new Error("--request-id is required.");
+        const result = await this.createScriptingTools(ctx.values).cancel({ requestId });
+        console.log(`cancelled ${result.cancelled}`);
+        console.log(`request   ${result.requestId}`);
         console.log(result.message);
       },
     });
@@ -304,10 +348,13 @@ export class PeaCliCommands {
     return define({
       name: "list",
       description:
-        "List scripting workspaces (pods) with their validated entrypoints. Invalid pods appear with diagnostics explaining what to fix.",
+        "List installed pods with their entrypoints. Pods with manifest or entrypoint problems appear with diagnostics explaining what to fix.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
       },
       toKebab: true,
       run: async (ctx) => {
@@ -339,14 +386,17 @@ export class PeaCliCommands {
   private scriptPodImportCommand() {
     return define({
       name: "import",
-      description: "Import a pod.json-backed scripting workspace from a Pod zip archive.",
+      description: "Import a Pod zip archive into Documents/Pe.Tools/Pods.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
-        workspace: {
+        folder: {
           type: "string",
-          description: "Optional target workspace slug. Omit to use the pod.json id.",
+          description: "Local folder name under Pods/. Omit to use the pod.json id.",
         },
       },
       toKebab: true,
@@ -355,9 +405,10 @@ export class PeaCliCommands {
         if (!archivePath) throw new Error("Provide --archive <path.zip>.");
         const result = await this.createScriptingTools(ctx.values).importPod({
           archivePath,
-          workspaceKey: firstNonBlank(ctx.values.workspace),
+          folder: firstNonBlank(ctx.values.folder),
         });
-        writeScriptPodImport(result);
+        console.log(`pod    ${result.id}`);
+        console.log(`folder ${result.folder}`);
       },
     });
   }
@@ -365,20 +416,27 @@ export class PeaCliCommands {
   private scriptPodExportCommand() {
     return define({
       name: "export",
-      description: "Export a pod.json-backed scripting workspace as a portable Pod zip archive.",
+      description:
+        "Export an installed pod as a portable zip archive with its foreign fragments vendored.",
       args: {
-        ...commonArgs,
-        output: { type: "string", description: "Output path for the Pod zip archive." },
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
+        openDocumentId: commonArgs.openDocumentId,
+        actor: commonArgs.actor,
+        actionId: commonArgs.actionId,
+        pod: { type: "string", description: "Manifest id of the pod to export." },
+        output: { type: "string", description: "Path of the .zip archive to write." },
       },
       toKebab: true,
       run: async (ctx) => {
-        const archivePath = firstNonBlank(ctx.values.output);
-        if (!archivePath) throw new Error("Provide --output <path.zip>.");
+        const pod = firstNonBlank(ctx.values.pod);
+        const output = firstNonBlank(ctx.values.output);
+        if (!pod || !output) throw new Error("Provide --pod <id> and --output <path.zip>.");
         const result = await this.createScriptingTools(ctx.values).exportPod({
-          workspaceKey: ctx.values.workspace,
-          archivePath,
+          pod,
+          archivePath: resolve(output),
         });
-        writeScriptPodExport(result);
+        console.log(`archive ${result.archivePath}`);
       },
     });
   }
@@ -387,7 +445,13 @@ export class PeaCliCommands {
     values: Record<string, unknown>,
     scriptTimeoutSeconds?: number,
   ): ScriptingTools {
-    return new ScriptingTools(this.createHostRpcCaller(values, scriptTimeoutSeconds), {
+    return new ScriptingTools({
+      hostBaseUrl: this.resolveHostBaseUrl(values.host),
+      bridgeSessionId: asOptionalString(values.bridgeSessionId),
+      openDocumentId: asOptionalString(values.openDocumentId),
+      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
+      actionId: asOptionalString(values.actionId),
+      timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds),
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
     });
   }
@@ -399,6 +463,9 @@ export class PeaCliCommands {
     return new HostRpcCaller({
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
+      openDocumentId: asOptionalString(values.openDocumentId),
+      requestId: asOptionalString(values.actionId),
+      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       ...(scriptTimeoutSeconds != null
         ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
         : {}),
@@ -415,6 +482,19 @@ export class PeaCliCommands {
 }
 
 const commonArgs = {
+  actor: {
+    type: "string",
+    description:
+      "Initiating actor: human or agent. Required for mutation; never inferred from CLI transport.",
+  },
+  actionId: {
+    type: "string",
+    description: "Original action ID. Reuse for receipt replay, never replace an unknown attempt.",
+  },
+  openDocumentId: {
+    type: "string",
+    description: "Exact open document lifetime required by document operations.",
+  },
   host: {
     type: "string",
     description: "Host base URL (default: this worktree's live host service file).",
@@ -458,6 +538,7 @@ function writeLogs(logs: HostOpResponse<"logs.tail">) {
 }
 
 function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
+  if (result.status !== "Succeeded") process.exitCode = 1;
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);
@@ -478,36 +559,17 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`sample       ${result.sampleScriptPath}`);
 }
 
-function writeScriptPodList(result: HostOpResponse<"scripting.pod.list">) {
-  console.log(`workspaces ${result.workspacesRootPath}`);
-  for (const pod of result.pods ?? []) {
-    const label = pod.isValid ? (pod.manifest?.name ?? pod.workspaceKey) : "INVALID";
-    console.log(
-      `${pod.workspaceKey}  ${label}${pod.manifest?.version ? ` v${pod.manifest.version}` : ""}`,
-    );
-    for (const entrypoint of pod.manifest?.entrypoints ?? [])
+function writeScriptPodList(result: PodList) {
+  for (const pod of result.pods) {
+    console.log(`${pod.id}  ${pod.name} v${pod.version}  ${pod.folder}`);
+    for (const entrypoint of pod.entrypoints)
       console.log(
         `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
       );
-    for (const diagnostic of pod.diagnostics ?? [])
-      console.error(`  ${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
+    for (const diagnostic of pod.diagnostics)
+      console.error(`  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`);
   }
-  if (!result.pods?.length) console.log("(no workspaces found — run `pea script bootstrap`)");
-}
-
-function writeScriptPodImport(result: HostOpResponse<"scripting.pod.import">) {
-  console.log(`status    ${result.status}`);
-  console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
-  console.log(`root      ${result.workspaceRootPath ?? "unknown"}`);
-  console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
-}
-
-function writeScriptPodExport(result: HostOpResponse<"scripting.pod.export">) {
-  console.log(`status    ${result.status}`);
-  console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
-  console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
+  if (!result.pods.length) console.log("(no pods found — run `pea script bootstrap`)");
 }
 
 function parseOperationVerbosity(value: unknown): "compact" | "hints" | "full" {
@@ -536,8 +598,10 @@ function parseLogTarget(target: unknown): HostLogTarget {
   }
 }
 
-function parseOptionalJson(value: unknown): unknown {
+function parseOptionalJson(value: unknown, file: unknown): unknown {
   const text = firstNonBlank(value);
-  if (!text) return undefined;
-  return JSON.parse(text);
+  const path = firstNonBlank(file);
+  if (text && path) throw new Error("Use either --request or --request-file, not both.");
+  if (!text && !path) return undefined;
+  return JSON.parse(path ? readFileSync(path, "utf8") : text!);
 }

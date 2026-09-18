@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { expect, test, vi } from "vite-plus/test";
 import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { RevitBridgeLive } from "../src/bridge.ts";
+import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { makeHttpLive, noRevitBoundary } from "../src/app.ts";
 import {
   NO_REVIT_ARGUMENT,
@@ -27,7 +29,7 @@ test("dev:no-revit uses the shared source entrypoint and a distinct dev receipt"
 
   expect(rootPackage.scripts?.["dev:no-revit"]).toBe("vp run --filter @pe/host dev:no-revit");
   expect(hostPackage.scripts?.["dev:no-revit"]).toBe(
-    "vp exec node --watch-path=src --import jiti/register src/dev.ts --take-over-host --no-revit",
+    "vp exec node --import jiti/register scripts/dev-watch.ts --take-over-host --no-revit",
   );
   expect(defaultCapabilities).toEqual({ revit: true });
   expect(noRevitCapabilities).toEqual({ revit: false });
@@ -78,40 +80,61 @@ test("no-Revit composition never touches contact factories", () => {
 
 test("no-Revit routes return empty 404 before the web fallback", async () => {
   const fallback = HttpRouter.add("*", "/*", Effect.succeed(Response.text("vite fallback")));
-  const boundary = noRevitBoundary(() => Effect.succeed(Response.text("spa index")));
-  const web = HttpRouter.toWebHandler(Layer.mergeAll(boundary, fallback), {
-    disableLogger: true,
-  });
+  const boundary = noRevitBoundary();
+  const web = HttpRouter.toWebHandler(
+    Layer.mergeAll(
+      boundary,
+      opsCatalogRoute(() => Effect.succeed(Response.text("spa index"))),
+      fallback,
+    ).pipe(Layer.provideMerge(RevitBridgeLive)),
+    {
+      disableLogger: true,
+    },
+  );
 
   try {
     for (const pathName of [
       "/api/bridge",
-      "/call",
-      "/ops",
       "/sessions",
       "/events",
       "/schemas/settings/module/root.json",
       "/host/install",
     ]) {
-      const response = await web.handler(new Request(`http://host.test${pathName}`));
+      const response = await web.handler(
+        new Request(`http://host.test${pathName}`),
+        Context.empty() as never,
+      );
       expect(response.status, pathName).toBe(404);
       expect(await response.text(), pathName).toBe("");
     }
 
     const websocket = await web.handler(
       new Request("http://host.test/api/bridge", { headers: { upgrade: "websocket" } }),
+      Context.empty() as never,
     );
     expect(websocket.status).toBe(404);
     expect(await websocket.text()).toBe("");
 
-    // A browser navigation to /ops belongs to the SPA on every lane; JSON callers keep the 404.
+    const catalogue = await web.handler(
+      new Request("http://host.test/ops"),
+      Context.empty() as never,
+    );
+    expect(catalogue.status).toBe(200);
+    expect(((await catalogue.json()) as { operations: unknown[] }).operations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "host.shell.open" })]),
+    );
+    // A browser navigation to /ops belongs to the SPA on every lane.
     const navigation = await web.handler(
       new Request("http://host.test/ops", { headers: { accept: "text/html,*/*" } }),
+      Context.empty() as never,
     );
     expect(navigation.status).toBe(200);
     expect(await navigation.text()).toBe("spa index");
 
-    const fallbackResponse = await web.handler(new Request("http://host.test/calls"));
+    const fallbackResponse = await web.handler(
+      new Request("http://host.test/calls"),
+      Context.empty() as never,
+    );
     expect(fallbackResponse.status).toBe(200);
     expect(await fallbackResponse.text()).toBe("vite fallback");
   } finally {

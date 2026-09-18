@@ -79,7 +79,9 @@ test("exports generic operation request and response typing", () => {
 
 test("exports TS-owned bridge session list schema", () => {
   const decoded = Schema.decodeUnknownSync(bridgeSessionsListSchema)({
-    sessions: [{ connected: true, openDocumentCount: 1, sessionId: "bridge-a" }],
+    sessions: [
+      { connected: true, openDocumentCount: 1, openDocuments: null, sessionId: "bridge-a" },
+    ],
   });
   expect(decoded.sessions[0]?.sessionId).toBe("bridge-a");
 });
@@ -132,9 +134,8 @@ test("keeps bridge session ids host-owned", () => {
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",
@@ -152,30 +153,22 @@ test("key guards agree with the checked-in typegen key list", () => {
   }
 });
 
-test("settings open-with-module schema decodes C# module/schema context", () => {
-  const decoded = Schema.decodeUnknownSync(
-    tsOnlyOperationSchemas["settings.document.open-with-module"].request,
-  )({
-    module: {
-      defaultRootKey: "profiles",
-      moduleKey: "CmdScheduleManager",
-      roots: [{ displayName: "profiles", rootKey: "profiles" }],
-      storageOptions: { includeRoots: ["fragments"], presetRoots: ["presets"] },
-    },
-    request: {
-      documentId: {
-        moduleKey: "CmdScheduleManager",
-        relativePath: "main.json",
-        rootKey: "profiles",
-        stableId: "CmdScheduleManager:profiles:main.json",
-      },
-      includeComposedContent: true,
-    },
-    schemaJson: "{}",
+test("pod member ops decode the member address and split create from save", () => {
+  // The host decodes requests with excess properties refused; so does this check.
+  const write = Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.member.write"].request, {
+    onExcessProperty: "error",
   });
-
-  expect(decoded.module.moduleKey).toBe("CmdScheduleManager");
-  expect(decoded.module.storageOptions?.includeRoots).toEqual(["fragments"]);
+  expect(() =>
+    write({ pod: "p", path: "settings/a.json", content: "{}", expectedSha256: "x" }),
+  ).toThrow();
+  const save = Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.member.save"].request);
+  expect(() => save({ pod: "p", path: "settings/a.json", content: "{}" })).toThrow();
+  expect(save({ pod: "p", path: "settings/a.json", content: "{}", expectedSha256: "x" })).toEqual({
+    pod: "p",
+    path: "settings/a.json",
+    content: "{}",
+    expectedSha256: "x",
+  });
 });
 
 test("exports TS-only admin operation schemas", () => {
@@ -196,12 +189,11 @@ test("exports TS-only admin operation schemas", () => {
   });
   expect(aps.loggedOut).toBe(true);
 
-  const settingsTree = Schema.decodeUnknownSync(tsOnlyOperationSchemas["settings.tree"].request!)({
-    includeFragments: true,
-    moduleKey: "CmdScheduleManager",
-    rootKey: "schedules",
+  const compose = Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.member.compose"].request)({
+    pod: "pe-standards",
+    path: "settings/schedules/a.json",
   });
-  expect(settingsTree.moduleKey).toBe("CmdScheduleManager");
+  expect(compose.pod).toBe("pe-standards");
 
   const shellOpen = Schema.decodeUnknownSync(tsOnlyOperationSchemas["host.shell.open"].request)({
     path: "C:\\artifacts\\run",

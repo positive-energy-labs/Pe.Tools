@@ -20,7 +20,7 @@ public sealed class BridgeOpSchemaGeneratorTests {
     private sealed record ProbeTarget(string Id, string? Label = null);
 
     private sealed record ProbeRequest(
-        string ModuleKey,
+        string SchemaUrl,
         ProbeTarget Target,
         string? Filter = null,
         bool IncludeHidden = false,
@@ -57,7 +57,7 @@ public sealed class BridgeOpSchemaGeneratorTests {
         var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeRequest)));
 
         var required = (schema["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
-        Assert.That(required, Does.Contain("moduleKey"));
+        Assert.That(required, Does.Contain("schemaUrl"));
         Assert.That(required, Does.Contain("target"));
         Assert.That(required, Does.Not.Contain("filter"));
         Assert.That(required, Does.Not.Contain("includeHidden"));
