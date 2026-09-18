@@ -182,7 +182,10 @@ function parseReceipt(content: string): PodReceipt | string {
     const origin = origins.includes(value.origin as never)
       ? (value.origin as PodReceipt["origin"])
       : null;
-    // An operation run consumed no member, so it names none; only saved bytes carry a member hash.
+    // An operation run consumed no member, so it names none: one that does is a writer defect,
+    // refused rather than normalized so it surfaces. Only saved bytes carry a member hash.
+    if (origin === "Operation" && (value.memberPath != null || value.memberSha256 != null))
+      return "receipt.json is an Operation run that names a member; an operation consumed no member, so its memberPath and memberSha256 must be null.";
     const member =
       origin === "Operation"
         ? { origin, memberPath: null, memberSha256: null }

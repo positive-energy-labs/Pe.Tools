@@ -162,6 +162,36 @@ test("runs list newest first, by member, and a run with no receipt still says so
   expect((await run(listRuns({ pod: "runs", path: "other.json" }, ctx()))).runs).toEqual([]);
 });
 
+test("an Operation receipt that names a member is refused, not quietly normalized", async () => {
+  await mkdir(join(root, "Ops", "output", "capture-run"), { recursive: true });
+  await writeFile(join(root, "Ops", "pod.json"), JSON.stringify({ id: "ops" }));
+  // A writer regression: a capture consumed Revit, yet this receipt borrows the member it wrote.
+  await writeFile(
+    join(root, "Ops", "output", "capture-run", "receipt.json"),
+    JSON.stringify({
+      podId: "ops",
+      memberPath: "settings/captured.json",
+      memberSha256: "abc",
+      origin: "Operation",
+      operation: "family.capture",
+      planHash: null,
+      outcome: "Succeeded",
+      outputs: [],
+      reason: null,
+    }),
+  );
+  const { runs } = await run(listRuns({ pod: "ops" }, ctx()));
+  expect(runs).toEqual([
+    {
+      runId: "capture-run",
+      receiptPath: "output/capture-run/receipt.json",
+      receipt: null,
+      error:
+        "receipt.json is an Operation run that names a member; an operation consumed no member, so its memberPath and memberSha256 must be null.",
+    },
+  ]);
+});
+
 test("a draft run is listed under its member only with its draft label and no saved hash", async () => {
   await mkdir(join(root, "Drafts", "output", "draft-run"), { recursive: true });
   await mkdir(join(root, "Drafts", "output", "legacy-run"), { recursive: true });
