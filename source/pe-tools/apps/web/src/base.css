@@ -236,10 +236,6 @@
   background: var(--pe-recess);
   --pe-on: var(--pe-recess);
 }
-[data-pe] .on-select {
-  background: var(--pe-select);
-  --pe-on: var(--pe-select);
-}
 
 [data-pe] .veil:hover {
   background-image: var(--fill-veil);

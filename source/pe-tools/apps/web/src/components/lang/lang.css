@@ -28,14 +28,19 @@
   background: color-mix(in srgb, currentColor 10%, var(--pe-on));
 }
 
+/* THE ONE SELECTION PAINT (census R18). The attribute states and the `on-select` class were two
+   mechanisms for one meaning; they are one rule now. Selection is a fill, never a hue, and it
+   re-grounds what sits on it (`--pe-on`), which the class did and the attributes did not. */
 :where(
   [aria-selected="true"],
   [aria-expanded="true"],
   [aria-pressed="true"],
   [data-selected],
-  [data-highlighted]
+  [data-highlighted],
+  .on-select
 ) {
   background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
 }
 
 :where(svg [aria-selected="true"], svg [data-selected]) {
@@ -457,4 +462,112 @@
   text-decoration: underline solid var(--pe-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+
+/* ── ROW · row.tsx — the one list item and table row (ix-list design). States are data:
+   cursor = the veil (the hover law, never a hue) · selected = the one select fill (above) ·
+   active = the left rail · pending = quiet italic · failed = the caution squiggle on the label ·
+   refused = aria-disabled, italic, with its reason in the meta slot. */
+.dl-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink);
+  cursor: default;
+  user-select: none;
+}
+tr.dl-row {
+  display: table-row;
+  height: var(--item-h);
+  padding: 0;
+}
+.dl-row[data-lines="2"] {
+  min-height: calc(var(--item-h) * 2);
+}
+.dl-row[data-cursor] {
+  background-image: var(--fill-veil);
+}
+.dl-row[data-active]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 2px;
+  background: var(--pe-ink);
+}
+.dl-row[data-pending] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row[data-failed] .dl-row-label {
+  text-decoration: underline wavy var(--pe-caution);
+  text-underline-offset: 3px;
+}
+.dl-row[aria-disabled="true"] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row-lead {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+.dl-row-label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dl-row-sub {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dl-row-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+}
+/* row verbs: zero footprint until the row is hovered or holds focus (the StateCell overlay idiom) */
+.dl-row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-right: 2px;
+  background: var(--pe-on);
+}
+.dl-row:hover > .dl-row-actions,
+.dl-row:focus-within > .dl-row-actions,
+.dl-row[data-cursor] > .dl-row-actions {
+  display: inline-flex;
+}
+.dl-row-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  font-size: var(--type-small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pe-ink-2);
 }

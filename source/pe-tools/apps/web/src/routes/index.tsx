@@ -149,6 +149,7 @@ const TOOLS = [
       "The spec and catalogue for the design language — production components under production tokens, with the gaps they cannot yet express marked in place.",
     satellites: [
       { to: "/design-system/band", label: "band" },
+      { to: "/design-system/list", label: "list" },
       { to: "/design-system/arming", label: "arming" },
       { to: "/design-system/popovers", label: "popovers" },
       { to: "/design-system/swatch", label: "swatch" },

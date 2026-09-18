@@ -1074,11 +1074,7 @@ for (const specimen of FILES.filter(
   visit(source);
 }
 const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
-const REQUIRED_RECIPE_GRIDS = new Set([
-  ...LANG_RECIPES,
-  "dialogRecipe",
-  "inputGroupRecipe",
-]);
+const REQUIRED_RECIPE_GRIDS = new Set([...LANG_RECIPES, "dialogRecipe", "inputGroupRecipe"]);
 const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .filter((name) => RECIPE_GRID_USES.get(name) !== 1)
   .map((name) => `${name}: ${RECIPE_GRID_USES.get(name) ?? 0} grids`)
