@@ -78,7 +78,7 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
     url: () => read<string>("location.href"),
     async open(url: string) {
       await send("Page.navigate", { url });
-      await page.until(() => read<boolean>("document.readyState === 'complete'"), "page load");
+      await page.until(() => read<boolean>("document.readyState === 'complete'"), "page load", 60_000);
     },
     async reload() {
       await send("Page.reload", {});
@@ -112,6 +112,55 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
           clickCount: 1,
         });
     },
+    /** Click a grid cell's input: the row whose text has every `row` word, under header `column`. */
+    async clickCell(row: string[], column: string) {
+      const box = await page.until(
+        () =>
+          read<{ x: number; y: number } | null>(
+            center(`${cellOf(row, column)}?.querySelector("input") ?? ${cellOf(row, column)}`),
+          ),
+        `cell ${row.join("/")} × ${column}`,
+      );
+      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
+        await send("Input.dispatchMouseEvent", {
+          type,
+          x: box.x,
+          y: box.y,
+          button: "left",
+          clickCount: 1,
+        });
+    },
+    /** Type a value into a grid cell as a person does: click, select all, delete, type, Enter. */
+    async setCell(row: string[], column: string, text: string) {
+      await page.clickCell(row, column);
+      await page.press("a", CTRL);
+      await page.press("Delete");
+      await page.type(text);
+      await page.press("Enter");
+    },
+    /** What a grid cell renders: its shown value, its marks, and its hover facts. */
+    readCell: (row: string[], column: string) =>
+      read<{
+        value: string;
+        staged: boolean;
+        proposal: boolean;
+        unsaved: string | null;
+        contest: boolean;
+        facts: string;
+      } | null>(`(() => {
+        const td = ${cellOf(row, column)};
+        if (!td) return null;
+        const input = td.querySelector("input");
+        const state = td.querySelector("[data-scale=row]");
+        return {
+          value: input ? input.value : td.innerText.trim(),
+          staged: td.querySelector("[data-staged]") != null,
+          proposal: td.querySelector("[data-proposal]") != null,
+          unsaved: state?.getAttribute("data-unsaved") ?? null,
+          contest: state?.hasAttribute("data-contest") ?? false,
+          facts: state?.getAttribute("title") ?? "",
+        };
+      })()`),
     /** Click the element matching a CSS selector (for controls with no text, e.g. a cell). */
     async clickAt(selector: string) {
       const box = await page.until(
@@ -196,6 +245,17 @@ const center = (el: string) => `(() => {
   return r.width && r.height ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
 })()`;
 
+/** The <td> at (row, column): under the header titled `column`, in the row holding every `row` word. */
+const cellOf = (row: string[], column: string) => `(() => {
+  const th = [...document.querySelectorAll("thead th")].find((th) => th.getClientRects().length && th.innerText.trim().split(/\\s*\\n/)[0] === ${JSON.stringify(column)});
+  const grid = th?.closest("table");
+  if (!grid) return null;
+  const tr = [...grid.querySelectorAll("tbody tr")].find((tr) => ${JSON.stringify(row)}.every((w) => [...tr.children].some((td) => td.innerText.trim() === w)));
+  if (!tr) return null;
+  const h = th.getBoundingClientRect(), x = h.left + h.width / 2;
+  return [...tr.children].find((td) => { const r = td.getBoundingClientRect(); return r.left <= x && x <= r.right; }) ?? null;
+})()`;
+
 const locate = (name: string | RegExp, within?: string) =>
   center(`(() => {
     const want = ${name instanceof RegExp ? name.toString() : JSON.stringify(name)};
@@ -248,4 +308,37 @@ export function expectText(actual: string, want: string | RegExp, label: string,
   const has = typeof want === "string" ? actual.includes(want) : want.test(actual);
   if (has !== present)
     throw new Error(`ASSERT ${label}: expected ${present ? "" : "no "}${want} in rendered text`);
+}
+
+/**
+ * Revit journeys (J1-J4, J6) name their data by env, set by whoever holds the slot:
+ * E2E_TARGET (document Address), E2E_ROWS (JSON [[family, type], …]), E2E_PARAM, E2E_VALUE.
+ */
+export const revit = {
+  target: process.env.E2E_TARGET ?? "",
+  rows: JSON.parse(process.env.E2E_ROWS ?? "[]") as string[][],
+  param: process.env.E2E_PARAM ?? "",
+  value: process.env.E2E_VALUE ?? "",
+  url: (path: string) => {
+    const url = new URL(path, WEB);
+    if (process.env.E2E_TARGET) url.searchParams.set("target", process.env.E2E_TARGET);
+    return url.href;
+  },
+};
+
+/** Fails as PRECONDITION (not ASSERT) when the route has no Revit bridge: the slot is not held. */
+export async function requireRevit(page: Page) {
+  await page.until(
+    async () => /FAMILIES IN SCOPE/i.test(await page.text()),
+    "the families pane",
+    60_000,
+  );
+  if (/BRIDGE IS DISCONNECTED/i.test(await page.text()))
+    throw new Error("PRECONDITION: no Revit bridge; this journey runs in the joint-hold slot");
+}
+
+/** Setup, not a journey step: pick a model this machine can sign (Anthropic login expired 09-07). */
+export async function pickModel(page: Page, model = process.env.E2E_MODEL ?? "gpt-5.6-terra") {
+  await page.click("Model");
+  await page.click(new RegExp(`^${model.replaceAll(".", ".")}s`));
 }

@@ -1,9 +1,8 @@
 // E2E-J5 · An ask lives exactly as long as its turn. Real host, real Pea; no Revit.
 // Red break: drop the `new-turn` expiry → the old question stays in the head after the new message.
-import { expectText, journey, WEB } from "./cdp.ts";
+import { expectText, journey, pickModel, WEB } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
-const MODEL = process.env.E2E_MODEL ?? "gpt-5.6-terra";
 const COMPOSER = 'textarea[aria-label="Message"]';
 
 await journey("J5", async (page, step) => {
@@ -11,10 +10,8 @@ await journey("J5", async (page, step) => {
   await page.open(`${WEB}/chat`);
   await page.click("new");
   await page.waitText("NO MESSAGES IN THIS THREAD YET");
-  // Setup, not the journey: this machine's Anthropic login expired, so pick a model it can sign.
-  step(`pick model ${MODEL} in the Model picker`);
-  await page.click("Model");
-  await page.click(new RegExp(`^${MODEL.replaceAll(".", "\\.")}\\s`));
+  step("pick a signable model in the Model picker");
+  await pickModel(page);
 
   step("type an ask-provoking message + Enter");
   await page.clickAt(COMPOSER);
