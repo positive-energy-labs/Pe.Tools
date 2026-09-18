@@ -915,6 +915,7 @@ public enum UnmodeledReason {
     ConnectorOnCurvedFace,
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
+    ConnectorSizeByRadius,           // a round connector sized through its Radius slot; the vocabulary names diameter only
     FormulaNameNotDeclared,
     RefLineStartNotTwoPlanes,        // the start is fixed by `on` crossed with two planes; capture found other than two
     ParameterMetadataUnreadable,
