@@ -54,10 +54,8 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
       command,
       { subCommands: command.subCommands },
     );
-    expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({
-      id: "cli-schedule-original",
-      state: "succeeded",
-    });
+    // The admission builder returns the succeeded receipt's result; a failure names the id.
+    expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({ applied: 1, failures: [] });
     expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
     expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   } finally {

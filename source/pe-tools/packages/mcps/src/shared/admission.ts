@@ -9,13 +9,16 @@
  */
 import {
   actionAdmissionSchema,
+  scheduleReads,
   semanticActions,
+  type ScheduleReadKey,
   type ActionBases,
   type ExecutionTarget,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
+import { readScheduleCapture } from "./schedule-client.ts";
 import { actionResult, submitAction } from "./takeoff-action-client.ts";
 
 export interface AdmissionContext {
@@ -58,17 +61,26 @@ export function admissionDestination(
   };
 }
 
+/** What the contract says about a key, and the session a native key was read against. */
+export type CapabilityIntent = {
+  kind: "operation" | "workflow" | "schedule-read";
+  needs: string;
+  mutates: boolean;
+  session?: string;
+};
+
 /**
  * What the contract says about a key: its admission kind, the lifetime it needs, and whether it
- * mutates. Three catalogs, in the order the host itself consults them
+ * mutates. Catalogs in the order the host itself consults them
  * (`apps/host/src/gateway-actions.ts:25`): the compiled host-local catalog, the compiled semantic
- * action contract (every one of which is a `workflow`), then the connected session's generated
- * operation catalog at `GET /ops`. A key none of them carries is a refusal, not a POST.
+ * action contract (every one of which is a `workflow`), the compiled schedule readings, then the
+ * session's generated operation catalog at `GET /ops`. `/ops` lists native keys only for a named
+ * session, so the session resolves first. A key none of them carries is a refusal, not a POST.
  */
 export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
-): Promise<{ kind: "operation" | "workflow"; needs: string; mutates: boolean }> {
+): Promise<CapabilityIntent> {
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return { kind: "operation", needs: local.needs, mutates: local.intent !== "Read" };
   if (Object.hasOwn(semanticActions, key))
@@ -77,16 +89,27 @@ export async function readCapabilityIntent(
       needs: semanticActions[key as SemanticActionKey].needs,
       mutates: true,
     };
-  const definition = await caller(context).getOperation(key);
-  if (!definition)
-    throw new Error(
-      `'${key}' is not in the operation catalog this host serves (or the catalog is unreachable). Run \`pea host operations search\`.`,
-    );
-  return {
-    kind: "operation",
-    needs: definition.needs,
-    mutates: definition.intent !== "Read",
-  };
+  if (Object.hasOwn(scheduleReads, key))
+    return {
+      kind: "schedule-read",
+      needs: scheduleReads[key as ScheduleReadKey].needs,
+      mutates: false,
+    };
+  const session = await requireSession(key, context);
+  const catalog = await caller({ ...context, bridgeSessionId: session }).catalog();
+  const definition = catalog.ops.find((row) => row.key === key);
+  if (definition)
+    return {
+      kind: "operation",
+      needs: definition.needs,
+      mutates: definition.intent !== "Read",
+      session,
+    };
+  throw new Error(
+    catalog.bridgeCatalogError
+      ? `The operation catalog of session '${session}' is unreachable: ${catalog.bridgeCatalogError}. '${key}' was not checked; retry once the session answers.`
+      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea host operations search\`.`,
+  );
 }
 
 const caller = (context: AdmissionContext) =>
@@ -97,28 +120,47 @@ const caller = (context: AdmissionContext) =>
     timeoutMs: context.timeoutMs,
   });
 
-/** The named session, or the one this host is connected to. Only asked when a key needs one. */
+/**
+ * The named session, or the one this host is connected to. A transport failure throws with its
+ * URL; only a host that answers "no session" reads as none.
+ */
 async function resolveSession(context: AdmissionContext): Promise<string | undefined> {
   if (context.bridgeSessionId) return context.bridgeSessionId;
-  const summary = await caller(context)
-    .call("bridge.sessions.summary")
-    .catch(() => undefined);
-  return summary?.sessionId ?? undefined;
+  return (await caller(context).call("bridge.sessions.summary")).sessionId ?? undefined;
+}
+
+async function requireSession(key: string, context: AdmissionContext): Promise<string> {
+  const session = await resolveSession(context);
+  if (session) return session;
+  throw new Error(
+    `'${key}' runs in a Revit session and none is connected to ${context.hostBaseUrl}. Start or attach one, or name it with --bridge-session-id (\`pea host status\` prints the connected session).`,
+  );
 }
 
 /**
- * Run any catalogued capability by key. Reads go to `/call`; mutations are admitted at
- * `/actions` and followed to a terminal receipt, whose result is returned unwrapped.
+ * Run any catalogued capability by key. Reads go to `/call` (schedule readings to their host
+ * route); mutations are admitted at `/actions` and followed to a terminal receipt, whose result
+ * is returned unwrapped. A caller that already read the intent passes it.
  */
 export async function runCapability(
   key: string,
   input: Record<string, unknown>,
   context: AdmissionContext,
+  intent?: CapabilityIntent,
 ): Promise<unknown> {
-  const intent = await readCapabilityIntent(key, context);
+  intent ??= await readCapabilityIntent(key, context);
+  if (intent.kind === "schedule-read")
+    return readScheduleCapture(
+      key as ScheduleReadKey,
+      input,
+      context.openDocumentId
+        ? { session: await requireSession(key, context), openId: context.openDocumentId }
+        : undefined,
+      context.hostBaseUrl,
+    );
   if (!intent.mutates)
     // A NoRequest op is called with no request; `{}` is a different body.
-    return caller(context).call(
+    return caller({ ...context, bridgeSessionId: intent.session ?? context.bridgeSessionId }).call(
       key as never,
       (Object.keys(input).length ? input : undefined) as never,
     );
@@ -130,7 +172,7 @@ export async function runCapability(
     key,
     actor: context.actor,
     destination: admissionDestination(key, intent.needs, {
-      bridgeSessionId: await resolveSession(context),
+      bridgeSessionId: intent.session ?? (await resolveSession(context)),
       openDocumentId: context.openDocumentId,
     }),
     input,

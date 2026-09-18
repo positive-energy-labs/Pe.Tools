@@ -1,6 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { admissionDestination, runCapability } from "../src/shared/admission.ts";
 import { ScriptingTools } from "../src/shared/scripting.ts";
+import { cli } from "gunshi";
+import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 
 /**
  * A fake host serving exactly the two endpoints a mutation needs: the generated operation
@@ -15,12 +17,28 @@ const operations = [
   { key: "op.cancel", intent: "Mutate", needs: "nothing" },
 ];
 
-function fakeHost(options: { session?: string } = {}) {
+/**
+ * Like the real `/ops` (`apps/host/src/ops-catalog.ts`): native keys only under a session
+ * selector, and a session whose bridge does not answer yields a 200 carrying `bridgeCatalogError`.
+ */
+function fakeHost(options: { session?: string; bridgeDown?: boolean } = {}) {
   const submitted: unknown[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.endsWith("/ops")) return Response.json({ operations });
+    if (url.endsWith("/ops")) {
+      const selected = (init?.headers as Record<string, string> | undefined)?.[
+        "x-pe-bridge-session-id"
+      ];
+      if (!selected)
+        return Response.json({
+          operations: [],
+          bridgeCatalogError: "Select a session for native operations",
+        });
+      if (options.bridgeDown)
+        return Response.json({ operations: [], bridgeCatalogError: "bridge request timed out" });
+      return Response.json({ operations });
+    }
     if (url.endsWith("/call")) {
       const { key } = JSON.parse(String(init?.body)) as { key: string };
       if (key !== "bridge.sessions.summary")
@@ -157,19 +175,23 @@ test("the catalog, not the caller, says whether a key is an operation or a workf
 test("a mutation with no session, no actor, or no catalog row refuses before it POSTs", async () => {
   const host = fakeHost();
   try {
-    await expect(tools().bootstrap({})).rejects.toThrow("none is connected or named");
+    await expect(tools().bootstrap({})).rejects.toThrow("none is connected to http://host.test");
     await expect(
       runCapability("family.capture", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
     ).rejects.toThrow("none is connected or named");
     await expect(
-      new ScriptingTools({ hostBaseUrl: "http://host.test", workspaceKey: "demo-pod" }).exportPod({
+      new ScriptingTools({
+        hostBaseUrl: "http://host.test",
+        bridgeSessionId: "s",
+        workspaceKey: "demo-pod",
+      }).exportPod({
         pod: "p",
         archivePath: "b.zip",
       }),
     ).rejects.toThrow("initiating actor");
     await expect(
       runCapability("pod.nonesuch", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
-    ).rejects.toThrow("not in the operation catalog");
+    ).rejects.toThrow("none is connected");
     expect(host.submitted).toEqual([]);
   } finally {
     host.restore();
@@ -191,6 +213,122 @@ test("a read key never enters admission; it stays on /call", async () => {
   try {
     await expect(tools().listPods()).rejects.toThrow("refuses raw dispatch of 'pod.list'");
     expect(host.submitted).toEqual([]);
+  } finally {
+    host.restore();
+  }
+});
+
+/** `pea host operations call`, driven through Gunshi exactly as a user types it. */
+async function peaCall(args: string[]) {
+  const command = new PeaCliCommands({ hostBaseUrl: "http://host.test" }).hostCommand();
+  const printed: string[] = [];
+  const log = console.log;
+  console.log = (line: unknown) => void printed.push(String(line));
+  try {
+    await cli(["operations", "call", ...args], command, { subCommands: command.subCommands });
+  } finally {
+    console.log = log;
+  }
+  return printed;
+}
+
+test("a native key with no --bridge-session-id reads the catalog of the connected session", async () => {
+  const host = fakeHost({ session: "session-live" });
+  try {
+    await peaCall([
+      "--key",
+      "scripting.workspace.bootstrap",
+      "--actor",
+      "agent",
+      "--request",
+      "{}",
+    ]);
+    await tools().bootstrap({});
+    expect(host.submitted).toMatchObject([
+      { kind: "operation", destination: { kind: "session", session: "session-live" } },
+      { kind: "operation", destination: { kind: "session", session: "session-live" } },
+    ]);
+  } finally {
+    host.restore();
+  }
+});
+
+test("a native key with no session names how to pick one", async () => {
+  const host = fakeHost();
+  try {
+    await expect(peaCall(["--key", "scripting.execute", "--actor", "agent"])).rejects.toThrow(
+      /'scripting.execute' runs in a Revit session and none is connected.*--bridge-session-id.*pea host status/,
+    );
+    expect(host.submitted).toEqual([]);
+  } finally {
+    host.restore();
+  }
+});
+
+test("an unreachable catalog and an unknown key are two refusals with two causes", async () => {
+  const down = fakeHost({ session: "session-live", bridgeDown: true });
+  try {
+    await expect(
+      peaCall(["--key", "scripting.execute", "--actor", "agent", "--bridge-session-id", "s-down"]),
+    ).rejects.toThrow("catalog of session 's-down' is unreachable: bridge request timed out");
+  } finally {
+    down.restore();
+  }
+  const up = fakeHost({ session: "session-live" });
+  try {
+    // The down answer was not cached: the same session now serves its catalog.
+    await peaCall([
+      "--key",
+      "scripting.execute",
+      "--actor",
+      "agent",
+      "--bridge-session-id",
+      "s-down",
+    ]);
+    await expect(peaCall(["--key", "pod.nonesuch", "--actor", "agent"])).rejects.toThrow(
+      "'pod.nonesuch' is not in the operation catalog of session 'session-live'",
+    );
+    expect(up.submitted).toHaveLength(1);
+  } finally {
+    up.restore();
+  }
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  try {
+    // A dead host is a transport error that names the URL, not "no session".
+    await expect(peaCall(["--key", "scripting.execute", "--actor", "agent"])).rejects.toThrow(
+      "POST http://host.test/call failed: TypeError: fetch failed",
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("operations call admits schedule.grid.push as a workflow with its bases", async () => {
+  const host = fakeHost({ session: "session-live" });
+  try {
+    await peaCall([
+      "--key",
+      "schedule.grid.push",
+      "--actor",
+      "human",
+      "--open-document-id",
+      "open-1",
+      "--request",
+      JSON.stringify({ bases: { captureId: "c".repeat(64) } }),
+    ]);
+    expect(host.submitted).toMatchObject([
+      {
+        kind: "workflow",
+        key: "schedule.grid.push",
+        actor: "human",
+        destination: { kind: "document", ref: { session: "session-live", openId: "open-1" } },
+        input: {},
+        bases: { captureId: "c".repeat(64) },
+      },
+    ]);
   } finally {
     host.restore();
   }
