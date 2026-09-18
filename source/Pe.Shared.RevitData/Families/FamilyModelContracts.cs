@@ -742,6 +742,36 @@ public enum FlowConfiguration { Preset, Calculated, System, Demand }
 public enum LossMethod { NotDefined, Coefficient, SpecificLoss, Table }
 
 /// <summary>
+///     The one mapping between the connector enums above and Revit's enum member names, with its inverse. Capture
+///     reads a Revit value through <see cref="FromRevitName{T}" />; apply writes one through <see cref="RevitName" />.
+///     Only the names below differ; every other member of <see cref="ConnectorSystemType" />, <see cref="FlowDirection" />,
+///     <see cref="FlowConfiguration" /> and <see cref="LossMethod" /> is spelled as Revit's `DuctSystemType`, `PipeSystemType`,
+///     `ElectricalSystemType`, `FlowDirectionType`, `*FlowConfigurationType` and `*LossMethodType` spell it.
+///     `MEPSystemClassification` agrees with the domain enums except `DataCircuit`, which is <see cref="ConnectorSystemType.Data" />.
+/// </summary>
+public static class ConnectorRevitNames {
+    private static readonly Dictionary<ConnectorSystemType, string> Renamed = new() {
+        [ConnectorSystemType.HydronicSupply] = "SupplyHydronic",
+        [ConnectorSystemType.HydronicReturn] = "ReturnHydronic",
+        [ConnectorSystemType.FireProtectionWet] = "FireProtectWet",
+        [ConnectorSystemType.FireProtectionDry] = "FireProtectDry",
+        [ConnectorSystemType.FireProtectionPreAction] = "FireProtectPreaction",
+        [ConnectorSystemType.FireProtectionOther] = "FireProtectOther"
+    };
+
+    public static string RevitName<T>(T value) where T : struct, Enum =>
+        value is ConnectorSystemType s && Renamed.TryGetValue(s, out var name) ? name : value.ToString();
+
+    /// <summary>The contract value Revit's member <paramref name="revitName" /> maps to; null when the contract has none.</summary>
+    public static T? FromRevitName<T>(string revitName) where T : struct, Enum {
+        if (typeof(T) == typeof(ConnectorSystemType) && revitName == "DataCircuit") revitName = nameof(ConnectorSystemType.Data);
+        foreach (T value in Enum.GetValues(typeof(T)))
+            if (RevitName(value) == revitName) return value;
+        return null;
+    }
+}
+
+/// <summary>
 ///     One detail element in one stock view: a nested Detail Item family instance (<see cref="Family" /> set)
 ///     or a loop of symbolic lines locked to planes (<see cref="Curves" /> set). Exactly one of the two.
 /// </summary>

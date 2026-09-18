@@ -40,7 +40,12 @@ public sealed record FamilyApplyRequest(string SpecJson, IReadOnlyDictionary<lon
 /// <summary>Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.</summary>
 public sealed record FamiliesApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
 
-/// <summary>The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.</summary>
+/// <summary>
+///     The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
+///     id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
+///     `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
+///     family name is stable across applies.
+/// </summary>
 public sealed record FamilyFoundryApplyReceipt(
     long FamilyId,
     string? FamilyName,
@@ -51,14 +56,19 @@ public sealed record FamilyFoundryApplyReceipt(
     IReadOnlyList<FamilyFoundryChangeData> Residue,
     IReadOnlyList<string> Errors,
     string? ArtifactDirectory,
-    string? ObservedParametersDigest = null
+    string? ObservedParametersDigest = null,
+    long? LoadedFamilyId = null
 );
 
-/// <summary>`receiptPath` is the pod run's receipt.json; null when the request was refused before running.</summary>
+/// <summary>
+///     `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+///     receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
+/// </summary>
 public sealed record FamilyFoundryApplyData(
     IReadOnlyList<FamilyFoundryApplyReceipt> Receipts,
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics,
-    string? ReceiptPath = null
+    string? ReceiptPath = null,
+    string? Reason = null
 );
 
 /// <summary>Capture loaded families read-only as family.json.</summary>

@@ -102,6 +102,16 @@ async function setup() {
   let planEntries = [entry(1, "Box", "h1"), entry(2, "Pipe", "h2")];
   let nativeFails = false;
   let nativeUnknown = false;
+  const box = {
+    familyId: 1,
+    familyName: "Box",
+    success: true,
+    converged: true,
+    residue: [],
+    errors: [],
+    artifactDirectory: "C:/art/1",
+  };
+  let applied: { receipts: unknown[]; reason?: string } = { receipts: [box] };
   let duringNative: (() => Promise<void>) | null = null;
   const bridge = {
     list: Effect.sync(() => [
@@ -149,22 +159,7 @@ async function setup() {
         if (nativeFails) throw Object.assign(Error("native refused"), { statusCode: 409 });
         if (key === "families.apply") {
           await duringNative?.();
-          return {
-            value: {
-              diagnostics: [],
-              receipts: [
-                {
-                  familyId: 1,
-                  familyName: "Box",
-                  success: true,
-                  converged: true,
-                  residue: [],
-                  errors: [],
-                  artifactDirectory: "C:/art/1",
-                },
-              ],
-            },
-          };
+          return { value: { diagnostics: [], ...applied } };
         }
         await duringNative?.();
         return { value: linkData };
@@ -230,6 +225,10 @@ async function setup() {
     unknown: (v: boolean) => {
       nativeUnknown = v;
     },
+    applied: (next: typeof applied) => {
+      applied = next;
+    },
+    box,
     during: (f: () => Promise<void>) => {
       duringNative = f;
     },
@@ -695,4 +694,35 @@ test("families.capture writes one new member per family into the route's pod", a
     $schema: "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json",
     pipe: 1,
   });
+});
+
+test("an apply where no family succeeded settles failed with the receipt's reason; one success settles succeeded", async () => {
+  const { work, admit, applied, box } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  const failedBox = { ...box, success: false, error: "trace", errors: ["trace"] };
+  const failedPipe = { ...failedBox, familyId: 2, familyName: "Pipe" };
+  const reason =
+    "2 of 2 families failed; the first, Box: Requested value 'FireProtectionDry' was not found.";
+  applied({ receipts: [failedBox, failedPipe], reason });
+  const none = await admit(
+    "families.apply",
+    { source, expectedPlanHashes: plan.included },
+    revision,
+    "none",
+  );
+  expect(none.state).toBe("failed");
+  expect((none as { error?: string }).error).toBe(reason);
+  // The per-family receipts stay on the settled row as evidence.
+  expect(JSON.stringify(none)).toContain("Pipe");
+
+  applied({ receipts: [box, failedPipe], reason: "1 of 2 families failed; the first, Pipe: x." });
+  const partial = await admit(
+    "families.apply",
+    { source, expectedPlanHashes: plan.included },
+    revision,
+    "partial",
+  );
+  const result = resultOf<{ native: { receipts: { success: boolean }[] } }>(partial);
+  expect(result.native.receipts.map((r) => r.success)).toEqual([true, false]);
 });

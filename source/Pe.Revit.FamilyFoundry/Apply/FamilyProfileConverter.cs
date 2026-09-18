@@ -317,9 +317,8 @@ public static class FamilyProfileConverter {
                 : domain == "Pipe" ? new[] { "SystemType", "FlowConfiguration", "FlowDirection" } : domain == "Electrical" ? new[] { "SystemType" }
                 : throw new InvalidOperationException($"ParamDrivenSolids connector domain '{domain}' requires native conversion.");
             RequireOnly(domainConfig, $"ParamDrivenSolids.Connector.Config.{domain}", allowed);
-            var system = Required(domainConfig, "SystemType", $"ParamDrivenSolids.Connector.Config.{domain}") switch {
-                "SupplyHydronic" => "HydronicSupply", "ReturnHydronic" => "HydronicReturn", var value => value
-            };
+            var legacySystem = Required(domainConfig, "SystemType", $"ParamDrivenSolids.Connector.Config.{domain}");
+            var system = ConnectorRevitNames.FromRevitName<ConnectorSystemType>(legacySystem)?.ToString() ?? legacySystem;
             var native = new JObject { ["domain"] = domain, ["systemType"] = system, ["on"] = depth.Name,
                 ["at"] = new JArray(centers) };
             if (domain != "Electrical") { native["shape"] = "Round"; native["diameter"] = $"param:{diameter.Parameter}"; }
