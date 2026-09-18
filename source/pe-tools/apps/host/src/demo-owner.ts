@@ -566,16 +566,23 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 }),
                 simulated: true,
               };
-            } else if (key === "revit.apply.parameter-values" && project) {
+            } else if (key === "schedule.cells.apply" && project) {
               const edits = (
-                input as { edits: { elementId: number; parameterName: string; value: string }[] }
+                input as { edits: { rowNumber: number; columnNumber: number; value: string }[] }
               ).edits;
-              for (const edit of edits)
-                rows[edit.elementId - 1]![DEMO_COLUMNS.indexOf(edit.parameterName)] = edit.value;
+              for (const edit of edits) rows[edit.rowNumber - 1]![edit.columnNumber] = edit.value;
               value = {
-                applied: edits.length,
+                appliedCells: edits.length,
+                appliedParameterWrites: edits.length,
                 dryRun: false,
-                results: edits.map((_, index) => ({ index, ok: true })),
+                results: edits.map((edit, index) => ({
+                  index,
+                  rowNumber: edit.rowNumber,
+                  columnNumber: edit.columnNumber,
+                  ok: true,
+                  parameterResults: [{ index: 0, ok: true }],
+                })),
+                diagnostics: [],
                 simulated: true,
               };
             } else if (key === "revit.catalog.schedules" && project) {
@@ -613,8 +620,22 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                         columnNumber,
                         targetElementIds: [index + 1],
                         parameterName,
+                        // Simulated parameter id = negative column position.
+                        parameterId: -(columnNumber + 1),
                         storageType: "String",
+                        rawValue: values[columnNumber] ?? null,
                         isEditable: true,
+                        targets: [
+                          {
+                            elementId: index + 1,
+                            parameterId: -(columnNumber + 1),
+                            parameterName,
+                            storageType: "String",
+                            isReadOnly: false,
+                            hasValue: values[columnNumber] != null,
+                            rawValue: values[columnNumber] ?? null,
+                          },
+                        ],
                       })),
                     })),
                   },

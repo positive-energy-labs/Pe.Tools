@@ -21,13 +21,13 @@ import {
 import type {
   RevitDetailSchedules,
   RevitCatalogSchedules,
-  RevitApplyParameterValues,
+  ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
-import type { TakeoffCaptures } from "./takeoff-captures.ts";
+import { StaleScheduleReading, type TakeoffCaptures } from "./takeoff-captures.ts";
 import type { PodMemberWritten } from "@pe/host-contracts/operation-types";
 import type { ScheduleCapture } from "@pe/host-contracts/generated";
 import { composedSpec, podFolder, writeRun } from "./settings.ts";
@@ -169,7 +169,14 @@ export async function readSchedule(
   return reading;
 }
 
-type Edit = RevitApplyParameterValues.Req.ParameterValueEdit & { key: string };
+/** The domain's 500-cell cap per call; larger reviews refuse before dispatch and keep every cell. */
+const CELL_CAP = 500;
+type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
+type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
+/**
+ * Each staged cell with its reviewed binding, handed back unchanged: the domain compares every
+ * target inside its transaction and refuses stale, blocked, or incomplete evidence per cell.
+ */
 function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
   const edits: Edit[] = [];
   const failures: { key: string; error: string }[] = [];
@@ -179,85 +186,62 @@ function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
     const binding = reading.snapshot.rows
       .find((r) => r.rowNumber === rowNumber)
       ?.bindings.find((b) => b.columnNumber === columnNumber);
-    if (
-      !binding ||
-      !binding.isEditable ||
-      binding.blocker !== "None" ||
-      !binding.targetElementIds.length ||
-      (binding.parameterId == null && !binding.parameterName)
-    ) {
-      failures.push({
-        key,
-        error:
-          binding?.blocker !== "None"
-            ? (binding?.blocker ?? "Missing binding")
-            : "Cell is not editable",
-      });
-      continue;
-    }
-    for (const elementId of binding.targetElementIds)
+    if (!binding) failures.push({ key, error: "Missing binding" });
+    else
       edits.push({
         key,
-        elementId,
-        ...(binding.parameterId != null
-          ? { parameterId: binding.parameterId }
-          : { parameterName: binding.parameterName! }),
+        rowNumber,
+        columnNumber,
+        expectedBinding: binding as ScheduleCellsApply.Req.ScheduleCellBinding,
         value: cell.staged.value,
       });
   }
   return { edits, failures };
 }
-/** Native indices are explicit. Out-of-range false entries are transaction diagnostics, never edit acknowledgments. */
+/**
+ * One result per request cell, at that cell's index, for that cell's row and column. Anything else
+ * is malformed; a missing result is unresolved. Nested target results stay per cell (their index is
+ * the cell's own `currentBinding.targets` position) and are never re-mapped here.
+ */
 function acknowledge(raw: unknown, edits: Edit[]) {
-  const value = raw as { applied?: unknown; dryRun?: unknown; results?: unknown } | null;
-  const acknowledgments = new Map<number, { ok: boolean; error?: string }>();
-  const diagnostics: unknown[] = [];
+  const value = raw as Partial<ScheduleCellsApply.Res.Response> | null;
+  const results = new Map<number, CellResult>();
   let malformed =
     !value ||
     value.dryRun !== false ||
-    !Number.isInteger(value.applied) ||
+    !Number.isInteger(value.appliedCells) ||
     !Array.isArray(value.results);
   for (const row of Array.isArray(value?.results) ? value.results : []) {
-    if (!row || !Number.isInteger(row.index) || row.index < 0 || typeof row.ok !== "boolean") {
+    const edit = row && Number.isInteger(row.index) ? edits[row.index] : undefined;
+    if (
+      !edit ||
+      typeof row.ok !== "boolean" ||
+      row.rowNumber !== edit.rowNumber ||
+      row.columnNumber !== edit.columnNumber ||
+      results.has(row.index)
+    ) {
       malformed = true;
       continue;
     }
-    if (row.index >= edits.length) {
-      if (row.ok !== false) malformed = true;
-      diagnostics.push(row);
-      continue;
-    }
-    if (acknowledgments.has(row.index)) malformed = true;
-    acknowledgments.set(row.index, row);
+    results.set(row.index, row);
   }
-  const positive = [...acknowledgments.values()].filter((r) => r.ok).length;
-  if (value?.applied !== positive) malformed = true;
-  const capRefused =
-    edits.length > 500 &&
-    value?.applied === 0 &&
-    value?.dryRun === false &&
-    acknowledgments.get(0)?.ok === false;
+  if (value?.appliedCells !== [...results.values()].filter((r) => r.ok).length) malformed = true;
   const successes: string[] = [],
     failures: { key: string; error: string }[] = [];
   let unresolved = malformed;
-  // ponytail: quadratic acknowledgment scan; native calls cap at 500, cap refusals retain all cells.
-  for (const key of new Set(edits.map((e) => e.key))) {
-    const indices = edits.flatMap((e, i) => (e.key === key ? [i] : []));
-    const missing = indices.some((i) => !acknowledgments.has(i));
-    if (missing && !capRefused) unresolved = true;
-    const failed = indices.map((i) => acknowledgments.get(i)).find((r) => r?.ok === false);
-    if (!malformed && !capRefused && !missing && !failed) successes.push(key);
+  edits.forEach((edit, index) => {
+    const result = results.get(index);
+    if (!result) unresolved = true;
+    if (!malformed && result?.ok) successes.push(edit.key);
     else
       failures.push({
-        key,
-        error: capRefused
-          ? "Native 500-edit cap refused the whole call"
-          : malformed
-            ? "Malformed native acknowledgment"
-            : (failed?.error ?? "Missing native edit acknowledgment"),
+        key: edit.key,
+        error: malformed
+          ? "Malformed native acknowledgment"
+          : (result?.error ?? (result ? "Native refused the cell" : "Missing native cell result")),
       });
-  }
-  return { successes, failures, diagnostics, unresolved };
+  });
+  return { successes, failures, results, diagnostics: value?.diagnostics ?? [], unresolved };
 }
 export async function admitScheduleAction(
   raw: unknown,
@@ -288,12 +272,17 @@ export async function admitScheduleAction(
       if (!view || view.revision !== base.revision) throw refused("Work changed");
       const document = scheduleGridDocumentSchema.parse(view.doc);
       if (!document.basis) throw refused("Select a binding reading before staging edits");
-      const reading = await captures.schedule(document.basis.captureId);
+      const reading = await captures.schedule(document.basis.captureId).catch((error) => {
+        throw error instanceof StaleScheduleReading ? refused(error.message) : error;
+      });
       if (base.key.work !== reading.workspaceId || !same(reading.target, target))
         throw refused("Work binding belongs to another schedule/target lifetime");
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");
+      if (edits.length > CELL_CAP)
+        throw refused(`${edits.length} staged cells exceed the ${CELL_CAP}-cell cap per push`);
+      if (!reading.snapshot.scheduleUniqueId) throw refused("Schedule unique identity is missing");
       if (pod) await runPods(deps, podFolder(pod, podContext(deps, bridge)));
       const at = new Date().toISOString();
       return { process: reading.process, document, reading, edits, failures, at };
@@ -308,50 +297,26 @@ export async function admitScheduleAction(
         at: string;
       };
       const { edits, reading, document } = prepared;
-      // Revalidate bindings with an actual read before effects. Never substitute newly resolved handles for reviewed ones.
-      if (!execution.recorded("native", "revit.apply.parameter-values")) {
-        const fresh = (await readSchedule(
-          {
-            key: "schedule.grid.snapshot",
-            target,
-            input: {
-              scheduleId: reading.snapshot.scheduleId,
-              maxRows: Math.min(2000, Math.max(200, reading.snapshot.rows.length + 1)),
-            },
-          },
-          captures,
-          bridge,
-          deps,
-        )) as ScheduleReading;
-        if (
-          fresh.workspaceId !== reading.workspaceId ||
-          !same(expand(document, fresh), { edits, failures: prepared.failures })
-        )
-          throw refused("Schedule bindings changed; review the new reading before applying");
-      }
+      // The journal seals this exact request as the step input before dispatch. The domain compares
+      // every reviewed target against a fresh read inside its own transaction.
+      const request: ScheduleCellsApply.Req.Request = {
+        scheduleId: reading.snapshot.scheduleId,
+        scheduleUniqueId: reading.snapshot.scheduleUniqueId!,
+        edits: edits.map(({ key: _key, ...edit }) => edit),
+        transactionName: "Schedule grid push",
+      };
       const native = edits.length
-        ? await execution.step(
-            "native",
-            "revit.apply.parameter-values",
-            {
-              edits: edits.map(({ key: _key, ...edit }) => edit),
-              transactionName: "Schedule grid push",
-            },
-            async (id) => {
-              await current(bridge, target, prepared.process);
-              return invoke(
-                bridge,
-                target,
-                "revit.apply.parameter-values",
-                {
-                  edits: edits.map(({ key: _key, ...edit }) => edit),
-                  transactionName: "Schedule grid push",
-                },
-                id,
-              );
-            },
-          )
-        : { applied: 0, dryRun: false, results: [] };
+        ? await execution.step("native", "schedule.cells.apply", request, async (id) => {
+            await current(bridge, target, prepared.process);
+            return invoke(bridge, target, "schedule.cells.apply", request, id);
+          })
+        : {
+            appliedCells: 0,
+            appliedParameterWrites: 0,
+            dryRun: false,
+            results: [],
+            diagnostics: [],
+          };
       const outcome = acknowledge(native, edits);
       const failures = [...prepared.failures, ...outcome.failures];
       let publication: unknown;
@@ -427,7 +392,14 @@ export async function admitScheduleAction(
       if (readbackError)
         throw new ActionIncomplete("Native outcome recorded; actual readback unavailable", result);
       // ponytail: a settled push only; an incomplete one files its run when resume settles it.
-      const receipt = pushReceipt(pod ?? null, reading, readback!, edits, failures);
+      const receipt = pushReceipt(
+        pod ?? null,
+        reading,
+        readback!,
+        edits,
+        failures,
+        outcome.results,
+      );
       // One run per admission: a resume overwrites the same folder (`writeRun`).
       const run = pod
         ? await runPods(
@@ -458,6 +430,7 @@ function pushReceipt(
   after: ScheduleReading,
   edits: Edit[],
   failures: { key: string; error: string }[],
+  results: Map<number, CellResult>,
 ) {
   // The text the grid shows for a cell (`route/schedules/workspace.tsx`): binding value, else the column's value.
   const cell = ({ snapshot }: ScheduleReading, key: string) => {
@@ -485,16 +458,19 @@ function pushReceipt(
     scheduleId: before.snapshot.scheduleId,
     scheduleUniqueId: before.snapshot.scheduleUniqueId,
     cells: keys.map((key) => {
-      const written = edits.filter((e) => e.key === key);
+      const index = edits.findIndex((e) => e.key === key);
+      const binding = edits[index]?.expectedBinding;
       return {
         cell: key,
-        elementIds: written.map((e) => e.elementId),
-        parameterId: written[0]?.parameterId ?? null,
-        parameterName: written[0]?.parameterName ?? null,
-        value: written[0]?.value ?? null,
+        elementIds: binding?.targets.map((t) => t.elementId) ?? [],
+        parameterId: binding?.parameterId ?? null,
+        parameterName: binding?.parameterName ?? null,
+        value: edits[index]?.value ?? null,
         before: cell(before, key),
         after: cell(after, key),
         error: failures.find((f) => f.key === key)?.error ?? null,
+        // Per target of this cell, in its own target order: the native write result.
+        writes: results.get(index)?.parameterResults ?? [],
       };
     }),
   };

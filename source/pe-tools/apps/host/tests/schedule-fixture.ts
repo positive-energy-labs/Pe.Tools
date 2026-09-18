@@ -1,3 +1,14 @@
+/** One reviewed native parameter behind a binding. */
+export const target = (elementId: number, rawValue: string | null = "100") => ({
+  elementId,
+  parameterId: 555,
+  parameterName: "Load",
+  storageType: "Double",
+  isReadOnly: false,
+  hasValue: rawValue != null,
+  rawValue,
+});
+
 export function detailResponse() {
   return {
     documentTitle: "Project.rvt",
@@ -38,11 +49,14 @@ export function detailResponse() {
                 parameterName: "Load",
                 parameterId: 555,
                 storageType: "Double",
+                rawValue: "100",
                 displayValue: "100 VA",
                 isTypeParameter: true,
                 isEditable: true,
                 blocker: "None",
                 hasMixedValues: false,
+                // One shared type parameter behind both instances.
+                targets: [target(7), target(8)],
               },
             ],
           },
