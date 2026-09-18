@@ -43,6 +43,13 @@ export function editCell(cell: HTMLTableCellElement, replacement?: string): bool
     'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])',
   );
   if (!editor) {
+    // A native select is edited by focusing it; its own typeahead and arrows take over.
+    const select = cell.querySelector<HTMLSelectElement>("select:not([disabled])");
+    if (select) {
+      if (replacement !== undefined) return false;
+      select.focus();
+      return true;
+    }
     // A button-shaped editor (a CellSelect's trigger) declares itself; editing it is opening it.
     const opener = cell.querySelector<HTMLButtonElement>("[data-cell-editor]:not([disabled])");
     if (!opener || replacement !== undefined) return false;
