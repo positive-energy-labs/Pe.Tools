@@ -81,6 +81,7 @@ export function DraftEditor({
       </div>
 
       <ArtifactFrame>
+        {/* DOMAIN (kept hand table): the table's shape is the document being edited; its headings are Inputs. */}
         <table className="border-collapse">
           <thead>
             <tr>

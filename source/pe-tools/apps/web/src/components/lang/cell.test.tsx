@@ -14,7 +14,7 @@ const t = (
   out: Awaited<ReturnType<CellTransition["run"]>> = null,
 ): CellTransition => ({ kind, run: vi.fn(async () => out) });
 
-/** Row scale inside the real MasterTable: one row, one column drawing the cell. */
+/** Row scale inside the real Table: one row, one column drawing the cell. */
 const inTable = (node: React.ReactNode) => {
   const view = render(
     <Table
@@ -82,7 +82,7 @@ test("a run in flight marks the cell busy and inerts its verbs", async () => {
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
-test("inside MasterTable, a focused cell fires a / d / u through the hotkey registry", async () => {
+test("inside Table, a focused cell fires a / d / u through the hotkey registry", async () => {
   const [accept, deny, unstage] = [t("accept"), t("deny"), t("unstage")];
   inTable(<StateCell value="10in" scale="row" transitions={[accept, deny, unstage]} />);
   const td = gridcell();

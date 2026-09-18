@@ -236,7 +236,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
   }, [columns, rows, tableState]);
 
   /**
-   * THE DRILL-IN, on the same primitive. Same MasterTable, same identity cell, same editable type
+   * THE DRILL-IN, on the same primitive. Same Table, same identity cell, same editable type
    * cell — narrowed to one type and opened up with the spine. The crossing verbs live ONLY in the
    * pane header (capture <type> / apply <type>): a per-row verb column was tried and retired —
    * the arrows read as claims about direction the cells already carry, and a bulk decision made

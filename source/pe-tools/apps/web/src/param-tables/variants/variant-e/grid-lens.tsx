@@ -18,6 +18,7 @@ export function VariantGridLens({
   plainHead: (label: string, sub?: string) => ReactNode;
 }) {
   return (
+    // OWED (census #12, accident): moves onto Table with the /param-tables cutover, not separately.
     <table className="w-full" style={{ ["--pe-on" as string]: token("artifact") }}>
       <thead>
         <tr

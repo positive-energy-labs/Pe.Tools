@@ -1,16 +1,12 @@
 {
   "rawTable": {
-    "total": 13,
+    "total": 8,
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
-      "families": 1,
       "lib": 1,
-      "ops": 1,
       "param-tables": 3,
-      "parameter-links": 1,
-      "route": 1,
-      "runs": 2,
+      "runs": 1,
       "workbench": 1
     }
   },

@@ -2,7 +2,7 @@
 /**
  * O8-c (floor: no silent loss of human work). Typing into a second matrix cell while the first
  * cell's write is in flight must survive that write landing: the text stays, and so does focus.
- * Real MasterTable, real families columns and ProposalCell; the store is a deferred write.
+ * Real Table, real families columns and ProposalCell; the store is a deferred write.
  */
 import { useState } from "react";
 import { familyCellKey, type FamilyCellAddress, type FamilyCellState } from "@pe/agent-contracts";

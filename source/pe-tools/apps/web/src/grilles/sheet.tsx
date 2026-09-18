@@ -1,8 +1,7 @@
 /**
- * THE SHEET — the product, like /family: one MasterTable row per candidate profile, inputs
+ * THE SHEET — the product, like /family: one Table row per candidate profile, inputs
  * editable in the row, derived columns live; the active row is what the drawing and chart show.
  * No drawing in the row: per-slot information lives only in the drawing pane.
- * Row density is a MasterTable gap owned by the design-system ledger; this consumer uses it as-is.
  */
 import { NumberCell } from "#/components/master-table/cells";
 import { Table } from "#/components/master-table/table";

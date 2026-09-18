@@ -238,6 +238,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
       />
       <FieldMessages messages={field.errors} />
       <div className="overflow-auto">
+        {/* DOMAIN (kept hand table): a form control over a JSON array whose headers edit the keys. */}
         <table className="min-w-full">
           <thead className="text-left">
             <tr>

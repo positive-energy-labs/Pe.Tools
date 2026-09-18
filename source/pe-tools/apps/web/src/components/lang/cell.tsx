@@ -134,7 +134,7 @@ function CellKeys({
 
 /**
  * The element that owns a hosted cell's keyboard focus, provided by whatever hosts the cell:
- * MasterTable hands each cell its td. Absent, the cell is its own host.
+ * Table hands each cell its td. Absent, the cell is its own host.
  */
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
@@ -163,7 +163,7 @@ export function StateCell(props: StateCellProps) {
       setRefusal(out ? out.message : null);
     });
   };
-  // The cell's keyboard host: whatever hosts the cell provides one (MasterTable its td); a cell
+  // The cell's keyboard host: whatever hosts the cell provides one (Table its td); a cell
   // hosted by nothing is its own host, focusable at any scale. Keys register only while it (or
   // its input) holds focus; Escape from the input hands focus back to it.
   const provided = useContext(CellHost);

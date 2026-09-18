@@ -425,7 +425,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // ── grounding highlight — independent of proposals, so it survives acceptance ──────────────────
 
   // MEMOISED, and that is load-bearing rather than tidy: `columns` depends on nothing that hover
-  // touches, but a fresh Set identity on every render would still churn the array, and MasterTable
+  // touches, but a fresh Set identity on every render would still churn the array, and Table
   // hands each column's `cell` to FlexRender as a COMPONENT TYPE. A new function identity there is
   // a new type, which unmounts and remounts every cell — including the input you are typing in.
   // Stable focus sets keep the table's inputs alive while the pointer moves.
@@ -462,7 +462,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
 
   // ── columns ───────────────────────────────────────────────────────────────────────────────────
   //
-  // Built by shared factories, because the DRILL-IN uses the same MasterTable and must therefore
+  // Built by shared factories, because the DRILL-IN uses the same Table and must therefore
   // use literally the same cells: the identity column and a type column are the two pieces both
   // modes need, and a per-type view that merely LOOKED like the cross-type table would drift away
   // from it the first time either changed.

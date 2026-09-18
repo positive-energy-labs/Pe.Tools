@@ -170,7 +170,7 @@ const SPECIMENS: readonly Specimen[] = [
     id: "facet",
     name: "combobox · facet filter",
     consumers:
-      "components/master-table/master-table.tsx → every MasterTable column header (atlas/takeoffs, families, data-tables)",
+      "components/master-table/master-table-header.tsx → every Table column header (atlas/takeoffs, families, data-tables)",
     shape: "explicit trigger anchor · in-popup search · bottom/start with collision fit",
     defects: [
       "FIXED — single-value Combobox popups keep the anchor as their preferred width with a readable 10rem floor.",

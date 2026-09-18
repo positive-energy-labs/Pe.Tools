@@ -1,4 +1,4 @@
-/** MasterTable's public product model. TanStack's types stay behind the component boundary. */
+/** Table's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
 import type { StateCellProps } from "#/components/lang/cell";

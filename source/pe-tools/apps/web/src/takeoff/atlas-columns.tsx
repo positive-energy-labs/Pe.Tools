@@ -256,7 +256,7 @@ export function useAtlasColumns({
       {
         // THE CELL-STATE CLAUSE, consumer #2. This column is a DIFF — what the .r10 holds against
         // what the model holds — which is exactly what the grammar's `agree` axis is for. The
-        // column declares what it draws; MasterTable renders `StateCell`, and facet/sort fall
+        // column declares what it draws; Table renders `StateCell`, and facet/sort fall
         // through to the grammar's own vocabulary and attention order. The old hand-rolled
         // `sort: identifier` is deliberately dropped: drift now sorts to the top, which is the
         // order the work happens in (SURFACE-PHILOSOPHY §1).

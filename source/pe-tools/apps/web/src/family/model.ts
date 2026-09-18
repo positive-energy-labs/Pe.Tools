@@ -52,7 +52,7 @@ export interface FamilyPageModel {
   familyName: string;
   typeNames: string[];
   /** Where a ghost row's ONE merged literal cell is drawn: the first type column. Its neighbours
-   * are suppressed, which is as close to a colspan as MasterTable can get today. */
+   * are suppressed, which is as close to a colspan as Table can get today. */
   mergeAnchor: string;
   spec: ProtoSpec | null;
   live: ProtoLive | null;
@@ -516,7 +516,7 @@ export function isUnsavedAt(
 const PIN_RANK: Record<PRow["kind"], number> = { profile: 0, "live-only": 1, ghost: 2 };
 
 /**
- * MasterTable has no row pinning, so the rank rides in front of the sort key as one character.
+ * Table has no row pinning, so the rank rides in front of the sort key as one character.
  * Descending flips the rank too, so the partition survives BOTH directions — a plain prefix would
  * pin ghosts to the bottom ascending and to the top descending, which is worse than not pinning.
  * This is a workaround, not a design: the primitive owes `pin: (row) => "bottom"`.
