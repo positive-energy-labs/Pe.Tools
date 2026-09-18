@@ -42,7 +42,7 @@ export function familySource(
       if (!model?.family || typeof model.family.name !== "string")
         throw new Error("The document has no family header.");
       model.types ??= {};
-      if (model.parameters == null && model.familyParameters == null) model.parameters = {};
+      model.parameters ??= {};
       projected = buildFamilyPageModel(projectFamilyModel(model, evidence, { path: relativePath }));
     } catch (error) {
       model = null;
@@ -56,6 +56,7 @@ export function familySource(
       if (!captured?.family || typeof captured.family.name !== "string")
         throw new Error("The capture has no family header.");
       captured.types ??= {};
+      captured.parameters ??= {};
       projected = buildFamilyPageModel(
         projectFamilyModel(captured, evidence, { path: "Captured family (not an authored file)" }),
       );
