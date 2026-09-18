@@ -8,8 +8,10 @@ import type {
 } from "@mastra/core/agent-controller";
 import { Buffer } from "node:buffer";
 import {
+  askExpiryOf,
   threadAccess,
   type DeferredToolResultRef,
+  type ExpiredAsk,
   type ThreadViewState,
   type ToolResultResponse,
   type ToolResultSummary,
@@ -49,10 +51,12 @@ export async function readThreadState(
     runtime.controller.listAvailableModels(),
   ]);
   const { messages, deferredResults } = projectThreadMessages(storedMessages);
+  const expiredAsks = selectExpiredAsks(storedMessages, session);
   const permissions = session.permissions.getRules();
   return {
     messages,
     ...(deferredResults.length ? { deferredResults } : {}),
+    ...(expiredAsks.length ? { expiredAsks } : {}),
     models: { currentId: session.model.get() || undefined, available },
     permissions,
     access: threadAccess(permissions),
@@ -62,6 +66,49 @@ export async function readThreadState(
 }
 
 type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number];
+
+/** Built-ins that ask through a tool suspension rather than the permission gate. */
+const suspendingAsks = new Set(["ask_user", "request_access", "submit_plan"]);
+
+/**
+ * Asks whose turn is gone, derived without a write: a stored ask call that never reached a terminal
+ * state and that nothing live awaits. Turn end, cancel (an abort-declined gate stays `call`, only a
+ * human denial is `output-denied`) and host restart all land here; the trigger is not recorded.
+ * ponytail: "was an ask" reads the CURRENT approval policy; a policy changed since the ask would
+ * misfile it. Upgrade: record the ask on `tool_approval_required` if that ever matters.
+ */
+export function selectExpiredAsks(
+  messages: ThreadMessage[],
+  session: Pick<Session, "displayState" | "resolveToolApproval">,
+): ExpiredAsk[] {
+  const display = session.displayState.get();
+  const live = new Set([
+    display.pendingApproval?.toolCallId,
+    ...display.pendingSuspensions.keys(),
+    ...(display.isRunning ? display.activeTools.keys() : []),
+  ]);
+  return messages.flatMap((message) =>
+    message.content.parts.flatMap((part) => {
+      if (part.type !== "tool-invocation") return [];
+      const { state, toolCallId, toolName } = part.toolInvocation;
+      if (state !== "call" && state !== "partial-call") return [];
+      if (live.has(toolCallId)) return [];
+      if (!suspendingAsks.has(toolName) && session.resolveToolApproval(toolName) !== "ask")
+        return [];
+      return [{ messageId: message.id, toolCallId, toolName }];
+    }),
+  );
+}
+
+/** Drops the resume data a run that ended leaves parked, so an expired ask cannot be answered. */
+export function expireAsks(
+  session: Pick<Session, "suspensions">,
+  reason: Parameters<typeof askExpiryOf>[0],
+): boolean {
+  if (askExpiryOf(reason) === null) return false;
+  session.suspensions.clear();
+  return true;
+}
 
 export function projectThreadMessages(messages: ThreadMessage[]): {
   messages: ThreadMessage[];

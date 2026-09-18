@@ -19,6 +19,31 @@ export function threadAccess(permissions: unknown): ThreadViewState["access"] {
   );
 }
 
+/**
+ * The one ask lifetime: an ask (permission gate or tool suspension) lives as long as the turn
+ * awaiting it. Navigation and reload are not here: the ask is thread state, replayed on reattach.
+ * Open (Kai): a new turn sent while suspensions are parked leaves them live; it is not a turn end.
+ */
+export const askExpiryTriggers = ["turn-end", "cancel", "host-restart"] as const;
+export type AskExpiry = (typeof askExpiryTriggers)[number];
+
+/** A run's end reason → the trigger that expires its asks, or null while the run is parked on them. */
+export function askExpiryOf(
+  reason: "complete" | "error" | "aborted" | "suspended" | undefined,
+): AskExpiry | null {
+  if (reason === "suspended") return null;
+  return reason === "aborted" ? "cancel" : "turn-end";
+}
+
+export const askLifetime = `expires on ${askExpiryTriggers.map((trigger) => trigger.replace("-", " ")).join(" / ")}; survives navigation and reload`;
+
+/** A stored ask call that no live turn awaits any more: a transcript record, never answerable. */
+export interface ExpiredAsk {
+  messageId: string;
+  toolCallId: string;
+  toolName: string;
+}
+
 export type ToolResultSummary =
   | { kind: "array"; items: number }
   | { kind: "object"; keyCount: number; keys: string[] }
@@ -47,6 +72,7 @@ export interface ThreadViewState<
 > {
   messages: TMessage[];
   deferredResults?: DeferredToolResultRef[];
+  expiredAsks?: ExpiredAsk[];
   inspect: TInspect;
   models: { currentId?: string; available: TModel[] };
   permissions: TPermissions;

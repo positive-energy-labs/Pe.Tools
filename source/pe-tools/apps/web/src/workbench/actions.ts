@@ -1,6 +1,6 @@
-import { selectApprovals, type ChatState } from "./chat-state";
+import type { ChatState } from "./chat-state";
 import type { SessionClient } from "./provider/thread-summary";
-import { rejectApproval, toFiles } from "./provider/use-workbench";
+import { toFiles } from "./provider/use-workbench";
 import type { WorkbenchAttachment } from "./prompt";
 
 export type ChatActionService = Pick<
@@ -47,12 +47,9 @@ export const CHAT_ACTIONS = {
     needs: "A session",
     ready: (context: ChatActionContext) => (context.session ? null : "Session is not ready"),
     run: async (context: ChatActionContext) => {
-      const session = context.session;
-      if (!session) throw Error("Session is not ready");
-      await Promise.all([
-        ...selectApprovals(context.display).map((approval) => rejectApproval(session, approval)),
-        session.abort(),
-      ]);
+      if (!context.session) throw Error("Session is not ready");
+      // Cancel expires the turn's open asks (runtime abort); it never answers them.
+      await context.session.abort();
     },
   } satisfies ChatAction<void>,
 } as const;

@@ -4,6 +4,7 @@
  * second copy. `send` and `cancel` run `workbench/actions.ts` over the session the provider holds,
  * because that session IS chat's host caller; `new` and `fork` run the provider's thread verbs.
  */
+import { askLifetime } from "@pe/agent-contracts";
 import { z } from "zod";
 
 import { defineRoute, type RouteManifest } from "#/route";
@@ -79,7 +80,7 @@ export const chatManifest = (
       },
       cancel: {
         label: "cancel",
-        says: "stops the running turn and rejects every approval it is still waiting on",
+        says: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,

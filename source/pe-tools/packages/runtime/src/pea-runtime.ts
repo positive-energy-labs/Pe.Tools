@@ -44,6 +44,7 @@ import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "./scope-store.ts";
+import { expireAsks } from "./thread-state.ts";
 export { messageContents } from "./message-contents.ts";
 import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
@@ -386,8 +387,9 @@ function createPeaSessionAdmission(
           ),
         });
   };
+  // The ask lifetime and the turn's documents end together, on the one expiry predicate.
   const unsubscribeDocumentCleanup = session.onBeforeAgentEnd(async (event) => {
-    if (event.reason !== "suspended") await finishOwnedDocuments();
+    if (expireAsks(session, event.reason)) await finishOwnedDocuments();
   });
   let restoreScopedThreadLifecycle: (() => void) | undefined;
   let admitted = false;

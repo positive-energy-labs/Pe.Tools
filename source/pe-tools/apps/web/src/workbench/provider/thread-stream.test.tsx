@@ -295,3 +295,41 @@ test("a failed turn keeps its server detail separate from body and connection fa
   act(() => emit({ type: "agent_end", reason: "error" } as AgentControllerEvent));
   expect(result.current.turnFailed).toBe(true);
 });
+
+test("a live ask survives reload and navigation: every attach replays the session snapshot", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(threadBody()))),
+  );
+  const ask = { toolCallId: "ask-1", toolName: "ask_user", suspendPayload: { question: "Which?" } };
+  // The host prefixes every (re)attach with the live session's display snapshot.
+  const session = (pendingSuspensions: Record<string, typeof ask>) => ({
+    subscribe: async (options: { onEvent: (event: AgentControllerEvent) => void }) => {
+      queueMicrotask(() =>
+        options.onEvent({
+          type: "display_state_changed",
+          displayState: { isRunning: false, pendingApproval: null, pendingSuspensions },
+        } as unknown as AgentControllerEvent),
+      );
+      return { unsubscribe: () => {} };
+    },
+  });
+  const a = { id: "ask-a", session: session({ [ask.toolCallId]: ask }) as never };
+  const b = { id: "ask-b", session: session({}) as never };
+  const asks = (chat: ChatState) => selectApprovals(chat.display).map((item) => item.toolCallId);
+
+  const reload = () =>
+    renderHook(({ thread }) => useThreadStream({ origin: "http://host", thread }), {
+      initialProps: { thread: a },
+    });
+  const first = reload();
+  await waitFor(() => expect(asks(first.result.current.chat)).toEqual(["ask-1"]));
+  first.unmount();
+
+  const { result, rerender } = reload();
+  await waitFor(() => expect(asks(result.current.chat)).toEqual(["ask-1"]));
+  rerender({ thread: b });
+  await waitFor(() => expect(asks(result.current.chat)).toEqual([]));
+  rerender({ thread: a });
+  await waitFor(() => expect(asks(result.current.chat)).toEqual(["ask-1"]));
+});
