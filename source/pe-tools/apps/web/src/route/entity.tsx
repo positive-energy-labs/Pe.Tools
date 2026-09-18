@@ -219,6 +219,7 @@ export function EntityRouteView({
                   }}
                   replan={() => void handle.actions.plan.run()}
                   refusal={handle.actions.apply.refusal}
+                  stale={view?.stale}
                   busy={handle.busy !== null}
                 />
               ) : null}

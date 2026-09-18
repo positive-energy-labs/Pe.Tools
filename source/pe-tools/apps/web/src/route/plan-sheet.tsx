@@ -11,7 +11,7 @@ import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { cn } from "#/lib/utils";
 
-import type { PlanEntry, PlanSheet } from "./manifest";
+import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./manifest";
 
 const CELL = "face-mono block truncate px-(--item-pad-x)";
 
@@ -62,6 +62,7 @@ export function PlanSheetView({
   stop,
   replan,
   refusal,
+  stale = false,
   busy,
 }: {
   /** null = the plan no longer describes the spec (or was never read). */
@@ -77,6 +78,8 @@ export function PlanSheetView({
   replan: () => void;
   /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
+  /** The staged cells moved since this plan: said before the press, in the host's words. */
+  stale?: boolean;
   busy: boolean;
 }) {
   const head = (
@@ -141,6 +144,7 @@ export function PlanSheetView({
     <section aria-label="Confirmation sheet" className="flex min-h-0 flex-col">
       {head}
       <div className="min-h-0 overflow-auto px-2 py-1">
+        {stale ? <OutcomeLine kind="refused" label="stale plan" says={STALE_PLAN} /> : null}
         {sheet.entries.flatMap((entry) =>
           entry.warnings.map((warning) => (
             <OutcomeLine

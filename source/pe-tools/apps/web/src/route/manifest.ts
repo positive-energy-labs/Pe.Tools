@@ -10,7 +10,14 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import type { ReactNode } from "react";
 import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
-import { semanticActions, type ActionBases, type SemanticActionKey } from "@pe/agent-contracts";
+import {
+  sameValue,
+  semanticActions,
+  stagedEntries,
+  type ActionBases,
+  type Rung,
+  type SemanticActionKey,
+} from "@pe/agent-contracts";
 import type {
   ExecutionTarget,
   Reading,
@@ -178,7 +185,15 @@ export const byPlan = (included: readonly PlanEntry[]) => {
 /** The plan apply confirms (dogma law 9), as the plan workflow returned it. */
 export interface PlanSheet {
   entries: readonly PlanEntry[];
+  /**
+   * The staged value at each cell a staged plan read, as it was when planned: the plan's own
+   * evidence. A cell that no longer holds it makes the sheet stale, the host's refusal rule.
+   */
+  staged?: Readonly<Record<string, Rung>>;
 }
+
+/** The host's words for a plan whose staged cells moved; the sheet says them before the press. */
+export const STALE_PLAN = "The staged cells changed since this plan; plan again";
 
 export interface EntityPage {
   stage: EntityStage;
@@ -270,7 +285,10 @@ export interface EntityRouteDef<W, R extends string, P> {
    * both halves of the confirmation; with none it falls back to `plan` over the page's member.
    */
   staged?: {
-    count: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => number;
+    /** The audit's keyed cells; the staged ones are what plan generates the spec from. */
+    cells: (
+      ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+    ) => Readonly<Record<string, { staged?: Rung | null }>>;
     plan: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => Promise<PlanSheet>;
     apply: (
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
@@ -377,14 +395,23 @@ export const memberOf = (view: Viewed) =>
 export function sheetOf<W, R extends string, P>(
   def: EntityRouteDef<W, R, P>,
   view: EntityView<W, R, P>,
-): { sheet: PlanSheet; excluded: ReadonlySet<string>; included: readonly PlanEntry[] } | null {
+): {
+  sheet: PlanSheet;
+  excluded: ReadonlySet<string>;
+  included: readonly PlanEntry[];
+  stale: boolean;
+} | null {
   const sheet = view.page.sheet;
   if (!sheet) return null;
   const excluded = new Set(def.plan?.excluded?.(view) ?? []);
+  const now = sheet.staged && def.staged ? def.staged.cells(view as never) : {};
   return {
     sheet,
     excluded,
     included: sheet.entries.filter((entry) => !entry.flag && !excluded.has(entry.id)),
+    stale: Object.entries(sheet.staged ?? {}).some(
+      ([cell, rung]) => !sameValue(now[cell]?.staged, rung),
+    ),
   };
 }
 
@@ -401,7 +428,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
   /** How many edits the audit has staged; 0 = the verbs read the page's saved member instead. */
-  const stagedCount = (ctx: EntityCtx) => staged?.count(ctx as never) ?? 0;
+  const stagedCells = (ctx: EntityCtx) =>
+    stagedEntries(staged?.cells(ctx as never) ?? {}) as [string, { staged: Rung }][];
+  const stagedCount = (ctx: EntityCtx) => stagedCells(ctx).length;
   const sheetView = (ctx: EntityCtx) => sheetOf(def as never, ctx as never);
   const sourceOf = (ctx: EntityCtx): MemberSource => {
     const member = memberOf(ctx);
@@ -459,8 +488,10 @@ export function entityRoute<W, const R extends string, P extends object, const A
       return plan ? savedSpec(ctx) : "nothing is staged to plan";
     },
     run: async (ctx) => {
+      // What the plan reads, taken before it reads it: the sheet's staged evidence.
+      const read = Object.fromEntries(stagedCells(ctx).map(([cell, { staged }]) => [cell, staged]));
       const sheet = stagedCount(ctx)
-        ? await staged!.plan(ctx as never)
+        ? { ...(await staged!.plan(ctx as never)), staged: read }
         : await plan!.read(ctx as never, sourceOf(ctx));
       ctx.setPage({ stage: "apply", confirming: true, sheet });
     },
@@ -480,6 +511,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       if (!ctx.page.confirming) return "plan first";
       const view = sheetView(ctx);
       if (!view) return "the plan no longer describes this spec; plan again";
+      if (view.stale) return STALE_PLAN;
       return view.included.length ? null : "no included row has changes to apply";
     },
     run: async (ctx) => {

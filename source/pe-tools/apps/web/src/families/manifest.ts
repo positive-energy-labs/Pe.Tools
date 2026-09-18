@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
-  stagedEntries,
   type FamiliesRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -85,7 +84,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
      * file — but one exists, the sheet names it per row, and the receipt names it.
      */
     staged: {
-      count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
+      cells: (ctx) => ctx.work.doc?.cells ?? {},
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");

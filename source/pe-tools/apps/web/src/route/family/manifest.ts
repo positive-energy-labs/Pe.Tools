@@ -13,7 +13,6 @@ import {
   familyProjectionSchema,
   podMemberSourceSchema,
   settingsSnapshotSchema,
-  stagedEntries,
   type ActionReceipt,
   type ActionStatus,
   type FamilyCapture,
@@ -121,7 +120,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
    * (capture's own save, run and all), plans it, and apply sends that member's hash.
    */
   staged: {
-    count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
+    cells: (ctx) => ctx.work.doc?.cells ?? {},
     plan: async (ctx) => {
       const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
       if (!spec) throw Error("read the family first");
