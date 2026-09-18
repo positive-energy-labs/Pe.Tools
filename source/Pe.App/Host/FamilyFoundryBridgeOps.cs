@@ -80,7 +80,7 @@ internal static class FamilyFoundryBridgeOps {
         var inputOutputs = PodRuns.WriteInputIn(run, new {
             operation = "family.build",
             source = request.Source,
-            target = new { kind = "new-family-document", processId = Environment.ProcessId, processStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(), revitVersion = application.VersionNumber },
+            target = new { kind = "new-family-document", process = ProcessEvidence(), revitVersion = application.VersionNumber },
             options = new { request.ModelDirectory },
             unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
         }, request.SpecJson);
@@ -178,10 +178,14 @@ internal static class FamilyFoundryBridgeOps {
             openId = tracked?.OpenId(),
             document.Title,
             path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
-            processId = Environment.ProcessId,
-            processStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+            process = ProcessEvidence(),
             unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
         };
+    }
+
+    private static object ProcessEvidence() {
+        using var process = Process.GetCurrentProcess();
+        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
     }
 
     /// <summary>Every failure with its full text: op-level diagnostics first, then each family's own. The run keeps it as `failures.json`.</summary>

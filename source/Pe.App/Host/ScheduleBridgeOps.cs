@@ -104,10 +104,14 @@ internal static class ScheduleBridgeOps {
             openId = tracked?.OpenId(),
             document.Title,
             path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
-            processId = Environment.ProcessId,
-            processStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+            process = ProcessEvidence(),
             unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
         };
+    }
+
+    private static object ProcessEvidence() {
+        using var process = Process.GetCurrentProcess();
+        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
     }
 
     private static object ResultReport(ScheduleCreationResult result) => new {
