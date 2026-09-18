@@ -260,7 +260,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             memberSha256: source.sha256,
             operation,
             planHash,
-            outcome: "succeeded",
+            outcome: "Succeeded",
             outputs: [],
             reason: "simulated demo engine; nothing was written to Revit",
           },

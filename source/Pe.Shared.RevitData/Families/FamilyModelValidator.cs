@@ -216,8 +216,8 @@ public static class FamilyModelValidator {
     }
 
     private static void CheckValue(PortableValue v, DataType dt, string path, List<FamilyModelDiagnostic> d) {
-        var ok = dt switch {
-            DataType.Length or DataType.PipeSize or DataType.DuctSize => v.Kind == PortableValueKind.Length,
+        var ok = dt.Measure() switch {
+            DataType.Length => v.Kind == PortableValueKind.Length,
             DataType.Angle => v.Kind == PortableValueKind.Angle,
             DataType.Integer or DataType.NumberOfPoles => v.Kind == PortableValueKind.Integer,
             DataType.YesNo => v.Kind == PortableValueKind.YesNo,
@@ -227,8 +227,8 @@ public static class FamilyModelValidator {
         if (!ok) d.Add(new(FamilyModelDiagnosticCodes.ValueDataTypeMismatch, path, $"'{v.Text}' reads as {v.Kind}; a {dt} parameter takes {Legal(dt)}."));
     }
 
-    private static string Legal(DataType dt) => dt switch {
-        DataType.Length or DataType.PipeSize or DataType.DuctSize => "a length literal such as 6in, 1/2in, 150mm, 1' - 6\"",
+    private static string Legal(DataType dt) => dt.Measure() switch {
+        DataType.Length => "a length literal such as 6in, 1/2in, 150mm, 1' - 6\"",
         DataType.Angle or DataType.Slope => "an angle literal such as 45deg",
         DataType.Integer or DataType.NumberOfPoles => "an integer such as 4",
         DataType.YesNo => "Yes or No",
@@ -238,7 +238,7 @@ public static class FamilyModelValidator {
     // Revit lets one parameter label many dimensions; identity for capture is label + reference set, so only that pair must be unique.
     private static void Label(string name, DataType need, string what, string path, string slug, IEnumerable<string> refs, FamilyModel m, Dictionary<string, string> labels, List<FamilyModelDiagnostic> d) {
         if (!m.Parameters.TryGetValue(name, out var p)) d.Add(new(FamilyModelDiagnosticCodes.UnknownParameter, path, $"'{name}' is not declared. Nearest: {Nearest(name, m.Parameters.Keys)}"));
-        else if (p.DataType is { } dt && dt != need) d.Add(new(FamilyModelDiagnosticCodes.LabelTypeMismatch, path, $"'{name}' is {dt}; {what} needs {need}."));
+        else if (p.DataType is { } dt && dt.Measure() != need.Measure()) d.Add(new(FamilyModelDiagnosticCodes.LabelTypeMismatch, path, $"'{name}' is {dt}; {what} needs {need}."));
         var key = name + "|" + string.Join(",", refs.OrderBy(r => r, StringComparer.Ordinal));
         if (labels.TryGetValue(key, out var other)) d.Add(new(FamilyModelDiagnosticCodes.LabelNotUnique, path, $"'{name}' already labels {other} between the same references; capture cannot tell them apart.")); else labels[key] = slug;
     }
@@ -258,7 +258,7 @@ public static class FamilyModelValidator {
     private static void Param(string text, string path, FamilyModel m, DataType? need, List<FamilyModelDiagnostic> d) {
         if (!text.StartsWith("param:", StringComparison.Ordinal) || text.Length == 6) { d.Add(new(FamilyModelDiagnosticCodes.InvalidReference, path, $"Write param:<Name>. Legal: {Legal(m.Parameters.Keys.Select(k => "param:" + k))}")); return; }
         if (!m.Parameters.TryGetValue(text[6..], out var p)) { d.Add(new(FamilyModelDiagnosticCodes.UnknownReference, path, $"No parameter '{text[6..]}'. Nearest: {Nearest(text[6..], m.Parameters.Keys)}")); return; }
-        if (need is { } dt && p.DataType != null && p.DataType != dt) d.Add(new(FamilyModelDiagnosticCodes.DriverDataTypeMismatch, path, $"'{text[6..]}' is {p.DataType}; this slot needs {dt}."));
+        if (need is { } dt && p.DataType is { } has && has.Measure() != dt.Measure()) d.Add(new(FamilyModelDiagnosticCodes.DriverDataTypeMismatch, path, $"'{text[6..]}' is {p.DataType}; this slot needs {dt}."));
     }
 
     private static void Length(PortableLength v, string path, FamilyModel m, List<FamilyModelDiagnostic> d) {

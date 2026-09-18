@@ -26,13 +26,13 @@ export const scheduleActions = {
     input: z.object({}),
   },
   "schedule.capture": {
-    says: "Capture one schedule as a new spec member in the route's pod; returns the member address and sha256.",
+    says: "Capture one schedule as a new spec member in the route's pod and write its run; returns the member address, sha256, and run.",
     needs: "project-document",
     actor: "any",
     dirties: ["pods"],
     executors: ["schedule.capture", "pod.member.write"],
     description:
-      "Capture one schedule as a new spec member in the route's pod; returns the member address and sha256.",
+      "Capture one schedule as a new spec member in the route's pod and write its run; returns the member address, sha256, and run.",
     input: z.object({
       pod: z.string().min(1),
       path: z.string().min(1).optional(),
