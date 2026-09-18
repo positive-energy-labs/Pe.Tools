@@ -325,7 +325,7 @@ export function useFamiliesStore(
       openFamily: (familyId: number) => {
         if (!documentScope)
           return Promise.reject(Error("Select an exact available project document"));
-        return callHostRpc("family.editor.open", { familyId }, documentScope);
+        return callHostRpc("family.open", { familyId }, documentScope);
       },
       openPath: (path: string) =>
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),

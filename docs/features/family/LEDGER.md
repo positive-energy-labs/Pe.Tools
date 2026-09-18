@@ -4,6 +4,7 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 
 ## Decided
 
+- 2026-09-18: The `family.editor.*` ops are gone. `family.editor.snapshot` is deleted: `family.capture` reads parameters, per-type values, formulas and shared identity, and no live consumer needed the snapshot's read-only flag, current type or display strings. `family.editor.open` is renamed `family.open` with the same behavior; `/families` calls it to open a loaded family for edit. The user ruled "prob delete all family editor stuff, or rename". Protocol 44 and 45. Proof: source compile and web typecheck against a locally regenerated catalog.
 - 2026-09-18: `family.editor.apply` is deleted. It was a third door that wrote per-type values and formulas with no evidence and committed partial success. Family writes are FamilyPatch plan/apply (`family.*`, `families.*`); scripts use the library in process. Its gotcha 18 guard moved into the family model validator (`value-names-parameter`). Ruled by domains-opus as settled direction (agents propose, users approve); the user can reopen it. Proof: pure, red then green.
 - 2026-09-18: `PreviewFamily` and `ReconcileFamily` share one `FamilyPreparation.Prepare`. Apply stays an operation in `OperationProcessor`, because the queue owns the transaction, single versus bulk, and cancellation. There is no `ApplyFamily` twin. Proof: native attached family-document lane, 4/4 on the refusal and formula scenarios.
 - 2026-09-18: A formula that the destination refuses aborts the whole parameter transfer (`NormalizeParameter.cs`). It is never dropped silently. Proof: fresh R25, red 2/1 then green 3/3. Consequence: the Old_template company migration now refuses families that used to lose formulas.
@@ -36,7 +37,6 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 
 ## Owed
 
-- `family.editor.snapshot` overlaps `family.capture` and `revit.detail.family-model`; fold it later. Its one consumer is the ops receipt renderer (`apps/web/src/ops/renderers.ts`).
 - At Family engine acceptance, port focused parameter plan capture with `DecisionFingerprint` (`7cc0706`) and exact electrical-connector plan identity that refuses approximate references (`881d393`, `a6ce060`) onto the `ba200ee` model. The behavior is preserved at local ref `refs/archive/wt-sweep-20260915/branch/family/electrical-connector-plan-capture`; compile passed there, but its prepared native tests never ran.
 - Prove natively that an `EditFamily` copy has an empty `PathName` and a `Title` equal to `{family.Name}.rfa`; the `HandleFamilyCopyFailures` document predicate depends on this identity.
 - Browser build reached durable action `f5b9f390-70aa-44c6-8ca6-2ff868e55ab1`; its exact SDK receipt proves a terminal 400 placement-parse failure, but beta.160 did not type that failure as pre-dispatch, so recovery conservatively retains `unknown`. Do not submit another build ID until a human explicitly retires that recovered uncertainty. Native build/open/rebind/plan/apply/re-plan acceptance therefore remains open.
