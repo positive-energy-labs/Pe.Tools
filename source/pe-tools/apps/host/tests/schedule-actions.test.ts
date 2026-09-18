@@ -21,6 +21,27 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
       applied: 1,
       failures: [],
       readback: { snapshot: { rows: [{ values: ["P-1", "100 VA"] }] } },
+      // No pod bound: the run receipt lives in this action record (host state), not in a pod.
+      run: null,
+      receipt: {
+        podId: null,
+        operation: "schedule.grid.push",
+        outcome: "Succeeded",
+        reason: null,
+        scheduleId: 42,
+        // This fixture's readback does not move, so after reads what Revit reported: unchanged.
+        cells: [
+          {
+            cell: "1::2",
+            elementIds: [7, 8],
+            parameterId: 555,
+            value: "150 VA",
+            before: "100 VA",
+            after: "100 VA",
+            error: null,
+          },
+        ],
+      },
     },
   });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();

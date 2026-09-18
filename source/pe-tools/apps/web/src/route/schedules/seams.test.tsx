@@ -269,3 +269,14 @@ test("the apply queue keeps an explicit expectedRevision explicit and does not p
   expect(view.revision).toBe(start + 2);
   mounted.unmount();
 });
+
+test("a push run line says where its receipt lives and each cell before → after", async () => {
+  const { pushRunLine } = await import("./manifest");
+  const cells = [{ cell: "2::1", before: "R-32", after: "R-454B" }];
+  expect(pushRunLine({ podId: "demo", outcome: "Succeeded", cells }, "output/run-1")).toBe(
+    "Succeeded · demo · output/run-1/receipt.json · 2::1 R-32 → R-454B",
+  );
+  expect(pushRunLine({ podId: null, outcome: "Succeeded", cells }, null)).toBe(
+    "Succeeded · action receipt (no pod bound) · 2::1 R-32 → R-454B",
+  );
+});

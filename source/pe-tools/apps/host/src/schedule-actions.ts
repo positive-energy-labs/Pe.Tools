@@ -30,7 +30,7 @@ import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./na
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import type { PodMemberWritten } from "@pe/host-contracts/operation-types";
 import type { ScheduleCapture } from "@pe/host-contracts/generated";
-import { composedSpec, podFolder } from "./settings.ts";
+import { composedSpec, podFolder, writeRun } from "./settings.ts";
 import {
   capturePath,
   lifetime,
@@ -277,6 +277,7 @@ export async function admitScheduleAction(
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
   if (key !== "schedule.grid.push") return admitScheduleSpec(key, admission, owner, bridge, deps);
+  const { pod } = scheduleActions["schedule.grid.push"].input.parse(admission.input);
   const work = deps.workspace ?? actionWorkspace();
   const base = admission.bases.work;
   if (!work || !base) throw refused("Reviewed Work address and revision required");
@@ -293,7 +294,9 @@ export async function admitScheduleAction(
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");
-      return { process: reading.process, document, reading, edits, failures };
+      if (pod) await runPods(deps, podFolder(pod, podContext(deps, bridge)));
+      const at = new Date().toISOString();
+      return { process: reading.process, document, reading, edits, failures, at };
     },
     async (execution) => {
       const prepared = execution.prepared as {
@@ -302,6 +305,7 @@ export async function admitScheduleAction(
         reading: ScheduleReading;
         edits: Edit[];
         failures: { key: string; error: string }[];
+        at: string;
       };
       const { edits, reading, document } = prepared;
       // Revalidate bindings with an actual read before effects. Never substitute newly resolved handles for reviewed ones.
@@ -422,10 +426,76 @@ export async function admitScheduleAction(
         );
       if (readbackError)
         throw new ActionIncomplete("Native outcome recorded; actual readback unavailable", result);
-      return result;
+      // ponytail: a settled push only; an incomplete one files its run when resume settles it.
+      const receipt = pushReceipt(pod ?? null, reading, readback!, edits, failures);
+      // One run per admission: a resume overwrites the same folder (`writeRun`).
+      const run = pod
+        ? await runPods(
+            deps,
+            writeRun(
+              pod,
+              `${prepared.at.replace(/[:.]/g, "-")}-${admission.id.slice(0, 8)}`,
+              {
+                "receipt.json": `${JSON.stringify(receipt, null, 2)}
+`,
+              },
+              podContext(deps, bridge),
+            ),
+          )
+        : null;
+      return { ...result, run, receipt };
     },
     resume,
   );
+}
+/**
+ * The push run's receipt (dogma law 10 shape; a push files no member, so the member fields are
+ * empty): per cell, the elements and parameter written and the cell text before and after.
+ */
+function pushReceipt(
+  pod: string | null,
+  before: ScheduleReading,
+  after: ScheduleReading,
+  edits: Edit[],
+  failures: { key: string; error: string }[],
+) {
+  // The text the grid shows for a cell (`route/schedules/workspace.tsx`): binding value, else the column's value.
+  const cell = ({ snapshot }: ScheduleReading, key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    const row = snapshot.rows.find((r) => r.rowNumber === rowNumber);
+    const column = snapshot.columns.findIndex((c) => c.columnNumber === columnNumber);
+    return (
+      row?.bindings.find((b) => b.columnNumber === columnNumber)?.displayValue ??
+      row?.values[column] ??
+      null
+    );
+  };
+  const keys = [...new Set([...edits.map((e) => e.key), ...failures.map((f) => f.key)])];
+  return {
+    podId: pod,
+    memberPath: "",
+    memberSha256: "",
+    operation: "schedule.grid.push",
+    planHash: null,
+    outcome: failures.length ? "Failed" : "Succeeded",
+    outputs: [],
+    reason: failures.length ? failures.map((f) => `${f.key}: ${f.error}`).join("; ") : null,
+    scheduleId: before.snapshot.scheduleId,
+    scheduleUniqueId: before.snapshot.scheduleUniqueId,
+    cells: keys.map((key) => {
+      const written = edits.filter((e) => e.key === key);
+      return {
+        cell: key,
+        elementIds: written.map((e) => e.elementId),
+        parameterId: written[0]?.parameterId ?? null,
+        parameterName: written[0]?.parameterName ?? null,
+        value: written[0]?.value ?? null,
+        before: cell(before, key),
+        after: cell(after, key),
+        error: failures.find((f) => f.key === key)?.error ?? null,
+      };
+    }),
+  };
 }
 /** Capture writes a new member into the route's pod; apply composes a saved spec and creates a schedule. */
 function admitScheduleSpec(

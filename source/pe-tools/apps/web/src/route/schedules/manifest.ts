@@ -32,15 +32,32 @@ export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
   target: z.infer<typeof documentRefSchema> | null;
+  /** The last push's run, as one line: outcome, where its receipt lives, cells before → after. */
+  pushRun: string;
 }
 
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
   target: documentRefSchema.nullable().default(null),
+  pushRun: z.string().default(""),
 });
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
+
+type PushReceipt = {
+  podId: string | null;
+  outcome: string;
+  cells: { cell: string; before: string | null; after: string | null }[];
+};
+export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
+  [
+    receipt.outcome,
+    receipt.podId && run
+      ? `${receipt.podId} · ${run}/receipt.json`
+      : "action receipt (no pod bound)",
+    receipt.cells.map((c) => `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`).join(", "),
+  ].join(" · ");
 
 const targetOf = (ctx: Ctx) => {
   if (ctx.target.kind !== "document") throw Error("Select an exact available document lifetime");
@@ -146,15 +163,20 @@ export const schedulesManifest = () =>
                 ? "Review the exact schedule binding first"
                 : null,
           run: async (ctx: Ctx) => {
+            // The run lands in the pod the route has bound; with none, in the action receipt.
+            const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
             const result = actionResult(
-              await runSemanticAction("schedule.grid.push", {}, targetOf(ctx), {
+              await runSemanticAction("schedule.grid.push", pod ? { pod } : {}, targetOf(ctx), {
                 work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
               }),
             ) as {
               readback?: unknown;
               failures?: { key: string; error: string }[];
               readbackError?: string;
+              run?: string | null;
+              receipt?: PushReceipt;
             };
+            if (result.receipt) ctx.setPage({ pushRun: pushRunLine(result.receipt, result.run) });
             if (result.readback) {
               const reading = scheduleReadingSchema.parse(result.readback);
               ctx.setPage({
