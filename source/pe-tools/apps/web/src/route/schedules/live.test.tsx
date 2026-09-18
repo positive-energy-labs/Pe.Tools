@@ -95,11 +95,11 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA", by: "pea" } }]);
   mounted.rerender(view(true));
-  await screen.findByRole("button", { name: "Approve" });
+  await screen.findByRole("button", { name: "accept" });
   await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled")).toBe(false),
+    expect(screen.getByRole("button", { name: "accept" }).hasAttribute("disabled")).toBe(false),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+  fireEvent.click(screen.getByRole("button", { name: "accept" }));
   await vi.waitFor(async () =>
     expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
   );

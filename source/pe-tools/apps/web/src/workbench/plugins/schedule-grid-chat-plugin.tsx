@@ -1,9 +1,19 @@
-import { splitScheduleCellKey, scheduleReadingSchema } from "@pe/agent-contracts";
+import {
+  splitScheduleCellKey,
+  scheduleReadingSchema,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import type { ScheduleGridState } from "#/route/schedules/workspace";
 import { useThreadScope } from "#/chat/scope";
 import { useWorkbench } from "../provider";
-import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
+import {
+  reviewAddresses,
+  reviewCommit,
+  reviewPatches,
+  ReviewRow,
+  WorkBand,
+} from "#/components/lang/band";
 import { InlineRoutePlugin } from "../route-chat-plugins";
 import type { RouteChatPluginViewProps } from "../route-chat-plugins/tool-names";
 import { ValueDiff } from "#/components/lang/value-diff";
@@ -41,29 +51,53 @@ export function ScheduleGridChatPlugin({ args, sessionState }: RouteChatPluginVi
 }
 export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
   const snapshot = state.snapshot;
+  const items = reviewAddresses(state.slice?.cells ?? {});
+  const staged = items.filter(([, cell]) => cell.staged != null);
+  const patch = reviewPatches("cells");
+  const run = (patches: RouteStatePatch[]) => void state.apply(patches).catch(() => undefined);
+  const busy = state.busy != null;
   return (
-    <CellTrichotomyReviewer
-      state={state}
-      segment="cells"
-      cells={state.slice?.cells ?? {}}
-      onCommit={() => state.execute("push")}
-      commitBlocked={state.blockedBecause ?? undefined}
-      commitLabel={(count) => `Push ${count} to Revit`}
-      reviewHint="Only a human can apply reviewed cells."
-      renderLabel={(key) => {
-        const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-        return `${snapshot?.columns.find((c) => c.columnNumber === columnNumber)?.headerText ?? columnNumber} · row ${rowNumber}`;
-      }}
-      renderValue={(value, key) => {
+    <WorkBand
+      count={staged.length}
+      noun="cell"
+      revision={state.revision}
+      busy={busy}
+      visible={items.length > 0}
+      discard={() => run(staged.flatMap(([key]) => patch.unstage(key)))}
+      commit={reviewCommit(
+        `Push ${staged.length} to Revit`,
+        staged.length,
+        () => void state.execute("push").catch(() => undefined),
+        state.blockedBecause,
+      )}
+      unresolved={state.failure ? [state.failure.message] : []}
+      body={items.map(([key, cell]) => {
         const { rowNumber, columnNumber } = splitScheduleCellKey(key);
         const row = snapshot?.rows.find((r) => r.rowNumber === rowNumber);
+        const to = (cell.staged ?? cell.proposal)?.value;
         return (
-          <ValueDiff
-            from={row?.bindings.find((b) => b.columnNumber === columnNumber)?.displayValue ?? null}
-            to={typeof value === "string" ? value : JSON.stringify(value ?? "")}
+          <ReviewRow
+            key={key}
+            address={key}
+            label={`${snapshot?.columns.find((c) => c.columnNumber === columnNumber)?.headerText ?? columnNumber} · row ${rowNumber}`}
+            cell={cell}
+            facts={{
+              value: (
+                <ValueDiff
+                  from={
+                    row?.bindings.find((b) => b.columnNumber === columnNumber)?.displayValue ?? null
+                  }
+                  to={typeof to === "string" ? to : JSON.stringify(to ?? "")}
+                />
+              ),
+            }}
+            busy={busy}
+            onAccept={(address) => run(patch.accept(address, cell))}
+            onDeny={(address) => run(patch.deny(address))}
+            onUnstage={(address) => run(patch.unstage(address))}
           />
         );
-      }}
+      })}
     />
   );
 }

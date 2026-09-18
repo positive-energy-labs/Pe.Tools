@@ -24,6 +24,8 @@ import type { Refusal } from "#/route";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
+  /** The Work revision the slice was read at; `null` before any Work exists. */
+  revision: number | null;
   hydrated: boolean;
   refreshing: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;

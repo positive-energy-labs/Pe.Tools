@@ -1,12 +1,12 @@
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import { isSpecOf } from "#/route/manifest";
-import { useMemo, type ComponentProps } from "react";
+import { useMemo } from "react";
 import { ActionReceipts } from "#/actions/receipt";
 import { useRoute } from "#/route/use-route";
 import { memberWorkManifest } from "#/route/spec-editor";
 import { Link } from "@tanstack/react-router";
 
-import { cellSummary, settingsRouteState } from "@pe/agent-contracts";
+import { cellSummary, settingsRouteState, type RouteStatePatch } from "@pe/agent-contracts";
 import { recordedRouteDoc } from "#/workbench/route-chat-plugins/tool-names";
 
 import {
@@ -15,7 +15,13 @@ import {
   type RouteChatPluginProps,
   actionLabel,
 } from "../route-chat-plugins";
-import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
+import {
+  reviewAddresses,
+  reviewCommit,
+  reviewPatches,
+  ReviewRow,
+  WorkBand,
+} from "#/components/lang/band";
 
 export function SettingsChatPlugin(props: RouteChatPluginProps) {
   const args =
@@ -37,11 +43,9 @@ function FileSettingsChatPlugin(props: RouteChatPluginProps & { workspaceId: str
       <SettingsReview
         {...props}
         sessionState={route.work.doc}
-        state={{
-          apply: route.work.write,
-          busy: route.busy?.key ?? null,
-          failure: route.failure,
-        }}
+        work={route.work}
+        busy={route.busy != null}
+        failure={route.failure}
         onCommit={() => route.actions.save.run()}
       />
       <ActionReceipts
@@ -58,10 +62,19 @@ function SettingsReview({
   sessionState,
   running,
   active,
-  state,
+  work,
+  busy,
+  failure,
   onCommit,
 }: RouteChatPluginProps & {
-  state: ComponentProps<typeof CellTrichotomyReviewer>["state"];
+  work: {
+    revision: number | null;
+    write: (patches: RouteStatePatch[]) => Promise<unknown>;
+    conflict: boolean;
+    reload: () => void;
+  };
+  busy: boolean;
+  failure: { message: string } | null;
   onCommit: () => Promise<unknown>;
 }) {
   const document = recordedRouteDoc(sessionState, settingsRouteState);
@@ -73,9 +86,11 @@ function SettingsReview({
   const openProposals = Object.values(fields).filter(
     (field) => field.proposal != null && field.staged == null,
   ).length;
-  const reviewable = Object.values(fields).some(
-    (field) => field.proposal != null || field.staged != null,
-  );
+  const items = reviewAddresses(fields);
+  const reviewable = items.length > 0;
+  const staged = items.filter(([, field]) => field.staged != null);
+  const patch = reviewPatches("fields");
+  const run = (patches: RouteStatePatch[]) => void work.write(patches).catch(() => undefined);
 
   if (active && !reviewable) return null;
 
@@ -104,25 +119,44 @@ function SettingsReview({
       </div>
 
       {active && reviewable ? (
-        <CellTrichotomyReviewer
-          state={state}
-          segment="fields"
-          cells={fields}
-          onCommit={onCommit}
-          commitLabel={(staged) => `Save ${staged}`}
-          reviewHint="Pea can propose; only you can save."
-          renderLabel={(path) => <span className="">{path}</span>}
-          renderValue={displaySettingsValue}
+        <WorkBand
+          count={staged.length}
+          noun="field"
+          revision={work.revision}
+          conflict={work.conflict}
+          reload={work.reload}
+          busy={busy}
+          visible
+          discard={() => run(staged.flatMap(([path]) => patch.unstage(path)))}
+          commit={reviewCommit(
+            `Save ${staged.length}`,
+            staged.length,
+            () => void onCommit().catch(() => undefined),
+          )}
+          unresolved={failure ? [failure.message] : []}
+          body={items.map(([path, field]) => (
+            <ReviewRow
+              key={path}
+              address={path}
+              label={path}
+              cell={field}
+              facts={{ value: displaySettingsValue(field.staged ?? field.proposal) }}
+              busy={busy}
+              onAccept={(address) => run(patch.accept(address, field))}
+              onDeny={(address) => run(patch.deny(address))}
+              onUnstage={(address) => run(patch.unstage(address))}
+            />
+          ))}
         />
       ) : null}
     </InlineRoutePlugin>
   );
 }
 
-function displaySettingsValue(value: unknown): string {
-  if (value === undefined) return "—";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
+function displaySettingsValue(rung: { value?: unknown; delete?: true } | null | undefined) {
+  if (rung?.delete) return "DELETE";
+  if (rung?.value === undefined) return "—";
+  return typeof rung.value === "string" ? rung.value : JSON.stringify(rung.value);
 }
 
 function declaresSchema(raw: string | undefined, schema: string) {

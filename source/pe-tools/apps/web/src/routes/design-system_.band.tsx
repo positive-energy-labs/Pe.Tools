@@ -1,11 +1,11 @@
 /** /design-system/band — one reducer-backed proposal fixture at route and chat-head scale. */
 import { useMemo, useReducer } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, Undo2, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { WorkBand } from "#/components/lang/band";
+import { ReviewRow, ReviewActions, WorkBand } from "#/components/lang/band";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -210,84 +210,18 @@ const shown = (item: BandItem) => {
   const rung = item.cell.staged ?? item.cell.proposal;
   return rung?.delete ? "DELETE" : (rung?.value ?? item.current ?? "—");
 };
-const open = (item: BandItem) => item.cell.proposal != null && item.cell.staged == null;
-const contested = (item: BandItem) =>
-  item.cell.proposal != null &&
-  item.cell.staged != null &&
-  (item.cell.proposal.value !== item.cell.staged.value ||
-    item.cell.proposal.delete !== item.cell.staged.delete);
-/**
- * The one verb set for a cell, at every scale. A proposal that differs from what is staged is
- * standing (open, or a counter-proposal) and takes accept/deny; anything staged takes unstage.
- * A contested cell therefore offers all three (journeys review 2).
- */
-function ReviewVerbs({
-  item,
-  dispatch,
-}: {
-  item: BandItem;
-  dispatch: (action: BandAction) => void;
-}) {
-  const counter = contested(item);
-  const standing = open(item) || counter;
-  if (!standing && !item.cell.staged) return <ReadCell value="—" />;
-  return (
-    <span className="flex gap-1">
-      {standing ? (
-        <>
-          <ActionButton
-            tone="agent"
-            icon={Check}
-            label="accept"
-            reason={
-              counter
-                ? "Stage Pea's counter-proposal in place of your staged value"
-                : "Stage Pea's proposal"
-            }
-            onClick={() => dispatch({ type: "accept", key: item.key })}
-          />
-          <ActionButton
-            icon={X}
-            label="deny"
-            reason={
-              counter
-                ? "Clear Pea's counter-proposal; your staged value stays"
-                : "Clear Pea's proposal"
-            }
-            onClick={() => dispatch({ type: "deny", key: item.key })}
-          />
-        </>
-      ) : null}
-      {item.cell.staged ? (
-        <ActionButton
-          icon={Undo2}
-          label="unstage"
-          reason="Clear the staged value; restore the standing proposal or baseline"
-          onClick={() => dispatch({ type: "unstage", key: item.key })}
-        />
-      ) : null}
-    </span>
-  );
-}
 const changed = (item: BandItem) => item.cell.proposal != null || item.cell.staged != null;
-const stagedBy = (item: BandItem) =>
-  item.cell.staged != null &&
-  item.cell.proposal != null &&
-  item.cell.staged.value === item.cell.proposal.value &&
-  item.cell.staged.delete === item.cell.proposal.delete
-    ? "Pea"
-    : "you";
 
-function cellProps(item: BandItem, foot: "inline" | "hover"): StateCellProps {
-  return cellFromTrichotomy(item.cell, {
-    value: shown(item),
-    fresh: "fresh",
-    agree: "agree",
-    cap: item.cap ?? "editable",
-    capReason: item.capReason,
-    foot,
-  });
-}
+const facts = (item: BandItem, foot: "inline" | "hover"): StateCellProps => ({
+  value: shown(item),
+  fresh: "fresh",
+  agree: "agree",
+  cap: item.cap ?? "editable",
+  capReason: item.capReason,
+  foot,
+});
+const cellProps = (item: BandItem, foot: "inline" | "hover") =>
+  cellFromTrichotomy(item.cell, facts(item, foot));
 
 const PLAN_SHEET: PlanSheet = {
   entries: [
@@ -321,7 +255,12 @@ function BandRoute() {
     fixture.draftMode === "authored"
       ? [draftItem, ...changedItems.filter((item) => item.key !== draftItem.key)]
       : changedItems;
-  const counter = displayItems.find(contested);
+  const counter = displayItems.find((item) => cellProps(item, "hover").counterValue != null);
+  const verbs = {
+    onAccept: (key: string) => dispatch({ type: "accept", key }),
+    onDeny: (key: string) => dispatch({ type: "deny", key }),
+    onUnstage: (key: string) => dispatch({ type: "unstage", key }),
+  };
   const refusal = planRefusal(fixture);
 
   const columns = useMemo<Column<BandItem>[]>(
@@ -354,7 +293,12 @@ function BandRoute() {
         key: "review",
         label: "review",
         width: "w-44",
-        cell: (item) => <ReviewVerbs item={item} dispatch={dispatch} />,
+        cell: (item) =>
+          changed(item) ? (
+            <ReviewActions address={item.key} cell={item.cell} {...verbs} />
+          ) : (
+            <ReadCell value="—" />
+          ),
       },
     ],
     [fixture.items, fixture.draftMode],
@@ -517,19 +461,14 @@ function BandRoute() {
                           </div>
                         ) : null}
                         {chatItems.slice(0, 5).map((item) => (
-                          <div
+                          <ReviewRow
                             key={item.key}
-                            className="grid grid-cols-[9rem_minmax(0,1fr)_auto] items-baseline gap-3 py-2"
-                          >
-                            <span>{item.param}</span>
-                            <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-                              <StateCell {...cellProps(item, "inline")} />
-                              {item.cell.staged ? (
-                                <span className="t-small text-ink-2">by {stagedBy(item)}</span>
-                              ) : null}
-                            </span>
-                            <ReviewVerbs item={item} dispatch={dispatch} />
-                          </div>
+                            address={item.key}
+                            label={item.param}
+                            cell={item.cell}
+                            facts={facts(item, "inline")}
+                            {...verbs}
+                          />
                         ))}
                         {chatItems.length > 5 ? (
                           <p>… and {chatItems.length - 5} more · open in /family</p>

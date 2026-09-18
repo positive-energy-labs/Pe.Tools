@@ -145,6 +145,7 @@ export function LiveScheduleGridWorkspace({
                 : handle.actions.push.refusal;
   const state: ScheduleGridState = {
     slice: work.doc,
+    revision: work.revision,
     hydrated: work.current || work.revision !== null,
     refreshing: work.revision !== null && !work.current,
     apply,

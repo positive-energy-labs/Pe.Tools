@@ -20,6 +20,7 @@ import {
   settingsCandidate,
   settingsRouteState,
   type PodMember,
+  type RouteStatePatch,
   type SettingsFieldState,
   type SettingsRouteDocument,
   type SettingsSnapshot,
@@ -43,7 +44,13 @@ import {
   useInventory,
 } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
-import { CellTrichotomyReviewer } from "#/components/trichotomy-reviewer";
+import {
+  reviewAddresses,
+  reviewCommit,
+  reviewPatches,
+  ReviewRow,
+  WorkBand,
+} from "#/components/lang/band";
 import {
   actionResult,
   saveSettingsAction,
@@ -204,24 +211,34 @@ export const seededWork = (
       }
     : undefined;
 
-const display = (value: unknown) =>
-  value === undefined ? "—" : typeof value === "string" ? value : JSON.stringify(value);
+const display = (rung: { value?: unknown; delete?: true } | null | undefined) =>
+  rung?.delete
+    ? "DELETE"
+    : rung?.value === undefined
+      ? "—"
+      : typeof rung.value === "string"
+        ? rung.value
+        : JSON.stringify(rung.value);
 
 /**
- * Pea's proposals and the staged fields on the open member: approve stages, deny clears, undo
- * unstages, and save writes every staged field. It stays out of the way while the Work is clean.
+ * Pea's proposals and the staged fields on the open member, on the Work band: accept stages, deny
+ * clears, unstage clears the staged value, and save writes every staged field. It stays out of the
+ * way while the Work is clean.
  */
 function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: string | null }) {
   const doc = work.work.doc;
   // The root raw edit is the editor's draft, not a card.
   const { [""]: _draft, ...fields } = doc?.fields ?? {};
-  const cells = Object.values(fields);
-  const proposed = cells.filter((cell) => cell.proposal != null && cell.staged == null).length;
-  const staged = cells.filter((cell) => cell.staged != null).length;
+  const items = reviewAddresses(fields);
+  const proposed = items.filter(([, cell]) => cell.proposal != null && cell.staged == null).length;
+  const staged = items.filter(([, cell]) => cell.staged != null);
   const basisSha = doc?.basis?.sha256 ?? null;
   // The Work reviews bytes the editor no longer sees on disk: only a person may adopt the new ones.
   const moved = !work.demo && readSha !== null && basisSha !== null && readSha !== basisSha;
-  if (!proposed && !staged && !moved) return null;
+  if (!items.length && !moved) return null;
+  const patch = reviewPatches("fields");
+  const run = (patches: RouteStatePatch[]) => void work.work.write(patches).catch(() => undefined);
+  const busy = work.busy !== null;
   return (
     <ArtifactFrame
       head={
@@ -230,19 +247,10 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
           <FactChip tone={proposed ? "pea" : "meta"} title="Open Pea proposals on this member.">
             {proposed} proposed
           </FactChip>
-          <FactChip tone={staged ? "caution" : "meta"} title="Fields staged for save.">
-            {staged} staged
-          </FactChip>
-          <FactChip
-            tone={work.work.revision === null ? "caution" : "meta"}
-            title="The member Work's revision; writes are refused while it is not current."
-          >
-            {work.work.revision === null ? "work not read" : `r${work.work.revision}`}
-          </FactChip>
           {moved ? (
             <ActionButton
               label="adopt disk bytes"
-              disabled={work.busy !== null}
+              disabled={busy}
               reason="The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
               onClick={() => void work.actions.adopt.run({ sha256: readSha } as never)}
             />
@@ -251,20 +259,35 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
       }
     >
       <div className="px-3">
-        <CellTrichotomyReviewer
-          state={{
-            apply: work.work.write,
-            busy: work.busy?.key ?? null,
-            failure: work.failure,
-          }}
-          segment="fields"
-          cells={fields}
-          onCommit={() => work.actions.save.run()}
-          commitBlocked={work.actions.save.refusal ?? false}
-          commitLabel={(count) => `save ${count} staged`}
-          reviewHint="Pea proposes; you stage; save writes the member."
-          renderLabel={(path) => <span className="face-mono">{path}</span>}
-          renderValue={display}
+        <WorkBand
+          count={staged.length}
+          noun="field"
+          revision={work.work.revision}
+          conflict={work.work.conflict}
+          reload={work.work.reload}
+          busy={busy}
+          visible
+          discard={() => run(staged.flatMap(([path]) => patch.unstage(path)))}
+          commit={reviewCommit(
+            `save ${staged.length} staged`,
+            staged.length,
+            () => void work.actions.save.run().catch(() => undefined),
+            work.actions.save.refusal,
+          )}
+          unresolved={work.failure ? [work.failure.message] : []}
+          body={items.map(([path, cell]) => (
+            <ReviewRow
+              key={path}
+              address={path}
+              label={<span className="face-mono">{path}</span>}
+              cell={cell}
+              facts={{ value: display(cell.staged ?? cell.proposal) }}
+              busy={busy}
+              onAccept={(address) => run(patch.accept(address, cell))}
+              onDeny={(address) => run(patch.deny(address))}
+              onUnstage={(address) => run(patch.unstage(address))}
+            />
+          ))}
         />
       </div>
     </ArtifactFrame>
