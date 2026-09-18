@@ -78,7 +78,11 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
     url: () => read<string>("location.href"),
     async open(url: string) {
       await send("Page.navigate", { url });
-      await page.until(() => read<boolean>("document.readyState === 'complete'"), "page load", 60_000);
+      await page.until(
+        () => read<boolean>("document.readyState === 'complete'"),
+        "page load",
+        60_000,
+      );
     },
     async reload() {
       await send("Page.reload", {});
@@ -340,5 +344,5 @@ export async function requireRevit(page: Page) {
 /** Setup, not a journey step: pick a model this machine can sign (Anthropic login expired 09-07). */
 export async function pickModel(page: Page, model = process.env.E2E_MODEL ?? "gpt-5.6-terra") {
   await page.click("Model");
-  await page.click(new RegExp(`^${model.replaceAll(".", ".")}s`));
+  await page.click(new RegExp(`^${model.replaceAll(".", "\\.")}\\s`));
 }
