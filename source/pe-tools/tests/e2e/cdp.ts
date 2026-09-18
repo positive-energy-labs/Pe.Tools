@@ -18,9 +18,14 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
     ws.onerror = reject;
   });
   let id = 0;
+  const errors: string[] = [];
   const pending = new Map<number, (m: { result?: any; error?: { message: string } }) => void>();
   ws.onmessage = (e) => {
     const m = JSON.parse(String(e.data));
+    if (m.method === "Runtime.exceptionThrown")
+      errors.push(
+        m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text,
+      );
     pending.get(m.id)?.(m);
     pending.delete(m.id);
   };
@@ -50,7 +55,13 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
     mobile: false,
   });
 
+  await send("Runtime.enable");
+  // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
+  await send("Network.enable");
+  await send("Network.setCacheDisabled", { cacheDisabled: true });
   const page = {
+    /** Uncaught page exceptions, for evidence dumps only (never an assertion). */
+    errors,
     send,
     read,
     close: () => ws.close(),
