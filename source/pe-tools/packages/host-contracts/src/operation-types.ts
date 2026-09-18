@@ -182,19 +182,31 @@ export const podRunOutcomeSchema = Schema.Literals(["Succeeded", "Failed", "Canc
 
 /**
  * What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. `memberSha256` names saved
- * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none.
+ * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none. The
+ * member fields name what the run consumed, so an Operation run (it consumed no member) has none.
  */
-export const podReceiptSchema = Schema.Struct({
+const podReceiptFields = {
   podId: Schema.String,
-  memberPath: Schema.NullOr(Schema.String),
-  memberSha256: Schema.NullOr(Schema.String),
-  origin: Schema.NullOr(podRunOriginSchema),
   operation: Schema.String,
   planHash: Schema.NullOr(Schema.String),
   outcome: podRunOutcomeSchema,
   outputs: Schema.Array(Schema.String),
   reason: Schema.NullOr(Schema.String),
-});
+};
+export const podReceiptSchema = Schema.Union([
+  Schema.Struct({
+    ...podReceiptFields,
+    origin: Schema.Literal("Operation"),
+    memberPath: Schema.Null,
+    memberSha256: Schema.Null,
+  }),
+  Schema.Struct({
+    ...podReceiptFields,
+    origin: Schema.NullOr(Schema.Literals(["SavedMember", "SuppliedDraft"])),
+    memberPath: Schema.NullOr(Schema.String),
+    memberSha256: Schema.NullOr(Schema.String),
+  }),
+]);
 export type PodReceipt = Schema.Schema.Type<typeof podReceiptSchema>;
 
 /**

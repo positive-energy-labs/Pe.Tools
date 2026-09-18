@@ -81,6 +81,8 @@ export const listRuns = Effect.fnUntraced(function* (
   const folder = yield* podFolder(request.pod, ctx);
   const entries = yield* readDirectoryEntriesOrEmpty(join(folder, "output"), "pod.runs");
   const runs: PodRuns["runs"][number][] = [];
+  /** The member each run wrote, from its `written-member.json` output (a capture's product). */
+  const wrote = new Map<string, string>();
   for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
     if (entry.info.type !== "Directory") continue;
     const receiptPath = `output/${entry.name}/receipt.json`;
@@ -88,6 +90,14 @@ export const listRuns = Effect.fnUntraced(function* (
     const receipt = read === null ? null : parseReceipt(read.content);
     const input = yield* readText(join(folder, "output", entry.name, "input.json"), "pod.runs");
     const source = input === null ? undefined : parseRunSource(input.content);
+    if (typeof receipt !== "string" && receipt?.outputs.includes("written-member.json")) {
+      const written = yield* readText(
+        join(folder, "output", entry.name, "written-member.json"),
+        "pod.runs",
+      );
+      const path = written === null ? undefined : writtenMemberPath(written.content);
+      if (path) wrote.set(entry.name, path);
+    }
     runs.push({
       runId: entry.name,
       receiptPath,
@@ -105,12 +115,27 @@ export const listRuns = Effect.fnUntraced(function* (
   }
   return {
     runs: request.path
-      ? runs.filter((run) => (run.source?.path ?? run.receipt?.memberPath) === request.path)
+      ? // A member's runs are the ones that consumed it or wrote it.
+        runs.filter(
+          (run) =>
+            (run.source?.path ?? run.receipt?.memberPath) === request.path ||
+            wrote.get(run.runId) === request.path,
+        )
       : runs,
   } satisfies PodRuns;
 });
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** The member path a run's `written-member.json` names; undefined when it is unreadable. */
+function writtenMemberPath(content: string): string | undefined {
+  try {
+    const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
+    return isRecord(value) && typeof value.path === "string" ? value.path : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** What `input.json` says the run consumed; undefined when it is unreadable. */
 function parseRunSource(content: string): PodRunSource | undefined {
@@ -157,17 +182,24 @@ function parseReceipt(content: string): PodReceipt | string {
     const origin = origins.includes(value.origin as never)
       ? (value.origin as PodReceipt["origin"])
       : null;
+    // An operation run consumed no member, so it names none: one that does is a writer defect,
+    // refused rather than normalized so it surfaces. Only saved bytes carry a member hash.
+    if (origin === "Operation" && (value.memberPath != null || value.memberSha256 != null))
+      return "receipt.json is an Operation run that names a member; an operation consumed no member, so its memberPath and memberSha256 must be null.";
+    const member =
+      origin === "Operation"
+        ? { origin, memberPath: null, memberSha256: null }
+        : {
+            origin,
+            memberPath: typeof value.memberPath === "string" ? value.memberPath : null,
+            memberSha256:
+              origin !== "SuppliedDraft" && typeof value.memberSha256 === "string"
+                ? value.memberSha256
+                : null,
+          };
     return {
       podId: text(value.podId),
-      memberPath: typeof value.memberPath === "string" ? value.memberPath : null,
-      // Only saved bytes carry a member hash; a draft or operation run claims none.
-      memberSha256:
-        origin !== "SuppliedDraft" &&
-        origin !== "Operation" &&
-        typeof value.memberSha256 === "string"
-          ? value.memberSha256
-          : null,
-      origin,
+      ...member,
       operation: value.operation,
       planHash: typeof value.planHash === "string" ? value.planHash : null,
       outcome: value.outcome as PodReceipt["outcome"],

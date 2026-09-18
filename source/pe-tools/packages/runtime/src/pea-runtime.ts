@@ -287,7 +287,8 @@ interface PeaSessionAdmission {
   close(): Promise<void>;
 }
 
-function installPeaControllerPolicy(
+/** Exported for tests: the deterministic harness can run the controller policy the host runs. */
+export function installPeaControllerPolicy(
   controller: AgentController<PeaRuntimeState>,
   options: {
     accessLevel?: RuntimeAccessLevel;

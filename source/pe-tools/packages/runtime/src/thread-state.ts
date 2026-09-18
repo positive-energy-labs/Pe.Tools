@@ -75,8 +75,9 @@ const cancelKey = (toolCallId: string) => `cancelled:${toolCallId}`;
 const systemAborts = new WeakSet<object>();
 
 /** An abort that is not a person's cancel: nothing it ends is recorded as cancelled. */
-export function abortQuietly(session: Pick<Session, "abort">): void {
-  systemAborts.add(session);
+export function abortQuietly(session: Pick<Session, "abort" | "run">): void {
+  // Only a running turn ends from an abort; marking an idle one would outlive it.
+  if (session.run.isRunning()) systemAborts.add(session);
   session.abort();
 }
 /** Each session's in-flight call records, so a read never races the write it depends on. */
@@ -151,7 +152,9 @@ export async function selectEndedCalls(
     message.content.parts.flatMap((part) => {
       if (part.type !== "tool-invocation") return [];
       const { state, toolCallId, toolName } = part.toolInvocation;
-      if (state !== "call" && state !== "partial-call") return [];
+      // An ask a new turn ended is stored with the unanswered result; it is still an ended ask.
+      const unanswered = state === "result" && isExpiredResult(part.toolInvocation.result);
+      if (state !== "call" && state !== "partial-call" && !unanswered) return [];
       if (live.has(toolCallId)) return [];
       return [{ messageId: message.id, toolCallId, toolName }];
     }),
@@ -176,12 +179,73 @@ export async function selectEndedCalls(
 export function expireAsks(
   session: Pick<Session, "suspensions" | "emit">,
   reason: Parameters<typeof askExpiryOf>[0],
-): boolean {
+): { toolCallId: string; toolName: string }[] | null {
   const expiry = askExpiryOf(reason);
-  if (expiry === null) return false;
-  for (const { toolCallId, toolName } of session.suspensions.clear())
+  if (expiry === null) return null;
+  const expired = session.suspensions.clear();
+  for (const { toolCallId, toolName } of expired)
     session.emit({ type: "tool_suspension_cancelled", toolCallId, toolName, reason: expiry });
-  return true;
+  return expired;
+}
+
+/**
+ * What an ask a new turn ended reads as, in the stored transcript and in the next turn's model
+ * context: unanswered, never rejected and never silently dropped (journeys, E2E-J5).
+ */
+export const EXPIRED_UNANSWERED = {
+  expired: "unanswered",
+  note: "The person sent a new message instead of answering.",
+} as const;
+const isExpiredResult = (result: unknown) =>
+  typeof result === "object" &&
+  result !== null &&
+  (result as { expired?: unknown }).expired === EXPIRED_UNANSWERED.expired;
+
+/**
+ * Persists the expiry of asks a new turn ended: each stored call gets the unanswered result and
+ * loses its parked-suspension metadata, so a reload reads it expired and the next turn's model sees
+ * its question went unanswered. The message is re-saved whole; storage upserts it by id.
+ */
+async function persistExpiredAsks(
+  session: Pick<Session, "thread" | "machinery">,
+  toolCallIds: readonly string[],
+): Promise<void> {
+  const threadId = session.thread.getId();
+  if (!threadId || !toolCallIds.length) return;
+  const memory = await session.machinery
+    .getAgent()
+    .getMastraInstance()
+    ?.getStorage()
+    ?.getStore("memory");
+  if (!memory) return;
+  const expired = new Set(toolCallIds);
+  const { messages } = await memory.listMessages({ threadId });
+  const changed = messages.flatMap((message) => {
+    let touched = false;
+    const parts = message.content.parts.map((part) => {
+      if (part.type !== "tool-invocation" || !expired.has(part.toolInvocation.toolCallId))
+        return part;
+      touched = true;
+      return {
+        ...part,
+        toolInvocation: {
+          ...part.toolInvocation,
+          state: "result" as const,
+          result: EXPIRED_UNANSWERED,
+        },
+      };
+    });
+    if (!touched) return [];
+    const metadata = { ...message.content.metadata } as Record<string, unknown>;
+    for (const key of ["suspendedTools", "pendingToolApprovals"]) {
+      const parked = { ...(metadata[key] as Record<string, unknown> | undefined) };
+      for (const toolCallId of expired) delete parked[toolCallId];
+      if (Object.keys(parked).length) metadata[key] = parked;
+      else delete metadata[key];
+    }
+    return [{ ...message, content: { ...message.content, parts, metadata } }];
+  });
+  if (changed.length) await memory.saveMessages({ messages: changed as never });
 }
 
 /**
@@ -191,15 +255,27 @@ export function expireAsks(
  * long as it needs, and the run resets before the stream detaches, so only the stream's end counts.
  */
 export function endParkedTurn(
-  session: Pick<Session, "suspensions" | "emit" | "abort" | "stream">,
+  session: Pick<
+    Session,
+    "suspensions" | "emit" | "abort" | "stream" | "run" | "thread" | "machinery"
+  >,
 ): Promise<void> | undefined {
   if (!session.suspensions.hasPending()) return undefined;
-  expireAsks(session, "new-turn");
-  const torndown = session.stream.isOpen()
-    ? session.stream.waitForTeardown(new AbortController().signal)
+  const expired = expireAsks(session, "new-turn") ?? [];
+  const waiting = new AbortController();
+  const teardown = session.stream.isOpen()
+    ? session.stream.waitForTeardown(waiting.signal).catch(() => undefined)
     : Promise.resolve();
   abortQuietly(session);
-  return torndown;
+  // A parked run that already detached is released at once, with no abort armed (the Mastra
+  // patch): its stream stays, so there is no teardown to wait out.
+  if (!session.run.isAbortRequested()) waiting.abort();
+  return teardown.then(() =>
+    persistExpiredAsks(
+      session,
+      expired.map((ask) => ask.toolCallId),
+    ),
+  );
 }
 
 export function projectThreadMessages(messages: ThreadMessage[]): {
