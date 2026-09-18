@@ -97,7 +97,11 @@ public sealed class ScheduleCellBindingProofTests {
                 var instance = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(afterRows[0].RowNumber, changedMark.ColumnNumber, changedMark, "PE-INSTANCE")]));
-                Assert.That(instance.AppliedParameterWrites, Is.EqualTo(1));
+                Assert.Multiple(() => {
+                    Assert.That(instance.AppliedParameterWrites, Is.EqualTo(1));
+                    Assert.That(projectDocument.GetElement(changedMark.Targets.Single().ElementId.ToElementId())
+                        .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString(), Is.EqualTo("PE-INSTANCE"));
+                });
 
                 var conflictEntry = CollectEntry(projectDocument, entry.ScheduleId);
                 var conflictRows = BoundDataRows(conflictEntry);
@@ -157,7 +161,9 @@ public sealed class ScheduleCellBindingProofTests {
             nameof(this.Reviewed_schedule_cell_requested_beyond_default_projection_budget_is_applied),
             includeCombinedAndCount: false,
             (projectDocument, _, entry) => {
-                var row = BoundDataRows(entry).Single(item => item.RowNumber > 25);
+                var beyondBudgetRows = BoundDataRows(entry).Where(item => item.RowNumber > 25).ToList();
+                Assert.That(beyondBudgetRows, Has.Count.GreaterThanOrEqualTo(1));
+                var row = beyondBudgetRows.Last();
                 var binding = BindingFor(entry, row, "Mark");
                 var result = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
@@ -180,11 +186,21 @@ public sealed class ScheduleCellBindingProofTests {
             (projectDocument, fixture, entry) => {
                 var row = BoundDataRows(entry).Single();
                 var binding = BindingFor(entry, row, "Mark");
-                Assert.That(binding.Targets, Has.Count.EqualTo(2));
+                var typeComments = BindingFor(entry, row, "Type Comments");
+                Assert.Multiple(() => {
+                    Assert.That(binding.Targets, Has.Count.EqualTo(2));
+                    Assert.That(binding.HasMixedValues, Is.True);
+                    Assert.That(binding.Targets.Select(target => target.RawValue),
+                        Is.EquivalentTo(new[] { MarkA, MarkB }));
+                });
+                var firstRawValue = binding.RawValue;
                 var dryRun = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
-                    [new(row.RowNumber, binding.ColumnNumber, binding, "PE-DRY-MULTI")], DryRun: true));
-                Assert.That(dryRun.Results.Single().ParameterResults.Select(result => result.Index),
+                    [
+                        new(row.RowNumber, typeComments.ColumnNumber, typeComments, "TC-DRY-FIRST"),
+                        new(row.RowNumber, binding.ColumnNumber, binding, "PE-DRY-MULTI")
+                    ], DryRun: true));
+                Assert.That(dryRun.Results[1].ParameterResults.Select(result => result.Index),
                     Is.EqualTo(new[] { 0, 1 }), "nested indices must map to this cell's Targets positions");
                 using (var transaction = new Transaction(projectDocument, "Change nonfirst reviewed target")) {
                     _ = transaction.Start();
@@ -196,15 +212,21 @@ public sealed class ScheduleCellBindingProofTests {
                 var result = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(row.RowNumber, binding.ColumnNumber, binding, "MUST-NOT-WRITE")]));
+                var current = result.Results.Single().CurrentBinding;
                 Assert.Multiple(() => {
                     Assert.That(result.AppliedParameterWrites, Is.Zero);
-                    Assert.That(result.Results.Single().Error, Does.Contain("stale").Or.Contain("unavailable"));
+                    Assert.That(result.Results.Single().Error, Does.Contain("stale"));
+                    Assert.That(current, Is.Not.Null);
+                    Assert.That(current!.HasMixedValues, Is.True);
+                    Assert.That(current.RawValue, Is.EqualTo(firstRawValue));
+                    Assert.That(current.Targets[0], Is.EqualTo(binding.Targets[0]));
+                    Assert.That(current.Targets[1], Is.Not.EqualTo(binding.Targets[1]));
                     Assert.That(projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
                         .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString(), Is.EqualTo(MarkA));
                     Assert.That(projectDocument.GetElement(fixture.InstanceIds[1].ToElementId())
                         .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString(), Is.EqualTo("PE-STALE-SECOND"));
                 });
-            }, groupedSameMarks: true);
+            }, groupedRows: true);
     }
 
     [Test]
@@ -376,7 +398,7 @@ public sealed class ScheduleCellBindingProofTests {
         Action<Document, BindingFixture, ScheduleRenderedScheduleEntry> assert,
         int instanceCount = 2,
         int collectionRowBudget = 25,
-        bool groupedSameMarks = false
+        bool groupedRows = false
     ) {
         var application = uiApplication.Application;
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
@@ -399,7 +421,7 @@ public sealed class ScheduleCellBindingProofTests {
             Assert.That(loadedFamily, Is.Not.Null);
 
             var fixture = CreateBoundSchedule(projectDocument, loadedFamily!, scheduleName, includeCombinedAndCount,
-                out var schedule, instanceCount, groupedSameMarks);
+                out var schedule, instanceCount, groupedRows);
             var entry = CollectEntry(projectDocument, schedule.Id.Value(), collectionRowBudget);
             assert(projectDocument, fixture, entry);
         } finally {
@@ -415,7 +437,7 @@ public sealed class ScheduleCellBindingProofTests {
         bool includeCombinedAndCount,
         out ViewSchedule schedule,
         int instanceCount = 2,
-        bool groupedSameMarks = false
+        bool groupedRows = false
     ) {
         using var transaction = new Transaction(projectDocument, $"Create schedule '{scheduleName}'");
         _ = transaction.Start();
@@ -432,7 +454,7 @@ public sealed class ScheduleCellBindingProofTests {
             .First();
         var instanceIds = new List<long>();
         var marks = Enumerable.Range(0, instanceCount)
-            .Select(index => groupedSameMarks ? MarkA : index switch { 0 => MarkA, 1 => MarkB, _ => $"PE-{index + 1:D3}" });
+            .Select(index => index switch { 0 => MarkA, 1 => MarkB, _ => $"PE-{index + 1:D3}" });
         foreach (var (mark, index) in marks.Select((mark, index) => (mark, index))) {
             var position = new XYZ(index * 10, 0, 0);
             var instance = projectDocument.Create.NewFamilyInstance(position, symbol, level, StructuralType.NonStructural);
@@ -442,7 +464,7 @@ public sealed class ScheduleCellBindingProofTests {
 
         schedule = ViewSchedule.CreateSchedule(projectDocument, new ElementId(BuiltInCategory.OST_MechanicalEquipment));
         schedule.Name = scheduleName;
-        schedule.Definition.IsItemized = !groupedSameMarks;
+        schedule.Definition.IsItemized = !groupedRows;
         _ = AddSchedulableField(schedule, "Mark");
         _ = AddSchedulableField(schedule, "Type Comments");
 
