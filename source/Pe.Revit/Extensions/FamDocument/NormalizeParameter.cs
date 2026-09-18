@@ -19,8 +19,11 @@ public static class FamilyDocumentNormalizeParameter {
         // Shared replacement cannot create an external definition while another parameter owns its name.
         if (!source.IsShared && shared is not null && source.Definition.Name == shared.Name)
             fm.RenameParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"));
+        // A shared source always leaves through a unique temporary family name: replacing it straight to `name` fails natively when
+        // it already holds that name ("The parameter 'X' is already in use", shared→family same-name). The rename below restores `name`;
+        // any failure rolls this sub-transaction back, so the temporary name never survives.
         else if (source.IsShared)
-            replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
+            replacement = fm.ReplaceParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
         else {
             if (replacement.Definition.Name != name) fm.RenameParameter(replacement, name);
@@ -43,6 +46,9 @@ public static class FamilyDocumentNormalizeParameter {
         var dependents = source.GetDependents(fm.Parameters).ToList();
         var targetDependsOnSource = dependents.Any(dependent => dependent.Id == target.Id);
         var targetIsExactAlias = targetDependsOnSource && fm.Parameters.TryGetSingleReference(target.Formula)?.Id == source.Id;
+        // The source reads exactly the destination (formula `Target`): its value is the destination's in every type, and its dependents are
+        // rewritten to the destination below, so not copying that circular formula loses nothing.
+        var sourceIsExactAlias = fm.Parameters.TryGetSingleReference(source.Formula)?.Id == target.Id;
         if (targetDependsOnSource && !targetIsExactAlias)
             throw new InvalidOperationException(
                 $"Cannot remove source '{source.Definition.Name}': destination '{target.Definition.Name}' formula '{target.Formula}' depends on the source but is not an exact alias. Refusing to discard formula intent.");
@@ -82,9 +88,18 @@ public static class FamilyDocumentNormalizeParameter {
             }
             document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
             foreach (var array in arrays) array.Label = target;
-            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Native refusal rolls back the whole transfer.
-            if (!targetIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula))
-                fm.SetFormula(target, source.Formula);
+            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Native refusal rolls back the whole transfer, and names
+            // its cause so a corpus run reads as a census (circular, data type, type/instance).
+            if (!targetIsExactAlias && !sourceIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
+                try { fm.SetFormula(target, source.Formula); }
+                catch (Autodesk.Revit.Exceptions.ApplicationException exception) {
+                    static string Scope(FamilyParameter p) => p.IsInstance ? "instance" : "type";
+                    throw new InvalidOperationException(
+                        $"Family '{document.Document.Title}': cannot copy formula '{source.Formula}' from source '{sourceName}' " +
+                        $"({source.Definition.GetDataType().TypeId}, {Scope(source)}) to destination '{target.Definition.Name}' " +
+                        $"({target.Definition.GetDataType().TypeId}, {Scope(target)}): {exception.Message}", exception);
+                }
+            }
             if (targetIsExactAlias) {
                 fm.SetFormula(target, null!);
                 foreach (var (type, value) in targetValues.Where(item => item.Value is not null)) {

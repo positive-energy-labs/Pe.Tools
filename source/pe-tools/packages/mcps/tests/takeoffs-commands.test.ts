@@ -135,3 +135,50 @@ test("snapshot projection preserves held regions and saved review after partitio
     version: "v1",
   });
 });
+
+test("a carrier blob's old resolutions suppress no flag: decisions come from Work only", () => {
+  const blob = JSON.stringify({
+    runId: "run-1",
+    sourceRoomId: "R01",
+    sourceSqft: 100,
+    flags: ["seedless"],
+    resolutions: [{ subject: "R01", flag: "seedless", verb: "dismiss", at: "t", runId: "run-1" }],
+  });
+  const snapshot = projectTakeoffSnapshot(
+    {
+      reading: {
+        at: address("C:\\Models\\Harness.rvt"),
+        version: "v1",
+        observedAt: "2026-09-18T12:00:00.000Z",
+      },
+      snapshot: {
+        ...rawSnapshot,
+        regionsByZone: {
+          "zone-1": [
+            {
+              elementId: 90,
+              role: "room-region",
+              guid: "room-1",
+              sqft: 100,
+              roomType: "office",
+              blob,
+              analysis: { state: "current", runId: "run-1", floorZ: 0, ceilingZ: 9 },
+              outer: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              holes: [],
+            },
+          ],
+        },
+      },
+    } as unknown as Parameters<typeof projectTakeoffSnapshot>[0],
+    "Harness.rvt",
+    [{ name: "Zoning", level: "Main" }],
+  );
+  const [room] = snapshot.world.zones[0]!.rooms;
+  expect(room!.flags).toContain("seedless");
+  expect(room!.decisions).toEqual([]);
+});

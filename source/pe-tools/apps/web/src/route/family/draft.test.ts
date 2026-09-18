@@ -20,7 +20,12 @@ const client = vi.hoisted(() => ({
 }));
 vi.mock("../../../../../packages/mcps/src/shared/takeoff-action-client", () => client);
 
-import { familyDraftRouteState, settingsFieldPointer, type FamilyDraft } from "@pe/agent-contracts";
+import {
+  familyDraftRouteState,
+  settingsFieldPointer,
+  stagedEntries,
+  type FamilyDraft,
+} from "@pe/agent-contracts";
 
 import { familyFixtures } from "#/family/authored-families";
 import { draftSpec, familyManifest, familySpec } from "./manifest";
@@ -87,7 +92,7 @@ test("a staged cell plans: save files the draft as a member, the plan names it",
     cells: { [width]: { proposal: null, staged: { value: "2in" } } },
   };
   const { ctx: c, pages } = ctx(doc, "p");
-  expect(familySpec.staged!.count(c)).toBe(1);
+  expect(stagedEntries(familySpec.staged!.cells(c as never))).toHaveLength(1);
   expect(familyManifest().actions!.plan.ready(c, undefined as never)).toBeNull();
   const sheet = await familySpec.staged!.plan(c);
   const [save, plan] = client.runSemanticAction.mock.calls;

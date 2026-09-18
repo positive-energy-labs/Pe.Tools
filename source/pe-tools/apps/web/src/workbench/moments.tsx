@@ -306,6 +306,9 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const failed = call.status === "failed";
   // ponytail: no cause word; `ExpiredAsk` does not carry one and the ruling forbids inventing it.
   const expired = call.status === "expired";
+  // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
+  const cancelled = call.status === "cancelled";
+  const record = expired ? " — expired, unanswered" : cancelled ? " — cancelled" : null;
   const tone = failed ? "failed" : running ? "active" : "";
   const result = failed ? (call.result ?? call.error) : deferred.result;
   const images = deferred.ref ? toolImages(result) : call.images;
@@ -343,7 +346,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         className={tone}
       >
         <span>⌗ {toolTitle(call.title)}</span>
-        {expired ? <span className="t-small text-ink-2">{" — expired, unanswered"}</span> : null}
+        {record ? <span className="t-small text-ink-2">{record}</span> : null}
         {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
           <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
@@ -356,12 +359,12 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           </span>
         ) : null}
 
-        {expired ? null : (
+        {record ? null : (
           <span
             className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
             data-tone={failed ? "caution" : running ? undefined : "done"}
           >
-            {failed ? "err" : running ? "run" : "ok"}
+            {failed ? "err" : approval ? "wait" : running ? "run" : "ok"}
           </span>
         )}
       </div>

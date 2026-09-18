@@ -77,6 +77,7 @@ export const scheduleSpec: EntityRouteDef<
   schema: "/schemas/settings/CmdScheduleManager/schedules.json",
   capture: "schedule.capture",
   apply: "schedule.apply",
+  applies: ["catalog"],
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
     return reading === undefined

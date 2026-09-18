@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * A CellListSelect inside MasterTable must not steal the table's keys: Enter opens it from the
+ * A CellListSelect inside Table must not steal the table's keys: Enter opens it from the
  * focused td, Escape closes the popover first and then leaves focus on the td, Tab moves to the
  * next cell, and a proposal cell's a / d / u still fire from its own td.
  */

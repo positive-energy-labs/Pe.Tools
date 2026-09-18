@@ -43,7 +43,7 @@ describe("registered plan substrate", () => {
           topRight: [30, 40],
           bottomLeft: [10, 0],
         },
-        { minX: 0, minY: 0, maxX: 50, maxY: 50, pxPerFt: 2, widthPx: 100, heightPx: 100 },
+        { minX: 0, maxY: 50, pxPerFt: 2 },
       ),
     ).toEqual([0.4, -0, 0, 0.4, 20, 20]);
   });

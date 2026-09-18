@@ -78,11 +78,6 @@
     </ItemGroup>
     <ItemGroup>
         <None
-            Include="..\Pe.Revit.Tests\Fixtures\Profiles\**\*.json"
-            Link="Benchmarks\Profiles\%(RecursiveDir)%(Filename)%(Extension)"
-            CopyToOutputDirectory="PreserveNewest"
-        />
-        <None
             Include="..\Pe.Revit.Tests\Fixtures\FamilyModel\**\*.json"
             Link="Benchmarks\FamilyModel\%(RecursiveDir)%(Filename)%(Extension)"
             CopyToOutputDirectory="PreserveNewest"

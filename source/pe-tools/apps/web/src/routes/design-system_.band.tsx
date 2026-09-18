@@ -52,6 +52,14 @@ function BandRoute() {
   const matrix: Matrix = { cells, wire, outcome };
   const aggregate = (run: Promise<FanOutOutcome>) => void run.then(setOutcome);
   const rows = useMemo(() => matrixRows(matrix), [cells, outcome]);
+  const view = {
+    rows,
+    columns: MATRIX_COLUMNS,
+    rowKey: (r: (typeof rows)[number]) => r.key,
+    label: "family types",
+    state: tableState,
+    onStateChange: setTableState,
+  };
   const staged = Object.values(cells).filter((cell) => cell.staged != null).length;
   const row = MATRIX.find((r) => r.key === picked) ?? MATRIX[0]!;
 
@@ -96,12 +104,7 @@ function BandRoute() {
               />
               <div className="h-[26rem]">
                 <TableFrame
-                  label="family types"
-                  rows={rows}
-                  columns={MATRIX_COLUMNS}
-                  rowKey={(r) => r.key}
-                  state={tableState}
-                  onStateChange={setTableState}
+                  {...view}
                   searchPlaceholder="search families, types, values…"
                   actions={
                     <ActionButton
@@ -112,16 +115,7 @@ function BandRoute() {
                     />
                   }
                 >
-                  <Table
-                    rows={rows}
-                    columns={MATRIX_COLUMNS}
-                    rowKey={(r) => r.key}
-                    label="family types"
-                    state={tableState}
-                    onStateChange={setTableState}
-                    activeKey={picked}
-                    onRowClick={(r) => setPicked(r.key)}
-                  />
+                  <Table {...view} activeKey={picked} onRowClick={(r) => setPicked(r.key)} />
                 </TableFrame>
               </div>
               {outcome ? (

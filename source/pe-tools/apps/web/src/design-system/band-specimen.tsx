@@ -66,7 +66,7 @@ export function cellState({ cells, wire, outcome }: Matrix, key: string): StateC
   };
 }
 
-/** A table row carries its state: MasterTable re-renders a row only when its identity changes. */
+/** A table row carries its state: Table re-renders a row only when its identity changes. */
 export type StatefulRow = MatrixRow & { matrix: Matrix };
 // ponytail: every write re-identifies all 18 rows; slice per row if the matrix grows.
 export const matrixRows = (matrix: Matrix): StatefulRow[] =>

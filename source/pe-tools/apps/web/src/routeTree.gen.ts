@@ -29,7 +29,6 @@ import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
-import { Route as DesignSystemCompactRouteImport } from "./routes/design-system_.compact";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
@@ -137,11 +136,6 @@ const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
   path: "/design-system/band",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemCompactRoute = DesignSystemCompactRouteImport.update({
-  id: "/design-system_/compact",
-  path: "/design-system/compact",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const DesignSystemListRoute = DesignSystemListRouteImport.update({
   id: "/design-system_/list",
   path: "/design-system/list",
@@ -194,7 +188,6 @@ export interface FileRoutesByFullPath {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
-  "/design-system/compact": typeof DesignSystemCompactRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
@@ -223,7 +216,6 @@ export interface FileRoutesByTo {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
-  "/design-system/compact": typeof DesignSystemCompactRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
@@ -253,7 +245,6 @@ export interface FileRoutesById {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
-  "/design-system_/compact": typeof DesignSystemCompactRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
@@ -284,7 +275,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
-    | "/design-system/compact"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/swatch"
@@ -313,7 +303,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
-    | "/design-system/compact"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/swatch"
@@ -342,7 +331,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/band"
-    | "/design-system_/compact"
     | "/design-system_/list"
     | "/design-system_/popovers"
     | "/design-system_/swatch"
@@ -372,7 +360,6 @@ export interface RootRouteChildren {
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
-  DesignSystemCompactRoute: typeof DesignSystemCompactRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
@@ -522,13 +509,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemBandRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/compact": {
-      id: "/design-system_/compact";
-      path: "/design-system/compact";
-      fullPath: "/design-system/compact";
-      preLoaderRoute: typeof DesignSystemCompactRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/design-system_/list": {
       id: "/design-system_/list";
       path: "/design-system/list";
@@ -606,7 +586,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
-  DesignSystemCompactRoute: DesignSystemCompactRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,

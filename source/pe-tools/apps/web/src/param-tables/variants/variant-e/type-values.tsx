@@ -112,8 +112,6 @@ export interface TypeWrite {
   refusal?: string;
 }
 
-export const COLS = 10;
-
 export const muted: React.CSSProperties = { color: token("ink-mute") };
 
 export const secondary: React.CSSProperties = { color: token("ink-2") };

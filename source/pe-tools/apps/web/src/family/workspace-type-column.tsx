@@ -67,7 +67,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     cell: (row) => {
       // ── the ghost's ONE merged cell ─────────────────────────────────────────────────────────
       // A frozen literal has no per-type spread, so it gets no per-type cells: it gets one cell
-      // the width of all of them, left-aligned like every other value. MasterTable cannot express
+      // the width of all of them, left-aligned like every other value. Table cannot express
       // a colspan, so the anchor column renders it and its neighbours are SUPPRESSED — blank, but
       // blank WITH a reason, which is the same discipline every other refusal on this page keeps.
       if (row.kind === "ghost") {
@@ -77,7 +77,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           return (
             <ReadCell
               value=""
-              reason={`Suppressed — part of the ONE merged value cell for ${row.name}, which begins in the first type column and spans all of them. There is exactly one literal for the whole family, so it is drawn once. (MasterTable has no spanning cell; this is the honest emulation of one.)`}
+              reason={`Suppressed — part of the ONE merged value cell for ${row.name}, which begins in the first type column and spans all of them. There is exactly one literal for the whole family, so it is drawn once. (Table has no spanning cell; this is the honest emulation of one.)`}
             />
           );
         const literal = bindingOf(world, draft, slug, property);

@@ -67,6 +67,8 @@ export type ToolOutcome = { result?: unknown } & (
   | { status: "failed"; error: string }
   /** An ask whose turn is gone (turn end, cancel, host restart): a record, never answerable. */
   | { status: "expired" }
+  /** A non-ask call a person's cancel stopped mid-run (the runtime's record): not a failure. */
+  | { status: "cancelled" }
 );
 
 export type ToolCall = {
@@ -102,6 +104,9 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
   const expired = new Set(selectExpiredAsks(state).map((ask) => ask.toolCallId));
+  const cancelled = new Set((state.cancelledCalls ?? []).map((call) => call.toolCallId));
+  // A call the live frame holds an approval for is waiting on a person, not interrupted.
+  const waiting = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
   for (const [messageAt, message] of rows.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
@@ -112,11 +117,15 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const terminal =
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
       const interrupted =
-        !terminal && !active && (messageAt < rows.length - 1 || state.display.isRunning !== true);
+        !terminal &&
+        !active &&
+        !waiting.has(call.toolCallId) &&
+        (messageAt < rows.length - 1 || state.display.isRunning !== true);
       const args = call.rawInput ?? call.args;
       const result = call.result ?? active?.result;
-      // Mastra keeps a call its input validation refused as a `result` holding the error.
-      const rejected = readRecord(result)?.error === true;
+      // Mastra keeps a call its input validation refused as a `result` holding the error; a tool
+      // that threw is a `result` of `{ isError: true, content }`.
+      const rejected = readRecord(result)?.error === true || readRecord(result)?.isError === true;
       const failed =
         call.isError === true ||
         (terminal && call.state !== "result") ||
@@ -127,17 +136,20 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = expired.has(call.toolCallId)
         ? { status: "expired", result }
-        : failed
-          ? {
-              status: "failed",
-              error:
-                call.errorText ||
-                readString(readRecord(result)?.message) ||
-                text(result) ||
-                "Tool call ended without a terminal result.",
-              result,
-            }
-          : { status: completed ? "completed" : "in_progress", result };
+        : cancelled.has(call.toolCallId)
+          ? { status: "cancelled", result }
+          : failed
+            ? {
+                status: "failed",
+                error:
+                  call.errorText ||
+                  readString(readRecord(result)?.message) ||
+                  readString(readRecord(result)?.content) ||
+                  text(result) ||
+                  "Tool call ended without a terminal result.",
+                result,
+              }
+            : { status: completed ? "completed" : "in_progress", result };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
@@ -396,6 +408,10 @@ export type Approval = { toolCallId: string; toolName: string } & (
   | { kind: "permission" }
   | { kind: "suspension"; payload: unknown }
 );
+
+/** A parked `ask_user`: Pea is waiting on the person, not working. A new turn expires it. */
+export const isParkedAsk = (approval: Approval) =>
+  approval.kind === "suspension" && approval.toolName === "ask_user";
 
 export function selectApprovals(display: ChatDisplay): Approval[] {
   const approvals: Approval[] = [];

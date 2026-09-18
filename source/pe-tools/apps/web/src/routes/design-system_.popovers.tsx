@@ -139,7 +139,7 @@ const SPECIMENS: readonly Specimen[] = [
     id: "facet",
     name: "ListPopup · facet filter",
     consumers:
-      "components/master-table/master-table.tsx → every MasterTable column header (atlas/takeoffs, families, data-tables)",
+      "components/master-table/master-table-header.tsx → every Table column header (atlas/takeoffs, families, data-tables)",
     shape: "ListPopup face=fill · search above 8 · the trigger is the anchor",
     defects: [
       "FIXED — the list grammar cutover: the trigger is always the anchor, so no consumer writes an anchor `div`.",

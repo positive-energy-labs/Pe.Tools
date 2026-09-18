@@ -14,7 +14,7 @@ const t = (
   out: Awaited<ReturnType<CellTransition["run"]>> = null,
 ): CellTransition => ({ kind, run: vi.fn(async () => out) });
 
-/** Row scale inside the real MasterTable: one row, one column drawing the cell. */
+/** Row scale inside the real Table: one row, one column drawing the cell. */
 const inTable = (node: React.ReactNode) => {
   const view = render(
     <Table
@@ -82,7 +82,7 @@ test("a run in flight marks the cell busy and inerts its verbs", async () => {
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
-test("inside MasterTable, a focused cell fires a / d / u through the hotkey registry", async () => {
+test("inside Table, a focused cell fires a / d / u through the hotkey registry", async () => {
   const [accept, deny, unstage] = [t("accept"), t("deny"), t("unstage")];
   inTable(<StateCell value="10in" scale="row" transitions={[accept, deny, unstage]} />);
   const td = gridcell();
@@ -151,4 +151,25 @@ test("with no table around it, Escape returns to the cell itself, where u unstag
 test("a cell with no verbs takes no tab stop of its own", () => {
   const { container } = render(<StateCell value="10in" />);
   expect((container.firstElementChild as HTMLElement).hasAttribute("tabindex")).toBe(false);
+});
+
+test("a contested row cell says pea's counter-proposal inline, not only in a hover title", () => {
+  for (const onCommit of [undefined, () => {}]) {
+    const { container, unmount } = render(
+      <StateCell
+        scale="row"
+        value="175 VA"
+        stage="staged"
+        stagedBy="you"
+        counterValue="180 VA"
+        onCommit={onCommit}
+      />,
+    );
+    const cell = container.querySelector<HTMLElement>("[data-scale='row']")!;
+    expect(cell.hasAttribute("data-contest")).toBe(true);
+    // Rendered text a keyboard, touch or no-hover person reads; the title stays a duplicate.
+    expect(cell.textContent).toContain("pea proposes 180 VA");
+    expect(cell.title).toContain("pea proposes 180 VA");
+    unmount();
+  }
 });

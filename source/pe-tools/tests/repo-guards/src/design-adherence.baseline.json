@@ -1,16 +1,12 @@
 {
   "rawTable": {
-    "total": 13,
+    "total": 7,
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
-      "families": 1,
       "lib": 1,
-      "ops": 1,
-      "param-tables": 3,
-      "parameter-links": 1,
-      "route": 1,
-      "runs": 2,
+      "param-tables": 2,
+      "runs": 1,
       "workbench": 1
     }
   },
@@ -70,7 +66,7 @@
     }
   },
   "inlineColor": {
-    "total": 82,
+    "total": 80,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -79,7 +75,7 @@
       "host": 3,
       "lab": 8,
       "ops": 14,
-      "param-tables": 5,
+      "param-tables": 3,
       "routes": 1,
       "runs": 27,
       "takeoff": 3,
