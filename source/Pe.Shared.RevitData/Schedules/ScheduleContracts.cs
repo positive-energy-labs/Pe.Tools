@@ -519,6 +519,17 @@ public enum ScheduleCellBindingBlocker {
     ReadOnlyParameter
 }
 
+/// <summary>Canonical mutation evidence for one native parameter behind a rendered cell.</summary>
+public sealed record ScheduleCellBindingTarget(
+    long ElementId,
+    long ParameterId,
+    string? ParameterName,
+    RequestedParameterStorageType StorageType,
+    bool IsReadOnly,
+    bool HasValue,
+    string? RawValue
+);
+
 /// <summary>
 ///     The write surface behind one rendered schedule cell: which element(s) a cell edit would
 ///     write to, and through which parameter. A type-parameter column resolves to the shared type
@@ -535,6 +546,7 @@ public record ScheduleCellBinding(
     string? DisplayValue,
     bool IsTypeParameter,
     bool IsEditable,
+    IReadOnlyList<ScheduleCellBindingTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
     bool HasMixedValues = false
 );
