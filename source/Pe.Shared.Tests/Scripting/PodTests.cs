@@ -398,6 +398,74 @@ public sealed class PodTests {
         });
     }
 
+    // An `_fields` fragment is `{ "$schema"?, "Items": [...] }`; in array position its items splice in order.
+    [Test]
+    public void Array_include_of_an_Items_fragment_splices_its_items_in_order() {
+        this.WritePod("Office", "office", new() {
+            ["settings/member.json"] = """{"Fields":[{"A":1},{"$include":"@local/_fields/X"},{"B":2}]}""",
+            ["settings/_fields/X.json"] = """{"$schema":"../schemas/fragment.json","Items":[{"X":1},{"Y":2}]}"""
+        });
+
+        var composed = this._service.Compose("office", "settings/member.json", null);
+
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["Fields"]!.ToString(Newtonsoft.Json.Formatting.None),
+            Is.EqualTo("""[{"A":1},{"X":1},{"Y":2},{"B":2}]"""));
+    }
+
+    [Test]
+    public void A_nested_Items_fragment_splices_inside_the_fragment_that_includes_it() {
+        this.WritePod("Office", "office", new() {
+            ["settings/member.json"] = """{"Fields":[{"A":1},{"$include":"@local/_fields/X"},{"B":2}]}""",
+            ["settings/_fields/X.json"] = """{"Items":[{"X":1},{"$include":"@local/_fields/Y"}]}""",
+            ["settings/_fields/Y.json"] = """{"Items":[{"Y":1},{"Y":2}]}"""
+        });
+
+        var composed = this._service.Compose("office", "settings/member.json", null);
+
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["Fields"]!.ToString(Newtonsoft.Json.Formatting.None),
+            Is.EqualTo("""[{"A":1},{"X":1},{"Y":1},{"Y":2},{"B":2}]"""));
+        Assert.That(composed.Dependencies.Select(d => d.Path), Is.EqualTo(new[] { "settings/_fields/X.json", "settings/_fields/Y.json" }));
+    }
+
+    [Test]
+    public void Array_include_of_any_other_shape_is_a_named_include_error() {
+        this.WritePod("Office", "office", new() {
+            ["settings/member.json"] = """{"Fields":[{"$include":"@local/_fields/X"}]}""",
+            ["settings/_fields/X.json"] = """{"Name":"not a fragment"}"""
+        });
+
+        var composed = this._service.Compose("office", "settings/member.json", null);
+
+        Assert.That(composed.Composed, Is.Null);
+        var error = composed.Diagnostics.Single();
+        Assert.That(error.Stage, Is.EqualTo("pod.settings.include"));
+        Assert.That(error.Message, Does.Contain("@local/_fields/X").And.Contain("Name"));
+    }
+
+    // The proof-3a shape: a schedule profile whose Fields include `_fields` fragments.
+    [Test]
+    public void A_MechEquip_shaped_profile_composes_to_field_specs_not_an_Items_wrapper() {
+        this.WritePod("Standards", "pe-standards", new() {
+            ["settings/schedules/MechEquip.json"] = """
+                {"Name":"Mechanical Equipment","CategoryName":"Mechanical Equipment",
+                 "Fields":[{"$include":"@local/schedules/_fields/Header"},{"ParameterName":"Comments"}]}
+                """,
+            ["settings/schedules/_fields/Header.json"] = """
+                {"$schema":"../../schemas/fields.json","Items":[{"Parameter":{"Name":"Mark"}},{"Parameter":{"Name":"Type Mark"}}]}
+                """
+        });
+
+        var composed = this._service.Compose("pe-standards", "settings/schedules/MechEquip.json", null);
+        var profile = JObject.Parse(composed.Composed!).ToObject<Pe.Shared.RevitData.Schedules.ScheduleProfile>()!;
+
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["Fields"]!.Children<JObject>().Select(field => field.ContainsKey("Items")), Has.None.True);
+        Assert.That(profile.Fields.Select(field => field.Parameter.Name).Take(2), Is.EqualTo(new[] { "Mark", "Type Mark" }));
+        Assert.That(profile.Fields, Has.Count.EqualTo(3));
+    }
+
     [Test]
     public void Composer_rejects_malformed_directives() {
         foreach (var malformed in new[] { "{\"$preset\":null}", "{\"$preset\":3}", "{\"$include\":[]}", "{\"$include\":\"@local/a\",\"b\":1}" }) {
