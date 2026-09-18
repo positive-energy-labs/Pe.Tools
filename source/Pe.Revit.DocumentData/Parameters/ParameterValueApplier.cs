@@ -74,14 +74,16 @@ public static class ParameterValueApplier {
             throw new ArgumentException(
                 $"Coalesced native write count {plan.Writes.Count} exceeds the {ParameterValueApplyBounds.MaxEditsPerCall}-write cap.");
 
-        var written = plan.Writes.Select(i => Write(document, resolved[i].Parameter!, flat[i].Edit, dryRun)).ToList();
+        var answers = new ParameterValueEditResult?[flat.Count];
+        foreach (var write in plan.Writes) {
+            var done = Write(document, resolved[write.Edit].Parameter!, flat[write.Edit].Edit, dryRun);
+            foreach (var i in write.Edits) answers[i] = done;
+        }
         var results = groups.Select(group => new ParameterValueEditResult[group.Count]).ToArray();
         for (var i = 0; i < flat.Count; i++) {
             var (group, slot, _) = flat[i];
-            var answer = plan.WriteOf[i] < 0
-                ? new ParameterValueEditResult(slot, false, plan.Refusals[i])
-                : written[plan.WriteOf[i]] with { Index = slot };
-            results[group][slot] = answer with { Current = resolved[i].Current };
+            var answer = answers[i] ?? new ParameterValueEditResult(slot, false, plan.Refusals[i]);
+            results[group][slot] = answer with { Index = slot, Current = resolved[i].Current };
         }
         return results;
     }
