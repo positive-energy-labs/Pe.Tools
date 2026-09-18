@@ -528,7 +528,7 @@ public sealed record ScheduleCellBindingTarget(
     [property: JsonProperty(Required = Required.Always)] RequestedParameterStorageType StorageType,
     [property: JsonProperty(Required = Required.Always)] bool IsReadOnly,
     [property: JsonProperty(Required = Required.Always)] bool HasValue,
-    [property: JsonProperty(Required = Required.AllowNull)] string? RawValue
+    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] string? RawValue
 );
 
 /// <summary>
