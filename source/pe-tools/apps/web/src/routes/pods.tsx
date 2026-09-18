@@ -4,7 +4,7 @@
  * route its `$schema` names.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -42,6 +42,11 @@ import {
   PODS_SEEDS,
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
+import {
+  LeftBehindLine,
+  PrototypeSwitcher,
+  useRetention,
+} from "#/route/spec-editor-variants/PROTOTYPE-retention";
 
 /** `/pods` acts on no document; it reads the thread head so field options and links carry it. */
 export const manifest = defineRoute({
@@ -90,10 +95,11 @@ export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
 export const Route = createFileRoute("/pods")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { pod?: string; path?: string; demo?: string } => ({
+  ): { pod?: string; path?: string; demo?: string; variant?: string } => ({
     pod: typeof search.pod === "string" ? search.pod : undefined,
     path: typeof search.path === "string" ? search.path : undefined,
     demo: typeof search.demo === "string" ? search.demo : undefined,
+    variant: typeof search.variant === "string" ? search.variant : undefined,
   }),
   component: PodsRoute,
 });
@@ -153,10 +159,20 @@ export function PodsRouteContent({
   const product = member
     ? PRODUCT_ROUTES.find((route) => isSpecOf(member.schema, route.def.schema))
     : undefined;
+  // PROTOTYPE (retention round): page-lifetime drafts per member, fixture lane only.
+  const retention = useRetention();
+  const memberKey = member ? `${row!.id}${SEP}${member.path}` : null;
+  const holdDraft = useCallback(
+    (draft: { text: string; mode: "form" | "raw" } | null) =>
+      memberKey && retention.hold(memberKey, draft),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memberKey, retention.hold],
+  );
   const { failure: runsFailure, runs } = usePodRuns(row?.id ?? null, member?.path ?? null, !!demo);
 
   return (
     <Surface>
+      {demo ? <PrototypeSwitcher current={retention.variant} /> : null}
       <AddressingBar
         name="pods"
         sentence={
@@ -233,18 +249,22 @@ export function PodsRouteContent({
                   id: `${item.id}${SEP}${m.path}`,
                   label: m.path,
                   group: `${item.name} · ${item.version}`,
-                  meta: m.schema
-                    ? m.schema
-                        .split("/")
-                        .at(-1)
-                        ?.replace(/\.json$/, "")
-                    : undefined,
+                  // PROTOTYPE: bold = what you have not saved (house law 6).
+                  meta: retention.held.has(`${item.id}${SEP}${m.path}`) ? (
+                    <b data-prototype="unsaved-mark">unsaved text</b>
+                  ) : m.schema ? (
+                    m.schema
+                      .split("/")
+                      .at(-1)
+                      ?.replace(/\.json$/, "")
+                  ) : undefined,
                   hint: m.schema ?? "no $schema: plain data",
                 })),
               )}
               activeId={member ? `${row!.id}${SEP}${member.path}` : null}
               onPick={(id) => {
                 const [p, m] = id.split(SEP);
+                if (id !== memberKey) retention.leaving(memberKey);
                 select({ pod: p!, path: m! });
               }}
               placeholder="Filter members…"
@@ -259,6 +279,17 @@ export function PodsRouteContent({
             resize={{ target: "end", defaultSize: 300, minSize: 220, persist: "pods:runs" }}
             start={
               <Pane kind="content" title="spec" meta={member?.path}>
+                {retention.left ? (
+                  <LeftBehindLine
+                    label={retention.left.split(SEP)[1]!}
+                    onBack={() => {
+                      const [p, m] = retention.left!.split(SEP);
+                      retention.dismiss();
+                      select({ pod: p!, path: m! });
+                    }}
+                    onDiscard={() => retention.discard(retention.left!)}
+                  />
+                ) : null}
                 {member && !member.path.endsWith(".json") ? (
                   <EmptyState story="scope" exit="pick a JSON member to edit it">
                     {member.path} is source, not a spec
@@ -275,6 +306,8 @@ export function PodsRouteContent({
                         ? DEMO_MEMBER_SPECS.get(`${row!.id}${SEP}${member.path}`)
                         : undefined
                     }
+                    initialDraft={memberKey && demo ? retention.held.get(memberKey) : undefined}
+                    onDraft={demo ? holdDraft : undefined}
                     onSaved={(saved) => {
                       refresh();
                       select(saved);

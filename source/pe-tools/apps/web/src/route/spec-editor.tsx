@@ -377,6 +377,8 @@ export function SpecEditor({
   fixture,
   optionsFrom,
   onSaved,
+  initialDraft,
+  onDraft,
 }: {
   member: MemberRef | null;
   /** The member's `$schema`; null = plain data, no library validates it. */
@@ -388,6 +390,9 @@ export function SpecEditor({
    */
   optionsFrom?: OptionsFrom | null;
   onSaved?: (ref: MemberRef) => void;
+  /** PROTOTYPE (retention round): a draft the host page held for this member, and the report back. */
+  initialDraft?: { text: string; mode: Mode };
+  onDraft?: (draft: { text: string; mode: Mode } | null) => void;
 }) {
   const status = useHostStatus(!fixture);
   const session =
@@ -396,9 +401,13 @@ export function SpecEditor({
   const [basis, setBasis] = useState<string | null>(fixture?.content ?? null);
   const [basisSha, setBasisSha] = useState<string | null>(null);
   /** What the person typed since the last read; null = the draft is the Work's or the disk's. */
-  const [typed, setDraft] = useState<string | null>(null);
+  const [typed, setDraft] = useState<string | null>(initialDraft?.text ?? null);
   const [schemaJson, setSchemaJson] = useState<string | null>(fixture?.schema ?? null);
-  const [mode, setMode] = useState<Mode>("form");
+  const [mode, setMode] = useState<Mode>(initialDraft?.mode ?? "form");
+  // PROTOTYPE: the host page holds what the person typed, for the life of the page.
+  useEffect(() => {
+    onDraft?.(typed !== null && typed !== basis ? { text: typed, mode } : null);
+  }, [typed, mode, basis, onDraft]);
   /** The host's last answer, with the draft it answered: an answer on older bytes gates nothing. */
   const [composed, setComposed] = useState<(Composed & { draft: string }) | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
