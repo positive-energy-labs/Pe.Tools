@@ -216,6 +216,59 @@ const contested = (item: BandItem) =>
   item.cell.staged != null &&
   (item.cell.proposal.value !== item.cell.staged.value ||
     item.cell.proposal.delete !== item.cell.staged.delete);
+/**
+ * The one verb set for a cell, at every scale. A proposal that differs from what is staged is
+ * standing (open, or a counter-proposal) and takes accept/deny; anything staged takes unstage.
+ * A contested cell therefore offers all three (journeys review 2).
+ */
+function ReviewVerbs({
+  item,
+  dispatch,
+}: {
+  item: BandItem;
+  dispatch: (action: BandAction) => void;
+}) {
+  const counter = contested(item);
+  const standing = open(item) || counter;
+  if (!standing && !item.cell.staged) return <ReadCell value="—" />;
+  return (
+    <span className="flex gap-1">
+      {standing ? (
+        <>
+          <ActionButton
+            tone="agent"
+            icon={Check}
+            label="accept"
+            reason={
+              counter
+                ? "Stage Pea's counter-proposal in place of your staged value"
+                : "Stage Pea's proposal"
+            }
+            onClick={() => dispatch({ type: "accept", key: item.key })}
+          />
+          <ActionButton
+            icon={X}
+            label="deny"
+            reason={
+              counter
+                ? "Clear Pea's counter-proposal; your staged value stays"
+                : "Clear Pea's proposal"
+            }
+            onClick={() => dispatch({ type: "deny", key: item.key })}
+          />
+        </>
+      ) : null}
+      {item.cell.staged ? (
+        <ActionButton
+          icon={Undo2}
+          label="unstage"
+          reason="Clear the staged value; restore the standing proposal or baseline"
+          onClick={() => dispatch({ type: "unstage", key: item.key })}
+        />
+      ) : null}
+    </span>
+  );
+}
 const changed = (item: BandItem) => item.cell.proposal != null || item.cell.staged != null;
 const stagedBy = (item: BandItem) =>
   item.cell.staged != null &&
@@ -301,33 +354,7 @@ function BandRoute() {
         key: "review",
         label: "review",
         width: "w-44",
-        cell: (item) =>
-          item.cell.staged ? (
-            <ActionButton
-              icon={Undo2}
-              label="unstage"
-              reason="Clear the staged value; restore the standing proposal or baseline"
-              onClick={() => dispatch({ type: "unstage", key: item.key })}
-            />
-          ) : open(item) ? (
-            <span className="flex gap-1">
-              <ActionButton
-                tone="agent"
-                icon={Check}
-                label="accept"
-                reason="Stage Pea's proposal"
-                onClick={() => dispatch({ type: "accept", key: item.key })}
-              />
-              <ActionButton
-                icon={X}
-                label="deny"
-                reason="Clear Pea's proposal"
-                onClick={() => dispatch({ type: "deny", key: item.key })}
-              />
-            </span>
-          ) : (
-            <ReadCell value="—" />
-          ),
+        cell: (item) => <ReviewVerbs item={item} dispatch={dispatch} />,
       },
     ],
     [fixture.items, fixture.draftMode],
@@ -501,30 +528,7 @@ function BandRoute() {
                                 <span className="t-small text-ink-2">by {stagedBy(item)}</span>
                               ) : null}
                             </span>
-                            {item.cell.staged ? (
-                              <ActionButton
-                                icon={Undo2}
-                                label="unstage"
-                                reason="Clear the staged value; restore the standing proposal or baseline"
-                                onClick={() => dispatch({ type: "unstage", key: item.key })}
-                              />
-                            ) : open(item) ? (
-                              <span className="flex gap-1">
-                                <ActionButton
-                                  tone="agent"
-                                  icon={Check}
-                                  label="accept"
-                                  reason="Stage Pea's proposal"
-                                  onClick={() => dispatch({ type: "accept", key: item.key })}
-                                />
-                                <ActionButton
-                                  icon={X}
-                                  label="deny"
-                                  reason="Clear Pea's proposal"
-                                  onClick={() => dispatch({ type: "deny", key: item.key })}
-                                />
-                              </span>
-                            ) : null}
+                            <ReviewVerbs item={item} dispatch={dispatch} />
                           </div>
                         ))}
                         {chatItems.length > 5 ? (
