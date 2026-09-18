@@ -28,6 +28,8 @@ interface MasterRowProps<Row extends RowData> {
   className: string;
   onRowClick?: (row: Row) => void;
   onRowHover?: (row: Row | null) => void;
+  /** The columns the children were drawn from: a row's cells redraw when the columns do. */
+  columns: unknown;
   children: ReactNode;
 }
 
@@ -64,7 +66,10 @@ const MasterRow = memo(
     previous.active === next.active &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
-    previous.onRowHover === next.onRowHover,
+    previous.onRowHover === next.onRowHover &&
+    // Cell state often lives in the columns (a route's Work), not the row: without this, a
+    // stable row skipped every Work change and a staged cell never showed its mark.
+    previous.columns === next.columns,
 ) as typeof MasterRowView;
 
 export function MasterTableBody<Row extends RowData>({
@@ -151,6 +156,7 @@ export function MasterTableBody<Row extends RowData>({
             )}
             onRowClick={onRowClick}
             onRowHover={onRowHover}
+            columns={columnByKey}
           >
             {gutter && <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />}
             {cells.map((cell, columnIndex) => {
@@ -203,7 +209,11 @@ export function MasterTableBody<Row extends RowData>({
                           moveFrom(document.activeElement, direction, true)
                         }
                       >
-                        <table.FlexRender cell={cell} />
+                        {/* The column's own renderer, called, never `FlexRender`: TanStack
+                            renders a def's `cell` as a component TYPE, and the def is rebuilt
+                            whenever the columns are, so every cell remounted on each Work change
+                            and a half-typed value (and focus) vanished with its input (O8-c). */}
+                        {column.cell(tableRow.original)}
                       </CellNavigationProvider>
                     </td>
                   )}
