@@ -480,6 +480,17 @@ export class ActionJournal {
             notDispatched: true,
           };
       }
+      const cancelled = nextRow.steps.find((step) => step.state === "cancelled");
+      if (
+        cancelled?.state === "cancelled" &&
+        !nextRow.steps.some((step) => step.state === "unknown" || step.state === "running")
+      )
+        nextRow = {
+          ...nextRow,
+          state: "cancelled",
+          error: cancelled.error,
+          status: cancelled.status,
+        };
       nextRow = actionReceiptSchema.parse(nextRow);
       const next = this.rows.map((row) => (row.id === id ? nextRow : row));
       await this.persist(next);

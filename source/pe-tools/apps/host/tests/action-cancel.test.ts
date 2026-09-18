@@ -7,7 +7,7 @@
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Fiber, Layer, Queue } from "effect";
@@ -16,6 +16,8 @@ import { expect, test } from "vite-plus/test";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 
 const metrics = {
   requestBytes: 0,
@@ -153,6 +155,94 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
       expect(row.steps.at(-1)).toMatchObject({ id: blocked, state: "cancelled", status: 499 });
     }),
   ));
+
+test("an exact cancelled SDK receipt settles a lost reply once without replaying prior work", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-cancel-recovery-"));
+  const path = join(dir, "attempts.json");
+  const fixture = await partitionFixture(dir, {
+    session: "cancel-recovery",
+    openId: "cancel-recovery",
+  });
+  const intent = fixture.intent("lost-cancel-reply");
+  let effects = 0;
+  try {
+    const interrupted = new ActionJournal(path);
+    await interrupted.admit(
+      intent,
+      async () => ({ kind: "native-leaf", originalProcess }),
+      async (execution) => {
+        await execution.step("file", "prior", {}, async () => ++effects);
+        return execution.step("native", "takeoffs.partition", {}, async () => {
+          ++effects;
+          return new Promise(() => undefined);
+        });
+      },
+    );
+    while (JSON.parse(await readFile(path, "utf8")).actions[0].steps.length !== 2)
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    const envelope = JSON.parse(await readFile(path, "utf8"));
+    const nativeId = envelope.actions[0].steps[1].id;
+    envelope.actions[0].steps.push({
+      id: "22222222-2222-4222-8222-222222222222",
+      key: "native.followup",
+      kind: "native",
+      input: {},
+      state: "running",
+    });
+    await writeFile(path, JSON.stringify(envelope));
+
+    const recovered = new ActionJournal(path);
+    const read = (_args: readonly string[]) => {
+      return Promise.resolve(
+        sdkEnvelope({
+          state: "completed",
+          requestId: nativeId,
+          receipt: {
+            requestId: nativeId,
+            key: "takeoffs.partition",
+            pid: originalProcess.pid,
+            processStartUtc: originalProcess.processStartUtc,
+            verdict: "cancelled",
+          },
+          response: { error: "stopped at checkpoint", statusCode: 499 },
+        }),
+      );
+    };
+    let resolveFollowup = false;
+    const recover = (step: Parameters<typeof readNativeReceipt>[0]) =>
+      step.id === nativeId
+        ? readNativeReceipt(step, originalProcess, read)
+        : Promise.resolve({
+            step: resolveFollowup
+              ? {
+                  id: step.id,
+                  key: step.key,
+                  kind: step.kind,
+                  input: step.input,
+                  state: "succeeded" as const,
+                  result: { preserved: true },
+                }
+              : step,
+            evidence: { diagnostics: resolveFollowup ? [] : ["still ambiguous"] },
+          });
+    const unresolved = await recovered.recover(intent.id, recover);
+    resolveFollowup = true;
+    const first = await recovered.recover(intent.id, recover);
+    const second = await recovered.recover(intent.id, recover);
+
+    expect(unresolved.state).toBe("unknown");
+    expect(first).toMatchObject({ state: "cancelled", status: 499 });
+    expect(first.steps).toMatchObject([
+      { key: "prior", state: "succeeded", result: 1 },
+      { key: "takeoffs.partition", state: "cancelled", status: 499 },
+      { key: "native.followup", state: "succeeded", result: { preserved: true } },
+    ]);
+    expect(second).toEqual(first);
+    expect(effects).toBe(2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test("a cancel for a request still behind the host gate never reaches Revit", () =>
   lane(({ outgoing, answer }) =>

@@ -103,6 +103,49 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       state: "failed",
       notDispatched: true,
     });
+    await writeFile(
+      file,
+      sdkEnvelope({
+        ...result,
+        receipt: { ...receipt, verdict: "cancelled" },
+        response: { error: "stopped at checkpoint", statusCode: 499 },
+      }),
+    );
+    expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
+      id: step.id,
+      state: "cancelled",
+      error: "stopped at checkpoint",
+      status: 499,
+    });
+    for (const altered of [
+      { ...result, receipt: { ...receipt, verdict: "cancelled" }, response: undefined },
+      {
+        ...result,
+        receipt: { ...receipt, verdict: "cancelled" },
+        response: { error: "not cancellation", statusCode: 500 },
+      },
+      {
+        ...result,
+        receipt: { ...receipt, verdict: "cancelled", key: "takeoffs.adopt" },
+        response: { error: "stopped", statusCode: 499 },
+      },
+    ]) {
+      await writeFile(file, sdkEnvelope(altered));
+      expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual(step);
+    }
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...JSON.parse(sdkEnvelope(result)),
+        result: {
+          ...result,
+          receipt: { ...receipt, verdict: "cancelled" },
+          response: { error: "stopped", statusCode: 499 },
+        },
+        diagnostics: [{ code: "ambiguous", message: "ambiguous evidence" }],
+      }),
+    );
+    expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual(step);
     await writeFile(file, sdkEnvelope({ ...result, response: null }));
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
       state: "succeeded",
