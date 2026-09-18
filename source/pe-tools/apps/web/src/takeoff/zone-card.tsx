@@ -40,7 +40,7 @@ export function ZoneCard({
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
   const closure = run
-    ? run.declaredSqft - (run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft)
+    ? run.declaredSqft - (run.roomSqft + run.excludedSqft + zone.heldSqft + run.voidSqft)
     : null;
   const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
   const partitionRefusal = store.handle.actions.partition.refusal;
