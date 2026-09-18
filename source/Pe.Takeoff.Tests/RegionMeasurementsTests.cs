@@ -14,8 +14,7 @@ public class RegionMeasurementsTests
         List<List<double[]>> loops = [Square(0, 0, 10), Square(2, 2, 1)];
         var key = RegionMeasurements.GeometryKey(0, [loops]);
         var provenance = new RegionProvenance(1, Guid.NewGuid(), "original", "R01", 99) {
-            Measurement = new(key, "measurement-1", 0, 8, null),
-            Resolutions = [new("R01", "flag", "accept", "now", "measurement-1")]
+            Measurement = new(key, "measurement-1", 0, 8, null)
         };
         Assert.That(RegionMeasurements.Read(provenance, key).State, Is.EqualTo("current"));
         List<List<double[]>> reordered = [loops[1].AsEnumerable().Reverse().ToList(),
@@ -33,7 +32,6 @@ public class RegionMeasurementsTests
         }).ToJson());
         Assert.That(RegionMeasurements.Read(renewed, editedKey).CeilingZ, Is.EqualTo(9));
         Assert.That(renewed.RunId, Is.EqualTo("original"));
-        Assert.That(renewed.Resolutions.Single().RunId, Is.EqualTo("measurement-1"));
         Assert.That(RegionMeasurements.Read(provenance with { Measurement = null }, key).State,
             Is.EqualTo("unmeasured"));
     }
