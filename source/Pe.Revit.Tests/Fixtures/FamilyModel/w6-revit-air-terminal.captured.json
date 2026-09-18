@@ -1,0 +1,390 @@
+{
+  "$schema": "http://127.0.0.1:64681/schemas/settings/FamilyFoundry/models.json",
+  "family": {
+    "name": "w6-air-terminal",
+    "category": "AirTerminals",
+    "template": "Generic Model",
+    "placement": "OneLevelBased"
+  },
+  "parameters": {
+    "Air Flow": {
+      "dataType": "AirFlow",
+      "propertiesGroup": "autodesk.parameter.group:mechanicalAirflow-1.0.0",
+      "isInstance": true
+    },
+    "Duct Height": {
+      "dataType": "DuctSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Duct Width": {
+      "dataType": "DuctSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Grille Height": {
+      "dataType": "Length",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "0'  2 1/8\""
+    },
+    "Grille Length": {
+      "dataType": "Length",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "Duct Width + 0'  1 3/8\""
+    },
+    "Grille Material": {
+      "dataType": "Material",
+      "propertiesGroup": "autodesk.parameter.group:materials-1.0.0",
+      "isInstance": false
+    },
+    "Grille Width": {
+      "dataType": "Length",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "Duct Height + 0'  1 5/16\""
+    },
+    "Panel Thickness": {
+      "dataType": "Length",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "0'  2 1/8\" - 0'  1 5/8\""
+    },
+    "Pressure Drop": {
+      "dataType": "Pressure",
+      "propertiesGroup": "autodesk.parameter.group:mechanicalAirflow-1.0.0",
+      "isInstance": true
+    }
+  },
+  "builtIns": [
+    "Assembly Code",
+    "Cost",
+    "Default Elevation",
+    "Description",
+    "Export Type to IFC As",
+    "Keynote",
+    "Manufacturer",
+    "Max Flow",
+    "Min Flow",
+    "Model",
+    "Type Comments",
+    "Type IFC Predefined Type",
+    "Type Image",
+    "URL"
+  ],
+  "types": {
+    "10x3": {
+      "Air Flow": "141.58423295999998 L/s",
+      "Duct Height": "76.2 mm",
+      "Duct Width": "254.00000000000006 mm",
+      "Pressure Drop": "5.72332 Pa"
+    },
+    "16x10": {
+      "Air Flow": "330.36321023999994 L/s",
+      "Duct Height": "254.00000000000006 mm",
+      "Duct Width": "406.40000000000003 mm",
+      "Pressure Drop": "30.607320000000005 Pa"
+    },
+    "10x4": {
+      "Air Flow": "188.77897728 L/s",
+      "Duct Height": "101.60000000000001 mm",
+      "Duct Width": "254.00000000000006 mm",
+      "Pressure Drop": "9.9536 Pa"
+    },
+    "12x6": {
+      "Air Flow": "235.9737216 L/s",
+      "Duct Height": "152.4 mm",
+      "Duct Width": "304.8 mm",
+      "Pressure Drop": "15.67692 Pa"
+    },
+    "14x8": {
+      "Air Flow": "283.16846591999996 L/s",
+      "Duct Height": "203.20000000000002 mm",
+      "Duct Width": "355.6 mm",
+      "Pressure Drop": "22.64444 Pa"
+    }
+  },
+  "datums": {
+    "Ref. Level": {
+      "normal": "Z",
+      "isLevel": true
+    },
+    "Center (Front/Back)": {
+      "normal": "Y"
+    },
+    "Reference Plane": {
+      "normal": "Z"
+    },
+    "Center (Left/Right)": {
+      "normal": "X"
+    }
+  },
+  "refPlanes": {
+    "plane-1": {
+      "normal": "PlusZ",
+      "at": "0.135416667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-2": {
+      "normal": "PlusZ",
+      "at": "-0.041666667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-3": {
+      "normal": "PlusX",
+      "at": "-0.666666667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-4": {
+      "normal": "PlusX",
+      "at": "0.666666667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-5": {
+      "normal": "PlusY",
+      "at": "0.416666667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-6": {
+      "normal": "MinusY",
+      "at": "0.416666667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-7": {
+      "normal": "PlusX",
+      "at": "0.723958333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-8": {
+      "normal": "PlusX",
+      "at": "-0.723958333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-9": {
+      "normal": "PlusY",
+      "at": "0.471354167ft",
+      "isReference": "NotAReference"
+    },
+    "plane-10": {
+      "normal": "MinusY",
+      "at": "0.471354167ft",
+      "isReference": "NotAReference"
+    },
+    "plane-11": {
+      "normal": "PlusZ",
+      "at": "0.015949982ft",
+      "isReference": "NotAReference"
+    }
+  },
+  "refLines": {},
+  "dimensions": {
+    "eq-plane-5-center-front-back-plane-6": {
+      "between": [
+        "plane-5",
+        "Center (Front/Back)",
+        "plane-6"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "duct-height": {
+      "between": [
+        "plane-5",
+        "plane-6"
+      ],
+      "label": "Duct Height",
+      "view": "RefLevel"
+    },
+    "eq-plane-3-center-left-right-plane-4": {
+      "between": [
+        "plane-3",
+        "Center (Left/Right)",
+        "plane-4"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "duct-width": {
+      "between": [
+        "plane-3",
+        "plane-4"
+      ],
+      "label": "Duct Width",
+      "view": "RefLevel"
+    },
+    "eq-plane-9-center-front-back-plane-10": {
+      "between": [
+        "plane-9",
+        "Center (Front/Back)",
+        "plane-10"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "grille-width": {
+      "between": [
+        "plane-9",
+        "plane-10"
+      ],
+      "label": "Grille Width",
+      "view": "RefLevel"
+    },
+    "panel-thickness": {
+      "between": [
+        "Reference Plane",
+        "plane-2"
+      ],
+      "label": "Panel Thickness",
+      "view": "Left"
+    },
+    "grille-height": {
+      "between": [
+        "plane-1",
+        "plane-2"
+      ],
+      "label": "Grille Height",
+      "view": "Left"
+    },
+    "eq-plane-8-center-left-right-plane-7": {
+      "between": [
+        "plane-8",
+        "Center (Left/Right)",
+        "plane-7"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "grille-length": {
+      "between": [
+        "plane-8",
+        "plane-7"
+      ],
+      "label": "Grille Length",
+      "view": "RefLevel"
+    }
+  },
+  "forms": {
+    "extrusion": {
+      "kind": "Extrusion",
+      "material": "param:Grille Material",
+      "visibility": {
+        "planRcp": true,
+        "frontBack": true,
+        "leftRight": true,
+        "onlyWhenCut": false,
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "sketchPlane": "Reference Plane",
+      "profile": [
+        {
+          "curves": [
+            {
+              "kind": "Line",
+              "on": "plane-6"
+            },
+            {
+              "kind": "Line",
+              "on": "Reference Plane"
+            },
+            {
+              "kind": "Line",
+              "on": "plane-5"
+            },
+            {
+              "kind": "Line",
+              "on": "plane-1"
+            }
+          ]
+        }
+      ],
+      "start": "plane-3",
+      "end": "plane-4"
+    },
+    "extrusion-2": {
+      "kind": "Extrusion",
+      "material": "param:Grille Material",
+      "visibility": {
+        "planRcp": true,
+        "frontBack": true,
+        "leftRight": true,
+        "onlyWhenCut": false,
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "sketchPlane": "Reference Plane",
+      "profile": [
+        {
+          "curves": [
+            {
+              "kind": "Line",
+              "on": "plane-10"
+            },
+            {
+              "kind": "Line",
+              "on": "plane-2"
+            },
+            {
+              "kind": "Line",
+              "on": "plane-9"
+            },
+            {
+              "kind": "Line",
+              "on": "Reference Plane"
+            }
+          ]
+        }
+      ],
+      "start": "plane-8",
+      "end": "plane-7"
+    }
+  },
+  "nested": {},
+  "arrays": {},
+  "connectors": {
+    "duct-supplyair": {
+      "domain": "Duct",
+      "systemType": "SupplyAir",
+      "on": "plane-1",
+      "at": [
+        "Center (Front/Back)",
+        "Center (Left/Right)"
+      ],
+      "shape": "Rectangular",
+      "width": "param:Duct Width",
+      "height": "param:Duct Height",
+      "flowDirection": "In",
+      "flowConfiguration": "Preset",
+      "lossMethod": "SpecificLoss",
+      "associate": {
+        "Pressure Drop": "param:Pressure Drop",
+        "Flow": "param:Air Flow"
+      }
+    }
+  },
+  "details": {},
+  "settings": {
+    "alwaysVertical": true,
+    "partType": "Normal"
+  },
+  "lookupTables": {},
+  "coverage": {
+    "parameters": "Read",
+    "types": "Read",
+    "datums": "Read",
+    "refPlanes": "Partial",
+    "refLines": "Read",
+    "dimensions": "Read",
+    "forms": "Read",
+    "nested": "Read",
+    "arrays": "Read",
+    "connectors": "Read",
+    "details": "Read",
+    "settings": "Read",
+    "lookupTables": "Read",
+    "roomCalculationPoint": "Read"
+  }
+}
