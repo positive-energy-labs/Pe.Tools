@@ -1,168 +1,29 @@
+import { Link } from "@tanstack/react-router";
+
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
-import { Press } from "#/components/lang/press";
-import { diagnosticLine } from "#/host/familyfoundry";
-import { familyFlag, provenanceSummary } from "#/families/plan";
+import { ActionButton } from "#/components/lang/action-button";
+import { ValueDiff } from "#/components/lang/value-diff";
+import type { FamilyCellEdit } from "@pe/agent-contracts";
+import { at, editKey, isAccepted } from "#/families/staged";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
 
 /**
- * THE TWO READOUT TABLES, on the ruled idiom (2026-08-31, `MasterTable` draws SEPARATE borders).
- * A row is `--item-h` and every rule is drawn by the CELL, because a collapsed border belongs to
- * the table and does not travel with its cell. Neither of these is a `MasterTable`: they are
- * fixed-shape readouts inside a 176px band that already carries its own label and chips, and a
- * `MasterTable` would bring a second search box, scope label and summary row into it. Porting the
- * decision queue when it grows sort/filter/facet needs is recorded as owed.
+ * THE RECEIPTS TABLE, on the ruled idiom (2026-08-31): rows at `--item-h`, every rule drawn by
+ * the CELL. It is a fixed-shape readout, not a `MasterTable`, which would bring a second search
+ * box and summary row into the band. The plan's rows live on the kernel's confirmation sheet.
  */
 const QUEUE_ROW = "h-(--item-h)";
 const QUEUE_CELL = "hairline-b px-(--item-pad-x) align-middle";
 
-export function FamiliesReadoutBands() {
-  const {
-    fixture,
-    store,
-    plan,
-    includedPlanned,
-    outsideProfile,
-    excludedIds,
-    applyData,
-    projection,
-  } = useFamiliesWorkspace();
+/** What the last apply actually did, per family, as the op reported it. */
+export function FamiliesReceiptsBand() {
+  const { store, applyData } = useFamiliesWorkspace();
   return (
     <>
-      {plan && (
-        <div className="hairline-b max-h-44 overflow-auto px-2 py-1.5">
-          <div
-            className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 py-0.5"
-            data-surface="page"
-          >
-            <SectionLabel>
-              <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
-                decision queue
-              </span>
-            </SectionLabel>
-            <FactChip title="Included = ticked here AND carrying at least one lowered action.">
-              {includedPlanned.length} / {plan.entries.length} included
-            </FactChip>
-            {outsideProfile.length > 0 && (
-              <FactChip title="These families are in scope, but the profile made no claim about them, so apply will not touch them.">
-                {outsideProfile.length} unclaimed
-              </FactChip>
-            )}
-          </div>
-          {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
-              `--item-h`, tier type. This queue was the last table in the app drawn the old way —
-              `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
-              directly above the 20px families matrix on the same page. A collapsed border belongs
-              to the TABLE, so every rule here is drawn by the CELL instead (`hairline-b`), which
-              is the same move `MasterTable` made and the reason its rules survive a sticky cell. */}
-          <table className="mt-0.5 w-full table-fixed border-separate border-spacing-0 t-small">
-            <thead className="t-small face-mono t-upper text-ink-mute">
-              <tr className={QUEUE_ROW}>
-                <th className={cn(QUEUE_CELL, "w-8 font-normal")}>
-                  <span className="sr-only">include</span>
-                </th>
-                <th className={cn(QUEUE_CELL, "w-56 text-left font-normal")}>family</th>
-                <th className={cn(QUEUE_CELL, "w-20 text-left font-normal")}>actions</th>
-                <th className={cn(QUEUE_CELL, "text-left font-normal")}>profile source</th>
-                <th className={cn(QUEUE_CELL, "w-80 text-left font-normal")}>exception</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plan.entries.map((entry) => {
-                const flag = familyFlag(entry);
-                const excluded = excludedIds.has(entry.familyId);
-                return (
-                  <tr
-                    key={entry.familyId}
-                    className={cn(QUEUE_ROW, (flag !== null || excluded) && "text-ink-mute")}
-                  >
-                    <td className={cn(QUEUE_CELL, "w-8 text-center")}>
-                      <Press
-                        type="button"
-                        disabled={flag !== null}
-                        title={
-                          flag
-                            ? `${flag}. There is nothing to include, so this row cannot be ticked.`
-                            : excluded
-                              ? `${entry.familyName} is held back — apply will skip it. Click to put its ${entry.plan.loweredActions.length} action(s) back in.`
-                              : `${entry.familyName} is in: apply will run its ${entry.plan.loweredActions.length} action(s) against the model. Click to hold it back without re-planning.`
-                        }
-                        onClick={() => void store.actions.exclude(entry.familyId)}
-                        tone="quiet"
-                        size="value"
-                        state={flag !== null ? "disabled" : excluded ? "rest" : "selected"}
-                      >
-                        {flag !== null ? "✕" : excluded ? "□" : "▪"}
-                      </Press>
-                    </td>
-                    <td className={cn(QUEUE_CELL, "face-mono w-56 truncate")}>
-                      {entry.familyName}
-                    </td>
-                    <td
-                      className={cn(QUEUE_CELL, "face-mono w-20 truncate")}
-                      title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
-                    >
-                      {entry.plan.loweredActions.length} action
-                      {entry.plan.loweredActions.length === 1 ? "" : "s"}
-                    </td>
-                    <td
-                      className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
-                      title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
-                    >
-                      {provenanceSummary(entry.plan)}
-                    </td>
-                    {/* A family the plan compiled nothing for is a verdict with nothing behind
-                        it, not a warning about the model: quiet ink, off the meaning band. */}
-                    <td
-                      className={cn(QUEUE_CELL, "t-small face-mono w-80 truncate text-ink-mute")}
-                      title={flag ?? ""}
-                    >
-                      {flag ?? ""}
-                    </td>
-                  </tr>
-                );
-              })}
-              {outsideProfile.map((family) => (
-                <tr key={`outside-${family.familyId}`} className={cn(QUEUE_ROW, "opacity-60")}>
-                  <td className={cn(QUEUE_CELL, "w-8 text-center")}>
-                    <span className="face-mono text-ink-2">✕</span>
-                  </td>
-                  <td className={cn(QUEUE_CELL, "face-mono w-56 truncate text-ink-mute")}>
-                    {family.familyName}
-                  </td>
-                  <td className={cn(QUEUE_CELL, "face-mono w-20 text-ink-mute")}>—</td>
-                  <td
-                    className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-mute")}
-                    colSpan={2}
-                  >
-                    in scope, but the bound profile does not claim this family
-                  </td>
-                </tr>
-              ))}
-              {plan.entries.length === 0 && outsideProfile.length === 0 && (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="py-1">
-                      <EmptyState
-                        story="scope"
-                        exit="widen the categories above, or bind a profile that covers this project"
-                      >
-                        no family in this scope is claimed by the bound profile — the plan compiled
-                        cleanly and matched nothing
-                      </EmptyState>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
         <div className="hairline-b max-h-48 overflow-auto px-4 py-2">
@@ -173,15 +34,15 @@ export function FamiliesReadoutBands() {
               </span>
             </SectionLabel>
             <Seam op="host.shell.open link" />
-            {applyData.planHash && (
-              <FactChip
-                tone={plan?.planHash && applyData.planHash !== plan.planHash ? "alarm" : "meta"}
-                title={`The hash the project compiled to at apply time (${applyData.planHash}). If it differs from the plan hash in the sentence row, apply refused rather than running a stale plan.`}
-              >
-                recompiled {applyData.planHash.slice(0, 12)}
-              </FactChip>
-            )}
           </div>
+          {applyData.diagnostics.map((issue) => (
+            <OutcomeLine
+              key={`${issue.code}:${issue.path}`}
+              kind="error"
+              label={issue.code}
+              says={issue.message}
+            />
+          ))}
           <table className="mt-1 w-full border-separate border-spacing-0 t-small">
             <tbody>
               {applyData.receipts.map((entry) => (
@@ -191,46 +52,43 @@ export function FamiliesReadoutBands() {
                   </td>
                   <td className={cn(QUEUE_CELL, "w-20")}>
                     <FactChip
-                      tone={entry.success ? "done" : "alarm"}
+                      tone={entry.converged ? "done" : "alarm"}
                       title={
                         entry.success
-                          ? `The op reported this family written: ${entry.parametersChanged} parameter(s) changed. This is the receipt, not the plan's promise.`
+                          ? `The op reported this family written: ${entry.residue.length} change(s) remaining. This is the receipt, not the plan's promise.`
                           : (entry.error ??
                             "The op reported this family as failed and gave no reason. Re-plan and read the decision queue before retrying.")
                       }
                     >
-                      {entry.success ? "applied" : "failed"}
+                      {entry.converged ? "converged" : entry.success ? "residue" : "failed"}
                     </FactChip>
                   </td>
                   <td
                     className={cn(QUEUE_CELL, "t-small face-mono w-40 text-ink-2")}
-                    title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
+                    title="Changes still present after apply and recapture. Zero residue plus no errors means converged."
                   >
-                    {entry.parametersChanged} changed · +{entry.diffSummary.added} −
-                    {entry.diffSummary.removed} ~{entry.diffSummary.modified}
+                    {entry.residue.length} remaining
                   </td>
                   <td
                     className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
                     title={
-                      entry.operationsRun.length > 0
-                        ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
-                        : (entry.error ?? "No operations ran and no reason was reported.")
+                      entry.errors.length > 0
+                        ? `Errors reported by this family: ${entry.errors.join(", ")}.`
+                        : (entry.error ?? "No errors reported.")
                     }
                   >
-                    {entry.operationsRun.join(" · ") || (entry.error ?? "")}
+                    {entry.errors.join(" · ") || (entry.error ?? "")}
                   </td>
                   <td className={cn(QUEUE_CELL, "w-24 text-right")}>
-                    {entry.artifactDirectoryPath && (
+                    {entry.artifactDirectory && (
                       /* Leaving the app entirely — nav:out, which is the direction browsers
                          already taught. It writes nothing, so it is not blue-filled. */
-                      <Verb
+                      <ActionButton
                         label="artifacts"
                         tone="nav"
                         direction="out"
-                        onClick={() =>
-                          void store.actions.openPath(entry.artifactDirectoryPath ?? "")
-                        }
-                        reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectoryPath}). The bundle stays on disk — this route never copies it.`}
+                        onClick={() => void store.actions.openPath(entry.artifactDirectory ?? "")}
+                        reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectory}). The bundle stays on disk — this route never copies it.`}
                       />
                     )}
                   </td>
@@ -254,77 +112,184 @@ export function FamiliesReadoutBands() {
           </table>
         </div>
       )}
-
-      {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
-      {projection && (
-        <details className="hairline-b px-4 py-2" open={fixture ? true : undefined}>
-          <summary className="cursor-pointer">
-            <SectionLabel>
-              <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
-                projected profiles
-              </span>
-            </SectionLabel>
-            <span className="ml-2">
-              <FactChip title="How many picked families the projection read back out of the model.">
-                {projection.projections.length} famil
-                {projection.projections.length === 1 ? "y" : "ies"}
-              </FactChip>
-            </span>
-          </summary>
-          {projection.projections.length === 0 && projection.diagnostics.length === 0 && (
-            <div className="mt-1">
-              <EmptyState
-                story="scope"
-                exit="re-pick families in the table's pick column and run it again"
-              >
-                nothing projected — the picked set read back empty
-              </EmptyState>
-            </div>
-          )}
-          {/* Projection is read-only and blocks nothing, which is exactly what the outcome
-              lane's `advisory` means — "a dry run blocks nothing". */}
-          {projection.diagnostics.map((diagnostic) => (
-            <div key={`${diagnostic.code}:${diagnostic.path}`} className="mt-1">
-              <OutcomeLine
-                kind="advisory"
-                label={diagnosticLine(diagnostic)}
-                says={diagnostic.suggestion ?? undefined}
-              />
-            </div>
-          ))}
-          {projection.projections.map((entry) => (
-            <div key={entry.familyId} className="mt-2">
-              <div className="flex items-center gap-2">
-                <span className="t-small t-upper">{entry.familyName ?? entry.familyId}</span>
-                {entry.profileJson && (
-                  <Verb
-                    label="copy"
-                    onClick={() => void navigator.clipboard.writeText(entry.profileJson ?? "")}
-                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."
-                  />
-                )}
-                {!entry.success && (
-                  <OutcomeLine
-                    kind="error"
-                    label="projection failed"
-                    says={entry.error ?? "no reason reported"}
-                  />
-                )}
-              </div>
-              {entry.profileJson && (
-                <pre
-                  className="t-small face-mono mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
-                  data-surface="recess"
-                >
-                  {entry.profileJson}
-                </pre>
-              )}
-            </div>
-          ))}
-        </details>
-      )}
-
-      {/* ── THE table: everything currently in scope ─────────────────────────────────────── */}
     </>
+  );
+}
+
+/** What the latest capture saw, per family, beside the members it filed (as `/family` shows it). */
+export function FamiliesCaptureBand() {
+  const { store } = useFamiliesWorkspace();
+  const captured = store.captured;
+  if (!captured) return null;
+  const { members, evidence } = captured;
+  return (
+    <section aria-label="capture evidence" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
+      <SectionLabel>
+        captured {members.length} of {evidence.families.length} families into{" "}
+        {members[0]?.pod ?? "the pod"}
+      </SectionLabel>
+      {evidence.diagnostics.map((issue) => (
+        <OutcomeLine
+          key={`${issue.code}:${issue.path}`}
+          kind="error"
+          label={issue.code}
+          says={issue.message}
+        />
+      ))}
+      {evidence.families.map((family) => (
+        <div key={family.familyId} className="flex flex-col gap-0.5">
+          <div className="flex flex-wrap items-baseline gap-2 t-small">
+            <span className="face-mono w-56 truncate text-ink-2">
+              {family.familyName ?? `element ${family.familyId}`}
+            </span>
+            {family.success ? (
+              <>
+                {Object.entries(family.coverage).map(([section, state]) => (
+                  <FactChip
+                    key={section}
+                    tone={state === "Full" ? "done" : "caution"}
+                    title={section}
+                  >
+                    {section}: {state}
+                  </FactChip>
+                ))}
+                {/* The facts are the run's `unmodeled.json`, never the member (law 12). */}
+                <FactChip tone={family.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
+                  {family.run && members[0] ? (
+                    <Link
+                      to="/pods"
+                      search={{ pod: members[0].pod, path: `${family.run}/unmodeled.json` }}
+                    >
+                      {family.unmodeledCount} unmodeled
+                    </Link>
+                  ) : (
+                    `${family.unmodeledCount} unmodeled`
+                  )}
+                </FactChip>
+              </>
+            ) : (
+              <FactChip tone="alarm" title="nothing was filed for this family">
+                failed
+              </FactChip>
+            )}
+          </div>
+          {family.error ? <OutcomeLine kind="error" label="capture" says={family.error} /> : null}
+          {family.issues.map((issue, index) => (
+            <OutcomeLine
+              key={index}
+              kind={issue.severity === "Error" ? "error" : "advisory"}
+              label={issue.code}
+              says={issue.message}
+            />
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * THE PROPOSALS BAND — the house proposal specimen at table scale (`/design-system/proposal-flow`,
+ * schedules' pending strip): one line per proposed cell, current → proposed, who proposed it, and
+ * accept / deny per cell and for the whole table. Accept promotes the value into `accepted`; deny
+ * clears the proposal and any accept, so the cell shows Revit's value again (no denied state).
+ * Plan reads `accepted` and nothing else.
+ */
+export function FamiliesProposalsBand() {
+  const { store, edits, accepted, rows, params } = useFamiliesWorkspace();
+  // A cell stands in the band while a proposal or an accept stands on it.
+  const cells = [...edits, ...accepted.filter((edit) => !at(edits, edit))];
+  if (!cells.length) return null;
+  const current = (edit: FamilyCellEdit) => {
+    const key = params.find((param) => param.name === edit.parameter)?.key;
+    const row = rows.find((r) => r.familyId === edit.familyId && r.typeName === edit.typeName);
+    return key && row ? (row.values[key] ?? "") : null;
+  };
+  const open = edits.filter((edit) => !isAccepted(accepted, edit));
+  return (
+    <section aria-label="proposals" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
+      <div className="flex items-center gap-2">
+        <SectionLabel>
+          <span title="Every proposed cell on this table. Pea and you propose the same way; only you accept. Plan generates the spec from accepted cells only.">
+            proposals
+          </span>
+        </SectionLabel>
+        <FactChip tone={open.length ? "pea" : "meta"} title="Proposals nobody has accepted yet.">
+          {open.length} open
+        </FactChip>
+        <FactChip
+          tone={accepted.length ? "caution" : "meta"}
+          title="Accepted cells: what plan will generate."
+        >
+          {accepted.length} accepted
+        </FactChip>
+        <span className="ml-auto flex items-center gap-1">
+          <ActionButton
+            tone="agent"
+            label="accept all"
+            disabled={!open.length}
+            reason={
+              open.length
+                ? `Accept all ${open.length} open proposals — plan includes them; nothing reaches Revit until apply.`
+                : "nothing is open to accept"
+            }
+            onClick={() => void store.actions.accept(open)}
+          />
+          <ActionButton
+            label="deny all"
+            reason="Clear every proposal and accept on this table — every cell shows Revit's value again."
+            onClick={() => void store.actions.deny(cells)}
+          />
+        </span>
+      </div>
+      {cells.map((edit) => {
+        const acceptedHere = at(accepted, edit);
+        const proposal = at(edits, edit);
+        const isOpen = proposal != null && !isAccepted(accepted, proposal);
+        return (
+          <div
+            key={editKey(edit)}
+            data-proposal-row={editKey(edit)}
+            className="flex items-center gap-3 t-small"
+          >
+            <span className="face-mono w-72 truncate text-ink-2">
+              {edit.familyName} · {edit.typeName} · {edit.parameter}
+            </span>
+            <span className="min-w-0 flex-1 truncate">
+              <ValueDiff from={current(edit)} to={(acceptedHere ?? edit).value} />
+            </span>
+            {proposal && acceptedHere && proposal.value !== acceptedHere.value ? (
+              <FactChip tone="pea" title="Pea's value against the one you accepted.">
+                Pea proposes {proposal.value}
+              </FactChip>
+            ) : null}
+            <FactChip tone={edit.by === "pea" ? "pea" : "caution"} title="Who proposed this value.">
+              by {edit.by === "pea" ? "Pea" : "you"}
+            </FactChip>
+            <FactChip
+              tone={isOpen ? "pea" : "caution"}
+              title="Open waits for you; accepted goes into plan."
+            >
+              {isOpen ? "open" : "accepted"}
+            </FactChip>
+            <span className="flex shrink-0 items-center gap-1">
+              {isOpen ? (
+                <ActionButton
+                  tone="agent"
+                  label="accept"
+                  reason={`Accept ${proposal!.value} — plan includes it; nothing reaches Revit until apply.`}
+                  onClick={() => void store.actions.accept([proposal!])}
+                />
+              ) : null}
+              <ActionButton
+                label="deny"
+                reason="Clear this proposal — the cell shows Revit's value again and plan leaves it out."
+                onClick={() => void store.actions.deny([edit])}
+              />
+            </span>
+          </div>
+        );
+      })}
+    </section>
   );
 }

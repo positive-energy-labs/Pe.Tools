@@ -1,6 +1,7 @@
 import { FactChip } from "#/components/lang/chip";
 import {
   Combobox,
+  ComboboxClear,
   ComboboxChip,
   ComboboxChips,
   ComboboxChipsInput,
@@ -60,6 +61,8 @@ export function NamePicker({
     <Combobox
       items={options}
       multiple
+      // Type a prefix, press Enter: the first match commits without an arrow key first.
+      autoHighlight
       value={values}
       disabled={disabled}
       onValueChange={(next: string[]) => onChange(next)}
@@ -88,6 +91,7 @@ export function NamePicker({
             placeholder={values.length === 0 ? placeholder : "add…"}
           />
           <ComboboxTrigger />
+          <ComboboxClear aria-label={`clear ${ariaLabel}`} disabled={disabled} />
         </ComboboxChips>
       </div>
       <ComboboxContent anchor={anchor}>

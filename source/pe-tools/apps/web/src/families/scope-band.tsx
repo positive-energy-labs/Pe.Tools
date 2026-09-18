@@ -1,7 +1,5 @@
-import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/lang/verb-lane";
 import {
   Select,
   SelectContent,
@@ -9,30 +7,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/lang/select";
-import { HostIssuePanel } from "#/host/issues";
-import { LoadedFamilyPlacementScope } from "#/host/loaded-families-view";
+import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
-const PLACEMENT_LABELS: Record<LoadedFamilyPlacementScope, string> = {
-  [LoadedFamilyPlacementScope.AllLoaded]: "all loaded",
-  [LoadedFamilyPlacementScope.PlacedOnly]: "placed only",
-  [LoadedFamilyPlacementScope.UnplacedOnly]: "unplaced only",
+const PLACEMENT_LABELS: Record<LoadedFamilyPlacement, string> = {
+  [LoadedFamilyPlacement.AllLoaded]: "all loaded",
+  [LoadedFamilyPlacement.PlacedOnly]: "placed only",
+  [LoadedFamilyPlacement.UnplacedOnly]: "unplaced only",
 };
-const PLACEMENT_NOTES: Record<LoadedFamilyPlacementScope, string> = {
-  [LoadedFamilyPlacementScope.AllLoaded]:
+const PLACEMENT_NOTES: Record<LoadedFamilyPlacement, string> = {
+  [LoadedFamilyPlacement.AllLoaded]:
     "Every family loaded into the project, placed or not — this also catches library families sitting unused in the file.",
-  [LoadedFamilyPlacementScope.PlacedOnly]:
+  [LoadedFamilyPlacement.PlacedOnly]:
     "Only families with at least one placed instance — what the project actually uses. Narrower scope, cheaper matrix.",
-  [LoadedFamilyPlacementScope.UnplacedOnly]:
+  [LoadedFamilyPlacement.UnplacedOnly]:
     "Only families with no placed instance — the loaded-but-unused tail, usually the purge conversation.",
 };
 
-export function FamiliesScopeBand() {
+export function FamiliesFilterBand() {
   const {
     fixture,
-    store,
-    selectedProfileQuery,
     placement,
     setPlacement,
     draftCategories,
@@ -43,21 +38,9 @@ export function FamiliesScopeBand() {
     setPickedFamilies,
     familyFeed,
     categoryFeed,
-    connected,
-    matrixIssue,
   } = useFamiliesWorkspace();
   return (
     <>
-      {selectedProfileQuery?.error && (
-        <div className="px-4 py-1.5">
-          <OutcomeLine
-            kind="error"
-            label="profile read failed"
-            says={(selectedProfileQuery.error as Error).message}
-          />
-        </div>
-      )}
-
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>
@@ -69,9 +52,7 @@ export function FamiliesScopeBand() {
           <Select
             items={PLACEMENT_LABELS}
             value={placement}
-            onValueChange={(value: LoadedFamilyPlacementScope | null) =>
-              value && setPlacement(value)
-            }
+            onValueChange={(value: LoadedFamilyPlacement | null) => value && setPlacement(value)}
           >
             <SelectTrigger
               aria-label="placement filter"
@@ -80,7 +61,7 @@ export function FamiliesScopeBand() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
+              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacement[]).map((value) => (
                 <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
                   {PLACEMENT_LABELS[value]}
                 </SelectItem>
@@ -88,27 +69,14 @@ export function FamiliesScopeBand() {
             </SelectContent>
           </Select>
         </div>
-        {!connected ? (
-          /* A disconnected bridge is not the model disagreeing — it is the machine being
-             unavailable, which the outcome lane calls `error` (caution, never alarm). */
-          <div className="min-w-0 flex-1">
-            <OutcomeLine
-              kind="error"
-              label="bridge disconnected"
-              says="nothing can be read — open Revit with the host connected, then bind that world in the sentence above"
-            />
-          </div>
-        ) : categoryFeed.state === "loading" ? (
+        {categoryFeed.state === "loading" ? (
           <div className="min-w-0 flex-1">
             <OutcomeLine kind="busy" label="reading categories" />
           </div>
         ) : categories.length === 0 ? (
           <div className="min-w-0 flex-1">
-            <EmptyState
-              story="scope"
-              exit="load a family in Revit, or bind a different world in the sentence above"
-            >
-              no loaded families in this project — the catalog read succeeded and reported nothing
+            <EmptyState story="scope" exit="bind a different world in the sentence above">
+              no categories — the category-names read succeeded and reported none
             </EmptyState>
           </div>
         ) : (
@@ -129,9 +97,11 @@ export function FamiliesScopeBand() {
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
-                  : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
-                    ? "resolving families…"
-                    : "no families resolved"
+                  : draftFamilyNames.length > 0
+                    ? `pick from ${draftFamilyNames.length} resolved families`
+                    : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
+                      ? "resolving families…"
+                      : "no families resolved"
               }
               ariaLabel="draft families"
               title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."
@@ -140,31 +110,15 @@ export function FamiliesScopeBand() {
         )}
         {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
             picked yet" — is deleted; the two visibly-empty pickers beside it announce
-            themselves. */}
-        {draftCategories.length === 0 ? null : !fixture &&
-          ((draftFamilyNames.length === 0 && familyFeed.state === "loading") ||
-            familyFeed.stale) ? (
+            themselves. The matrix count is the Situation sentence's scope slot. */}
+        {draftCategories.length !== 0 &&
+        !fixture &&
+        ((draftFamilyNames.length === 0 && familyFeed.state === "loading") || familyFeed.stale) ? (
           <div>
             <OutcomeLine kind="busy" label="resolving families" />
           </div>
-        ) : (
-          <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
-            {pickedFamilies.length === draftFamilyNames.length
-              ? `matrix · ${draftFamilyNames.length}`
-              : `matrix · ${pickedFamilies.length} / ${draftFamilyNames.length}`}
-          </FactChip>
-        )}
+        ) : null}
       </div>
-
-      <div className="hairline-b px-2 py-1 empty:hidden">
-        <VerbLane atoms={store.atoms} />
-      </div>
-      {matrixIssue && (
-        <div className="px-4 py-2">
-          <HostIssuePanel issue={matrixIssue} compact />
-        </div>
-      )}
-      {/* ── decision queue: the plan as a lens over the scope ────────────────────────────── */}
     </>
   );
 }

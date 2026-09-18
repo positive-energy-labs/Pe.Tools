@@ -1,12 +1,11 @@
 import { EmptyState } from "#/components/lang/empty";
-import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 
 export function FamiliesMatrix() {
   const {
     store,
-    navigate,
+    fixture,
     rows,
     columns,
     tableState,
@@ -15,13 +14,17 @@ export function FamiliesMatrix() {
     totalTypes,
     params,
     pickedIds,
-    runProject,
-    busy,
     connected,
     applied,
   } = useFamiliesWorkspace();
   return (
     <>
+      {fixture && (
+        <p className="px-4 py-1 t-small">
+          Fixture review (no Revit capture).{" "}
+          <a href="/families?demo=apply">plan confirmation fixture</a>
+        </p>
+      )}
       <MasterTable
         rows={rows}
         columns={columns}
@@ -42,18 +45,11 @@ export function FamiliesMatrix() {
             >
               {params.length} parameters
             </span>
-            <span className="hairline-l pl-2">
-              <Verb
-                label="project → profile"
-                onClick={() => runProject()}
-                busy={busy === "project"}
-                disabled={pickedIds.size === 0}
-                reason={
-                  pickedIds.size === 0
-                    ? "Nothing picked. Tick families in the pick column — projection runs the audit backwards, so it needs a source to read."
-                    : `Run the audit backwards: read ${pickedIds.size} picked famil${pickedIds.size === 1 ? "y" : "ies"} out of the model as profile JSON, so an existing family can seed a profile instead of being reconciled against one. Read-only.`
-                }
-              />
+            <span
+              className="hairline-l pl-2 text-ink-2"
+              title="Picked families are what capture files into the pod, one spec member each."
+            >
+              {pickedIds.size} picked
             </span>
           </span>
         }
@@ -70,7 +66,7 @@ export function FamiliesMatrix() {
           ) : applied === null ? (
             <EmptyState
               story="scope"
-              exit="pick categories in the scope row above, then press “apply scope”"
+              exit="pick categories in the scope row above, then press “apply scope” in the verb row"
             >
               no scope applied yet — the matrix op is expensive, so it waits to be asked
             </EmptyState>
@@ -87,10 +83,11 @@ export function FamiliesMatrix() {
             </EmptyState>
           )
         }
-        /* Fleet → one family. The URL is the whole handoff: /family opens the requested
-           family in the bound session's family editor and lands in its live lane. No
-           cross-route store, nothing to keep in sync. */
-        onRowClick={() => void navigate({ to: "/family", search: {} })}
+        /* Opens a scratch copy of the family in Revit's family editor. That copy is not a pod
+           member, so there is nothing to address on /family until it is captured there. */
+        onRowClick={(row) => {
+          void store.actions.openFamily(row.familyId).catch(() => undefined);
+        }}
       />
     </>
   );
