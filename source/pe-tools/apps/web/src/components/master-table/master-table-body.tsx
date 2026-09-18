@@ -91,6 +91,7 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover,
   gutter,
   gutterWidth,
+  compact,
 }: {
   table: Table<Row>;
   visibleRows: VisibleRow<Row>[];
@@ -103,6 +104,7 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
+  compact: boolean;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   useEffect(() => {
@@ -208,7 +210,10 @@ export function MasterTableBody<Row extends RowData>({
                       className={cn(
                         // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
                         // every list row at 21px (measured, annotation round 2 2026-08-31).
-                        "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                        compact
+                          ? // One clipped mono line: the row holds the 20px rhythm whatever the value.
+                            "hairline-b-inset face-mono max-w-80 truncate p-0 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2"
+                          : "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
                         selection & 2 && "on-select",
                         column.right && "text-right",
                         column.width,

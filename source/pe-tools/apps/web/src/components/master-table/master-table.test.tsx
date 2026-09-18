@@ -358,3 +358,44 @@ test("cell editing and navigation stay spreadsheet-fast", () => {
   expect(document.activeElement).toBe(inputs[0]);
   expect(navigationRenders).toBeLessThanOrEqual(2);
 });
+
+test("absent density renders exactly the default table", () => {
+  // React ids (`_r_1_`) count up across renders; everything else must match byte for byte.
+  const html = (props: Parameters<typeof table>[0]) =>
+    renderTable(props).container.innerHTML.replace(/_r_[0-9a-z]+_/g, "id");
+  const absent = html({});
+  cleanup();
+  expect(html({ density: "default" })).toBe(absent);
+  expect(screen.getByText("families in scope")).toBeTruthy();
+  expect(screen.getAllByRole("gridcell")[0]!.className).toContain("border-l");
+});
+
+test("compact drops the scope strip and keeps sort, selection and cell keyboard", () => {
+  render(<SelectedTable density="compact" />);
+  expect(screen.queryByText("families in scope")).toBeNull();
+  expect(screen.queryByPlaceholderText("search families")).toBeNull();
+  expect(screen.getByRole("grid", { name: "families in scope" })).toBeTruthy();
+  const first = screen.getAllByRole("gridcell")[0]!;
+  expect(first.className).toContain("face-mono");
+  expect(first.className).toContain("truncate");
+  expect(first.className).not.toContain("border-l");
+
+  fireEvent.click(screen.getByRole("button", { name: /asset name/i }));
+  const names = () =>
+    screen
+      .getAllByRole("gridcell")
+      .filter((_, index) => index % columns.length === 0)
+      .map((cell) => cell.textContent);
+  expect(names()).toEqual(["Diffuser", "Panelboard", "VAV Box"]);
+
+  fireEvent.click(rowFor("Diffuser"));
+  fireEvent.click(rowFor("VAV Box"), { shiftKey: true });
+  expect(rowFor("Panelboard").classList.contains("on-select")).toBe(true);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(rowFor("Panelboard").classList.contains("on-select")).toBe(false);
+
+  const cells = screen.getAllByRole("gridcell");
+  cells[0]!.focus();
+  fireEvent.keyDown(cells[0]!, { key: "ArrowRight" });
+  expect(document.activeElement).toBe(cells[1]);
+});

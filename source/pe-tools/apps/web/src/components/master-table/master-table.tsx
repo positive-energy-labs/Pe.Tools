@@ -45,6 +45,10 @@ export interface MasterTableProps<Row extends RowData> {
   tableState?: MasterTableState;
   onTableStateChange?: (state: MasterTableState) => void;
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
+  /** `compact` is the sheet row: no scope strip (so no search box, `modes`, `actions`, `summary`
+   * or select-all — `scopeLabel` names the grid instead), no column rules, mono one-line cells.
+   * Sort, filters, selection and cell keyboard stay. Absent = `default`. */
+  density?: "default" | "compact";
 }
 
 const GUTTER_PX = 18;
@@ -71,7 +75,9 @@ export function MasterTable<Row extends RowData>({
   tableState,
   onTableStateChange,
   gutter,
+  density = "default",
 }: MasterTableProps<Row>) {
+  const compact = density === "compact";
   const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
   const [internalState, setInternalState] = useState(emptyTableState);
   const resolvedState = tableState ?? internalState;
@@ -274,7 +280,11 @@ export function MasterTable<Row extends RowData>({
   );
 
   return (
-    <ArtifactFrame className="flex min-h-0 flex-1 flex-col" head={head} headTrail={headTrail}>
+    <ArtifactFrame
+      className="flex min-h-0 flex-1 flex-col"
+      head={compact ? undefined : head}
+      headTrail={compact ? undefined : headTrail}
+    >
       {hasFilters && (
         <div
           data-slot="table-filters"
@@ -324,6 +334,7 @@ export function MasterTable<Row extends RowData>({
       <div className="min-h-0 flex-1 overflow-auto">
         <table
           role="grid"
+          aria-label={compact ? scopeLabel : undefined}
           aria-rowcount={visibleRows.length}
           aria-colcount={columns.length + (gutter ? 1 : 0)}
           // SEPARATE, not collapsed: a collapsed border belongs to the TABLE, so it does not travel
@@ -343,6 +354,7 @@ export function MasterTable<Row extends RowData>({
             gutter={Boolean(gutter)}
             gutterWidth={GUTTER_PX}
             theadRef={theadRef}
+            compact={compact}
           />
           <MasterTableBody
             table={table}
@@ -356,6 +368,7 @@ export function MasterTable<Row extends RowData>({
             onRowHover={onRowHover}
             gutter={gutter}
             gutterWidth={GUTTER_PX}
+            compact={compact}
           />
         </table>
         {visibleRows.length === 0 && (
