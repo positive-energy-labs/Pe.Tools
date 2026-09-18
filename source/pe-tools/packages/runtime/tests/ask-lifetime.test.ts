@@ -258,3 +258,25 @@ test("host restart expires the ask; reopening the live session keeps it", async 
     await restarted.runtime.close?.();
   }
 });
+
+test("an ask stays an ask after the approval policy changes", async () => {
+  const first = await start([gated, { text: "done" }]);
+  const { end } = await park(first.session, "gate");
+  first.session.abort();
+  await end;
+  await first.runtime.close?.();
+
+  const restarted = await first.open();
+  try {
+    await restarted.session.permissions.setForTool({
+      toolName: "scenario_approval",
+      policy: "allow",
+    });
+    expect(restarted.session.resolveToolApproval("scenario_approval")).toBe("allow");
+    expect((await readThreadState(restarted.runtime, restarted.session, "t")).expiredAsks).toEqual([
+      expect.objectContaining({ toolCallId: call, toolName: "scenario_approval" }),
+    ]);
+  } finally {
+    await restarted.runtime.close?.();
+  }
+});
