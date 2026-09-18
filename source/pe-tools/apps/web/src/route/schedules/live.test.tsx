@@ -98,7 +98,10 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   await vi.waitFor(async () =>
     expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
   );
-  // The first push's receipt settles before the route lets a second one start.
+  // Work clears before the push ends: the host still reads back and persists the receipt, and the
+  // button is busy until that receipt reads settled. In this lane host, SSE and jsdom share one
+  // event loop, which stretches those steps to seconds (measured: a one-row journal persist
+  // ~3.8 s), hence the long wait and the test's 20 s budget.
   await vi.waitFor(
     () =>
       expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
