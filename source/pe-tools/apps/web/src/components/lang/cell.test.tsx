@@ -107,3 +107,11 @@ test("Escape in the input restores the value and hands focus back to the td, whe
   expect(accept.run).toHaveBeenCalledOnce();
   expect(commit).not.toHaveBeenCalled();
 });
+
+test("an aggregate's refusal draws in the same note on each covered cell", () => {
+  inTable(<StateCell value="10in" scale="row" refused="moved since you looked" />);
+  expect(screen.getByText("moved since you looked").className).toBe("dl-refuse");
+  cleanup();
+  render(<StateCell value="10in" refused="moved since you looked" />);
+  expect(screen.getByText("moved since you looked").className).toBe("dl-refuse");
+});
