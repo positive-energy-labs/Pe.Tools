@@ -7,7 +7,7 @@ const statuses = [
   "Succeeded",
   "RuntimeFailed",
   "CompilationFailed",
-  "Canceled",
+  "Cancelled",
 ] satisfies HostOpResponse<"scripting.execute">["status"][];
 
 test("import carries the optional local folder through Gunshi to pod.import", async () => {

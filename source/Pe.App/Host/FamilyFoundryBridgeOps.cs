@@ -78,11 +78,11 @@ internal static class FamilyFoundryBridgeOps {
         try {
             var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
-            var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, new PodReceipt(source.Id, source.Path, source.Sha256, "family.build",
-                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [.. inputOutputs, outputPath], null), EngineEdge.WarningsOutput(handled));
+            var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, "family.build",
+                receipt.PlanHash, receipt.Converged ? PodRunOutcome.Succeeded : PodRunOutcome.Failed, [.. inputOutputs, outputPath], null), EngineEdge.WarningsOutput(handled));
             return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath, unsaved);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
-            _ = PodRuns.SettleReceiptIn(run, new PodReceipt(source.Id, source.Path, source.Sha256, "family.build", null, "Failed", inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
+            _ = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, "family.build", null, PodRunOutcome.Failed, inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
@@ -138,10 +138,10 @@ internal static class FamilyFoundryBridgeOps {
             // Lazy on purpose: the artifact reads run inside SettleReceiptIn, so an output failure after the effect
             // becomes `RunOutputUnsaved` beside the known outcome, never an exception in its place.
             // One family applied is a run that changed Revit, so it succeeded; its failed siblings are on the receipts.
-            var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, new PodReceipt(source.Id, source.Path, source.Sha256, operation,
+            var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
-                    data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
-                        : data.Receipts.Any(r => r.Success) ? "Succeeded" : "Failed",
+                    data.Diagnostics.Any(d => d.Code == CancelledCode) ? PodRunOutcome.Cancelled
+                        : data.Receipts.Any(r => r.Success) ? PodRunOutcome.Succeeded : PodRunOutcome.Failed,
                     inputOutputs,
                     relative.Reason),
                 outputs);
