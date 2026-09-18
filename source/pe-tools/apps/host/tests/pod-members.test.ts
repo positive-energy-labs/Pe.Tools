@@ -162,6 +162,50 @@ test("runs list newest first, by member, and a run with no receipt still says so
   expect((await run(listRuns({ pod: "runs", path: "other.json" }, ctx()))).runs).toEqual([]);
 });
 
+test("a draft run is listed under its member only with its draft label and no saved hash", async () => {
+  await mkdir(join(root, "Drafts", "output", "draft-run"), { recursive: true });
+  await mkdir(join(root, "Drafts", "output", "legacy-run"), { recursive: true });
+  await writeFile(join(root, "Drafts", "pod.json"), JSON.stringify({ id: "drafts" }));
+  await writeFile(
+    join(root, "Drafts", "output", "draft-run", "receipt.json"),
+    JSON.stringify({
+      podId: "drafts",
+      memberPath: "settings/file.json",
+      memberSha256: "draft-bytes-hash",
+      origin: "SuppliedDraft",
+      operation: "family.apply",
+      planHash: null,
+      outcome: "Cancelled",
+      outputs: [],
+      reason: null,
+    }),
+  );
+  await writeFile(
+    join(root, "Drafts", "output", "legacy-run", "receipt.json"),
+    JSON.stringify({
+      podId: "drafts",
+      memberPath: "settings/file.json",
+      memberSha256: "x",
+      operation: "scripting.execute",
+      outcome: "CompilationFailed",
+      outputs: [],
+    }),
+  );
+  const { runs } = await run(listRuns({ pod: "drafts", path: "settings/file.json" }, ctx()));
+  const draft = runs.find((r) => r.runId === "draft-run")!;
+  expect(draft.receipt).toMatchObject({
+    origin: "SuppliedDraft",
+    memberSha256: null,
+    outcome: "Cancelled",
+  });
+  // An unreadable receipt cannot name a member, so it lists only in the whole pod's runs.
+  const all = (await run(listRuns({ pod: "drafts" }, ctx()))).runs;
+  expect(all.find((r) => r.runId === "legacy-run")).toMatchObject({
+    receipt: null,
+    error: "receipt.json outcome 'CompilationFailed' is not Succeeded, Failed, Cancelled.",
+  });
+});
+
 test("read returns exact bytes and their sha256; invalid UTF-8 refuses", async () => {
   const raw = "\uFEFF{ broken  \r\n";
   await writeFile(file(), raw);

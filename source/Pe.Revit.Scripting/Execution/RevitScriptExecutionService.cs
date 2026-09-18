@@ -106,15 +106,17 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
-            outputSink.Attribution = plan.Attribution;
             // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
-            // in the default pod beside the inline traces.
-            outputSink.Artifacts = new ScriptArtifactWriter(
-                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
-                    ? plan.WorkspaceRoot
-                    : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
+            // in the default pod beside the inline traces, as operation input that names no member.
+            var runPod = plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
+                ? plan.WorkspaceRoot
+                : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey);
+            outputSink.Artifacts = new ScriptArtifactWriter(runPod);
             revitVersion = plan.RevitVersion;
             try {
+                outputSink.Attribution = plan.Attribution ?? new PodReceipt(
+                    ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
+                    null, null, PodRunOrigin.Operation, "scripting.execute", null, PodRunOutcome.Failed, [], null);
                 outputSink.Artifacts.WriteInput(RunInputMetadata(plan, request), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
                 AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
@@ -368,7 +370,7 @@ public sealed class RevitScriptExecutionService(
                 }
             }
         } catch (OperationCanceledException) {
-            var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Canceled;
+            var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Cancelled;
             AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
                 "cancel",
                 cancellation.IsTimeout
@@ -469,8 +471,8 @@ public sealed class RevitScriptExecutionService(
                 projectSeed = captured.ProjectSeed;
                 var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
                 var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
-                // Outcome and output references are filled when CreateResult observes the final result.
-                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, string.Empty, [], null);
+                // Outcome and output references are settled when CreateResult observes the final result.
+                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, PodRunOrigin.SavedMember, "scripting.execute", null, PodRunOutcome.Failed, [], null);
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
@@ -1083,7 +1085,11 @@ public sealed class RevitScriptExecutionService(
         object? data = null
     ) {
         var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
-            Outcome = status.ToString(),
+            Outcome = status switch {
+                ScriptExecutionStatus.Succeeded => PodRunOutcome.Succeeded,
+                ScriptExecutionStatus.Cancelled => PodRunOutcome.Cancelled,
+                _ => PodRunOutcome.Failed
+            },
             Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
             Outputs = [.. outputSink.Artifacts?.Inputs ?? [], .. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
         };

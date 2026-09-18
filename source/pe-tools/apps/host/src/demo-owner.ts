@@ -273,6 +273,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             podId: root.id,
             memberPath: root.path,
             memberSha256: root.sha256,
+            origin: "SavedMember",
             operation,
             planHash,
             outcome: "Succeeded",

@@ -5003,9 +5003,17 @@ export namespace ScriptingExecute {
       | "RuntimeFailed"
       | "Rejected"
       | "PolicyRejected"
-      | "Canceled"
+      | "Cancelled"
       | "TimedOut";
     export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
+    /**
+     * A run's settled outcome. Cancelled is its own answer, never a rollback claim.
+     */
+    export type PodRunOutcome = "Succeeded" | "Failed" | "Cancelled";
 
     export interface Response {
       status: ScriptExecutionStatus;
@@ -5033,15 +5041,20 @@ export namespace ScriptingExecute {
       sizeBytes: number;
     }
     /**
-     * One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.
+     * One run's receipt: its source origin, outcome, and outputs. `PodId` is the pod that stores the run.
+     * `MemberSha256` names saved bytes, so only a SavedMember run carries it; a
+     * supplied draft keeps the path it drafts and its own bytes and hash stay in `input.json`; operation input
+     * names no member.
+     *
      */
     export interface PodReceipt {
       podId: string;
-      memberPath: string;
-      memberSha256: string;
+      memberPath?: null | string;
+      memberSha256?: null | string;
+      origin: PodRunOrigin;
       operation: string;
       planHash?: null | string;
-      outcome: string;
+      outcome: PodRunOutcome;
       outputs: string[];
       /**
        * A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".

@@ -148,16 +148,17 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             0 => throw new InvalidDataException($"No installed pod has id '{podId}' under {this.PodsRoot}."),
             _ => throw new InvalidDataException($"Pod id '{podId}' is ambiguous between folders: {string.Join(", ", matches)}.")
         };
+    }
 
-        static string? ReadId(string folder) {
-            var path = Path.Combine(folder, "pod.json");
-            if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
-                return null;
-            try {
-                return JObject.Parse(File.ReadAllText(path))["id"]?.Value<string>();
-            } catch (JsonException) {
-                return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
-            }
+    /// <summary>The `id` a pod folder's manifest declares; null when it has no readable manifest.</summary>
+    internal static string? ReadId(string folder) {
+        var path = Path.Combine(folder, "pod.json");
+        if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
+            return null;
+        try {
+            return JObject.Parse(File.ReadAllText(path))["id"]?.Value<string>();
+        } catch (JsonException) {
+            return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
         }
     }
 

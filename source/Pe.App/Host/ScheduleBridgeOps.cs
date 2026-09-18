@@ -80,7 +80,7 @@ internal static class ScheduleBridgeOps {
             });
         } catch (Exception exception) {
             // The transaction rolled back; an unsaved failure receipt must not replace the failure itself.
-            _ = PodRuns.SettleReceiptIn(run, new PodReceipt(source.Id, source.Path, source.Sha256, "schedule.apply", null, "Failed", inputOutputs, exception.Message),
+            _ = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, "schedule.apply", null, PodRunOutcome.Failed, inputOutputs, exception.Message),
                 EngineEdge.WarningsOutput(handled));
             throw;
         }
@@ -91,7 +91,7 @@ internal static class ScheduleBridgeOps {
             .ToList();
         var resultJson = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ResultReport(result), Formatting.Indented));
         var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run,
-            new PodReceipt(source.Id, source.Path, source.Sha256, "schedule.apply", null, "Succeeded", [.. inputOutputs, $"schedule:{result.Schedule.Id.Value()}"], null),
+            PodReceipt.ForSource(source, "schedule.apply", null, PodRunOutcome.Succeeded, [.. inputOutputs, $"schedule:{result.Schedule.Id.Value()}"], null),
             [("result.json", resultJson), .. EngineEdge.WarningsOutput(handled)]);
         return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped,
             unsaved is null ? result.Warnings : [.. result.Warnings, unsaved], receiptPath), result);

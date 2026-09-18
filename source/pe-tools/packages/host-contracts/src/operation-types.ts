@@ -175,14 +175,23 @@ export const podRunsRequestSchema = Schema.Struct({
 });
 export type PodRunsRequest = Schema.Schema.Type<typeof podRunsRequestSchema>;
 
-/** What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. */
+/** The C# `PodRunOrigin`: a saved member's bytes, a supplied draft, or operation input with no member. */
+export const podRunOriginSchema = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]);
+/** The C# `PodRunOutcome`; Cancelled is its own answer, never a rollback claim. */
+export const podRunOutcomeSchema = Schema.Literals(["Succeeded", "Failed", "Cancelled"]);
+
+/**
+ * What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. `memberSha256` names saved
+ * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none.
+ */
 export const podReceiptSchema = Schema.Struct({
   podId: Schema.String,
-  memberPath: Schema.String,
-  memberSha256: Schema.String,
+  memberPath: Schema.NullOr(Schema.String),
+  memberSha256: Schema.NullOr(Schema.String),
+  origin: Schema.NullOr(podRunOriginSchema),
   operation: Schema.String,
   planHash: Schema.NullOr(Schema.String),
-  outcome: Schema.String,
+  outcome: podRunOutcomeSchema,
   outputs: Schema.Array(Schema.String),
   reason: Schema.NullOr(Schema.String),
 });
