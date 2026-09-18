@@ -211,7 +211,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public void Preview_refuses_invalid_units_without_mutation() {
         var document = this.NewFamily("FF invalid unit preview");
         try {
-            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var before = JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel()));
             var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}""");
             var preview = document.PreviewFamily(patch);
             Assert.That(preview.Diagnostics, Is.Not.Empty);
@@ -225,7 +225,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             foreach (var diagnostic in preview.Diagnostics)
                 Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
             Assert.That(apply.LastReceipt, Is.Null);
-            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(JToken.DeepEquals(
+                JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), before), Is.True,
+                "Preview must preserve the captured model; JSON object property order is not semantic.");
         } finally { document.Close(false); }
     }
 
