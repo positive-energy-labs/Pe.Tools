@@ -1000,7 +1000,12 @@ export function useRoute<W, R extends string, P, A extends string>(
     const actionPageEpoch = pageEpoch.current;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
-      work: { key, doc: doc?.doc ?? null, revision: doc?.revision ?? null },
+      work: {
+        key,
+        doc: doc?.doc ?? null,
+        revision: doc?.revision ?? null,
+        refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
+      },
       readings,
       page,
       call: (operation: string, input?: unknown) =>
@@ -1083,6 +1088,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     page,
     doc,
     workCurrent,
+    sliceResult,
     writer,
     writeWork,
     owner,

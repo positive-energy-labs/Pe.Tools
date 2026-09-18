@@ -46,17 +46,14 @@ function next(session: Session, type: string, reason?: string) {
   });
 }
 
-// RED, pinned with `test.fails` until the fix lands (E2E-J5 F-J5-2, cells-opus Mission 7):
-// after the person pauses, the parked run has detached; `endParkedTurn` clears the session's
-// suspension and aborts the session, but Mastra's agent thread registry still holds the suspended
-// run warm (MASTRA_SUSPENDED_RUN_TTL_MS, 30 min) and answers the new signal `thread-blocked`, so
-// the message never lands and the stored call keeps its `suspendedTools`. Flip to `test` with the fix.
-test.fails("J5: a new turn sent through the web route over a parked ask lands, and the ask reads expired after a reload", async () => {
+test("J5: a new turn sent through the web route over a parked ask lands, and the ask reads expired after a reload", async () => {
   const databasePath = join(await mkdtemp(join(tmpdir(), "j5-")), "pea.sqlite");
+  const prompts: unknown[] = [];
   const runtime = await createDeterministicRuntime({
     databasePath,
     resourceId: "r",
     peaWeb: true,
+    onPrompt: (prompt) => prompts.push(prompt),
     responses: [askUser, { text: "fresh turn" }],
   });
   const thread = crypto.randomUUID();
@@ -97,6 +94,13 @@ test.fails("J5: a new turn sent through the web route over a parked ask lands, a
     expect(state.expiredAsks).toEqual([
       expect.objectContaining({ toolCallId: call, toolName: "ask_user" }),
     ]);
+    // The stored call no longer parks: a reload offers no answer to it.
+    expect(JSON.stringify(state.messages)).not.toContain("suspendedTools");
+    // The new turn's model sees its question went unanswered: never rejected, never dropped.
+    const context = JSON.stringify(prompts.at(-1));
+    expect(context).toContain(call);
+    expect(context).toContain("unanswered");
+    expect(context).not.toMatch(/reject|declin|denied/i);
   } finally {
     await runtime.close?.();
   }

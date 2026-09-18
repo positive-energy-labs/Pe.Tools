@@ -194,3 +194,28 @@ test("a staged empty value draws the empty mark, never the baseline text, at bot
       unmount();
     }
 });
+
+test("a click selects the cell, typing replaces its value, and F2 or double-click edits in place", async () => {
+  const { container } = inTable(<StateCell value="No" scale="row" onCommit={vi.fn()} />);
+  const td = gridcell();
+  const input = container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
+  // A browser focuses the input on mousedown unless the grid takes it: the grid takes it.
+  const allowed = fireEvent.mouseDown(input);
+  if (allowed) await act(async () => input.focus());
+  expect(document.activeElement).toBe(td);
+  // The first printable key is the whole new value, as in every grid.
+  await act(async () => fireEvent.keyDown(td, { key: "j", code: "KeyJ" }));
+  expect(input.value).toBe("j");
+  expect(document.activeElement).toBe(input);
+
+  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
+  expect(input.value).toBe("No");
+  await act(async () => fireEvent.keyDown(td, { key: "F2", code: "F2" }));
+  expect(document.activeElement).toBe(input);
+  expect(input.value).toBe("No");
+
+  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
+  await act(async () => fireEvent.doubleClick(input));
+  expect(document.activeElement).toBe(input);
+  expect(input.value).toBe("No");
+});

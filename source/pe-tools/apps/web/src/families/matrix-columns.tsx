@@ -38,6 +38,22 @@ export interface ParamColumn {
   isBuiltIn: boolean;
   isProjectOnly: boolean;
   familyCount: number;
+  /** A Yes/No parameter: a closed choice, never free text. */
+  yesNo?: boolean;
+}
+
+/** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
+export const isYesNo = (dataTypeId: string | null | undefined) =>
+  dataTypeId?.startsWith("autodesk.spec:spec.bool") === true;
+
+const YES_NO = ["Yes", "No"] as const;
+
+/** The typed text as the closed choice it names, or the reason it names none. */
+export function yesNoOf(name: string, text: string): { value: string } | { refusal: string } {
+  const value = YES_NO.find((choice) => choice.toLowerCase() === text.trim().toLowerCase());
+  return value
+    ? { value }
+    : { refusal: `${name} is Yes/No: type Yes or No ("${text}" is neither)` };
 }
 
 type Cluster = "built-in" | "common" | "uncommon" | "project-only";
@@ -235,9 +251,11 @@ export function useFamiliesColumns({
                 reason={reason}
                 cell={cell}
                 transitions={transitions}
-                onCommit={(next) =>
-                  void propose(address, { familyName: row.familyName, value: next }, value)
-                }
+                onCommit={(next) => {
+                  const choice = col.yesNo ? yesNoOf(col.name, next) : { value: next };
+                  if ("refusal" in choice) return choice.refusal;
+                  void propose(address, { familyName: row.familyName, value: choice.value }, value);
+                }}
               />
             );
           }
@@ -303,7 +321,8 @@ export function ProposalCell({
   transitions?: readonly CellTransition[];
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
-  onCommit?: (text: string) => void;
+  /** A returned string refuses the edit, said on the cell. */
+  onCommit?: (text: string) => string | void;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;

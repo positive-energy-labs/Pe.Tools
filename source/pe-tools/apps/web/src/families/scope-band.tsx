@@ -35,6 +35,7 @@ export function FamiliesFilterBand() {
     setPickedFamilies,
     familyFeed,
     categoryFeed,
+    workUnreadable,
   } = useFamiliesWorkspace();
   return (
     <>
@@ -57,6 +58,7 @@ export function FamiliesFilterBand() {
             items={PLACEMENT_OPTIONS}
             keyOf={(option) => option.value}
             labelOf={(option) => option.label}
+            disabled={workUnreadable}
             select="single"
             selected={[placement]}
             empty="no placements"
@@ -81,6 +83,7 @@ export function FamiliesFilterBand() {
               values={draftCategories}
               onChange={(next) => setDraftCategories([...next].sort((a, b) => a.localeCompare(b)))}
               placeholder="add categories…"
+              disabled={workUnreadable}
               ariaLabel="draft categories"
               title="Which Revit categories the draft asks for. Picking one only edits the DRAFT — nothing loads until you apply the scope, because the matrix op is the expensive one."
             />
@@ -88,7 +91,7 @@ export function FamiliesFilterBand() {
               options={draftFamilyNames}
               values={pickedFamilies}
               onChange={setPickedFamilies}
-              disabled={draftFamilyNames.length === 0}
+              disabled={workUnreadable || draftFamilyNames.length === 0}
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
