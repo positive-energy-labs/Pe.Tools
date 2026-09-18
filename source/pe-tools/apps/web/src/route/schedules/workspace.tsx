@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   scheduleCellKey,
   splitScheduleCellKey,
+  transitionPatches,
   type RouteStatePatch,
   type ScheduleCatalog,
   type ScheduleGridDocument,
@@ -18,8 +19,9 @@ import { PickList } from "#/components/lang/pick-list";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
+import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
-import { useScheduleGridColumns } from "./columns";
+import { scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
 
 export interface ScheduleGridState {
@@ -47,6 +49,7 @@ export interface ScheduleGridState {
 export function ScheduleGridWorkspace({
   state: {
     slice,
+    revision,
     hydrated,
     refreshing,
     apply,
@@ -82,19 +85,29 @@ export function ScheduleGridWorkspace({
   const runCommand = (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) =>
     void execute(kind, input);
 
-  const stageValue = (key: string, value: string) =>
-    void apply([{ path: ["cells", key, "staged"], value: { value } }]);
+  const bindingAt = (key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    return snapshot?.rows
+      .find((row) => row.rowNumber === rowNumber)
+      ?.bindings.find((binding) => binding.columnNumber === columnNumber);
+  };
+  /** Every schedule cell's accept, deny and unstage write here, bound to the rendered revision. */
+  const wire: CellWire = {
+    segment: "cells",
+    write: apply,
+    revision,
+    lockOf: (key) => scheduleLock(bindingAt(key)),
+  };
+  /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
   const stageEdit = (key: string, value: string): string | void => {
     if (value.length === 0)
       return "an empty value cannot be staged — type a value, or leave the cell as it was";
-    const patches: { path: (string | number)[]; value?: unknown }[] = [
-      { path: ["cells", key, "staged"], value: { value } },
-    ];
-    if (cells[key]?.proposal != null) patches.push({ path: ["cells", key, "proposal"] });
-    void apply(patches);
+    const cell = cells[key] ?? {};
+    void apply([
+      ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),
+      ...(cell.proposal != null ? transitionPatches(["cells"], key, cell, { kind: "deny" }) : []),
+    ]);
   };
-  const deny = (key: string) => void apply([{ path: ["cells", key, "proposal"] }]);
-  const undo = (key: string) => void apply([{ path: ["cells", key, "staged"] }]);
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -104,16 +117,17 @@ export function ScheduleGridWorkspace({
     const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
     const columnIndex =
       snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
-    const binding = row?.bindings.find((candidate) => candidate.columnNumber === columnNumber);
-    return binding?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null);
+    return (
+      bindingAt(key)?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null)
+    );
   };
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, stageEdit);
+  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit);
 
   const pushReason = blockedBecause
     ? blockedBecause
     : stagedCount === 0
-      ? "Nothing is staged yet — approve a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
+      ? "Nothing is staged yet — accept a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
@@ -328,10 +342,8 @@ export function ScheduleGridWorkspace({
                   proposalCount={proposalCount}
                   stagedCount={stagedCount}
                   columnHeader={columnHeader}
+                  wire={wire}
                   currentText={currentText}
-                  stageValue={stageValue}
-                  deny={deny}
-                  undo={undo}
                   locate={(key) => setActiveRow(String(splitScheduleCellKey(key).rowNumber))}
                 />
               )}
