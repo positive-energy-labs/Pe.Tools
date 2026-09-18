@@ -20,6 +20,7 @@ export function AtlasVisual() {
     planOpen,
     statsOpen,
     level,
+    planImage,
     setLevel,
     setPlanOpen,
     setStatsOpen,
@@ -104,6 +105,11 @@ export function AtlasVisual() {
         }
       >
         <LevelPlan
+          plan={planImage.image && "plan" in planImage.image ? planImage.image.plan : null}
+          planRefusal={
+            planImage.image && "refusal" in planImage.image ? planImage.image.refusal : null
+          }
+          planError={planImage.error}
           zones={levelZones}
           stageFilter={stageFilter}
           selectedKey={zoneKey}
