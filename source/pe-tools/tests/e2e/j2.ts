@@ -10,6 +10,8 @@ const mine = process.env.E2E_MINE ?? "e2e-mine";
 const ask = `propose ${param} = ${pea} on ${rows.map(([family, type]) => `${family} (${type})`).join(", ")}`;
 
 await journey("J2", async (page, step) => {
+  if (mine.includes(pea))
+    throw new Error("PRECONDITION: E2E_VALUE must not be a substring of E2E_MINE");
   step(`open ${revit.url("/chat?plugin=families")}, click "new"`);
   await page.open(revit.url("/chat?plugin=families"));
   await page.click("new");
@@ -43,7 +45,8 @@ await journey("J2", async (page, step) => {
     throw new Error(
       `ASSERT the contested cell still shows ${mine} staged: got ${JSON.stringify(cell)}`,
     );
-  // Row scale carries the counter-proposal in the cell's hover facts (StateCell title), not inline.
-  expectText(cell.facts, `pea proposes ${pea}`, "the contested cell shows Pea's counter-proposal");
+  // journeys ruled a hover title does not count: Pea's value must be drawn inline in the cell.
+  // The inline form is the cell's choice, so this checks only that Pea's value is rendered text.
+  expectText(cell.text, pea, "the contested cell draws Pea's counter-proposal inline");
   expectText(await page.textOf(HEAD), "accepted 2 · skipped 1 (contested)", "outcome line");
 });

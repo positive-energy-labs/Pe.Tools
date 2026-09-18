@@ -146,6 +146,8 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
     readCell: (row: string[], column: string) =>
       read<{
         value: string;
+        /** The cell's inline rendered text (innerText; an input's value is not part of it). */
+        text: string;
         staged: boolean;
         proposal: boolean;
         unsaved: string | null;
@@ -158,6 +160,7 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
         const state = td.querySelector("[data-scale=row]");
         return {
           value: input ? input.value : td.innerText.trim(),
+          text: td.innerText.trim(),
           staged: td.querySelector("[data-staged]") != null,
           proposal: td.querySelector("[data-proposal]") != null,
           unsaved: state?.getAttribute("data-unsaved") ?? null,
