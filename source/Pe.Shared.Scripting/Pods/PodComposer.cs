@@ -181,15 +181,37 @@ public static class PodComposer {
 
         var result = new JArray();
         foreach (var item in array) {
+            var before = diagnostics.Count;
             var expanded = ExpandIncludes(item, owner, resolve, visiting, dependencies, diagnostics);
-            if (item is JObject candidate && candidate.ContainsKey("$include") && expanded is JArray splice)
+            if (item is not JObject candidate || candidate["$include"]?.Type != JTokenType.String || diagnostics.Count > before) {
+                result.Add(expanded);
+                continue;
+            }
+            if (Spliced(expanded) is { } splice) {
                 foreach (var child in splice)
                     result.Add(child);
-            else
-                result.Add(expanded);
+                continue;
+            }
+            diagnostics.Add(Error("pod.settings.include", owner,
+                $"Include '{candidate["$include"]}' in an array must resolve to an array or an `Items` fragment; it resolved to {Shape(expanded)}."));
+            result.Add(expanded);
         }
         return result;
     }
+
+    /// <summary>What an array-position include splices: a raw array, or the `Items` of a `{ "$schema"?, "Items": [...] }` fragment.</summary>
+    private static JArray? Spliced(JToken expanded) =>
+        expanded switch {
+            JArray array => array,
+            JObject fragment when fragment["Items"] is JArray items
+                && fragment.Properties().All(property => property.Name is "Items" or "$schema") => items,
+            _ => null
+        };
+
+    private static string Shape(JToken token) =>
+        token is JObject obj
+            ? $"an object with properties {string.Join(", ", obj.Properties().Select(property => property.Name))}"
+            : $"a {token.Type.ToString().ToLowerInvariant()}";
 
     private static JObject MergeRightWins(JObject left, JObject right) {
         var result = (JObject)left.DeepClone();
