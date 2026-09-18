@@ -130,11 +130,7 @@ export function ParameterLinksView({ data }: OpViewProps) {
 
 export const MAX_TYPE_COLUMNS = 8;
 
-export function FamilyMatrix({
-  family,
-}: {
-  family: RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
-}) {
+function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord }) {
   const typeNames = family.typeNames.slice(0, MAX_TYPE_COLUMNS);
   const overflow = family.typeNames.length - typeNames.length;
   const columns: Column<RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot>[] = [

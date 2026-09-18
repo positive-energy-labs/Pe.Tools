@@ -1,11 +1,8 @@
 import { token } from "#/lib/token";
-import type { ReactNode } from "react";
 import { EmptyState } from "#/components/lang/empty";
-import { Provenance, Section } from "#/components/lang/section";
-import { KVGrid, type KVTone } from "#/ops/primitives";
+import { Provenance } from "#/components/lang/section";
 import {
   type OpViewProps,
-  type OpViewRegistry,
   UnrecognizedShape,
   asNumber,
   asRecord,
@@ -13,17 +10,30 @@ import {
   asString,
   text,
 } from "#/ops/registry";
-import {
-  ContextSummaryView,
-  HandleChip,
-  IssueLines,
-  formatBytes,
-  handleId,
-  handleLabel,
-  truncateMiddle,
-} from "./kind-viz";
-import { DocumentSessionView, VisibleSummaryView } from "./document-tab";
-import { ScoreBar, ViewRenderingStateView } from "./observed-view-card";
+import { HandleChip, IssueLines, handleId } from "./kind-viz";
+
+function ScoreBar({ score, max, muted }: { score: number; max: number; muted: boolean }) {
+  const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1.5"
+      title={`score ${score} of max ${max} in this set`}
+    >
+      <span className="inline-block h-[3px] w-[72px]">
+        <span
+          className="block h-full"
+          style={{
+            width: `${frac * 100}%`,
+            backgroundColor: muted ? token("ink-mute") : token("viz-1"),
+          }}
+        />
+      </span>
+      <span className="" style={{ color: muted ? token("ink-mute") : undefined }}>
+        {score}
+      </span>
+    </span>
+  );
+}
 
 export function ResolveReferencesView({ data }: OpViewProps) {
   const res = asRecord(data);
@@ -129,65 +139,3 @@ export function ResolveReferencesView({ data }: OpViewProps) {
     </div>
   );
 }
-
-export function ViewImageView({ data }: OpViewProps) {
-  const res = asRecord(data);
-  const filePath = res && asString(res.filePath);
-  if (!res || !filePath) return <UnrecognizedShape />;
-
-  const view = asRecord(res.view);
-  const modelRect = asRecord(res.modelRect);
-  const byteSize = asNumber(res.byteSize);
-  const viewScale = asNumber(res.viewScale);
-  const sheetNumber = asString(res.sheetNumber);
-
-  const items: { label: string; value: ReactNode; tone?: KVTone }[] = [
-    { label: "view", value: view ? handleLabel(view) : "∅" },
-    { label: "pixel size", value: `${text(res.pixelSize)} px (long edge)` },
-    { label: "file size", value: byteSize !== undefined ? formatBytes(byteSize) : "∅" },
-  ];
-  if (viewScale !== undefined) items.push({ label: "view scale", value: `1:${viewScale}` });
-  if (sheetNumber) items.push({ label: "sheet", value: sheetNumber });
-
-  return (
-    <div className="flex flex-col gap-4">
-      <Section label="exported image">
-        <KVGrid columns={3} items={items} />
-        <div className="mt-2">
-          <div className="">file path</div>
-          <div className="" title={filePath}>
-            {truncateMiddle(filePath, 72)}
-          </div>
-        </div>
-      </Section>
-
-      {modelRect && (
-        <Section label="model extent">
-          <KVGrid
-            columns={2}
-            items={[
-              { label: "min (x, y)", value: `${text(modelRect.minX)}, ${text(modelRect.minY)} ft` },
-              { label: "max (x, y)", value: `${text(modelRect.maxX)}, ${text(modelRect.maxY)} ft` },
-            ]}
-          />
-        </Section>
-      )}
-
-      <Provenance>
-        path is local to the Revit host machine — not fetchable from this browser
-        {modelRect
-          ? " · model extent in feet, project internal coordinates"
-          : " · no model extent reported (sheet or schedule capture)"}
-      </Provenance>
-    </div>
-  );
-}
-
-export const views: OpViewRegistry = {
-  "revit.context.summary": ContextSummaryView,
-  "revit.context.document-session": DocumentSessionView,
-  "revit.context.visible-summary": VisibleSummaryView,
-  "revit.context.view-rendering-state": ViewRenderingStateView,
-  "revit.resolve.references": ResolveReferencesView,
-  "revit.context.view-image": ViewImageView,
-};

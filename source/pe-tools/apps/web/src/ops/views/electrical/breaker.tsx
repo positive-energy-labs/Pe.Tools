@@ -1,4 +1,5 @@
 import { token } from "#/lib/token";
+import type { ReactNode } from "react";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type Column, DataTable } from "#/ops/primitives";
@@ -8,21 +9,87 @@ import {
   asRecords,
   asString,
   type OpViewProps,
-  type OpViewRegistry,
   UnrecognizedShape,
 } from "#/ops/registry";
-import type { Rec } from "./record";
-import type { BreakerSlot } from "./circuits";
-import { IssuesNote, MonoAside, PanelsView, joinNonEmpty } from "./record";
-import { CircuitsView, LoadClassificationsView, extractBreakerSlots } from "./circuits";
 
-export function BreakerHalf({
-  slot,
-  side,
-}: {
-  slot: BreakerSlot | undefined;
-  side: "left" | "right";
-}) {
+type Rec = Record<string, unknown>;
+
+function joinNonEmpty(parts: (string | undefined)[], sep = " · "): string {
+  return parts.filter((p): p is string => Boolean(p && p.trim())).join(sep);
+}
+
+function MonoAside({ children }: { children: ReactNode }) {
+  return <span className="">{children}</span>;
+}
+
+function IssuesNote({ data }: { data: Rec }) {
+  const issues = asRecords(data.issues);
+  if (issues.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-col gap-0.5">
+      {issues.map((issue, i) => {
+        const severity = asString(issue.severity) ?? "Info";
+        return (
+          <span
+            key={i}
+            className=""
+            style={{ color: severity === "Info" ? token("ink-2") : token("caution") }}
+          >
+            {severity.toLowerCase()}: {asString(issue.code)} — {asString(issue.message)}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+type BreakerCell = { num: number; load?: string; trip?: string; poles?: string };
+
+const CKT_HEADER = /ckt|cct|circuit|^no\.?$|^#$/i;
+
+function extractBreakerCells(body: Rec): BreakerCell[] | undefined {
+  const rows = asRecords(body.rows).filter((row) => row.isCircuitTableRow === true);
+  const slots: BreakerCell[] = [];
+  const seen = new Set<number>();
+  for (const row of rows) {
+    const cells = asRecords(row.cells)
+      .slice()
+      .sort((a, b) => (asNumber(a.columnNumber) ?? 0) - (asNumber(b.columnNumber) ?? 0));
+    const numberIndexes: number[] = [];
+    cells.forEach((cell, i) => {
+      const textValue = asString(cell.displayText)?.trim() ?? "";
+      if (!/^\d{1,3}$/.test(textValue)) return;
+      const header = asString(cell.columnHeaderText) ?? "";
+      if (asNumber(cell.circuitId) !== undefined || CKT_HEADER.test(header)) numberIndexes.push(i);
+    });
+    for (const i of numberIndexes) {
+      const num = Number.parseInt(asString(cells[i]?.displayText) ?? "", 10);
+      if (!Number.isFinite(num) || seen.has(num)) continue;
+      const dir = i < cells.length / 2 ? 1 : -1;
+      let load: string | undefined;
+      let trip: string | undefined;
+      let poles: string | undefined;
+      let firstText: string | undefined;
+      for (let j = i + dir; j >= 0 && j < cells.length; j += dir) {
+        const cell = cells[j];
+        if (!cell) break;
+        const header = asString(cell.columnHeaderText) ?? "";
+        if (CKT_HEADER.test(header) && numberIndexes.includes(j)) break; // crossed the spine
+        const textValue = asString(cell.displayText)?.trim();
+        if (!textValue) continue;
+        if (!load && /load|descr|name/i.test(header)) load = textValue;
+        else if (!trip && /trip|breaker|amp|rating/i.test(header)) trip = textValue;
+        else if (!poles && /pole/i.test(header)) poles = textValue;
+        else if (!firstText && !/^[\d.,/-]+$/.test(textValue)) firstText = textValue;
+      }
+      seen.add(num);
+      slots.push({ num, load: load ?? firstText, trip, poles });
+    }
+  }
+  return slots.length >= 2 ? slots : undefined;
+}
+
+function BreakerHalf({ slot, side }: { slot: BreakerCell | undefined; side: "left" | "right" }) {
   const gutter = (
     <span
       className={`w-[34px] shrink-0 px-1.5 py-1 ${side === "left" ? "text-right" : "text-left"}`}
@@ -60,7 +127,7 @@ export function BreakerHalf({
   return <div className={`flex min-w-0 items-center ${side === "left" ? "" : ""}`}>{inner}</div>;
 }
 
-export function Panelboard({ slots }: { slots: BreakerSlot[] }) {
+function Panelboard({ slots }: { slots: BreakerCell[] }) {
   const odds = slots.filter((s) => s.num % 2 === 1).sort((a, b) => a.num - b.num);
   const evens = slots.filter((s) => s.num % 2 === 0).sort((a, b) => a.num - b.num);
   const rowCount = Math.max(odds.length, evens.length);
@@ -76,7 +143,7 @@ export function Panelboard({ slots }: { slots: BreakerSlot[] }) {
   );
 }
 
-export function SectionGrid({ section }: { section: Rec }) {
+function SectionGrid({ section }: { section: Rec }) {
   const rows = asRecords(section.rows);
   if (rows.length === 0) return null;
   const columnNumbers = [
@@ -110,7 +177,7 @@ export function SectionGrid({ section }: { section: Rec }) {
   );
 }
 
-export function SectionLines({ section }: { section: Rec }) {
+function SectionLines({ section }: { section: Rec }) {
   const lines = asRecords(section.rows)
     .map((row) =>
       asRecords(row.cells)
@@ -131,13 +198,13 @@ export function SectionLines({ section }: { section: Rec }) {
   );
 }
 
-export function PanelScheduleCard({ entry }: { entry: Rec }) {
+function PanelScheduleCard({ entry }: { entry: Rec }) {
   const sections = asRecords(entry.sections);
   const header = sections.find((s) => asString(s.sectionType) === "Header");
   const body = sections.find((s) => asString(s.sectionType) === "Body");
   const summary = sections.find((s) => asString(s.sectionType) === "Summary");
   const footer = sections.find((s) => asString(s.sectionType) === "Footer");
-  const slots = body ? extractBreakerSlots(body) : undefined;
+  const slots = body ? extractBreakerCells(body) : undefined;
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
     <article className="min-w-0">
@@ -225,10 +292,3 @@ export function PanelSchedulesView({ data }: OpViewProps) {
     </Section>
   );
 }
-
-export const views: OpViewRegistry = {
-  "revit.catalog.electrical-panels": PanelsView,
-  "revit.catalog.electrical-circuits": CircuitsView,
-  "revit.catalog.electrical-load-classifications": LoadClassificationsView,
-  "revit.detail.electrical-panel-schedules": PanelSchedulesView,
-};

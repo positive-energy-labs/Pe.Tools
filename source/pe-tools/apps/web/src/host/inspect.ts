@@ -1,4 +1,4 @@
-import { peUrl, type WorkbenchEndpointConfig } from "#/workbench/config";
+import { peUrl, type WorkbenchEndpointConfig } from "#/workbench/config.ts";
 
 export interface PeInspect {
   systemPrompt?: { content?: string; source?: string; updatedAt?: string };

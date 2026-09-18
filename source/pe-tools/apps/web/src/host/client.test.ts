@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { callHostDynamic } from "./client.ts";

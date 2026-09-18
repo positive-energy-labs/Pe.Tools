@@ -7,13 +7,13 @@ import { type Column, DataTable, type VizIndex, vizVar } from "#/ops/primitives"
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { contentViewport, fitFrame } from "#/lib/affine-frame";
 
-export function numericish(value: string): boolean {
+function numericish(value: string): boolean {
   const v = value.trim();
   if (v === "") return false;
   return /^-?[\d,]+(\.\d+)?\s*(%|[A-Za-z°"']{0,4})?$/.test(v);
 }
 
-export function columnIsNumeric(rows: string[][], columnIndex: number): boolean {
+function columnIsNumeric(rows: string[][], columnIndex: number): boolean {
   let nonEmpty = 0;
   let numeric = 0;
   for (const row of rows) {

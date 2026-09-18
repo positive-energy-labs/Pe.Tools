@@ -1,4 +1,6 @@
+import { parameterLinksBasis } from "@pe/agent-contracts";
 import type {
+  ParameterLinksReading,
   ParameterLinkAssignment,
   ParameterLinkDefinition,
   ParameterLinkEvaluation,
@@ -6,18 +8,19 @@ import type {
   ParameterLinksDocument,
 } from "@pe/agent-contracts";
 
-export type SourceScope = ParameterLinkDefinition["sourceScope"];
+export type SourceKind = ParameterLinkDefinition["sourceScope"];
 export type Relationship = ParameterLinkDefinition["relationship"];
 export type Reducer = ParameterLinkDefinition["reducer"];
 
-export const SOURCE_SCOPES: SourceScope[] = ["instance", "type", "instanceThenType"];
+export const SOURCE_SCOPES: SourceKind[] = ["instance", "type", "instanceThenType"];
 export const RELATIONSHIPS: Relationship[] = ["sameElement", "electricalEquipmentCircuits"];
 export const REDUCERS: Reducer[] = ["first", "min", "max"];
 
+/** The authored draft is the only editable profile. There is no second copy to reconcile. */
 export function editingProfile(
   document: ParameterLinksDocument | null,
 ): ParameterLinkProfile | null {
-  return document?.draftProfile ?? document?.profile ?? null;
+  return document?.draft ?? null;
 }
 
 export function sameProfile(
@@ -27,33 +30,41 @@ export function sameProfile(
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
-export function retainDraftBasis(
-  basis: number | null,
-  hasUnsavedEdits: boolean,
-  revision: number | null,
-): number | null {
-  return hasUnsavedEdits ? basis : revision;
+/**
+ * Freshness, computed exactly as the server computes it before it admits an apply: an
+ * evaluation belongs to the draft named by its basis, and to no other.
+ */
+export function evaluationIsCurrent(
+  document: ParameterLinksDocument | null,
+  reading: ParameterLinksReading | null,
+): boolean {
+  if (!document?.draft || !reading?.evaluated) return false;
+  return reading.basis === parameterLinksBasis(document);
 }
 
-export function isDraftDirty(document: ParameterLinksDocument | null): boolean {
-  const draft = document?.draftProfile;
+export function isDraftDirty(
+  document: ParameterLinksDocument | null,
+  reading: ParameterLinksReading | null,
+): boolean {
+  const draft = document?.draft;
   if (draft == null) return false;
-  return !sameProfile(draft, document?.profile);
+  return !sameProfile(draft, reading?.stored);
 }
 
 export function errorIssueCount(evaluation: ParameterLinkEvaluation | null | undefined): number {
   return evaluation?.issues.filter((issue) => issue.severity === "error").length ?? 0;
 }
 
-export function canApply(args: {
-  editing: ParameterLinkProfile | null;
-  previewed: ParameterLinkProfile | null;
-  errorCount: number;
-}): boolean {
-  const { editing, previewed, errorCount } = args;
-  return (
-    editing != null && previewed != null && errorCount === 0 && sameProfile(editing, previewed)
-  );
+/** One refusal string, so the strip and the verb can never disagree about why. */
+export function applyRefusal(
+  document: ParameterLinksDocument | null,
+  reading: ParameterLinksReading | null,
+): string | null {
+  if (!document?.draft) return "Author a draft profile first.";
+  if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
+  if (errorIssueCount(reading?.evaluation) > 0)
+    return "Resolve the evaluation errors before applying.";
+  return null;
 }
 
 export function parseUniqueIds(text: string): string[] {

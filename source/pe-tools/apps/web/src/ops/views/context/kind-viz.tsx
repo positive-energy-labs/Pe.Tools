@@ -13,7 +13,7 @@ import {
   text,
 } from "#/ops/registry";
 
-export const KIND_VIZ: Record<string, VizIndex> = {
+const KIND_VIZ: Record<string, VizIndex> = {
   Document: 3,
   View: 1,
   Sheet: 2,
@@ -23,7 +23,7 @@ export const KIND_VIZ: Record<string, VizIndex> = {
   Family: 6,
 };
 
-export function kindViz(kind: string | undefined): VizIndex {
+function kindViz(kind: string | undefined): VizIndex {
   return (kind && KIND_VIZ[kind]) || 3;
 }
 
@@ -34,7 +34,7 @@ export function handleId(handle: Record<string, unknown> | undefined): string {
   return asString(handle.uniqueId) ?? "∅";
 }
 
-export function handleLabel(handle: Record<string, unknown> | undefined): string {
+function handleLabel(handle: Record<string, unknown> | undefined): string {
   return (handle && asString(handle.label)) || "∅";
 }
 
@@ -47,26 +47,14 @@ export function HandleChip({ handle }: { handle: Record<string, unknown> }) {
   );
 }
 
-export function provenanceDescriptions(value: unknown): string[] {
-  return asRecords(value)
-    .map((p) => asString(p.description))
-    .filter((d): d is string => !!d);
-}
-
-export function truncateMiddle(value: string, max = 64): string {
+function truncateMiddle(value: string, max = 64): string {
   if (value.length <= max) return value;
   const head = Math.ceil((max - 1) / 2);
   const tail = Math.floor((max - 1) / 2);
   return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
 }
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-export function docKind(doc: Record<string, unknown>): string {
+function docKind(doc: Record<string, unknown>): string {
   return doc.isFamilyDocument === true ? "rfa" : "rvt";
 }
 
@@ -90,7 +78,7 @@ export function IssueLines({ issues }: { issues: unknown }) {
   );
 }
 
-export function DocFactChips({ doc }: { doc: Record<string, unknown> }) {
+function DocFactChips({ doc }: { doc: Record<string, unknown> }) {
   return (
     <>
       {doc.isWorkshared === true && (
