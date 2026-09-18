@@ -30,7 +30,6 @@ import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
-import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
@@ -141,12 +140,6 @@ const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemProposalFlowRoute =
-  DesignSystemProposalFlowRouteImport.update({
-    id: "/design-system_/proposal-flow",
-    path: "/design-system/proposal-flow",
-    getParentRoute: () => rootRouteImport,
-  } as any);
 const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   id: "/design-system_/swatch",
   path: "/design-system/swatch",
@@ -190,7 +183,6 @@ export interface FileRoutesByFullPath {
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -218,7 +210,6 @@ export interface FileRoutesByTo {
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -247,7 +238,6 @@ export interface FileRoutesById {
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -277,7 +267,6 @@ export interface FileRouteTypes {
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/popovers"
-    | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -305,7 +294,6 @@ export interface FileRouteTypes {
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/popovers"
-    | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -333,7 +321,6 @@ export interface FileRouteTypes {
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/popovers"
-    | "/design-system_/proposal-flow"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -362,7 +349,6 @@ export interface RootRouteChildren {
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
-  DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
   ApiRunsDataSplatRoute: typeof ApiRunsDataSplatRoute;
@@ -517,13 +503,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemPopoversRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/proposal-flow": {
-      id: "/design-system_/proposal-flow";
-      path: "/design-system/proposal-flow";
-      fullPath: "/design-system/proposal-flow";
-      preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/design-system_/swatch": {
       id: "/design-system_/swatch";
       path: "/design-system/swatch";
@@ -588,7 +567,6 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
-  DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
   ApiRunsDataSplatRoute: ApiRunsDataSplatRoute,
