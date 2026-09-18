@@ -17,7 +17,7 @@ import { trichotomyAgentMask } from "./trichotomy.ts";
 /* ── Field trichotomy — settings keep the shared proposal/staged shape.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
 
-const settingsFieldEditSchema = z
+export const settingsFieldEditSchema = z
   .object({
     value: z.unknown().optional(),
     delete: z.literal(true).optional(),

@@ -10,10 +10,9 @@ describe("route bindings", () => {
     expect(familyProjectionSchema.parse({}).bindings).toEqual({});
   });
 
-  it("Families Work drops a binding: a target is a navigation, not authored input", () => {
-    // Zod strips undeclared keys, so the write simply never lands as Work.
-    expect(
+  it("Families Work rejects a binding: a target is navigation, not authored input", () => {
+    expect(() =>
       familiesRouteState.schema.parse({ bindings: { profile: { id: "a", label: "A" } } }),
-    ).not.toHaveProperty("bindings");
+    ).toThrow();
   });
 });

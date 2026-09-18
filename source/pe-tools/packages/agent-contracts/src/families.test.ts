@@ -1,22 +1,37 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { familiesIncluded, familiesRouteState } from "./families.ts";
+import {
+  familyCellAddress,
+  familyCellKey,
+  familiesIncluded,
+  familiesRouteState,
+} from "./families.ts";
 
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
       scope: null,
       excludedIds: [],
-      edits: [],
-      accepted: [],
+      cells: {},
     });
-    // Everything but `accepted` is agent-writable: Pea proposes, only a person accepts.
+    // Pea may propose, but only a person stages.
     expect(familiesRouteState.agentWriteMask).toEqual([
       ["scope"],
       ["excludedIds"],
-      ["edits"],
+      ["cells", "*", "proposal"],
       ["executionOptions"],
     ]);
+  });
+
+  it("encodes the full address tuple without separator collisions", () => {
+    const left = { familyId: 1, typeName: "a|b", parameter: "c" };
+    const right = { familyId: 1, typeName: "a", parameter: "b|c" };
+    expect(familyCellKey(left)).not.toBe(familyCellKey(right));
+    expect(familyCellAddress(familyCellKey(left))).toEqual(left);
+  });
+
+  it("rejects persisted legacy arrays instead of stripping them", () => {
+    expect(() => familiesRouteState.schema.parse({ edits: [], accepted: [] })).toThrow();
   });
 
   it("advertises no route command at all: reading and applying are host ports", () => {

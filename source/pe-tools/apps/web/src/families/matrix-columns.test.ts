@@ -22,8 +22,7 @@ test("a parameter on the only scoped family remains visible as common", () => {
       setPickedIds: () => {},
       showUncommon: false,
       totalFamilies: 1,
-      edits: [],
-      accepted: [],
+      cells: {},
       propose: () => Promise.resolve(null),
     }),
   );

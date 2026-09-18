@@ -18,6 +18,7 @@ import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
+import { familyCellEntries } from "#/families/staged";
 
 /**
  * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
@@ -53,8 +54,11 @@ function useFamiliesWorkspaceModel(
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = store.applied;
-  const edits = store.edits;
-  const accepted = store.accepted;
+  const cells = store.cells;
+  const staged = useMemo(
+    () => familyCellEntries(cells).filter((entry) => entry.cell.staged != null),
+    [cells],
+  );
   const plan = store.plan;
   const excludedIds = new Set(store.excludedIds);
   const pickedIds = store.pickedIds;
@@ -260,14 +264,13 @@ function useFamiliesWorkspaceModel(
     setPickedIds,
     showUncommon,
     totalFamilies,
-    edits,
-    accepted,
+    cells,
     propose: store.actions.propose,
   });
 
-  const acceptedFamilies = useMemo(
-    () => new Set(accepted.map((edit) => edit.familyId)).size,
-    [accepted],
+  const stagedFamilies = useMemo(
+    () => new Set(staged.map((entry) => entry.familyId)).size,
+    [staged],
   );
 
   const chips = useTableChips({
@@ -296,12 +299,12 @@ function useFamiliesWorkspaceModel(
             onClear: () => setPickedIds(new Set()),
           }
         : null,
-    // Accepted cells are what plan will generate: countable here, denied whole in one press.
+    // Staged cells are what plan will generate: countable here, removable in one press.
     staged:
-      accepted.length > 0
+      staged.length > 0
         ? {
-            label: `accepted · ${accepted.length} cell${accepted.length === 1 ? "" : "s"} · ${acceptedFamilies} famil${acceptedFamilies === 1 ? "y" : "ies"}`,
-            onClear: () => void store.actions.deny(accepted),
+            label: `staged · ${staged.length} cell${staged.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
+            onClear: () => void store.actions.unstage(staged),
           }
         : null,
   });
@@ -332,8 +335,7 @@ function useFamiliesWorkspaceModel(
     target,
     scope,
     draft,
-    edits,
-    accepted,
+    cells,
     placement,
     draftCategories,
     pickedFamilies,
