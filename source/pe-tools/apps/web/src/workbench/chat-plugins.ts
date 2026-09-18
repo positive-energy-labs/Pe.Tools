@@ -4,12 +4,14 @@
  * import it without the route views.
  */
 import {
+  actionControls,
   familiesRouteState,
   familyDraftRouteState,
   instancesRouteState,
   parameterLinksRouteState,
   routeCallOf,
   scheduleGridRouteState,
+  semanticActions,
   settingsRouteState,
   takeoffsRouteState,
 } from "@pe/agent-contracts";
@@ -54,6 +56,8 @@ const parsed = (value: unknown): unknown => {
 
 export interface ProposedRecord {
   route: ChatPluginRoute;
+  /** Distinct cells (or fields) the call proposed on, not patches: several rungs of one cell's
+   * proposal are one change. */
   changes: number;
   /** The document (or named workspace) the call recorded; null when it recorded none. */
   subject: string | null;
@@ -78,10 +82,19 @@ export function proposedRecord(
   const request = isRecord(args) ? args : {};
   const input = parsed(request.input);
   const patches = isRecord(input) && Array.isArray(input.patches) ? input.patches : [];
+  // Pea's mask admits only `cells/<key>/proposal…` and `fields/<pointer>/proposal…`.
+  const cells = new Set(
+    patches.flatMap((patch) => {
+      const path = isRecord(patch) && Array.isArray(patch.path) ? patch.path : [];
+      return (path[0] === "cells" || path[0] === "fields") && path[1] !== undefined
+        ? [`${path[0]}/${String(path[1])}`]
+        : [];
+    }),
+  );
   const target = isRecord(outer.target) ? outer.target : {};
   return {
     route,
-    changes: patches.length,
+    changes: cells.size,
     subject:
       typeof target.document === "string"
         ? target.document
@@ -90,3 +103,49 @@ export function proposedRecord(
           : null,
   };
 }
+
+/** The receipt a Pea action call admitted: its original ID and the action key it named. */
+export interface ActionCall {
+  id: string;
+  key: string;
+}
+
+/**
+ * A `pe_do` of a semantic action, an action control or an `op:`/`pod:` operation, with the
+ * receipt ID its result (or its input, for a control) names. Its state is the receipt's, read live.
+ */
+export function actionCall(toolName: string, args: unknown, result: unknown): ActionCall | null {
+  if (toolName !== "pe_do" || !isRecord(args) || typeof args.key !== "string") return null;
+  const key = args.key.replace(/^(op|workflow):/, "");
+  const known =
+    Object.hasOwn(semanticActions, key) ||
+    Object.hasOwn(actionControls, key) ||
+    /^(op|pod):/.test(args.key);
+  if (!known) return null;
+  const outer =
+    isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
+  const row = isRecord(outer) && isRecord(outer.result) ? outer.result : outer;
+  const input = parsed(args.input);
+  const id =
+    isRecord(row) && isRecord(row.action) && typeof row.action.id === "string"
+      ? row.action.id
+      : isRecord(row) && typeof row.id === "string"
+        ? row.id
+        : isRecord(input) && typeof input.actionId === "string"
+          ? input.actionId
+          : isRecord(input) && typeof input.id === "string"
+            ? input.id
+            : null;
+  return id ? { id, key } : null;
+}
+
+/** An action key's first segment names its entity; a few entities live on another route. */
+export function actionRoute(key: string): ChatPluginRoute | null {
+  const entity = key.split(".")[0] ?? "";
+  const route =
+    ({ schedule: "schedules", settings: "pods", pod: "pods" } as const)[entity] ?? entity;
+  return CHAT_PLUGIN_ROUTES.find((name) => name === route) ?? null;
+}
+
+/** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
+export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;
