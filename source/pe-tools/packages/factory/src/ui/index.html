@@ -144,18 +144,13 @@
           ${points.map((value, index) => (Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"/>` : "")).join("")}
         </svg></div>`;
       };
-      async function render() {
-        const state = await fetch("/state").then((response) => response.json());
+      function render(setpoints) {
         const errors = events.filter((event) => event.kind === "error");
         const latest = [...new Map(errors.map((event) => [event.loop, event])).values()];
         document.querySelector("#loops").innerHTML = latest.length
           ? `<table><thead><tr><th>loop</th><th>sha</th><th>setpoint</th><th>value</th><th>error</th></tr></thead><tbody>${latest.flatMap((event) => Object.entries(payload(event).values).map(([key, error]) => `<tr><td>${esc(event.loop)}</td><td class="mono">${event.sha.slice(0, 7)}</td><td>${esc(key)}</td><td class="number">${esc(latestValue(key, event.seq) ?? "-")}</td><td class="number ${error > 0 ? "error" : ""}">${error}</td></tr>`)).join("")}</tbody></table>`
           : "no events yet";
         const triggers = events.filter((event) => event.kind === "triggered");
-        const setpoints = Object.values(state.setpoints).reduce(
-          (all, value) => Object.assign(all, value),
-          {},
-        );
         document.querySelector("#charts").innerHTML = Object.keys(setpoints).length
           ? Object.entries(setpoints)
               .map(([key, rule]) => chart(key, rule, triggers))
@@ -171,12 +166,20 @@
               .join("")}</ol>`
           : "no events yet";
       }
-      render();
-      const stream = new EventSource("/events?since=0");
-      stream.onmessage = (message) => {
-        events.push(JSON.parse(message.data));
-        render();
-      };
+      async function start() {
+        const state = await fetch("/state").then((response) => response.json());
+        const setpoints = Object.values(state.setpoints).reduce(
+          (all, value) => Object.assign(all, value),
+          {},
+        );
+        render(setpoints);
+        const stream = new EventSource("/events?since=0");
+        stream.onmessage = (message) => {
+          events.push(JSON.parse(message.data));
+          render(setpoints);
+        };
+      }
+      start();
     </script>
   </body>
 </html>

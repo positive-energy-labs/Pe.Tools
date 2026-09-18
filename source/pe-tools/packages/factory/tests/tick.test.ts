@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,7 +10,7 @@ import { tick } from "../src/main.ts";
 
 describe("tick", () => {
   it("triggers and reads once per sha, then reports a rising down error", () => {
-    const repo = mkdtempSync(join(tmpdir(), "pe-factory-"));
+    const repo = mkdtempSync(join(tmpdir(), "pe factory-"));
     const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args]);
     try {
       git("init", "-b", "main");
@@ -18,7 +18,7 @@ describe("tick", () => {
       git("config", "user.name", "Factory Test");
       writeFileSync(
         join(repo, "sensor.mjs"),
-        'import {readdirSync} from "node:fs"; import {dirname} from "node:path"; import {fileURLToPath} from "node:url"; if(process.env.FACTORY_ROOT!==dirname(fileURLToPath(import.meta.url))) throw new Error("wrong FACTORY_ROOT"); console.log(JSON.stringify({n:readdirSync(".").filter(x=>x.endsWith(".txt")).length}))\n',
+        'import {existsSync,readdirSync} from "node:fs"; import {dirname,join} from "node:path"; import {fileURLToPath} from "node:url"; if(process.env.FACTORY_ROOT!==dirname(fileURLToPath(import.meta.url))) throw new Error("wrong FACTORY_ROOT"); if(existsSync(join(process.env.FACTORY_ROOT,"fail.flag"))) throw new Error("boom"); console.log(JSON.stringify({n:readdirSync(".").filter(x=>x.endsWith(".txt")).length}))\n',
       );
       writeFileSync(
         join(repo, "factory.toml"),
@@ -50,8 +50,40 @@ describe("tick", () => {
         .prepare("SELECT payload FROM events WHERE kind = 'error' ORDER BY seq DESC LIMIT 1")
         .get() as { payload: string };
       expect(JSON.parse(error.payload)).toEqual({ loop: "watch", values: { "files.n": 1 } });
+
+      writeFileSync(join(repo, "notes.md"), "scope skip\n");
+      git("add", "notes.md");
+      git("commit", "-m", "skip");
+      tick(repo);
+      expect(
+        database.prepare("SELECT count(*) count FROM events WHERE kind = 'reading'").get(),
+      ).toEqual({ count: 2 });
+
+      writeFileSync(join(repo, "three.txt"), "three\n");
+      writeFileSync(join(repo, "fail.flag"), "fail\n");
+      git("add", "three.txt");
+      git("commit", "-m", "fail");
+      tick(repo);
+      const failedError = database
+        .prepare("SELECT payload FROM events WHERE kind = 'error' ORDER BY seq DESC LIMIT 1")
+        .get() as { payload: string };
+      expect(JSON.parse(failedError.payload)).toEqual({
+        loop: "watch",
+        values: { "files.n": null },
+      });
+
+      rmSync(join(repo, "fail.flag"));
+      tick(repo);
+      expect(
+        database.prepare("SELECT count(*) count FROM events WHERE kind = 'reading'").get(),
+      ).toEqual({
+        count: 3,
+      });
+      const sha = git("rev-parse", "HEAD").toString().trim();
+      expect(existsSync(join(repo, ".artifacts", "factory", "checkouts", sha.slice(0, 7)))).toBe(
+        false,
+      );
       database.close();
-      expect(readFileSync(join(repo, "factory.toml"), "utf8")).toContain('ref="main"');
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

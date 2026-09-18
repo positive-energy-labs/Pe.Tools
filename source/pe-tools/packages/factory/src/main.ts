@@ -93,58 +93,75 @@ const sense = (
   const sensors = [...new Set(Object.values(config.loop).flatMap((loop) => loop.sense))];
   const checkout = join(repo, ".artifacts", "factory", "checkouts", sha.slice(0, 7));
 
-  for (const name of sensors) {
-    if (readValues(database, name, sha)) continue;
-    const sensor = config.sensor[name];
-    if (!sensor) {
-      append(database, "failed", sha, { sensor: name, stderr: "sensor is not declared" });
-      continue;
-    }
-    if (previous && !changed.some((file) => sensor.scope.some((glob) => matchesGlob(file, glob)))) {
-      continue;
-    }
+  try {
+    for (const name of sensors) {
+      if (readValues(database, name, sha)) continue;
+      const sensor = config.sensor[name];
+      if (!sensor) {
+        append(database, "failed", sha, { sensor: name, stderr: "sensor is not declared" });
+        continue;
+      }
+      const retry = database
+        .prepare(
+          "SELECT 1 FROM events WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') = ? LIMIT 1",
+        )
+        .get(sha, name);
+      if (
+        previous &&
+        !retry &&
+        !changed.some((file) => sensor.scope.some((glob) => matchesGlob(file, glob)))
+      ) {
+        continue;
+      }
 
-    try {
-      mkdirSync(dirname(checkout), { recursive: true });
-      if (!existsSync(checkout)) {
-        execFileSync("git", ["-C", repo, "worktree", "add", "--detach", checkout, sha], {
-          stdio: "ignore",
+      try {
+        mkdirSync(dirname(checkout), { recursive: true });
+        if (!existsSync(checkout)) {
+          execFileSync("git", ["-C", repo, "worktree", "add", "--detach", checkout, sha], {
+            stdio: "ignore",
+          });
+        }
+        if (git(checkout, "rev-parse", "HEAD") !== sha || git(checkout, "status", "--porcelain")) {
+          throw new Error(`checkout is not clean at ${sha}`);
+        }
+
+        const env: NodeJS.ProcessEnv = { ...process.env, FACTORY_ROOT: repo, FACTORY_SHA: sha };
+        delete env.ANTHROPIC_API_KEY;
+        delete env.ANTHROPIC_AUTH_TOKEN;
+        delete env.OPENAI_API_KEY;
+        const root = `"${repo.replaceAll("\\", "/")}"`;
+        const result = spawnSync(sensor.run.replaceAll("{root}", root), {
+          cwd: checkout,
+          encoding: "utf8",
+          env,
+          shell: true,
+        });
+        if (result.status !== 0)
+          throw new Error(result.stderr.trim() || `sensor exited ${result.status}`);
+        const values: unknown = JSON.parse(result.stdout.trim());
+        if (
+          !values ||
+          Array.isArray(values) ||
+          typeof values !== "object" ||
+          Object.values(values).some(
+            (value) => typeof value !== "number" || !Number.isFinite(value),
+          )
+        ) {
+          throw new Error("sensor stdout is not one flat JSON object of numbers");
+        }
+        append(database, "reading", sha, { sensor: name, values }, null, `${name}@${sha}`);
+      } catch (error) {
+        append(database, "failed", sha, {
+          sensor: name,
+          stderr: error instanceof Error ? error.message : String(error),
         });
       }
-      if (git(checkout, "rev-parse", "HEAD") !== sha || git(checkout, "status", "--porcelain")) {
-        throw new Error(`checkout is not clean at ${sha}`);
-      }
-
-      const env: NodeJS.ProcessEnv = { ...process.env, FACTORY_ROOT: repo, FACTORY_SHA: sha };
-      delete env.ANTHROPIC_API_KEY;
-      delete env.ANTHROPIC_AUTH_TOKEN;
-      delete env.OPENAI_API_KEY;
-      const result = spawnSync(sensor.run.replace("{root}", repo), {
-        cwd: checkout,
-        encoding: "utf8",
-        env,
-        shell: true,
-      });
-      if (result.status !== 0)
-        throw new Error(result.stderr.trim() || `sensor exited ${result.status}`);
-      const values: unknown = JSON.parse(result.stdout.trim());
-      if (
-        !values ||
-        Array.isArray(values) ||
-        typeof values !== "object" ||
-        Object.values(values).some((value) => typeof value !== "number" || !Number.isFinite(value))
-      ) {
-        throw new Error("sensor stdout is not one flat JSON object of numbers");
-      }
-      append(database, "reading", sha, { sensor: name, values }, null, `${name}@${sha}`);
-    } catch (error) {
-      append(database, "failed", sha, {
-        sensor: name,
-        stderr: error instanceof Error ? error.message : String(error),
-      });
+    }
+  } finally {
+    if (existsSync(checkout)) {
+      execFileSync("git", ["-C", repo, "worktree", "remove", "--force", checkout]);
     }
   }
-  execFileSync("git", ["-C", repo, "worktree", "prune"]);
 };
 
 const errors = (
@@ -153,26 +170,33 @@ const errors = (
   sha: string,
   previous: string | undefined,
 ) => {
-  const trigger = database
-    .prepare(
-      "SELECT seq FROM events WHERE kind = 'triggered' AND sha = ? ORDER BY seq DESC LIMIT 1",
-    )
-    .get(sha) as { seq: number };
+  const first = database.prepare("SELECT min(seq) seq FROM events WHERE sha = ?").get(sha) as {
+    seq: number | null;
+  };
   for (const [loopName, loop] of Object.entries(config.loop)) {
-    const values: Record<string, number> = {};
+    const values: Record<string, number | null> = {};
     for (const [key, setpoint] of Object.entries(loop.setpoint)) {
       const dot = key.indexOf(".");
       const sensor = key.slice(0, dot);
       const field = key.slice(dot + 1);
-      const current = latestValues(database, sensor)?.[field];
-      const prior = previous ? latestValues(database, sensor, trigger.seq)?.[field] : undefined;
-      if (current === undefined || setpoint === "any") values[key] = 0;
+      const current = readValues(database, sensor, sha)?.[field];
+      const prior = previous
+        ? latestValues(database, sensor, first.seq ?? Number.MAX_SAFE_INTEGER)?.[field]
+        : undefined;
+      const failed = database
+        .prepare(
+          "SELECT 1 FROM events WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') = ? LIMIT 1",
+        )
+        .get(sha, sensor);
+      const value = current ?? prior;
+      if (failed && current === undefined) values[key] = null;
+      else if (value === undefined || setpoint === "any") values[key] = 0;
       else if (setpoint === "down")
-        values[key] = prior === undefined ? 0 : Math.max(0, current - prior);
+        values[key] = prior === undefined ? 0 : Math.max(0, value - prior);
       else if (setpoint.startsWith("<="))
-        values[key] = Math.max(0, current - Number(setpoint.slice(2)));
+        values[key] = Math.max(0, value - Number(setpoint.slice(2)));
       else if (setpoint.startsWith(">="))
-        values[key] = Math.max(0, Number(setpoint.slice(2)) - current);
+        values[key] = Math.max(0, Number(setpoint.slice(2)) - value);
       else values[key] = 0;
     }
     append(database, "error", sha, { loop: loopName, values }, loopName);
@@ -186,13 +210,19 @@ export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
     const sha = git(repo, "rev-parse", config.factory.ref);
     const latest = database
       .prepare(
-        "SELECT sha FROM events WHERE kind = 'triggered' AND json_extract(payload, '$.ref') = ? ORDER BY seq DESC LIMIT 1",
+        "SELECT sha FROM events WHERE kind = 'triggered' AND json_extract(payload, '$.ref') = ? ORDER BY seq DESC LIMIT 2",
       )
-      .get(config.factory.ref) as { sha: string } | undefined;
-    if (latest?.sha === sha) return;
-    append(database, "triggered", sha, { ref: config.factory.ref });
-    sense(repo, config, database, sha, latest?.sha);
-    errors(config, database, sha, latest?.sha);
+      .all(config.factory.ref) as { sha: string }[];
+    const pending = database
+      .prepare(
+        "SELECT 1 FROM events failed WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events reading WHERE reading.id = json_extract(failed.payload, '$.sensor') || '@' || ?) LIMIT 1",
+      )
+      .get(sha, sha);
+    if (latest[0]?.sha === sha && !pending) return;
+    const previous = latest[0]?.sha === sha ? latest[1]?.sha : latest[0]?.sha;
+    sense(repo, config, database, sha, previous);
+    errors(config, database, sha, previous);
+    if (latest[0]?.sha !== sha) append(database, "triggered", sha, { ref: config.factory.ref });
   } finally {
     if (!suppliedDatabase) database.close();
   }
