@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
 
@@ -52,5 +53,26 @@ public sealed class PodReceiptTests {
         var pod = Path.Combine(Path.GetTempPath(), "pe-pod-receipt-" + Guid.NewGuid().ToString("N"));
         _ = new ScriptArtifactWriter(pod);
         Assert.That(Directory.Exists(Path.Combine(pod, "output")), Is.False);
+    }
+
+    [Test]
+    public void Run_input_preserves_exact_utf8_bytes_and_cannot_be_rewritten() {
+        var pod = Path.Combine(Path.GetTempPath(), "pe-pod-input-" + Guid.NewGuid().ToString("N"));
+        try {
+            var run = PodRuns.NewRunFolder(pod);
+            var exact = "{\r\n  \"name\": \"café\"  \r\n}";
+            var outputs = PodRuns.WriteInputIn(run, new { operation = "test", evidence = "available" }, exact);
+
+            Assert.Multiple(() => {
+                Assert.That(File.ReadAllBytes(Path.Combine(run, "effective-input.json")), Is.EqualTo(System.Text.Encoding.UTF8.GetBytes(exact)));
+                Assert.That(outputs, Is.EqualTo(new[] { "input.json", "effective-input.json" }));
+                Assert.Throws<IOException>(() => PodRuns.WriteInputIn(run, new { operation = "other" }, "{}"));
+                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
+                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
+                    [("effective-input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
+            });
+        } finally {
+            if (Directory.Exists(pod)) Directory.Delete(pod, true);
+        }
     }
 }

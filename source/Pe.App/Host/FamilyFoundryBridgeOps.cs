@@ -11,6 +11,7 @@ using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Pods;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
@@ -20,6 +21,7 @@ using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
 using System.IO;
+using System.Diagnostics;
 
 namespace Pe.App.Host;
 
@@ -75,6 +77,13 @@ internal static class FamilyFoundryBridgeOps {
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
         var podFolder = PodMembers.VerifiedFolder(request.Source);
         var run = PodRuns.NewRunFolder(podFolder);
+        var inputOutputs = PodRuns.WriteInputIn(run, new {
+            operation = "family.build",
+            source = request.Source,
+            target = new { kind = "new-family-document", processId = Environment.ProcessId, processStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(), revitVersion = application.VersionNumber },
+            options = new { request.ModelDirectory },
+            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+        }, request.SpecJson);
         var outputPath = Path.Combine(run, $"{FileName(parsed.Value.Family.Name)}.rfa");
         var source = request.Source;
         var handled = new List<(bool IsError, string Message)>();
@@ -82,10 +91,10 @@ internal static class FamilyFoundryBridgeOps {
             var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
             var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build",
-                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [outputPath], null), EngineEdge.WarningsOutput(handled));
+                receipt.PlanHash, receipt.Converged ? "Succeeded" : "Failed", [.. inputOutputs, outputPath], null), EngineEdge.WarningsOutput(handled));
             return new FamilyBuildData(reading, parsed.Value.Family.Name, outputPath, templatePath, receipt.Converged, receipt.Residue.Count, receiptPath);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FileNotFoundException or DirectoryNotFoundException) {
-            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", [], exception.Message), EngineEdge.WarningsOutput(handled));
+            _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, "family.build", null, "Failed", inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
     }
@@ -115,6 +124,17 @@ internal static class FamilyFoundryBridgeOps {
         CancellationToken cancellationToken = default) {
         var podFolder = PodMembers.VerifiedFolder(source);
         EngineEdge.RequireReachableCentral(document);
+        var run = PodRuns.NewRunFolder(podFolder);
+        var inputOutputs = PodRuns.WriteInputIn(run, new {
+            operation,
+            source,
+            target = DocumentTarget(document),
+            executionOptions,
+            selectedFamilyIds = expectedPlanHashes.Keys.OrderBy(id => id).ToList(),
+            expectedPlanHashes,
+            loadAndSave,
+            unavailableEvidence = new[] { "authored root bytes", "dependency bytes", "reviewed draft revision" }
+        }, specJson);
         var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
@@ -131,20 +151,37 @@ internal static class FamilyFoundryBridgeOps {
                 .Concat(EngineEdge.WarningsOutput(handled))
                 .ToList();
             // One family applied is a run that changed Revit, so it succeeded; its failed siblings are on the receipts.
-            var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
+            var receiptPath = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
                     data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
                         : data.Receipts.Any(r => r.Success) ? "Succeeded" : "Failed",
-                    [],
+                    inputOutputs,
                     relative.Reason),
                 outputs);
             return relative with {
                 ReceiptPath = receiptPath,
                 Receipts = relative.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is null ? null : Path.GetDirectoryName(receiptPath) }).ToList()
             };
+        } catch (Exception exception) {
+            if (!File.Exists(Path.Combine(run, "receipt.json")))
+                _ = PodRuns.WriteReceiptIn(run, new PodReceipt(source.Pod, source.Path, source.Sha256, operation, null, "Failed", inputOutputs, exception.Message), EngineEdge.WarningsOutput(handled));
+            throw;
         } finally {
             if (Directory.Exists(artifacts)) Directory.Delete(artifacts, true);
         }
+    }
+
+    private static object DocumentTarget(Document document) {
+        var tracked = DocumentTrackerAccessor.Current?.Find(document);
+        return new {
+            kind = document.IsFamilyDocument ? "family-document" : "project-document",
+            openId = tracked?.OpenId(),
+            document.Title,
+            path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
+            processId = Environment.ProcessId,
+            processStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
+            unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
+        };
     }
 
     /// <summary>Every failure with its full text: op-level diagnostics first, then each family's own. The run keeps it as `failures.json`.</summary>

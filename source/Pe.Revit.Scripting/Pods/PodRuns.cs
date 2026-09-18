@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Scripting;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Pods;
 
@@ -19,6 +20,25 @@ public static class PodRuns {
         return runFolder;
     }
 
+    /// <summary>Writes immutable run metadata and the exact effective JSON bytes before any native effect.</summary>
+    public static List<string> WriteInputIn(string runFolder, object metadata, string effectiveInput) {
+        _ = Directory.CreateDirectory(runFolder);
+        var metadataPath = Path.Combine(runFolder, "input.json");
+        var effectivePath = Path.Combine(runFolder, "effective-input.json");
+        using (var stream = new FileStream(metadataPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+            writer.Write(JsonConvert.SerializeObject(metadata, Json));
+        try {
+            using var stream = new FileStream(effectivePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            var bytes = Encoding.UTF8.GetBytes(effectiveInput);
+            stream.Write(bytes, 0, bytes.Length);
+        } catch {
+            File.Delete(metadataPath);
+            throw;
+        }
+        return ["input.json", "effective-input.json"];
+    }
+
     /// <summary>Writes the outputs and the receipt; returns the receipt's full path. Output names are appended to `receipt.Outputs`.</summary>
     public static string WriteReceipt(string podFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) =>
         WriteReceiptIn(NewRunFolder(podFolder), receipt, outputs);
@@ -30,7 +50,10 @@ public static class PodRuns {
         foreach (var (name, bytes) in outputs) {
             if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || name == "receipt.json")
                 throw new ArgumentException($"Run output name must be a plain file name other than receipt.json: '{name}'.", nameof(outputs));
-            File.WriteAllBytes(Path.Combine(runFolder, name), bytes);
+            var outputPath = Path.Combine(runFolder, name);
+            if (name is "input.json" or "effective-input.json" && File.Exists(outputPath))
+                throw new IOException($"Run input '{name}' is immutable.");
+            File.WriteAllBytes(outputPath, bytes);
             written.Add(name);
         }
         var path = Path.Combine(runFolder, "receipt.json");
