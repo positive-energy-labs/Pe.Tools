@@ -19,10 +19,10 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                 var normal = plane.Normal.Normalize();
                 var center = FamilyRefs.Intersect(plane, FamilyRefs.Resolve(doc, spec.At[0]).Plane, FamilyRefs.Resolve(doc, spec.At[1]).Plane);
                 var connector = spec.Domain switch {
-                    ConnectorDomain.Duct => ConnectorElement.CreateDuctConnector(doc, (DuctSystemType)Enum.Parse(typeof(DuctSystemType), spec.SystemType.ToString()),
+                    ConnectorDomain.Duct => ConnectorElement.CreateDuctConnector(doc, Revit<ConnectorSystemType, DuctSystemType>(spec.SystemType),
                         spec.Shape == ConnectorShape.Rectangular ? ConnectorProfileType.Rectangular : spec.Shape == ConnectorShape.Oval ? ConnectorProfileType.Oval : ConnectorProfileType.Round, reference),
-                    ConnectorDomain.Pipe => ConnectorElement.CreatePipeConnector(doc, (PipeSystemType)Enum.Parse(typeof(PipeSystemType), spec.SystemType.ToString()), reference),
-                    ConnectorDomain.Electrical => ConnectorElement.CreateElectricalConnector(doc, (ElectricalSystemType)Enum.Parse(typeof(ElectricalSystemType), spec.SystemType.ToString()), reference),
+                    ConnectorDomain.Pipe => ConnectorElement.CreatePipeConnector(doc, Revit<ConnectorSystemType, PipeSystemType>(spec.SystemType), reference),
+                    ConnectorDomain.Electrical => ConnectorElement.CreateElectricalConnector(doc, Revit<ConnectorSystemType, ElectricalSystemType>(spec.SystemType), reference),
                     ConnectorDomain.CableTray => ConnectorElement.CreateCableTrayConnector(doc, reference),
                     _ => ConnectorElement.CreateConduitConnector(doc, reference)
                 };
@@ -35,20 +35,22 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
                 Size(connector, BuiltInParameter.CONNECTOR_DIAMETER, spec.Diameter, doc, slug, logs);
                 Size(connector, BuiltInParameter.CONNECTOR_WIDTH, spec.Width, doc, slug, logs);
                 Size(connector, BuiltInParameter.CONNECTOR_HEIGHT, spec.Height, doc, slug, logs);
-                if (spec.FlowDirection is { } fd) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM))?.Set((int)(FlowDirectionType)Enum.Parse(typeof(FlowDirectionType), fd.ToString()));
+                if (spec.FlowDirection is { } fd) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM))?.Set((int)Revit<FlowDirection, FlowDirectionType>(fd));
                 if (spec.FlowConfiguration is { } fc) {
                     var (parameter, value) = spec.Domain switch {
                         ConnectorDomain.Duct => (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM),
-                            (int)(DuctFlowConfigurationType)Enum.Parse(typeof(DuctFlowConfigurationType), fc.ToString())),
+                            (int)Revit<FlowConfiguration, DuctFlowConfigurationType>(fc)),
                         ConnectorDomain.Pipe => (connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM),
-                            (int)(PipeFlowConfigurationType)Enum.Parse(typeof(PipeFlowConfigurationType), fc.ToString())),
+                            (int)Revit<FlowConfiguration, PipeFlowConfigurationType>(fc)),
                         _ => throw new InvalidOperationException($"{spec.Domain} connectors do not support flow configuration.")
                     };
                     if (parameter?.Set(value) != true)
                         throw new InvalidOperationException($"Connector '{slug}' could not set flow configuration '{fc}'.");
                     doc.Document.Regenerate();
                 }
-                if (spec.LossMethod is { } lm) _ = (connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM) ?? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM))?.Set((int)(DuctLossMethodType)Enum.Parse(typeof(DuctLossMethodType), lm.ToString()));
+                if (spec.LossMethod is { } lm) _ = spec.Domain == ConnectorDomain.Pipe
+                    ? connector.get_Parameter(BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM)?.Set((int)Revit<LossMethod, PipeLossMethodType>(lm))
+                    : connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM)?.Set((int)Revit<LossMethod, DuctLossMethodType>(lm));
                 if (spec.Angle is { Degrees: { } deg }) _ = connector.get_Parameter(BuiltInParameter.CONNECTOR_ANGLE)?.Set(deg * Math.PI / 180);
                 foreach (var (target, source) in spec.Associate ?? []) {
                     var p = (spec.Domain == ConnectorDomain.Pipe && target == "Fixture Units"
@@ -62,6 +64,10 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
         }
         return new OperationLog(this.Name, logs);
     }
+
+    private static TRevit Revit<TContract, TRevit>(TContract value) where TContract : struct, Enum where TRevit : struct, Enum =>
+        Enum.TryParse<TRevit>(ConnectorRevitNames.RevitName(value), out var revit) ? revit
+        : throw new InvalidOperationException($"{typeof(TContract).Name}.{value} has no Revit {typeof(TRevit).Name}.");
 
     private static void Size(ConnectorElement connector, BuiltInParameter bip, PortableLength? length, FamilyDocument doc, string key, List<LogEntry> logs) {
         if (length is not { } l || connector.get_Parameter(bip) is not { } p) return;

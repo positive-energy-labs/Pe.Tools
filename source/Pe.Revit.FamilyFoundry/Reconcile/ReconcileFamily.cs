@@ -120,9 +120,6 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         if (this._dryRun)
             return new OperationLog(this.Name, plan.Changes.Select(c => new LogEntry($"{c.Section}:{c.Key}").Skip($"dry run: {c.Kind}")).ToList());
 
-        var unverifiable = plan.Changes.Where(c => c.Kind == ChangeKind.Unverifiable).ToList();
-        if (unverifiable.Count > 0)
-            throw new InvalidOperationException($"Requested changes cannot be verified: {string.Join(", ", unverifiable.Select(c => $"{c.Section}:{c.Key}"))}.");
         var logs = new List<OperationLog>();
         var applyPlan = plan;
         if (plan.Queue.Operations.OfType<NormalizeParamSources>().SingleOrDefault() is { } normalization) {
@@ -136,7 +133,7 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             desired = FamilyReconciler.ResolveNativeFormulas(desired, doc.Document, formulaCache);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
         }
-        if (applyPlan.Refusals.Count > 0 || applyPlan.Changes.Any(c => c.Kind == ChangeKind.Unverifiable))
+        if (applyPlan.Refusals.Count > 0)
             throw new InvalidOperationException("Source migration left an unsupported requested change.");
         foreach (var callback in applyPlan.Queue.ToFuncs(this._executionOptions.OptimizeTypeOperations, singleTransaction: false)) {
             logs.AddRange(callback(doc, ctx));

@@ -50,6 +50,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string CoverageSectionUnknown = "coverage-section-unknown";
     public const string MacroNameCollision = "macro-name-collision";
     public const string UnmodeledState = "unmodeled-state";
+    public const string Unverifiable = "unverifiable-change";
 }
 
 /// <summary>
@@ -172,6 +173,8 @@ public static class FamilyModelValidator {
             if (c.Domain == ConnectorDomain.Pipe && c.Shape is not (null or ConnectorShape.Round)) d.Add(new(FamilyModelDiagnosticCodes.PipeRound, $"{path}.shape", "Pipe connectors are Round."));
             if (c.FlowConfiguration == FlowConfiguration.Demand && c.Domain != ConnectorDomain.Pipe)
                 d.Add(new(FamilyModelDiagnosticCodes.SlotNotLegalForKind, $"{path}.flowConfiguration", "Demand is only a Pipe flow configuration."));
+            if (c.LossMethod == LossMethod.Table && c.Domain != ConnectorDomain.Pipe)
+                d.Add(new(FamilyModelDiagnosticCodes.SlotNotLegalForKind, $"{path}.lossMethod", "Table is only a Pipe loss method."));
             foreach (var (n, v) in new[] { ("diameter", c.Diameter), ("width", c.Width), ("height", c.Height) }) if (v is { } len) Length(len, $"{path}.{n}", m, d);
             if (c.Angle is { IsParameter: true } ang) Param(ang.Text, $"{path}.angle", m, DataType.Angle, d);
             foreach (var (k, v) in c.Associate ?? []) Param(v, $"{path}.associate.{k}", m, null, d);

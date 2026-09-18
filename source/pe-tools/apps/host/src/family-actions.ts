@@ -35,6 +35,7 @@ import type {
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
 import type {
+  FamiliesApply,
   FamiliesCapture,
   FamiliesPlan,
   FamilyCapture as NativeFamilyCapture,
@@ -283,6 +284,21 @@ type Prepared =
       at: string;
     };
 
+/**
+ * An apply where no family succeeded changed nothing (each failure rolls back whole), so it settles `failed` with the
+ * receipt's one-sentence reason; one success is a run that changed Revit and settles `succeeded` with per-family receipts.
+ * `notDispatched` is the journal's only settled-failure shape; here it means "no effect", not "never sent".
+ */
+const appliedSomething = (result: unknown) => {
+  const applied = result as FamiliesApply.Res.Response;
+  if (applied.receipts.some((receipt) => receipt.success)) return;
+  if (applied.diagnostics.some((diagnostic) => diagnostic.code === "Cancelled")) return;
+  throw new BridgeError(applied.reason ?? "No family was applied", 422, {
+    notDispatched: true,
+    result,
+  });
+};
+
 export async function admitFamilyAction(
   raw: unknown,
   owner: ActionJournal,
@@ -474,7 +490,10 @@ export async function admitFamilyAction(
       const native = (nativeKey: string, input: unknown, process: NativeProcess) =>
         execution.step("native", nativeKey, input, async (id) => {
           await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
-          return invoke(bridge, target!, nativeKey, input, id);
+          const result = await invoke(bridge, target!, nativeKey, input, id);
+          if (nativeKey === "family.apply" || nativeKey === "families.apply")
+            appliedSomething(result);
+          return result;
         });
       const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
