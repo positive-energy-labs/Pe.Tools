@@ -203,6 +203,13 @@ export async function setup() {
     );
   let server = mount();
   cleanup.push(() => server.dispose());
+  // Teardown runs in reverse, so this runs first: every action the test admitted settles before
+  // its server, runtime and workspace go. A push clears Work before it ends (it still reads back
+  // and files its receipt), so a test can finish mid-action; deleting the workspace then raced
+  // the readback capture's write (ENOTEMPTY on captures/schedules).
+  cleanup.push(async () => {
+    for (const row of await owner.list()) await owner.wait(row.id);
+  });
   const requests: { path: string; body: string; result?: unknown }[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(
