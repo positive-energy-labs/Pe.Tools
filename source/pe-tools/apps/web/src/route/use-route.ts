@@ -13,6 +13,7 @@ import {
   resolveCallTarget,
   sameAddress,
   START_FRESH,
+  UNREADABLE_WORK,
   threadHeadSchema,
   workKey,
   type Address,
@@ -539,7 +540,7 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly refusal: string | null;
     /**
      * Human-only: sets the unreadable Work aside, untouched, and starts an empty Work. A refusal
-     * lands on `failure`; success re-reads Work. Null when Work is readable.
+     * lands on `failure`; success re-reads Work. Null unless the failure is the host's UNREADABLE_WORK.
      */
     readonly startFresh: (() => Promise<Refusal | null>) | null;
     readonly reload: () => void;
@@ -1068,7 +1069,10 @@ export function useRoute<W, R extends string, P, A extends string>(
       conflict: conflictNow,
       refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
       startFresh:
-        sliceResult?.state === "failed" && writer && !seed
+        sliceResult?.state === "failed" &&
+        sliceResult.message === UNREADABLE_WORK &&
+        writer &&
+        !seed
           ? async () => {
               const refusal = await writer.startFresh();
               if (refusal) owner.registry.set(owner.failure, refusal);
