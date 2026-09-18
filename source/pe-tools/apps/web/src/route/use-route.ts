@@ -926,6 +926,9 @@ export function useRoute<W, R extends string, P, A extends string>(
       const missing = action.requires?.readings?.find((name) => readings[name].state !== "ready");
       return missing === undefined ? null : `${missing} is not ready`;
     };
+    // An action's Work is one snapshot. Its late writes must let the host reject that snapshot,
+    // not silently borrow a newer revision observed while the action was computing.
+    const actionRevision = workCurrent ? (doc?.revision ?? 0) : null;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
       work: { key, doc: doc?.doc ?? null, revision: doc?.revision ?? null },
@@ -934,12 +937,18 @@ export function useRoute<W, R extends string, P, A extends string>(
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
       write: async (patches: RouteStatePatch[]) => {
-        const refusal = writer ? await writer.apply(patches) : notHydrated;
+        const refusal =
+          writer && actionRevision !== null
+            ? await writer.apply(patches, actionRevision)
+            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
       command: async (name: string, input?: unknown) => {
-        const refusal = writer ? await writer.command(name as never, input) : notHydrated;
+        const refusal =
+          writer && actionRevision !== null
+            ? await writer.command(name as never, input, actionRevision)
+            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
