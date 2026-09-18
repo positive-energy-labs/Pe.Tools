@@ -60,6 +60,7 @@ export const stateCellRecipe = tv({
     ghost: "dl-ghost",
     foot: "dl-foot",
     citation: "dl-cite",
+    counter: "dl-counter",
   },
   variants: {
     size: { card: {}, row: {} },
@@ -290,6 +291,11 @@ export function StateCell(props: StateCellProps) {
         ) : (
           value
         )}
+        {/* SPECIMEN: /design-system/band's words, on the row's one line: a contest a title alone
+            hides from keyboard, touch and no-hover readers (E2E-J2 ruling). */}
+        {read.contested ? (
+          <span className={slots.counter()}>pea proposes {props.counterValue}</span>
+        ) : null}
         {hasTransitions ? (
           <span className={slots.acts()}>
             {transitions.map((t) => {

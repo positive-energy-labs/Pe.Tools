@@ -152,3 +152,24 @@ test("a cell with no verbs takes no tab stop of its own", () => {
   const { container } = render(<StateCell value="10in" />);
   expect((container.firstElementChild as HTMLElement).hasAttribute("tabindex")).toBe(false);
 });
+
+test("a contested row cell says pea's counter-proposal inline, not only in a hover title", () => {
+  for (const onCommit of [undefined, () => {}]) {
+    const { container, unmount } = render(
+      <StateCell
+        scale="row"
+        value="175 VA"
+        stage="staged"
+        stagedBy="you"
+        counterValue="180 VA"
+        onCommit={onCommit}
+      />,
+    );
+    const cell = container.querySelector<HTMLElement>("[data-scale='row']")!;
+    expect(cell.hasAttribute("data-contest")).toBe(true);
+    // Rendered text a keyboard, touch or no-hover person reads; the title stays a duplicate.
+    expect(cell.textContent).toContain("pea proposes 180 VA");
+    expect(cell.title).toContain("pea proposes 180 VA");
+    unmount();
+  }
+});

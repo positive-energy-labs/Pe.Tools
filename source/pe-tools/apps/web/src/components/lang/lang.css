@@ -220,6 +220,25 @@
   border-top: 9px solid var(--pe-pea-ink);
   border-left: 9px solid transparent;
 }
+/* At row scale the counter value rides the same line, after the value: one row, no height. */
+.dl-cell[data-scale="row"][data-contest] {
+  display: flex;
+  align-items: center;
+  gap: var(--item-pad-x);
+}
+.dl-cell[data-scale="row"][data-contest] > .dl-cell-input {
+  flex: 1 1 0;
+}
+.dl-counter {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  font-style: normal;
+  color: var(--pe-pea-ink);
+}
 
 /* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
       discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
