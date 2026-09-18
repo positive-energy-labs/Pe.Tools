@@ -51,9 +51,10 @@ public sealed record ScriptingWorkspaceLayout(string RootPath) {
         if (string.IsNullOrWhiteSpace(normalized))
             return DefaultWorkspaceKey;
 
-        if (!IsWorkspaceSlug(normalized))
+        if (normalized.Contains('/') || normalized.EndsWith(".", StringComparison.Ordinal)
+            || !string.Equals(normalized, workspaceKey, StringComparison.Ordinal))
             throw new ArgumentException(
-                "Workspace key must be a single lowercase slug segment using letters, digits, and hyphen separators.",
+                "Workspace key must be one exact local folder name, without path separators or trailing dots/spaces.",
                 nameof(workspaceKey)
             );
 
