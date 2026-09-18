@@ -187,7 +187,8 @@ public static class TakeoffAtlas
             acc.Excluded,
             acc.Void,
             acc.Accepted + acc.Held + acc.Void + acc.Excluded,
-            answer.EnclosureSource + (answer.Hold is null ? "" : " | hold: " + answer.Hold),
+            answer.EnclosureSource,
+            answer.Hold,
             materialized.Failures,
             rooms.Select(r => new TakeoffDetectedRoom(
                 r.Id, r.RawSqft, r.PerimeterFt, r.MeanCeilingFt,
