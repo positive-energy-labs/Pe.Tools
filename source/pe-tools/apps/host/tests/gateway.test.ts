@@ -677,7 +677,7 @@ test("generic operation client and real router preserve partial payload, replay 
   }
 }, 15000);
 
-test("crash before source seal retains unprepared identity and refuses recapture on resume", async () => {
+test("crash before source seal settles failed, keeps its unprepared identity, and never recaptures", async () => {
   const directory = await mkdtemp(join(tmpdir(), "script-unsealed-"));
   const oldRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
   process.env.PE_TOOLS_DOCUMENTS_ROOT = directory;
@@ -717,14 +717,16 @@ test("crash before source seal retains unprepared identity and refuses recapture
     await writeFile(crashPath, await readFile(journalPath));
     await writeFile(join(workspace, "src/Main.cs"), "changed before seal");
     const restarted = new ActionJournal(crashPath);
-    expect(await restarted.admit(intent, prepare, async () => 1)).toMatchObject({
+    // Nothing dispatches before the seal, so the restart settles failed, not an unknown row that
+    // no recover or resume could ever clear. The identity stays, and neither replay nor resume recaptures.
+    const settled = {
       id: "unsealed",
-      state: "unknown",
+      state: "failed",
+      notDispatched: true,
       preparation: { state: "unprepared" },
-    });
-    await expect(restarted.admit(intent, prepare, async () => 1, true)).rejects.toThrow(
-      "Original consumed values were not frozen",
-    );
+    };
+    expect(await restarted.admit(intent, prepare, async () => 1)).toMatchObject(settled);
+    expect(await restarted.admit(intent, prepare, async () => 1, true)).toMatchObject(settled);
     expect(captures).toBe(1);
   } finally {
     release();
