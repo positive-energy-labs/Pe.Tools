@@ -948,3 +948,29 @@ test("an apply where no family succeeded settles failed with the receipt's reaso
   const result = resultOf<{ native: { receipts: { success: boolean }[] } }>(partial);
   expect(result.native.receipts.map((r) => r.success)).toEqual([true, false]);
 });
+
+/* ── O8-a: a plan applies once ───────────────────────────────────────────────────────────── */
+
+test("a plan that already applied refuses a second apply: plan again, and nothing is dispatched", async () => {
+  const { work, admit, sent } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  const input = { plan: plan.id, expectedPlanHashes: plan.included };
+  resultOf(await admit("families.apply", input, revision, "first"));
+  const second = await admit("families.apply", input, revision, "second");
+  expect(second.state).toBe("failed");
+  expect((second as { error?: string }).error).toMatch(/already applied .*; plan again/);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
+});
+
+test("a plan whose apply outcome is unknown refuses another apply until it is recovered", async () => {
+  const { work, admit, sent, unknown } = await setup();
+  const revision = await authorFamilies(work);
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  const input = { plan: plan.id, expectedPlanHashes: plan.included };
+  unknown(true);
+  await admit("families.apply", input, revision, "uncertain");
+  unknown(false);
+  await expect(admit("families.apply", input, revision, "again")).rejects.toThrow(/recover/);
+  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
+});

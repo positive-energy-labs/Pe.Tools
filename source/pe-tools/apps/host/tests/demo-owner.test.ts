@@ -316,8 +316,14 @@ test("demo Family plan returns a hash, apply sends that exact hash, from the byt
   expect(planHash).toMatch(/^[a-f0-9]{64}$/);
   expect((planned as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
+  // A member saved after the plan does not change what apply runs: the plan sealed its bytes.
+  await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
   const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");
+  expect(success.steps[0]!.input).toMatchObject({
+    specJson: (planned.preparation as { value: { sealed: { specJson: string } } }).value.sealed
+      .specJson,
+  });
   // The simulated engine files the run in the source pod, as the real one does (law 10).
   const { receiptPath } = (success as { result: { native: { receiptPath: string } } }).result
     .native;
@@ -335,14 +341,11 @@ test("demo Family plan returns a hash, apply sends that exact hash, from the byt
   expect(
     JSON.parse(await readFile(join(receiptPath, "..", "simulated.json"), "utf8")),
   ).toMatchObject({ simulated: true });
-  // A member saved after the plan does not change what apply runs: the plan sealed its bytes.
-  await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
-  const later = await apply("after-save", planHash);
-  expect(later.state).toBe("succeeded");
-  expect(later.steps[0]!.input).toMatchObject({
-    specJson: (planned.preparation as { value: { sealed: { specJson: string } } }).value.sealed
-      .specJson,
-  });
+  // The plan is spent: applying it again refuses before anything reaches Revit.
+  const again = await apply("again", planHash);
+  expect(again.state).toBe("failed");
+  expect(again.steps).toEqual([]);
+  expect(JSON.stringify(again)).toContain("plan again");
 });
 
 test("same HTTP router separates production Work and two demo resource owners; reset cannot retire production", async () => {

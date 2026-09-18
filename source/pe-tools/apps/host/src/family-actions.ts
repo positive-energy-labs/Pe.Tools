@@ -468,6 +468,18 @@ export async function admitFamilyAction(
           throw refused(`Apply must name a succeeded ${planKey} action`);
         if (canonicalRouteInput(plan.destination) !== canonicalRouteInput(admission.destination))
           throw refused("The plan was made for a different document");
+        // A plan applies once. The journal is the record: an earlier apply of this plan that
+        // reached Revit (succeeded, or incomplete after native success) spends it. An unknown
+        // outcome never gets here: the journal refuses new work on the document until it is
+        // recovered from its receipt.
+        const spent = (await owner.list()).find(
+          (row) =>
+            row.id !== admission.id &&
+            row.key === key &&
+            (row.request as { plan?: unknown }).plan === input.plan &&
+            (row.state === "succeeded" || row.state === "incomplete"),
+        );
+        if (spent) throw refused(`This plan already applied (action ${spent.id}); plan again`);
         const included = (plan.result as { included: Record<string, string> }).included;
         const stray = Object.keys(input.expectedPlanHashes).filter(
           (id) => included[id] !== input.expectedPlanHashes[id],
