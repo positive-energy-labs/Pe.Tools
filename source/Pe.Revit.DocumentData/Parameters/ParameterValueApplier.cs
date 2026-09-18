@@ -22,7 +22,24 @@ public static class ParameterValueApplier {
     public const string DefaultTransactionName = "Pe Apply Parameter Values";
 
     /// <summary>Each edit is its own admission group. Over the cap throws an ArgumentException; nothing is processed.</summary>
-    public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) {
+    public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) =>
+        Run(document, request, request.DryRun ? ParameterEditPlan.Evidence.IfGiven : ParameterEditPlan.Evidence.Required);
+
+    /// <summary>
+    ///     The script door: writes WITHOUT dry-run evidence, for in-process scripts that own their own review. Pea
+    ///     and web write through <c>revit.apply.parameter-values</c> (<see cref="Apply" />), which requires it; this
+    ///     has no op and is not host-facing. Everything else holds: edits name exact parameter ids, a read-only
+    ///     document throws and a read-only parameter refuses, identical edits to one parameter write once, differing
+    ///     ones refuse together, and a given Expected is still checked.
+    /// </summary>
+    public static ParameterValueApplyData WriteWithoutEvidence(
+        Document document, IReadOnlyList<ParameterValueEdit> edits, string? transactionName = null
+    ) {
+        if (document.IsReadOnly) throw new InvalidOperationException("The document is read-only.");
+        return Run(document, new ParameterValueApplyRequest(edits, false, transactionName), ParameterEditPlan.Evidence.IfGiven);
+    }
+
+    private static ParameterValueApplyData Run(Document document, ParameterValueApplyRequest request, ParameterEditPlan.Evidence evidence) {
         var edits = request.Edits ?? [];
         if (edits.Count > ParameterValueApplyBounds.MaxEditsPerCall)
             throw new ArgumentException(
@@ -33,7 +50,7 @@ public static class ParameterValueApplier {
 
         var groups = edits.Select(edit => (IReadOnlyList<ParameterValueEdit>)[edit]).ToList();
         if (request.DryRun)
-            return new ParameterValueApplyData(0, true, Flatten(ApplyGroups(document, groups, dryRun: true)));
+            return new ParameterValueApplyData(0, true, Flatten(ApplyGroups(document, groups, dryRun: true, evidence)));
 
         using var sandbox = DocumentSandbox.BeginCommit(
             document,
@@ -44,7 +61,7 @@ public static class ParameterValueApplier {
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
-        var results = Flatten(ApplyGroups(document, groups, dryRun: false)).ToList();
+        var results = Flatten(ApplyGroups(document, groups, dryRun: false, evidence)).ToList();
         var applied = results.Count(result => result.Ok);
 
         if (applied > 0)
@@ -63,13 +80,14 @@ public static class ParameterValueApplier {
     internal static IReadOnlyList<IReadOnlyList<ParameterValueEditResult>> ApplyGroups(
         Document document,
         IReadOnlyList<IReadOnlyList<ParameterValueEdit>> groups,
-        bool dryRun
+        bool dryRun,
+        ParameterEditPlan.Evidence evidence
     ) {
         var flat = groups.SelectMany((group, g) => group.Select((edit, k) => (Group: g, Slot: k, Edit: edit))).ToList();
         var resolved = flat.Select(item => Resolve(document, item.Edit, dryRun)).ToList();
         var plan = ParameterEditPlan.Build(
             flat.Select((item, i) => new ParameterEditPlan.Edit(item.Group, item.Edit, resolved[i].Current, resolved[i].Refusal)).ToList(),
-            dryRun);
+            evidence);
         if (plan.Writes.Count > ParameterValueApplyBounds.MaxEditsPerCall)
             throw new ArgumentException(
                 $"Coalesced native write count {plan.Writes.Count} exceeds the {ParameterValueApplyBounds.MaxEditsPerCall}-write cap.");

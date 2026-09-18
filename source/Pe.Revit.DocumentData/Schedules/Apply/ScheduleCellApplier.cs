@@ -74,7 +74,8 @@ public static class ScheduleCellApplier {
 
         if (!request.DryRun && groups.Count != 0)
             cancellationToken.ThrowIfCancellationRequested();
-        var answers = ParameterValueApplier.ApplyGroups(document, groups, request.DryRun);
+        var answers = ParameterValueApplier.ApplyGroups(document, groups, request.DryRun,
+            request.DryRun ? ParameterEditPlan.Evidence.IfGiven : ParameterEditPlan.Evidence.Required);
         var leavesOf = new IReadOnlyList<ParameterValueEditResult>[cells.Count];
         for (var i = 0; i < admitted.Count; i++)
             leavesOf[admitted[i].Index] = answers[i];

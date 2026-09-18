@@ -2,12 +2,20 @@ namespace Pe.Shared.RevitData;
 
 /// <summary>
 ///     The one place parameter-write evidence is judged. Edits arrive in groups that are admitted whole (a
-///     parameter edit is a group of one; a schedule cell is a group of its targets). Per edit: a wet run needs
-///     Expected, and Expected must equal Current. A refused edit refuses its group. Surviving groups joined by a
+///     parameter edit is a group of one; a schedule cell is a group of its targets). Per edit: required evidence
+///     needs Expected, and a given Expected must equal Current. A refused edit refuses its group. Surviving groups joined by a
 ///     shared native target form one connected alias group: differing values refuse all of it, identical values
 ///     coalesce to one write per target.
 /// </summary>
 public static class ParameterEditPlan {
+    /// <summary>Whether every edit must carry Expected. A given Expected is checked either way.</summary>
+    public enum Evidence {
+        /// <summary>Wet host writes (<c>revit.apply.parameter-values</c>, <c>schedule.cells.apply</c>).</summary>
+        Required,
+        /// <summary>Dry runs, which read the evidence, and the in-process script door, which writes without it.</summary>
+        IfGiven
+    }
+
     /// <param name="Group">Admission unit; every edit of a group writes or none does.</param>
     /// <param name="Value">The edit, with its Expected evidence.</param>
     /// <param name="Current">Fresh evidence for the resolved target; null when it did not resolve.</param>
@@ -30,8 +38,8 @@ public static class ParameterEditPlan {
     public const string AliasConflict =
         "Conflicting edits alias the same native parameter; nothing in the connected alias group was written.";
 
-    public static Plan Build(IReadOnlyList<Edit> edits, bool dryRun) {
-        var refusals = edits.Select(edit => edit.Refusal ?? Judge(edit, dryRun)).ToArray();
+    public static Plan Build(IReadOnlyList<Edit> edits, Evidence evidence) {
+        var refusals = edits.Select(edit => edit.Refusal ?? Judge(edit, evidence)).ToArray();
 
         foreach (var group in Enumerable.Range(0, edits.Count).GroupBy(index => edits[index].Group)) {
             if (group.All(index => refusals[index] == null)) continue;
@@ -56,9 +64,9 @@ public static class ParameterEditPlan {
         return new Plan(refusals, writes);
     }
 
-    private static string? Judge(Edit edit, bool dryRun) {
+    private static string? Judge(Edit edit, Evidence evidence) {
         if (edit.Current == null) return "Target did not resolve.";
-        if (edit.Value.Expected is not { } expected) return dryRun ? null : MissingExpected;
+        if (edit.Value.Expected is not { } expected) return evidence == Evidence.IfGiven ? null : MissingExpected;
         return expected == edit.Current ? null : Stale;
     }
 
