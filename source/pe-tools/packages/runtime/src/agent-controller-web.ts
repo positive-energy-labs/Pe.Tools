@@ -154,15 +154,16 @@ export async function buildAgentControllerApp(
         400,
       );
     const session = await openSession(threadId);
-    const admitted = runtime.scopes.admittedTurn(threadId);
-    const result: PutTargetResult =
-      session.run.isRunning() && parsed.data.turn !== admitted
-        ? { ok: false, why: "in-turn" }
-        : await runtime.scopes.set(
-            threadId,
-            parsed.data.defaultTarget,
-            parsed.data.expectedRevision,
-          );
+    const result: PutTargetResult = await runtime.scopes.set(
+      threadId,
+      parsed.data.defaultTarget,
+      parsed.data.expectedRevision,
+      () =>
+        (session.run.isRunning() || runtime.scopes.admissionPending(threadId)) &&
+        parsed.data.turn !== runtime.scopes.admittedTurn(threadId)
+          ? { ok: false, why: "in-turn" }
+          : undefined,
+    );
     return c.json(result, result.ok ? 200 : 409);
   });
   // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
