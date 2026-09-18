@@ -107,8 +107,8 @@ interface MockRun {
   orphaned: number;
   declaredSqft: number;
   roomSqft: number;
-  claimedWallSqft: number;
   excludedSqft: number;
+  voidSqft: number;
 }
 
 export interface MockZone {
@@ -286,8 +286,8 @@ export function mockModel(): MockModel {
               orphaned: 0,
               declaredSqft: zone.declaredSqft,
               roomSqft,
-              claimedWallSqft: Math.round(zone.declaredSqft - roomSqft - heldSqft),
-              excludedSqft: 0,
+              excludedSqft: Math.round(zone.declaredSqft - roomSqft - heldSqft),
+              voidSqft: 0,
             },
           ]
         : [];

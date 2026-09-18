@@ -15,7 +15,7 @@ namespace Pe.Revit.DocumentData.AgentContext;
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
         var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
-        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null);
+        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
     }
 
     /// <summary>Focus capture: temporary crop box around <paramref name="modelBox" />, rolled back after export.</summary>
@@ -56,8 +56,8 @@ public static class RevitViewImageExporter {
         });
         try {
             var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
-            var modelRect = TryModelRect(view);
-            return BuildResult(document, view, producedPath, clamped, modelRect, null);
+            // Read while the temporary crop is still set: it is the crop the image was exported with.
+            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
         } finally {
             RunCropTransaction(document, "PE restore crop", () => {
                 view.CropBox = originalCrop;
@@ -141,7 +141,7 @@ public static class RevitViewImageExporter {
 
         var croppedPath = CropSheetPng(sheetPath, outline, box, marginPercent);
         var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
-        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber);
+        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber, null);
     }
 
     private static void ApplyCrop(View view, BoundingBoxXYZ modelBox, double marginPercent) {
@@ -191,6 +191,24 @@ public static class RevitViewImageExporter {
         }
     }
 
+    /// <summary>Pixel-to-model registration from the crop box transform, so a rotated crop is placed honestly.</summary>
+    private static RevitViewImageRegistration? TryRegistration(View view, string imagePath) {
+        if (view is ViewSheet || !view.CropBoxActive || !File.Exists(imagePath)) return null;
+        var crop = view.CropBox;
+        var transform = crop.Transform;
+        BitmapFrame frame;
+        using (var stream = File.OpenRead(imagePath))
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        string sha;
+        using (var stream = File.OpenRead(imagePath))
+        using (var hash = System.Security.Cryptography.SHA256.Create())
+            sha = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+        return RevitViewImageRegistration.FromCrop(frame.PixelWidth, frame.PixelHeight, sha,
+            (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
+            (transform.Origin.X, transform.Origin.Y), (transform.BasisX.X, transform.BasisX.Y),
+            (transform.BasisY.X, transform.BasisY.Y));
+    }
+
     private static string CropSheetPng(string sheetPath, BoundingBoxUV outline, BoundingBoxXYZ box, double marginPercent) {
         BitmapFrame frame;
         using (var stream = File.OpenRead(sheetPath)) {
@@ -236,7 +254,8 @@ public static class RevitViewImageExporter {
         string producedPath,
         int pixelSize,
         RevitViewImageModelRect? modelRect,
-        string? sheetNumber
+        string? sheetNumber,
+        RevitViewImageRegistration? registration
     ) {
         var kind = view switch {
             ViewSheet => RevitAgentContextHandleKind.Sheet,
@@ -264,7 +283,8 @@ public static class RevitViewImageExporter {
             pixelSize,
             scale,
             modelRect,
-            sheetNumber
+            sheetNumber,
+            registration
         );
     }
 

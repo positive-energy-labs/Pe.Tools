@@ -54,8 +54,8 @@ const zone = (z: GeoZone | MockZone): ModelZone => ({
     failures: 0,
     declaredSqft: r.declaredSqft,
     roomSqft: r.roomSqft,
-    claimedWallSqft: r.claimedWallSqft,
     excludedSqft: r.excludedSqft,
+    voidSqft: r.voidSqft,
   })),
   driftSqft: z.driftSqft,
 });
