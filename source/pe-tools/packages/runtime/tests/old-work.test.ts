@@ -1,12 +1,15 @@
 /**
  * Obligation 12: an old-shape persisted Work document is fail-closed. No read, reload, human or
- * Pea write rewrites or deletes its bytes, and every path answers with one readable sentence.
+ * Pea write rewrites or deletes its bytes, and every path answers with one readable sentence. Only
+ * the human start fresh moves them, unchanged, aside.
  */
 import { expect, test, vi } from "vite-plus/test";
 import {
   address,
   familiesRouteState,
   familyDraftRouteState,
+  START_FRESH_ASIDE,
+  UNREADABLE_WORK,
   workKey,
   type RouteStateSpec,
   type WorkKey,
@@ -14,7 +17,7 @@ import {
 import type { z } from "zod";
 import { observeResources, resourceResponse } from "../src/resource-stream.ts";
 import { ScopeStore } from "../src/scope-store.ts";
-import { RouteWorkspace, UNREADABLE_WORK } from "../src/route-workspace.ts";
+import { RouteWorkspace } from "../src/route-workspace.ts";
 
 const target = address("C:\\Models\\Old.rvt");
 // Exactly what the pre-cells contracts persisted (`fb3d7b9`): arrays of edits and accepts.
@@ -143,4 +146,46 @@ test("/family: a human-authored proposal refuses in the sentence and stays; Pea'
     reading: "{}",
     cells: { "/a": { proposal: { value: 1 }, staged: null } },
   });
+});
+
+test("/families: start fresh sets old Work aside byte-for-byte, refuses Pea, never clobbers an aside", async () => {
+  const scope: WorkKey = { route: "families", target };
+  const key = (route: string) => `${workKey(scope)}\0${route}`;
+  const state = new Map<string, unknown>();
+  const module = new RouteWorkspace({
+    registrations: [
+      { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+    ],
+    store: {
+      getState: async ({ targetKey, route }) =>
+        structuredClone(state.get(`${targetKey}\0${route}`)),
+      setState: async ({ targetKey, route, value }) =>
+        void state.set(`${targetKey}\0${route}`, structuredClone(value)),
+    },
+  });
+  const bytes = JSON.stringify(oldFamilies);
+  state.set(key("families"), JSON.parse(bytes));
+
+  expect(await module.startFresh(scope, "families", "agent")).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(JSON.stringify(state.get(key("families")))).toBe(bytes);
+  expect(state.size).toBe(1);
+
+  expect(await module.startFresh(scope, "families", "human")).toMatchObject({
+    ok: true,
+    revision: 0,
+  });
+  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+  expect((await module.read(scope, "families"))!.revision).toBe(0);
+  // Readable Work has nothing to set aside.
+  expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: false });
+
+  // Unreadable again: the second aside takes the next slot, the first keeps its bytes.
+  const second = JSON.stringify({ ...oldFamilies, revision: 8 });
+  state.set(key("families"), JSON.parse(second));
+  expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
+  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
 });

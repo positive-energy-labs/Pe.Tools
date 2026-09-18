@@ -8,6 +8,8 @@ import {
   guardCommand,
   message,
   refuse,
+  START_FRESH_ASIDE,
+  UNREADABLE_WORK,
   type RouteActor,
   type RouteEnvelope,
   type RouteRefusal,
@@ -27,7 +29,7 @@ export interface RouteWorkspaceEvent {
   scope: WorkKey;
   actor: RouteActor;
   route: string;
-  action: "apply" | "command";
+  action: "apply" | "command" | "start-fresh";
   revision: number;
   command?: string;
   patchCount?: number;
@@ -46,9 +48,6 @@ export interface RouteWorkspaceOptions {
 }
 
 const ENVELOPE_VERSION = 1;
-/** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
-export const UNREADABLE_WORK =
-  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
 // ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
@@ -217,6 +216,44 @@ export class RouteWorkspace {
     });
   }
 
+  /**
+   * Human-only: moves unreadable Work aside, byte-for-byte and never parsed, to the first free
+   * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
+   */
+  async startFresh(
+    scope: WorkKey,
+    route: string,
+    actor: RouteActor,
+  ): Promise<RouteStateWriteResult> {
+    const registration = this.#registry.get(route);
+    if (!registration) return unknownRoute(route);
+    if (actor !== "human")
+      return refuse("refused", "start fresh is human-only", "Ask the user to start fresh.");
+    const { spec } = registration;
+    const targetKey = workKey(scope);
+    return this.#serialized(scope, route, async () => {
+      const raw = await this.options.store.getState({ targetKey, route });
+      if (raw == null || readable(raw, spec))
+        return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
+      let slot = 1;
+      while ((await this.options.store.getState({ targetKey, route: aside(route, slot) })) != null)
+        slot++;
+      await this.options.store.setState({ targetKey, route: aside(route, slot), value: raw });
+      const fresh = emptyEnvelope(spec);
+      await this.#persist(scope, route, fresh);
+      await this.#publish({
+        type: "route_workspace",
+        scope,
+        route,
+        actor,
+        action: "start-fresh",
+        revision: fresh.revision,
+        ok: true,
+      });
+      return { ok: true, revision: fresh.revision };
+    });
+  }
+
   observe(
     scope: WorkKey,
     route: string,
@@ -254,14 +291,7 @@ export class RouteWorkspace {
       targetKey: workKey(scope),
       route: spec.route,
     });
-    if (raw == null)
-      return create
-        ? {
-            version: ENVELOPE_VERSION,
-            revision: 0,
-            doc: spec.schema.parse({}),
-          }
-        : null;
+    if (raw == null) return create ? emptyEnvelope(spec) : null;
     return parseEnvelope(raw, spec);
   }
 
@@ -297,6 +327,21 @@ const envelopeSchema = z.object({
   revision: z.number().int(),
   doc: z.unknown(),
 });
+
+function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
+  return { version: ENVELOPE_VERSION, revision: 0, doc: spec.schema.parse({}) };
+}
+
+function readable(raw: unknown, spec: RouteStateSpec<z.ZodType>): boolean {
+  try {
+    parseEnvelope(raw, spec);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${slot}`;
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const parsed = envelopeSchema.safeParse(raw);

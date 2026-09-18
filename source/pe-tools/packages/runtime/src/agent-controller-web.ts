@@ -6,7 +6,12 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { observeResources, resourceResponse, type ResourceObserver } from "./resource-stream.ts";
 import { z } from "zod";
-import { putTargetSchema, routeStatePatchSchema, type PutTargetResult } from "@pe/agent-contracts";
+import {
+  putTargetSchema,
+  routeStatePatchSchema,
+  START_FRESH,
+  type PutTargetResult,
+} from "@pe/agent-contracts";
 import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, readToolResult, toWireDisplayState } from "./thread-state.ts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
@@ -250,6 +255,14 @@ export async function buildAgentControllerApp(
           body.expectedRevision,
         );
       },
+    },
+    {
+      // Mounted under both prefixes; the agent door is refused by startFresh itself.
+      suffix: START_FRESH,
+      schema: z.object({}),
+      hint: "expected {}",
+      run: (scope: WorkKey, route: string, actor: "agent" | "human") =>
+        routeWorkspace.startFresh(scope, route, actor),
     },
   ] as const;
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
