@@ -7,13 +7,14 @@ import {
   type SettingsValues,
 } from "./shared";
 import { SchemaDocument, type SchemaNodeRef } from "@pe/schema-core";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { buildFieldChangeMap, projectHostValidationState } from "./field-state";
 
 export function SchemaToFieldRender({
   schema,
   schemaUrl,
   baselineValues,
-  validationResult,
+  issues,
   values,
   onChange,
   useRemoteOptions,
@@ -24,8 +25,8 @@ export function SchemaToFieldRender({
     [schemaDocument],
   );
   const projectedValidationState = useMemo(
-    () => projectHostValidationState(schemaDocument, validationResult),
-    [schemaDocument, validationResult],
+    () => projectHostValidationState(schemaDocument, issues),
+    [schemaDocument, issues],
   );
   if (rootEntries.length === 0) {
     return (
@@ -63,7 +64,7 @@ function SchemaToFieldRenderContent({
   values: SettingsValues;
   baselineValues: SettingsValues;
   onChange: (path: string, value: unknown) => void;
-  errors: ReadonlyMap<string, string[]>;
+  errors: ReadonlyMap<string, MemberIssue[]>;
   useRemoteOptions?: RemoteOptionsHook;
 }) {
   const fieldChanges = useMemo(

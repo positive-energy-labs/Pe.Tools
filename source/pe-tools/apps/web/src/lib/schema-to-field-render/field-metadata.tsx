@@ -4,6 +4,7 @@ import { Code, stringify } from "#/components/lang/code";
 import { Label } from "#/components/lang/label";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 
 function formatValue(value: unknown): string | undefined {
@@ -146,11 +147,12 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
   );
 }
 
+/** The host's reasons on this field, in the outcome-line house style: code, then the sentence. */
 export function FieldMessages({
   messages,
   compact = false,
 }: {
-  messages: string[];
+  messages: readonly MemberIssue[];
   compact?: boolean;
 }) {
   if (messages.length === 0) {
@@ -159,9 +161,13 @@ export function FieldMessages({
 
   return (
     <ul className={compact ? "space-y-0.5 py-1" : "space-y-1 py-1.5"}>
-      {messages.map((message, index) => (
-        <li key={`${message}-${index}`}>
-          <OutcomeLine kind="error" label={message} />
+      {messages.map((issue, index) => (
+        <li key={`${issue.message}-${index}`}>
+          <OutcomeLine
+            kind={issue.severity === "error" ? "error" : "advisory"}
+            label={issue.code}
+            says={issue.message}
+          />
         </li>
       ))}
     </ul>

@@ -20,6 +20,8 @@ const work = {
   revision: 0,
   listeners: new Set<() => void>(),
 };
+/** What the host's compose answers for any draft; a test sets it before the draft moves. */
+let diagnostics: object[] = [];
 const publish = () => work.listeners.forEach((listener) => listener());
 
 const patch = (doc: SettingsRouteDocument, patches: RouteStatePatch[]) => {
@@ -42,7 +44,7 @@ vi.mock("./pods", async (original) => ({
   ...(await original<typeof import("./pods")>()),
   podHost: {
     read: async () => ({ content: disk.content, sha256: disk.sha256 }),
-    compose: async () => ({ composed: null, diagnostics: [], dependencies: [], schemaJson: null }),
+    compose: async () => ({ composed: null, diagnostics, dependencies: [], schemaJson: null }),
     save: async () => {
       throw Error("a staged member must not save through pod.member.save");
     },
@@ -162,4 +164,32 @@ test("a staged field and a draft edit beside a $preset save once, and both read 
   expect(Object.values(work.doc!.fields).some((field) => field.staged)).toBe(false);
   expect(screen.queryByText(/changed on disk|adopt/i)).toBeNull();
   await waitFor(() => expect(editor.value).toBe(disk.content));
+});
+
+test("save refuses a draft the host just called invalid, in raw mode too, and clears on a clean compose", async () => {
+  disk.content = '{ "datums": {} }';
+  work.doc = { basis: { member, rawContent: disk.content, sha256: disk.sha256 }, fields: {} };
+  render(<SpecEditor member={member} schema={null} />);
+  const editor = (await screen.findByRole("textbox", { name: "spec JSON" })) as HTMLTextAreaElement;
+  await waitFor(() => expect(editor.value).toBe(disk.content));
+  const save = screen.getByRole("button", { name: /^save$/i }) as HTMLButtonElement;
+  const saveAsNew = screen.getByRole("button", { name: /save as new/i }) as HTMLButtonElement;
+
+  diagnostics = [
+    { code: "schema.type", message: "must be object", path: "$.datums", severity: "error" },
+  ];
+  fireEvent.change(editor, { target: { value: '{ "datums": "x" }' } });
+  await waitFor(() =>
+    expect(save.title).toBe(
+      "The host called this draft invalid: 1 error, first $.datums: must be object.",
+    ),
+  );
+  expect(save.disabled).toBe(true);
+  expect(saveAsNew.disabled).toBe(true);
+  expect(saveAsNew.title).toBe(save.title);
+
+  diagnostics = [];
+  fireEvent.change(editor, { target: { value: '{ "datums": { "Ref Level": {} } }' } });
+  await waitFor(() => expect(save.disabled).toBe(false));
+  expect(saveAsNew.disabled).toBe(false);
 });

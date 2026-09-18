@@ -1,11 +1,4 @@
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
-
-/** A member's validation as the host reports it. */
-export interface SettingsValidationResult {
-  isValid: boolean;
-  issues: readonly MemberIssue[];
-}
-type SettingsValidationIssue = MemberIssue;
 import type { SchemaDocument } from "@pe/schema-core";
 
 export interface FieldChangeSummary {
@@ -17,8 +10,8 @@ export interface FieldChangeSummary {
 }
 
 export interface ProjectedValidationState {
-  fieldIssuesByPath: ReadonlyMap<string, string[]>;
-  formIssues: SettingsValidationIssue[];
+  fieldIssuesByPath: ReadonlyMap<string, MemberIssue[]>;
+  formIssues: MemberIssue[];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -118,41 +111,25 @@ function resolveProjectedIssuePath(
   return undefined;
 }
 
-function formatValidationMessage(issue: SettingsValidationIssue): string {
-  return issue.message;
-}
-
-function pushIssueMessage(issuesByPath: Map<string, string[]>, path: string, message: string) {
-  const existing = issuesByPath.get(path) ?? [];
-  if (existing.includes(message)) {
-    return;
-  }
-
-  issuesByPath.set(path, [...existing, message]);
-}
-
+/** Each host issue lands on the deepest schema field its path reaches; the rest stay form-level. */
 export function projectHostValidationState(
   schemaDocument: SchemaDocument,
-  validationResult?: SettingsValidationResult,
+  issues: readonly MemberIssue[] = [],
 ): ProjectedValidationState {
-  if (!validationResult?.issues?.length) {
-    return {
-      fieldIssuesByPath: new Map<string, string[]>(),
-      formIssues: [],
-    };
-  }
+  const fieldIssuesByPath = new Map<string, MemberIssue[]>();
+  const formIssues: MemberIssue[] = [];
 
-  const fieldIssuesByPath = new Map<string, string[]>();
-  const formIssues: SettingsValidationIssue[] = [];
-
-  for (const issue of validationResult.issues) {
+  for (const issue of issues) {
     const projectedPath = resolveProjectedIssuePath(issue.path, schemaDocument);
     if (!projectedPath) {
       formIssues.push(issue);
       continue;
     }
 
-    pushIssueMessage(fieldIssuesByPath, projectedPath, formatValidationMessage(issue));
+    const existing = fieldIssuesByPath.get(projectedPath) ?? [];
+    if (!existing.some((known) => known.message === issue.message)) {
+      fieldIssuesByPath.set(projectedPath, [...existing, issue]);
+    }
   }
 
   return {
