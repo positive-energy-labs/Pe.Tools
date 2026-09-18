@@ -49,6 +49,7 @@ function Matrix({ inlineClick = false }: { inlineClick?: boolean }) {
     showUncommon: true,
     totalFamilies: 2,
     cells,
+    wire: { segment: "cells", revision: 1, write: async () => null },
     // The write lands later, as Work does: only then do the cells (and the columns) change.
     propose: (address: FamilyCellAddress, value: { familyName: string; value: string }) =>
       new Promise<void>((resolve) => {

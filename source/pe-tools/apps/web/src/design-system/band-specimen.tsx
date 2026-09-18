@@ -44,8 +44,8 @@ export const matrixWire = (write: CellWire["write"]): CellWire => ({
   segment: "cells",
   write,
   baselineOf,
-  // ponytail: the fixture has no Work, so bound kinds carry no revision and never refuse.
-  revision: null,
+  // ponytail: the fixture has no Work; r0 stands in, and nothing ever writes against it.
+  revision: 0,
   lockOf: (key) => LOCKS[key] ?? null,
 });
 
@@ -179,8 +179,8 @@ export function BandGaps() {
     <section className="flex flex-col gap-1.5">
       <span>known gaps and owed work</span>
       <Gap>
-        <strong>Fixture revision:</strong> the specimen has no Work, so accept and deny carry no
-        revision here and cannot show a stale-revision refusal; the routes carry theirs.
+        <strong>Fixture revision:</strong> the specimen holds no Work, so accept and deny bind to a
+        stand-in r0 that nothing else writes; it cannot show a stale-revision refusal.
       </Gap>
       <Gap>
         <strong>Structural proposals:</strong> the cell draws delete; rename and add-row have no

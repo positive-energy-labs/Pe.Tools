@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { FAMILY_SCOPE_LIMIT, type FfReceipt } from "@pe/agent-contracts";
 
+import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { Verdict } from "#/components/master-table/model";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
@@ -13,7 +14,12 @@ import {
 } from "#/host/loaded-families-view";
 import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
-import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
+import {
+  familiesLockOf,
+  useFamiliesColumns,
+  type ParamColumn,
+  type TypeRow,
+} from "#/families/matrix-columns";
 import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
@@ -242,6 +248,11 @@ function useFamiliesWorkspaceModel(
     [plan, planByFamilyId, receiptByFamilyId, excludedIds],
   );
 
+  // The one families cell wire: the store's write, plus the lock facts only the matrix knows.
+  const wire = useMemo(
+    (): CellWire => ({ ...store.wire, lockOf: familiesLockOf(rows, params) }),
+    [store.wire, rows, params],
+  );
   const { columns, uncommonCount } = useFamiliesColumns({
     familyState,
     params,
@@ -249,6 +260,7 @@ function useFamiliesWorkspaceModel(
     totalFamilies,
     cells,
     propose: store.actions.propose,
+    wire,
   });
 
   const stagedFamilies = useMemo(
@@ -287,7 +299,13 @@ function useFamiliesWorkspaceModel(
       staged.length > 0
         ? {
             label: `staged · ${staged.length} cell${staged.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
-            onClear: () => void store.actions.unstage(staged),
+            onClear: () =>
+              void runFanOut(
+                wire,
+                cells,
+                staged.map((entry) => entry.key),
+                "unstage",
+              ),
           }
         : null,
   });
@@ -351,6 +369,7 @@ function useFamiliesWorkspaceModel(
     familyState,
     columns,
     uncommonCount,
+    wire,
     chips,
     includedPlanned,
     matrixIssue,

@@ -159,8 +159,19 @@ export interface CellWire {
 
 const DRAWN = new Set<string>(["accept", "deny", "unstage"] satisfies CellTransitionKind[]);
 
-const bindingOf = (wire: CellWire, kind: TransitionKind) =>
-  transitionBinding(kind) === "bound" ? (wire.revision ?? undefined) : undefined;
+/**
+ * One write of a transition's patches. A bound kind (accept, deny) carries the rendered revision;
+ * with nothing rendered to bind to it refuses and writes nothing, never an unbound write.
+ */
+const writeKind = (wire: CellWire, kind: TransitionKind, patches: RouteStatePatch[]) =>
+  transitionBinding(kind) !== "bound"
+    ? wire.write(patches)
+    : wire.revision === null
+      ? Promise.resolve({
+          code: "not-ready",
+          message: "Work has not been read yet; nothing on screen to act on",
+        })
+      : wire.write(patches, wire.revision);
 
 /** The cell's verbs: exactly what the contract makes available to a person on it. */
 export function reviewTransitions(
@@ -184,8 +195,7 @@ export function reviewTransitions(
     .map((kind) => ({
       kind,
       reason: reason[kind],
-      run: () =>
-        wire.write(transitionPatches([wire.segment], key, cell, { kind }), bindingOf(wire, kind)),
+      run: () => writeKind(wire, kind, transitionPatches([wire.segment], key, cell, { kind })),
     }));
 }
 
@@ -211,7 +221,7 @@ export async function runFanOut(
     actor: "human",
     lockOf: wire.lockOf,
   });
-  const refusal = covered.length ? await wire.write(patches, bindingOf(wire, kind)) : null;
+  const refusal = covered.length ? await writeKind(wire, kind, patches) : null;
   return { kind, covered, skipped, refusal };
 }
 

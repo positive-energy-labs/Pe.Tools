@@ -107,7 +107,14 @@ export function useScheduleGridColumns(
                 cap: binding == null ? "nohome" : lock ? "locked" : "editable",
                 capReason: lock ?? undefined,
                 note,
-                onCommit: lock ? undefined : (text) => stageEdit(key, text),
+                // Clearing a value is allowed (ruling 1600-3), as far as Revit can hold it: a
+                // text parameter can be empty, a number or an element id cannot.
+                onCommit: lock
+                  ? undefined
+                  : (text) =>
+                      text === "" && binding?.storageType !== "String"
+                        ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
+                        : stageEdit(key, text),
               }),
               transitions: reviewTransitions(wire, key, cell),
             };

@@ -56,11 +56,19 @@ test("bound kinds carry the rendered revision; unstage does not", async () => {
     [{ path: ["cells", "a", "staged"], value: { value: "5in" } }],
     7,
   );
-  expect(w.write).toHaveBeenNthCalledWith(
-    2,
-    [{ path: ["cells", "a", "staged"], value: null }],
-    undefined,
-  );
+  expect(w.write).toHaveBeenNthCalledWith(2, [{ path: ["cells", "a", "staged"], value: null }]);
+});
+
+test("a bound verb with nothing rendered refuses and writes nothing; unstage still writes", async () => {
+  const w = { ...wire(), revision: null };
+  const [accept, deny, unstage] = reviewTransitions(w, "a", CASES[1]![1]);
+  expect(await accept!.run()).toMatchObject({ code: "not-ready" });
+  expect(await deny!.run()).toMatchObject({ code: "not-ready" });
+  const out = await runFanOut(w, { x: CASES[0]![1] }, ["x"], "accept");
+  expect(out.refusal).toMatchObject({ code: "not-ready" });
+  expect(w.write).not.toHaveBeenCalled();
+  await unstage!.run();
+  expect(w.write).toHaveBeenCalledOnce();
 });
 
 test("an aggregate accept is one bound write that skips the contested key and says so", async () => {

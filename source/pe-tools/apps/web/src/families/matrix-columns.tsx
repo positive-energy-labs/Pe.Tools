@@ -1,8 +1,14 @@
 import { useMemo } from "react";
-import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
+import {
+  familyCellAddress,
+  familyCellKey,
+  familyCellValueSchema,
+  type FamilyCellState,
+} from "@pe/agent-contracts";
+import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
+import { cellFromTrichotomy, StateCell, type CellTransition } from "#/components/lang/cell";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { FamiliesStore } from "#/families/store";
@@ -66,6 +72,20 @@ export function patchable(row: TypeRow, key: string): boolean {
   );
 }
 
+/**
+ * The families lock facts: a cell a patch cannot write (unresolved, project-bound, formula-driven)
+ * is locked, and its reason is the one the matrix already says. Unknown addresses are not locked.
+ */
+export const familiesLockOf =
+  (rows: readonly TypeRow[], params: readonly ParamColumn[]) =>
+  (key: string): string | null => {
+    const { familyId, typeName, parameter } = familyCellAddress(key);
+    const row = rows.find((r) => r.familyId === familyId && r.typeName === typeName);
+    const param = params.find((p) => p.name === parameter);
+    if (!row || !param || patchable(row, param.key)) return null;
+    return cellReason(row, param.key, param.isInstance);
+  };
+
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
 function cellReason(row: TypeRow, key: string, instance: boolean): string {
   const scope = row.scopes[key];
@@ -98,6 +118,7 @@ export function useFamiliesColumns({
   totalFamilies,
   cells,
   propose,
+  wire,
 }: {
   familyState: (familyId: number) => Verdict;
   params: ParamColumn[];
@@ -105,6 +126,8 @@ export function useFamiliesColumns({
   totalFamilies: number;
   cells: Record<string, FamilyCellState>;
   propose: FamiliesStore["actions"]["propose"];
+  /** The families cell wire, with the matrix's lock facts. */
+  wire: CellWire;
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -198,19 +221,36 @@ export function useFamiliesColumns({
           const value = row.values[col.key] ?? "";
           const unresolved = !scopeOf || scopeOf === "Unresolved";
           const reason = cellReason(row, col.key, col.isInstance);
+          const address = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+          const cell = cellAt(cells, address);
+          // Every drawn trichotomy cell carries exactly the contract's transitions. A Pea proposal
+          // on a cell a patch cannot write draws locked, where the contract leaves deny only.
+          const transitions = cell
+            ? reviewTransitions(wire, familyCellKey(address), cell)
+            : undefined;
           if (patchable(row, col.key)) {
-            const address = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
             return (
               <ProposalCell
                 current={value}
                 reason={reason}
-                cell={cellAt(cells, address)}
+                cell={cell}
+                transitions={transitions}
                 onCommit={(next) =>
                   void propose(address, { familyName: row.familyName, value: next }, value)
                 }
               />
             );
           }
+          if (cell?.proposal != null || cell?.staged != null)
+            return (
+              <ProposalCell
+                current={value}
+                reason={reason}
+                cell={cell}
+                transitions={transitions}
+                lock={reason}
+              />
+            );
           return (
             <ReadCell
               value={unresolved ? "" : value || "—"}
@@ -232,7 +272,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, familyState, cells, propose]);
+  }, [params, totalFamilies, showUncommon, familyState, cells, propose, wire]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,
@@ -252,12 +292,18 @@ export function ProposalCell({
   current,
   reason,
   cell,
+  transitions,
+  lock,
   onCommit,
 }: {
   current: string;
   reason: string;
   cell: FamilyCellState | undefined;
-  onCommit: (text: string) => void;
+  /** The cell's own verbs: exactly `availableTransitions`, over the families wire. */
+  transitions?: readonly CellTransition[];
+  /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
+  lock?: string;
+  onCommit?: (text: string) => void;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;
@@ -269,7 +315,7 @@ export function ProposalCell({
           ? "; staged — plan will include it"
           : staged
             ? `; you staged ${staged.value.value}, so Pea's value is a counter-proposal`
-            : "; open — accept or deny it in the proposals band"
+            : "; open — accept (a) or deny (d) it on this cell"
       }. Nothing has reached Revit.`
     : staged
       ? `You staged ${current || "(blank)"} → ${staged.value.value}. Nothing has reached Revit.`
@@ -282,8 +328,11 @@ export function ProposalCell({
           { value: shown, note, scale: "row" },
           showFamilyCell,
         )}
+        cap={lock ? "locked" : "editable"}
+        capReason={lock}
+        transitions={transitions}
         placeholder={proposal || staged ? current : undefined}
-        onCommit={(text) => onCommit(text)}
+        onCommit={lock || !onCommit ? undefined : (text) => onCommit(text)}
         onNavigate={(direction) => move?.(direction) ?? false}
       />
     </span>

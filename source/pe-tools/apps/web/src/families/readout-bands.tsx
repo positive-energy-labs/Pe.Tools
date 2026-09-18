@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { familyCellValueSchema } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
+import { fanOutWord, ReviewRow, runFanOut, type FanOutOutcome } from "#/components/lang/band";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { familyCellEntries } from "#/families/staged";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
@@ -188,13 +191,14 @@ export function FamiliesCaptureBand() {
 }
 
 /**
- * THE PROPOSALS BAND — the house proposal specimen at table scale (`/design-system/proposal-flow`,
- * schedules' pending strip): one line per proposed cell, current → proposed, who proposed it, and
- * accept / deny per cell and for the whole table. Accept promotes the proposal into `staged`; deny
- * clears the proposal. Plan reads staged cells and nothing else.
+ * THE PROPOSALS BAND — every pending cell on the table, one `ReviewRow` each: the matrix cell's
+ * own verbs (exactly `availableTransitions`, over the families wire), findable without scrolling
+ * a large matrix. Its "all" verbs are aggregates only: one `runFanOut` each (an aggregate accept
+ * skips contested cells, A7), with the outcome in the kit's words. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { store, cells, rows, params } = useFamiliesWorkspace();
+  const { cells, rows, params, wire } = useFamiliesWorkspace();
+  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
   const entries = familyCellEntries(cells).filter(
     (entry) => entry.cell.proposal != null || entry.cell.staged != null,
   );
@@ -204,8 +208,10 @@ export function FamiliesProposalsBand() {
     const row = rows.find((r) => r.familyId === entry.familyId && r.typeName === entry.typeName);
     return key && row ? (row.values[key] ?? "") : null;
   };
+  const keys = entries.map((entry) => entry.key);
   const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);
   const staged = entries.filter(({ cell }) => cell.staged != null);
+  const all = (kind: "accept" | "deny") => void runFanOut(wire, cells, keys, kind).then(setOutcome);
   return (
     <section aria-label="proposals" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
       <div className="flex items-center gap-2">
@@ -230,64 +236,48 @@ export function FamiliesProposalsBand() {
             disabled={!open.length}
             reason={
               open.length
-                ? `Accept all ${open.length} open proposals — plan includes them; nothing reaches Revit until apply.`
+                ? `Accept every open proposal in one write; cells you staged yourself are skipped. Nothing reaches Revit until apply.`
                 : "nothing is open to accept"
             }
-            onClick={() => void store.actions.accept(open)}
+            onClick={() => all("accept")}
           />
           <ActionButton
             label="deny all"
-            reason="Clear every proposal on this table. Staged human values stay."
-            onClick={() => void store.actions.deny(entries)}
+            reason="Clear every proposal on this table in one write. Staged values stay."
+            onClick={() => all("deny")}
           />
         </span>
       </div>
-      {entries.map((entry) => {
-        const proposal = entry.cell.proposal;
-        const stagedHere = entry.cell.staged;
-        const display = proposal?.value ?? stagedHere?.value;
-        const isOpen = proposal != null && stagedHere == null;
-        return (
-          <div
-            key={entry.key}
-            data-proposal-row={entry.key}
-            className="flex items-center gap-3 t-small"
-          >
-            <span className="face-mono w-72 truncate text-ink-2">
-              {display?.familyName ?? "family"} · {entry.typeName} · {entry.parameter}
+      {outcome ? (
+        <OutcomeLine
+          kind={outcome.refusal ? "refused" : "receipt"}
+          label={fanOutWord(outcome)}
+          says={outcome.refusal ? "nothing was written" : undefined}
+        />
+      ) : null}
+      {entries.map((entry) => (
+        <ReviewRow
+          key={entry.key}
+          wire={wire}
+          address={entry.key}
+          label={
+            <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
+              {(entry.cell.proposal ?? entry.cell.staged)?.value.familyName ?? "family"} ·{" "}
+              {entry.typeName} · {entry.parameter}
             </span>
-            <span className="min-w-0 flex-1 truncate">
-              <ValueDiff from={current(entry)} to={(stagedHere ?? proposal)?.value.value ?? ""} />
-            </span>
-            {proposal && stagedHere && proposal.value.value !== stagedHere.value.value ? (
-              <FactChip tone="pea" title="Pea's value against the one you staged.">
-                Pea proposes {proposal.value.value}
-              </FactChip>
-            ) : null}
-            <FactChip
-              tone={isOpen ? "pea" : "caution"}
-              title="Open waits for you; staged goes into plan."
-            >
-              {isOpen ? "open" : "staged"}
-            </FactChip>
-            <span className="flex shrink-0 items-center gap-1">
-              {isOpen ? (
-                <ActionButton
-                  tone="agent"
-                  label="accept"
-                  reason={`Stage ${proposal!.value.value} — plan includes it; nothing reaches Revit until apply.`}
-                  onClick={() => void store.actions.accept([entry])}
-                />
-              ) : null}
-              <ActionButton
-                label="deny"
-                reason="Clear this proposal — the cell shows Revit's value again and plan leaves it out."
-                onClick={() => void store.actions.deny([entry])}
+          }
+          cell={entry.cell}
+          facts={{
+            value: (
+              <ValueDiff
+                from={current(entry)}
+                to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
               />
-            </span>
-          </div>
-        );
-      })}
+            ),
+          }}
+          show={(value) => familyCellValueSchema.parse(value).value}
+        />
+      ))}
     </section>
   );
 }

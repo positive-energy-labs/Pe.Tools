@@ -100,8 +100,6 @@ export function ScheduleGridWorkspace({
   };
   /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
   const stageEdit = (key: string, value: string): string | void => {
-    if (value.length === 0)
-      return "an empty value cannot be staged — type a value, or leave the cell as it was";
     const cell = cells[key] ?? {};
     void apply([
       ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),

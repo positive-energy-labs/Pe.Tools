@@ -23,23 +23,16 @@ import {
   type AppliedFilter,
   type FamiliesRouteDocument,
   type Reading,
-  fanOut,
-  transitionBinding,
   transitionPatches,
-  type FanOutKind,
-  type RouteStatePatch,
-  type SkipReason,
-  type Transition,
-  type TransitionKind,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
+import type { CellWire } from "#/components/lang/band";
 import type { MasterTableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
-import type { Refusal } from "#/route/refusal";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
@@ -142,13 +135,6 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
   };
 }
 
-/** A cell write's outcome, per address: one refusal covers every address the write covered. */
-export interface CellWrite {
-  covered: string[];
-  skipped: { key: string; reason: SkipReason }[];
-  refused?: Refusal & { addresses: string[] };
-}
-
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
@@ -189,45 +175,18 @@ export function useFamiliesStore(
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
   const cells = doc?.cells ?? NO_CELLS;
   /*
-   * Every cell verb is one transition of the shared cell machine, written as one Work write of its
-   * rung patches. Bound kinds (accept, deny) carry the rendered revision, which the queue rebases
-   * over this owner's own landed writes only. One address is the cell's own control; more is an
-   * aggregate fan-out, which skips keys the kind is not open on (and contested keys, for accept).
+   * Every cell verb is one transition of the shared cell machine over this one wire: the cell's
+   * own controls (`reviewTransitions`) and any aggregate (`runFanOut`) write through it, and bound
+   * kinds carry the rendered revision. The workspace adds the matrix's lock facts (`lockOf`).
    */
-  const writeCells = async (
-    kind: TransitionKind,
-    covered: string[],
-    skipped: { key: string; reason: SkipReason }[],
-    patches: RouteStatePatch[],
-  ): Promise<CellWrite> => {
-    if (!patches.length) return { covered, skipped };
-    const refusal = await handle.work.write(
-      patches,
-      transitionBinding(kind) === "bound" ? handle.work.revision : undefined,
-    );
-    return {
-      covered,
-      skipped,
-      ...(refusal ? { refused: { ...refusal, addresses: covered } } : {}),
-    };
-  };
-  const transition = (address: FamilyCellAddress, change: Transition) => {
-    const key = familyCellKey(address);
-    return writeCells(
-      change.kind,
-      [key],
-      [],
-      transitionPatches(["cells"], key, cells[key] ?? {}, change),
-    );
-  };
-  const aggregate = (addresses: readonly FamilyCellAddress[], kind: FanOutKind) => {
-    if (addresses.length === 1) return transition(addresses[0]!, { kind });
-    const out = fanOut(cells, addresses.map(familyCellKey), kind, {
-      cellsPath: ["cells"],
-      actor: "human",
-    });
-    return writeCells(kind, out.covered, out.skipped, out.patches);
-  };
+  const wire = useMemo(
+    (): CellWire => ({
+      segment: "cells",
+      revision: handle.work.revision,
+      write: handle.work.write,
+    }),
+    [handle.work.revision, handle.work.write],
+  );
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -304,23 +263,20 @@ export function useFamiliesStore(
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /**
        * A typed value stages; Pea's standing proposal remains as a counter. This route's codec:
-       * an emptied cell unstages, and the baseline is the family's current value.
+       * the baseline is the family's current value, and an emptied cell stages the empty value
+       * (ruling 1600-3: clearing a value is allowed everywhere). Typing the current value back
+       * stages nothing.
        */
-      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
-        transition(
-          address,
-          value.value === ""
-            ? { kind: "unstage" }
-            : {
-                kind: "stage",
-                rung: { value: { familyName: value.familyName, value: value.value } },
-                baseline: { value: { familyName: value.familyName, value: current } },
-              },
-        ),
-      accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
-      /** Deny clears the proposal on screen only; an independently staged value survives. */
-      deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
-      unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
+      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) => {
+        const key = familyCellKey(address);
+        return handle.work.write(
+          transitionPatches(["cells"], key, cells[key] ?? {}, {
+            kind: "stage",
+            rung: { value: { familyName: value.familyName, value: value.value } },
+            baseline: { value: { familyName: value.familyName, value: current } },
+          }),
+        );
+      },
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
@@ -362,6 +318,7 @@ export function useFamiliesStore(
     failure: handle.failure,
     feeds,
     actions,
+    wire,
   };
 }
 
