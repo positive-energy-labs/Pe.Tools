@@ -136,4 +136,23 @@ public sealed class BridgeOpRequestDeserializationTests {
 
         Assert.That(((ProbeResponse)response!).Echo, Is.EqualTo("-1001203:False:null"));
     }
+
+    // The bridge serializes responses with NullValueHandling.Ignore; a reading's unset target must still
+    // carry `rawValue: null`, or the host would echo back evidence the apply edge refuses.
+    [Test]
+    public async Task An_unset_target_read_from_a_response_round_trips_into_a_reviewed_cell() {
+        var response = Newtonsoft.Json.JsonConvert.SerializeObject(
+            new ScheduleCellBindingTarget(7, -1001203, "Mark", Pe.Shared.RevitData.RequestedParameterStorageType.String, false, false, null),
+            new Newtonsoft.Json.JsonSerializerSettings {
+                NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                ContractResolver = new Newtonsoft.Json.Serialization.DefaultContractResolver {
+                    NamingStrategy = new Newtonsoft.Json.Serialization.CamelCaseNamingStrategy { ProcessDictionaryKeys = false, OverrideSpecifiedNames = false }
+                },
+                Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()]
+            });
+
+        Assert.That(response, Does.Contain("\"rawValue\":null"));
+        var bound = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(CellRequest(response), null, CancellationToken.None);
+        Assert.That(((ProbeResponse)bound!).Echo, Is.EqualTo("-1001203:False:null"));
+    }
 }
