@@ -2,6 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { scheduleGridRouteState } from "@pe/agent-contracts";
+import { parameterValueApplyBounds } from "@pe/host-contracts/generated";
 import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import {
@@ -110,10 +111,11 @@ test.each([
   expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
 });
 
-test("501 staged cells refuse before dispatch and keep every cell", async () => {
+test("staged cells over the generated cap refuse before dispatch and keep every cell", async () => {
+  const over = parameterValueApplyBounds.maxEditsPerCall + 1;
   const f = await setup();
   const detail = detailResponse();
-  detail.entries[0].rows = Array.from({ length: 501 }, (_, index) => ({
+  detail.entries[0].rows = Array.from({ length: over }, (_, index) => ({
     ...detail.entries[0].rows[0],
     rowNumber: index,
     bindings: [
@@ -131,12 +133,15 @@ test("501 staged cells refuse before dispatch and keep every cell", async () => 
     {
       path: ["cells"],
       value: Object.fromEntries(
-        Array.from({ length: 501 }, (_, index) => [`${index}::2`, { staged: { value: "150 VA" } }]),
+        Array.from({ length: over }, (_, index) => [
+          `${index}::2`,
+          { staged: { value: "150 VA" } },
+        ]),
       ),
     },
   ]);
   expect(await f.submit()).toMatchObject({ state: "failed", notDispatched: true });
-  expect(Object.values((await f.view()).doc.cells).filter((c) => c.staged)).toHaveLength(501);
+  expect(Object.values((await f.view()).doc.cells).filter((c) => c.staged)).toHaveLength(over);
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
 

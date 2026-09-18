@@ -32,6 +32,7 @@ import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
 
 const unsupported = (key: string) =>
   new BridgeError(`Unsupported demo scenario: ${key}. No native execution.`, 409, {
@@ -56,7 +57,26 @@ const SIMULATED_READS = [
 ];
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
-type RunSource = { root: { id: string; path: string; sha256: string } };
+type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
+type RunSource = { root: Captured; dependencies: Captured[] };
+/**
+ * The simulated engine checks captured bytes the way `PodRuns.Decode` does: every root and
+ * dependency hash must match its bytes, or the run refuses before anything is filed.
+ */
+export function verifyCaptured({ root, dependencies }: RunSource) {
+  for (const file of [root, ...dependencies])
+    if (
+      createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex") !==
+      file.sha256
+    )
+      throw new BridgeError(
+        `${file.id}:${file.path} captured bytes do not match SHA-256 ${file.sha256}.`,
+        400,
+        {
+          notDispatched: true,
+        },
+      );
+}
 
 /** The simulated project's schedules: supplied facts, never a read of a real model. */
 const DEMO_SCHEDULES = [
@@ -251,7 +271,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
      * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
      * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
      */
-    const fileRun = async (operation: string, { root }: RunSource, planHash: string | null) => {
+    const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
+      verifyCaptured(source);
+      const { root } = source;
       const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
       const file = await settings.memberPath({
         pod: root.id,
@@ -567,11 +589,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 simulated: true,
               };
             } else if (key === "schedule.cells.apply" && project) {
-              const edits = (
-                input as { edits: { rowNumber: number; columnNumber: number; value: string }[] }
-              ).edits;
-              for (const edit of edits) rows[edit.rowNumber - 1]![edit.columnNumber] = edit.value;
-              value = {
+              // Demo-only: writes the grid rows; the answer keeps the domain result shape.
+              const edits = (input as ScheduleCellsApply.Req.Request).edits;
+              for (const edit of edits) rows[edit.rowNumber - 1]![edit.columnNumber] = edit.value!;
+              const answer: ScheduleCellsApply.Res.Response = {
                 appliedCells: edits.length,
                 appliedParameterWrites: edits.length,
                 dryRun: false,
@@ -580,11 +601,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                   rowNumber: edit.rowNumber,
                   columnNumber: edit.columnNumber,
                   ok: true,
-                  parameterResults: [{ index: 0, ok: true }],
+                  parameterResults: edit.expectedBinding.targets.map((_, target) => ({
+                    index: target,
+                    ok: true,
+                  })),
                 })),
                 diagnostics: [],
-                simulated: true,
               };
+              value = { ...answer, simulated: true };
             } else if (key === "revit.catalog.schedules" && project) {
               value = {
                 entries: DEMO_SCHEDULES.map((row) => ({

@@ -155,4 +155,9 @@ public sealed class BridgeOpRequestDeserializationTests {
         var bound = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(CellRequest(response), null, CancellationToken.None);
         Assert.That(((ProbeResponse)bound!).Echo, Is.EqualTo("-1001203:False:null"));
     }
+
+    // The host reads the cell cap from the generated contract instead of re-typing 500.
+    [Test]
+    public void The_catalog_carries_the_parameter_write_cap() =>
+        Assert.That(HostOpsCatalogData.ReadConstants()["parameterValueApplyBounds"]["maxEditsPerCall"], Is.EqualTo(500));
 }

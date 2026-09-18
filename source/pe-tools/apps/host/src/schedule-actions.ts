@@ -18,10 +18,11 @@ import {
   type ScheduleReadKey,
   type ScheduleGridDocument,
 } from "@pe/agent-contracts";
-import type {
-  RevitDetailSchedules,
-  RevitCatalogSchedules,
-  ScheduleCellsApply,
+import {
+  parameterValueApplyBounds,
+  type RevitDetailSchedules,
+  type RevitCatalogSchedules,
+  type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
@@ -169,8 +170,6 @@ export async function readSchedule(
   return reading;
 }
 
-/** The domain's 500-cell cap per call; larger reviews refuse before dispatch and keep every cell. */
-const CELL_CAP = 500;
 type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
 type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
 /**
@@ -280,8 +279,11 @@ export async function admitScheduleAction(
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");
-      if (edits.length > CELL_CAP)
-        throw refused(`${edits.length} staged cells exceed the ${CELL_CAP}-cell cap per push`);
+      // The domain's cap, from the generated contract: a larger review refuses before dispatch and keeps every cell.
+      if (edits.length > parameterValueApplyBounds.maxEditsPerCall)
+        throw refused(
+          `${edits.length} staged cells exceed the ${parameterValueApplyBounds.maxEditsPerCall}-cell cap per push`,
+        );
       if (!reading.snapshot.scheduleUniqueId) throw refused("Schedule unique identity is missing");
       if (pod) await runPods(deps, podFolder(pod, podContext(deps, bridge)));
       const at = new Date().toISOString();

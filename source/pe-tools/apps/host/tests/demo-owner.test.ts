@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile, symlink, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +9,7 @@ import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
 import { readingKey, scheduleGridRouteState, settingsRouteState } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
+import { demoRoutes, createDemoOwner, verifyCaptured } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -528,4 +529,18 @@ test("demo schedule push files a run in the bound pod with values before and aft
     reason: null,
     cells: [{ cell: "1::2", before: "", after: "Wall unit" }],
   });
+});
+
+test("the simulated engine refuses captured bytes that disagree with their hash", () => {
+  const bytes = Buffer.from('{"a":1}');
+  const file = (content: Buffer) => ({
+    id: "demo",
+    path: "settings/a.json",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytesBase64: content.toString("base64"),
+  });
+  expect(() => verifyCaptured({ root: file(bytes), dependencies: [file(bytes)] })).not.toThrow();
+  expect(() =>
+    verifyCaptured({ root: file(bytes), dependencies: [file(Buffer.from('{"a":2}'))] }),
+  ).toThrow("captured bytes do not match SHA-256");
 });
