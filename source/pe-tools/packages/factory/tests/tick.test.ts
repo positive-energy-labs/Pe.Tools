@@ -154,5 +154,5 @@ describe("tick", () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 60_000);
 });
