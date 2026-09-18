@@ -2,7 +2,6 @@ import { Deferred, Effect, FileSystem, Ref } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import type { HttpClient } from "effect/unstable/http";
 import type { ChildProcessSpawner } from "effect/unstable/process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,10 +10,12 @@ import type { BridgeResponse } from "@pe/host-contracts/contracts";
 import { BRIDGE_CONTRACT_VERSION } from "@pe/host-contracts/contracts";
 import {
   BridgeError,
-  completeBridgePending,
+  completeBridgeRequest,
   getBridgeRegistrationRejection,
-  reserveBridgePending,
+  trackBridgeRequest,
+  type BridgeRequest,
   type RevitBridge,
+  type BridgeSessionView,
 } from "../src/bridge.ts";
 import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
 import {
@@ -22,23 +23,8 @@ import {
   normalizeApsTokenRequest,
   resolveApsScopes,
 } from "../src/aps-auth.ts";
-import {
-  getBridgeSessionSummary,
-  getSettingsWorkspaces,
-  listBridgeSessions,
-  openShellPath,
-} from "../src/local-ops.ts";
-import { LocalOpError } from "../src/local-error.ts";
-import {
-  discoverSettingsTree,
-  openSettingsDocument,
-  openSettingsDocumentWithModule,
-  saveSettingsDocument,
-  validateSettingsDocument,
-} from "../src/settings.ts";
-
-type BridgePendingRefValue =
-  Parameters<typeof reserveBridgePending>[0] extends Ref.Ref<infer T> ? T : never;
+import { getBridgeSessionSummary, listBridgeSessions, openShellPath } from "../src/local-ops.ts";
+import { productPodsRootPath } from "../src/product-paths.ts";
 
 function runDispatch<A, E>(
   effect: Effect.Effect<
@@ -52,12 +38,12 @@ function runDispatch<A, E>(
   );
 }
 
-test("dispatch threads bridgeSessionId through local snapshots and bridge invokes", async () => {
+test("pod compose runs schema-only when the selected session is disconnected", async () => {
   const seen: string[] = [];
   const bridge = {
-    invoke: (key: string, _payload: unknown, bridgeSessionId?: string) => {
-      seen.push(`invoke:${key}:${bridgeSessionId ?? ""}`);
-      return Effect.succeed({ schemaJson: "{}" });
+    invoke: (key: string) => {
+      seen.push(`invoke:${key}`);
+      return Effect.succeed({ value: {} });
     },
     snapshot: (bridgeSessionId?: string) => {
       seen.push(`snapshot:${bridgeSessionId ?? ""}`);
@@ -65,11 +51,24 @@ test("dispatch threads bridgeSessionId through local snapshots and bridge invoke
     },
     list: Effect.succeed([]),
   } as unknown as RevitBridge["Service"];
-
-  // ts-only ops thread the session id into local snapshots and bridge invokes.
-  await runDispatch(dispatchTsOnlyOperation("settings.workspaces", undefined, "bridge-b", bridge));
-
-  expect(seen[0]).toBe("snapshot:bridge-b");
+  const profile = withTempUserProfile();
+  try {
+    const podDir = join(productPodsRootPath(), "P");
+    mkdirSync(podDir, { recursive: true });
+    writeFileSync(join(podDir, "pod.json"), '{"id":"p"}');
+    const result = await runDispatch(
+      dispatchTsOnlyOperation(
+        "pod.member.compose",
+        { pod: "p", path: "settings/x.json", content: '{"$include":"@local/y"}' },
+        "bridge-b",
+        bridge,
+      ),
+    );
+    expect(seen).toEqual(["snapshot:bridge-b"]);
+    expect(result).toMatchObject({ composed: null, schemaValidation: "no-schema" });
+  } finally {
+    profile.dispose();
+  }
 });
 
 test("ts-only dispatch rejects malformed requests before running the operation", async () => {
@@ -80,7 +79,7 @@ test("ts-only dispatch rejects malformed requests before running the operation",
   } as unknown as RevitBridge["Service"];
 
   await expect(
-    runDispatch(dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge)),
+    runDispatch(dispatchTsOnlyOperation("pod.member.read", { pod: 123 }, undefined, bridge)),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
 });
 
@@ -106,304 +105,6 @@ test("host shell open validates an absolute existing path and returns the launch
   }
 });
 
-test("settings tree path validation fails as LocalOpError", async () => {
-  await expect(
-    runDispatch(
-      discoverSettingsTree({
-        subDirectory: "C:\\outside",
-      }),
-    ),
-  ).rejects.toBeInstanceOf(LocalOpError);
-});
-
-test("settings save uses content hash version tokens", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const result = await runDispatch(
-      saveSettingsDocument({
-        documentId: {
-          moduleKey: "Global",
-          rootKey: "fragments",
-          relativePath: "hash-test",
-        },
-        rawContent: '{"ok":true}',
-      }),
-    );
-
-    expect(result.writeApplied).toBe(true);
-    expect(result.metadata.versionToken?.value).toBe(sha256('{"ok":true}\n'));
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings save writes schema-invalid documents and returns validation issues", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const result = await runDispatch(
-      saveSettingsDocument(
-        {
-          documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/invalid-but-saved",
-          },
-          rawContent: "{}",
-        },
-        {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: [], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : {
-                    schemaJson:
-                      '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
-                  },
-            ),
-        },
-      ),
-    );
-
-    expect(result.writeApplied).toBe(true);
-    expect(result.validation.isValid).toBe(false);
-    expect(result.validation.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings open composes global includes from bridge-discovered module options", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const settingsRoot = join(profile.path, "Documents", "Pe.Tools", "settings");
-    mkdirSync(join(settingsRoot, "Global", "fragments", "_fields"), { recursive: true });
-    mkdirSync(join(settingsRoot, "CmdScheduleManager", "schedules", "profiles"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(settingsRoot, "Global", "fragments", "_fields", "shared.json"),
-      '[{"Name":"Room"}]',
-    );
-    writeFileSync(
-      join(settingsRoot, "CmdScheduleManager", "schedules", "profiles", "main.json"),
-      '{"Fields":[{"$include":"@global/_fields/shared"}]}',
-    );
-
-    const snapshot = await runDispatch(
-      openSettingsDocument(
-        {
-          documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/main",
-          },
-          includeComposedContent: true,
-        },
-        {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: ["_fields"], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : { schemaJson: "{}" },
-            ),
-        },
-      ),
-    );
-
-    expect(snapshot.composedContent).toContain('"Name": "Room"');
-    expect(snapshot.dependencies[0]).toMatchObject({
-      directivePath: "@global/_fields/shared",
-      scope: "Global",
-      kind: "Include",
-    });
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings open preserves missing document as not found", async () => {
-  const profile = withTempUserProfile();
-  try {
-    await expect(
-      runDispatch(
-        openSettingsDocumentWithModule(
-          {
-            documentId: {
-              moduleKey: "CmdScheduleManager",
-              rootKey: "schedules",
-              relativePath: "profiles/missing",
-            },
-            includeComposedContent: true,
-          },
-          {
-            moduleKey: "CmdScheduleManager",
-            defaultRootKey: "schedules",
-            roots: [{ rootKey: "schedules", displayName: "schedules" }],
-            storageOptions: { includeRoots: [], presetRoots: [] },
-          },
-        ),
-      ),
-    ).rejects.toMatchObject({ statusCode: 404 });
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings validation uses bridge schema json", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const result = await runDispatch(
-      validateSettingsDocument(
-        {
-          documentId: {
-            moduleKey: "CmdScheduleManager",
-            rootKey: "schedules",
-            relativePath: "profiles/main",
-          },
-          rawContent: "{}",
-        },
-        {
-          invokeBridge: (operationKey) =>
-            Effect.succeed(
-              operationKey === "settings.module-catalog"
-                ? {
-                    modules: [
-                      {
-                        moduleKey: "CmdScheduleManager",
-                        defaultRootKey: "schedules",
-                        roots: [{ rootKey: "schedules", displayName: "schedules" }],
-                        storageOptions: { includeRoots: [], presetRoots: [] },
-                      },
-                    ],
-                  }
-                : {
-                    schemaJson:
-                      '{"type":"object","required":["Name"],"properties":{"Name":{"type":"string"}}}',
-                  },
-            ),
-        },
-      ),
-    );
-
-    expect(result.isValid).toBe(false);
-    expect(result.issues.some((issue) => issue.code === "required")).toBe(true);
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings create-only save refuses to overwrite an existing document", async () => {
-  const profile = withTempUserProfile();
-  try {
-    const request = {
-      documentId: {
-        moduleKey: "Global",
-        rootKey: "fragments",
-        relativePath: "create-only",
-      },
-      rawContent: '{"version":1}',
-      createOnly: true,
-    };
-    expect((await runDispatch(saveSettingsDocument(request))).writeApplied).toBe(true);
-
-    const conflict = await runDispatch(
-      saveSettingsDocument({ ...request, rawContent: '{"version":2}' }),
-    );
-    expect(conflict.writeApplied).toBe(false);
-    expect(conflict.conflictDetected).toBe(true);
-    expect(conflict.conflictMessage).toContain("already exists");
-  } finally {
-    profile.dispose();
-  }
-});
-
-test("settings validation merges registered semantic diagnostics after structural validation", async () => {
-  const result = await runDispatch(
-    validateSettingsDocument(
-      {
-        documentId: {
-          moduleKey: "FamilyFoundry",
-          rootKey: "models",
-          relativePath: "showcase",
-        },
-        rawContent: '{"family":{"name":"Showcase"}}',
-      },
-      {
-        invokeBridge: (operationKey) => {
-          if (operationKey === "settings.module-catalog")
-            return Effect.succeed({
-              modules: [
-                {
-                  moduleKey: "FamilyFoundry",
-                  defaultRootKey: "models",
-                  roots: [{ rootKey: "models", displayName: "Family Models" }],
-                  storageOptions: { includeRoots: [], presetRoots: [] },
-                },
-              ],
-            });
-          if (operationKey === "settings.schema")
-            return Effect.succeed({ schemaJson: '{"type":"object"}' });
-          return Effect.succeed({
-            isConfigured: true,
-            issues: [
-              {
-                instancePath: "$.solids.body.frame",
-                schemaPath: null,
-                code: "unsupported-frame",
-                severity: "error",
-                message: "Frame is not declared.",
-                suggestion: null,
-              },
-            ],
-          });
-        },
-      },
-    ),
-  );
-
-  expect(result.isValid).toBe(false);
-  expect(result.issues).toContainEqual(
-    expect.objectContaining({
-      code: "unsupported-frame",
-      path: "$.solids.body.frame",
-    }),
-  );
-});
-
-test("settings workspaces calls internal module catalog without fake payload", async () => {
-  const seen: unknown[] = [];
-  const result = await runDispatch(
-    getSettingsWorkspaces({
-      bridge: { connected: true },
-      invokeBridge: (operationKey, payload) => {
-        seen.push({ operationKey, payload });
-        return Effect.succeed({ modules: [] });
-      },
-    }),
-  );
-
-  expect(seen).toEqual([{ operationKey: "settings.module-catalog", payload: undefined }]);
-  expect(result.workspaces.length).toBe(1);
-});
-
 test("aps auth defaults preserve C# token-store key shape", () => {
   const request = normalizeApsTokenRequest({});
   expect(request.flowKind).toBe("ThreeLeggedConfidential");
@@ -421,31 +122,27 @@ test("aps auth defaults preserve C# token-store key shape", () => {
   );
 });
 
-test("bridge pending mailbox rejects concurrent reservations", async () => {
-  const error = await Effect.runPromise(
+test("the request table routes each response to the request that carries its id", async () => {
+  const [first, second, stale] = await Effect.runPromise(
     Effect.gen(function* () {
-      const pending = yield* Ref.make<BridgePendingRefValue>(null);
-      const first = yield* Deferred.make<BridgeResponse, BridgeError>();
-      const second = yield* Deferred.make<BridgeResponse, BridgeError>();
-      yield* reserveBridgePending(pending, "first.operation", "request-1", first);
-      return yield* Effect.flip(
-        reserveBridgePending(pending, "second.operation", "request-2", second),
-      );
-    }),
-  );
-
-  expect(error).toBeInstanceOf(BridgeError);
-  expect(error.statusCode).toBe(423);
-  expect(error.message).toContain("first.operation");
-});
-
-test("bridge pending mailbox ignores mismatched response ids", async () => {
-  const completed = await Effect.runPromise(
-    Effect.gen(function* () {
-      const pending = yield* Ref.make<BridgePendingRefValue>(null);
+      const requests = yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map());
       const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
-      yield* reserveBridgePending(pending, "first.operation", "request-1", reply);
-      return yield* completeBridgePending(pending, {
+      const other = yield* Deferred.make<BridgeResponse, BridgeError>();
+      // Two live at once is a VALID state now: the FIFO gate keeps ordinary ops serial, and
+      // `op.cancel` is dispatched beside the op it names.
+      yield* trackBridgeRequest(requests, {
+        operationKey: "first.operation",
+        requestId: "request-1",
+        reply,
+        phase: "dispatched",
+      });
+      yield* trackBridgeRequest(requests, {
+        operationKey: "op.cancel",
+        requestId: "request-2",
+        reply: other,
+        phase: "dispatched",
+      });
+      const answer = (requestId: string) => ({
         errorMessage: null,
         metrics: {
           requestBytes: 0,
@@ -456,59 +153,79 @@ test("bridge pending mailbox ignores mismatched response ids", async () => {
         },
         ok: true,
         payloadJson: "{}",
-        requestId: "stale-request",
+        requestId,
       });
+      return [
+        yield* completeBridgeRequest(requests, answer("request-1")),
+        yield* completeBridgeRequest(requests, answer("request-2")),
+        yield* completeBridgeRequest(requests, answer("stale-request")),
+      ] as const;
     }),
   );
 
-  expect(completed).toBe(false);
+  expect([first, second, stale]).toEqual([true, true, false]);
 });
 
 test("bridge session summary maps Revit state snapshot fields", async () => {
-  const summary = await Effect.runPromise(
-    getBridgeSessionSummary({
-      connected: true,
-      processId: 123,
-      sessionId: "bridge-a",
-      state: {
-        activeDocumentCloudModelGuid: "model-guid",
-        activeDocumentCloudModelUrn: "model-urn",
-        activeDocumentCloudProjectGuid: "project-guid",
-        activeDocumentIsFamilyDocument: true,
-        activeDocumentIsModelInCloud: true,
-        activeDocumentIsWorkshared: true,
-        activeDocumentKey: "doc-key",
-        activeDocumentObservedAtUnixMs: 42,
-        activeDocumentPath: "C:/model.rvt",
-        activeDocumentTitle: "Model",
-        availableModules: [
-          {
-            activeDocumentKind: "Any",
-            defaultRootKey: "default",
-            moduleKey: "module-a",
-            scope: "Session",
-          },
-        ],
-        hasActiveDocument: true,
-        openDocumentCount: 2,
-        revitVersion: "2026",
-        runtimeAssemblies: [
-          {
-            informationalVersion: "1.2.3",
-            location: "C:/Pe.dll",
-            moduleVersionId: "mvid",
-            name: "Pe.Test",
-            version: "1.2.3.0",
-          },
-        ],
-        runtimeFramework: ".NET 8",
-        sharedParametersFilename: "C:/shared.txt",
-      },
-    }),
-  );
+  const bridge = {
+    connected: true,
+    processId: 123,
+    sessionId: "bridge-a",
+    state: {
+      activeDocumentCloudModelGuid: "model-guid",
+      activeDocumentCloudModelUrn: "model-urn",
+      activeDocumentCloudProjectGuid: "project-guid",
+      activeDocumentIsFamilyDocument: true,
+      activeDocumentIsModelInCloud: true,
+      activeDocumentIsWorkshared: true,
+      activeDocumentKey: "doc-key",
+      activeDocumentObservedAtUnixMs: 42,
+      activeDocumentPath: "C:/model.rvt",
+      activeDocumentTitle: "Model",
+      hasActiveDocument: true,
+      openDocuments: [
+        {
+          openId: "project",
+          title: "Model",
+          address: "C:/model.rvt",
+          isFamilyDocument: false,
+          isActive: true,
+        },
+        {
+          openId: "family",
+          title: "Unsaved family",
+          address: null,
+          isFamilyDocument: true,
+          isActive: false,
+        },
+        {
+          openId: "cloud",
+          title: "Cloud",
+          address: "f2933e8d-9e16-4bf4-b9ca-484f461e4563",
+          isFamilyDocument: false,
+          isActive: false,
+        },
+      ],
+      revitVersion: "2026",
+      runtimeAssemblies: [
+        {
+          informationalVersion: "1.2.3",
+          location: "C:/Pe.dll",
+          moduleVersionId: "mvid",
+          name: "Pe.Test",
+          version: "1.2.3.0",
+        },
+      ],
+      runtimeFramework: ".NET 8",
+      sharedParametersFilename: "C:/shared.txt",
+    },
+  } satisfies BridgeSessionView;
+  const summary = await Effect.runPromise(getBridgeSessionSummary(bridge));
+  const inventory = await Effect.runPromise(listBridgeSessions(Effect.succeed([bridge])));
+  expect(inventory.sessions[0]?.openDocuments).toEqual(bridge.state.openDocuments);
+  expect(inventory.sessions[0]?.openDocumentCount).toBe(3);
 
   expect(summary.activeDocument?.key).toBe("doc-key");
-  expect(summary.availableModules).toHaveLength(1);
   expect(summary.runtimeAssemblies).toHaveLength(1);
   expect(summary.workbenchResources.parameters.sharedParametersFile).toMatchObject({
     exists: true,
@@ -555,9 +272,8 @@ test("bridge registration rejects mismatched contract versions", () => {
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",
@@ -583,9 +299,8 @@ test("bridge registration accepts current contract version without session id", 
       activeDocumentObservedAtUnixMs: 0,
       activeDocumentPath: null,
       activeDocumentTitle: null,
-      availableModules: [],
       hasActiveDocument: false,
-      openDocumentCount: 0,
+      openDocuments: [],
       revitVersion: "2025",
       runtimeAssemblies: [],
       runtimeFramework: ".NET",
@@ -611,8 +326,4 @@ function withTempUserProfile() {
       rmSync(path, { recursive: true, force: true });
     },
   };
-}
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
 }

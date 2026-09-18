@@ -33,14 +33,6 @@ public static class HostEndpoint {
         ?? TryReadServiceFileBaseUrl()
         ?? DefaultHostBaseUrl;
 
-    /// <summary>
-    ///     Process-local service-name pin set by the lane-aware launcher (TsHostLauncher) so the
-    ///     platform-neutral callers here (bridge, /call client) read THIS runtime's service file.
-    ///     Deliberately a static, NOT an environment variable: env vars leak to child processes
-    ///     (e.g. an installed-lane session spawned from a dev session) and would pin them to the wrong
-    ///     worktree. Only the stable NAME is pinned — the port is re-read from the service file on
-    ///     every resolve, so a host takeover/restart can never leave a stale address behind.
-    /// </summary>
     public static string? ConfiguredServiceName { get; set; }
 
     /// <param name="lane">The SDK lane string: <c>"installed"</c> or <c>"dev"</c>.</param>
@@ -52,8 +44,6 @@ public static class HostEndpoint {
         return SourceServiceName(sourceRoot!);
     }
 
-    /// <summary>Worktree-scoped dev-host name — the hash is SDK-owned (vendored
-    /// <see cref="PeServiceDiscovery"/>, byte-stable with the TS client via contract vectors).</summary>
     public static string SourceServiceName(string sourceRoot) =>
         PeServiceDiscovery.SourceServiceName(ServiceName, sourceRoot);
 

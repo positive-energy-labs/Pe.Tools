@@ -7,15 +7,15 @@ using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.HostContracts;
-using Pe.Revit.Scripting.Transport;
 using Pe.Shared.HostContracts.Transport;
-using Pe.Shared.Product;
+using Pe.Revit.Scripting.Transport;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
 using Pe.Revit.Operations;
 using Pe.Revit.Tasks;
+using Pe.Revit.Global.Services.Document;
 using Serilog;
 using System.Net.WebSockets;
 using System.Reflection;
@@ -34,6 +34,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly SettingsRuntimeRegistry _moduleRegistry;
     private readonly BridgeTransportSession _transportSession;
     private readonly ClientWebSocket _webSocket;
+    private readonly BridgeRequestPump _pump;
     private readonly Task _readLoop;
 
     private readonly JsonSerializerSettings _serializerSettings = new() {
@@ -77,17 +78,6 @@ internal sealed class BridgeAgent : IDisposable {
             () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)
         );
-        var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
-        var boundOps = OpRegistry.Bind(
-            requestService,
-            this._revitDataRequestService,
-            this._scriptingMessageHandler
-        );
-        Log.Information(
-            "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
-            discoveredOps,
-            boundOps
-        );
         this._webSocket = new ClientWebSocket();
         var connectStopwatch = Stopwatch.StartNew();
         Log.Information("Host bridge agent connecting WebSocket: BridgeUri={BridgeUri}", bridgeOptions.BridgeUri);
@@ -100,6 +90,28 @@ internal sealed class BridgeAgent : IDisposable {
         this._transportSession = new BridgeTransportSession(
             this._webSocket,
             this._serializerSettings
+        );
+        this._pump = new BridgeRequestPump(
+            this._transportSession,
+            this.HandleRequestAsync,
+            (message, exception) => {
+                if (exception == null)
+                    Log.Debug(message);
+                else
+                    Log.Error(exception, message);
+            }
+        );
+        var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
+        var boundOps = OpRegistry.Bind(
+            requestService,
+            this._revitDataRequestService,
+            this._scriptingMessageHandler,
+            this._pump
+        );
+        Log.Information(
+            "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
+            discoveredOps,
+            boundOps
         );
         this._documentNotifier = new BridgeDocumentNotifier(
             Global.Services.Document.DocumentTrackerAccessor.Current
@@ -197,19 +209,7 @@ internal sealed class BridgeAgent : IDisposable {
     private async Task RunReadLoopAsync(CancellationToken cancellationToken) {
         Log.Information("Host bridge read loop entered.");
         try {
-            while (!cancellationToken.IsCancellationRequested && this._transportSession.IsConnected) {
-                var frame = await this._transportSession.ReadAsync(cancellationToken).ConfigureAwait(false);
-                if (frame == null)
-                    break;
-                if (frame?.Request == null || frame.Kind != BridgeFrameKind.Request) {
-                    Log.Debug("Host bridge read loop ignored frame: Kind={Kind}", frame?.Kind);
-                    continue;
-                }
-
-                Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
-                    frame.Request.OperationKey, frame.Request.RequestId);
-                await this.HandleRequestAsync(frame.Request, cancellationToken).ConfigureAwait(false);
-            }
+            await this._pump.RunAsync(cancellationToken).ConfigureAwait(false);
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
             // Expected on shutdown.
         } catch (ObjectDisposedException) when (this._disposed || cancellationToken.IsCancellationRequested) {
@@ -228,6 +228,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
+        Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
+            request.OperationKey, request.RequestId);
         var startedAt = Stopwatch.GetTimestamp();
         var requestBytes = Encoding.UTF8.GetByteCount(request.PayloadJson);
         // Begin before dispatch and before any response frame: the receipt is what makes this
@@ -246,11 +248,14 @@ internal sealed class BridgeAgent : IDisposable {
 
             Task<object?> responseTask;
             if (op.Thread == OpThread.Revit) {
+                // The op gets the request's own token, never context.Cancellation: the queue disposes
+                // that per-run link when the delegate returns, and an async op (scripting.execute)
+                // returns at its first await, so op.cancel would fire a token nothing links anymore.
                 var run = await this._revitTaskQueue.RunForResult(
                     context => op.ExecuteAsync(
                         request.PayloadJson,
-                        ResolveDocument(op, context.Cancellation),
-                        context.Cancellation),
+                        ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
+                        cancellationToken),
                     new RevitRunOptions { Label = op.Key },
                     cancellationToken
                 ).ConfigureAwait(false);
@@ -302,7 +307,8 @@ internal sealed class BridgeAgent : IDisposable {
                         serializationMs,
                         requestBytes,
                         responseBytes
-                    )
+                    ),
+                    op.Definition.Needs == OpNeeds.Nothing ? null : request.OpenDocumentId
                 )
             );
 
@@ -326,6 +332,19 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
+        } catch (OperationCanceledException) {
+            // The pump owns the token, so the pump answers the cancelled frame. Here we only
+            // stamp the verdict `op result` reads, then let it through.
+            var message = $"Operation '{request.OperationKey}' was cancelled.";
+            Log.Information(
+                "Host bridge request cancelled: OperationKey={OperationKey}, RequestId={RequestId}",
+                request.OperationKey,
+                request.RequestId
+            );
+            CompleteOpReceipt(receipt, "cancelled", JsonConvert.SerializeObject(
+                new { error = message, statusCode = BridgeOperationExceptions.CancelledStatusCode },
+                this._serializerSettings));
+            throw;
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -433,7 +452,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private static (string Verdict, int StatusCode) RevitTaskOutcomeResponse(RevitTaskOutcome outcome) => outcome switch {
-        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively => ("cancelled", 499),
+        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively
+            => ("cancelled", BridgeOperationExceptions.CancelledStatusCode),
         RevitTaskOutcome.TimedOut => ("timed-out", 504),
         RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423),
         RevitTaskOutcome.RefusedQueueUnresponsive => ("rejected", 423),
@@ -441,12 +461,14 @@ internal sealed class BridgeAgent : IDisposable {
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
     };
 
-    private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
+    private static object? ResolveDocument(Op op, string? openDocumentId, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         if (op.Definition.Needs == OpNeeds.Nothing)
             return null;
 
-        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        var tracked = openDocumentId == null ? null : DocumentTrackerAccessor.Current?.FindOpenId(openDocumentId);
+        var document = tracked?.Resolve()
+            ?? throw BridgeOperationExceptions.Conflict("The selected document is no longer open. Select a document and retry.");
         OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
         return op.Definition.Needs switch {
             OpNeeds.Document => new RevitDocument(document!),
@@ -515,7 +537,7 @@ internal sealed class BridgeAgent : IDisposable {
         }
     }
 
-    private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload) {
+    private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload, BridgeStateSnapshot snapshot) {
         // Cache eviction happens element-granularly in BridgeDocumentNotifier.OnDocumentChanged
         // (DocShadow.HandleChange); this path only notifies the TS host.
         if (!this.IsConnected)
@@ -529,8 +551,12 @@ internal sealed class BridgeAgent : IDisposable {
             BridgeFrameKind.Event,
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
         );
+        // Publish the API-thread snapshot before invalidation can trigger a host read.
+        await this.WriteFrameAsync(new BridgeFrame(
+            BridgeFrameKind.StateSync,
+            StateSync: new BridgeStateSync(snapshot)
+        ), this._shutdown.Token).ConfigureAwait(false);
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
-        await this.SendStateSyncAsync(this._shutdown.Token).ConfigureAwait(false);
     }
 
     private void SendRegistrationAndAwaitAck() {
@@ -587,17 +613,25 @@ internal sealed class BridgeAgent : IDisposable {
 
     private BridgeStateSnapshot BuildStateSnapshot() {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
-        var availableModules = this._moduleRegistry.GetModules()
-            .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
-            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
-            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-            .Select(SettingsModuleAvailability.CreateHostModuleDescriptor)
+        var tracker = DocumentTrackerAccessor.Current
+            ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        // Title and address come from the live document, never the tracker's event-time snapshot:
+        // SaveAs changes the path, and an EditFamily document is admitted before it has a title.
+        var documents = tracker.Open.Where(tracked => !tracked.IsLinked)
+            .Select(tracked => {
+                var document = tracked.Resolve();
+                return new BridgeDocumentSnapshot(
+                    tracked.OpenId(),
+                    document.Title,
+                    document.GetCloudModelGuid() ?? document.GetDocumentPath(),
+                    document.IsFamilyDocument,
+                    activeDocument != null && tracked.Matches(activeDocument));
+            })
             .ToList();
         var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(
-            "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
-            activeDocument?.Title,
-            availableModules.Count
+            "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}",
+            activeDocument?.Title
         );
         return new BridgeStateSnapshot(
             RevitUiSession.CurrentUIApplication.Application.VersionNumber,
@@ -614,9 +648,8 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument == null ? null : activeDocument.GetCloudModelUrn(),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             RevitUiSession.CurrentUIApplication.Application.SharedParametersFilename,
-            RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
-            runtimeAssemblies,
-            availableModules
+            documents,
+            runtimeAssemblies
         );
     }
 
@@ -686,58 +719,6 @@ internal sealed class BridgeAgent : IDisposable {
     }
 }
 
-internal static class SettingsModuleAvailability {
-    public static bool IsBridgeDiscoverable(StructuralSettingsModuleDescriptor module) =>
-        module.HostScope != SettingsModuleHostScope.Host;
-
-    public static bool IsAvailableForDocument(
-        StructuralSettingsModuleDescriptor module,
-        Autodesk.Revit.DB.Document? activeDocument
-    ) {
-        if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
-            return true;
-
-        if (activeDocument == null)
-            return false;
-
-        return module.ActiveDocumentKind switch {
-            SettingsModuleActiveDocumentKind.ProjectOnly => !activeDocument.IsFamilyDocument,
-            SettingsModuleActiveDocumentKind.FamilyOnly => activeDocument.IsFamilyDocument,
-            _ => true
-        };
-    }
-
-    public static HostModuleDescriptor CreateHostModuleDescriptor(StructuralSettingsModuleDescriptor module) =>
-        new(
-            module.ModuleKey,
-            module.DefaultRootKey,
-            module.HostScope switch {
-                SettingsModuleHostScope.Host => HostModuleScope.Host,
-                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
-                _ => HostModuleScope.Session
-            },
-            module.ActiveDocumentKind switch {
-                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
-                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
-                _ => HostModuleActiveDocumentKind.Any
-            }
-        );
-
-    public static SettingsModuleDescriptor CreateSettingsModuleDescriptor(StructuralSettingsModuleDescriptor module) {
-        var hostDescriptor = CreateHostModuleDescriptor(module);
-        return new SettingsModuleDescriptor(
-            module.ModuleKey,
-            module.DefaultRootKey,
-            module.Roots.Select(root => new SettingsRootDescriptor(root.RootKey, root.DisplayName)).ToList(),
-            new SettingsModuleStorageOptionsContract(
-                [.. module.StorageOptions.IncludeRoots],
-                [.. module.StorageOptions.PresetRoots]
-            ),
-            hostDescriptor.Scope,
-            hostDescriptor.ActiveDocumentKind
-        );
-    }
-}
 
 internal sealed record BridgeConnectionOptions(
     Uri BridgeUri,

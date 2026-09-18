@@ -1,5 +1,4 @@
-using Pe.Shared.HostContracts.Bridge;
-
+﻿using Pe.Shared.HostContracts.Bridge;
 using Serilog;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -95,9 +94,6 @@ internal sealed record BridgeSessionIdentity(
     /// Descriptor-less session: report installed metadata from the runtime descriptor the build/
     /// installer wrote beside the loaded payload (Pe.App.runtime.json).
     /// </summary>
-    /// <summary>The descriptor the build/installer writes beside the loaded Revit payload.</summary>
-    private const string RuntimeDescriptorFileName = "Pe.App.runtime.json";
-
     private static BridgeSessionIdentity FromInstalledRuntimeContext(
         long processStartUtcUnixMs,
         string? payloadDirectory
@@ -105,7 +101,10 @@ internal sealed record BridgeSessionIdentity(
         if (payloadDirectory is null)
             return new BridgeSessionIdentity(processStartUtcUnixMs, null, InstalledLane, null, null);
 
-        var runtimeDescriptorPath = Path.Combine(payloadDirectory, RuntimeDescriptorFileName);
+        var runtimeDescriptorPath = Path.Combine(
+            payloadDirectory,
+            "Pe.App.runtime.json"
+        );
         try {
             if (File.Exists(runtimeDescriptorPath)) {
                 var descriptor = BridgeSessionDescriptor.TryParse(File.ReadAllText(runtimeDescriptorPath));

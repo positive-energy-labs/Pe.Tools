@@ -31,6 +31,7 @@ public record RuntimeStatus(
 public static class HostRuntime {
     private static readonly object Sync = new();
     private static BridgeAgent? _agent;
+    internal static string? SessionId => _agent?.SessionId;
     private static BridgeConnectionOptions _connectionOptions = BridgeConnectionOptions.FromEnvironment();
     private static SettingsRuntimeRegistry? _moduleRegistry;
     private static RevitTaskQueue? _revitTaskQueue;
@@ -81,7 +82,13 @@ public static class HostRuntime {
             // Re-resolve on every connect: the lane-aware launcher pins the service name and the
             // service file's port can change under takeover/restart. The Initialize-time snapshot
             // predates both, so reusing it dialed the installed host from dev sessions.
-            connectionOptions = _connectionOptions = BridgeConnectionOptions.FromEnvironment();
+            try {
+                connectionOptions = _connectionOptions = BridgeConnectionOptions.FromEnvironment();
+            } catch (Exception ex) {
+                _lastError = ex.Message;
+                Log.Warning(ex, "Host runtime could not resolve its configured host service.");
+                return new RuntimeActionResult(false, ex.Message);
+            }
             previousAgent = _agent;
             _agent = null;
         }
