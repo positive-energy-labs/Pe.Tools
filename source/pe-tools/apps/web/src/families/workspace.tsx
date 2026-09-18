@@ -16,6 +16,7 @@ import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import {
   familiesLockOf,
+  isYesNo,
   useFamiliesColumns,
   type ParamColumn,
   type TypeRow,
@@ -144,6 +145,7 @@ function useFamiliesWorkspaceModel(
             isBuiltIn: param.definition.identity.kind === "BuiltInParameter",
             isProjectOnly: param.kind === "ProjectParameter",
             familyCount: 0,
+            yesNo: isYesNo(param.definition.dataTypeId),
             seen: new Set<string>(),
           };
           params.set(key, entry);
