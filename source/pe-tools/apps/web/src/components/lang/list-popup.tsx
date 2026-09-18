@@ -9,6 +9,7 @@
  */
 import { useContext, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
+import { ChevronDown } from "lucide-react";
 
 import { CellHost } from "#/components/lang/cell";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
@@ -65,10 +66,11 @@ export function List<T>(props: ListProps<T>) {
   const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const total = props.items?.length ?? Infinity;
+  // A list that creates always takes typing: the typed text is the new value (R9).
   const searchable =
-    (props.filter ?? "none") !== "none" &&
     props.owner === undefined &&
-    total > (props.searchAbove ?? 0);
+    (props.onCreate !== undefined ||
+      ((props.filter ?? "none") !== "none" && total > (props.searchAbove ?? 0)));
   const collection = useCollection<T>({
     ...props,
     refusalOf: (item) => props.row(item).refusal,
@@ -95,7 +97,12 @@ export function List<T>(props: ListProps<T>) {
     return <Row key={row.key} {...collection.rowProps(row.key)} {...slots} />;
   };
   return (
-    <div className="flex min-h-0 flex-col" data-list="">
+    <div
+      className="flex min-h-0 flex-col"
+      data-list=""
+      // An input-owned list never takes focus from its owner: a click picks, the caret stays (R14).
+      onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
+    >
       {props.levels && collection.path.length ? (
         <div className="hairline-b flex flex-wrap items-baseline gap-1 px-2 py-1 t-small">
           <button type="button" className="text-ink-2" onClick={() => collection.backTo(0)}>
@@ -146,10 +153,16 @@ export function List<T>(props: ListProps<T>) {
   );
 }
 
-type PopupFrameProps = { children: ReactNode; anchor?: Element | null; label: string };
+type PopupFrameProps = {
+  children: ReactNode;
+  anchor?: Element | null;
+  label: string;
+  /** An input-owned popup (R14) never takes focus: the owner keeps the caret and the keys. */
+  owned?: boolean;
+};
 
 /** The one popup surface: positioned by Base UI, drawn by the kit. */
-function PopupFrame({ children, anchor, label }: PopupFrameProps) {
+function PopupFrame({ children, anchor, label, owned }: PopupFrameProps) {
   return (
     <Popover.Portal>
       <Popover.Positioner
@@ -161,6 +174,8 @@ function PopupFrame({ children, anchor, label }: PopupFrameProps) {
       >
         <Popover.Popup
           aria-label={label}
+          initialFocus={owned ? false : undefined}
+          finalFocus={owned ? false : undefined}
           data-list-popup=""
           data-surface="artifact"
           className="block min-w-48 max-w-(--available-width) overflow-hidden rounded-lg py-1 text-ink ring-1 ring-line outline-none"
@@ -172,18 +187,41 @@ function PopupFrame({ children, anchor, label }: PopupFrameProps) {
   );
 }
 
+/**
+ * The trigger's shapes, one recipe (R19: face by role, not by call site). `inline` is a quiet word
+ * in running chrome (a chip, a head), `fill` stretches to its cell or column head (mono, item
+ * height, chevron on the right edge), `field` is a form field at control height.
+ */
+const TRIGGER_FACE = {
+  inline: "inline-flex min-w-0 cursor-pointer items-center gap-1 t-small",
+  fill: "flex h-(--item-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 px-1 t-small face-mono",
+  field:
+    "flex min-h-(--control-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 rounded-md border border-line bg-line/20 px-2 t-small dark:bg-line/30",
+} as const;
+
+export type TriggerFace = keyof typeof TRIGGER_FACE;
+
 /** A popup list opened by a trigger or anchored to a caret the caller owns. */
 export function ListPopup<T>({
   anchor,
   trigger,
+  face = "inline",
+  triggerLabel,
+  title,
+  disabled,
   open: controlled,
   onOpenChange,
   caret,
   ...list
 }: ListProps<T> & {
   anchor: "trigger" | "caret";
-  /** anchor=trigger: the button's face. */
+  /** anchor=trigger: the button's face (the chevron is the trigger's own). */
   trigger?: ReactNode;
+  face?: TriggerFace;
+  /** The trigger's accessible name, when its face is a value. */
+  triggerLabel?: string;
+  title?: string;
+  disabled?: boolean;
   /** anchor=caret: the caller opens it and points at the caret. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -198,12 +236,24 @@ export function ListPopup<T>({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       {anchor === "trigger" ? (
-        <Popover.Trigger className="inline-flex cursor-pointer items-center gap-1 t-small">
-          {trigger}
+        <Popover.Trigger
+          className={TRIGGER_FACE[face]}
+          aria-haspopup="listbox"
+          aria-label={triggerLabel}
+          title={title}
+          disabled={disabled}
+          data-list-trigger={face}
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{trigger}</span>
+          <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
         </Popover.Trigger>
       ) : null}
       {open ? (
-        <PopupFrame anchor={anchor === "caret" ? caret : undefined} label={list["aria-label"]}>
+        <PopupFrame
+          anchor={anchor === "caret" ? caret : undefined}
+          label={list["aria-label"]}
+          owned={list.owner !== undefined}
+        >
           <List
             {...list}
             onPick={(item, path) => {
@@ -218,6 +268,90 @@ export function ListPopup<T>({
   );
 }
 
+/** A multi trigger's face: the picked values as chips at item density, or what none means (R6). */
+export function ListChips({ labels, none }: { labels: readonly ReactNode[]; none: ReactNode }) {
+  if (!labels.length) return <span className="truncate text-ink-2">{none}</span>;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1 py-0.5">
+      {labels.map((label, index) => (
+        <span key={index} className="rounded-sm bg-ink-2/10 px-1 whitespace-nowrap">
+          {label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * FREE TEXT WITH SUGGESTIONS (R9, replaces `<datalist>`). The input owns the value, the query and
+ * the keys (R14); the list only suggests, so Enter keeps what was typed unless a row is cursored.
+ */
+export function ListInput({
+  id,
+  value,
+  onChange,
+  suggestions,
+  "aria-label": label,
+  placeholder,
+  disabled,
+  mono,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  /** A suggestion's value is what a pick writes; its label, when it differs, reads beside it. */
+  suggestions: readonly { value: string; label?: string }[];
+  "aria-label": string;
+  placeholder?: string;
+  disabled?: boolean;
+  mono?: boolean;
+}) {
+  const [input, setInput] = useState<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <input
+        ref={setInput}
+        id={id}
+        aria-label={label}
+        placeholder={placeholder}
+        disabled={disabled}
+        value={value}
+        autoComplete="off"
+        className={`h-(--control-h) w-full min-w-0 rounded-md border border-line bg-line/20 px-2 t-small outline-none placeholder:text-ink-2 focus-visible:border-line-2 dark:bg-line/30${mono ? " face-mono" : ""}`}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+        }}
+      />
+      <ListPopup<{ value: string; label?: string }>
+        anchor="caret"
+        caret={input}
+        owner={input}
+        open={open && suggestions.length > 0}
+        onOpenChange={setOpen}
+        query={value}
+        autoCursor={false}
+        aria-label={`${label} suggestions`}
+        region={label}
+        items={suggestions}
+        keyOf={(s) => s.value}
+        labelOf={(s) => s.value}
+        filter="substring"
+        empty="no suggestions"
+        maxHeight="12rem"
+        onPick={(s) => onChange(s.value)}
+        row={(s) => ({
+          label: mono ? <span className="face-mono">{s.value}</span> : s.value,
+          meta: s.label && s.label !== s.value ? s.label : undefined,
+        })}
+      />
+    </>
+  );
+}
+
 /**
  * THE IN-CELL SELECT (R13). At rest it is one button in the cell and nothing else: no popover
  * root, no portal, no collection. The table's Enter/F2 edit opens it (it declares itself the
@@ -227,8 +361,16 @@ export function ListPopup<T>({
 export function CellListSelect<T>({
   value,
   display,
+  invalid,
+  title,
   ...list
-}: Omit<ListProps<T>, "onEscape" | "onTab"> & { value: string; display?: ReactNode }) {
+}: Omit<ListProps<T>, "onEscape" | "onTab"> & {
+  value: string;
+  display?: ReactNode;
+  /** The cell's refusal: the one alarm, spent as an ink + wash mix on the resting face. */
+  invalid?: boolean;
+  title?: string;
+}) {
   const [open, setOpen] = useState(false);
   // A printable key on the td opens the list already filtered by it (R13).
   const [initial, setInitial] = useState("");
@@ -245,6 +387,9 @@ export function CellListSelect<T>({
         tabIndex={-1}
         data-cell-editor=""
         data-cell-query=""
+        title={title}
+        data-tone={invalid ? "alarm" : undefined}
+        data-wash={invalid ? "" : undefined}
         className="flex h-(--item-h) w-full min-w-0 items-center justify-between gap-1 px-1 face-mono"
         onClick={(event) => {
           setInitial(event.currentTarget.dataset.query ?? "");

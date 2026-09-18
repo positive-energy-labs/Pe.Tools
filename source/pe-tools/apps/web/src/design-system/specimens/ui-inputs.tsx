@@ -1,18 +1,5 @@
-import { useState } from "react";
 import { Search } from "lucide-react";
 
-import { Press } from "#/components/lang/press";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  comboboxRecipe,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
 import {
   Command,
   CommandEmpty,
@@ -36,17 +23,9 @@ import { Textarea, textareaRecipe } from "#/components/lang/textarea";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid } from "./recipe-grid";
 
-type Option = (typeof CATEGORY_OPTIONS)[number];
-
 export function UiInputSpecimens() {
   return (
     <>
-      <RecipeGrid
-        name="Combobox"
-        importPath="#/components/lang/combobox"
-        recipe={comboboxRecipe}
-        render={() => <ComboboxSpecimen />}
-      />
       <RecipeGrid
         name="Command"
         importPath="#/components/lang/command"
@@ -125,35 +104,5 @@ export function UiInputSpecimens() {
         )}
       />
     </>
-  );
-}
-
-function ComboboxSpecimen() {
-  const [picked, setPicked] = useState<Option | null>(null);
-  const anchor = useComboboxAnchor();
-  return (
-    <Combobox
-      items={CATEGORY_OPTIONS}
-      value={picked}
-      onValueChange={(option: Option | null) => setPicked(option)}
-      itemToStringLabel={(option: Option) => option.label}
-    >
-      <div ref={anchor} className="inline-flex w-40 [&>button]:w-full">
-        <ComboboxTrigger render={<Press tone="quiet" size="value" state="selected" />}>
-          {picked?.label ?? "category"}
-        </ComboboxTrigger>
-      </div>
-      <ComboboxContent anchor={anchor}>
-        <ComboboxInput placeholder="search" />
-        <ComboboxEmpty>No matches</ComboboxEmpty>
-        <ComboboxList>
-          {(option: Option) => (
-            <ComboboxItem key={option.value} value={option}>
-              {option.label}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
   );
 }

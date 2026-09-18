@@ -1,13 +1,6 @@
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -30,7 +23,6 @@ const PLACEMENT_OPTIONS = (Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacemen
 );
 
 export function FamiliesFilterBand() {
-  const placementAnchor = useComboboxAnchor();
   const {
     fixture,
     placement,
@@ -54,33 +46,23 @@ export function FamiliesFilterBand() {
           </span>
         </SectionLabel>
         <div className="face-mono w-32">
-          <Combobox
+          <ListPopup<(typeof PLACEMENT_OPTIONS)[number]>
+            anchor="trigger"
+            face="fill"
+            triggerLabel="placement filter"
+            title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
+            trigger={PLACEMENT_LABELS[placement]}
+            aria-label="placement"
+            region="placement filter"
             items={PLACEMENT_OPTIONS}
-            value={PLACEMENT_OPTIONS.find((option) => option.value === placement) ?? null}
-            onValueChange={(option: (typeof PLACEMENT_OPTIONS)[number] | null) =>
-              option && setPlacement(option.value)
-            }
-            itemToStringLabel={(option: (typeof PLACEMENT_OPTIONS)[number]) => option.label}
-          >
-            <div ref={placementAnchor} className="flex">
-              <ComboboxTrigger
-                fill
-                aria-label="placement filter"
-                title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-              >
-                {PLACEMENT_LABELS[placement]}
-              </ComboboxTrigger>
-            </div>
-            <ComboboxContent anchor={placementAnchor}>
-              <ComboboxList>
-                {(option: (typeof PLACEMENT_OPTIONS)[number]) => (
-                  <ComboboxItem key={option.value} value={option} title={option.note}>
-                    {option.label}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
+            keyOf={(option) => option.value}
+            labelOf={(option) => option.label}
+            select="single"
+            selected={[placement]}
+            empty="no placements"
+            onPick={(option) => setPlacement(option.value)}
+            row={(option) => ({ label: option.label, sub: option.note, lines: 2 })}
+          />
         </div>
         {categoryFeed.state === "loading" ? (
           <div className="min-w-0 flex-1">

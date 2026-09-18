@@ -40,9 +40,9 @@
     }
   },
   "opacityDim": {
-    "total": 17,
+    "total": 15,
     "byArea": {
-      "components": 14,
+      "components": 12,
       "family": 2,
       "route": 1
     }

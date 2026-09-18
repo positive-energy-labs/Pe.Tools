@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 import type { ParameterReference } from "@pe/agent-contracts";
 import { type FieldOption } from "#/host/field-options";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 
 export function findParameterOption(items: FieldOption[], reference: ParameterReference) {
   return items.find(
@@ -53,23 +47,21 @@ export function Enum<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <Combobox
-      items={[...options]}
-      value={value}
+    <ListPopup<T>
+      anchor="trigger"
+      face="fill"
       disabled={disabled}
-      onValueChange={(option: T | null) => option && onChange(option)}
-      itemToStringLabel={(option: T) => option}
-    >
-      <ComboboxTrigger fill>{value}</ComboboxTrigger>
-      <ComboboxContent>
-        <ComboboxList>
-          {(option: T) => (
-            <ComboboxItem key={option} value={option}>
-              {option}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+      trigger={value}
+      aria-label="options"
+      region="profile field"
+      items={options}
+      keyOf={(option) => option}
+      labelOf={(option) => option}
+      select="single"
+      selected={[value]}
+      empty="no options"
+      onPick={onChange}
+      row={(option) => ({ label: option })}
+    />
   );
 }

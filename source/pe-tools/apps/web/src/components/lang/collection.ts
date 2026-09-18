@@ -49,6 +49,8 @@ export interface CollectionOptions<T> {
   onTab?: (back: boolean) => boolean;
   /** A query owned outside the list (the composer's text after "/", R14). */
   query?: string;
+  /** False, typing never puts the cursor on the top hit: Enter keeps free text (R9). */
+  autoCursor?: boolean;
   /** The query the list opens with (a cell opened by a printable key, R13). */
   initialQuery?: string;
   /** The hotkey registry region these keys belong to (a pane id or a widget name). */
@@ -183,7 +185,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
 
   const pickable = visible.filter((row) => row.kind !== "head");
   const cursor =
-    pickable.find((row) => row.key === cursorKey) ?? (query.trim() ? pickable[0] : undefined);
+    pickable.find((row) => row.key === cursorKey) ??
+    (query.trim() && options.autoCursor !== false ? pickable[0] : undefined);
   const status: CollectionStatus =
     remote === "pending"
       ? "pending"
@@ -242,7 +245,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   };
 
   const escape = () => {
-    if (query) return setQuery("");
+    // A query owned outside the list (R14) is not the list's to clear: Escape closes.
+    if (query && options.query === undefined) return setQuery("");
     if (levels && path.length) return setPath(path.slice(0, -1));
     options.onEscape?.();
   };

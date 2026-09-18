@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * A popover CellSelect inside MasterTable must not steal the table's keys: Enter opens it from the
+ * A CellListSelect inside MasterTable must not steal the table's keys: Enter opens it from the
  * focused td, Escape closes the popover first and then leaves focus on the td, Tab moves to the
  * next cell, and a proposal cell's a / d / u still fire from its own td.
  */
@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { StateCell, type CellTransition } from "#/components/lang/cell";
-import { CellSelect } from "#/components/master-table/cells";
+import { CellListSelect } from "#/components/lang/list-popup";
 import { Table } from "#/components/master-table/table";
 
 afterEach(cleanup);
@@ -29,7 +29,19 @@ function mount() {
         {
           key: "kind",
           label: "kind",
-          cell: () => <CellSelect value="Text" onChange={onChange} options={OPTIONS} />,
+          cell: () => (
+            <CellListSelect
+              aria-label="kind"
+              region="cells"
+              value="Text"
+              items={OPTIONS}
+              keyOf={(o) => o.value}
+              labelOf={(o) => o.label}
+              empty="no kinds"
+              onPick={(o) => onChange(o.value)}
+              row={(o) => ({ label: o.label })}
+            />
+          ),
         },
         {
           key: "value",

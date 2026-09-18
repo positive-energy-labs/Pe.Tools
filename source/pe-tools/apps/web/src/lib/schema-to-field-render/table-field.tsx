@@ -1,5 +1,6 @@
 import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
+import { ListInput } from "#/components/lang/list-popup";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import {
   FieldChangeBadge,
@@ -113,22 +114,32 @@ function TableCellField({
   path,
   value,
   onChange,
-  list,
+  suggestions,
 }: {
   path: string;
   value: unknown;
   onChange: (nextValue: string) => void;
-  list?: string;
+  /** Free text with suggestions (the primary column's options). */
+  suggestions?: readonly string[];
 }) {
   const field = useSettingsField(path);
   return (
     <div className="space-y-1">
-      <Input
-        face="mono"
-        list={list}
-        value={primitiveInputValue(field.value ?? value)}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
+      {suggestions ? (
+        <ListInput
+          mono
+          aria-label={path}
+          value={primitiveInputValue(field.value ?? value)}
+          onChange={onChange}
+          suggestions={suggestions.map((suggestion) => ({ value: suggestion }))}
+        />
+      ) : (
+        <Input
+          face="mono"
+          value={primitiveInputValue(field.value ?? value)}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <FieldChangeBadge path={path} compact />
       </div>
@@ -161,7 +172,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
   const optionValues = primaryColumnOptions.items
     .map((item) => item.value.trim())
     .filter((value) => value.length > 0);
-  const datalistId = `${path.replaceAll(".", "-")}-table-primary-column-options`;
   const description = effectiveNodeRef.description();
   const defaultValue = effectiveNodeRef.hasExplicitDefault()
     ? effectiveNodeRef.explicitDefault()
@@ -285,9 +295,9 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                         <TableCellField
                           path={cellPath}
                           value={row[columnKey]}
-                          list={
+                          suggestions={
                             fixedColumnIndex === 0 && optionValues.length > 0
-                              ? datalistId
+                              ? optionValues
                               : undefined
                           }
                           onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
@@ -319,13 +329,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
             )}
           </tbody>
         </table>
-        {optionValues.length > 0 ? (
-          <datalist id={datalistId}>
-            {optionValues.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-        ) : null}
       </div>
       <div className="flex items-center justify-between gap-3">
         <span className="">

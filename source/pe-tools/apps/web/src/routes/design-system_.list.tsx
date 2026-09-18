@@ -7,6 +7,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import {
   FieldOptionsPanel,
+  FreeTextPanel,
   LadderPanel,
   LEGEND,
   PalettePanel,
@@ -32,7 +33,7 @@ function ListRoute() {
             <span>one row, one collection, every list kind</span>
             <FactChip
               dashed
-              title="Chat seeds, demo pods, the project-a zones and the families demo parameters; the product lists are not cut over yet."
+              title="Chat seeds, demo pods, the project-a zones and the families demo parameters; the product lists compose these same pieces."
             >
               fixture
             </FactChip>
@@ -63,6 +64,9 @@ function ListRoute() {
           </Panel>
           <Panel title="zones" kind="List · sticky heads · lead · chip">
             <ZonesPanel say={say} />
+          </Panel>
+          <Panel title="free text" kind="ListInput · suggestions">
+            <FreeTextPanel say={say} />
           </Panel>
           <Panel title="table" kind="Row as tr · cell list · multi">
             <TablePanel say={say} />

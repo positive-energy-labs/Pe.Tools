@@ -17,7 +17,6 @@ import { actionRecipe } from "#/components/lang/action-button";
 import { dialogRecipe } from "#/components/lang/dialog";
 import { inputGroupRecipe } from "#/components/lang/input-group";
 import { cardRecipe } from "#/components/lang/card";
-import { comboboxRecipe } from "#/components/lang/combobox";
 import { commandRecipe } from "#/components/lang/command";
 import { inputRecipe } from "#/components/lang/input";
 import { labelRecipe } from "#/components/lang/label";
@@ -49,7 +48,6 @@ const RECIPES = {
   dialogRecipe,
   inputGroupRecipe,
   cardRecipe,
-  comboboxRecipe,
   commandRecipe,
   inputRecipe,
   labelRecipe,

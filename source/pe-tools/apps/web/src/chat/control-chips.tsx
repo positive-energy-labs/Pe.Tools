@@ -1,14 +1,5 @@
 import { Press } from "#/components/lang/press";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import { useWorkbench } from "#/workbench/provider";
 import { ACCESS_LEVELS, type AccessLevel } from "#/workbench/chat-state";
 
@@ -20,7 +11,7 @@ interface PickerOption {
   disabled?: boolean;
 }
 
-/** Model + access pickers — Combobox-backed chips. */
+/** Model + access pickers: chips that open the one list. */
 export function ControlChips() {
   const { chat, setModel, setAccessLevel, addApiKey } = useWorkbench();
   const { models, access } = chat;
@@ -40,7 +31,7 @@ export function ControlChips() {
 
   return (
     <>
-      <Picker
+      <ChipList
         title="Model"
         label={modelLabel}
         activeId={models.currentId}
@@ -58,7 +49,7 @@ export function ControlChips() {
           </Press>
         ))}
       />
-      <Picker
+      <ChipList
         title="Access"
         label={accessLabel}
         activeId={access}
@@ -73,7 +64,7 @@ export function ControlChips() {
   );
 }
 
-function Picker({
+function ChipList({
   title,
   label,
   activeId,
@@ -90,45 +81,32 @@ function Picker({
   searchable?: boolean;
   footer?: React.ReactNode;
 }) {
-  const selected = options.find((option) => option.id === activeId) ?? null;
-  const anchorRef = useComboboxAnchor();
   return (
-    <Combobox
+    <ListPopup<PickerOption>
+      anchor="trigger"
+      triggerLabel={title}
+      title={title}
+      trigger={<span className="face-mono truncate">{label}</span>}
+      aria-label={title}
+      region={`${title.toLowerCase()} chip`}
       items={options}
-      value={selected}
-      onValueChange={(option: PickerOption | null) => option && onPick(option.id)}
-      itemToStringLabel={(option: PickerOption) => option.name}
-      // A picker without a search input must never filter: Base UI otherwise narrows the list
-      // to the stale label query (a Read-only chip opened to only "Ask", 2026-09-03 scenario).
-      filter={searchable ? undefined : null}
-    >
-      {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
-          positioner anchor or it feedback-loops (roaming/jittering popup). */}
-      <div ref={anchorRef} className="inline-flex">
-        <ComboboxTrigger
-          aria-label={title}
-          title={title}
-          render={<Press tone="quiet" size="value" />}
-        >
-          <span className="face-mono truncate">{label}</span>
-        </ComboboxTrigger>
-      </div>
-      <ComboboxContent anchor={anchorRef}>
-        {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
-        {/* Empty is a state: with no session yet, options arrive with the snapshot. */}
-        <ComboboxEmpty>{options.length === 0 ? "no session yet" : "No matches"}</ComboboxEmpty>
-        <ComboboxList>
-          {(option: PickerOption) => (
-            <ComboboxItem key={option.id} value={option} disabled={option.disabled}>
-              <span className="flex min-w-0 flex-col">
-                <span className="text-ink">{option.name}</span>
-                {option.hint ? <span className="text-ink-2">{option.hint}</span> : null}
-              </span>
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-        {footer}
-      </ComboboxContent>
-    </Combobox>
+      keyOf={(option) => option.id}
+      labelOf={(option) => option.name}
+      // A short menu never filters; only a searchable one shows its input (R5).
+      filter={searchable ? "substring" : "none"}
+      searchPlaceholder={`Search ${title.toLowerCase()}…`}
+      select="single"
+      selected={activeId ? [activeId] : []}
+      // Empty is a state: with no session yet, options arrive with the snapshot.
+      empty="no session yet"
+      onPick={(option) => onPick(option.id)}
+      footer={footer}
+      row={(option) => ({
+        label: option.name,
+        sub: option.hint,
+        lines: option.hint ? 2 : 1,
+        refusal: option.disabled ? "no key" : null,
+      })}
+    />
   );
 }
