@@ -232,19 +232,10 @@ internal static class FamilyFoundryBridgeOps {
             // A cancelled plan returns nothing: the confirmation sheet is only worth reading whole.
             cancellationToken.ThrowIfCancellationRequested();
             try { return WithFamilyDocument(document, family, (famDoc, editDiagnostics) => {
-            var current = famDoc.CaptureFamilyModel();
-            var warnings = CaptureIssues(current, family, editDiagnostics);
-            var effective = patch.ResolveParameterRules(current);
-            var desired = FamilyReconciler.Desired(current, patch);
-            if (desired.Value is null || desired.Diagnostics.Count > 0)
-                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], desired.Diagnostics.Select(ToDiagnostic).ToList(), warnings);
-            using var source = new FamilySharedParameterSource(famDoc);
-            var resolved = FamilyReconciler.ResolveNativeFormulas(source.Resolve(desired.Value, effective), famDoc);
-            var unitDiagnostics = FamilyModelUnitValidation.Validate(resolved, effective, source.GetDefinition);
-            if (unitDiagnostics.Count > 0)
-                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [], unitDiagnostics.Select(ToDiagnostic).ToList(), warnings);
-            var plan = FamilyReconciler.Reconcile(resolved, current, UnitResolvers.Revit(famDoc), patch.Run, source.GetDefinition, effective, source.ResolvedDefinitions, executionOptions);
-            return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, plan.PlanHash, plan.Changes.Select(ToChange).ToList(), plan.RunEffects, plan.Refusals.Select(ToDiagnostic).ToList(), warnings);
+            var preview = famDoc.PreviewFamily(patch, executionOptions);
+            var warnings = CaptureIssues(preview.Original, family, editDiagnostics);
+            return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, preview.PlanHash,
+                preview.Changes.Select(ToChange).ToList(), preview.RunEffects, preview.Diagnostics.Select(ToDiagnostic).ToList(), warnings);
             }); } catch (Exception exception) when (exception is Autodesk.Revit.Exceptions.InvalidOperationException or InvalidOperationException) {
                 return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [],
                     [new FamilyFoundryDiagnostic("FamilyEditRefused", "$.familyId", exception.Message)], []);
