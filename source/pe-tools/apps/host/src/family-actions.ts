@@ -510,6 +510,7 @@ export async function admitFamilyAction(
           process,
           nativeKey: key,
           input: {
+            plan: input.plan,
             specJson: sealed.specJson,
             expectedPlanHashes: input.expectedPlanHashes,
             source: sealed.source,

@@ -542,6 +542,8 @@ test("families apply sends exactly the reviewed hashes, and the spec, source byt
     dependencies: [],
   });
   expect(native.input.executionOptions).toEqual(options);
+  // The native run names the plan it applies (execution reads it once C# declares the field).
+  expect(native.input.plan).toBe(plan.id);
 });
 
 test("an exclusion written while the native call runs survives, because Work is never rewritten", async () => {
