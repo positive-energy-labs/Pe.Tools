@@ -103,3 +103,23 @@ test("failed concurrent admission restores the accepted turn and releases pendin
   expect(scopes.admissionPending("thread")).toBe(false);
   expect(scopes.admittedTurn("thread")).toBe(firstTurn);
 });
+
+test("failed signal delivery releases admission state", async () => {
+  const store = memoryStore();
+  const scopes = new ScopeStore(async () => store, "resource");
+  const session = {
+    thread: { requireId: () => "thread" },
+    sendSignal: (_input: unknown, options?: { requireDelivery?: boolean }) => ({
+      accepted: options?.requireDelivery
+        ? Promise.reject(new Error("delivery failed"))
+        : Promise.resolve({ accepted: true as const }),
+    }),
+  } as unknown as Session;
+
+  await expect(admitTurn(scopes, session, { content: "message" })).rejects.toThrow(
+    "delivery failed",
+  );
+  expect(scopes.admissionPending("thread")).toBe(false);
+  expect(scopes.admittedTurn("thread")).toBeUndefined();
+  await expect(scopes.set("thread", null, 0)).resolves.toMatchObject({ ok: true });
+});

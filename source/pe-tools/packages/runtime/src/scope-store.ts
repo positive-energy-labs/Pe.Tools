@@ -161,7 +161,7 @@ export async function admitTurn(
         contents: messageContents(input.content, input.files),
         metadata: { turn },
       },
-      { requestContext },
+      { requestContext, requireDelivery: true },
     );
     await signal.accepted;
   });
