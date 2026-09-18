@@ -1,6 +1,5 @@
-import { actionBasesSchema, scheduleReads, type ScheduleReadKey } from "@pe/agent-contracts";
-import { readScheduleCapture } from "../shared/schedule-client.ts";
-import { runSemanticAction } from "../shared/takeoff-action-client.ts";
+import { actionBasesSchema } from "@pe/agent-contracts";
+import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -219,32 +218,35 @@ export class PeaCliCommands {
         const key = firstNonBlank(ctx.values.key)?.replace(/^(op|workflow):/, "");
         if (!key) throw new Error("Provide --key <operation.key>.");
         const request = parseOptionalJson(ctx.values.request, ctx.values.requestFile);
-        if (key === "schedule.grid.push" || Object.hasOwn(scheduleReads, key)) {
-          const target =
-            ctx.values.bridgeSessionId && ctx.values.openDocumentId
-              ? { session: ctx.values.bridgeSessionId, openId: ctx.values.openDocumentId }
-              : undefined;
-          const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
-          const base = this.resolveHostBaseUrl(ctx.values.host);
-          const result =
-            key === "schedule.grid.push"
-              ? await runSemanticAction(
-                  key,
-                  input,
-                  target,
-                  actionBasesSchema.parse(bases ?? {}),
-                  ctx.values.actor === "human" ? "human" : "agent",
-                  base,
-                  ctx.values.actionId,
-                )
-              : await readScheduleCapture(key as ScheduleReadKey, input, target, base);
+        const context: AdmissionContext = {
+          hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
+          bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
+          openDocumentId: asOptionalString(ctx.values.openDocumentId),
+          actor:
+            ctx.values.actor === "human" || ctx.values.actor === "agent"
+              ? ctx.values.actor
+              : undefined,
+          actionId: asOptionalString(ctx.values.actionId),
+        };
+        const intent = await readCapabilityIntent(key, context);
+        if (intent.kind === "operation" && !intent.mutates) {
+          // Operation reads keep `/call`'s enriched result, so --verbosity still means something.
+          const result = await this.createHostRpcCaller({
+            ...ctx.values,
+            bridgeSessionId: intent.session ?? context.bridgeSessionId,
+          }).callOperation(key, request, parseOperationVerbosity(ctx.values.verbosity));
           console.log(JSON.stringify(result, null, 2));
           return;
         }
-        const result = await this.createHostRpcCaller(ctx.values).callOperation(
+        // A workflow's request may carry the bases it was drafted against.
+        const { bases, ...input } = (request ?? {}) as Record<string, unknown>;
+        const result = await runCapability(
           key,
-          request,
-          parseOperationVerbosity(ctx.values.verbosity),
+          intent.kind === "workflow" ? input : ((request ?? {}) as Record<string, unknown>),
+          intent.kind === "workflow"
+            ? { ...context, bases: actionBasesSchema.parse(bases ?? {}) }
+            : context,
+          intent,
         );
         console.log(JSON.stringify(result, null, 2));
       },
