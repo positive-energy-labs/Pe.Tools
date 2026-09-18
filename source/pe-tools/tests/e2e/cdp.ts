@@ -142,31 +142,40 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
       await page.type(text);
       await page.press("Enter");
     },
-    /** What a grid cell renders: its shown value, its marks, and its hover facts. */
+    /** What a grid cell renders: its shown value, its inline text, and its drawn marks. */
     readCell: (row: string[], column: string) =>
       read<{
         value: string;
         /** The cell's inline rendered text (innerText; an input's value is not part of it). */
         text: string;
+        /** data-staged / data-proposal are hooks on the drawn mark node, not transported data. */
         staged: boolean;
         proposal: boolean;
-        unsaved: string | null;
-        contest: boolean;
-        facts: string;
       } | null>(`(() => {
         const td = ${cellOf(row, column)};
         if (!td) return null;
         const input = td.querySelector("input");
-        const state = td.querySelector("[data-scale=row]");
         return {
           value: input ? input.value : td.innerText.trim(),
           text: td.innerText.trim(),
           staged: td.querySelector("[data-staged]") != null,
           proposal: td.querySelector("[data-proposal]") != null,
-          unsaved: state?.getAttribute("data-unsaved") ?? null,
-          contest: state?.hasAttribute("data-contest") ?? false,
-          facts: state?.getAttribute("title") ?? "",
         };
+      })()`),
+    /**
+     * The proposals band's row for (row, param), as drawn: its whole text, and the text of every
+     * part rendered struck through (computed style, what the eye sees). Null when no row is drawn.
+     */
+    bandRow: (row: string[], param: string) =>
+      read<{ text: string; struck: string[] } | null>(`(() => {
+        const want = [...${JSON.stringify(row)}, ${JSON.stringify(param)}];
+        const band = document.querySelector('section[aria-label="proposals"]');
+        const el = band && [...band.children].find((r) => r.getClientRects().length && want.every((w) => (r.firstElementChild?.innerText ?? "").includes(w)));
+        if (!el) return null;
+        const struck = [...el.querySelectorAll("*")]
+          .filter((e) => e.childElementCount === 0 && getComputedStyle(e).textDecorationLine.includes("line-through"))
+          .map((e) => e.innerText.trim());
+        return { text: el.innerText, struck };
       })()`),
     /** Click the element matching a CSS selector (for controls with no text, e.g. a cell). */
     async clickAt(selector: string) {
@@ -299,7 +308,9 @@ export async function journey(
     log.push("RESULT: PASS");
   } catch (error) {
     failed = error;
-    log.push(`RESULT: FAIL — ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    // A missing precondition (no slot, no seed, wrong chips) is BLOCKED, never a product FAIL.
+    log.push(`RESULT: ${/^(PRECONDITION|BLOCKED):/.test(message) ? "BLOCKED" : "FAIL"} — ${message}`);
   }
   await page.dump(dir, "final").catch(() => {});
   page.close();

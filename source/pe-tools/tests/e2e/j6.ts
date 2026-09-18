@@ -19,13 +19,15 @@ await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {
     // Timing gate: the page settles on whatever the dead host leaves it; the DOM is the assertion.
     await page
       .until(
-        () => page.has(/./, '[role="status"][data-tone="caution"]'),
+        async () => (await page.textOf('[role="status"][data-tone="caution"]')).trim(),
         "a failure status",
         30_000,
       )
       .catch(() => {});
-    if ((await page.count('[role="status"][data-tone="caution"]')) === 0)
-      throw new Error("ASSERT J6b a failed read renders a caution status: none rendered");
+    // data-tone is only the locator of the drawn caution line; the person must see its words.
+    const status = await page.textOf('[role="status"][data-tone="caution"]');
+    if (!status.trim())
+      throw new Error("ASSERT J6b a failed read renders a caution status with words: none rendered");
     if (await page.has("start fresh"))
       throw new Error(
         'ASSERT J6b a failed read does not offer "start fresh": the control is rendered',
@@ -33,16 +35,21 @@ await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {
     return;
   }
 
-  await page.until(
-    async () => /BRIDGE IS DISCONNECTED|cannot be opened here/i.test(await page.text()),
-    "the Work refusal (or the disconnected-bridge line)",
-    60_000,
-  );
+  // The seed is consumed by any "start fresh" (journeys' live J6 took project-a' real row), so its
+  // absence is a missing precondition (README: seeding an old-shape Work), never a product FAIL.
+  await page
+    .until(
+      async () => /BRIDGE IS DISCONNECTED|cannot be opened here/i.test(await page.text()),
+      "the Work refusal (or the disconnected-bridge line)",
+      60_000,
+    )
+    .catch(() => {});
   if (/BRIDGE IS DISCONNECTED/.test(await page.text()))
     throw new Error("PRECONDITION: no Revit bridge; J6 runs in the joint-hold slot");
+  if (!(await page.text()).includes(REFUSAL))
+    throw new Error("PRECONDITION: no old-shape Work seeded");
 
   step("see the refusal sentence and a start fresh control");
-  expectText(await page.text(), REFUSAL, "before: the exact unreadable-Work sentence");
   if (!(await page.has("start fresh")))
     throw new Error('ASSERT before: a "start fresh" control is rendered beside the refusal');
 

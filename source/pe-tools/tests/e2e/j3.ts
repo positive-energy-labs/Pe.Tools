@@ -29,13 +29,13 @@ await journey("J3", async (page, step) => {
     "The staged cells changed since this plan; plan again",
     "first apply is refused as stale",
   );
-  const after = await page.readCell(rows[0]!, param);
-  // Staged cells carry the Revit value in their facts: "You staged {current} → {value}".
-  expectText(
-    after?.facts ?? "",
-    `You staged ${baseline || "(blank)"} →`,
-    "the cell's audit value is unchanged",
-  );
+  // The band row draws the Revit value struck, then the staged one: `{baseline} → {edited}`.
+  const band = await page.bandRow(rows[0]!, param);
+  if (!band?.struck.includes(baseline || "—"))
+    throw new Error(
+      `ASSERT the band row still strikes the unchanged Revit value ${baseline || "—"}: got ${JSON.stringify(band)}`,
+    );
+  expectText(band.text, `→ ${edited}`, "the band row shows the edit");
 
   step("click plan, apply (succeeds)");
   await page.click(/^(re-)?plan$/);

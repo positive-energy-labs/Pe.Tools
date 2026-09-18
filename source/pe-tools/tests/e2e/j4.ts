@@ -1,7 +1,7 @@
 // E2E-J4 · Clearing a value is a change you can apply. /families, real Revit (joint-hold slot).
 // E2E_ROWS = 1 row whose E2E_PARAM is a non-empty text parameter.
 // Red break: restore the old empty→unstage codec → the cleared cell shows its baseline again.
-import { journey, requireRevit, revit, CTRL } from "./cdp.ts";
+import { expectText, journey, requireRevit, revit, CTRL, type Page } from "./cdp.ts";
 
 const SHEET = '[aria-label="Confirmation sheet"]';
 const APPLY = /^apply \d+ rows?$/;
@@ -25,11 +25,13 @@ await journey("J4", async (page, step) => {
     .until(async () => (await page.readCell(row, param))?.staged, "the clear to stage", 30_000)
     .catch(() => {});
   const staged = await page.readCell(row, param);
-  // data-unsaved="" is the "by you" mark; "pea" would be Pea's.
-  if (!staged || staged.value !== "" || !staged.staged || staged.unsaved !== "")
+  if (!staged || staged.value !== "" || !staged.staged)
     throw new Error(
-      `ASSERT before plan the cell shows an empty value staged by you, not "${baseline}": got ${JSON.stringify(staged)}`,
+      `ASSERT before plan the cell shows an empty value staged, not "${baseline}": got ${JSON.stringify(staged)}`,
     );
+  const band = await page.bandRow(row, param);
+  expectText(band?.text ?? "", /\bby you\b/, "the band row says the clear is staged by you");
+  await noDelete(page, "while staged");
 
   step("click plan, apply");
   await page.click("plan");
@@ -43,9 +45,16 @@ await journey("J4", async (page, step) => {
     throw new Error(
       `ASSERT after apply the audit reads empty, unstaged: got ${JSON.stringify(after)}`,
     );
-  const deletes = await page.count(
-    '[role="grid"] button[aria-label="delete"], table button[aria-label="delete"]',
-  );
-  if (deletes)
-    throw new Error(`ASSERT no "delete" control on any /families cell: ${deletes} found`);
+  await noDelete(page, "after apply");
 });
+
+/** Clearing is never deleting: no visible grid or band control says delete/remove in text or aria-label. */
+async function noDelete(page: Page, when: string) {
+  const found = await page.read<string[]>(`[...document.querySelectorAll('table, [role="grid"], section[aria-label="proposals"]')]
+    .flatMap((root) => [...root.querySelectorAll('button, [role="button"], [role="menuitem"]')])
+    .filter((e) => e.getClientRects().length)
+    .map((e) => [e.innerText, e.getAttribute("aria-label")].filter(Boolean).join(" | "))
+    .filter((l) => /\\b(delete|remove)\\b/i.test(l))`);
+  if (found.length)
+    throw new Error(`ASSERT ${when}, no delete/remove control in the grid or band: ${JSON.stringify(found)}`);
+}
