@@ -519,6 +519,18 @@ public enum ScheduleCellBindingBlocker {
     ReadOnlyParameter
 }
 
+/// <summary>Canonical mutation evidence for one native parameter behind a rendered cell.</summary>
+/// <remarks>Reviewed evidence is required on the wire: a capture that lacks a field refuses, never defaults to 0/false/absent.</remarks>
+public sealed record ScheduleCellBindingTarget(
+    [property: JsonProperty(Required = Required.Always)] long ElementId,
+    [property: JsonProperty(Required = Required.Always)] long ParameterId,
+    string? ParameterName,
+    [property: JsonProperty(Required = Required.Always)] RequestedParameterStorageType StorageType,
+    [property: JsonProperty(Required = Required.Always)] bool IsReadOnly,
+    [property: JsonProperty(Required = Required.Always)] bool HasValue,
+    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] string? RawValue
+);
+
 /// <summary>
 ///     The write surface behind one rendered schedule cell: which element(s) a cell edit would
 ///     write to, and through which parameter. A type-parameter column resolves to the shared type
@@ -535,6 +547,7 @@ public record ScheduleCellBinding(
     string? DisplayValue,
     bool IsTypeParameter,
     bool IsEditable,
+    [property: JsonProperty(Required = Required.Always)] IReadOnlyList<ScheduleCellBindingTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
     bool HasMixedValues = false
 );

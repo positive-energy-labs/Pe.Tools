@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
 using Pe.Revit.DocumentData.Schedules;
+using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.Failures;
 using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Revit.Extensions.ProjDocument;
@@ -16,11 +17,12 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using System.IO;
+using Pe.Shared.RevitData.Schedules;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Host;
 
-/// <summary>Schedule definitions: capture one as a spec, apply a spec as a new schedule. Cell values are the grid's `push`.</summary>
+/// <summary>Schedule definitions (capture one as a spec, apply a spec as a new schedule) and reviewed cell values (`schedule.cells.apply`).</summary>
 internal static class ScheduleBridgeOps {
     [Op("schedule.capture", Does = "Capture one schedule's definition (fields, sort/group, filters, header groups, view template) as a schedule spec. Never captures cell values.", Title = "Capture Schedule", Finds = ["schedule", "capture", "spec", "definition"], Cost = OpCost.Bounded)]
     private static Task<ScheduleSpecCaptureData> Capture(ScheduleSpecCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
@@ -28,6 +30,21 @@ internal static class ScheduleBridgeOps {
             if (document.Value.GetElement(request.ScheduleId.ToElementId()) is not ViewSchedule schedule)
                 throw BridgeOperationExceptions.BadRequest($"Element id {request.ScheduleId} is not a schedule.");
             return new ScheduleSpecCaptureData(schedule.Name, CaptureSpec(schedule));
+        }, cancellationToken);
+
+    /// <summary>
+    ///     The one reviewed-cell write edge. The domain compares every reviewed target against a fresh read inside its
+    ///     transaction and answers per cell; a refused cell is an answer, never a reason to retry by parameter name.
+    ///     The host journal seals this exact request as the step input before dispatch.
+    /// </summary>
+    [Op("schedule.cells.apply", Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<ScheduleCellApplyData> ApplyCells(ScheduleCellApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => {
+            if (!request.DryRun && document.Value.IsReadOnly)
+                throw BridgeOperationExceptions.Conflict("The document is read-only.");
+            EngineEdge.RequireReachableCentral(document.Value);
+            try { return document.Value.ApplyReviewedScheduleCells(request, cancellationToken); }
+            catch (ArgumentException exception) { throw BridgeOperationExceptions.BadRequest(exception.Message); }
         }, cancellationToken);
 
     [Op("schedule.apply", Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]

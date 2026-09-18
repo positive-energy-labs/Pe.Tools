@@ -4,9 +4,9 @@
  * Fourth trichotomy instance: the snapshot mirrors one rendered Revit schedule
  * (columns × rows with cell binding handles from revit.detail.schedules
  * projection.includeBindings); cells carry proposal → staged → pushed state keyed
- * `${rowNumber}::${columnNumber}`. The human-only `push` command redeems each staged
- * cell's binding handle (target element ids + parameter id) through
- * revit.apply.parameter-values in one host-owned transaction.
+ * `${rowNumber}::${columnNumber}`. The human-only `push` hands each staged cell's
+ * reviewed binding to schedule.cells.apply, which compares every target inside one
+ * native transaction.
  */
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -45,19 +45,37 @@ export const scheduleColumnSchema = z.object({
 });
 export type ScheduleColumn = z.infer<typeof scheduleColumnSchema>;
 
-/** The write surface behind one rendered cell — the binding handle push redeems. */
+/**
+ * One native parameter behind a rendered cell: the reviewed evidence `schedule.cells.apply` compares
+ * inside its transaction. Every field is required; `hasValue` keeps unset apart from stored zero/empty.
+ */
+export const scheduleCellBindingTargetSchema = z.object({
+  elementId: z.number().int(),
+  parameterId: z.number().int(),
+  parameterName: z.string().nullish(),
+  storageType: z.string(),
+  isReadOnly: z.boolean(),
+  hasValue: z.boolean(),
+  rawValue: z.string().nullable(),
+});
+export type ScheduleCellBindingTarget = z.infer<typeof scheduleCellBindingTargetSchema>;
+
+/** The write surface behind one rendered cell — the reviewed binding push hands back unchanged. */
 export const scheduleCellBindingSchema = z.object({
   columnNumber: z.number().int(),
   targetElementIds: z.array(z.number().int()).default([]),
   parameterName: z.string().nullish(),
   parameterId: z.number().int().nullish(),
   storageType: z.string(),
+  rawValue: z.string().nullish(),
   displayValue: z.string().nullish(),
   isTypeParameter: z.boolean().default(false),
   isEditable: z.boolean().default(false),
   /** Why the cell is not writable (None when it is). */
   blocker: z.string().default("None"),
   hasMixedValues: z.boolean().default(false),
+  /** Required: a capture without per-target evidence cannot arm a push. */
+  targets: z.array(scheduleCellBindingTargetSchema),
 });
 export type ScheduleCellBinding = z.infer<typeof scheduleCellBindingSchema>;
 
