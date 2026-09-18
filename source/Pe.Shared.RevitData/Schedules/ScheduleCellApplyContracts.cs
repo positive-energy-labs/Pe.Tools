@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Pe.Shared.RevitData;
 
 namespace Pe.Shared.RevitData.Schedules;
@@ -13,7 +14,7 @@ public sealed record ScheduleCellApplyRequest(
 public sealed record ScheduleCellEdit(
     int RowNumber,
     int ColumnNumber,
-    ScheduleCellBinding ExpectedBinding,
+    [property: JsonProperty(Required = Required.Always)] ScheduleCellBinding ExpectedBinding,
     string? Value = null,
     string? Unit = null,
     bool RawInternal = false
