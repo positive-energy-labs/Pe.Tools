@@ -624,33 +624,6 @@ export namespace FamilyCapture {
   }
 }
 
-/** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
-export namespace FamilyEditorApply {
-  export namespace Req {
-    export interface Request {
-      edits: FamilyEditorApplyEdit[];
-      dryRun?: boolean;
-    }
-    export interface FamilyEditorApplyEdit {
-      paramName: string;
-      typeName?: null | string;
-      value?: null | string;
-      formula?: null | string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      applied: number;
-      results: FamilyEditorApplyEditResult[];
-    }
-    export interface FamilyEditorApplyEditResult {
-      index: number;
-      ok: boolean;
-      error?: null | string;
-    }
-  }
-}
-
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
 export namespace FamilyEditorOpen {
   export namespace Req {
@@ -5731,7 +5704,6 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
-  "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
@@ -5804,7 +5776,6 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
-  "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
   "family.plan",
