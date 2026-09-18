@@ -1,5 +1,7 @@
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import type { Session } from "@mastra/core/agent-controller";
+import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
+import { createDeterministicRuntime } from "../src/testing.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "../src/scope-store.ts";
 
 function deferred() {
@@ -107,19 +109,104 @@ test("failed concurrent admission restores the accepted turn and releases pendin
 test("failed signal delivery releases admission state", async () => {
   const store = memoryStore();
   const scopes = new ScopeStore(async () => store, "resource");
+  const delivery = deferred();
+  const sent = deferred();
   const session = {
     thread: { requireId: () => "thread" },
-    sendSignal: (_input: unknown, options?: { requireDelivery?: boolean }) => ({
-      accepted: options?.requireDelivery
-        ? Promise.reject(new Error("delivery failed"))
-        : Promise.resolve({ accepted: true as const }),
-    }),
+    sendSignal: (_input: unknown, options?: { requireDelivery?: boolean }) => {
+      sent.resolve();
+      return {
+        accepted: options?.requireDelivery
+          ? delivery.promise
+          : Promise.resolve({ accepted: true as const }),
+      };
+    },
   } as unknown as Session;
 
-  await expect(admitTurn(scopes, session, { content: "message" })).rejects.toThrow(
-    "delivery failed",
-  );
+  const admission = admitTurn(scopes, session, { content: "message" });
+  await sent.promise;
+  expect(scopes.admissionPending("thread")).toBe(true);
+  delivery.reject(new Error("delivery failed"));
+  await expect(admission).rejects.toThrow("delivery failed");
   expect(scopes.admissionPending("thread")).toBe(false);
   expect(scopes.admittedTurn("thread")).toBeUndefined();
   await expect(scopes.set("thread", null, 0)).resolves.toMatchObject({ ok: true });
+});
+
+test("scope PUT fences running writes and applies an approved proposal only to future turns", async () => {
+  const runtime = await createDeterministicRuntime({
+    databasePath: ":memory:",
+    resourceId: "scope-http",
+    responses: [{ text: "unused" }],
+  });
+  try {
+    const app = await buildAgentControllerApp({ runtime, label: "pea" });
+    const put = (body: unknown) =>
+      app.fetch(
+        new Request("http://local/pe/scope/thread", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    const first = { kind: "open", ref: { session: "s", openId: "first" } } as const;
+    const second = { kind: "open", ref: { session: "s", openId: "second" } } as const;
+    expect((await put({ defaultTarget: first, expectedRevision: 0 })).status).toBe(200);
+    const approvedTurn = crypto.randomUUID();
+    let frozen: unknown;
+    await runtime.scopes.admit("thread", approvedTurn, async (head) => {
+      frozen = structuredClone(head);
+    });
+    const session = await runtime.controller.createSession({
+      resourceId: runtime.resourceId,
+      scope: "thread",
+      threadId: "thread",
+    });
+    vi.spyOn(session.run, "isRunning").mockReturnValue(true);
+
+    expect((await put({ defaultTarget: second, expectedRevision: 1 })).status).toBe(409);
+    expect(
+      (await put({ defaultTarget: second, expectedRevision: 1, turn: crypto.randomUUID() })).status,
+    ).toBe(409);
+    expect(
+      (await put({ defaultTarget: second, expectedRevision: 1, turn: approvedTurn })).status,
+    ).toBe(200);
+    expect(frozen).toMatchObject({ defaultTarget: first, revision: 1 });
+    expect(await runtime.scopes.read("thread")).toMatchObject({
+      defaultTarget: second,
+      revision: 2,
+    });
+  } finally {
+    await runtime.close?.();
+  }
+});
+
+test("admission queued behind a scope write freezes the landed head", async () => {
+  let value: unknown;
+  const writeStarted = deferred();
+  const releaseWrite = deferred();
+  const store: ScopeStateStore = {
+    getState: async () => value,
+    setState: async (input) => {
+      writeStarted.resolve();
+      await releaseWrite.promise;
+      value = input.value;
+    },
+  };
+  const scopes = new ScopeStore(async () => store, "resource");
+  let frozenRevision: number | undefined;
+  const session = {
+    thread: { requireId: () => "thread" },
+    sendSignal: (input: { metadata?: { turn?: { revision: number } } }) => {
+      frozenRevision = input.metadata?.turn?.revision;
+      return { accepted: Promise.resolve({ accepted: true as const }) };
+    },
+  } as unknown as Session;
+
+  const write = scopes.set("thread", null, 0);
+  await writeStarted.promise;
+  const admission = admitTurn(scopes, session, { content: "after write" });
+  releaseWrite.resolve();
+  await Promise.all([write, admission]);
+  expect(frozenRevision).toBe(1);
 });

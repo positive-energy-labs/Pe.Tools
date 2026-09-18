@@ -158,11 +158,13 @@ export async function buildAgentControllerApp(
       threadId,
       parsed.data.defaultTarget,
       parsed.data.expectedRevision,
-      () =>
-        (session.run.isRunning() || runtime.scopes.admissionPending(threadId)) &&
-        parsed.data.turn !== runtime.scopes.admittedTurn(threadId)
+      () => {
+        const admitted = runtime.scopes.admittedTurn(threadId);
+        return (session.run.isRunning() || runtime.scopes.admissionPending(threadId)) &&
+          (!admitted || parsed.data.turn !== admitted)
           ? { ok: false, why: "in-turn" }
-          : undefined,
+          : undefined;
+      },
     );
     return c.json(result, result.ok ? 200 : 409);
   });
