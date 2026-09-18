@@ -104,6 +104,45 @@ test("expired is keyed by the runtime's ask record, never by the tool name", () 
     expiredAsks: [{ messageId: "a1", toolCallId: "ask-1", toolName: "ask_user" }],
   };
   const status = Object.fromEntries(selectToolCalls(state).map((call) => [call.id, call.status]));
-  // ponytail: a stopped non-ask call is `failed` until the runtime records who stopped it.
+  // No record, no label: a stopped call the runtime did not record reads `failed`.
   expect(status).toEqual({ "ask-1": "expired", "run-1": "failed", "ask-2": "failed" });
+});
+
+test("a cancelled call is the runtime's record line: a word, no tag, no button; unrecorded stays failed", () => {
+  const call = (toolCallId: string) =>
+    ({
+      ...askCall,
+      id: `m-${toolCallId}`,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: "tool-invocation",
+            toolInvocation: { state: "call", toolCallId, toolName: "run_script", args: {} },
+          },
+        ],
+      },
+    }) as unknown as MastraDBMessage;
+  const state: ChatState = {
+    ...emptyChatState(),
+    messages: [call("run-1"), call("run-2")],
+    cancelledCalls: [{ messageId: "m-run-1", toolCallId: "run-1", toolName: "run_script" }],
+  };
+  const [cancelled, restarted] = selectToolCalls(state);
+  expect(cancelled!.status).toBe("cancelled");
+  // An approved call that ran into a restart is not a cancel and not an expired ask.
+  expect(restarted).toMatchObject({
+    status: "failed",
+    error: "Tool call ended without a terminal result.",
+  });
+  const { container } = mount(state);
+  const marker = container.querySelector("[data-tool-id='run-1'] [data-annotation='tool-marker']")!;
+  expect(marker.textContent).toBe("⌗ Run Script — cancelled");
+  expect(marker.querySelector("[data-tone]")).toBe(null);
+  expect(marker.className).toBe("");
+  expect([
+    ...container.querySelectorAll(
+      "[data-tool-id='run-1'] button, [data-tool-id='run-1'] [role='button']",
+    ),
+  ]).toEqual([marker]);
 });

@@ -67,6 +67,8 @@ export type ToolOutcome = { result?: unknown } & (
   | { status: "failed"; error: string }
   /** An ask whose turn is gone (turn end, cancel, host restart): a record, never answerable. */
   | { status: "expired" }
+  /** A non-ask call a person's cancel stopped mid-run (the runtime's record): not a failure. */
+  | { status: "cancelled" }
 );
 
 export type ToolCall = {
@@ -102,6 +104,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
   const expired = new Set(selectExpiredAsks(state).map((ask) => ask.toolCallId));
+  const cancelled = new Set((state.cancelledCalls ?? []).map((call) => call.toolCallId));
   for (const [messageAt, message] of rows.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
@@ -127,17 +130,19 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = expired.has(call.toolCallId)
         ? { status: "expired", result }
-        : failed
-          ? {
-              status: "failed",
-              error:
-                call.errorText ||
-                readString(readRecord(result)?.message) ||
-                text(result) ||
-                "Tool call ended without a terminal result.",
-              result,
-            }
-          : { status: completed ? "completed" : "in_progress", result };
+        : cancelled.has(call.toolCallId)
+          ? { status: "cancelled", result }
+          : failed
+            ? {
+                status: "failed",
+                error:
+                  call.errorText ||
+                  readString(readRecord(result)?.message) ||
+                  text(result) ||
+                  "Tool call ended without a terminal result.",
+                result,
+              }
+            : { status: completed ? "completed" : "in_progress", result };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
