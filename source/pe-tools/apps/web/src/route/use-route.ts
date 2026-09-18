@@ -864,10 +864,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     };
   }, [writer, owner, seed]);
   // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
-  const setPage = useCallback(
-    (next: Partial<P>) => setPageState((current) => ({ ...current, ...next })),
-    [],
-  );
+  const pageEpoch = useRef(0);
+  const setPage = useCallback((next: Partial<P>) => {
+    pageEpoch.current += 1;
+    setPageState((current) => ({ ...current, ...next }));
+  }, []);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -929,6 +930,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     // An action's Work is one snapshot. Its late writes must let the host reject that snapshot,
     // not silently borrow a newer revision observed while the action was computing.
     const actionRevision = workCurrent ? (doc?.revision ?? 0) : null;
+    const actionPageEpoch = pageEpoch.current;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
       work: { key, doc: doc?.doc ?? null, revision: doc?.revision ?? null },
@@ -953,7 +955,8 @@ export function useRoute<W, R extends string, P, A extends string>(
         return null;
       },
       setPage: (next: Partial<P>) => {
-        if (currentActionScope.current === actionScope) setPage(next);
+        if (currentActionScope.current === actionScope && pageEpoch.current === actionPageEpoch)
+          setPageState((current) => ({ ...current, ...next }));
       },
     };
     return Object.fromEntries(
