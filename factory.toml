@@ -2,7 +2,7 @@
 # Design record: docs/features/factory/LEDGER.md
 
 [factory]
-ref = "factory-dev"          # proof lane; restored to main in the final commit
+ref = "main"
 poll_seconds = 5
 port = 4747
 db = ".artifacts/factory/events.sqlite"
