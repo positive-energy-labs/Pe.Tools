@@ -230,8 +230,24 @@ export function MasterTableBody<Row extends RowData>({
                         if (event.target === event.currentTarget) handleGridKey(event);
                       }}
                       onMouseDown={(event) => {
+                        // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
+                        // would take the caret and make typing append. The td takes focus; the
+                        // first printable key then replaces the value, and a double-click, F2 or
+                        // Enter edits in place.
+                        const target = event.target as HTMLElement;
+                        if (
+                          target.matches("input.dl-cell-input") &&
+                          document.activeElement !== target
+                        ) {
+                          event.preventDefault();
+                          event.currentTarget.focus();
+                        }
                         if (!isInteractive(event.target))
                           cell.getSelectionStartHandler(document)(event);
+                      }}
+                      onDoubleClick={(event) => {
+                        if (document.activeElement === event.currentTarget)
+                          editCell(event.currentTarget);
                       }}
                       onMouseEnter={cell.getSelectionExtendHandler()}
                       style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
