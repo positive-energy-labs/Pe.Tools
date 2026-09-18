@@ -137,11 +137,18 @@ function CellKeys({
  * The element that owns a hosted cell's keyboard focus, provided by whatever hosts the cell:
  * Table hands each cell its td. Absent, the cell is its own host.
  */
+/** The drawn empty value: a stated blank, as the band draws it. */
+export const EMPTY_MARK = "–";
+
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
   const read = readCell(props);
+  // An emptied value IS a value (F-J4-1): a staged or proposed "" draws the empty mark, never the
+  // caller's placeholder, which would read as the old value still standing.
+  const emptied = value === "" && (props.stage === "staged" || props.stage === "proposed");
+  const shown = emptied ? EMPTY_MARK : value;
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
   // move Escape makes) rather than re-keying it, so the DOM node — and anything holding a
@@ -255,7 +262,8 @@ export function StateCell(props: StateCellProps) {
           <input
             key={value as string}
             defaultValue={value as string}
-            placeholder={props.placeholder}
+            placeholder={emptied ? EMPTY_MARK : props.placeholder}
+            data-empty={emptied ? "" : undefined}
             inputMode={props.numeric != null ? "decimal" : undefined}
             tabIndex={-1}
             className={
@@ -286,10 +294,10 @@ export function StateCell(props: StateCellProps) {
           />
         ) : read.unsettled != null ? (
           <span className={slots.unsettled()} data-state={read.unsettled}>
-            {value}
+            {shown}
           </span>
         ) : (
-          value
+          shown
         )}
         {/* SPECIMEN: /design-system/band's words, on the row's one line: a contest a title alone
             hides from keyboard, touch and no-hover readers (E2E-J2 ruling). */}
@@ -377,10 +385,10 @@ export function StateCell(props: StateCellProps) {
         >
           {read.unsettled != null ? (
             <span className={slots.unsettled()} data-state={read.unsettled}>
-              {value}
+              {shown}
             </span>
           ) : (
-            value
+            shown
           )}
         </span>
         {read.unsettled === "drift" && modelValue != null ? (

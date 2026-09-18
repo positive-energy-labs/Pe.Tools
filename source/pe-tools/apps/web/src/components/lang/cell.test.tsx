@@ -173,3 +173,24 @@ test("a contested row cell says pea's counter-proposal inline, not only in a hov
     unmount();
   }
 });
+
+test("a staged empty value draws the empty mark, never the baseline text, at both scales", () => {
+  for (const scale of ["row", "card"] as const)
+    for (const onCommit of [undefined, () => {}]) {
+      const { container, unmount } = render(
+        <StateCell
+          scale={scale}
+          value=""
+          stage="staged"
+          stagedBy="you"
+          placeholder="Old value"
+          onCommit={onCommit}
+        />,
+      );
+      const input = container.querySelector("input");
+      const drawn = `${container.textContent ?? ""}${input?.placeholder ?? ""}`;
+      expect(drawn, `${scale} ${onCommit ? "editable" : "read"}`).toContain("–");
+      expect(drawn).not.toContain("Old value");
+      unmount();
+    }
+});

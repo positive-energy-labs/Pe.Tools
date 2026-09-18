@@ -21,7 +21,8 @@ public static class HostProtocol {
     // 41: parameter-values wet edits require exact parameterId + expected ParameterTarget evidence (dry run
     //     returns it as current); stale/missing evidence, admission groups and aliases judged by ParameterEditPlan
     // 42: family.editor.apply deleted; family writes are FamilyPatch plan/apply
-    public const int ContractVersion = 42;
+    // 43: revit.context.view-image response gains imageUrl (/view-image/<imageSha256>.png, null iff no registration)
+    public const int ContractVersion = 43;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

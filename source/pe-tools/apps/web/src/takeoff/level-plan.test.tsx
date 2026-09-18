@@ -3,7 +3,10 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 
 import { fitFrame, type Point2 } from "#/lib/affine-frame";
-import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
+import { LevelPlan, PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
+import { PLAN_REFUSAL, planOf } from "#/takeoff/plan-image";
+import { mockModel } from "#/takeoff/proto/mock";
+import { projectMockModel } from "#/takeoff/proto/project-model";
 
 afterEach(cleanup);
 
@@ -51,4 +54,79 @@ test("the plan image layer mounts under the zones, placed by the registration in
   close(pixel([0, 0]), frame.toViewport(r.topLeft));
   close(pixel([r.width, 0]), frame.toViewport(r.topRight));
   close(pixel([0, r.height]), frame.toViewport(r.bottomLeft));
+});
+
+/* ── 4h: the view-image response is the source ─────────────────────────────────────────── */
+
+const world = projectMockModel(mockModel());
+const lane = world.lanes[0]!;
+const zones = world.zones.filter((z) => z.zone.lane.label === lane.label);
+const levelPlan = (props: Partial<React.ComponentProps<typeof LevelPlan>>) =>
+  render(
+    <LevelPlan
+      zones={zones}
+      stageFilter={null}
+      selectedKey={null}
+      cursor={null}
+      stateOf={() => "unreviewed"}
+      onSelectZone={() => {}}
+      onHover={() => {}}
+      onCursor={() => {}}
+      onClear={() => {}}
+      {...props}
+    />,
+  );
+const response = (extra: Record<string, unknown>) =>
+  ({
+    view: { kind: "View", documentKey: "d", label: lane.view },
+    filePath: "C:Temppe-view-capturesplan.png",
+    byteSize: 10,
+    pixelSize: 400,
+    ...extra,
+  }) as never;
+
+test("a view-image response with imageUrl mounts the plan under the zones, in the zones' frame", () => {
+  const sha = "a".repeat(64);
+  const got = planOf(
+    response({
+      imageUrl: `/view-image/${sha}.png`,
+      registration: {
+        ...plan.registration,
+        imageSha256: sha,
+        topLeft: [...plan.registration.topLeft],
+        topRight: [...plan.registration.topRight],
+        bottomLeft: [...plan.registration.bottomLeft],
+      },
+      registrationRefusal: null,
+    }),
+  );
+  if (!("plan" in got)) throw Error("expected a plan");
+  const { container } = levelPlan({ plan: got.plan });
+  const image = container.querySelector("svg image[data-layer='plan-image']")!;
+  // Host-relative, on the base host calls use.
+  expect(image.getAttribute("href")).toBe(`/view-image/${sha}.png`);
+  expect(image.getAttribute("transform")).toMatch(/^matrix\(/);
+  // Under the zones: the layer precedes every zone group in paint order.
+  const svg = container.querySelector("svg")!;
+  expect([...svg.children].indexOf(image)).toBeLessThan(
+    [...svg.children].findIndex((node) => node.tagName === "g"),
+  );
+  expect(container.textContent).not.toContain("no plan image");
+});
+
+test("each registration refusal is said by name in the plan area, and no image is drawn", () => {
+  for (const name of ["NoCrop", "NoImage", "DegenerateCrop", "AspectDisagrees"] as const) {
+    const got = planOf(response({ registration: null, imageUrl: null, registrationRefusal: name }));
+    if (!("refusal" in got)) throw Error("expected a refusal");
+    const { container, unmount } = levelPlan({ planRefusal: got.refusal });
+    expect(container.textContent).toContain(`no plan image · ${name}`);
+    expect(container.textContent).toContain(PLAN_REFUSAL[name]);
+    expect(container.querySelector("image")).toBe(null);
+    unmount();
+  }
+});
+
+test("a response that pairs neither half, or names no reason, is refused, not drawn as nothing", () => {
+  expect(() => planOf(response({ registration: null, imageUrl: "/view-image/x.png" }))).toThrow();
+  expect(() => planOf(response({ registration: null, imageUrl: null }))).toThrow();
 });

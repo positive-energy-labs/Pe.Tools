@@ -367,7 +367,13 @@ public record RevitViewImageData(
     RevitViewImageRegistration? Registration = null,
     // Why Registration is absent; null exactly when it is present.
     RevitViewImageRegistrationRefusal? RegistrationRefusal = null
-);
+) {
+    /// <summary>
+    ///     Host route for exactly the registered PNG, keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;
+    ///     null exactly when <see cref="Registration" /> is. <see cref="FilePath" /> stays the host-side record.
+    /// </summary>
+    public string? ImageUrl => this.Registration is null ? null : $"/view-image/{this.Registration.ImageSha256}.png";
+}
 
 /// <summary>Why a view image carries no <see cref="RevitViewImageRegistration" />.</summary>
 [JsonConverter(typeof(StringEnumConverter))]
