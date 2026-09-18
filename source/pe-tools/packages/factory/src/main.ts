@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -536,11 +536,55 @@ const sendJson = (response: ServerResponse, value: unknown, status = 200) => {
   response.end(JSON.stringify(value));
 };
 
-const serve = (repo: string, config: Config, database: DatabaseSync) =>
+const runDetail = (database: DatabaseSync, run: string) => {
+  const at = run.lastIndexOf("@");
+  if (at < 1) return;
+  const loop = run.slice(0, at);
+  const sha = run.slice(at + 1);
+  const events = database
+    .prepare("SELECT * FROM events WHERE loop = ? AND sha = ? ORDER BY seq")
+    .all(loop, sha) as EventRow[];
+  if (!events.length) return;
+  const details: Record<string, unknown> = { run, loop, sha, events, verdicts: [] };
+  for (const event of events) {
+    const data = JSON.parse(event.payload) as Record<string, unknown>;
+    if (event.kind === "error") details.error = data.values;
+    for (const key of ["branch", "worktree", "head", "shortstat", "stdout", "stderr"]) {
+      if (data[key] !== undefined) details[key] = data[key];
+    }
+    if (event.kind === "verdict") {
+      (details.verdicts as object[]).push({ seq: event.seq, ts: event.ts, ...data });
+    }
+  }
+  return details;
+};
+
+const sendText = (response: ServerResponse, value: string, status = 200) => {
+  response.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  response.end(value);
+};
+
+export const serve = (repo: string, database: DatabaseSync) =>
   createServer((request, response) => {
+    const config = configAt(repo);
     const url = new URL(request.url ?? "/", "http://localhost");
     const since = Math.max(0, Number.parseInt(url.searchParams.get("since") ?? "0", 10) || 0);
-    if (request.method === "POST" && url.pathname === "/verdict") {
+    const runRoute = url.pathname.match(/^\/runs\/([^/]+)(?:\/(diff|open))?$/);
+    const run = runRoute ? decodeURIComponent(runRoute[1]!) : undefined;
+    const detail = run ? runDetail(database, run) : undefined;
+    if (request.method === "POST" && runRoute?.[2] === "open") {
+      const worktree = detail?.worktree as string | undefined;
+      if (!worktree) sendText(response, "run has no worktree", 404);
+      else {
+        const finder = process.platform === "win32" ? "where.exe" : "which";
+        if (spawnSync(finder, ["code"], { stdio: "ignore" }).status !== 0) {
+          sendText(response, worktree, 501);
+        } else {
+          spawn("code", [worktree], { detached: true, stdio: "ignore" }).unref();
+          sendText(response, worktree);
+        }
+      }
+    } else if (request.method === "POST" && url.pathname === "/verdict") {
       let body = "";
       let tooLarge = false;
       request.setEncoding("utf8");
@@ -568,6 +612,18 @@ const serve = (repo: string, config: Config, database: DatabaseSync) =>
       });
     } else if (request.method !== "GET") {
       response.writeHead(405).end();
+    } else if (runRoute?.[2] === "diff") {
+      const sha = detail?.sha as string | undefined;
+      const head = detail?.head as string | undefined;
+      if (!sha || !head) sendText(response, "run has no proposal", 404);
+      else
+        sendText(
+          response,
+          execFileSync("git", ["-C", repo, "diff", `${sha}..${head}`], { encoding: "utf8" }),
+        );
+    } else if (runRoute) {
+      if (detail) sendJson(response, detail);
+      else sendJson(response, { error: "run not found" }, 404);
     } else if (url.pathname === "/") {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end(readFileSync(new URL("./ui/index.html", import.meta.url), "utf8"));
@@ -609,7 +665,7 @@ function main() {
 
   const database = openDatabase(repo, config);
   tick(repo, database);
-  const server = serve(repo, config, database);
+  const server = serve(repo, database);
   server.listen(config.factory.port, () =>
     console.log(`factory listening on http://localhost:${config.factory.port}`),
   );

@@ -6,10 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { recordVerdict, tick } from "../src/main.ts";
+import { recordVerdict, serve, tick } from "../src/main.ts";
 
 describe("tick", () => {
-  it("triggers, senses, gates, reruns, and merges", () => {
+  it("triggers, senses, gates, reruns, and merges", async () => {
     const repo = mkdtempSync(join(tmpdir(), "pe factory-"));
     const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args]);
     try {
@@ -116,6 +116,15 @@ describe("tick", () => {
       const humanSha = git("rev-parse", "HEAD").toString().trim();
       const run = `human@${humanSha}`;
       tick(repo, database);
+      const server = serve(repo, database);
+      await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("server did not bind");
+      const detail = (await fetch(
+        `http://127.0.0.1:${address.port}/runs/${encodeURIComponent(run)}`,
+      ).then((response) => response.json())) as { error: object };
+      expect(detail.error).toEqual({});
+      await new Promise<void>((done) => server.close(() => done()));
       recordVerdict(database, { run, decision: "reject", text: "say hello instead" });
       tick(repo, database);
       expect(

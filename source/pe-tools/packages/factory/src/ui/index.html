@@ -49,6 +49,12 @@
       .error {
         color: #c43d3d;
       }
+      .path {
+        display: block;
+        font-size: 11px;
+        margin-top: 5px;
+        word-break: break-all;
+      }
       button,
       input {
         background: transparent;
@@ -174,16 +180,42 @@
             ...(runs.get(run) || { run, loop: event.loop, sha: event.sha }),
             kind: event.kind,
             ...(data.branch ? { branch: data.branch } : {}),
+            ...(data.worktree ? { worktree: data.worktree } : {}),
             ...(data.shortstat ? { shortstat: data.shortstat } : {}),
           });
         }
         const proposals = [...runs.values()].filter((run) => run.kind === "gated");
         document.querySelector("#proposals").innerHTML = proposals.length
-          ? `<table><thead><tr><th>loop</th><th>sha</th><th>branch</th><th>change</th><th>verdict</th></tr></thead><tbody>${proposals.map((run) => `<tr data-run="${esc(run.run)}"><td>${esc(run.loop)}</td><td class="mono">${run.sha.slice(0, 7)}</td><td class="mono">${esc(run.branch)}</td><td>${esc(run.shortstat)}</td><td><button data-decision="accept">accept</button> <input aria-label="Rejection reason" placeholder="rejection reason" required /> <button data-decision="reject">reject</button></td></tr>`).join("")}</tbody></table>`
+          ? `<table><thead><tr><th>loop</th><th>sha</th><th>motivation</th><th>change</th><th>verdict</th></tr></thead><tbody>${proposals
+              .map((run) => {
+                const error = events.find(
+                  (event) =>
+                    event.kind === "error" && event.loop === run.loop && event.sha === run.sha,
+                );
+                const values = error ? payload(error).values : {};
+                return `<tr data-run="${esc(run.run)}"><td>${esc(run.loop)}</td><td class="mono">${run.sha.slice(0, 7)}</td><td class="mono">${Object.entries(
+                  values,
+                )
+                  .map(
+                    ([key, value]) =>
+                      `<span class="${value > 0 ? "error" : ""}">${esc(key)} ${esc(value)}</span>`,
+                  )
+                  .join(
+                    "<br>",
+                  )}</td><td>${esc(run.shortstat)}<br><button data-open>open</button><span class="mono path">${esc(run.worktree)}</span></td><td><button data-decision="accept">accept</button> <input aria-label="Rejection reason" placeholder="rejection reason" required /> <button data-decision="reject">reject</button></td></tr>`;
+              })
+              .join("")}</tbody></table>`
           : "nothing waiting on you";
         document.querySelectorAll("#proposals button").forEach((button) => {
           button.onclick = async () => {
             const row = button.closest("tr");
+            if (button.hasAttribute("data-open")) {
+              const response = await fetch(`/runs/${encodeURIComponent(row.dataset.run)}/open`, {
+                method: "POST",
+              });
+              row.querySelector(".path").textContent = await response.text();
+              return;
+            }
             const decision = button.dataset.decision;
             const input = row.querySelector("input");
             if (decision === "reject" && !input.reportValidity()) return;
