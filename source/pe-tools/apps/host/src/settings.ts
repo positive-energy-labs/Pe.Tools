@@ -428,21 +428,28 @@ export const composeMember = Effect.fnUntraced(function* (
 
 /** The composed spec an engine consumes; refuses anything that did not compose cleanly. */
 export const composedSpec = Effect.fnUntraced(function* (
-  member: PodMember & { sha256: string },
+  member: PodMember & ({ sha256: string } | { content: string }),
   ctx: PodContext,
 ) {
-  const saved = yield* readMember(member, ctx);
-  if (saved.sha256 !== member.sha256)
-    return yield* Effect.fail(
-      new LocalOpError("pod.member.compose", "The member changed after it was reviewed.", 409),
-    );
-  const result = yield* composeMember({ ...member, content: saved.content }, ctx, {
-    id: member.pod,
-    path: member.path,
-    sha256: saved.sha256,
-    bytesBase64: saved.bytesBase64,
-    origin: "SavedMember",
-  });
+  let result: PodMemberComposeResponse;
+  if ("content" in member) {
+    // A supplied draft: its bytes are the input, captured as SuppliedDraft; the pod must exist to hold the run.
+    yield* podFolder(member.pod, ctx);
+    result = yield* composeMember(member, ctx);
+  } else {
+    const saved = yield* readMember(member, ctx);
+    if (saved.sha256 !== member.sha256)
+      return yield* Effect.fail(
+        new LocalOpError("pod.member.compose", "The member changed after it was reviewed.", 409),
+      );
+    result = yield* composeMember({ ...member, content: saved.content }, ctx, {
+      id: member.pod,
+      path: member.path,
+      sha256: saved.sha256,
+      bytesBase64: saved.bytesBase64,
+      origin: "SavedMember",
+    });
+  }
   const errors = result.diagnostics.filter((d) => d.severity === "error");
   if (errors.length || result.composed == null)
     return yield* Effect.fail(

@@ -1,7 +1,7 @@
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
  * authored scope, its cells open to proposals; capture files one spec member per picked family;
- * plan reads the page's member, or generates one member per family from staged cells, and
+ * plan reads the page's member, or sends one draft per family generated from staged cells, and
  * apply sends the sheet's included hashes. Work holds the scope and keyed cells,
  * and the rows a person held back.
  */
@@ -24,11 +24,10 @@ import {
   type EntityRouteDef,
   type PlanEntry,
 } from "#/route";
-import { podHost } from "#/route/pods";
 
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import { stagedMembers } from "./staged";
+import { stagedDrafts } from "./staged";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
@@ -49,7 +48,7 @@ export type FamiliesReadingKey = "receipts" | "inventory";
 
 /* ── The definition ────────────────────────────────────────────────────────── */
 
-/** The generated member's `$schema`: this library, on the host actually serving the page. */
+/** The generated draft's `$schema`: this library, on the host actually serving the page. */
 const stagedSchema = () =>
   typeof location === "undefined" ? FF_SPEC_SCHEMA : new URL(FF_SPEC_SCHEMA, location.origin).href;
 
@@ -78,63 +77,45 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
     },
     /**
-     * The editable table's half. Plan takes staged cells only, generates one patch member per
-     * family from them, files each in the page's pod through the same host writer capture uses, and
-     * plans each through `families.plan` over exactly that family's id; apply sends each included
-     * row's hash back to the member that produced it. The person never named, saved, or opened a
-     * file — but one exists, the sheet names it per row, and the receipt names it.
+     * The editable table's half. Plan takes staged cells only, generates one patch draft per family
+     * from them, and plans each through `families.plan` over exactly that family's id, sending the
+     * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
+     * keeps them as a supplied draft. Saving a spec to the pod is capture's job, never plan's.
      */
     staged: {
       count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        if (!ctx.page.pod) throw Error("choose the pod the generated spec lands in");
+        if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
-        const generated = stagedMembers(doc.cells, new Date(), stagedSchema());
-        for (const member of generated) {
-          const source = await podHost.write(
-            { pod: ctx.page.pod, path: member.path },
-            member.content,
-          );
-          // The page names the first generated member so the Situation can open what was written;
-          // every member is still addressed per row, and each files its own run. Named only after
-          // it exists: naming a path before the write lands makes the editor read a missing file.
-          if (member === generated[0]) ctx.setPage({ path: member.path });
+        for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
           const result = await workflow(
             "families.plan",
             {
-              source,
-              // The member selects one family by name; the plan names it by id, so the host plans
+              source: { pod: ctx.page.pod, path: draft.path, content: draft.content },
+              // The draft selects one family by name; the plan names it by id, so the host plans
               // that family alone and never lays one family's types onto the rest of the scope.
-              familyIds: [member.familyId],
+              familyIds: [draft.familyId],
               excludedIds: doc.excludedIds,
               ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
             },
             ctx,
             bases,
           );
-          // The sheet names the member each family applies from.
-          for (const plan of [result.plan].flat()) {
-            const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
-            entries.push({
-              ...row,
-              detail: `${row.detail} · from ${member.path}`,
-              source,
-              plan: String(result.id),
-            });
-          }
+          for (const plan of [result.plan].flat())
+            entries.push({ ...ffPlanRow(ffPlanEntrySchema.parse(plan)), plan: String(result.id) });
         }
-        return { entries };
+        return { entries, staged: true };
       },
-      // Each member's plan sealed its bytes and the staged cells it consumed; the host retires
+      // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
       // those cells after proven native success, only where they are still unchanged.
       apply: async (ctx, included) => {
         for (const input of byPlan(included)) await workflow("families.apply", input, ctx);
       },
     },
-    docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or generated staged cells and apply exactly the families it changes.",
+    docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or the staged cells as a draft (filed nowhere) and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<

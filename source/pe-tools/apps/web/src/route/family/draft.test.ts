@@ -100,8 +100,5 @@ test("a staged cell plans: save files the draft as a member, the plan names it",
     source: { pod: "p", path: "settings/family/box-saved.json", sha256: "b".repeat(64) },
   });
   expect(pages).toContainEqual({ path: "settings/family/box-saved.json" });
-  expect(sheet.entries[0]).toMatchObject({
-    planHash: "h",
-    source: { path: "settings/family/box-saved.json" },
-  });
+  expect(sheet).toMatchObject({ staged: true, entries: [{ planHash: "h" }] });
 });
