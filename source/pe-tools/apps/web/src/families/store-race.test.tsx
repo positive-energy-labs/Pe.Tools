@@ -20,6 +20,8 @@ const server = vi.hoisted(() => ({
   envelope: null as unknown as RouteEnvelope<FamiliesRouteDocument>,
   shown: null as unknown as RouteEnvelope<FamiliesRouteDocument>,
   refuseNext: false,
+  /** The queue's own chain, base → result, as `useRoute` keeps it (proven in schedules/seams). */
+  own: new Map<number, number>(),
 }));
 
 vi.mock("#/route", async (original) => ({
@@ -38,7 +40,10 @@ vi.mock("#/route", async (original) => ({
       key: { route: "families", target: null },
       doc: server.shown.doc,
       revision: server.shown.revision,
-      write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
+      write: async (patches: RouteStatePatch[], expectedRevision?: number | null) => {
+        if (expectedRevision === null) return { code: "not-ready", message: "not read" };
+        let bound = expectedRevision;
+        if (bound !== undefined) while (server.own.has(bound)) bound = server.own.get(bound)!;
         if (server.refuseNext) {
           server.refuseNext = false;
           return { kind: "refused", message: "refused" };
@@ -48,9 +53,10 @@ vi.mock("#/route", async (original) => ({
           server.envelope,
           "human",
           patches,
-          expectedRevision ?? server.envelope.revision,
+          bound ?? server.envelope.revision,
         );
-        if (!landed.ok) return { kind: "refused", message: landed.error };
+        if (!landed.ok) return { code: "stale-revision", message: landed.error };
+        server.own.set(landed.envelope.revision - 1, landed.envelope.revision);
         server.envelope = landed.envelope;
         return null;
       },
@@ -92,6 +98,7 @@ function start(cells: Record<string, FamilyCellState> = {}) {
   };
   server.shown = server.envelope;
   server.refuseNext = false;
+  server.own.clear();
   const hook = renderHook(() => useFamiliesStore());
   /** Show the hook whatever Work the server now holds. */
   const observe = () => {
@@ -193,4 +200,49 @@ test("each verb touches one rung: accept, counter, deny and unstage keep the oth
   expect(cell(x)).toMatchObject({ proposal: { value: { value: "R" } }, staged: null });
   await act(() => actions().propose(y, human("base"), "base"));
   expect(cell(y)?.staged ?? null).toBeNull();
+});
+
+test("deny clears only the proposal the person saw, never a newer unseen one", async () => {
+  const { actions } = start({ [familyCellKey(x)]: { proposal: pea("SEEN"), staged: null } });
+  external([{ path: ["cells", familyCellKey(x), "proposal"], value: pea("UNSEEN") }]);
+  await act(() => actions().deny([x]));
+  expect(cell(x)?.proposal?.value.value).toBe("UNSEEN");
+});
+
+test("without a rendered revision, accept and deny refuse instead of writing unbound", async () => {
+  const { hook, actions } = start({ [familyCellKey(x)]: { proposal: pea("P"), staged: null } });
+  server.shown = { ...server.envelope, revision: null as never };
+  hook.rerender();
+  const before = server.envelope;
+  let refusals!: unknown[];
+  await act(async () => {
+    refusals = [await actions().accept([x]), await actions().deny([x])];
+  });
+  expect(refusals).toEqual([
+    expect.objectContaining({ code: "not-ready" }),
+    expect.objectContaining({ code: "not-ready" }),
+  ]);
+  expect(server.envelope).toBe(before);
+});
+
+test("type then quick accept or deny lands; a foreign write between them refuses", async () => {
+  const { actions } = start({
+    [familyCellKey(x)]: { proposal: pea("P"), staged: null },
+    [familyCellKey(y)]: { proposal: pea("Q"), staged: null },
+  });
+  const quick = actions(); // rendered before anything below lands
+  expect(await act(() => quick.propose(z, human("T"), "base"))).toBeNull();
+  expect(await act(() => quick.accept([x]))).toBeNull();
+  expect(await act(() => quick.deny([y]))).toBeNull();
+  expect(cell(x)?.staged?.value.value).toBe("P");
+  expect(cell(y)?.proposal ?? null).toBeNull();
+
+  const { actions: again } = start({ [familyCellKey(x)]: { proposal: pea("P"), staged: null } });
+  const late = again();
+  await act(() => late.propose(z, human("T"), "base"));
+  external([{ path: ["cells", familyCellKey(y), "proposal"], value: pea("F") }]);
+  expect(await act(() => late.accept([x]))).toMatchObject({ code: "stale-revision" });
+  expect(await act(() => late.deny([x]))).toMatchObject({ code: "stale-revision" });
+  expect(cell(x)).toMatchObject({ proposal: { value: { value: "P" } } });
+  expect(cell(x)?.staged ?? null).toBeNull();
 });

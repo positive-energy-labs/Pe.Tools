@@ -174,8 +174,9 @@ export function useFamiliesStore(
   const cells = doc?.cells ?? NO_CELLS;
   /*
    * Every cell verb writes only the rungs it names, so a write can never carry an older copy of a
-   * cell it did not touch. Accept binds the proposal the person saw to the revision they saw it at:
-   * if Work moved since, the write is refused rather than staging a value no one reviewed.
+   * cell it did not touch. Accept and deny act on the proposal the person saw, so they bind the
+   * revision they saw it at (the queue rebases that over this owner's own landed writes only);
+   * unstage and typing touch human-only staged values and stay unbound.
    */
   const rung = (address: FamilyCellAddress, name: "proposal" | "staged", value: unknown) => ({
     path: ["cells", familyCellKey(address), name],
@@ -273,11 +274,14 @@ export function useFamiliesStore(
             const proposal = cells[familyCellKey(address)]?.proposal;
             return proposal ? [rung(address, "staged", { value: proposal.value })] : [];
           }),
-          handle.work.revision ?? undefined,
+          handle.work.revision,
         ),
-      /** Deny clears the proposal only; an independently staged human value survives. */
+      /** Deny clears the proposal on screen only; an independently staged value survives. */
       deny: (addresses: readonly FamilyCellAddress[]) =>
-        handle.work.write(addresses.map((address) => rung(address, "proposal", null))),
+        handle.work.write(
+          addresses.map((address) => rung(address, "proposal", null)),
+          handle.work.revision,
+        ),
       unstage: (addresses: readonly FamilyCellAddress[]) =>
         handle.work.write(addresses.map((address) => rung(address, "staged", null))),
       exclude: (id: number) => {
