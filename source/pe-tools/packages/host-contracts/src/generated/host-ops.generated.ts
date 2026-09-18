@@ -891,19 +891,38 @@ export namespace PodImport {
 /** Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256. */
 export namespace PodMemberCompose {
   export namespace Req {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+
     export interface Request {
       pod: string;
       path: string;
       content?: null | string;
+      source?: null | PodCapturedSourceData;
+    }
+    export interface PodCapturedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
     }
   }
   export namespace Res {
+    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
     export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
       composed?: null | string;
+      source: PodCapturedSourceData;
       diagnostics: ScriptDiagnostic[];
-      dependencies: PodDependencyData[];
+      dependencies: PodConsumedSourceData[];
+    }
+    export interface PodCapturedSourceData {
+      id: string;
+      path: string;
+      sha256: string;
+      bytesBase64: string;
+      origin: PodSourceOrigin;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -911,10 +930,11 @@ export namespace PodMemberCompose {
       message: string;
       source?: null | string;
     }
-    export interface PodDependencyData {
+    export interface PodConsumedSourceData {
       id: string;
       path: string;
       sha256: string;
+      bytesBase64: string;
     }
   }
 }

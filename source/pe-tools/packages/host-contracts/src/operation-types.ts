@@ -204,6 +204,7 @@ export type PodRuns = Schema.Schema.Type<typeof podRunsResponseSchema>;
 export const podMemberReadResponseSchema = Schema.Struct({
   content: Schema.String,
   sha256: Schema.String,
+  bytesBase64: Schema.String,
 });
 export type PodMemberRead = Schema.Schema.Type<typeof podMemberReadResponseSchema>;
 
@@ -247,9 +248,21 @@ export const podMemberComposeResponseSchema = Schema.Struct({
   /** The schema the host validated against, so the editor can render its form. */
   schemaJson: Schema.NullOr(Schema.String),
   composed: Schema.NullOr(Schema.String),
+  source: Schema.Struct({
+    id: Schema.String,
+    path: Schema.String,
+    sha256: Schema.String,
+    bytesBase64: Schema.String,
+    origin: Schema.Literals(["SavedMember", "SuppliedDraft"]),
+  }),
   diagnostics: Schema.Array(memberIssueSchema),
   dependencies: Schema.Array(
-    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      path: Schema.String,
+      sha256: Schema.String,
+      bytesBase64: Schema.String,
+    }),
   ),
   schemaValidation: Schema.Literals(["passed", "failed", "not-run", "no-schema", "unavailable"]),
   semanticValidation: Schema.Literals(["passed", "failed", "not-run", "unavailable"]),

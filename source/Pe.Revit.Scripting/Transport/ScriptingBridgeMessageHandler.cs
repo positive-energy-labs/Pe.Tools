@@ -145,11 +145,22 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
 
     [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]
     public Task<PodMemberComposeData> ComposePodMemberAsync(PodMemberComposeRequest request, CancellationToken cancellationToken) {
-        var result = this._pods.Compose(request.Pod, request.Path, request.Content);
+        var captured = request.Source is null ? null : ScriptPodPreparationService.CaptureComposeSource(request);
+        var result = this._pods.Compose(request.Pod, request.Path, request.Content, captured);
         return Task.FromResult(new PodMemberComposeData(
             result.Composed,
+            new PodCapturedSourceData(
+                result.Source.Id,
+                result.Source.Path,
+                result.Source.Sha256,
+                Convert.ToBase64String(result.Source.Bytes),
+                result.Source.Origin),
             result.Diagnostics.ToList(),
-            result.Dependencies.Select(dependency => new PodDependencyData(dependency.PodId, dependency.Path, dependency.Sha256)).ToList()
+            result.Dependencies.Select(dependency => new PodConsumedSourceData(
+                dependency.PodId,
+                dependency.Path,
+                dependency.Sha256,
+                Convert.ToBase64String(dependency.Bytes))).ToList()
         ));
     }
 

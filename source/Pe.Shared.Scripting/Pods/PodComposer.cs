@@ -4,22 +4,18 @@ using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Shared.Scripting.Pods;
 
-public sealed record PodComposedDocument(
-    string Path,
-    string Content,
-    IReadOnlyList<PodConsumedDependency> Dependencies
-);
-
 /// <summary>One consumed fragment: the pod whose manifest id owns it, its pod-relative path, and its bytes' SHA-256.</summary>
 public sealed record PodConsumedDependency(
     string PodId,
     string Path,
     string Sha256,
+    byte[] Bytes,
     string Content
 );
 
 public sealed record PodCompositionResult(
-    PodComposedDocument? Document,
+    string? Content,
+    IReadOnlyList<PodConsumedDependency> Dependencies,
     IReadOnlyList<ScriptDiagnostic> Diagnostics
 );
 
@@ -37,14 +33,14 @@ public static class PodComposer {
         var dependencies = new List<PodConsumedDependency>();
         JToken root;
         try {
-            root = JToken.Parse(source, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            root = Parse(source);
         } catch (JsonException ex) {
-            return new PodCompositionResult(null, [Error("pod.settings.json", path, ex.Message)]);
+            return new PodCompositionResult(null, dependencies, [Error("pod.settings.json", path, ex.Message)]);
         }
 
         ValidateDirectives(root, path, diagnostics);
         if (diagnostics.Count > 0)
-            return new PodCompositionResult(null, diagnostics);
+            return new PodCompositionResult(null, dependencies, diagnostics);
 
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         var expanded = ExpandPresets(root, path, resolve, visiting, dependencies, diagnostics);
@@ -53,10 +49,11 @@ public static class PodComposer {
         if (ContainsDirective(expanded))
             diagnostics.Add(Error("pod.settings.directive", path, "Composed settings contain an unresolved directive."));
         if (diagnostics.Count > 0)
-            return new PodCompositionResult(null, diagnostics);
+            return new PodCompositionResult(null, dependencies, diagnostics);
 
         return new PodCompositionResult(
-            new PodComposedDocument(path, expanded.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n", dependencies),
+            expanded.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n",
+            dependencies,
             []
         );
     }
@@ -103,7 +100,7 @@ public static class PodComposer {
                 out nestedReason
             );
         try {
-            var loaded = JToken.Parse(dependency.Content, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            var loaded = Parse(dependency.Content);
             return ExpandIncludes(
                 ExpandPresets(loaded, dependency.Path, scoped, visiting, dependencies, diagnostics),
                 dependency.Path,
@@ -202,6 +199,10 @@ public static class PodComposer {
                 : property.Value.DeepClone();
         return result;
     }
+
+    private static JToken Parse(string source) => JToken.Parse(
+        source.Length > 0 && source[0] == '\uFEFF' ? source.Substring(1) : source,
+        new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
 
     private static void ValidateDirectives(JToken token, string owner, ICollection<ScriptDiagnostic> diagnostics) {
         if (token is JObject obj) {

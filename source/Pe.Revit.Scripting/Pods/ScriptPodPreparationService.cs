@@ -42,8 +42,18 @@ public sealed record RefusedPod(
 /// <summary>One member composed on request: its composed JSON (null on error), its own diagnostics, and consumed fragments.</summary>
 public sealed record PodMemberComposition(
     string? Composed,
+    PodCapturedSource Source,
     IReadOnlyList<ScriptDiagnostic> Diagnostics,
     IReadOnlyList<PodConsumedDependency> Dependencies
+);
+
+public sealed record PodCapturedSource(
+    string Id,
+    string Path,
+    string Sha256,
+    byte[] Bytes,
+    string Content,
+    PodSourceOrigin Origin
 );
 
 /// <summary>
@@ -150,6 +160,16 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
         return (Encoding.UTF8.GetString(bytes), Sha256(bytes));
     }
 
+    internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {
+        var source = request.Source ?? throw new InvalidDataException("Captured compose source is required.");
+        var content = request.Content ?? throw new InvalidDataException("Captured compose source requires content.");
+        var bytes = Convert.FromBase64String(source.BytesBase64);
+        if (source.Id != request.Pod || source.Path != request.Path || source.Sha256 != Sha256(bytes)
+            || !bytes.SequenceEqual(Encoding.UTF8.GetBytes(content)))
+            throw new InvalidDataException("Captured compose source bytes, hash, pod, path, and content disagree.");
+        return new PodCapturedSource(source.Id, source.Path, source.Sha256, bytes, content, source.Origin);
+    }
+
     /// <summary>Creates a new member. Never overwrites: capture always creates.</summary>
     public string WriteMember(string podId, string path, string content) {
         var fullPath = this.MemberFullPath(podId, path);
@@ -163,12 +183,25 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     }
 
     /// <summary>Composes one member from the draft when given, else from disk. Only this member's diagnostics return.</summary>
-    public PodMemberComposition Compose(string podId, string path, string? draftContent) {
+    public PodMemberComposition Compose(string podId, string path, string? draftContent, PodCapturedSource? capturedSource = null) {
         var folder = this.ResolveFolder(podId);
         path = NormalizeMemberPath(path);
-        var source = draftContent ?? Encoding.UTF8.GetString(ReadBoundedFile(FullPath(folder, path)));
-        var result = PodComposer.Compose(path, source, Resolve);
-        return new PodMemberComposition(result.Document?.Content, result.Diagnostics, result.Document?.Dependencies ?? []);
+        var source = capturedSource ?? CaptureRoot();
+        var result = PodComposer.Compose(path, source.Content, Resolve);
+        return new PodMemberComposition(result.Content, source, result.Diagnostics, result.Dependencies);
+
+        PodCapturedSource CaptureRoot() {
+            var bytes = draftContent is null
+                ? ReadBoundedFile(FullPath(folder, path))
+                : Encoding.UTF8.GetBytes(draftContent);
+            return new PodCapturedSource(
+                podId,
+                path,
+                Sha256(bytes),
+                bytes,
+                draftContent ?? Encoding.UTF8.GetString(bytes),
+                draftContent is null ? PodSourceOrigin.SavedMember : PodSourceOrigin.SuppliedDraft);
+        }
 
         bool Resolve(string reference, out PodConsumedDependency dependency, out string reason) {
             dependency = null!;
@@ -183,7 +216,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
                     return false;
                 }
                 var bytes = ReadBoundedFile(fullPath);
-                dependency = new PodConsumedDependency(owner, referencedPath, Sha256(bytes), Encoding.UTF8.GetString(bytes));
+                dependency = new PodConsumedDependency(owner, referencedPath, Sha256(bytes), bytes, Encoding.UTF8.GetString(bytes));
                 return true;
             } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException) {
                 reason = $"Reference '{reference}': {exception.Message}";

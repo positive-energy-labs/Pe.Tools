@@ -145,7 +145,7 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     return yield* Effect.fail(
       new LocalOpError("pod.member.read", "The member is not valid UTF-8 text.", 400),
     );
-  return { content: read.content, sha256: read.sha256 };
+  return { content: read.content, sha256: read.sha256, bytesBase64: read.bytesBase64 };
 });
 
 /**
@@ -237,14 +237,26 @@ const written = (request: PodMember & { content: string }): PodMemberWritten => 
 export const composeMember = Effect.fnUntraced(function* (
   request: PodMemberComposeRequest,
   ctx: PodContext = {},
+  capturedSource?: PodMemberComposeResponse["source"],
 ) {
   const saved = request.content == null ? yield* readMember(request, ctx) : null;
   const content = saved?.content ?? request.content!;
+  const bytesBase64 = saved?.bytesBase64 ?? Buffer.from(content, "utf8").toString("base64");
+  let source =
+    capturedSource ??
+    ({
+      id: request.pod,
+      path: request.path,
+      sha256: saved?.sha256 ?? sha256(content),
+      bytesBase64,
+      origin: saved ? "SavedMember" : "SuppliedDraft",
+    } satisfies PodMemberComposeResponse["source"]);
   const base = {
-    sha256: saved?.sha256 ?? sha256(content),
+    sha256: source.sha256,
     schemaUrl: null,
     schemaJson: request.schemaJson ?? null,
     composed: null,
+    source,
     dependencies: [],
   };
   let value: unknown;
@@ -278,6 +290,7 @@ export const composeMember = Effect.fnUntraced(function* (
         pod: request.pod,
         path: request.path,
         content,
+        source,
       })) as PodMemberCompose.Res.Response;
       diagnostics.push(
         ...result.diagnostics.map((d) =>
@@ -285,6 +298,7 @@ export const composeMember = Effect.fnUntraced(function* (
         ),
       );
       dependencies = [...result.dependencies];
+      source = result.source;
       composed = result.composed == null ? undefined : JSON.parse(result.composed);
     }
   }
@@ -322,6 +336,7 @@ export const composeMember = Effect.fnUntraced(function* (
   } else if (schemaValidation === "passed") semanticValidation = "unavailable";
   return {
     ...base,
+    source,
     schemaUrl,
     schemaJson: schemaJson ?? null,
     composed: composed === undefined ? null : `${JSON.stringify(composed, null, 2)}\n`,
@@ -342,7 +357,13 @@ export const composedSpec = Effect.fnUntraced(function* (
     return yield* Effect.fail(
       new LocalOpError("pod.member.compose", "The member changed after it was reviewed.", 409),
     );
-  const result = yield* composeMember({ ...member, content: saved.content }, ctx);
+  const result = yield* composeMember({ ...member, content: saved.content }, ctx, {
+    id: member.pod,
+    path: member.path,
+    sha256: saved.sha256,
+    bytesBase64: saved.bytesBase64,
+    origin: "SavedMember",
+  });
   const errors = result.diagnostics.filter((d) => d.severity === "error");
   if (errors.length || result.composed == null)
     return yield* Effect.fail(
@@ -352,7 +373,12 @@ export const composedSpec = Effect.fnUntraced(function* (
         409,
       ),
     );
-  return { spec: result.composed, schemaUrl: result.schemaUrl, dependencies: result.dependencies };
+  return {
+    spec: result.composed,
+    schemaUrl: result.schemaUrl,
+    source: result.source,
+    dependencies: result.dependencies,
+  };
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
@@ -456,6 +482,7 @@ const readText = Effect.fnUntraced(function* (path: string, operationKey: string
     content,
     utf8: isUtf8(result.success),
     sha256: createHash("sha256").update(result.success).digest("hex"),
+    bytesBase64: Buffer.from(result.success).toString("base64"),
   };
 });
 

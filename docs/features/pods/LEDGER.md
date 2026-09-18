@@ -30,6 +30,7 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-17: One thread binds one Revit document. "A single thread should only have one canonical document bound." The thread head is the one target store; every product route and every chat pane reads and writes it; the URL carries the thread, and a `?target` pin is a view, never a second store. A second document is a second thread. (Demiurge round 1, shape A2.)
 - 2026-09-17: The audit stage is a live read of the target's entity into an in-memory draft; capture and apply are "save this draft as a member" and "write this draft to Revit". A pod appears at save, not at audit. `/family` stops requiring a saved member to look at a family. One draft shape per entity serves the audit table and the spec editor; on schedules, cell values are a section of the spec that capture omits. (Shape B1; the user: "if it makes sense architecturally and/or could help us code share and consolidate then I'm in".)
 - 2026-09-17: A draft is thread-owned Work, not route-owned page state. Pea proposes into it from chat without the route being open; the inline chat card renders the same proposals band the route renders; the user opens the route to see the whole table. "User asks to rename a param across the entire project, then the inline rendered proposal in chat surfaces it to the user, and the user can open the route to see. That is my dream."
+- 2026-09-18: Composition retains the exact consumed root and dependency bytes once; effective JSON is a decoded view and never source-byte authority.
 
 ## Tried & rejected
 
@@ -58,3 +59,4 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - Migrate the user's local `OneDrive/Documents/Pe.Tools` to `Pods/<folder>` shape by a one-shot destructive script after committing; the old tree is deleted.
 - Prove actual Family Foundry and Schedules operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
 - Add Git/cloud transport only when its concrete workflow is selected; archive transport is the present carrier.
+- Migrate `PodMembers.Load` and native plan/apply adapters to the captured composition source; run outputs must include that source before native/run-output acceptance.
