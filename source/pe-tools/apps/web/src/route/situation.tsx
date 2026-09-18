@@ -222,8 +222,9 @@ export function Cluster({
 
 /**
  * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.
- * By default the ladder binds through `?target`; a route whose binding lives elsewhere (Chat's
- * thread head) hands in its own `binding` and the ladder reads and writes that instead.
+ * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
+ * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
+ * composer hands in its own `binding`.
  */
 export function useDocumentLadder(
   handle: RouteHandle<any, any, any, any>,
@@ -233,7 +234,7 @@ export function useDocumentLadder(
     bind: (ref: { session: string; openId: string }) => void;
   },
 ) {
-  const [, choose] = useChooseTarget();
+  const [pin, choose] = useChooseTarget();
   // The kernel's own inventory: a route need not declare an `inventory` Reading to show sessions.
   const inventory = handle.inventory;
   const observed = previousOf(inventory) as
@@ -255,18 +256,25 @@ export function useDocumentLadder(
       : inventory.state === "loading" && !sessions.length
         ? "reading sessions…"
         : undefined;
+  const head = handle.head;
   const pick = (openId: string) => {
     if (!sessionId) return;
     onTarget?.();
     chooseSession(null);
     const ref = { session: sessionId, openId };
     if (binding) binding.bind(ref);
+    else if (head)
+      void head.set({ kind: "open", ref }).then((moved) => {
+        if (moved && pin) choose(null);
+      });
     else choose(JSON.stringify({ kind: "open", ref }));
   };
   const sessionWord = session ? (session.sdkSessionId ?? session.sessionId) : null;
   return {
     sessionWord,
     docWord: doc?.title ?? null,
+    /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
+    refusal: binding ? null : (head?.refusal ?? null),
     levels: [
       {
         key: "session",
@@ -622,7 +630,9 @@ export function Situation({
   const stage = typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const verbs = Object.entries(handle.actions).filter(
-    ([, action]) => !action.stage || action.stage === stage,
+    ([name, action]) =>
+      (!action.stage || action.stage === stage) &&
+      !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
   const nounOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;

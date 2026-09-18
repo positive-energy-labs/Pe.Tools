@@ -273,6 +273,15 @@ async function run(page: Page, label: string) {
   await button.click();
 }
 
+/** The plan sheet gates apply: its `apply N rows` is the only apply button (w8-revit trip 5). */
+async function applySheet(page: Page) {
+  const button = page
+    .getByRole("region", { name: "Confirmation sheet" })
+    .getByRole("button", { name: /^apply \d+ rows?/ });
+  await expect.poll(() => button.isEnabled(), { timeout: 30_000 }).toBe(true);
+  await button.click();
+}
+
 async function landed(page: Page, pattern: RegExp) {
   await expect
     .poll(() => decodeURIComponent(new URL(page.url()).searchParams.get("path") ?? ""), {
@@ -354,7 +363,7 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
     await run(page, "capture family");
     const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
     await run(page, "plan");
-    await run(page, "apply family");
+    await applySheet(page);
     // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
@@ -474,7 +483,7 @@ test("live /families: proposed cells, one accepted and one denied, plan and appl
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(`from ${path}`);
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
-    await run(page, "apply families");
+    await applySheet(page);
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
     // Applied proposals are spent; the receipt is the record from here.
     await expect
@@ -496,7 +505,7 @@ test("live /families: capture, plan, apply files a run receipt", async () => {
     const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
     // The captured family model is itself a families spec: plan and apply it.
     await run(page, "plan");
-    await run(page, "apply families");
+    await applySheet(page);
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
       .toContain("apply families ran");

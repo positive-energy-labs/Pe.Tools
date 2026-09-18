@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { FamiliesWorkspace } from "#/families/workspace";
 import { useFamiliesStore } from "#/families/store";
-import { entitySearch, routeSearch, type EntitySearch } from "#/route";
+import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
 
 import { manifest as familiesManifest } from "#/families/manifest";
 export const manifest = familiesManifest;
@@ -12,10 +12,9 @@ const str = (value: unknown) => (typeof value === "string" ? value : "");
 /** `?demo=<action>` mounts one seed of `manifest.seeds`; stage, pod and path are the page in the URL. */
 export const familiesSearch = (
   search: Record<string, unknown>,
-): ReturnType<typeof routeSearch> & EntitySearch & { thread?: string; demo?: string } => ({
+): ReturnType<typeof routeSearch> & EntitySearch & { demo?: string } => ({
   ...routeSearch(search),
   ...entitySearch(search),
-  thread: str(search.thread) || undefined,
   demo: str(search.demo) || undefined,
 });
 
@@ -25,7 +24,8 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  const { target, thread, stage, pod, path } = Route.useSearch();
+  const { target, stage, pod, path } = Route.useSearch();
+  const thread = useRouteThread();
   return <FamiliesRouteContent target={target} thread={thread} entry={{ stage, pod, path }} url />;
 }
 

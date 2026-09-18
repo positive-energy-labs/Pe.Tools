@@ -1,4 +1,10 @@
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  retainSearchParams,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { RegistryContext } from "@effect/atom-react";
@@ -30,6 +36,8 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   validateSearch: routeSearch,
+  // The URL carries the thread (its head is the target store) and a `?target` pin across every link.
+  search: { middlewares: [retainSearchParams(["thread", "target"])] },
   head: () => ({
     meta: [
       {

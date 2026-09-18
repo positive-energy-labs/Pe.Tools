@@ -83,6 +83,8 @@ export interface RouteAction<W, R extends string, P, I = void> {
   chord?: UseHotkeyDefinition["hotkey"];
   /** The stage this verb belongs to; absent = every stage. The Situation scopes its verb row by it. */
   stage?: string;
+  /** Runs only from its confirmation sheet; the verb row draws no second button for it. */
+  sheet?: true;
   /** Page state the verb carries in its button ("Partition 10"); null = no count. */
   count?: (ctx: Ctx<W, R, P>) => number | null;
   ready: (ctx: Ctx<W, R, P>, input: I) => string | null;
@@ -456,6 +458,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const apply: RouteAction<unknown, string, EntityPage, never> = {
     label: `apply ${def.entity}`,
     ...semanticActionFacts(def.apply),
+    // The plan sheet gates apply: its button is the only one (w8-revit trip 5).
+    ...(plan || staged ? { sheet: true as const } : {}),
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
     count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
