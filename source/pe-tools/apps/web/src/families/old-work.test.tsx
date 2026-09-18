@@ -75,8 +75,12 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
   });
   await router.load();
   render(<RouterProvider router={router} />);
-  const status = await screen.findByText((_, node) =>
-    Boolean(node?.getAttribute("role") === "status" && node.textContent?.includes(UNREADABLE)),
+  const status = await screen.findByText(
+    (_, node) =>
+      Boolean(node?.getAttribute("role") === "status" && node.textContent?.includes(UNREADABLE)),
+    undefined,
+    // A whole route mount; under a loaded full run it outlasts the default second.
+    { timeout: 5_000 },
   );
   expect(status).toBeTruthy();
   expect(screen.getByText("unreadable")).toBeTruthy();

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
@@ -349,6 +350,63 @@ test("a bound write with no rendered revision refuses as not-ready and says so",
   expect(route().failure).toMatchObject({ code: "not-ready" });
   expect((await f.view()).revision).toBe(rendered);
   mounted.unmount();
+});
+
+/** An action whose run writes one cell through `ctx.write`, from the snapshot it was built at. */
+async function mountAction() {
+  const f = await setup();
+  stubBrowser(f.app);
+  await f.patch([{ path: ["cells"], value: {} }]);
+  const base = schedulesManifest();
+  const manifest = {
+    ...base,
+    actions: {
+      ...base.actions,
+      poke: {
+        label: "poke",
+        says: "writes one cell",
+        needs: "host" as const,
+        actor: "any" as const,
+        input: z.void(),
+        dirties: [],
+        ready: () => null,
+        run: async (ctx: { write: (patches: unknown[]) => Promise<unknown> }) => {
+          await ctx.write(stage("5::1", "action"));
+        },
+      },
+    },
+  } as unknown as ReturnType<typeof schedulesManifest>;
+  let route!: ReturnType<typeof useRoute>;
+  function Probe() {
+    route = useRoute(manifest, { work: f.scope.work }) as never;
+    return <span>{String(route.work.revision)}</span>;
+  }
+  const mounted = render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <Probe />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => expect(route.work.current).toBe(true));
+  return { f, mounted, route: () => route };
+}
+
+test("an action's write follows the owner's own writes past its snapshot, and a foreign write still refuses", async () => {
+  for (const foreign of [false, true]) {
+    const { f, mounted, route } = await mountAction();
+    const poke = (route().actions as Record<string, { run: () => Promise<unknown> }>).poke!;
+    let refusal: unknown;
+    await act(async () => {
+      expect(await route().work.write(stage("5::0", "own"))).toBeNull();
+      if (foreign) await f.patch(stage("5::9", "foreign"));
+      refusal = await poke.run();
+    });
+    if (foreign) expect(refusal).toMatchObject({ code: "stale-revision" });
+    else {
+      expect(refusal).toBeNull();
+      expect((await f.view()).doc.cells["5::1"]?.staged?.value).toBe("action");
+    }
+    mounted.unmount();
+  }
 });
 
 test("a push run line says where its receipt lives and each cell before → after", async () => {

@@ -2,9 +2,9 @@
 import {
   familyCellAddress,
   familyCellKey,
+  familyStagedPatch,
   type FamilyCellAddress,
   type FamilyCellState,
-  type FamilyCellValue,
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA } from "#/host/familyfoundry";
@@ -41,15 +41,6 @@ export interface FamilyCellEntry extends FamilyCellAddress {
 export const familyCellEntries = (cells: Record<string, FamilyCellState>): FamilyCellEntry[] =>
   Object.entries(cells).map(([key, cell]) => ({ key, ...familyCellAddress(key), cell }));
 
-export const patchValue = (text: string): string | number | boolean =>
-  text === "true"
-    ? true
-    : text === "false"
-      ? false
-      : text.trim() !== "" && Number.isFinite(Number(text))
-        ? Number(text)
-        : text;
-
 export interface StagedMember {
   familyId: number;
   familyName: string;
@@ -64,31 +55,23 @@ export function stagedMembers(
   at: Date,
   schema: string = FF_SPEC_SCHEMA,
 ): StagedMember[] {
-  const byFamily = new Map<number, (FamilyCellAddress & FamilyCellValue)[]>();
-  for (const { cell, ...address } of familyCellEntries(cells)) {
-    if (!cell.staged) continue;
-    const value = cell.staged.value;
-    const bucket = byFamily.get(address.familyId);
-    if (bucket) bucket.push({ ...address, ...value });
-    else byFamily.set(address.familyId, [{ ...address, ...value }]);
-  }
   const stamp = at.toISOString().replace(/[:.]/g, "-");
-  return [...byFamily.values()]
-    .map((entries) => {
-      const { familyId, familyName } = entries[0]!;
-      const types: Record<string, Record<string, string | number | boolean>> = {};
-      for (const entry of entries)
-        (types[entry.typeName] ??= {})[entry.parameter] = patchValue(entry.value);
+  const ids = [
+    ...new Set(familyCellEntries(cells).flatMap((e) => (e.cell.staged ? [e.familyId] : []))),
+  ];
+  return ids
+    .map((familyId) => {
+      const { familyName, spec, keys } = familyStagedPatch(cells, familyId)!;
       return {
         familyId,
         familyName,
         path: `settings/families/staged-${familyName.replace(/[^\w.-]+/g, "-")}-${stamp}.json`,
-        content: `${JSON.stringify(
-          { $schema: schema, select: { names: [familyName] }, patch: { types } },
-          null,
-          2,
-        )}\n`,
-        cells: entries.map((entry) => `${entry.typeName} · ${entry.parameter} = ${entry.value}`),
+        // The host proves a planned member is exactly this before the plan may retire its cells.
+        content: `${JSON.stringify({ $schema: schema, ...spec }, null, 2)}\n`,
+        cells: keys.map((key) => {
+          const { typeName, parameter } = familyCellAddress(key);
+          return `${typeName} · ${parameter} = ${cells[key]!.staged!.value.value}`;
+        }),
       };
     })
     .sort((a, b) => a.familyName.localeCompare(b.familyName));

@@ -991,11 +991,11 @@ export function useRoute<W, R extends string, P, A extends string>(
       page,
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
+      // Bound to the action's snapshot, through the queue: it follows this owner's own landed
+      // writes past that snapshot, and a foreign write still refuses it.
       write: async (patches: RouteStatePatch[]) => {
         const refusal =
-          writer && actionRevision !== null
-            ? await writer.apply(patches, actionRevision)
-            : notHydrated;
+          actionRevision === null ? notHydrated : await writeWork(patches, actionRevision);
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
@@ -1070,6 +1070,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     doc,
     workCurrent,
     writer,
+    writeWork,
     owner,
     seed,
     key,

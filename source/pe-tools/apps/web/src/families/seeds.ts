@@ -174,7 +174,7 @@ export const FAMILIES_SEEDS = {
     stage: "apply",
     path: DEMO_FAMILIES_SPEC_PATH,
     confirming: true,
-    sheet: { entries: plan.map(ffPlanRow) },
+    sheet: { entries: plan.map((row) => ({ ...ffPlanRow(row), plan: "demo-plan" })) },
   }),
   edit: seed(
     "two cell proposals across two families, one staged; plan generates the spec from the staged one",

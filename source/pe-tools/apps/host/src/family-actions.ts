@@ -9,7 +9,12 @@ import {
   familiesCaptureEvidenceSchema,
   familiesRouteState,
   familiesIncluded,
+  familyCellAddress,
+  familyDraftRouteState,
+  familyStagedPatch,
   memberWork,
+  stagedEntries,
+  transitionPatches,
   parameterLinksRouteState,
   parameterLinksBasis,
   parameterLinksReadingSchema,
@@ -27,6 +32,8 @@ import {
   type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
+  type Rung,
+  type WorkKey,
   FAMILY_SCOPE_LIMIT,
 } from "@pe/agent-contracts";
 import type {
@@ -254,6 +261,34 @@ export async function lifetime(
   return { session: await current(bridge, target, family, process), process };
 }
 
+/** The staged cells a plan provably consumed, at the Work revision the plan was bound to. */
+type Consumed = { key: WorkKey; route: "family" | "families"; cells: Record<string, Rung> };
+type Sealed = {
+  specJson: string;
+  source: { root: { bytesBase64: string } };
+  executionOptions?: unknown;
+  /** Null: no Work basis, or a member the staged cells do not generate. It retires nothing. */
+  consumed: Consumed | null;
+};
+
+/** A member's JSON as authored, ignoring the `$schema` URL its writer stamps. */
+const unstamped = (json: string) => {
+  const { $schema: _, ...rest } = JSON.parse(json.replace(/^\uFEFF/, "")) as { $schema?: unknown };
+  return canonicalRouteInput(rest);
+};
+const rootText = (source: Sealed["source"]) =>
+  Buffer.from(source.root.bytesBase64, "base64").toString("utf8");
+const consumedOf = (
+  key: WorkKey,
+  route: Consumed["route"],
+  cells: Record<string, { staged?: Rung | null }>,
+  keys: string[],
+): Consumed => ({
+  key,
+  route,
+  cells: Object.fromEntries(keys.map((cell) => [cell, cells[cell]!.staged!])),
+});
+
 type Prepared =
   | {
       kind: "settings";
@@ -275,6 +310,10 @@ type Prepared =
         /** A subset of the scope the caller names (one generated member's family); absent = all. */
         familyIds?: readonly number[];
       };
+      /** A plan seals everything its apply consumes; apply never re-reads the member or Work. */
+      sealed?: Sealed;
+      /** An apply retires these staged cells after proven native success, if still unchanged. */
+      retire?: Consumed | null;
     }
   | {
       kind: "capture";
@@ -383,31 +422,70 @@ export async function admitFamilyAction(
           at: new Date().toISOString(),
         };
       }
-      if (key === "family.plan" || key === "family.apply") {
+      if (key === "family.plan") {
         const { specJson, source } = await familySpec(
           deps,
-          familyActions["family.plan"].input.parse(admission.input).source,
+          familyActions[key].input.parse(admission.input).source,
           pods,
         );
-        return key === "family.apply"
-          ? {
-              kind: "native",
-              process,
-              nativeKey: "family.apply",
-              input: {
-                specJson,
-                expectedPlanHashes: familyActions[key].input.parse(admission.input)
-                  .expectedPlanHashes,
-                source,
-              },
-            }
-          : {
-              kind: "native",
-              process,
-              nativeKey: "family.plan",
-              input: { specJson },
-              planned: { scope: null, excludedIds: [] },
-            };
+        // With a reviewed draft, the plan consumes its staged cells only if the member IS that draft.
+        const base = admission.bases.work;
+        let consumed: Consumed | null = null;
+        if (base) {
+          const view = work ? await work.read(base.key, familyDraftRouteState.route) : null;
+          if (!view || view.revision !== base.revision)
+            throw refused("Current reviewed Family Work is required");
+          const draft = familyDraftRouteState.schema.parse(view.doc);
+          const staged = stagedEntries(draft.cells).map(([cell]) => cell);
+          if (
+            draft.reading !== null &&
+            staged.length &&
+            unstamped(settingsCandidate(draft.reading, draft.cells)) === unstamped(rootText(source))
+          )
+            consumed = consumedOf(base.key, "family", draft.cells, staged);
+        }
+        return {
+          kind: "native",
+          process,
+          nativeKey: "family.plan",
+          input: { specJson },
+          planned: { scope: null, excludedIds: [] },
+          sealed: { specJson, source, consumed },
+        };
+      }
+      if (key === "family.apply" || key === "families.apply") {
+        const input = familyActions[key].input.parse(admission.input);
+        if (!Object.keys(input.expectedPlanHashes).length)
+          throw refused("No included family has changes to apply");
+        // The succeeded plan's sealed preparation is the input: never a live member or Work read.
+        const planKey = key === "family.apply" ? "family.plan" : "families.plan";
+        const [plan] = await owner.list(undefined, input.plan);
+        const sealed =
+          plan?.preparation.state === "ready"
+            ? (plan.preparation.value as { sealed?: Sealed }).sealed
+            : undefined;
+        if (!plan || plan.key !== planKey || plan.state !== "succeeded" || !sealed)
+          throw refused(`Apply must name a succeeded ${planKey} action`);
+        if (canonicalRouteInput(plan.destination) !== canonicalRouteInput(admission.destination))
+          throw refused("The plan was made for a different document");
+        const included = (plan.result as { included: Record<string, string> }).included;
+        const stray = Object.keys(input.expectedPlanHashes).filter(
+          (id) => included[id] !== input.expectedPlanHashes[id],
+        );
+        if (stray.length)
+          throw refused(`Families ${stray.join(", ")} are not in the reviewed plan as sent`);
+        return {
+          kind: "native",
+          process,
+          nativeKey: key,
+          input: {
+            specJson: sealed.specJson,
+            expectedPlanHashes: input.expectedPlanHashes,
+            source: sealed.source,
+            ...(sealed.executionOptions ? { executionOptions: sealed.executionOptions } : {}),
+          },
+          retire: sealed.consumed,
+        };
       }
       if (key === "families.plan") {
         const input = familyActions[key].input.parse(admission.input);
@@ -416,33 +494,37 @@ export async function admitFamilyAction(
         const view = base && work ? await work.read(base.key, familiesRouteState.route) : null;
         if (!view || view.revision !== base!.revision)
           throw refused("Current reviewed Families Work is required");
-        const { scope } = familiesRouteState.schema.parse(view.doc);
+        const doc = familiesRouteState.schema.parse(view.doc);
+        const scope = doc.scope;
         if (!scope) throw refused("Author a scope before planning");
+        const { specJson, source } = await familySpec(deps, input.source, pods);
+        // A generated member plans one family; it consumes that family's staged cells only if the
+        // member is exactly what those cells generate.
+        const generated =
+          input.familyIds?.length === 1 ? familyStagedPatch(doc.cells, input.familyIds[0]!) : null;
+        const consumed =
+          generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
+            ? consumedOf(base!.key, "families", doc.cells, generated.keys)
+            : null;
         return {
           kind: "native",
           process,
           nativeKey: "families.plan",
           input: {
-            specJson: (await familySpec(deps, input.source, pods)).specJson,
+            specJson,
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+          },
+          sealed: {
+            specJson,
+            source,
+            ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+            consumed,
           },
           planned: {
             scope,
             excludedIds: input.excludedIds,
             ...(input.familyIds ? { familyIds: input.familyIds } : {}),
           },
-        };
-      }
-      if (key === "families.apply") {
-        const input = familyActions[key].input.parse(admission.input);
-        if (!Object.keys(input.expectedPlanHashes).length)
-          throw refused("No included family has changes to apply");
-        // The saved bytes must still be the ones planned; the engine gates each family's hash.
-        return {
-          kind: "native",
-          process,
-          nativeKey: "families.apply",
-          input: { ...input, ...(await familySpec(deps, input.source, pods)) },
         };
       }
       if (key === "parameter-links.apply") {
@@ -619,6 +701,7 @@ export async function admitFamilyAction(
             if (planned.diagnostics.length)
               throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
             return {
+              id: admission.id,
               executionContext: target,
               plan: planned.families,
               included: familiesIncluded({ entries: planned.families }, excludedIds),
@@ -632,10 +715,34 @@ export async function admitFamilyAction(
                 "Expected one family plan",
             );
           return {
+            id: admission.id,
             executionContext: target,
             plan,
             included: { [String(plan!.familyId)]: plan!.planHash },
           };
+        }
+        const consumed = prepared.retire;
+        if (consumed) {
+          const succeeded = new Set(
+            (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
+              receipt.success ? [receipt.familyId] : [],
+            ),
+          );
+          // A family document applies its one family; Families retires per proven family only.
+          const retiring: Consumed = {
+            ...consumed,
+            cells: Object.fromEntries(
+              Object.entries(consumed.cells).filter(
+                ([cell]) =>
+                  consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyId),
+              ),
+            ),
+          };
+          const retired = await execution.step("publication", "work.retire", retiring, () =>
+            retire(work, retiring, admission.actor),
+          );
+          await execution.publish(retired);
+          return { executionContext: target, native: result, retired };
         }
         return {
           executionContext: target,
@@ -677,6 +784,44 @@ export async function admitFamilyAction(
     },
     resume,
   );
+}
+
+/**
+ * Retire the consumed cells: each rung clears only while it still equals what the plan consumed,
+ * so edits and proposals made after review survive. It re-reads and retries on a concurrent write
+ * and never touches native work. Journaled as one step, so a replay never runs it twice.
+ */
+async function retire(
+  work: ReturnType<typeof actionWorkspace> | undefined,
+  consumed: Consumed,
+  actor: "human" | "agent",
+) {
+  if (!work) throw new ActionIncomplete("Applied; Work was unavailable to retire staged cells", {});
+  const route =
+    consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+  // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const view = await work.read(consumed.key, route);
+    if (!view) return { retired: [] as string[] };
+    const cells = (
+      view.doc as { cells: Record<string, { proposal?: Rung | null; staged?: Rung | null }> }
+    ).cells;
+    const patches = Object.entries(consumed.cells).flatMap(([cell, rung]) =>
+      cells[cell]
+        ? transitionPatches(["cells"], cell, cells[cell]!, { kind: "retire", consumed: rung })
+        : [],
+    );
+    const retired = [...new Set(patches.map((patch) => String(patch.path[1])))];
+    if (!patches.length) return { retired, revision: view.revision };
+    const landed = await work.apply(consumed.key, route, actor, patches, view.revision);
+    if (landed.ok) return { retired, revision: landed.revision };
+    if (landed.code !== "stale_revision")
+      throw new ActionIncomplete(
+        `Applied; retiring staged cells was refused: ${landed.error}`,
+        landed,
+      );
+  }
+  throw new ActionIncomplete("Applied; Work kept moving, so staged cells were not retired", {});
 }
 
 export const recoverFamilyAction = (

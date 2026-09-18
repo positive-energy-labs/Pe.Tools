@@ -66,13 +66,13 @@ test("held-back rows are the Work's exclusions", () => {
   expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
 });
 
-test("apply sends the source with exactly the included hashes", async () => {
+test("apply names its plan with exactly the included hashes", async () => {
   const ctx = view({ confirming: true, sheet: seed.page.sheet });
   expect(manifest.actions!.apply.ready(ctx as never, undefined as never)).toBeNull();
   await manifest.actions!.apply.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
     "families.apply",
-    { source, expectedPlanHashes: { "3101": "plan-3101" } },
+    { plan: "demo-plan", expectedPlanHashes: { "3101": "plan-3101" } },
     ref,
     undefined,
   );
