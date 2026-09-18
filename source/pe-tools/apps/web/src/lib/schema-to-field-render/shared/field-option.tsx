@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
-import type { SettingsValidationResult } from "../field-state";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import type {
   NormalizedRenderFieldOptionDependency,
   RenderSchemaNode,
@@ -37,7 +37,8 @@ export interface SchemaToFieldRenderProps {
   schema: RenderSchemaNode;
   schemaUrl: string;
   baselineValues: SettingsValues;
-  validationResult?: SettingsValidationResult;
+  /** The host's diagnostics on these values; each lands beside the field its path names. */
+  issues?: readonly MemberIssue[];
   useRemoteOptions?: RemoteOptionsHook;
 }
 
@@ -77,7 +78,7 @@ export interface ResolvedFieldRendererProps extends FieldRendererProps {
 export interface SchemaRenderContextValue {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
-  errors: ReadonlyMap<string, string[]>;
+  errors: ReadonlyMap<string, MemberIssue[]>;
   schemaUrl: string;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
@@ -98,7 +99,7 @@ export function SchemaRenderProvider({
 }: {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
-  errors: ReadonlyMap<string, string[]>;
+  errors: ReadonlyMap<string, MemberIssue[]>;
   schemaDocument: SchemaDocument;
   schemaUrl: string;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;

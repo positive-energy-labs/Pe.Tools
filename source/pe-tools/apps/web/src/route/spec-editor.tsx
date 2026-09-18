@@ -13,6 +13,7 @@
  */
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { z } from "zod";
+import { SchemaDocument } from "@pe/schema-core";
 import {
   memberWork,
   podMemberSchema,
@@ -32,6 +33,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
+import { projectHostValidationState } from "#/lib/schema-to-field-render/field-state";
 import type { RemoteOptionsHook } from "#/lib/schema-to-field-render/shared";
 import {
   inventoryOf,
@@ -365,6 +367,8 @@ const setAt = (root: Record<string, unknown>, path: string, value: unknown) => {
 const siblingPath = (path: string, at = new Date()) =>
   path.replace(/(\.json)?$/, `.${at.toISOString().replace(/[:.]/g, "-")}.json`);
 
+const NO_ISSUES: Composed["diagnostics"] = [];
+
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function SpecEditor({
@@ -395,7 +399,8 @@ export function SpecEditor({
   const [typed, setDraft] = useState<string | null>(null);
   const [schemaJson, setSchemaJson] = useState<string | null>(fixture?.schema ?? null);
   const [mode, setMode] = useState<Mode>("form");
-  const [composed, setComposed] = useState<Composed | null>(null);
+  /** The host's last answer, with the draft it answered: an answer on older bytes gates nothing. */
+  const [composed, setComposed] = useState<(Composed & { draft: string }) | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
   const key = member ? `${member.pod}/${member.path}` : "";
@@ -448,6 +453,15 @@ export function SpecEditor({
   const form = useMemo(() => schemaFormModel(draft, schemaJson), [draft, schemaJson]);
   const baseline = useMemo(() => schemaFormModel(basis, schemaJson), [basis, schemaJson]);
   const shown: Mode = form ? mode : "raw";
+  const issues = composed?.diagnostics ?? NO_ISSUES;
+  // In the form each issue with a path lands beside its field; the rest stay outcome lines.
+  const unplaced = useMemo(
+    () =>
+      shown === "form" && form
+        ? projectHostValidationState(SchemaDocument.from(form.schema), issues).formIssues
+        : issues,
+    [shown, form, issues],
+  );
 
   // Host diagnostics follow the draft: schema issues always, composition and semantics in Revit.
   useEffect(() => {
@@ -459,7 +473,7 @@ export function SpecEditor({
         .compose(member, draft)
         .then((result) => {
           if (!live) return;
-          setComposed(result);
+          setComposed({ ...result, draft });
           if (result.schemaJson) setSchemaJson(result.schemaJson);
         })
         .catch((error) => live && setFailure(message(error)));
@@ -508,15 +522,22 @@ export function SpecEditor({
         setFailure(message(error));
       }
     });
+  // Guard (law 14): a member is JSON the type cannot close; the host's schema and composition
+  // checks are the judge, so save refuses bytes the host has not yet answered or just called invalid.
+  const hostErrors = issues.filter((issue) => issue.severity === "error");
   const saveReason = fixture
     ? "The demo member is read-only."
     : parsed.error
       ? `The draft is not JSON: ${parsed.error}`
       : !synced
         ? "The draft is still being staged on the member."
-        : dirty
-          ? null
-          : "Nothing to save.";
+        : !dirty
+          ? "Nothing to save."
+          : composed?.draft !== draft
+            ? "The host is still checking this draft."
+            : hostErrors.length
+              ? `The host called this draft invalid: ${hostErrors.length === 1 ? "1 error" : `${hostErrors.length} errors`}, first ${hostErrors[0]!.path || "the member"}: ${hostErrors[0]!.message}.`
+              : null;
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5">
@@ -618,6 +639,7 @@ export function SpecEditor({
               baselineValues={baseline.baseline}
               useRemoteOptions={options.useRemoteOptions}
               values={form.parsedRaw}
+              issues={issues}
               onChange={(path, value) =>
                 setDraft(JSON.stringify(setAt(form.parsedRaw, path, value), null, 2))
               }
@@ -636,7 +658,7 @@ export function SpecEditor({
           says="the schema form cannot render this draft; raw JSON is kept as written"
         />
       ) : null}
-      {(composed?.diagnostics ?? []).map((issue, index) => (
+      {unplaced.map((issue, index) => (
         <OutcomeLine
           key={index}
           kind={issue.severity === "error" ? "error" : "advisory"}
