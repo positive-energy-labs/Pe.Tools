@@ -138,21 +138,23 @@ type Write = (patches: RouteStatePatch[]) => Promise<{ code: string; message: st
 /**
  * The cell's verbs over one segment of a route document. The ONLY availability code in the web
  * app: a proposal that differs from what is staged stands (open, or a counter-proposal) and takes
- * accept/deny; anything staged takes unstage; a contested cell takes all three. StateCell draws
- * exactly what this returns.
+ * accept/deny; anything staged takes unstage; a contested cell takes all three. A locked cell
+ * (`lock` is its reason) keeps only deny, to clear a stray Pea proposal. StateCell draws exactly
+ * what this returns.
  */
 export function reviewTransitions(
   segment: string,
   address: string,
   cell: ReviewCell,
   write: Write,
+  lock: string | null = null,
 ): CellTransition[] {
   const read = cellFromTrichotomy(cell, { value: null });
   const counter = read.counterValue != null;
   const standing = read.stage === "proposed" || counter;
   const patch = reviewPatches(segment);
   return [
-    ...(standing
+    ...(standing && lock == null
       ? ([
           {
             kind: "accept",
@@ -161,6 +163,10 @@ export function reviewTransitions(
               : "Stage Pea's proposal",
             run: () => write(patch.accept(address, cell)),
           },
+        ] as const)
+      : []),
+    ...(standing
+      ? ([
           {
             kind: "deny",
             reason: counter
@@ -170,7 +176,7 @@ export function reviewTransitions(
           },
         ] as const)
       : []),
-    ...(cell.staged != null
+    ...(cell.staged != null && lock == null
       ? ([
           {
             kind: "unstage",

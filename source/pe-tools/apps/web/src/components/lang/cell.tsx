@@ -29,7 +29,7 @@
  *   1 uneditable owns the body · 2 pea's proposal owns it otherwise · 3 the squiggle slot ·
  *   4 unsaved composes on top · 5 citation never contends.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { Check, Undo2, X, type LucideIcon } from "lucide-react";
 
@@ -136,15 +136,17 @@ export function StateCell(props: StateCellProps) {
   initial.current = typeof value === "string" ? value : "";
 
   // A transition in flight inerts every verb on the cell; its refusal rides the same note.
-  const [pending, setPending] = useState(false);
+  const [pending, startRun] = useTransition();
   const transitions = props.transitions ?? [];
   const fire = (t: CellTransition) => {
     if (pending) return;
-    setPending(true);
-    t.run()
-      .then((out) => setRefusal(out ? out.message : null))
-      .catch((cause: unknown) => setRefusal(cause instanceof Error ? cause.message : String(cause)))
-      .finally(() => setPending(false));
+    startRun(async () => {
+      const out = await t.run().catch((cause: unknown) => ({
+        code: "failed",
+        message: cause instanceof Error ? cause.message : String(cause),
+      }));
+      setRefusal(out ? out.message : null);
+    });
   };
   // Row scale: the td that owns focus. Keys register only while it (or its input) holds focus.
   const rowRef = useRef<HTMLSpanElement | null>(null);

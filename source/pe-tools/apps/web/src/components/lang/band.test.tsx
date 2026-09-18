@@ -38,6 +38,19 @@ test("a staged cell that agrees with Pea takes unstage only, compared as canonic
   ).toEqual(["unstage"]);
 });
 
+test("a locked cell keeps deny only, to clear a stray Pea proposal", () => {
+  const stray = { proposal: { value: "40A", by: "pea" as const }, staged: null };
+  expect(
+    reviewTransitions(
+      "cells",
+      "a",
+      stray,
+      vi.fn(async () => null),
+      "formula-driven",
+    ).map((t) => t.kind),
+  ).toEqual(["deny"]);
+});
+
 test("unstage on the schedule-grid review clears staged through the consumer's apply", () => {
   const apply = vi.fn<ScheduleGridState["apply"]>(async () => null);
   const state = {
