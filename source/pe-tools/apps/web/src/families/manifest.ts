@@ -158,7 +158,9 @@ export const manifest = entityRoute<
       dirties: [],
       stage: "audit",
       count: (ctx) => ctx.page.draft.categories.length || null,
-      ready: (ctx) => (ctx.page.draft.categories.length ? null : "Pick a category first"),
+      // Unreadable Work takes no scope: its refusal (and start fresh) is the only instruction.
+      ready: (ctx) =>
+        ctx.work.refusal ?? (ctx.page.draft.categories.length ? null : "Pick a category first"),
       run: async (ctx) => {
         const { categories, families, placement } = ctx.page.draft;
         // A plan confirmed over another scope no longer describes what apply would touch.

@@ -66,6 +66,8 @@ export interface Ctx<W, R extends string, P> {
     readonly key: WorkKey;
     readonly doc: W | null;
     readonly revision: number | null;
+    /** Why the Work cannot be read (unreadable saved Work); null when it can. */
+    readonly refusal: string | null;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   readonly page: P;

@@ -334,6 +334,9 @@ function useFamiliesWorkspaceModel(
 
   return {
     store,
+    /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
+     * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
+    workUnreadable: store.handle.work.refusal != null,
     fixture,
     target,
     scope,

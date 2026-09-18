@@ -91,6 +91,19 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
   expect(status).toBeTruthy();
   expect(screen.getByText("unreadable")).toBeTruthy();
 
+  // F-J6-1: the refusal sentence is the only instruction. The Work-bearing controls are inert,
+  // and the empty-Work instruction is not drawn.
+  const placement = screen.getByRole("combobox", { name: "placement filter" });
+  expect(
+    placement.hasAttribute("disabled") || placement.getAttribute("aria-disabled") === "true",
+  ).toBe(true);
+  const applyScope = screen.getByRole("button", { name: /apply scope/ });
+  expect(
+    applyScope.hasAttribute("disabled") || applyScope.getAttribute("aria-disabled") === "true",
+  ).toBe(true);
+  expect(document.body.textContent).not.toContain("press “apply scope”");
+  expect(document.body.textContent).toContain("the saved Work cannot be read");
+
   // The human verb beside the sentence posts the host's human door once, never Pea's.
   const posts: string[] = [];
   vi.stubGlobal("fetch", async (url: string) => {

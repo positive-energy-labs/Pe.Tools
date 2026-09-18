@@ -22,6 +22,7 @@ export function FamiliesMatrix() {
     setPickedIds,
     connected,
     applied,
+    workUnreadable,
   } = useFamiliesWorkspace();
   // Chat's group drill-in: only the types holding a pending cell under the focused path.
   const focus = useContext(ChatFocus);
@@ -117,7 +118,10 @@ export function FamiliesMatrix() {
           empty={
             // §4's two kinds of empty: the first three are the route's story (nothing in scope);
             // the last fires only when rows exist and the table's own narrowing hid them.
-            !connected ? (
+            workUnreadable ? (
+              // The Situation's refusal sentence is the only instruction: this says what is, no exit.
+              <p className="t-small text-ink-2">no matrix — the saved Work cannot be read</p>
+            ) : !connected ? (
               <EmptyState
                 story="scope"
                 exit="connect the host in Revit, then bind that world in the sentence above"
