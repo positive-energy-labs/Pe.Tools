@@ -5,7 +5,7 @@ import { Check, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { ReviewRow, ReviewActions, WorkBand } from "#/components/lang/band";
+import { ReviewRow, reviewTransitions, WorkBand } from "#/components/lang/band";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -295,7 +295,22 @@ function BandRoute() {
         width: "w-44",
         cell: (item) =>
           changed(item) ? (
-            <ReviewActions address={item.key} cell={item.cell} {...verbs} />
+            <StateCell
+              value=""
+              scale="row"
+              transitions={reviewTransitions("cells", item.key, item.cell, async (patches) => {
+                const kind =
+                  patches[0]!.path.at(-1) === "proposal"
+                    ? "deny"
+                    : "value" in (patches[0] ?? {})
+                      ? "accept"
+                      : "unstage";
+                verbs[kind === "accept" ? "onAccept" : kind === "deny" ? "onDeny" : "onUnstage"](
+                  item.key,
+                );
+                return null;
+              })}
+            />
           ) : (
             <ReadCell value="—" />
           ),
@@ -467,7 +482,14 @@ function BandRoute() {
                             label={item.param}
                             cell={item.cell}
                             facts={facts(item, "inline")}
-                            {...verbs}
+                            segment="cells"
+                            write={async (patches) => {
+                              const p = patches[0]!;
+                              if (p.path.at(-1) === "proposal") verbs.onDeny(item.key);
+                              else if ("value" in p) verbs.onAccept(item.key);
+                              else verbs.onUnstage(item.key);
+                              return null;
+                            }}
                           />
                         ))}
                         {chatItems.length > 5 ? (

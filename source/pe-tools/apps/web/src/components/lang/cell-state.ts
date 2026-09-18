@@ -105,6 +105,26 @@ export interface StateCellProps {
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
+  /**
+   * THE CELL'S OWN VERBS (verdict 2026-09-18: approve/deny belong to the cell, as transitions of
+   * the language). The caller decides which kinds are available; the cell draws exactly these,
+   * in this order, and holds NO availability logic. Typing is `stage` and stays `onCommit`.
+   * Card scale draws them inline after the value. Row scale costs zero footprint: they overlay
+   * the trailing edge while the cell is hovered or focused, and a focused table cell takes
+   * `a` / `d` / `u` through the hotkey registry. A run in flight marks the cell busy and inerts
+   * its verbs; a returned refusal shows its message beside the cell (the `onCommit` note).
+   */
+  transitions?: readonly CellTransition[];
+}
+
+export type CellTransitionKind = "accept" | "deny" | "unstage";
+
+export interface CellTransition {
+  kind: CellTransitionKind;
+  /** Resolves to a refusal when the write was refused; nothing or null when it landed. */
+  run: () => Promise<{ code: string; message: string } | null | void>;
+  /** What pressing it does, in this cell's words. Defaults to the kind's plain sentence. */
+  reason?: string;
 }
 
 /**

@@ -54,7 +54,8 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
   const items = reviewAddresses(state.slice?.cells ?? {});
   const staged = items.filter(([, cell]) => cell.staged != null);
   const patch = reviewPatches("cells");
-  const run = (patches: RouteStatePatch[]) => void state.apply(patches).catch(() => undefined);
+  const write = (patches: RouteStatePatch[]) => state.apply(patches);
+  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
   const busy = state.busy != null;
   return (
     <WorkBand
@@ -78,6 +79,7 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
         return (
           <ReviewRow
             key={key}
+            segment="cells"
             address={key}
             label={`${snapshot?.columns.find((c) => c.columnNumber === columnNumber)?.headerText ?? columnNumber} · row ${rowNumber}`}
             cell={cell}
@@ -91,10 +93,7 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
                 />
               ),
             }}
-            busy={busy}
-            onAccept={(address) => run(patch.accept(address, cell))}
-            onDeny={(address) => run(patch.deny(address))}
-            onUnstage={(address) => run(patch.unstage(address))}
+            write={write}
           />
         );
       })}

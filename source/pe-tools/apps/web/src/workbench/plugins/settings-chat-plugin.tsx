@@ -69,7 +69,7 @@ function SettingsReview({
 }: RouteChatPluginProps & {
   work: {
     revision: number | null;
-    write: (patches: RouteStatePatch[]) => Promise<unknown>;
+    write: (patches: RouteStatePatch[]) => Promise<{ code: string; message: string } | null>;
     conflict: boolean;
     reload: () => void;
   };
@@ -90,7 +90,8 @@ function SettingsReview({
   const reviewable = items.length > 0;
   const staged = items.filter(([, field]) => field.staged != null);
   const patch = reviewPatches("fields");
-  const run = (patches: RouteStatePatch[]) => void work.write(patches).catch(() => undefined);
+  const write = (patches: RouteStatePatch[]) => work.write(patches);
+  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
 
   if (active && !reviewable) return null;
 
@@ -137,14 +138,12 @@ function SettingsReview({
           body={items.map(([path, field]) => (
             <ReviewRow
               key={path}
+              segment="fields"
               address={path}
               label={path}
               cell={field}
               facts={{ value: displaySettingsValue(field.staged ?? field.proposal) }}
-              busy={busy}
-              onAccept={(address) => run(patch.accept(address, field))}
-              onDeny={(address) => run(patch.deny(address))}
-              onUnstage={(address) => run(patch.unstage(address))}
+              write={write}
             />
           ))}
         />

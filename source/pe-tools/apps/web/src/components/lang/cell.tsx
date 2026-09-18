@@ -29,10 +29,14 @@
  *   1 uneditable owns the body · 2 pea's proposal owns it otherwise · 3 the squiggle slot ·
  *   4 unsaved composes on top · 5 citation never contends.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
+import { Check, Undo2, X, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
+import { keyMeta } from "#/route/keys";
 
+import { ActionButton } from "./action-button";
 import "./lang.css";
 
 export const stateCellRecipe = tv({
@@ -43,6 +47,8 @@ export const stateCellRecipe = tv({
     input: "dl-cell-input",
     unsettled: "dl-sq",
     refusal: "dl-refuse",
+    acts: "dl-acts",
+    act: "dl-act",
     ghost: "dl-ghost",
     foot: "dl-foot",
     citation: "dl-cite",
@@ -53,7 +59,15 @@ export const stateCellRecipe = tv({
   defaultVariants: { size: "card" },
 });
 
-import { cellFactsText, fmtNum, parseCell, readCell, type StateCellProps } from "./cell-state";
+import {
+  cellFactsText,
+  fmtNum,
+  parseCell,
+  readCell,
+  type CellTransition,
+  type CellTransitionKind,
+  type StateCellProps,
+} from "./cell-state";
 
 export {
   CELL_STATE_ORDER,
@@ -63,7 +77,52 @@ export {
   fmtNum,
   parseCell,
 } from "./cell-state";
-export type { CellStateName, StateCellProps, Unsettled } from "./cell-state";
+export type {
+  CellStateName,
+  CellTransition,
+  CellTransitionKind,
+  StateCellProps,
+  Unsettled,
+} from "./cell-state";
+
+/** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
+const TRANSITION: Record<CellTransitionKind, { icon: LucideIcon; key: string; says: string }> = {
+  accept: { icon: Check, key: "a", says: "Stage Pea's proposal" },
+  deny: { icon: X, key: "d", says: "Clear Pea's proposal" },
+  unstage: { icon: Undo2, key: "u", says: "Clear the staged value" },
+};
+
+/**
+ * A focused table cell's `a` / `d` / `u`, registered on the cell's own td so the chord beats the
+ * table's type-to-edit (the hotkey stops propagation) and help lists them only while it is focused.
+ * Inside the input the keys are text: single keys ignore inputs by default.
+ */
+function CellKeys({
+  target,
+  transitions,
+  fire,
+}: {
+  target: HTMLElement;
+  transitions: readonly CellTransition[];
+  fire: (t: CellTransition) => void;
+}) {
+  useHotkeys(
+    transitions.map((t) => ({
+      hotkey: TRANSITION[t.kind].key as "A",
+      callback: () => fire(t),
+      options: {
+        meta: keyMeta({
+          name: t.kind,
+          description: t.reason ?? TRANSITION[t.kind].says,
+          tier: "widget",
+          region: "table",
+        }),
+      },
+    })),
+    { target },
+  );
+  return null;
+}
 
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
@@ -75,6 +134,37 @@ export function StateCell(props: StateCellProps) {
   const [refusal, setRefusal] = useState<string | null>(null);
   const initial = useRef(typeof value === "string" ? value : "");
   initial.current = typeof value === "string" ? value : "";
+
+  // A transition in flight inerts every verb on the cell; its refusal rides the same note.
+  const [pending, setPending] = useState(false);
+  const transitions = props.transitions ?? [];
+  const fire = (t: CellTransition) => {
+    if (pending) return;
+    setPending(true);
+    t.run()
+      .then((out) => setRefusal(out ? out.message : null))
+      .catch((cause: unknown) => setRefusal(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setPending(false));
+  };
+  // Row scale: the td that owns focus. Keys register only while it (or its input) holds focus.
+  const rowRef = useRef<HTMLSpanElement | null>(null);
+  const [focusHost, setFocusHost] = useState<HTMLElement | null>(null);
+  const hasTransitions = transitions.length > 0;
+  useEffect(() => {
+    const host = rowRef.current?.closest<HTMLElement>("[data-master-cell]");
+    if (!hasTransitions || !host) return;
+    const on = () => setFocusHost(host);
+    const off = (e: FocusEvent) => {
+      if (!host.contains(e.relatedTarget as Node | null)) setFocusHost(null);
+    };
+    host.addEventListener("focusin", on);
+    host.addEventListener("focusout", off);
+    if (host.contains(document.activeElement)) setFocusHost(host);
+    return () => {
+      host.removeEventListener("focusin", on);
+      host.removeEventListener("focusout", off);
+    };
+  }, [hasTransitions]);
 
   const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
@@ -118,8 +208,11 @@ export function StateCell(props: StateCellProps) {
     };
     return (
       <span
+        ref={rowRef}
         className={slots.base()}
         data-scale="row"
+        data-focus={focusHost != null ? "" : undefined}
+        aria-busy={pending || undefined}
         onClick={locate}
         data-body={read.body ?? undefined}
         data-seam={read.seam ? "" : undefined}
@@ -166,6 +259,32 @@ export function StateCell(props: StateCellProps) {
         ) : (
           value
         )}
+        {hasTransitions ? (
+          <span className={slots.acts()}>
+            {transitions.map((t) => {
+              const Icon = TRANSITION[t.kind].icon;
+              return (
+                <button
+                  key={t.kind}
+                  type="button"
+                  className={slots.act()}
+                  aria-label={t.kind}
+                  title={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
+                  disabled={pending}
+                  tabIndex={-1}
+                  // the verb must never take the caret from the input it overlays
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => fire(t)}
+                >
+                  <Icon />
+                </button>
+              );
+            })}
+          </span>
+        ) : null}
+        {focusHost != null && hasTransitions ? (
+          <CellKeys target={focusHost} transitions={transitions} fire={fire} />
+        ) : null}
         {refusal != null ? (
           <button
             type="button"
@@ -205,6 +324,7 @@ export function StateCell(props: StateCellProps) {
   return (
     <span
       className={slots.wrapper()}
+      aria-busy={pending || undefined}
       onClick={locate}
       title={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}
     >
@@ -230,6 +350,27 @@ export function StateCell(props: StateCellProps) {
           <span className={slots.ghost()} title="the value the model currently holds">
             {modelValue}
           </span>
+        ) : null}
+        {transitions.map((t) => (
+          <ActionButton
+            key={t.kind}
+            tone={t.kind === "accept" ? "agent" : "act"}
+            icon={TRANSITION[t.kind].icon}
+            label={t.kind}
+            reason={t.reason ?? TRANSITION[t.kind].says}
+            busy={pending}
+            onClick={() => fire(t)}
+          />
+        ))}
+        {refusal != null ? (
+          <button
+            type="button"
+            className={slots.refusal()}
+            title={`${refusal} — click to dismiss`}
+            onClick={() => setRefusal(null)}
+          >
+            {refusal}
+          </button>
         ) : null}
       </span>
       {facts.length > 0 && !hoverFoot ? (

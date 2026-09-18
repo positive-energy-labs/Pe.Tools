@@ -2,24 +2,19 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { ReviewActions, type ReviewCell } from "#/components/lang/band";
+import { reviewTransitions, type ReviewCell } from "#/components/lang/band";
 import type { ScheduleGridState } from "#/route/schedules/workspace";
 import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 afterEach(cleanup);
 
-const verbs = (cell: ReviewCell) => {
-  render(
-    <ReviewActions
-      address="a"
-      cell={cell}
-      onAccept={vi.fn()}
-      onDeny={vi.fn()}
-      onUnstage={vi.fn()}
-    />,
-  );
-  return screen.queryAllByRole("button").map((button) => button.textContent);
-};
+const verbs = (cell: ReviewCell) =>
+  reviewTransitions(
+    "cells",
+    "a",
+    cell,
+    vi.fn(async () => null),
+  ).map((t) => t.kind);
 
 test("an open proposal takes accept and deny", () => {
   expect(verbs({ proposal: { value: "10in", by: "pea" }, staged: null })).toEqual([

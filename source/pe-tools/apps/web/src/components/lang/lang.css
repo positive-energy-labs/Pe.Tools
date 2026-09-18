@@ -337,6 +337,59 @@
   cursor: pointer;
 }
 
+/* at card scale the note sits in the value line, beside the cell; there is no row to protect. */
+.dl-cell-line > .dl-refuse {
+  position: static;
+  max-width: 36ch;
+}
+
+/* THE CELL'S VERBS (verdict 2026-09-18). Row scale: ZERO footprint — an overlay on the trailing
+   edge, drawn only while the cell is hovered, focused or in flight, so the row never widens or
+   grows. The overlay takes the cell's own ground so the value under it does not show through. */
+.dl-acts {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 4;
+  display: none;
+  align-items: center;
+  background: var(--dl-cell-fill, var(--pe-on));
+}
+.dl-cell:hover > .dl-acts,
+.dl-cell:focus-within > .dl-acts,
+.dl-cell[data-focus] > .dl-acts,
+.dl-cell[aria-busy="true"] > .dl-acts {
+  display: inline-flex;
+}
+.dl-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--item-h) - 2px);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pe-ink);
+  cursor: pointer;
+}
+.dl-act:hover {
+  background-image: var(--fill-veil);
+}
+.dl-act:disabled {
+  color: var(--pe-ink-2);
+  cursor: progress;
+}
+.dl-act > svg {
+  width: 12px;
+  height: 12px;
+}
+/* in flight: the cell says it is being written, and nothing else about it changes. */
+.dl-cell[aria-busy="true"] {
+  cursor: progress;
+}
+
 /* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
       "state of the value"; the colour says which state; the two primary text colours are
       untouched. Rides on the TEXT, never on the box. */

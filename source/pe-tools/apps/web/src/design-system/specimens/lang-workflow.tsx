@@ -6,7 +6,6 @@ import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-f
 import {
   reviewAddresses,
   reviewCommit,
-  ReviewActions,
   ReviewRow,
   WorkBand,
   type ReviewCell,
@@ -30,7 +29,7 @@ const REVIEW_SPECIMEN: Record<string, ReviewCell> = {
   },
   "Neck Height": { proposal: { value: "10in", by: "pea" }, staged: { value: "10in" } },
 };
-const reviewHandlers = { onAccept: noop, onDeny: noop, onUnstage: noop };
+const write = async () => null;
 
 export function LangWorkflowSpecimens() {
   return (
@@ -41,10 +40,7 @@ export function LangWorkflowSpecimens() {
           <Kbd mute>Esc</Kbd>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame
-        name="WorkBand · ReviewRow · ReviewActions"
-        importPath="#/components/lang/band"
-      >
+      <SpecimenFrame name="WorkBand · ReviewRow" importPath="#/components/lang/band">
         <WorkBand
           count={2}
           noun="edit"
@@ -55,22 +51,15 @@ export function LangWorkflowSpecimens() {
           body={reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
             <ReviewRow
               key={address}
+              segment="fields"
               address={address}
               label={address}
               cell={cell}
               facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
-              {...reviewHandlers}
+              write={write}
             />
           ))}
         />
-        <div className="flex items-baseline gap-3 pt-2">
-          <span>table column</span>
-          <ReviewActions
-            address="Neck Width"
-            cell={REVIEW_SPECIMEN["Neck Width"]}
-            {...reviewHandlers}
-          />
-        </div>
       </SpecimenFrame>
       <RecipeGrid
         name="AddressingBar"

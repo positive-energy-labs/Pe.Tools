@@ -237,7 +237,8 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
   const moved = !work.demo && readSha !== null && basisSha !== null && readSha !== basisSha;
   if (!items.length && !moved) return null;
   const patch = reviewPatches("fields");
-  const run = (patches: RouteStatePatch[]) => void work.work.write(patches).catch(() => undefined);
+  const write = (patches: RouteStatePatch[]) => work.work.write(patches);
+  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
   const busy = work.busy !== null;
   return (
     <ArtifactFrame
@@ -278,14 +279,12 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
           body={items.map(([path, cell]) => (
             <ReviewRow
               key={path}
+              segment="fields"
               address={path}
               label={<span className="face-mono">{path}</span>}
               cell={cell}
               facts={{ value: display(cell.staged ?? cell.proposal) }}
-              busy={busy}
-              onAccept={(address) => run(patch.accept(address, cell))}
-              onDeny={(address) => run(patch.deny(address))}
-              onUnstage={(address) => run(patch.unstage(address))}
+              write={write}
             />
           ))}
         />

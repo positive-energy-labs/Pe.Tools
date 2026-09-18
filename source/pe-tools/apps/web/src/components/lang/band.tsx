@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
-import { Check, Undo2, X } from "lucide-react";
 import type { RouteStatePatch, TrichotomyCellLike } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
-import { cellFromTrichotomy, StateCell, type StateCellProps } from "#/components/lang/cell";
+import {
+  cellFromTrichotomy,
+  StateCell,
+  type CellTransition,
+  type StateCellProps,
+} from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
 
 export interface WorkBandProps {
@@ -129,108 +132,88 @@ export type ReviewCell = Pick<TrichotomyCellLike, "proposal" | "staged"> & {
   staged?: { value?: unknown; delete?: true } | null;
 };
 
-export interface ReviewHandlers {
-  onAccept: (address: string) => void;
-  onDeny: (address: string) => void;
-  onUnstage: (address: string) => void;
-  busy?: boolean;
-}
+type Write = (patches: RouteStatePatch[]) => Promise<{ code: string; message: string } | null>;
 
-/** Open or contested, read through the one reader so equality is canonical JSON. */
-const reviewRead = (cell: ReviewCell) => {
-  const read = cellFromTrichotomy(cell, { value: null });
-  return { standing: read.stage === "proposed" || read.counterValue != null, read };
-};
-
+// bridge: replaced by availableTransitions from @pe/agent-contracts (v3) — delete on SHA
 /**
- * The one verb set for a trichotomy cell, at every scale. A proposal that differs from what is
- * staged is standing (open, or a counter-proposal) and takes accept/deny; anything staged takes
- * unstage. A contested cell therefore offers all three (journeys review 2). A clean or pea-less
- * cell draws nothing.
+ * The cell's verbs over one segment of a route document. The ONLY availability code in the web
+ * app: a proposal that differs from what is staged stands (open, or a counter-proposal) and takes
+ * accept/deny; anything staged takes unstage; a contested cell takes all three. StateCell draws
+ * exactly what this returns.
  */
-export function ReviewActions({
-  address,
-  cell,
-  onAccept,
-  onDeny,
-  onUnstage,
-  busy,
-}: ReviewHandlers & { address: string; cell: ReviewCell }) {
-  const { standing, read } = reviewRead(cell);
+export function reviewTransitions(
+  segment: string,
+  address: string,
+  cell: ReviewCell,
+  write: Write,
+): CellTransition[] {
+  const read = cellFromTrichotomy(cell, { value: null });
   const counter = read.counterValue != null;
-  if (!standing && cell.staged == null) return null;
-  return (
-    <span className="flex gap-1">
-      {standing ? (
-        <>
-          <ActionButton
-            tone="agent"
-            icon={Check}
-            label="accept"
-            disabled={busy}
-            reason={
-              counter
-                ? "Stage Pea's counter-proposal in place of your staged value"
-                : "Stage Pea's proposal"
-            }
-            onClick={() => onAccept(address)}
-          />
-          <ActionButton
-            icon={X}
-            label="deny"
-            disabled={busy}
-            reason={
-              counter
-                ? "Clear Pea's counter-proposal; your staged value stays"
-                : "Clear Pea's proposal"
-            }
-            onClick={() => onDeny(address)}
-          />
-        </>
-      ) : null}
-      {cell.staged != null ? (
-        <ActionButton
-          icon={Undo2}
-          label="unstage"
-          disabled={busy}
-          reason="Clear the staged value; restore the standing proposal or baseline"
-          onClick={() => onUnstage(address)}
-        />
-      ) : null}
-    </span>
-  );
+  const standing = read.stage === "proposed" || counter;
+  const patch = reviewPatches(segment);
+  return [
+    ...(standing
+      ? ([
+          {
+            kind: "accept",
+            reason: counter
+              ? "Stage Pea's counter-proposal in place of your staged value"
+              : "Stage Pea's proposal",
+            run: () => write(patch.accept(address, cell)),
+          },
+          {
+            kind: "deny",
+            reason: counter
+              ? "Clear Pea's counter-proposal; your staged value stays"
+              : "Clear Pea's proposal",
+            run: () => write(patch.deny(address)),
+          },
+        ] as const)
+      : []),
+    ...(cell.staged != null
+      ? ([
+          {
+            kind: "unstage",
+            reason: "Clear the staged value; restore the standing proposal or baseline",
+            run: () => write(patch.unstage(address)),
+          },
+        ] as const)
+      : []),
+  ];
 }
 
 /**
- * One changed address at card scale: its label, the StateCell, whose staged value it is in words
- * (a compact head has no table to carry that), and the verbs.
+ * One changed address at card scale: its label, the StateCell carrying its own verbs, and whose
+ * staged value it is in words (a compact head has no table to carry that).
  */
 export function ReviewRow({
+  segment,
   address,
   label,
   cell,
   facts,
   show,
-  ...handlers
-}: ReviewHandlers & {
+  write,
+}: {
+  segment: string;
   address: string;
   label: ReactNode;
   cell: ReviewCell;
   facts: StateCellProps;
   /** The caller's word for a counter-proposed value. */
   show?: (value: unknown) => string;
+  write: Write;
 }) {
   const props = cellFromTrichotomy(cell, facts, show);
   return (
-    <div className="grid grid-cols-[9rem_minmax(0,1fr)_auto] items-baseline gap-3 py-2">
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 py-2">
       <span className="truncate">{label}</span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <StateCell {...props} />
+        <StateCell {...props} transitions={reviewTransitions(segment, address, cell, write)} />
         {props.stagedBy ? (
           <span className="t-small text-ink-2">by {props.stagedBy === "pea" ? "Pea" : "you"}</span>
         ) : null}
       </span>
-      <ReviewActions address={address} cell={cell} {...handlers} />
     </div>
   );
 }
