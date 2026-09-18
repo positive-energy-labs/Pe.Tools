@@ -190,6 +190,8 @@ Held: `/families` read pressure (w4 8, 17) until w7-scope lands and a driver can
 
 Held: shape 4 field options until the demiurge round; `/families` read pressure; the `inventory` reading and `JOIN_GUIDE.md` copies.
 
+- w8-nested: ADOPT, grafted. Report `reports/w8-nested.md`. `FamilyModelJson.FindModel` (`FamilyModelContracts.cs:1166`) finds a nested family's model by `$schema` suffix and `family.name` among the folder's top-level JSON members; no match falls to `.rfa`; two matches refuse naming both files; a schema-less member is plain data and is skipped. The "declares X, expected Y" guard is deleted because a name match makes that state impossible. All nine fixtures renamed to `.json`; the six authored ones gain `$schema`. `Pe.Shared.Tests` 207, web 411, three C# projects compile. NUMBER on the branch: 1, the validator's own `externalRequirements` test; every other pattern 0. Left: resolution scans top-level only, O(members × nested); `codegen:check` printed nothing for ten minutes in that worktree (it ran clean in the commander's).
+
 ### Wave 8 candidates (none cast; the user's shape pick from `reports/w7-census.md` comes first)
 
 1. w8-revit: walk the landed tree in a controlled session. Claims: the air-terminal plan with no hand edit (w7-engine); scoped `families.plan` sends the category's ids and w6-cancel's stop-after-this-family (w7-scope, w6-cancel); save-as address refresh and Edit Family capture (w7-address); `pea script bootstrap` with no `--bridge-session-id` (w7-pea); the dialog answers (w7-engine); `schedule.capture` run on `/pods`.
