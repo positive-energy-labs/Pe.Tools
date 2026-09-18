@@ -112,6 +112,15 @@ const familyMember = (modelJson: string) => {
   };
 };
 
+/** A draft saved as a member says what it is, whatever `$schema` it carried. */
+const draftContent = (spec: string) => {
+  const { $schema: _, ...model } = JSON.parse(spec.replace(/^﻿/, "")) as object & {
+    $schema?: string;
+  };
+  return `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}
+`;
+};
+
 export const runPods = <A, E>(
   deps: PodDependencies,
   effect: Effect.Effect<A, E, FileSystem.FileSystem>,
@@ -265,8 +274,11 @@ type Prepared =
       process: NativeProcess;
       nativeKey: string;
       input: unknown;
-      pod: string;
+      /** Null: a live read that files nothing. */
+      pod: string | null;
       path: string | null;
+      /** The draft's text to file instead of what Revit said. */
+      spec: string | null;
       at: string;
     };
 
@@ -334,15 +346,21 @@ export async function admitFamilyAction(
       }
       const { process } = await lifetime(bridge, target!, documentKind(key), deps);
       if (key === "family.capture" || key === "families.capture") {
-        const input = admission.input as { pod: string; path?: string; familyIds?: number[] };
-        await runPods(deps, podFolder(input.pod, pods));
+        const input = admission.input as {
+          pod?: string;
+          path?: string;
+          spec?: string;
+          familyIds?: number[];
+        };
+        if (input.pod) await runPods(deps, podFolder(input.pod, pods));
         return {
           kind: "capture",
           process,
           nativeKey: key,
           input: key === "families.capture" ? { familyIds: input.familyIds } : {},
-          pod: input.pod,
+          pod: input.pod ?? null,
           path: input.path ?? null,
+          spec: input.spec ?? null,
           at: new Date().toISOString(),
         };
       }
@@ -491,6 +509,8 @@ export async function admitFamilyAction(
                 {
                   familyId: 0,
                   ...familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
+                  // Saving a draft files the draft's text; the run still holds what Revit said.
+                  ...(prepared.spec ? { content: draftContent(prepared.spec) } : {}),
                   path:
                     prepared.path ??
                     capturePath(
@@ -500,12 +520,20 @@ export async function admitFamilyAction(
                     ),
                 },
               ];
+        // No pod: the live read the audit drafts from. Nothing is filed.
+        if (!prepared.pod)
+          return {
+            executionContext: target,
+            spec: specs[0]!.content,
+            evidence: { ...(captured as object), origin: "capture", rfaPath: null, run: null },
+          };
+        const pod = prepared.pod;
         const members: PodMemberWritten[] = [];
         // Each captured member gets its own run, so `/pods` lists it against that member like any
         // other run; the run holds the unmodeled facts the member cannot carry.
         const runs = new Map<number, string>();
         for (const { familyId, content, unmodeled, path } of specs) {
-          const request = { pod: prepared.pod, path, content };
+          const request = { pod, path, content };
           const written = (await execution.step("file", "pod.member.write", request, () =>
             writeMemberOnce(deps, request, pods),
           )) as PodMemberWritten;

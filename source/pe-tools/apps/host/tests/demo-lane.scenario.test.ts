@@ -366,7 +366,8 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
   expect(shown).toContain("Succeeded");
   // The capture filed a run of its own on this member: that run holds the unmodeled facts.
   expect(shown).toContain("family.capture");
-  expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
+  // The first capture is the audit's live read into the draft (no pod); the second saves the draft.
+  expect(workflows).toEqual(["family.capture", "family.capture", "family.plan", "family.apply"]);
 }, 180_000);
 
 /**

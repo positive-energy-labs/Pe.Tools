@@ -29,7 +29,7 @@ test("/family is one kernel definition: audit, capture, apply, with the build ce
     capture: "family.capture",
     apply: "family.apply",
     needs: "document",
-    specPicker: "always",
+    specPicker: "apply",
     schema: "/schemas/settings/FamilyFoundry/models.json",
   });
   expect(manifest.stages?.map((stage) => stage.key)).toEqual(["audit", "capture", "apply"]);
@@ -40,15 +40,20 @@ test("/family is one kernel definition: audit, capture, apply, with the build ce
     "capture",
     "plan",
     "prepare-build",
+    "read",
   ]);
   expect(manifest.actions?.build.stage).toBe("audit");
 });
 
-test("every seed opens an authored fixture member of the demo pod at its stage", () => {
+test("every seed drafts an authored fixture; all but the live read open its demo member", () => {
   const seeds = familyManifest().seeds ?? {};
   const members = FAMILY_DEMO_PODS[0]!.members.map((member) => member.path);
-  expect(Object.keys(seeds).sort()).toEqual(["apply", "build", "capture"]);
+  expect(Object.keys(seeds).sort()).toEqual(["apply", "build", "capture", "read"]);
+  // The live read: a family in the draft, no pod bound.
+  expect(seeds.read!.page).not.toHaveProperty("pod");
+  expect(seeds.read!.work).toMatchObject({ reading: familyFixtures.box });
   for (const [action, seed] of Object.entries(seeds)) {
+    if (action === "read") continue;
     const page = seed!.page as { stage: string; pod: string; path: string };
     expect(page.pod).toBe("demo");
     expect(members).toContain(page.path);

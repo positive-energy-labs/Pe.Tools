@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   actionStatusSchema,
   familyActions,
+  familyDraftRouteState,
   ffPlanEntrySchema,
   familyEvidenceSchema,
   familyProjectionSchema,
@@ -16,10 +17,16 @@ import {
   type ActionStatus,
   type FamilyCapture,
   type FamilyDocument,
+  type FamilyDraft,
+  type FamilyProposal,
   type PodMemberSource,
   type Seed,
   type WorkKey,
   type DocumentRef,
+  type SettingsFieldState,
+  type RouteStatePatch,
+  settingsCandidate,
+  settingsFieldPointer,
 } from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
@@ -28,9 +35,11 @@ import {
   entityRoute,
   semanticActionFacts,
   semanticActionInput,
+  workflow,
   type Ctx as RouteCtx,
   type EntityPage,
   type EntityRouteDef,
+  type MemberSource,
   type PodRow,
 } from "#/route";
 import { previousOf } from "#/readings";
@@ -45,8 +54,52 @@ import {
 /** The `$schema` path that says a member is a family model: the spec `/family` captures and applies. */
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
 
-/** Family edits the member's Settings Work; the route itself has no authored document. */
-type FamilyRouteDocument = Record<string, never>;
+/** The route's Work is the family draft: the live reading and the proposals on it. */
+type FamilyRouteDocument = FamilyDraft;
+
+/** The draft's spec text with every accepted proposal laid on it: what save files and plan plans. */
+export const draftSpec = (draft: FamilyDraft): string | null =>
+  draft.reading === null
+    ? null
+    : settingsCandidate(draft.reading, draftFields({ ...draft, edits: [] }));
+
+/**
+ * A person's field edits laid on the draft (the workspace's `fields.<pointer>.staged|proposal`
+ * patches): a staged field is an accept by a person and settles any proposal there; a cleared
+ * proposal is a deny and leaves nothing.
+ */
+export function proposeOnDraft(
+  draft: FamilyDraft,
+  patches: readonly RouteStatePatch[],
+): FamilyDraft {
+  let { edits, accepted } = draft;
+  for (const { path, value } of patches) {
+    const pointer = String(path[1]);
+    edits = edits.filter((edit) => edit.pointer !== pointer);
+    if (path[2] === "staged")
+      accepted = [
+        ...accepted.filter((edit) => edit.pointer !== pointer),
+        { pointer, ...(value as { value?: unknown; delete?: true }), by: "human" },
+      ];
+  }
+  return { ...draft, edits, accepted };
+}
+
+/** The draft's proposals as the field trichotomy the family workspace renders. */
+export const draftFields = (draft: Pick<FamilyDraft, "edits" | "accepted">) => {
+  const edit = ({ value, delete: remove }: FamilyProposal) =>
+    remove ? { delete: true as const } : { value };
+  const fields: Record<string, SettingsFieldState> = {};
+  for (const proposal of draft.edits)
+    fields[proposal.pointer] = { proposal: { ...edit(proposal), by: proposal.by }, staged: null };
+  for (const accepted of draft.accepted)
+    fields[accepted.pointer] = {
+      proposal: null,
+      ...fields[accepted.pointer],
+      staged: edit(accepted),
+    };
+  return fields;
+};
 
 export interface FamilyPage {
   view: "sheet" | "anatomy" | "drill" | "inspector";
@@ -77,7 +130,7 @@ const familyPageSchema = z.object({
 });
 
 export type FamilyReadingKey = "family" | "profile" | "receipts" | "inventory";
-export type FamilyAction = "prepare-build" | "cancel-build" | "build";
+export type FamilyAction = "read" | "prepare-build" | "cancel-build" | "build";
 
 type Ctx = RouteCtx<FamilyRouteDocument, FamilyReadingKey, FamilyPage>;
 
@@ -92,13 +145,52 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   apply: "family.apply",
   // Build accepts any bound document; capture and apply need a family document (their contracts).
   needs: "document",
-  // The audit edits a member in every stage, so the Situation offers the spec picker throughout.
-  specPicker: "always",
+  // The audit is the live draft; a saved member is opened into it, never required to look.
+  specPicker: "apply",
+  // Capture saves the draft as a new member when one was read; with none, it reads Revit and files that.
+  captureInput: (ctx) => {
+    const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
+    return spec ? { spec } : {};
+  },
   // `family.plan` returns one family plan and changes nothing; `family.apply` applies its hash.
   plan: admissionPlan({ plan: "family.plan", apply: "family.apply" }, (plan) =>
     ffPlanRow(ffPlanEntrySchema.parse(plan)),
   ),
-  docs: "Audit one family model beside its Revit family: capture the open family into a pod, edit the saved model, plan and apply it, or build it to an .rfa.",
+  /**
+   * Accepted proposals are the spec: plan files the draft as a new member in the page's pod
+   * (capture's own save, run and all), plans it, and apply sends that member's hash.
+   */
+  staged: {
+    count: (ctx) => ctx.work.doc?.accepted.length ?? 0,
+    plan: async (ctx) => {
+      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
+      if (!spec) throw Error("read the family first");
+      if (!ctx.page.pod) throw Error("choose the pod the draft is saved in");
+      const saved = await workflow("family.capture", { pod: ctx.page.pod, spec }, ctx);
+      const source = saved.member as MemberSource;
+      ctx.setPage({ path: source.path });
+      const result = await workflow("family.plan", { source }, ctx);
+      const row = ffPlanRow(ffPlanEntrySchema.parse(result.plan));
+      return { entries: [{ ...row, detail: `${row.detail} · from ${source.path}`, source }] };
+    },
+    apply: async (ctx, included) => {
+      const [row] = included;
+      if (!row?.source) throw Error("the planned row names no saved member");
+      await workflow(
+        "family.apply",
+        { source: row.source, expectedPlanHashes: { [row.id]: row.planHash } },
+        ctx,
+      );
+      // The applied draft is spent: its text is what Revit now holds, and its proposals are done.
+      const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
+      await ctx.write([
+        { path: ["reading"], value: spec },
+        { path: ["edits"], value: [] },
+        { path: ["accepted"], value: [] },
+      ]);
+    },
+  },
+  docs: "Audit the open family as a live draft with no pod: propose and accept edits, save the draft into a pod as a member, plan and apply it, open a saved member into the draft, or build a saved member to an .rfa.",
 };
 
 const latestOf = (rows: ActionStatus[]) =>
@@ -200,10 +292,42 @@ export const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
 const familyCaptureWork = (work: WorkKey): WorkKey | null =>
   work.work ? { route: "family", target: null, work: work.work } : null;
 
-const emptyWork: FamilyRouteDocument = {};
 const emptyInventory = { sessions: [] } satisfies {
   sessions: readonly BridgeSessionListEntry[];
 };
+
+/**
+ * The demo lane's proposal lane on a family fixture: its first Length parameter staged, its
+ * second proposed by Pea. Real pointers of the fixture's bytes; the values are fixture.
+ */
+export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
+  const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })
+    .parameters;
+  const [staged, proposed] = Object.entries(parameters ?? {})
+    .filter(([, spec]) => spec.dataType === "Length")
+    .map(([name]) => settingsFieldPointer(["parameters", name, "value"]));
+  return {
+    ...(staged ? { [staged]: { proposal: null, staged: { value: "5in" } } } : {}),
+    ...(proposed
+      ? {
+          [proposed]: {
+            proposal: { value: "6in", by: "pea", note: "office standard", confidence: "low" },
+            staged: null,
+          },
+        }
+      : {}),
+  };
+}
+
+/** The demo lane's draft over a fixture: the fixture is the reading, its demo fields the proposals. */
+export function familyDemoDraft(raw: string): FamilyDraft {
+  const draft: FamilyDraft = { reading: raw, edits: [], accepted: [] };
+  for (const [pointer, field] of Object.entries(familyDemoFields(raw))) {
+    if (field.proposal) draft.edits.push({ pointer, value: field.proposal.value, by: "pea" });
+    if (field.staged) draft.accepted.push({ pointer, value: field.staged.value, by: "human" });
+  }
+  return draft;
+}
 
 const DEMO_POD = "demo";
 const demoPath = (name: AuthoredFamilyName) => `settings/family/${name}.json`;
@@ -232,9 +356,11 @@ const familySeed = (
   name: AuthoredFamilyName,
   view: FamilyPage["view"],
   stage: "audit" | "capture" | "apply",
+  /** False: the live family with no saved member and no pod bound. */
+  saved = true,
 ): Seed<FamilyRouteDocument, FamilyReadingKey | "pods", FamilyPage & EntityPage> => ({
   title: `${name} — authored family fixture`,
-  work: emptyWork,
+  work: familyDemoDraft(familyFixtures[name]),
   readings: {
     profile: {
       member: { pod: DEMO_POD, path: demoPath(name) },
@@ -255,8 +381,7 @@ const familySeed = (
     view,
     buildReview: null,
     stage,
-    pod: DEMO_POD,
-    path: demoPath(name),
+    ...(saved ? { pod: DEMO_POD, path: demoPath(name) } : {}),
     ...(stage === "apply" ? { confirming: true, sheet: { entries: [DEMO_PLAN] } } : {}),
   },
 });
@@ -299,8 +424,23 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       receipts: { kind: "receipts", target: { session: "", openId: "" } },
       inventory: { kind: "inventory" },
     } as never,
+    work: familyDraftRouteState,
     page: familyPageSchema,
     actions: {
+      read: {
+        label: "read family",
+        says: "Read the open family's spec from Revit into the draft; files nothing. Proposals stay.",
+        needs: "family",
+        actor: "any",
+        input: z.void(),
+        dirties: [],
+        stage: "audit",
+        ready: () => null,
+        run: async (ctx: Ctx) => {
+          const read = await workflow("family.capture", {}, ctx);
+          await ctx.write([{ path: ["reading"], value: read.spec }]);
+        },
+      },
       "prepare-build": {
         label: "review build",
         says: "Review the exact saved family profile before building its .rfa.",
@@ -392,6 +532,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       },
     } as never,
     seeds: {
+      read: familySeed("box", "sheet", "audit", false),
       build: familySeed("refline", "drill", "audit"),
       capture: familySeed("bath", "anatomy", "capture"),
       apply: familySeed("grd", "sheet", "apply"),

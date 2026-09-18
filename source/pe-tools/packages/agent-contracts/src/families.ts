@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { draftProposals } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 
 export const diagnosticSchema = z.object({
@@ -107,14 +108,7 @@ export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
 const familiesDocumentSchema = z.object({
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
-  /** Standing proposals, one per cell (agent-writable). */
-  edits: z.array(familyCellEditSchema).default([]),
-  /**
-   * What a person accepted, value and author as accepted (human-only, off the agent mask). Plan
-   * reads this list and nothing else. It carries the value, not a key, so a proposal Pea changes
-   * after the accept stands as a counter-proposal instead of riding the old approval.
-   */
-  accepted: z.array(familyCellEditSchema).default([]),
+  ...draftProposals(familyCellEditSchema),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;

@@ -5,9 +5,9 @@ import type { EntityPage } from "#/route";
 import { EntityRouteView } from "#/route/entity";
 import { usePodList } from "#/route/pods";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
-import { familyDemoFields, useFamilyStore } from "#/family/store";
+import { useFamilyStore } from "#/family/store";
 import { FamilyWorkspace, familyFacts } from "#/family/workspace";
-import { familySpec } from "./manifest";
+import { familyDemoFields, familySpec } from "./manifest";
 
 /** The demo lane holds no family model schema offline, so its editor opens the raw JSON. */
 const DEMO_SCHEMA = "";
@@ -32,6 +32,12 @@ export function FamilyRouteView({
   const [pods, refreshPods] = usePodList(!demo);
   const store = useFamilyStore({ target, thread, pods, initial });
   const captureReady = store.handle.actions.capture.refusal === null;
+  const readReady = store.handle.actions.read.refusal === null;
+  const unread = store.snapshot === null;
+  useEffect(() => {
+    // The audit is the live family: an empty draft reads it on arrival, no pod needed.
+    if (unread && readReady) void store.actions.read().catch(() => undefined);
+  }, [unread, readReady]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (capture && captureReady) void store.actions.capture().catch(() => undefined);
     // Once per arrival: the flag names an intent, not a standing order.
