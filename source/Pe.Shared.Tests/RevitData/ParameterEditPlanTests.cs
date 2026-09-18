@@ -27,48 +27,51 @@ public sealed class ParameterEditPlanTests {
     private static (string?[] Refusals, string[] Writes) Shape(Plan plan) =>
         (plan.Refusals.ToArray(), plan.Writes.Select(write => string.Join(",", write.Edits)).ToArray());
 
-    private static TestCaseData Case(string name, bool dryRun, Edit[] edits, string?[] refusals, params string[] writes) =>
-        new TestCaseData(edits, dryRun, refusals, writes).SetName(name);
+    private static TestCaseData Case(string name, Evidence evidence, Edit[] edits, string?[] refusals, params string[] writes) =>
+        new TestCaseData(edits, evidence, refusals, writes).SetName(name);
 
     private static IEnumerable<TestCaseData> Cases() {
-        yield return Case("A stale Expected refuses and writes nothing", false,
+        yield return Case("A stale Expected refuses and writes nothing", Evidence.Required,
             [E(0, 1, ev: Ev.Stale)], [Stale]);
-        yield return Case("Any evidence field differing is stale, not just the raw value", true,
+        yield return Case("Any evidence field differing is stale, not just the raw value", Evidence.IfGiven,
             [StaleBy(1, target => target with { IsReadOnly = true }), StaleBy(2, target => target with { HasValue = false }),
                 StaleBy(3, target => target with { StorageType = RequestedParameterStorageType.Double }),
                 StaleBy(4, target => target with { ParameterName = "Comments" })],
             [Stale, Stale, Stale, Stale]);
-        yield return Case("A wet edit without Expected refuses", false,
+        yield return Case("A wet edit without Expected refuses", Evidence.Required,
             [E(0, 1, ev: Ev.None)], [MissingExpected]);
-        yield return Case("A dry run admits a missing Expected but still refuses a stale one", true,
+        yield return Case("Evidence if given (dry run, script door) admits a missing Expected but still refuses a stale one", Evidence.IfGiven,
             [E(0, 1, ev: Ev.None), E(1, 1, ev: Ev.None), E(2, 2, ev: Ev.Stale)], [Ok, Ok, Stale], "0,1");
-        yield return Case("Identical edits to one target write once", false,
+        yield return Case("The script door writes without evidence yet still coalesces, refuses aliases and stale evidence", Evidence.IfGiven,
+            [E(0, 1, ev: Ev.None), E(1, 1, ev: Ev.None), E(2, 2, ev: Ev.None), E(3, 2, "Y", Ev.None), E(4, 3, ev: Ev.Stale)],
+            [Ok, Ok, AliasConflict, AliasConflict, Stale], "0,1");
+        yield return Case("Identical edits to one target write once", Evidence.Required,
             [E(0, 1), E(1, 1), E(2, 2, "Y")], [Ok, Ok, Ok], "0,1", "2");
-        yield return Case("A transitive alias chain with one differing value refuses all three groups", false,
+        yield return Case("A transitive alias chain with one differing value refuses all three groups", Evidence.Required,
             [E(0, 1), E(0, 2), E(1, 2), E(1, 3), E(2, 3, "Y")],
             [AliasConflict, AliasConflict, AliasConflict, AliasConflict, AliasConflict]);
-        yield return Case("Of two independent alias groups one refuses and the other writes", false,
+        yield return Case("Of two independent alias groups one refuses and the other writes", Evidence.Required,
             [E(0, 1), E(1, 1, "Y"), E(2, 2, "Z"), E(3, 2, "Z")], [AliasConflict, AliasConflict, Ok, Ok], "2,3");
-        yield return Case("A refused group touching another group's target leaves that group writing", false,
+        yield return Case("A refused group touching another group's target leaves that group writing", Evidence.Required,
             [E(0, 1), E(0, 2, ev: Ev.Stale), E(1, 2, "Y"), E(2, 1)], [GroupRefused, Stale, Ok, Ok], "2", "3");
-        yield return Case("A stale Expected on one target of a multi-target cell refuses the whole cell", false,
+        yield return Case("A stale Expected on one target of a multi-target cell refuses the whole cell", Evidence.Required,
             [E(0, 1), E(0, 2, ev: Ev.Stale), E(0, 3)], [GroupRefused, Stale, GroupRefused]);
-        yield return Case("Identical-value duplicates across different groups coalesce per target", false,
+        yield return Case("Identical-value duplicates across different groups coalesce per target", Evidence.Required,
             [E(0, 1), E(0, 2), E(1, 2), E(1, 3), E(2, 1)], [Ok, Ok, Ok, Ok, Ok], "0,4", "1,2", "3");
-        yield return Case("A unit difference counts as differing", false,
+        yield return Case("A unit difference counts as differing", Evidence.Required,
             [E(0, 1, "5", unit: "CFM"), E(1, 1, "5")], [AliasConflict, AliasConflict]);
-        yield return Case("A rawInternal difference counts as differing", false,
+        yield return Case("A rawInternal difference counts as differing", Evidence.Required,
             [E(0, 1, "5", rawInternal: true), E(1, 1, "5")], [AliasConflict, AliasConflict]);
-        yield return Case("An unresolved target refuses its group", true,
+        yield return Case("An unresolved target refuses its group", Evidence.IfGiven,
             [new Edit(0, new ParameterValueEdit(9, -1, Value: "X"), null), E(0, 1), E(1, 1)], [Unresolved, GroupRefused, Ok], "2");
-        yield return Case("A resolution refusal is kept as the answer", false,
+        yield return Case("A resolution refusal is kept as the answer", Evidence.Required,
             [new Edit(0, new ParameterValueEdit(9, -1, Value: "X", Expected: Target(9)), null, "Element 9 was not found.")],
             ["Element 9 was not found."]);
     }
 
     [TestCaseSource(nameof(Cases))]
-    public void Judges(Edit[] edits, bool dryRun, string?[] refusals, string[] writes) {
-        var (actualRefusals, actualWrites) = Shape(Build(edits, dryRun));
+    public void Judges(Edit[] edits, Evidence evidence, string?[] refusals, string[] writes) {
+        var (actualRefusals, actualWrites) = Shape(Build(edits, evidence));
         Assert.Multiple(() => {
             Assert.That(actualRefusals, Is.EqualTo(refusals));
             Assert.That(actualWrites, Is.EqualTo(writes));
@@ -76,18 +79,18 @@ public sealed class ParameterEditPlanTests {
     }
 
     [TestCaseSource(nameof(Cases))]
-    public void Is_independent_of_input_order(Edit[] edits, bool dryRun, string?[] refusals, string[] writes) {
+    public void Is_independent_of_input_order(Edit[] edits, Evidence evidence, string?[] refusals, string[] writes) {
         var random = new Random(7);
-        var expected = Canonical(edits, dryRun, Enumerable.Range(0, edits.Length).ToArray());
+        var expected = Canonical(edits, evidence, Enumerable.Range(0, edits.Length).ToArray());
         for (var trial = 0; trial < 20; trial++) {
             var order = Enumerable.Range(0, edits.Length).OrderBy(_ => random.Next()).ToArray();
-            Assert.That(Canonical(edits, dryRun, order), Is.EqualTo(expected), $"order {string.Join(",", order)}");
+            Assert.That(Canonical(edits, evidence, order), Is.EqualTo(expected), $"order {string.Join(",", order)}");
         }
     }
 
     /// <summary>Judges edits in the given order and answers in original-index terms, as sets.</summary>
-    private static string Canonical(Edit[] edits, bool dryRun, int[] order) {
-        var plan = Build(order.Select(i => edits[i]).ToList(), dryRun);
+    private static string Canonical(Edit[] edits, Evidence evidence, int[] order) {
+        var plan = Build(order.Select(i => edits[i]).ToList(), evidence);
         var refusals = order.Select((original, at) => (original, plan.Refusals[at])).OrderBy(pair => pair.original);
         var writes = plan.Writes.Select(write => string.Join(",", write.Edits.Select(at => order[at]).Order())).Order();
         return string.Join("|", refusals) + " / " + string.Join(" ", writes);
@@ -98,7 +101,7 @@ public sealed class ParameterEditPlanTests {
         var cap = ParameterValueApplyBounds.MaxEditsPerCall;
         // One cell group of cap targets plus a second group aliasing its last target identically: cap writes.
         var edits = Enumerable.Range(1, cap).Select(element => E(0, element)).Append(E(1, cap)).ToList();
-        var plan = Build(edits, dryRun: false);
+        var plan = Build(edits, Evidence.Required);
         Assert.Multiple(() => {
             Assert.That(plan.Refusals, Is.All.Null);
             Assert.That(plan.Writes, Has.Count.EqualTo(cap));
@@ -106,7 +109,7 @@ public sealed class ParameterEditPlanTests {
         });
 
         edits[cap - 1] = E(0, cap, ev: Ev.Stale);
-        var refused = Build(edits, dryRun: false);
+        var refused = Build(edits, Evidence.Required);
         Assert.Multiple(() => {
             Assert.That(refused.Refusals.Take(cap - 1), Is.All.EqualTo(GroupRefused));
             Assert.That(refused.Refusals[cap - 1], Is.EqualTo(Stale));
@@ -119,9 +122,9 @@ public sealed class ParameterEditPlanTests {
         var random = new Random(20260918);
         for (var trial = 0; trial < 500; trial++) {
             var edits = Enumerable.Range(0, random.Next(1, 11)).Select(_ => RandomEdit(random)).ToList();
-            var dryRun = random.Next(4) == 0;
-            var actual = Shape(Build(edits, dryRun));
-            var naive = Naive(edits, dryRun);
+            var evidence = random.Next(4) == 0 ? Evidence.IfGiven : Evidence.Required;
+            var actual = Shape(Build(edits, evidence));
+            var naive = Naive(edits, evidence);
             Assert.Multiple(() => {
                 Assert.That(actual.Refusals, Is.EqualTo(naive.Refusals), $"trial {trial} refusals");
                 Assert.That(actual.Writes, Is.EqualTo(naive.Writes), $"trial {trial} writes");
@@ -141,11 +144,11 @@ public sealed class ParameterEditPlanTests {
     ///     Reference judge written the obvious way: live edits connect when they share a group or a target; a
     ///     connected set with more than one payload refuses; the rest coalesce per target.
     /// </summary>
-    private static (string?[] Refusals, string[] Writes) Naive(IReadOnlyList<Edit> edits, bool dryRun) {
+    private static (string?[] Refusals, string[] Writes) Naive(IReadOnlyList<Edit> edits, Evidence evidence) {
         var n = edits.Count;
         var judged = edits.Select(edit =>
             edit.Refusal ?? (edit.Current == null ? Unresolved
-                : edit.Value.Expected == null ? (dryRun ? null : MissingExpected)
+                : edit.Value.Expected == null ? (evidence == Evidence.IfGiven ? null : MissingExpected)
                 : edit.Value.Expected == edit.Current ? null : Stale)).ToArray();
         var refusals = Enumerable.Range(0, n).Select(i => judged[i]
             ?? (Enumerable.Range(0, n).Any(j => edits[j].Group == edits[i].Group && judged[j] != null) ? GroupRefused : null)).ToArray();

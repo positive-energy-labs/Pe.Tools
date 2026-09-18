@@ -346,6 +346,30 @@ public sealed class ParameterValueApplyProofTests {
             });
     }
 
+    [Test]
+    public void The_script_door_writes_without_evidence_but_keeps_alias_and_coalescing_rules(
+        UIApplication uiApplication
+    ) {
+        RunWithPlacedInstances(
+            uiApplication,
+            nameof(this.The_script_door_writes_without_evidence_but_keeps_alias_and_coalescing_rules),
+            (projectDocument, fixture) => {
+                var data = ParameterValueApplier.WriteWithoutEvidence(projectDocument, [
+                    new ParameterValueEdit(fixture.InstanceIds[0], MarkParameterId, Value: "PE-SCRIPT"),
+                    new ParameterValueEdit(fixture.InstanceIds[0], MarkParameterId, Value: "PE-SCRIPT"),
+                    new ParameterValueEdit(fixture.InstanceIds[1], MarkParameterId, Value: "PE-ONE"),
+                    new ParameterValueEdit(fixture.InstanceIds[1], MarkParameterId, Value: "PE-TWO")
+                ]);
+
+                Assert.Multiple(() => {
+                    Assert.That(data.Results.Take(2).Select(result => result.Ok), Is.All.True);
+                    Assert.That(ReadInstanceMark(projectDocument, fixture.InstanceIds[0]), Is.EqualTo("PE-SCRIPT"));
+                    Assert.That(data.Results.Skip(2).Select(result => result.Error), Is.All.EqualTo(ParameterEditPlan.AliasConflict));
+                    Assert.That(ReadInstanceMark(projectDocument, fixture.InstanceIds[1]), Is.EqualTo(MarkB));
+                });
+            });
+    }
+
     // A wet run redeems the evidence a dry run read: each edit carries its Current as Expected.
     private static ParameterValueApplyData ApplyReviewed(Document projectDocument, params ParameterValueEdit[] edits) {
         var read = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest(edits, DryRun: true));
