@@ -2884,6 +2884,10 @@ export namespace RevitContextViewImage {
       | "Schedule"
       | "Category"
       | "Family";
+    /**
+     * Why a view image carries no RevitViewImageRegistration.
+     */
+    export type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees";
 
     export interface Response {
       view: RevitAgentContextHandle;
@@ -2894,6 +2898,7 @@ export namespace RevitContextViewImage {
       modelRect?: null | RevitViewImageModelRect;
       sheetNumber?: null | string;
       registration?: null | RevitViewImageRegistration;
+      registrationRefusal?: null | RevitViewImageRegistrationRefusal;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -2916,7 +2921,7 @@ export namespace RevitContextViewImage {
     /**
      * Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
      * corners, so a rotated crop stays honest. ImageSha256 binds it to exactly this file.
-     * Absent when the view has no active crop or the image's aspect disagrees with the crop's.
+     * When absent, RegistrationRefusal says why.
      *
      */
     export interface RevitViewImageRegistration {

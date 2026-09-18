@@ -141,7 +141,7 @@ public static class RevitViewImageExporter {
 
         var croppedPath = CropSheetPng(sheetPath, outline, box, marginPercent);
         var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
-        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber, null);
+        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber, (null, RevitViewImageRegistrationRefusal.NoCrop));
     }
 
     private static void ApplyCrop(View view, BoundingBoxXYZ modelBox, double marginPercent) {
@@ -192,8 +192,9 @@ public static class RevitViewImageExporter {
     }
 
     /// <summary>Pixel-to-model registration from the crop box transform, so a rotated crop is placed honestly.</summary>
-    private static RevitViewImageRegistration? TryRegistration(View view, string imagePath) {
-        if (view is ViewSheet || !view.CropBoxActive || !File.Exists(imagePath)) return null;
+    private static (RevitViewImageRegistration?, RevitViewImageRegistrationRefusal?) TryRegistration(View view, string imagePath) {
+        if (view is ViewSheet || !view.CropBoxActive) return (null, RevitViewImageRegistrationRefusal.NoCrop);
+        if (!File.Exists(imagePath)) return (null, RevitViewImageRegistrationRefusal.NoImage);
         var crop = view.CropBox;
         var transform = crop.Transform;
         BitmapFrame frame;
@@ -255,7 +256,7 @@ public static class RevitViewImageExporter {
         int pixelSize,
         RevitViewImageModelRect? modelRect,
         string? sheetNumber,
-        RevitViewImageRegistration? registration
+        (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) registration
     ) {
         var kind = view switch {
             ViewSheet => RevitAgentContextHandleKind.Sheet,
@@ -284,7 +285,8 @@ public static class RevitViewImageExporter {
             scale,
             modelRect,
             sheetNumber,
-            registration
+            registration.Registration,
+            registration.Refusal
         );
     }
 
