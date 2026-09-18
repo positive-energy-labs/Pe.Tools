@@ -9,6 +9,7 @@ const routes = () =>
 test("route registry lists exactly the retained collaborative routes", () => {
   expect([...routes()].sort()).toEqual([
     "families",
+    "family",
     "instances",
     "parameter-links",
     "pods",
