@@ -113,8 +113,11 @@ export type Transition =
   | { kind: "stage"; rung: Rung; baseline?: Rung }
   | { kind: "retire"; consumed: Rung };
 
-/** Rungs compare as the canonical JSON of what they write, never by identity or by note. */
-const same = (a: Rung | null | undefined, b: Rung | null | undefined) =>
+/**
+ * Whether two rungs write the same thing: canonical JSON of value and delete, never identity, and
+ * never note or confidence. Absent on either side is not equal. Every reader compares rungs by this.
+ */
+export const sameValue = (a: Rung | null | undefined, b: Rung | null | undefined) =>
   a != null &&
   b != null &&
   canonicalRouteInput({ value: a.value, delete: a.delete === true }) ===
@@ -124,7 +127,7 @@ const rungOf = (rung: Rung): Rung =>
 
 /** A proposal the person can still act on: present, and not already what is staged. */
 const standing = (cell: TrichotomyCellLike) =>
-  cell.proposal != null && !same(cell.proposal, cell.staged);
+  cell.proposal != null && !sameValue(cell.proposal, cell.staged);
 
 /** The transitions this actor may take on this cell, in table order: the cell's own controls. */
 export function availableTransitions(
@@ -176,14 +179,17 @@ export function transitionPatches(
       return cell.proposal ? [at("staged", rungOf(cell.proposal))] : [];
     case "stage":
       return [
-        at("staged", same(transition.rung, transition.baseline) ? null : rungOf(transition.rung)),
+        at(
+          "staged",
+          sameValue(transition.rung, transition.baseline) ? null : rungOf(transition.rung),
+        ),
       ];
     case "unstage":
       return [at("staged", null)];
     case "retire":
       return [
-        ...(same(cell.staged, transition.consumed) ? [at("staged", null)] : []),
-        ...(same(cell.proposal, transition.consumed) ? [at("proposal", null)] : []),
+        ...(sameValue(cell.staged, transition.consumed) ? [at("staged", null)] : []),
+        ...(sameValue(cell.proposal, transition.consumed) ? [at("proposal", null)] : []),
       ];
   }
 }
