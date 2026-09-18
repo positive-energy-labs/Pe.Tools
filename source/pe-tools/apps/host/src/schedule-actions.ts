@@ -448,7 +448,8 @@ function admitScheduleSpec(
           input: { scheduleId: input.scheduleId },
           pod: input.pod,
           at,
-          path: input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
+          path:
+            input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
         };
       }
       const { source } = scheduleActions[key].input.parse(admission.input);
