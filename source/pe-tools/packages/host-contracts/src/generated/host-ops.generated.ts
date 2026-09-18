@@ -3825,8 +3825,21 @@ export namespace RevitDetailSchedules {
       displayValue?: null | string;
       isTypeParameter: boolean;
       isEditable: boolean;
+      targets: ScheduleCellBindingTarget[];
       blocker: ScheduleCellBindingBlocker;
       hasMixedValues: boolean;
+    }
+    /**
+     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     */
+    export interface ScheduleCellBindingTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -4973,6 +4986,151 @@ export namespace ScheduleCapture {
   }
 }
 
+/** Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index. */
+export namespace ScheduleCellsApply {
+  export namespace Req {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    /**
+     * Why a schedule cell has no writable parameter behind it.
+     */
+    export type ScheduleCellBindingBlocker =
+      | "None"
+      | "CalculatedField"
+      | "CombinedParameterField"
+      | "NonStandardDisplay"
+      | "ParameterNotFound"
+      | "ReadOnlyParameter";
+
+    export interface Request {
+      scheduleId: number;
+      scheduleUniqueId: string;
+      edits: ScheduleCellEdit[];
+      dryRun?: boolean;
+      transactionName?: null | string;
+    }
+    export interface ScheduleCellEdit {
+      rowNumber: number;
+      columnNumber: number;
+      expectedBinding: ScheduleCellBinding;
+      value?: null | string;
+      unit?: null | string;
+      rawInternal?: boolean;
+    }
+    /**
+     * The write surface behind one rendered schedule cell: which element(s) a cell edit would
+     * write to, and through which parameter. A type-parameter column resolves to the shared type
+     * element, so TargetElementIds makes write fan-out explicit — one id shared by
+     * every row of that type — instead of a per-instance surprise.
+     *
+     */
+    export interface ScheduleCellBinding {
+      columnNumber: number;
+      targetElementIds: number[];
+      parameterName?: null | string;
+      parameterId?: number | null;
+      storageType: RequestedParameterStorageType;
+      rawValue?: null | string;
+      displayValue?: null | string;
+      isTypeParameter: boolean;
+      isEditable: boolean;
+      targets: ScheduleCellBindingTarget[];
+      blocker?: ScheduleCellBindingBlocker;
+      hasMixedValues?: boolean;
+    }
+    /**
+     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     */
+    export interface ScheduleCellBindingTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
+    }
+  }
+  export namespace Res {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    /**
+     * Why a schedule cell has no writable parameter behind it.
+     */
+    export type ScheduleCellBindingBlocker =
+      | "None"
+      | "CalculatedField"
+      | "CombinedParameterField"
+      | "NonStandardDisplay"
+      | "ParameterNotFound"
+      | "ReadOnlyParameter";
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      appliedCells: number;
+      appliedParameterWrites: number;
+      dryRun: boolean;
+      results: ScheduleCellEditResult[];
+      diagnostics: RevitDataIssue[];
+    }
+    export interface ScheduleCellEditResult {
+      index: number;
+      rowNumber: number;
+      columnNumber: number;
+      ok: boolean;
+      error?: null | string;
+      currentBinding?: null | ScheduleCellBinding;
+      parameterResults: ParameterValueEditResult[];
+    }
+    /**
+     * The write surface behind one rendered schedule cell: which element(s) a cell edit would
+     * write to, and through which parameter. A type-parameter column resolves to the shared type
+     * element, so TargetElementIds makes write fan-out explicit — one id shared by
+     * every row of that type — instead of a per-instance surprise.
+     *
+     */
+    export interface ScheduleCellBinding {
+      columnNumber: number;
+      targetElementIds: number[];
+      parameterName?: null | string;
+      parameterId?: number | null;
+      storageType: RequestedParameterStorageType;
+      rawValue?: null | string;
+      displayValue?: null | string;
+      isTypeParameter: boolean;
+      isEditable: boolean;
+      targets: ScheduleCellBindingTarget[];
+      blocker: ScheduleCellBindingBlocker;
+      hasMixedValues: boolean;
+    }
+    /**
+     * Canonical mutation evidence for one native parameter behind a rendered cell.
+     */
+    export interface ScheduleCellBindingTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
+    }
+    export interface ParameterValueEditResult {
+      index: number;
+      ok: boolean;
+      error?: null | string;
+      parsedRaw?: null | string;
+      parsedDisplay?: null | string;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+  }
+}
+
 /** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
 export namespace ScriptingExecute {
   export namespace Req {
@@ -5550,6 +5708,7 @@ export interface HostOps {
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
+  "schedule.cells.apply": { request: ScheduleCellsApply.Req.Request; response: ScheduleCellsApply.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
@@ -5622,6 +5781,7 @@ export const hostOpKeys = [
   "revit.resolve.references",
   "schedule.apply",
   "schedule.capture",
+  "schedule.cells.apply",
   "scripting.execute",
   "scripting.workspace.bootstrap",
   "settings.field-options",

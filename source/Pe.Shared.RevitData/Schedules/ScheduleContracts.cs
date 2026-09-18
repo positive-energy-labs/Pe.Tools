@@ -520,14 +520,15 @@ public enum ScheduleCellBindingBlocker {
 }
 
 /// <summary>Canonical mutation evidence for one native parameter behind a rendered cell.</summary>
+/// <remarks>Reviewed evidence is required on the wire: a capture that lacks a field refuses, never defaults to 0/false/absent.</remarks>
 public sealed record ScheduleCellBindingTarget(
-    long ElementId,
-    long ParameterId,
+    [property: JsonProperty(Required = Required.Always)] long ElementId,
+    [property: JsonProperty(Required = Required.Always)] long ParameterId,
     string? ParameterName,
-    RequestedParameterStorageType StorageType,
-    bool IsReadOnly,
-    bool HasValue,
-    string? RawValue
+    [property: JsonProperty(Required = Required.Always)] RequestedParameterStorageType StorageType,
+    [property: JsonProperty(Required = Required.Always)] bool IsReadOnly,
+    [property: JsonProperty(Required = Required.Always)] bool HasValue,
+    [property: JsonProperty(Required = Required.AllowNull)] string? RawValue
 );
 
 /// <summary>
@@ -546,7 +547,7 @@ public record ScheduleCellBinding(
     string? DisplayValue,
     bool IsTypeParameter,
     bool IsEditable,
-    IReadOnlyList<ScheduleCellBindingTarget> Targets,
+    [property: JsonProperty(Required = Required.Always)] IReadOnlyList<ScheduleCellBindingTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
     bool HasMixedValues = false
 );
