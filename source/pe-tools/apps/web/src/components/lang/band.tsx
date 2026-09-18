@@ -31,6 +31,8 @@ export interface WorkBandProps {
   commit?: { label: string; reason: string; disabled?: boolean; run: () => void };
   unresolved?: readonly string[];
   reload?: () => void;
+  /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
+  startFresh?: () => void;
   body?: ReactNode;
   /** Compact heads may remain present for open proposals or transient asks with nothing staged. */
   visible?: boolean;
@@ -61,6 +63,7 @@ export function WorkBand({
   commit,
   unresolved = [],
   reload,
+  startFresh,
   body,
   visible = count > 0,
   showRevision = true,
@@ -133,6 +136,17 @@ export function WorkBand({
           {conflict && reload ? (
             <Press frame="line" tone="quiet" size="value" onClick={reload}>
               reload
+            </Press>
+          ) : null}
+          {startFresh ? (
+            <Press
+              frame="line"
+              tone="quiet"
+              size="value"
+              title="Sets the saved Work aside, untouched on disk, and starts a new empty Work here. Pea cannot do this."
+              onClick={startFresh}
+            >
+              start fresh
             </Press>
           ) : null}
         </div>

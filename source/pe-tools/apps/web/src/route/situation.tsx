@@ -772,6 +772,9 @@ export function Situation({
               }
               unresolved={unresolved as string[]}
               reload={handle.work.reload}
+              startFresh={
+                handle.work.startFresh ? () => void handle.work.startFresh?.() : undefined
+              }
               body={staged?.body}
               showRevision={false}
             />
