@@ -1,6 +1,6 @@
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
-using System.Globalization;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
@@ -57,11 +57,7 @@ internal static class ScheduleBindingResolver {
         if (resolved.Count == 0)
             return Blocked(column.ColumnNumber, ScheduleCellBindingBlocker.ParameterNotFound);
 
-        var targets = resolved.Select(item => new ScheduleCellBindingTarget(
-                item.Source.Id.Value(), item.Parameter.Id.Value(),
-                ScheduleCollectorSupport.SafeGet(() => item.Parameter.Definition?.Name) ?? column.FieldName,
-                ToStorageType(item.Parameter.StorageType), item.Parameter.IsReadOnly, item.Parameter.HasValue,
-                GetRawValue(item.Parameter)))
+        var targets = resolved.Select(item => ParameterTargets.Read(item.Source, item.Parameter, column.FieldName))
             .Distinct().OrderBy(item => item.ElementId).ThenBy(item => item.ParameterId).ToList();
         var first = resolved[0].Parameter;
         var rawValues = targets.Select(item => item.RawValue).ToList();
@@ -73,7 +69,7 @@ internal static class ScheduleBindingResolver {
             targets.Select(item => item.ElementId).Distinct().ToList(),
             ScheduleCollectorSupport.SafeGet(() => first.Definition?.Name) ?? column.FieldName,
             first.Id.Value(),
-            ToStorageType(first.StorageType),
+            ParameterTargets.StorageOf(first.StorageType),
             rawValues[0],
             ScheduleCollectorSupport.NullIfWhiteSpace(first.AsValueString())
                 ?? ScheduleCollectorSupport.NullIfWhiteSpace(first.AsString()),
@@ -114,22 +110,4 @@ internal static class ScheduleBindingResolver {
 
     private static bool IsTypeSource(Element source, IReadOnlyList<Element> boundElements) =>
         boundElements.All(element => element.Id.Value() != source.Id.Value());
-
-    private static string? GetRawValue(Parameter parameter) =>
-        parameter.StorageType switch {
-            StorageType.String => parameter.AsString(),
-            StorageType.Integer => parameter.AsInteger().ToString(CultureInfo.InvariantCulture),
-            StorageType.Double => parameter.AsDouble().ToString("G17", CultureInfo.InvariantCulture),
-            StorageType.ElementId => parameter.AsElementId()?.Value().ToString(CultureInfo.InvariantCulture),
-            _ => null
-        };
-
-    private static RequestedParameterStorageType ToStorageType(StorageType storageType) =>
-        storageType switch {
-            StorageType.String => RequestedParameterStorageType.String,
-            StorageType.Integer => RequestedParameterStorageType.Integer,
-            StorageType.Double => RequestedParameterStorageType.Double,
-            StorageType.ElementId => RequestedParameterStorageType.ElementId,
-            _ => RequestedParameterStorageType.None
-        };
 }
