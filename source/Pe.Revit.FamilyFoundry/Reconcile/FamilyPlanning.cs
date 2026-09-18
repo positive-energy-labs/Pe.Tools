@@ -5,6 +5,10 @@ using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Reconcile;
 
+/// <summary>
+/// A nonexecutable preview for a family document. Formula interpretation uses rolled-back native transactions;
+/// <see cref="Original"/> is the captured evidence. Apply recomputes from intent and verifies <see cref="PlanHash"/>.
+/// </summary>
 public sealed record FamilyPreview(
     FamilyModel Original,
     string PlanHash,
@@ -15,6 +19,10 @@ public sealed record FamilyPreview(
     IReadOnlyList<string> ObservedResourceIds);
 
 public static class FamilyPlanningExtensions {
+    /// <summary>
+    /// Previews a patch against a family document. Native formula interpretation is rollback-only, and the returned
+    /// original capture is evidence. Apply with <see cref="ReconcileFamily"/> recomputes and checks the expected hash.
+    /// </summary>
     public static FamilyPreview PreviewFamily(this Document familyDocument, FamilyPatch patch,
         ExecutionOptions? executionOptions = null, Func<Document, FamilySharedParameterSource>? sharedSource = null) {
         using var source = sharedSource?.Invoke(familyDocument) ?? new FamilySharedParameterSource(familyDocument);

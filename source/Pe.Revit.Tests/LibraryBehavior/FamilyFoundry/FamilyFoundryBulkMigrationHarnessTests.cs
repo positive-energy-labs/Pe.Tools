@@ -176,6 +176,16 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var changed = document.PreviewFamily(Patch(raw.Replace("120", "208")));
             Assert.That(changed.Changes,
                 Has.Some.Matches<FamilyChange>(c => c.Section == "parameters" && c.Key == "PE_E___NumberOfPoles"));
+            var apply = new ReconcileFamily(Patch(raw.Replace("120", "208")), expectedPlanHash: changed.PlanHash);
+            using (var processor = new OperationProcessor(document))
+                _ = processor.ProcessQueue(new OperationQueue().Add(apply));
+            var applied = document.CaptureFamilyModel();
+            Assert.That(apply.LastReceipt?.Converged, Is.True);
+            Assert.That(apply.LastReceipt?.PlanHash, Is.EqualTo(changed.PlanHash));
+            Assert.That(applied.Parameters["PE_E___NumberOfPoles"].Formula, Does.Contain("208"));
+            var poles = document.FamilyManager.FindParameter("PE_E___NumberOfPoles");
+            Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Select(type => type.AsInteger(poles)),
+                Is.All.Not.Null);
         } finally { document.Close(false); }
     }
 
@@ -184,8 +194,16 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         var document = this.NewFamily("FF invalid unit preview");
         try {
             var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
-            var preview = document.PreviewFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}"""));
+            var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}""");
+            var preview = document.PreviewFamily(patch);
             Assert.That(preview.Diagnostics, Is.Not.Empty);
+            var apply = new ReconcileFamily(patch);
+            IReadOnlyList<OperationLog>? logs;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+                (logs, _) = contexts.Single().OperationLogs;
+            }
+            Assert.That(logs!.SelectMany(log => log.Entries).Any(entry => entry.Status == LogStatus.Error), Is.True);
             Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
         } finally { document.Close(false); }
     }
@@ -194,19 +212,24 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public void Preview_and_apply_refuse_the_same_existing_shared_tooltip_change() {
         var document = this.NewFamily("FF shared tooltip preview");
         try {
-            var definition = CompanyDefinitions().First();
+            var definition = CompanyDefinitions().Single(item => item.Name == "PE_G___Model");
             Func<Document, FamilySharedParameterSource> source = d => new(d, [definition]);
             var parameter = new JObject {
                 ["shared"] = true,
                 ["sharedGuid"] = definition.DownloadOptions.GetGuid(),
                 ["sharedSpecId"] = definition.DownloadOptions.GetSpecTypeId().TypeId,
-                ["tooltip"] = definition.Description ?? ""
+                ["tooltip"] = definition.Description ?? "",
+                ["value"] = "original value"
             };
             var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { [definition.Name!] = parameter } } };
             var create = new ReconcileFamily(patch, sharedSource: source);
             using (var processor = new OperationProcessor(document))
                 _ = processor.ProcessQueue(new OperationQueue().Add(create));
             Assert.That(create.LastReceipt?.Converged, Is.True);
+            var original = document.CaptureFamilyModel().Parameters[definition.Name!];
+            var originalValues = document.FamilyManager.Types.Cast<FamilyType>()
+                .ToDictionary(type => type.Name, type => type.AsString(document.FamilyManager.FindParameter(definition.Name!)));
+            Assert.That(originalValues.Values, Is.All.Not.Empty);
 
             parameter["tooltip"] = "replacement is unsupported";
             var preview = document.PreviewFamily(patch, sharedSource: source);
@@ -220,6 +243,11 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That(diagnostic.Code, Is.EqualTo(FamilyModelDiagnosticCodes.SharedTooltipUnsupported));
             Assert.That(logs!.Single().Entries.Single().Message, Is.EqualTo($"{diagnostic.Code}: {diagnostic.Message}"));
             Assert.That(apply.LastReceipt, Is.Null);
+            var preserved = document.CaptureFamilyModel().Parameters[definition.Name!];
+            Assert.That((preserved.SharedGuid, preserved.Formula), Is.EqualTo((original.SharedGuid, original.Formula)));
+            Assert.That(document.FamilyManager.Types.Cast<FamilyType>()
+                .ToDictionary(type => type.Name, type => type.AsString(document.FamilyManager.FindParameter(definition.Name!))),
+                Is.EqualTo(originalValues));
         } finally { document.Close(false); }
     }
 
@@ -229,10 +257,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         try {
             var current = document.CaptureFamilyModel();
             var options = new ExecutionOptions { OptimizeTypeOperations = false };
+            ReconcileFamily Dry(ExecutionOptions? executionOptions) {
+                var operation = new ReconcileFamily(current, dryRun: true, executionOptions: executionOptions);
+                using var processor = new OperationProcessor(document, executionOptions);
+                _ = processor.ProcessQueue(new OperationQueue().Add(operation));
+                return operation;
+            }
+            var defaults = Dry(null);
+            var nondefault = Dry(options);
+            Assert.That(nondefault.LastPlan?.PlanHash, Is.Not.EqualTo(defaults.LastPlan?.PlanHash));
             var receipt = FamilyModelBuild.Reconcile(document, current, options);
-            var expected = FamilyReconciler.Reconcile(current, current, UnitResolvers.Revit(document),
-                executionOptions: options).PlanHash;
-            Assert.That(receipt?.PlanHash, Is.EqualTo(expected));
+            Assert.That(receipt?.PlanHash, Is.EqualTo(nondefault.LastPlan?.PlanHash));
         } finally { document.Close(false); }
     }
 
