@@ -269,10 +269,8 @@ export interface Draft {
   /** paramName → typeName → what Revit carries. */
   live: Record<string, Record<string, ProtoLiveValue>>;
   /**
-   * PROPOSAL IDS THAT NO LONGER STAND — denied, or beaten by your own edit. Not a verdict and not
+   * PROPOSAL IDS YOUR OWN EDIT BEAT, until the buffered deny lands in Work. Not a verdict and not
    * a cell state: a cleared proposal is absent, and the cell it aimed at shows the real value.
-   * It is kept as a LIST rather than forgotten so re-open can put the proposal back, which is the
-   * only undo a page-scoped proposal can have.
    */
   cleared: string[];
   /**

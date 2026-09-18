@@ -1,3 +1,4 @@
+import { settingsFieldPointer } from "@pe/agent-contracts";
 import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
@@ -29,6 +30,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     setStageType,
     proposalsAt,
     locate,
+    transitionsAt,
     editOverride,
     editLiteral,
   } = core;
@@ -191,6 +193,9 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
             parameterText,
           )}
           onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
+          transitions={transitionsAt(
+            proposals[0]?.id ?? settingsFieldPointer(["types", typeName, row.name]),
+          )}
         />
       );
 
@@ -256,7 +261,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         placeholder: authored,
         note: `${
           proposals.length > 0
-            ? `Pea proposes ${proposals[0]!.proposed} here — but this cell is ORDINARY. Type your own value and the proposal is CLEARED on the spot: no accept, no deny, and the cell simply shows what you typed. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
+            ? `Pea proposes ${proposals[0]!.proposed} here. Accept or deny it on the cell, or type your own value and the proposal is CLEARED on the spot. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
             : override === undefined
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`

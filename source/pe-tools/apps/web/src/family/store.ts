@@ -25,6 +25,7 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
+import type { CellWire } from "#/components/lang/band";
 import type { MasterTableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
 import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";
@@ -259,6 +260,24 @@ export function useFamilyStore(options: {
     [draftDoc, member],
   );
   const snapshot = useMemo(() => draftSnapshot(false), [draftSnapshot]);
+  const authored = useMemo(
+    (): unknown => (snapshot?.rawContent ? JSON.parse(snapshot.rawContent.replace(/^﻿/, "")) : null),
+    [snapshot],
+  );
+  /** Every Family cell's accept, deny and unstage: one wire over the draft Work's `cells`. */
+  const wire = useMemo(
+    (): CellWire => ({
+      segment: "cells",
+      revision: draftRevision,
+      // Buffered typing lands first; a bound verb rendered before it then refuses as stale.
+      write: async (patches, revision) => {
+        await flush();
+        return handle.work.write(patches, revision);
+      },
+      lockOf: familyLockOf(authored),
+    }),
+    [handle.work, draftRevision, flush, authored],
+  );
   const authoredLane = useMemo(() => familySource(snapshot, null, fields), [snapshot, fields]);
   const authoredDraft = useMemo(
     () => initialDraft(familySource(draftSnapshot(true), null).world),
@@ -502,6 +521,7 @@ export function useFamilyStore(options: {
     snapshot,
     review,
     fields,
+    wire,
     saved,
     draft,
     buildFacts,
@@ -533,3 +553,11 @@ export function useFamilyStore(options: {
 }
 
 export type FamilyStore = ReturnType<typeof useFamilyStore>;
+
+/** A field inside a shared-source pointer is locked: the profile holds the pointer, not the value. */
+export const familyLockOf =
+  (authored: unknown) =>
+  (key: string): string | null =>
+    authored != null && settingsFieldDirectives(authored, settingsFieldSegments(key))
+      ? `${key} points to a shared source — edit that source instead`
+      : null;
