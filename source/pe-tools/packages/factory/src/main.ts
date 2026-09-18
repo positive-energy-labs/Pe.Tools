@@ -21,7 +21,13 @@ type Config = {
   actuator?: Record<string, { run: string }>;
   loop: Record<
     string,
-    { sense?: string[]; setpoint?: Record<string, string>; act?: string; gate?: "auto" | "human" }
+    {
+      on?: string;
+      sense?: string[];
+      setpoint?: Record<string, string>;
+      act?: string;
+      gate?: "auto" | "human";
+    }
   >;
 };
 
@@ -488,15 +494,34 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
         (order.get(a.sha) ?? Number.MAX_SAFE_INTEGER) -
         (order.get(b.sha) ?? Number.MAX_SAFE_INTEGER),
     );
-  const loops = Object.keys(config.loop).flatMap((loop) => {
-    const row = database
+  const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
+  const loops = Object.entries(config.loop).map(([loop, declaration]) => {
+    const error = database
       .prepare("SELECT * FROM events WHERE kind = 'error' AND loop = ? ORDER BY seq DESC LIMIT 1")
       .get(loop) as EventRow | undefined;
-    return row
-      ? [{ loop, sha: row.sha, values: (JSON.parse(row.payload) as { values: object }).values }]
-      : [];
+    const run = rows(database)
+      .filter((row) => row.loop === loop && runKinds.has(row.kind))
+      .at(-1);
+    const data = run ? (JSON.parse(run.payload) as Record<string, string>) : {};
+    const every = declaration.on?.match(/^every(?::|\s+)(\d+)/)?.[1];
+    const commits =
+      every && run
+        ? Number.parseInt(git(repo, "rev-list", "--count", `${run.sha}..${config.factory.ref}`), 10)
+        : 0;
+    return {
+      loop,
+      sha: error?.sha,
+      values: error
+        ? (JSON.parse(error.payload) as { values: Record<string, number | null> }).values
+        : {},
+      state: run?.kind ?? "idle",
+      lastRun: run ? { ts: run.ts, sha: run.sha } : null,
+      next: every
+        ? `every ${every} commits: ${commits % Number.parseInt(every, 10)} of ${every}`
+        : `on ${declaration.on ?? `merge:${config.factory.ref}`}`,
+      stderr: run?.kind === "failed" ? data.stderr?.split(/\r?\n/, 1)[0] : undefined,
+    };
   });
-  const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
   const runs = new Map<
     string,
     {
