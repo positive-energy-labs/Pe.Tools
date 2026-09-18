@@ -35,10 +35,10 @@ public sealed record FamilyFoundryPlanData(
 ///     gates drift. One key, the active document's owner family — the same shape `families.apply` takes, so
 ///     one apply grammar serves both routes. The document is not saved.
 /// </summary>
-public sealed record FamilyApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
+public sealed record FamilyApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodComposedSource Source, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.</summary>
-public sealed record FamiliesApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodMemberSource Source, ExecutionOptions? ExecutionOptions = null);
+public sealed record FamiliesApplyRequest(string SpecJson, IReadOnlyDictionary<long, string> ExpectedPlanHashes, PodComposedSource Source, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>
 ///     The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the

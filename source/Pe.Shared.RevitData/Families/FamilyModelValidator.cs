@@ -14,6 +14,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string ValueFormulaConflict = "value-formula-conflict";
     public const string ValueWithoutTypes = "value-without-types";
     public const string SharedOwnsDataType = "shared-owns-datatype";
+    public const string SharedTooltipUnsupported = "shared-tooltip-unsupported";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";
     public const string UnknownParameter = "unknown-parameter";

@@ -11,9 +11,15 @@ public sealed class BridgeOpRequestDeserializationTests {
     [Op("revit.detail.deserialization-probe", Does = "Exercise strict request deserialization.")]
     private static ProbeResponse Handle(ProbeRequest request) => new(request.ScriptContent);
 
-    private static Op Probe() {
+    [Op("revit.detail.schedule-source-probe", Does = "Bind the real schedule.apply request.")]
+    private static ProbeResponse HandleSchedule(ScheduleSpecApplyRequest request) => new(request.Source.Root.Id);
+
+    [Op("revit.detail.family-source-probe", Does = "Bind the real family.apply request.")]
+    private static ProbeResponse HandleFamily(FamilyApplyRequest request) => new(request.Source.Root.Id);
+
+    private static Op Probe(string key = "revit.detail.deserialization-probe") {
         OpRegistry.RegisterFrom(typeof(BridgeOpRequestDeserializationTests).Assembly);
-        return OpRegistry.TryGet("revit.detail.deserialization-probe", out var op)
+        return OpRegistry.TryGet(key, out var op)
             ? op
             : throw new InvalidOperationException("Probe op was not discovered.");
     }
@@ -64,5 +70,26 @@ public sealed class BridgeOpRequestDeserializationTests {
         );
 
         Assert.That(((ProbeResponse)response!).Echo, Does.Contain("\nvar x = 1;\n"));
+    }
+
+    // The pre-composition shape `{pod, path, sha256}` must not bind to a source whose root is null.
+    [TestCase("revit.detail.schedule-source-probe", """{"specJson":"{}","source":{"pod":"office","path":"settings/a.json","sha256":"abc"}}""")]
+    [TestCase("revit.detail.family-source-probe", """{"specJson":"{}","expectedPlanHashes":{},"source":{"pod":"office","path":"settings/a.json","sha256":"abc"}}""")]
+    [TestCase("revit.detail.schedule-source-probe", """{"specJson":"{}","source":{"root":{"id":"office","path":"settings/a.json","sha256":"abc","origin":"SavedMember"},"dependencies":[]}}""")]
+    public void An_apply_source_without_captured_bytes_is_a_400_before_any_handler(string key, string payload) {
+        var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe(key).ExecuteAsync(payload, null, CancellationToken.None))!;
+
+        Assert.That(exception.StatusCode, Is.EqualTo(BridgeOperationExceptions.BadRequestStatusCode));
+        Assert.That(exception.Message, Does.Contain("Required property"));
+    }
+
+    [Test]
+    public async Task A_captured_source_binds() {
+        var response = await Probe("revit.detail.schedule-source-probe").ExecuteAsync(
+            """{"specJson":"{}","source":{"root":{"id":"office","path":"settings/a.json","sha256":"abc","bytesBase64":"e30=","origin":"SavedMember"},"dependencies":[]}}""",
+            null,
+            CancellationToken.None);
+
+        Assert.That(((ProbeResponse)response!).Echo, Is.EqualTo("office"));
     }
 }

@@ -55,7 +55,8 @@ const SIMULATED_READS = [
   "revit.matrix.loaded-families",
 ];
 
-type RunSource = { pod: string; path: string; sha256: string };
+/** The composed source a native apply receives; the simulated engine reads its root. */
+type RunSource = { root: { id: string; path: string; sha256: string } };
 
 /** The simulated project's schedules: supplied facts, never a read of a real model. */
 const DEMO_SCHEDULES = [
@@ -250,10 +251,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
      * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
      * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
      */
-    const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
+    const fileRun = async (operation: string, { root }: RunSource, planHash: string | null) => {
       const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
       const file = await settings.memberPath({
-        pod: source.pod,
+        pod: root.id,
         path: `output/${runId}/receipt.json`,
       });
       await mkdir(join(file, ".."), { recursive: true });
@@ -269,9 +270,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         file,
         JSON.stringify(
           {
-            podId: source.pod,
-            memberPath: source.path,
-            memberSha256: source.sha256,
+            podId: root.id,
+            memberPath: root.path,
+            memberSha256: root.sha256,
             operation,
             planHash,
             outcome: "Succeeded",

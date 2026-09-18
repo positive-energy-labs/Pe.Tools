@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
 
@@ -52,5 +53,25 @@ public sealed class PodReceiptTests {
         var pod = Path.Combine(Path.GetTempPath(), "pe-pod-receipt-" + Guid.NewGuid().ToString("N"));
         _ = new ScriptArtifactWriter(pod);
         Assert.That(Directory.Exists(Path.Combine(pod, "output")), Is.False);
+    }
+
+    [Test]
+    public void Run_input_cannot_be_rewritten_by_a_receipt_output_or_a_script_artifact() {
+        var pod = Path.Combine(Path.GetTempPath(), "pe-pod-input-" + Guid.NewGuid().ToString("N"));
+        try {
+            var writer = new ScriptArtifactWriter(pod);
+            writer.WriteInput(new { operation = "test" }, [new PodRunInputFile("inline-script", null, "inline", "source/00-inline.csx", [1, 2, 3])]);
+            var run = Path.GetDirectoryName(writer.WriteReceipt(new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null)).FullPath)!;
+
+            Assert.Multiple(() => {
+                Assert.That(writer.Inputs, Is.EqualTo(new[] { "input.json", "source/00-inline.csx" }));
+                Assert.Throws<ArgumentException>(() => writer.WriteText("source/00-inline.csx", "forged"));
+                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
+                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null), [("input.json", [0])]));
+                Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-inline.csx")), Is.EqualTo(new byte[] { 1, 2, 3 }));
+            });
+        } finally {
+            if (Directory.Exists(pod)) Directory.Delete(pod, true);
+        }
     }
 }

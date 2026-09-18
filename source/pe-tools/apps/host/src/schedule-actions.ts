@@ -526,9 +526,13 @@ function admitScheduleSpec(
             input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
         };
       }
-      const { source } = scheduleActions[key].input.parse(admission.input);
-      const { spec } = await runPods(deps, composedSpec(source, pods));
-      return { process, nativeKey: key, input: { specJson: spec, source } };
+      const member = scheduleActions[key].input.parse(admission.input).source;
+      const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
+      return {
+        process,
+        nativeKey: key,
+        input: { specJson: spec, source: { root: source, dependencies } },
+      };
     },
     async (execution) => {
       const prepared = execution.prepared as {

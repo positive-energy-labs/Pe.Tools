@@ -463,6 +463,9 @@ export function makeCallRoute(
             fileVersion: await (actionDeps.fileVersion ?? fileVersion)(path),
           });
         }
+        // Exported inputs by original action ID; the receipt, not this, says how the action settled.
+        if (query.has("output"))
+          return Response.jsonUnsafe(await owner().outputs(query.get("output")!));
         const session = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
           openId = req.headers[HOST_RPC_DOCUMENT_HEADER];
         const target = session && openId ? documentRefSchema.parse({ session, openId }) : undefined;
