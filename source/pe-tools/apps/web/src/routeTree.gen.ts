@@ -29,7 +29,6 @@ import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
-import { Route as DesignSystemCellSelectRouteImport } from "./routes/design-system_.cell-select";
 import { Route as DesignSystemCompactRouteImport } from "./routes/design-system_.compact";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
@@ -138,11 +137,6 @@ const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
   path: "/design-system/band",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemCellSelectRoute = DesignSystemCellSelectRouteImport.update({
-  id: "/design-system_/cell-select",
-  path: "/design-system/cell-select",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const DesignSystemCompactRoute = DesignSystemCompactRouteImport.update({
   id: "/design-system_/compact",
   path: "/design-system/compact",
@@ -201,7 +195,6 @@ export interface FileRoutesByFullPath {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
-  "/design-system/cell-select": typeof DesignSystemCellSelectRoute;
   "/design-system/compact": typeof DesignSystemCompactRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -231,7 +224,6 @@ export interface FileRoutesByTo {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
-  "/design-system/cell-select": typeof DesignSystemCellSelectRoute;
   "/design-system/compact": typeof DesignSystemCompactRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -262,7 +254,6 @@ export interface FileRoutesById {
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
-  "/design-system_/cell-select": typeof DesignSystemCellSelectRoute;
   "/design-system_/compact": typeof DesignSystemCompactRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -294,7 +285,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
-    | "/design-system/cell-select"
     | "/design-system/compact"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
@@ -324,7 +314,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
-    | "/design-system/cell-select"
     | "/design-system/compact"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
@@ -354,7 +343,6 @@ export interface FileRouteTypes {
     | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/band"
-    | "/design-system_/cell-select"
     | "/design-system_/compact"
     | "/design-system_/popovers"
     | "/design-system_/proposal-flow"
@@ -385,7 +373,6 @@ export interface RootRouteChildren {
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
-  DesignSystemCellSelectRoute: typeof DesignSystemCellSelectRoute;
   DesignSystemCompactRoute: typeof DesignSystemCompactRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
@@ -536,13 +523,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemBandRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/cell-select": {
-      id: "/design-system_/cell-select";
-      path: "/design-system/cell-select";
-      fullPath: "/design-system/cell-select";
-      preLoaderRoute: typeof DesignSystemCellSelectRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/design-system_/compact": {
       id: "/design-system_/compact";
       path: "/design-system/compact";
@@ -627,7 +607,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
-  DesignSystemCellSelectRoute: DesignSystemCellSelectRoute,
   DesignSystemCompactRoute: DesignSystemCompactRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
