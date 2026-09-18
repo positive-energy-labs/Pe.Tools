@@ -69,8 +69,8 @@ function ParameterLinksRoute() {
 }
 
 /** No seeds: `parameter-links` has no demo lane (spec §7). `?demo=` is inert here. */
-export function ParameterLinksRouteContent() {
-  const handle = useRoute(manifest);
+export function ParameterLinksRouteContent({ thread }: { thread?: string } = {}) {
+  const handle = useRoute(manifest, { thread });
   const workbench = useContext(WorkbenchContext);
   const resolved = handle.resolution.kind === "resolved" ? handle.resolution.target : null;
   const ref = resolved?.kind === "document" ? resolved.ref : null;

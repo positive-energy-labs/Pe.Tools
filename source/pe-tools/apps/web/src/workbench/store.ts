@@ -1,4 +1,4 @@
-import type { ChatPluginRoute } from "./route-chat-plugins";
+import type { ChatPluginRoute } from "./chat-plugins";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
@@ -9,6 +9,7 @@ export interface ChatSearch {
   readonly mode: string;
   readonly turn?: number;
   readonly plugin?: ChatPluginRoute;
+  readonly focus?: string;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }
@@ -52,7 +53,16 @@ export function createChatPageStore(deps: {
       setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),
       setPluginOpen: (value: Setter<boolean>) => setPaneOpen("plugin", value),
       setMode: (mode: string) => void deps.search.patch({ mode }),
-      setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
+      /**
+       * The one way into the plugin pane (head plan, `open ›`, the close button). It patches only
+       * the Chat URL, never navigates, posts nothing to the thread, and sets the focus the head's
+       * group drill-in names; every other entry opens the pane unscoped.
+       */
+      setPlugin: (plugin?: ChatPluginRoute, focus?: readonly string[]) =>
+        void deps.search.patch({
+          plugin,
+          focus: plugin && focus ? JSON.stringify(focus) : undefined,
+        }),
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
     },

@@ -33,6 +33,7 @@ export function LiveScheduleGridWorkspace({
   target: chosen = null,
   thread,
   entry,
+  url = true,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
@@ -44,6 +45,8 @@ export function LiveScheduleGridWorkspace({
   thread?: string;
   /** The route's URL page state (stage, pod, path), read once at mount. */
   entry?: EntitySearch;
+  /** False in a chat pane, which does not own the URL. */
+  url?: boolean;
 }) {
   const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
@@ -84,7 +87,7 @@ export function LiveScheduleGridWorkspace({
   // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
   const navigate = useNavigate();
   useEffect(() => {
-    if (!framed) return;
+    if (!framed || !url) return;
     void navigate({
       to: ".",
       search: (previous: Record<string, unknown>) => ({
@@ -93,7 +96,7 @@ export function LiveScheduleGridWorkspace({
       }),
       replace: true,
     } as never);
-  }, [framed, navigate, page.workspaceId]);
+  }, [framed, url, navigate, page.workspaceId]);
 
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
@@ -191,6 +194,7 @@ export function LiveScheduleGridWorkspace({
       handle={handle as never}
       refreshPods={refreshPods}
       fixture={demo ? DEMO_SPEC : undefined}
+      url={url}
     >
       {audit}
     </EntityRouteView>

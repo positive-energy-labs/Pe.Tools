@@ -23,8 +23,7 @@ import {
   type MemberRef,
   type PodRow,
 } from "#/route";
-import { Picker } from "#/route/picker";
-import { useDocumentLadder } from "#/route/situation";
+import { LadderPicker, useDocumentLadder } from "#/route/situation";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
@@ -168,7 +167,7 @@ export function PodsRouteContent({
             ) : (
               <Provenance>no member open</Provenance>
             )}{" "}
-            options from <Picker levels={ladder.levels} />
+            options from <LadderPicker ladder={ladder} />
             {ladder.refusal ? (
               <span role="status" data-tone="caution">
                 {" "}

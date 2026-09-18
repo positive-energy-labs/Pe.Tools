@@ -1,7 +1,6 @@
 import { annotation } from "#/components/anatomy";
 import { modeDepth } from "../depth";
 import { Moments } from "../moments";
-import { RouteChatPluginDock } from "../route-chat-plugins";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
 import { ContextStrip, formatTime } from "./context-strip";
@@ -118,7 +117,6 @@ export function Lens({
             ) : null}
             <ContextStrip state={state} depth={modeDepth(mode)} />
             <Moments messages={messages} register={registerMoment} />
-            <RouteChatPluginDock />
           </div>
         </div>
       </div>

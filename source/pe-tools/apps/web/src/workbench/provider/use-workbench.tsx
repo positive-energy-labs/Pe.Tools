@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
-import { readRecord, readString, shortId, type Approval, type ChatState } from "../chat-state";
+import { readRecord, readString, shortId, type ChatState } from "../chat-state";
 import { type WorkbenchAttachment } from "../prompt";
 import type {
   MessageFile,
@@ -64,22 +64,6 @@ export function resumeDataForSuspension(
     return payload?.selectionMode === "multiple" ? [first] : first;
   }
   return reject ? "Rejected" : "Approved";
-}
-
-export async function rejectApproval(
-  session: Pick<SessionClient, "respondToToolSuspension" | "approveTool">,
-  approval: Approval,
-): Promise<void> {
-  if (approval.kind === "suspension") {
-    await session.respondToToolSuspension(
-      approval.toolCallId,
-      approval.toolName === "ask_user"
-        ? "(skipped)"
-        : resumeDataForSuspension(approval.toolName, approval.payload, "reject_once"),
-    );
-    return;
-  }
-  await session.approveTool(approval.toolCallId, false);
 }
 
 export function toFiles(attachments: WorkbenchAttachment[] | undefined): MessageFile[] | undefined {

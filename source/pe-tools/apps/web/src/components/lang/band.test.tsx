@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { availableTransitions, type TrichotomyCellLike } from "@pe/agent-contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import {
@@ -10,8 +10,6 @@ import {
   runFanOut,
   type CellWire,
 } from "#/components/lang/band";
-import type { ScheduleGridState } from "#/route/schedules/workspace";
-import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 afterEach(cleanup);
 
@@ -36,7 +34,7 @@ const CASES: [string, TrichotomyCellLike, string | null][] = [
 test("the cell's kinds are the contract's availableTransitions, minus stage", () => {
   for (const [, cell, lock] of CASES)
     expect(verbs(cell, lock)).toEqual(
-      availableTransitions(cell, "human", { baseline: null, lock }).filter((k) => k !== "stage"),
+      availableTransitions(cell, "human", { lock }).filter((k) => k !== "stage"),
     );
   expect(CASES.map(([name, cell, lock]) => [name, verbs(cell, lock)])).toEqual([
     ["open", ["accept", "deny"]],
@@ -87,29 +85,4 @@ test("discard unstages every staged address in one write", async () => {
   const outcome = await discardStaged(w, Object.fromEntries(CASES.map(([n, c]) => [n, c])));
   expect(outcome.covered).toEqual(["contested", "agreed", "staged"]);
   expect(w.write).toHaveBeenCalledOnce();
-});
-
-test("unstage on the schedule-grid review clears staged through the consumer's apply", () => {
-  const apply = vi.fn<ScheduleGridState["apply"]>(async () => null);
-  const state = {
-    slice: {
-      cells: { "1::2": { proposal: { value: "180 VA" }, staged: { value: "180 VA" } } },
-    },
-    revision: 3,
-    apply,
-    busy: null,
-    failure: null,
-    snapshot: null,
-    execute: vi.fn(async () => null),
-    blockedBecause: null,
-  } as unknown as ScheduleGridState;
-  render(<ScheduleGridReview state={state} />);
-
-  fireEvent.click(screen.getByRole("button", { name: "unstage" }));
-
-  expect(apply).toHaveBeenCalledWith(
-    [{ path: ["cells", "1::2", "staged"], value: null }],
-    undefined,
-  );
-  expect(screen.queryByRole("button", { name: "accept" })).toBeNull();
 });

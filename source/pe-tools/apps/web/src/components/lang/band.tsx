@@ -179,10 +179,7 @@ export function reviewTransitions(
       : "Clear Pea's proposal",
     unstage: "Clear the staged value; restore the standing proposal or baseline",
   };
-  return availableTransitions(cell, "human", {
-    baseline: wire.baselineOf?.(key),
-    lock: wire.lockOf?.(key) ?? null,
-  })
+  return availableTransitions(cell, "human", { lock: wire.lockOf?.(key) ?? null })
     .filter((kind): kind is CellTransitionKind => DRAWN.has(kind))
     .map((kind) => ({
       kind,

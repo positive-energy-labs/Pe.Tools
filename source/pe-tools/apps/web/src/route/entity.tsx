@@ -15,7 +15,7 @@ import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } 
 import { Picker } from "./picker";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
-import { Situation, SituationCell, useDocumentLadder } from "./situation";
+import { LadderPicker, Situation, SituationCell, useDocumentLadder } from "./situation";
 import type { RouteHandle } from "./use-route";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
@@ -157,7 +157,7 @@ export function EntityRouteView({
             <>
               {subject ?? def.entity}
               {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
-              <Picker levels={ladder.levels} disabled={handle.busy !== null} />
+              <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
               {ladder.refusal ? (
                 <span role="status" data-tone="caution">
                   {" "}

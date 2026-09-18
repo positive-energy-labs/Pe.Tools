@@ -6,7 +6,6 @@ import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry } from "#/route";
 import { setup } from "../../../../host/tests/schedule-test-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
-import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 const sources: { close(): void }[] = [];
@@ -15,7 +14,7 @@ afterEach(() => {
   for (const source of sources.splice(0)) source.close();
 });
 
-test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work and independent readback", async () => {
+test("real grid edits and route-approved proposals apply through HTTP, journal, Work and independent readback", async () => {
   const f = await setup();
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
@@ -59,14 +58,13 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   }
   vi.stubGlobal("EventSource", Source);
   await f.patch([{ path: ["cells"], value: {} }]);
-  const view = (review = false) => (
+  const view = () => (
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={f.scope.work}
         // The document is the thread's; this test pins it instead of standing up a head.
 
         target={JSON.stringify({ kind: "open", ref: f.b })}
-        render={review ? (state) => <ScheduleGridReview state={state} /> : undefined}
       />
     </RegistryContext.Provider>
   );
@@ -94,26 +92,25 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
   expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);
-  mounted.rerender(view(true));
-  await screen.findByRole("button", { name: "accept" });
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "accept" }).hasAttribute("disabled")).toBe(false),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "accept" }));
+  // The proposal is approved where it lives: the route's own pending strip, the view Chat hosts.
+  await screen.findByRole("button", { name: "approve" });
+  fireEvent.click(screen.getByRole("button", { name: "approve" }));
   await vi.waitFor(async () =>
     expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
   );
-  await screen.findByRole("button", { name: "Push 1 to Revit" });
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "Push 1 to Revit" }).hasAttribute("disabled")).toBe(
-      false,
-    ),
+  // The first push's receipt settles before the route lets a second one start.
+  await vi.waitFor(
+    () =>
+      expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
+    { timeout: 10_000 },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Push 1 to Revit" }));
+  fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
   await vi.waitFor(() =>
     expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(2),
   );
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
   mounted.unmount();
-});
+}, 20_000);
