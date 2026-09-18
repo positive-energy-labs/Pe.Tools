@@ -91,6 +91,10 @@
   <body>
     <h1>Factory</h1>
     <section>
+      <h2>Declaration</h2>
+      <div id="declaration">no declaration</div>
+    </section>
+    <section>
       <h2>Loops</h2>
       <div id="loops">no events yet</div>
     </section>
@@ -172,6 +176,25 @@
           <polyline points="${line}" fill="none" stroke="#1d1d1b" stroke-width="2"/>
           ${points.map((value, index) => (Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"/>` : "")).join("")}
         </svg></div>`;
+      };
+      const renderDeclaration = (declaration) => {
+        const rows = [
+          ...Object.entries(declaration.sensor || {}).map(
+            ([name, value]) =>
+              `<tr><td>sensor</td><td>${esc(name)}</td><td>${esc((value.scope || []).join(", "))}</td><td>${esc(value.run)}</td></tr>`,
+          ),
+          ...Object.entries(declaration.actuator || {}).map(
+            ([name, value]) =>
+              `<tr><td>actuator</td><td>${esc(name)}</td><td>${value.review ? `review ${esc(value.review)}` : "-"}</td><td>${esc(value.run)}</td></tr>`,
+          ),
+          ...Object.entries(declaration.loop || {}).map(
+            ([name, value]) =>
+              `<tr><td>loop</td><td>${esc(name)}</td><td>${esc(value.on || "-")} · sense ${esc((value.sense || []).join(", ") || "-")} · setpoints ${esc(JSON.stringify(value.setpoint || {}))} · act ${esc(value.act || "-")} · gate ${esc(value.gate || "-")}</td><td>-</td></tr>`,
+          ),
+        ];
+        document.querySelector("#declaration").innerHTML = rows.length
+          ? `<table class="mono"><thead><tr><th>kind</th><th>name</th><th>declaration</th><th>run</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+          : "no declaration";
       };
       function render(state) {
         const setpoints = state.setpoints;
@@ -264,7 +287,10 @@
           : "no events yet";
       }
       async function start() {
-        const state = await fetch("/state").then((response) => response.json());
+        const [state, declaration] = await Promise.all(
+          ["/state", "/declaration"].map((url) => fetch(url).then((response) => response.json())),
+        );
+        renderDeclaration(declaration);
         render(state);
         const stream = new EventSource("/events?since=0");
         stream.onmessage = async (message) => {

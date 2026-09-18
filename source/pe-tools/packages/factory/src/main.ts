@@ -18,7 +18,7 @@ import { parse } from "smol-toml";
 type Config = {
   factory: { ref: string; poll_seconds: number; port: number; db: string };
   sensor: Record<string, { run: string; scope: string[] }>;
-  actuator?: Record<string, { run: string }>;
+  actuator?: Record<string, { run: string; review?: string }>;
   loop: Record<
     string,
     {
@@ -654,6 +654,8 @@ export const serve = (repo: string, database: DatabaseSync) =>
       response.end(readFileSync(new URL("./ui/index.html", import.meta.url), "utf8"));
     } else if (url.pathname === "/events.json") {
       sendJson(response, rows(database, since));
+    } else if (url.pathname === "/declaration") {
+      sendJson(response, config);
     } else if (url.pathname === "/state") {
       sendJson(response, projection(database, config, repo));
     } else if (url.pathname === "/events") {
