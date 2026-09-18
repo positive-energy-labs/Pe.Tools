@@ -80,9 +80,18 @@ public record PodMemberComposeRequest(string Pod, string Path, string? Content =
 
 public record PodMemberComposeData(string? Composed, PodCapturedSourceData Source, List<ScriptDiagnostic> Diagnostics, List<PodConsumedSourceData> Dependencies);
 
-public record PodCapturedSourceData(string Id, string Path, string Sha256, string BytesBase64, PodSourceOrigin Origin);
+public record PodCapturedSourceData(
+    [property: JsonProperty(Required = Required.Always)] string Id,
+    [property: JsonProperty(Required = Required.Always)] string Path,
+    [property: JsonProperty(Required = Required.Always)] string Sha256,
+    [property: JsonProperty(Required = Required.Always)] string BytesBase64,
+    [property: JsonProperty(Required = Required.Always)] PodSourceOrigin Origin);
 
-public record PodConsumedSourceData(string Id, string Path, string Sha256, string BytesBase64);
+public record PodConsumedSourceData(
+    [property: JsonProperty(Required = Required.Always)] string Id,
+    [property: JsonProperty(Required = Required.Always)] string Path,
+    [property: JsonProperty(Required = Required.Always)] string Sha256,
+    [property: JsonProperty(Required = Required.Always)] string BytesBase64);
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum PodSourceOrigin {
