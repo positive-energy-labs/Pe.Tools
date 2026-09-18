@@ -112,6 +112,8 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             desired = source.Resolve(afterMigration.Value, patch.Patch);
             desired = FamilyPreparation.ResolveNativeFormulas(desired, doc.Document, formulaCache);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
+            // An identity-only migration keeps the pre-migration intent as the residue baseline (FamilyPlan.IsIdentityOnlyMigration).
+            if (plan.IsIdentityOnlyMigration(prepared.Original, current)) desired = prepared.Desired!;
         }
         if (applyPlan.Refusals.Count > 0)
             throw new InvalidOperationException("Source migration left an unsupported requested change.");
