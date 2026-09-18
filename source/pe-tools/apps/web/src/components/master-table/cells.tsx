@@ -9,6 +9,8 @@
  * focus law). `CellSelect` is the one forced wrapper: it keeps table navigation around the kit
  * Combobox and routes its refusal through the alarm mixes.
  */
+import { useContext } from "react";
+
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import {
   Combobox,
@@ -17,7 +19,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
 } from "#/components/lang/combobox";
-import { StateCell, fmtNum } from "#/components/lang/cell";
+import { CellHost, StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { cn } from "#/lib/utils";
@@ -94,6 +96,8 @@ export function CellSelect({
   title?: string;
 }) {
   const move = useCellNavigation();
+  // Closing (Escape or a pick) hands focus back to the td, where the table's keys live.
+  const host = useContext(CellHost);
   const selected = options.find((option) => option.value === value) ?? null;
   return (
     <Combobox
@@ -108,6 +112,7 @@ export function CellSelect({
         fill
         title={title}
         tabIndex={-1}
+        data-cell-editor=""
         onKeyDown={(event) => {
           if (event.key === "Tab" && move?.(event.shiftKey ? "left" : "right"))
             event.preventDefault();
@@ -117,7 +122,7 @@ export function CellSelect({
       >
         {selected?.label ?? value}
       </ComboboxTrigger>
-      <ComboboxContent>
+      <ComboboxContent finalFocus={host ?? undefined}>
         <ComboboxList>
           {(option: { value: string; label: string }) => (
             <ComboboxItem key={option.value} value={option}>

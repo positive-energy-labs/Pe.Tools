@@ -151,7 +151,8 @@ export function MasterTableBody<Row extends RowData>({
   );
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
-      if (event.key === "Enter" && editCell(event.currentTarget)) return event.preventDefault();
+      if ((event.key === "Enter" || event.key === "F2") && editCell(event.currentTarget))
+        return event.preventDefault();
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
         return event.preventDefault();
       const direction = keyDirection(event.key, event.shiftKey);

@@ -39,9 +39,16 @@ export function keyDirection(key: string, shift: boolean): CellMove | null {
 
 export function editCell(cell: HTMLTableCellElement, replacement?: string): boolean {
   const editor = cell.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-    "input:not([disabled]),textarea:not([disabled])",
+    // A hidden form proxy (base-ui renders one inside every Combobox) is never the editor.
+    'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])',
   );
-  if (!editor) return false;
+  if (!editor) {
+    // A button-shaped editor (a CellSelect's trigger) declares itself; editing it is opening it.
+    const opener = cell.querySelector<HTMLButtonElement>("[data-cell-editor]:not([disabled])");
+    if (!opener || replacement !== undefined) return false;
+    opener.click();
+    return true;
+  }
   editor.focus();
   if (replacement !== undefined) editor.value = replacement;
   const end = editor.value.length;
