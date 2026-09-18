@@ -2,9 +2,10 @@ import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { capture } from "@pe/runtime";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   BRIDGE_CONTRACT_VERSION,
+  computeBridgeSessionId,
   bridgeFrameSchema,
   type BridgeFrame,
   type BridgeRegistrationRequest,
@@ -19,7 +20,10 @@ import {
 // so registration performs an explicit takeover and cleanup must be guarded (see cleanupSession).
 type Session = {
   readonly send: (frame: BridgeFrame) => Effect.Effect<void>;
-  readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
+  // Every request this session owns, keyed by the id the wire carries. Responses route by that
+  // id, so several requests may be live at once: the FIFO gate below is what keeps ordinary ops
+  // serial, and `op.cancel` is the one op that walks past it.
+  readonly requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>;
   readonly sessionId: string;
   readonly processId: number;
   readonly processStartUtcUnixMs: number | null;
@@ -37,11 +41,20 @@ type Session = {
 
 const MAX_QUEUED_OPS = 8;
 
-type BridgePendingRequest = {
+/**
+ * One live request. `queued` = the host holds it behind the gate and Revit has never seen it;
+ * `dispatched` = Revit owns it; `cancelled` = a cancel reached it before dispatch, so the gate
+ * drops it instead of sending it.
+ */
+export type BridgeRequest = {
   readonly operationKey: string;
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
   readonly requestId: string;
+  readonly phase: "queued" | "dispatched" | "cancelled";
 };
+
+/** The op that must never wait behind the op it names. */
+export const CANCEL_OPERATION_KEY = "op.cancel";
 
 /** A bridge operation failed on the Revit side (statusCode mirrors the C# BridgeOperationException). */
 export class BridgeError {
@@ -49,7 +62,22 @@ export class BridgeError {
   constructor(
     readonly message: string,
     readonly statusCode: number,
+    readonly evidence: {
+      readonly issues?: BridgeResponse["issues"];
+      readonly nativeOutcome?: string;
+      readonly notDispatched?: true;
+      readonly result?: unknown;
+      readonly resolvedTarget?: { readonly session: string; readonly document: string | null };
+    } = {},
   ) {}
+  get nativeOutcome(): string | undefined {
+    // BridgeAgent emits one root issue for a RevitTaskOutcome; preserve unknown future codes.
+    const issues = this.evidence.issues;
+    return (
+      this.evidence.nativeOutcome ??
+      (issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined)
+    );
+  }
 }
 
 /** No Revit process is currently connected to the bridge. */
@@ -98,22 +126,6 @@ export function getBridgeRegistrationRejection(registration: BridgeRegistrationR
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
     ? null
     : `Unsupported bridge contract version '${registration.contractVersion}'. Expected '${BRIDGE_CONTRACT_VERSION}'.`;
-}
-
-/**
- * The universal session id: hash(pid + processStartUtc), for every lane, no exceptions.
- * The broker (this host) assigns it and returns it in the registration ack. Returns null when
- * the client did not report process identity — the caller keeps the bridge-${uuid} fallback
- * (deleting that fallback is later hardening).
- */
-export function computeBridgeSessionId(registration: {
-  readonly processId: number;
-  readonly processStartUtcUnixMs?: number | null;
-}): string | null {
-  const startUtc = registration.processStartUtcUnixMs;
-  if (typeof startUtc !== "number" || !Number.isFinite(startUtc) || startUtc <= 0) return null;
-  const digest = createHash("sha256").update(`${registration.processId}:${startUtc}`).digest("hex");
-  return `session-${digest.slice(0, 16)}`;
 }
 
 /** Accepts only Host/UI lanes; lane-less sessions remain targetable by process identity. */
@@ -191,7 +203,7 @@ const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LA
  * Selector grammar: `session:<id>` → the connection reporting that pe-revit session id;
  * `doc:<Address>` → the one connection holding that document (zero or several holders refuse,
  * naming every session and what it holds); `pin:<id>|doc:<Address>` → the pinned pe-revit session
- * while it holds the document, else the plain `doc:` rules; `controlled`/`observed` → custody; `dev`/`installed` → lane; all digits → pid; anything else
+ * only while it holds the document; a pin miss refuses; `controlled`/`observed` â†’ custody; `dev`/`installed` â†’ lane; all digits â†’ pid; anything else
  * → bridge session id (one process incarnation). Untargeted with one session is implicit
  * (ergonomic and safe); untargeted with several HARD-FAILS immediately with the listing —
  * read-only status/list surfaces aggregate via `list` instead, never through here.
@@ -233,7 +245,7 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
   // A Scope that names a document and no session resolves here: the document is the primary key
   // and the session is derived from its one holder. Two holders is the one case the user must
   // name a session, and the refusal lists them so the head can offer exactly those.
-  // The pin is a tiebreak, never a claim: it wins only while that session is a holder.
+  // A pin is a required selected session, never a fallback preference.
   const pinned = /^pin:([^|]+)\|doc:(.*)$/is.exec(selector);
   if (pinned || selector.toLowerCase().startsWith("doc:")) {
     const address = (pinned ? pinned[2]! : selector.slice("doc:".length)).trim();
@@ -242,6 +254,12 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     // An observed Revit (no pe-revit receipt) has no SDK id; its bridge id is its name on the head.
     const held = pin ? holders.find((s) => (s.sdkSessionId ?? s.sessionId) === pin) : undefined;
     if (held) return { _tag: "found", session: held };
+    if (pin)
+      return {
+        _tag: "error",
+        statusCode: 409,
+        message: `Pinned session '${pin}' does not hold document '${address}'. Connected sessions: ${listing}`,
+      };
     if (holders.length === 1) return { _tag: "found", session: holders[0] };
     if (holders.length === 0)
       return {
@@ -327,13 +345,20 @@ export class RevitBridge extends Context.Service<
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
-    ) => Effect.Effect<unknown, BridgeError | NoRevitSession>;
+      openDocumentId?: string | null,
+      requestId?: string,
+    ) => Effect.Effect<
+      { value: unknown; target: { session: string; document: string | null } },
+      BridgeError | NoRevitSession
+    >;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;
     readonly list: Effect.Effect<readonly BridgeSessionView[]>;
     readonly handleConnection: (
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
     readonly events: PubSub.PubSub<HostBridgeEvent>;
+    /** Synchronous public observation tap; a slow network reader never backpressures the bridge. */
+    readonly subscribe: (listener: (event: HostBridgeEvent) => void) => () => void;
   }
 >()("RevitBridge") {}
 
@@ -363,41 +388,39 @@ const decodePayloadJson = Effect.fnUntraced(function* (payloadJson: string | nul
 const encodePayloadJson = Effect.fnUntraced(function* (payload: unknown) {
   return yield* Effect.try({
     try: () => JSON.stringify(payload ?? {}),
-    catch: (error) => new BridgeError(String(error), 400),
+    catch: (error) => new BridgeError(String(error), 400, { notDispatched: true }),
   });
 });
 
-export const reserveBridgePending = Effect.fnUntraced(function* (
-  pendingRef: Ref.Ref<BridgePendingRequest | null>,
-  operationKey: string,
-  requestId: string,
-  reply: Deferred.Deferred<BridgeResponse, BridgeError>,
-) {
-  const activeOperationKey = yield* Ref.modify(pendingRef, (pending) =>
-    pending ? [pending.operationKey, pending] : [null, { operationKey, reply, requestId }],
-  );
-  if (activeOperationKey)
-    return yield* Effect.fail(
-      new BridgeError(
-        `Revit is busy executing '${activeOperationKey}'. Retry '${operationKey}' after the current request completes.`,
-        423,
-      ),
-    );
-});
+/** Records one request under its wire id; a later phase for the same id replaces the earlier one. */
+export const trackBridgeRequest = (
+  requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
+  request: BridgeRequest,
+) => Ref.update(requests, (live) => new Map(live).set(request.requestId, request));
 
-export const completeBridgePending = Effect.fnUntraced(function* (
-  pendingRef: Ref.Ref<BridgePendingRequest | null>,
+export const forgetBridgeRequest = (
+  requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
+  requestId: string,
+) =>
+  Ref.update(requests, (live) => {
+    const next = new Map(live);
+    next.delete(requestId);
+    return next;
+  });
+
+/** Routes one Response frame to the request that carries its id. */
+export const completeBridgeRequest = Effect.fnUntraced(function* (
+  requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
   response: BridgeResponse,
 ) {
-  const pending = yield* Ref.get(pendingRef);
-  if (!pending) return false;
-  if (pending.requestId !== response.requestId) {
+  const request = (yield* Ref.get(requests)).get(response.requestId);
+  if (!request) {
     yield* Effect.logWarning(
-      `bridge response requestId mismatch: pending=${pending.requestId}, received=${response.requestId}`,
+      `bridge response for an unknown requestId: received=${response.requestId}`,
     );
     return false;
   }
-  yield* Deferred.succeed(pending.reply, response);
+  yield* Deferred.succeed(request.reply, response);
   return true;
 });
 
@@ -410,7 +433,17 @@ export const RevitBridgeLive = Layer.effect(
       PubSub.sliding<HostBridgeEvent>(EVENT_STREAM_CAPACITY),
       PubSub.shutdown,
     );
-    const emit = (event: HostBridgeEvent) => PubSub.publish(events, event).pipe(Effect.asVoid);
+    const listeners = new Set<(event: HostBridgeEvent) => void>();
+    const subscribe = (listener: (event: HostBridgeEvent) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    };
+    const emit = (event: HostBridgeEvent) =>
+      Effect.sync(() => {
+        for (const listener of listeners) listener(event);
+      }).pipe(Effect.andThen(PubSub.publish(events, event)), Effect.asVoid);
 
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
@@ -441,10 +474,9 @@ export const RevitBridgeLive = Layer.effect(
     });
 
     const failPendingRequest = Effect.fnUntraced(function* (session: Session, reason: string) {
-      const pending = yield* Ref.get(session.pending);
-      if (!pending) return;
-      yield* Deferred.fail(pending.reply, new BridgeError(reason, 503));
-      yield* Ref.set(session.pending, null);
+      const live = yield* Ref.getAndSet(session.requests, new Map());
+      for (const request of live.values())
+        yield* Deferred.fail(request.reply, new BridgeError(reason, 503));
     });
 
     // Socket-close cleanup. With stable session ids this races reconnect takeover: the OLD
@@ -508,11 +540,13 @@ export const RevitBridgeLive = Layer.effect(
             yield* Deferred.succeed(initialGate, void 0);
             // Broker-assigned identity: hash(pid + processStartUtc) when the client reported
             // process identity; bridge-${uuid} fallback otherwise (deleting it is later hardening).
+            const registration = frame.registration;
             const sessionId =
-              computeBridgeSessionId(frame.registration) ?? `bridge-${randomUUID()}`;
+              (yield* Effect.promise(() => computeBridgeSessionId(registration))) ??
+              `bridge-${randomUUID()}`;
             const registeredSession = {
               send,
-              pending: yield* Ref.make<BridgePendingRequest | null>(null),
+              requests: yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map()),
               sessionId,
               processId: frame.registration.processId,
               processStartUtcUnixMs: frame.registration.processStartUtcUnixMs ?? null,
@@ -576,7 +610,7 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge Response frame missing response");
               return;
             }
-            if (session) yield* completeBridgePending(session.pending, frame.response);
+            if (session) yield* completeBridgeRequest(session.requests, frame.response);
             return;
           }
           case "Event": {
@@ -616,10 +650,18 @@ export const RevitBridgeLive = Layer.effect(
       session: Session,
       operationKey: string,
       payload: unknown,
+      openDocumentId: string | undefined,
+      requestId = randomUUID(),
+      // The gate reserves the reply before it queues, so a cancel can fail it before dispatch.
+      reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
     ) {
-      const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
-      const requestId = randomUUID();
-      yield* reserveBridgePending(session.pending, operationKey, requestId, reply);
+      const reply = reserved ?? (yield* Deferred.make<BridgeResponse, BridgeError>());
+      yield* trackBridgeRequest(session.requests, {
+        operationKey,
+        requestId,
+        reply,
+        phase: "dispatched",
+      });
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
         yield* session.send({
@@ -628,37 +670,112 @@ export const RevitBridgeLive = Layer.effect(
             requestId,
             operationKey,
             payloadJson,
+            openDocumentId,
           },
         });
         const res = yield* Deferred.await(reply);
-        if (!res.ok)
+        if (!res.ok) {
+          const state = yield* Ref.get(session.state);
+          const targetOpenId = res.openDocumentId ?? openDocumentId;
           return yield* Effect.fail(
-            new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500),
+            new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
+              issues: res.issues,
+              resolvedTarget: {
+                session: session.sdkSessionId ?? session.sessionId,
+                document: targetOpenId
+                  ? (state.openDocuments.find((document) => document.openId === targetOpenId)
+                      ?.address ?? null)
+                  : null,
+              },
+            }),
           );
-        return yield* decodePayloadJson(res.payloadJson);
-      }).pipe(
-        Effect.ensuring(
-          Ref.update(session.pending, (pending) => (pending?.reply === reply ? null : pending)),
-        ),
-      );
+        }
+        return {
+          value: yield* decodePayloadJson(res.payloadJson),
+          openDocumentId: res.openDocumentId,
+        };
+      }).pipe(Effect.ensuring(forgetBridgeRequest(session.requests, requestId)));
+    });
+
+    /**
+     * The whole point of cancel: it walks past the per-session FIFO gate, so it reaches Revit
+     * while the op it names is still running there. Returns null when no connected session owns
+     * the id, so the caller falls through to ordinary targeting and Revit answers the refusal.
+     */
+    const cancelRequest = Effect.fnUntraced(function* (requestId: string) {
+      for (const session of (yield* Ref.get(sessions)).values()) {
+        const request = (yield* Ref.get(session.requests)).get(requestId);
+        if (!request) continue;
+        const target = {
+          session: session.sdkSessionId ?? session.sessionId,
+          document: null,
+        };
+        if (request.phase === "dispatched") {
+          const result = yield* invokeSession(
+            session,
+            CANCEL_OPERATION_KEY,
+            { requestId },
+            undefined,
+          );
+          return { value: result.value, target };
+        }
+        // Still behind the gate: mark it and let the gate drop it. Revit never sees it at all.
+        yield* trackBridgeRequest(session.requests, { ...request, phase: "cancelled" });
+        return {
+          value: {
+            cancelled: true,
+            requestId,
+            message: `Request '${requestId}' had not reached Revit; it will not be dispatched.`,
+          },
+          target,
+        };
+      }
+      return null;
     });
 
     const invoke = Effect.fnUntraced(function* (
       operationKey: string,
       payload: unknown,
       bridgeSessionId?: string,
+      openDocumentId?: string | null,
+      requestId?: string,
     ) {
       // Every bridge invoke reaches into exactly one Revit process, so ambiguity hard-fails here
       // (no warning-only release). Read-only aggregation across sessions goes through `list`.
+      // `op.cancel` is the exception in two ways: the request it names picks the session (an
+      // untargeted cancel must work while several sessions are connected), and it NEVER queues —
+      // waiting behind the op it is meant to stop is the whole bug it exists to fix.
+      if (operationKey === CANCEL_OPERATION_KEY) {
+        const named = (payload as { requestId?: unknown } | null)?.requestId;
+        const known = typeof named === "string" ? yield* cancelRequest(named) : null;
+        if (known) return known;
+      }
       const resolution = yield* resolveTarget(bridgeSessionId);
       if (resolution._tag === "none") return yield* Effect.fail(new NoRevitSession());
       if (resolution._tag === "error")
-        return yield* Effect.fail(new BridgeError(resolution.message, resolution.statusCode));
+        return yield* Effect.fail(
+          new BridgeError(resolution.message, resolution.statusCode, { notDispatched: true }),
+        );
       // The candidate is a spread copy carrying `documents`; the liveness check below compares by
       // identity, so take the map's own Session object. FOOTGUN: every invoke failed NoRevitSession
       // on a live Revit (2026-09-06) while `list` showed the session, because of this copy.
       const session = (yield* Ref.get(sessions)).get(resolution.session.sessionId);
       if (!session) return yield* Effect.fail(new NoRevitSession());
+
+      // An id this host never queued: let Revit answer for it, but still outside the gate.
+      if (operationKey === CANCEL_OPERATION_KEY) {
+        const result = yield* invokeSession(session, operationKey, payload, undefined);
+        return {
+          value: result.value,
+          target: { session: session.sdkSessionId ?? session.sessionId, document: null },
+        };
+      }
+
+      const state = yield* Ref.get(session.state);
+      const selectedDocument =
+        openDocumentId === null
+          ? undefined
+          : (openDocumentId ?? state.openDocuments.find((document) => document.isActive)?.openId);
 
       const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
       if (depth > MAX_QUEUED_OPS) {
@@ -667,9 +784,21 @@ export const RevitBridgeLive = Layer.effect(
           new BridgeError(
             `Revit queue is full (${MAX_QUEUED_OPS} waiting). Retry '${operationKey}' shortly.`,
             423,
+            { notDispatched: true },
           ),
         );
       }
+
+      // Reserve the request under its wire id BEFORE queueing, so a cancel that arrives while it
+      // waits has something to name (and something to fail) instead of a 404.
+      const wireId = requestId ?? randomUUID();
+      const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
+      yield* trackBridgeRequest(session.requests, {
+        operationKey,
+        requestId: wireId,
+        reply,
+        phase: "queued",
+      });
 
       const myGate = yield* Deferred.make<void>();
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
@@ -699,16 +828,53 @@ export const RevitBridgeLive = Layer.effect(
         // The session may have died — or been taken over by a reconnect — while we queued.
         const live = (yield* Ref.get(sessions)).get(session.sessionId);
         if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        const result = yield* invokeSession(session, operationKey, payload);
+        // Cancelled while it waited: Revit never sees it, so this is the CancelledBeforeDispatch
+        // the native queue reports for the same situation on its own side.
+        if ((yield* Ref.get(session.requests)).get(wireId)?.phase === "cancelled")
+          return yield* Effect.fail(
+            new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {
+              notDispatched: true,
+              nativeOutcome: "CancelledBeforeDispatch",
+            }),
+          );
+        const currentState = yield* Ref.get(session.state);
+        if (
+          selectedDocument &&
+          !currentState.openDocuments.some((doc) => doc.openId === selectedDocument)
+        )
+          return yield* Effect.fail(
+            new BridgeError("The selected document lifetime closed before dispatch", 409, {
+              notDispatched: true,
+            }),
+          );
+        const result = yield* invokeSession(
+          session,
+          operationKey,
+          payload,
+          selectedDocument,
+          wireId,
+          reply,
+        );
         yield* Effect.logInfo(
           `Revit queue completed op=${operationKey} session=${session.sessionId} duration_ms=${Date.now() - startedAt}`,
         );
-        return result;
+        return {
+          value: result.value,
+          target: {
+            session: session.sdkSessionId ?? session.sessionId,
+            document:
+              state.openDocuments.find((document) => document.openId === result.openDocumentId)
+                ?.address ?? null,
+          },
+        };
       }).pipe(
         Effect.ensuring(
           Effect.andThen(
-            Ref.update(session.queueDepth, (n) => n - 1),
-            Deferred.succeed(myGate, void 0),
+            forgetBridgeRequest(session.requests, wireId),
+            Effect.andThen(
+              Ref.update(session.queueDepth, (n) => n - 1),
+              Deferred.succeed(myGate, void 0),
+            ),
           ),
         ),
       );
@@ -733,6 +899,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, events };
+    return { invoke, snapshot, list, handleConnection, events, subscribe };
   }),
 );

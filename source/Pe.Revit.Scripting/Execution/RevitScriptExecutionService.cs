@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
@@ -32,9 +32,6 @@ public sealed class RevitScriptExecutionService(
     Action<string>? notificationSink = null
 ) {
     private const int MaxInlineSourceBytes = 256 * 1024;
-    private const int MaxPodSourceFileCount = 200;
-    private const long MaxPodSourceFileBytes = 512 * 1024;
-    private const long MaxPodSourceBytes = 2 * 1024 * 1024;
 
     private readonly ScriptAssemblyLoadService _assemblyLoadService = assemblyLoadService;
     private readonly ScriptCompilationService _compilationService = compilationService;
@@ -64,6 +61,7 @@ public sealed class RevitScriptExecutionService(
     }
 
     public ExecuteRevitScriptData Execute(
+        Document? document,
         ExecuteRevitScriptRequest request,
         string executionId,
         ScriptCancellationScope? cancellation = null
@@ -84,7 +82,7 @@ public sealed class RevitScriptExecutionService(
         RevitScriptContext? executionContext = null;
 
         try {
-            var planResult = this.NormalizeRequest(request, executionId);
+            var planResult = this.NormalizeRequest(document, request, executionId);
             Log.Information(
                 "Revit scripting normalize completed: ExecutionId={ExecutionId}, Status={Status}, Diagnostics={DiagnosticCount}",
                 executionId,
@@ -107,6 +105,13 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
+            outputSink.Attribution = plan.Attribution;
+            // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
+            // in the default pod beside the inline traces.
+            outputSink.Artifacts = new ScriptArtifactWriter(
+                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
+                    ? plan.WorkspaceRoot
+                    : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
@@ -391,7 +396,7 @@ public sealed class RevitScriptExecutionService(
     }
 
     private (ScriptExecutionPlan? Plan, ScriptExecutionStatus Status, IReadOnlyList<ScriptDiagnostic> Diagnostics)
-        NormalizeRequest(ExecuteRevitScriptRequest request, string executionId) {
+        NormalizeRequest(Document? document, ExecuteRevitScriptRequest request, string executionId) {
         var diagnostics = new List<ScriptDiagnostic>();
         var uiApplication = this._uiApplicationAccessor();
         if (uiApplication == null) {
@@ -408,7 +413,7 @@ public sealed class RevitScriptExecutionService(
 
         var hasInlineContent = !string.IsNullOrWhiteSpace(request.ScriptContent);
         var hasSourcePath = !string.IsNullOrWhiteSpace(request.SourcePath);
-        if (hasInlineContent && hasSourcePath) {
+        if (hasInlineContent && (hasSourcePath || request.SourceBundle is not null)) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(
                 "normalize",
                 "Provide either scriptContent (inline C#) or sourcePath (a pod entrypoint under src/), not both."
@@ -425,13 +430,16 @@ public sealed class RevitScriptExecutionService(
         }
 
         try {
+            RequireTargetLifetime(uiApplication, document);
             var workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
             var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-            var workspaceProjectPath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
+
 
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
             PodManifest? podManifest = null;
+            PodReceipt? preparedAttribution = null;
+            string? projectSeed = null;
             if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
                     request.ScriptContent,
@@ -440,18 +448,24 @@ public sealed class RevitScriptExecutionService(
                 );
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
             } else {
-                var workspaceSource = this.LoadWorkspaceSource(workspaceKey, request.SourcePath);
-                foreach (var diagnostic in workspaceSource.Diagnostics)
-                    diagnostics.Add(diagnostic);
-                if (workspaceSource.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
-                    return (null, ScriptExecutionStatus.Rejected, diagnostics);
-
-                sourceSet = workspaceSource.SourceSet;
-                executionMode = workspaceSource.ExecutionMode;
-                podManifest = workspaceSource.PodManifest;
+                var bundle = request.SourceBundle
+                             ?? throw new ArgumentException("A pod execution requires the host-captured sourceBundle.", nameof(request.SourceBundle));
+                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle) switch {
+                    PreparedPod prepared => prepared,
+                    RefusedPod refused => throw new ArgumentException(refused.Reason, PodManifestValidator.DiagnosticStage),
+                    _ => throw new InvalidOperationException("Pod preparation is prepared or refused.")
+                };
+                var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
+                sourceSet = captured.SourceSet;
+                executionMode = ScriptWorkspaceExecutionMode.Pod;
+                podManifest = captured.Manifest;
+                projectSeed = captured.ProjectSeed;
+                var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
+                var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
+                // Outcome and output references are filled when CreateResult observes the final result.
+                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, string.Empty, [], null);
             }
 
-            var projectSeed = hasInlineContent ? null : ReadFileIfExists(workspaceProjectPath);
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
                 projectSeed,
                 workspaceRoot,
@@ -463,6 +477,7 @@ public sealed class RevitScriptExecutionService(
             return (
                 new ScriptExecutionPlan(
                     uiApplication,
+                    document,
                     executionId,
                     revitVersion,
                     targetFramework,
@@ -473,6 +488,7 @@ public sealed class RevitScriptExecutionService(
                     sourceSet,
                     executionMode,
                     podManifest,
+                    preparedAttribution,
                     canonicalProjectContent,
                     hasInlineContent
                 ),
@@ -481,7 +497,7 @@ public sealed class RevitScriptExecutionService(
             );
         } catch (ArgumentException ex) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(
-                "normalize",
+                ex.ParamName == PodManifestValidator.DiagnosticStage ? PodManifestValidator.DiagnosticStage : "normalize",
                 ex.Message
             ));
             return (null, ScriptExecutionStatus.Rejected, diagnostics);
@@ -604,121 +620,22 @@ public sealed class RevitScriptExecutionService(
         _ => "Script mode:"
     };
 
-    private WorkspaceSourceLoadResult LoadWorkspaceSource(string workspaceKey, string? sourcePath) {
-        if (string.IsNullOrWhiteSpace(sourcePath))
-            throw new ArgumentException("SourcePath is required for workspace file execution.", nameof(sourcePath));
-
-        var normalizedSourcePath = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Workspace source path");
-        var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
-            workspaceKey,
-            normalizedSourcePath
-        );
-        if (Directory.Exists(selectedPath))
-            throw new ArgumentException("Workspace source path must point to a .cs file, not a directory.",
-                nameof(sourcePath));
-        if (!selectedPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Workspace source path must point to a .cs file.", nameof(sourcePath));
-        if (!File.Exists(selectedPath))
-            throw new IOException($"Workspace source file does not exist: {selectedPath}");
-
-        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
-        if (!Directory.Exists(sourceDirectory))
-            throw new IOException($"Workspace source directory does not exist: {sourceDirectory}");
-
-        var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        if (!File.Exists(podManifestPath)) {
-            return new WorkspaceSourceLoadResult(
-                new ScriptSourceSet([], string.Empty),
-                ScriptWorkspaceExecutionMode.Pod,
-                null,
-                [
-                    ScriptDiagnosticFactory.Error(
-                        PodManifestValidator.DiagnosticStage,
-                        $"Workspace '{workspaceKey}' has no pod.json, so scripts cannot execute from it. Run scripting.workspace.bootstrap (pea script bootstrap) to create pod.json, then declare '{normalizedSourcePath}' under entrypoints.",
-                        normalizedSourcePath
-                    )
-                ]
-            );
-        }
-
-        var diagnostics = new List<ScriptDiagnostic>();
-        var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(podManifestPath), workspaceKey);
-        diagnostics.AddRange(manifestResult.Diagnostics);
-        if (!manifestResult.Success || manifestResult.Manifest is null)
-            return new WorkspaceSourceLoadResult(
-                new ScriptSourceSet([], string.Empty),
-                ScriptWorkspaceExecutionMode.Pod,
-                null,
-                diagnostics
-            );
-
-        if (!manifestResult.Manifest.Entrypoints.Any(entrypoint =>
-                string.Equals(entrypoint.SourcePath, normalizedSourcePath, StringComparison.OrdinalIgnoreCase)))
-            diagnostics.Add(ScriptDiagnosticFactory.Error(
-                PodManifestValidator.DiagnosticStage,
-                $"pod.json does not declare '{normalizedSourcePath}' as an entrypoint.",
-                normalizedSourcePath
-            ));
-        if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
-            return new WorkspaceSourceLoadResult(
-                new ScriptSourceSet([], string.Empty),
-                ScriptWorkspaceExecutionMode.Pod,
-                null,
-                diagnostics
-            );
-
-        var sourcePaths = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (sourcePaths.Count > MaxPodSourceFileCount)
-            throw new IOException($"Pod source may contain at most {MaxPodSourceFileCount} C# files.");
-
-        var sourceBytes = sourcePaths.Sum(path => new FileInfo(path).Length);
-        var oversizedSource = sourcePaths.FirstOrDefault(path => new FileInfo(path).Length > MaxPodSourceFileBytes);
-        if (oversizedSource is not null)
-            throw new IOException($"Pod source file exceeds 512 KiB: {oversizedSource}");
-        if (sourceBytes > MaxPodSourceBytes)
-            throw new IOException("Pod C# source may not exceed 2 MiB total.");
-
-        var sourceFiles = sourcePaths
-            .Select(path => new ScriptSourceFile(
-                GetRelativePath(sourceDirectory, path),
-                File.ReadAllText(path),
-                path
-            ))
-            .ToList();
-
-        var selectedFullPath = Path.GetFullPath(selectedPath);
-        var selectedSource = sourceFiles.FirstOrDefault(file =>
-            file.FullPath != null && string.Equals(Path.GetFullPath(file.FullPath), selectedFullPath,
-                StringComparison.OrdinalIgnoreCase));
-        if (selectedSource == null)
-            throw new IOException($"Workspace source file is not under src/: {selectedPath}");
-
-        diagnostics.Add(ScriptDiagnosticFactory.Info(
-            "normalize",
-            "Pod mode: pod.json was validated, the requested source is a declared entrypoint, and all src/**/*.cs files will be compiled.",
-            selectedSource.Name
-        ));
-
-        return new WorkspaceSourceLoadResult(
-            new ScriptSourceSet(sourceFiles, selectedSource.Name),
-            ScriptWorkspaceExecutionMode.Pod,
-            manifestResult.Manifest,
-            diagnostics
-        );
+    private static void RequireTargetLifetime(UIApplication uiApplication, Document? document) {
+        if (document is not null && (!document.IsValidObject ||
+            !uiApplication.Application.Documents.Cast<Document>().Any(open => open.Equals(document))))
+            throw new ArgumentException("The supplied script document lifetime is no longer open.");
     }
 
     private static IReadOnlyList<ScriptDiagnostic> ValidatePermissionMode(ScriptExecutionPlan plan) {
         if (plan.PermissionMode == ScriptPermissionMode.ReadOnly)
             return [];
 
-        var document = plan.UiApplication.ActiveUIDocument?.Document;
+        var document = plan.Document;
         if (document == null) {
             return [
                 ScriptDiagnosticFactory.Error(
                     "permission",
-                    "WriteTransaction scripts require an active document."
+                    $"{plan.PermissionMode} scripts require a supplied document."
                 )
             ];
         }
@@ -727,7 +644,7 @@ public sealed class RevitScriptExecutionService(
             return [
                 ScriptDiagnosticFactory.Error(
                     "permission",
-                    "WriteTransaction scripts require a writable active document; the active document is read-only."
+                    $"{plan.PermissionMode} scripts require a writable supplied document; the supplied document is read-only."
                 )
             ];
         }
@@ -770,8 +687,11 @@ public sealed class RevitScriptExecutionService(
         ScriptOutputSink outputSink,
         CancellationToken cancellationToken
     ) {
-        var uiDocument = plan.UiApplication.ActiveUIDocument;
-        var document = uiDocument?.Document;
+        RequireTargetLifetime(plan.UiApplication, plan.Document);
+        var document = plan.Document;
+        var activeUiDocument = plan.UiApplication.ActiveUIDocument;
+        var uiDocument = document is not null && activeUiDocument?.Document.Equals(document) == true
+            ? activeUiDocument : null;
         var selection = uiDocument?.Selection.GetElementIds().ToList() ?? [];
 
         return new RevitScriptContext(
@@ -780,7 +700,7 @@ public sealed class RevitScriptExecutionService(
             document,
             selection,
             plan.RevitVersion,
-            new ScriptArtifactWriter(plan.ExecutionId),
+            outputSink.Artifacts!,
             cancellationToken,
             outputSink.WriteLine,
             this._notificationSink
@@ -947,7 +867,7 @@ public sealed class RevitScriptExecutionService(
 
         // SaveAs and a few other Revit APIs require a quiescent document and reject any open
         // transaction. NoTransaction is explicit because it has neither rollback nor commit safety;
-        // script-owned Transaction objects remain policy-rejected in every mode.
+        // the script or called library owns any transaction boundaries it needs.
         container.Execute();
     }
 
@@ -1127,17 +1047,34 @@ public sealed class RevitScriptExecutionService(
         string executionId,
         IReadOnlyList<ScriptArtifactData>? artifacts = null,
         object? data = null
-    ) => new(
+    ) {
+        var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
+            Outcome = status.ToString(),
+            Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
+            Outputs = [.. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
+        };
+        var resultArtifacts = artifacts?.ToList() ?? [];
+        var resultDiagnostics = diagnostics.ToList();
+        if (attribution is not null && outputSink.Artifacts is not null) {
+            try {
+                resultArtifacts.Add(outputSink.Artifacts.WriteReceipt(attribution));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                resultDiagnostics.Add(ScriptDiagnosticFactory.Warning("pod.receipt", $"Execution finished but its receipt could not be saved: {exception.Message}"));
+            }
+        }
+        return new(
         status,
         outputSink.GetBufferedOutput(),
-        diagnostics.ToList(),
+        resultDiagnostics,
         revitVersion,
         targetFramework,
         containerTypeName,
         executionId,
-        artifacts?.ToList() ?? [],
-        data
+        resultArtifacts,
+        data,
+        attribution
     );
+    }
 
     private static void AppendDiagnostic(
         List<ScriptDiagnostic> diagnostics,
@@ -1181,13 +1118,6 @@ public sealed class RevitScriptExecutionService(
             source
         ));
     }
-
-    private sealed record WorkspaceSourceLoadResult(
-        ScriptSourceSet SourceSet,
-        ScriptWorkspaceExecutionMode ExecutionMode,
-        PodManifest? PodManifest,
-        IReadOnlyList<ScriptDiagnostic> Diagnostics
-    );
 
     private sealed class RevitScriptTransactionException(
         ScriptExecutionStatus status,
@@ -1292,6 +1222,4 @@ public sealed class RevitScriptExecutionService(
         bool IsSandboxChurn
     );
 
-    private static string? ReadFileIfExists(string path) =>
-        File.Exists(path) ? File.ReadAllText(path) : null;
 }

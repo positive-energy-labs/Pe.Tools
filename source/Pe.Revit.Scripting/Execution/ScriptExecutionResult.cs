@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
@@ -9,6 +9,7 @@ namespace Pe.Revit.Scripting.Execution;
 
 internal sealed record ScriptExecutionPlan(
     UIApplication UiApplication,
+    Autodesk.Revit.DB.Document? Document,
     string ExecutionId,
     string RevitVersion,
     string TargetFramework,
@@ -19,6 +20,7 @@ internal sealed record ScriptExecutionPlan(
     ScriptSourceSet SourceSet,
     ScriptWorkspaceExecutionMode ExecutionMode,
     PodManifest? PodManifest,
+    PodReceipt? Attribution,
     string ProjectContent,
     bool RequireSingleContainer
 );
@@ -30,7 +32,7 @@ internal enum ScriptWorkspaceExecutionMode {
 
 /// <summary>
 ///     Cooperative cancellation for one script execution: the linked token fires on caller cancel,
-///     scripting.cancel, or timeout; <see cref="IsTimeout" /> distinguishes the timeout source.
+///     op.cancel, or timeout; <see cref="IsTimeout" /> distinguishes the timeout source.
 /// </summary>
 public sealed class ScriptCancellationScope(
     CancellationToken token,

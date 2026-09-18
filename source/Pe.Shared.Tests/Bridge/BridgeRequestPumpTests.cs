@@ -1,0 +1,234 @@
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
+using Pe.Shared.HostContracts.Bridge;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+
+namespace Pe.Shared.Tests.Bridge;
+
+/// <summary>
+///     The census the whole cancel story rests on: while one op runs, does the read loop take the
+///     next frame off the socket? If it does not, no cancel frame can ever reach a running op.
+/// </summary>
+[TestFixture]
+public sealed class BridgeRequestPumpTests {
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
+
+    [Test]
+    public async Task ReadLoopReadsTheNextFrameWhileTheFirstOpIsStillRunning() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var firstStarted = new TaskCompletionSource();
+        var releaseFirst = new TaskCompletionSource();
+        var secondStarted = new TaskCompletionSource();
+
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (request, _) => {
+            if (request.RequestId == "slow") {
+                firstStarted.TrySetResult();
+                await releaseFirst.Task;
+            } else
+                secondStarted.TrySetResult();
+        });
+        var loop = pump.RunAsync(shutdown.Token);
+
+        await pair.Server.WriteAsync(RequestFrame("slow"), CancellationToken.None);
+        await firstStarted.Task.WaitAsync(Patience);
+        await pair.Server.WriteAsync(RequestFrame("fast"), CancellationToken.None);
+
+        var read = await Task.WhenAny(secondStarted.Task, Task.Delay(Patience));
+        releaseFirst.TrySetResult();
+        shutdown.Cancel();
+
+        Assert.That(
+            read,
+            Is.SameAs(secondStarted.Task),
+            "The read loop did not read the second frame while the first op was still running."
+        );
+    }
+
+    [Test]
+    public async Task CancelByIdEndsTheRunningOpWithACancelledOutcome() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var started = new TaskCompletionSource();
+
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (request, token) => {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+        });
+        var loop = pump.RunAsync(shutdown.Token);
+
+        await pair.Server.WriteAsync(RequestFrame("slow"), CancellationToken.None);
+        await started.Task.WaitAsync(Patience);
+
+        var cancelled = await pump.CancelAsync(new OpCancelRequest("slow"), CancellationToken.None);
+        var frame = await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience);
+        shutdown.Cancel();
+
+        Assert.Multiple(() => {
+            Assert.That(cancelled.Cancelled, Is.True);
+            Assert.That(frame?.Kind, Is.EqualTo(BridgeFrameKind.Response));
+            Assert.That(frame?.Response?.RequestId, Is.EqualTo("slow"));
+            Assert.That(frame?.Response?.StatusCode, Is.EqualTo(499), "a cancelled op answers cancelled, not a fault");
+            Assert.That(frame?.Response?.Issues?.Single().Code, Is.EqualTo("Cancelled"));
+        });
+    }
+
+    /// <summary>
+    ///     w8-revit 4c: scripting.execute returns its Task at its first await, so the Revit task
+    ///     queue settles the run and disposes its per-run linked token before the script starts.
+    ///     BridgeAgent used to hand the op that per-run token; op.cancel then fired a token nothing
+    ///     linked. The handler below has the same shape as BridgeAgent's Revit branch.
+    /// </summary>
+    [TestCase(true, TestName = "An async script handed the request token stops at ThrowIfCancelled on op.cancel")]
+    [TestCase(false, TestName = "An async script handed the queue's disposed per-run token never hears op.cancel")]
+    public async Task OpCancelReachesAScriptThatOutlivesTheQueueRun(bool handsRequestToken) {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var started = new TaskCompletionSource();
+        var checkpoint = new TaskCompletionSource<bool>(); // true: ThrowIfCancelled fired
+        Task? script = null;
+
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (_, requestToken) => {
+            using (var perRun = CancellationTokenSource.CreateLinkedTokenSource(requestToken))
+                script = FakeScriptAsync(handsRequestToken ? requestToken : perRun.Token, started, checkpoint);
+            await script;
+        });
+        var loop = pump.RunAsync(shutdown.Token);
+
+        await pair.Server.WriteAsync(RequestFrame("script"), CancellationToken.None);
+        await started.Task.WaitAsync(Patience);
+        var cancelled = await pump.CancelAsync(new OpCancelRequest("script"), CancellationToken.None);
+
+        var fired = await Task.WhenAny(checkpoint.Task, Task.Delay(TimeSpan.FromMilliseconds(500))) == checkpoint.Task;
+        shutdown.Cancel();
+
+        Assert.Multiple(() => {
+            Assert.That(cancelled.Cancelled, Is.True);
+            Assert.That(fired, Is.EqualTo(handsRequestToken));
+        });
+    }
+
+    /// <summary>The ScriptingBridgeMessageHandler.ExecuteAsync shape: link a timeout, await, then loop on ThrowIfCancelled.</summary>
+    private static async Task FakeScriptAsync(CancellationToken token, TaskCompletionSource started, TaskCompletionSource<bool> checkpoint) {
+        using var timeout = new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, token);
+        var scope = new Pe.Revit.Scripting.Execution.ScriptCancellationScope(linked.Token, () => timeout.IsCancellationRequested, 120);
+        await Task.Yield();
+        started.TrySetResult();
+        try {
+            for (var i = 0; i < 100; i++) {
+                scope.Token.ThrowIfCancellationRequested(); // PeScriptContainer.ThrowIfCancelled
+                await Task.Delay(10);
+            }
+        } catch (OperationCanceledException) {
+            checkpoint.TrySetResult(true);
+            throw;
+        }
+    }
+
+    [Test]
+    public async Task CancelForAnUnknownIdIsAPlainRefusal() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var pump = new BridgeRequestPump(pair.Client, (_, _) => Task.CompletedTask);
+
+        var result = await pump.CancelAsync(new OpCancelRequest("never-sent"), CancellationToken.None);
+
+        Assert.Multiple(() => {
+            Assert.That(result.Cancelled, Is.False);
+            Assert.That(result.RequestId, Is.EqualTo("never-sent"));
+            Assert.That(result.Message, Does.Contain("not in flight"));
+        });
+    }
+
+    [Test]
+    public async Task ConcurrentWritesDoNotInterleaveOnTheSocket() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var first = new string('a', 200_000);
+        var second = new string('b', 200_000);
+
+        // Both ops answer at the same instant; the transport's write lock is what keeps each
+        // frame whole. An interleaved frame does not deserialize at all.
+        await Task.WhenAll(
+            Task.Run(() => pair.Client.WriteAsync(RequestFrame("first", payloadJson: first), CancellationToken.None)),
+            Task.Run(() => pair.Client.WriteAsync(RequestFrame("second", payloadJson: second), CancellationToken.None))
+        ).WaitAsync(Patience);
+
+        var frames = new[] {
+            await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience),
+            await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience)
+        };
+
+        Assert.That(
+            frames.Select(frame => frame?.Request?.PayloadJson).OrderBy(payload => payload, StringComparer.Ordinal),
+            Is.EqualTo(new[] { first, second }.OrderBy(payload => payload, StringComparer.Ordinal))
+        );
+    }
+
+    internal static BridgeFrame RequestFrame(string requestId, string operationKey = "test.slow", string payloadJson = "{}") =>
+        new(BridgeFrameKind.Request, Request: new BridgeRequest(requestId, operationKey, payloadJson));
+
+    /// <summary>Two real WebSocket ends over loopback TCP — the same transport the bridge runs on.</summary>
+    internal sealed class WebSocketPair : IDisposable {
+        internal static readonly JsonSerializerSettings SerializerSettings = new() {
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new DefaultContractResolver {
+                NamingStrategy = new CamelCaseNamingStrategy {
+                    ProcessDictionaryKeys = false,
+                    OverrideSpecifiedNames = false
+                }
+            },
+            Converters = [new StringEnumConverter()]
+        };
+
+        private readonly TcpClient _clientSocket;
+        private readonly TcpClient _serverSocket;
+
+        private WebSocketPair(TcpClient clientSocket, TcpClient serverSocket, BridgeTransportSession client, BridgeTransportSession server) {
+            this._clientSocket = clientSocket;
+            this._serverSocket = serverSocket;
+            this.Client = client;
+            this.Server = server;
+        }
+
+        /// <summary>The Revit-side end (the agent reads here).</summary>
+        public BridgeTransportSession Client { get; }
+
+        /// <summary>The host-side end (the test writes request frames here).</summary>
+        public BridgeTransportSession Server { get; }
+
+        public static async Task<WebSocketPair> ConnectAsync() {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            try {
+                var clientSocket = new TcpClient();
+                var connect = clientSocket.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+                var serverSocket = await listener.AcceptTcpClientAsync();
+                await connect;
+                return new WebSocketPair(
+                    clientSocket,
+                    serverSocket,
+                    new BridgeTransportSession(
+                        WebSocket.CreateFromStream(clientSocket.GetStream(), isServer: false, null, TimeSpan.FromSeconds(30)),
+                        SerializerSettings
+                    ),
+                    new BridgeTransportSession(
+                        WebSocket.CreateFromStream(serverSocket.GetStream(), isServer: true, null, TimeSpan.FromSeconds(30)),
+                        SerializerSettings
+                    )
+                );
+            } finally {
+                listener.Stop();
+            }
+        }
+
+        public void Dispose() {
+            this.Client.Dispose();
+            this.Server.Dispose();
+            this._clientSocket.Dispose();
+            this._serverSocket.Dispose();
+        }
+    }
+}

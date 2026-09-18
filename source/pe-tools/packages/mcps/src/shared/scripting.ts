@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import z from "zod";
+import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { HostRpcCaller } from "./host-rpc-caller.js";
+import { runCapability, type AdmissionContext } from "./admission.ts";
 
 // Defaults live in the C# request DTO (ExecuteRevitScriptRequest) — this layer passes values
 // through untouched so there is exactly one source of truth for scripting semantics.
@@ -50,11 +51,8 @@ export const scriptBootstrapInputSchema = z.object({
     .describe("Pe scripting workspace (pod) key. Defaults to the runtime workspace."),
 });
 
-export const scriptCancelInputSchema = z.object({
-  executionId: z
-    .string()
-    .optional()
-    .describe("Optional execution id guard; omit to cancel whatever script is currently running."),
+export const opCancelInputSchema = z.object({
+  requestId: z.string().describe("The requestId the in-flight operation was sent under."),
 });
 
 export const scriptPodListInputSchema = z.object({});
@@ -63,18 +61,19 @@ export const scriptPodImportInputSchema = z.object({
   archivePath: z
     .string()
     .describe("Absolute or process-relative path to the Pod .zip archive to import."),
-  workspaceKey: z
+  folder: z
     .string()
     .optional()
-    .describe("Optional target workspace slug. Omit to use the pod.json id."),
+    .describe(
+      "Local folder name under Pods/. Omit to use the pod.json id; the folder is only an address.",
+    ),
 });
 
 export const scriptPodExportInputSchema = z.object({
-  workspaceKey: z
+  pod: z
     .string()
-    .optional()
-    .describe("Pod workspace slug to export. Defaults to the runtime workspace."),
-  archivePath: z.string().describe("Output path for the exported Pod .zip archive."),
+    .describe("Manifest id of the installed pod to export; foreign fragments are vendored."),
+  archivePath: z.string().describe("Absolute path of the .zip archive to write."),
 });
 
 export type ScriptRuntimeContext = HostSessionScope & {
@@ -85,16 +84,23 @@ export type ScriptRuntimeContext = HostSessionScope & {
 
 export type ScriptExecuteInput = z.input<typeof scriptExecuteInputSchema>;
 export type ScriptBootstrapInput = z.input<typeof scriptBootstrapInputSchema>;
-export type ScriptCancelInput = z.input<typeof scriptCancelInputSchema>;
+export type OpCancelInput = z.input<typeof opCancelInputSchema>;
 export type ScriptPodListInput = z.input<typeof scriptPodListInputSchema>;
 export type ScriptPodImportInput = z.input<typeof scriptPodImportInputSchema>;
 export type ScriptPodExportInput = z.input<typeof scriptPodExportInputSchema>;
 
 export class ScriptingTools {
   constructor(
-    private readonly client: HostRpcCaller,
-    private readonly context: Pick<ScriptRuntimeContext, "workspaceKey">,
+    private readonly context: AdmissionContext & Pick<ScriptRuntimeContext, "workspaceKey">,
   ) {}
+
+  /** Every verb, mutating or not, goes through the one admission builder. */
+  private run<K extends keyof ScriptingResponses>(
+    key: K,
+    input: Record<string, unknown> = {},
+  ): Promise<ScriptingResponses[K]> {
+    return runCapability(key, input, this.context) as Promise<ScriptingResponses[K]>;
+  }
 
   execute(input: ScriptExecuteInput) {
     if (input.scriptContent != null && input.sourcePath != null)
@@ -102,11 +108,9 @@ export class ScriptingTools {
         "Provide either scriptContent (inline C#) or sourcePath (a pod entrypoint under src/), not both.",
       );
 
-    // Omit nullish optional keys: the effect NDJSON RPC layer rejects an explicit `undefined`
-    // field value (fails at ["request"]) rather than treating the key as absent.
-    // Freshness and lifecycle are explicit SDK control-plane actions. Script execution must never
-    // build, converge, or restart a Revit session as a hidden precondition.
-    return this.client.call("scripting.execute", {
+    // Omit nullish optional keys: the admission input is compared byte for byte against the
+    // original intent, and an explicit `undefined` is not the same request as an absent key.
+    return this.run("scripting.execute", {
       ...(input.scriptContent != null ? { scriptContent: input.scriptContent } : {}),
       ...(input.sourcePath != null ? { sourcePath: input.sourcePath } : {}),
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
@@ -116,43 +120,51 @@ export class ScriptingTools {
     });
   }
 
-  cancel(input: ScriptCancelInput = {}) {
-    return this.client.call(
-      "scripting.cancel",
-      input.executionId != null ? { executionId: input.executionId } : {},
-    );
+  cancel(input: OpCancelInput) {
+    return this.run("op.cancel", { requestId: input.requestId });
   }
 
   bootstrap(input: ScriptBootstrapInput) {
-    return this.client.call("scripting.workspace.bootstrap", {
+    return this.run("scripting.workspace.bootstrap", {
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
     });
   }
 
   listPods() {
-    return this.client.call("scripting.pod.list", {});
+    return this.run("pod.list");
   }
 
   importPod(input: ScriptPodImportInput) {
-    return this.client.call("scripting.pod.import", {
+    return this.run("pod.import", {
       archivePath: input.archivePath,
-      ...(input.workspaceKey != null ? { workspaceKey: input.workspaceKey } : {}),
+      ...(input.folder != null ? { folder: input.folder } : {}),
     });
   }
 
   exportPod(input: ScriptPodExportInput) {
-    return this.client.call("scripting.pod.export", {
-      workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
-      archivePath: input.archivePath,
-    });
+    return this.run("pod.export", { pod: input.pod, archivePath: input.archivePath });
   }
 
   static fromContext(context: ScriptRuntimeContext): ScriptingTools {
-    return new ScriptingTools(createScriptingClient(context), {
+    return new ScriptingTools({
+      hostBaseUrl: context.hostBaseUrl,
+      bridgeSessionId: context.bridgeSessionId,
+      openDocumentId: context.openDocumentId,
+      actor: "agent",
+      timeoutMs: scriptClientTimeoutMs(context.timeoutSeconds),
       workspaceKey: context.workspaceKey,
     });
   }
 }
+
+type ScriptingResponses = {
+  "scripting.execute": HostOpResponse<"scripting.execute">;
+  "scripting.workspace.bootstrap": HostOpResponse<"scripting.workspace.bootstrap">;
+  "op.cancel": HostOpResponse<"op.cancel">;
+  "pod.list": HostOpResponse<"pod.list">;
+  "pod.import": HostOpResponse<"pod.import">;
+  "pod.export": HostOpResponse<"pod.export">;
+};
 
 export function executeScriptViaHost(input: ScriptExecuteInput, context: ScriptRuntimeContext) {
   return ScriptingTools.fromContext(context).execute(input);
@@ -231,13 +243,5 @@ function readCliStdin(): Promise<string> {
     });
     process.stdin.on("error", reject);
     process.stdin.on("end", () => resolve(content));
-  });
-}
-
-function createScriptingClient(context: ScriptRuntimeContext): HostRpcCaller {
-  return new HostRpcCaller({
-    hostBaseUrl: context.hostBaseUrl,
-    bridgeSessionId: context.bridgeSessionId,
-    timeoutMs: scriptClientTimeoutMs(context.timeoutSeconds),
   });
 }
