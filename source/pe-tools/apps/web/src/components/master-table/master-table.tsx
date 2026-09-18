@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useTable, type RowData } from "@tanstack/react-table";
 
 import { cellFactsText, cellStateLabel } from "#/components/lang/cell";
@@ -20,6 +21,7 @@ import {
 } from "#/components/master-table/master-table-state";
 import type { Column, MasterTableState } from "#/components/master-table/model";
 import { masterTableFeatures, toColumnDefs } from "#/components/master-table/tanstack-adapter";
+import { keyMeta } from "#/route/keys";
 
 export interface MasterTableProps<Row extends RowData> {
   rows: readonly Row[];
@@ -36,6 +38,8 @@ export interface MasterTableProps<Row extends RowData> {
   onRowClick?: (row: Row) => void;
   rowClassName?: (row: Row) => string | undefined;
   onRowHover?: (row: Row | null) => void;
+  selectedKeys?: ReadonlySet<string>;
+  onSelectedKeysChange?: (next: ReadonlySet<string>) => void;
   activeKey?: string | null;
   visibleKeys?: readonly string[];
   tableState?: MasterTableState;
@@ -60,6 +64,8 @@ export function MasterTable<Row extends RowData>({
   onRowClick,
   rowClassName,
   onRowHover,
+  selectedKeys,
+  onSelectedKeysChange,
   activeKey,
   visibleKeys,
   tableState,
@@ -144,6 +150,46 @@ export function MasterTable<Row extends RowData>({
     const byId = new Map(tableRows.map((row) => [row.id, row]));
     return visibleKeys.map((key) => byId.get(key)).filter((row) => row !== undefined);
   }, [tableRows, visibleKeys]);
+  const selectionAnchor = useRef<string | null>(null);
+  const selectable = selectedKeys !== undefined && onSelectedKeysChange !== undefined;
+  const toggleSelection = (key: string, range: boolean) => {
+    if (!selectable) return;
+    const next = new Set(selectedKeys);
+    if (range && selectionAnchor.current) {
+      const start = visibleRows.findIndex((row) => row.id === selectionAnchor.current);
+      const end = visibleRows.findIndex((row) => row.id === key);
+      if (start >= 0 && end >= 0) {
+        for (const row of visibleRows.slice(Math.min(start, end), Math.max(start, end) + 1))
+          next.add(row.id);
+      }
+    } else if (next.has(key)) next.delete(key);
+    else next.add(key);
+    selectionAnchor.current = key;
+    onSelectedKeysChange(next);
+  };
+  const visibleSelectionCount = selectable
+    ? visibleRows.filter((row) => selectedKeys.has(row.id)).length
+    : 0;
+  const selectionKey = useMemo(
+    () => [
+      {
+        hotkey: "Escape" as const,
+        callback: () => onSelectedKeysChange?.(new Set()),
+        options: {
+          enabled: selectable && (selectedKeys?.size ?? 0) > 0,
+          ignoreInputs: true,
+          meta: keyMeta({
+            name: "clear selection",
+            description: "drop the selected table rows",
+            tier: "widget",
+            region: "master table",
+          }),
+        },
+      },
+    ],
+    [onSelectedKeysChange, selectable, selectedKeys?.size],
+  );
+  useHotkeys(selectionKey);
 
   const theadRef = useRef<HTMLTableSectionElement | null>(null);
   const [rowTops, setRowTops] = useState<number[]>([]);
@@ -205,6 +251,24 @@ export function MasterTable<Row extends RowData>({
         </div>
       )}
       {modes}
+      {selectable && visibleRows.length > 0 && (
+        <Press
+          type="button"
+          tone="quiet"
+          size="label"
+          onClick={() => {
+            const next = new Set(selectedKeys);
+            if (visibleSelectionCount === visibleRows.length)
+              for (const row of visibleRows) next.delete(row.id);
+            else for (const row of visibleRows) next.add(row.id);
+            onSelectedKeysChange(next);
+          }}
+        >
+          {visibleSelectionCount === visibleRows.length
+            ? `clear ${visibleRows.length}`
+            : `select ${visibleRows.length}`}
+        </Press>
+      )}
       {actions}
     </>
   );
@@ -287,6 +351,8 @@ export function MasterTable<Row extends RowData>({
             activeKey={activeKey}
             rowClassName={rowClassName}
             onRowClick={onRowClick}
+            selectedKeys={selectedKeys}
+            onSelect={selectable ? toggleSelection : undefined}
             onRowHover={onRowHover}
             gutter={gutter}
             gutterWidth={GUTTER_PX}

@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
@@ -27,6 +35,7 @@ interface MasterRowProps<Row extends RowData> {
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
+  onSelect?: (event: MouseEvent<HTMLTableRowElement>) => void;
   onRowHover?: (row: Row | null) => void;
   children: ReactNode;
 }
@@ -37,6 +46,7 @@ function MasterRowView<Row extends RowData>({
   activeRowRef,
   className,
   onRowClick,
+  onSelect,
   onRowHover,
   children,
 }: MasterRowProps<Row>) {
@@ -49,6 +59,7 @@ function MasterRowView<Row extends RowData>({
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
           return;
+        onSelect?.(event);
         onRowClick?.(row);
       }}
     >
@@ -64,6 +75,7 @@ const MasterRow = memo(
     previous.active === next.active &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
+    previous.onSelect === next.onSelect &&
     previous.onRowHover === next.onRowHover,
 ) as typeof MasterRowView;
 
@@ -74,6 +86,8 @@ export function MasterTableBody<Row extends RowData>({
   activeKey,
   rowClassName,
   onRowClick,
+  selectedKeys,
+  onSelect,
   onRowHover,
   gutter,
   gutterWidth,
@@ -84,6 +98,8 @@ export function MasterTableBody<Row extends RowData>({
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   onRowClick?: (row: Row) => void;
+  selectedKeys?: ReadonlySet<string>;
+  onSelect?: (key: string, range: boolean) => void;
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
@@ -147,9 +163,11 @@ export function MasterTableBody<Row extends RowData>({
             className={cn(
               "veil h-(--item-h) scroll-mt-12",
               activeKey === key && "on-select",
+              selectedKeys?.has(key) && "on-select",
               rowClassName?.(tableRow.original),
             )}
             onRowClick={onRowClick}
+            onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
             onRowHover={onRowHover}
           >
             {gutter && <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />}

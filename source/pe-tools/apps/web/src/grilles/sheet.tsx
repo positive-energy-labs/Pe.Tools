@@ -12,7 +12,6 @@ import { Tag } from "#/components/lang/chip";
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
 import { Press } from "#/components/lang/press";
-import { Input } from "#/components/lang/input";
 
 export type SheetRow = Grille & { id: string };
 
@@ -62,7 +61,7 @@ export function Sheet({
   set,
   add,
   picked,
-  onPick,
+  onPickedChange,
 }: {
   rows: SheetRow[];
   active: string;
@@ -71,28 +70,9 @@ export function Sheet({
   add: () => void;
   /** rows chosen for the export sheet */
   picked: ReadonlySet<string>;
-  onPick: (id: string, on: boolean) => void;
+  onPickedChange: (next: ReadonlySet<string>) => void;
 }) {
   const columns: Column<SheetRow>[] = [
-    {
-      key: "pick",
-      label: "sheet",
-      title: "Put this profile on the export sheet",
-      width: "w-10",
-      facet: (r) => (picked.has(r.id) ? "on" : "off"),
-      options: [
-        { value: "on", label: "on the sheet" },
-        { value: "off", label: "not on the sheet" },
-      ],
-      cell: (r) => (
-        <Input
-          type="checkbox"
-          checked={picked.has(r.id)}
-          onChange={(e) => onPick(r.id, e.target.checked)}
-          aria-label="on the export sheet"
-        />
-      ),
-    },
     num("boardLength", "L", "Board length, inches", set),
     num("endBorder", "end", "End border, each end", set),
     num("boardWidth", "W", "Board width, inches", set),
@@ -144,6 +124,8 @@ export function Sheet({
       scopeLabel="grille profiles"
       activeKey={active}
       onRowClick={(r) => onActive(r.id)}
+      selectedKeys={picked}
+      onSelectedKeysChange={onPickedChange}
       gutter={(r) =>
         r.slack < -1e-9
           ? {

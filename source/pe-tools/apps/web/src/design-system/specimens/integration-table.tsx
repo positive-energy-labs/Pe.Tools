@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Upload } from "lucide-react";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -15,6 +15,7 @@ import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/s
 const noop = () => {};
 
 export function RealTable() {
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() => new Set());
   const columns = useMemo<Column<ParamRow>[]>(
     () => [
       {
@@ -149,6 +150,8 @@ export function RealTable() {
             rowKey={(r) => r.key}
             scopeLabel="params in scope"
             searchPlaceholder="search params…"
+            selectedKeys={selectedKeys}
+            onSelectedKeysChange={setSelectedKeys}
             summary={<>13 params · 3 types</>}
             // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
             // person must act on — count in the tone's ink, sentence in the title, no verb.
