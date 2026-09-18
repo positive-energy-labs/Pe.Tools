@@ -8,6 +8,7 @@ import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
 import { Code } from "#/components/lang/code";
+import { Input } from "#/components/lang/input";
 
 export function ExportActions(props: {
   items: StagedItem[];
@@ -141,12 +142,13 @@ export function NoteInput(props: {
     title:
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
-    className: cn("w-full px-1.5 py-0.5", props.className),
   };
   return props.multiline ? (
-    <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />
+    <textarea {...shared} rows={3} className={cn("w-full resize-y", props.className)} />
   ) : (
-    <input {...shared} />
+    <div className={props.className}>
+      <Input {...shared} />
+    </div>
   );
 }
 

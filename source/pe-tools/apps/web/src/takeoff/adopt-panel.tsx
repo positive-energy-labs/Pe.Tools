@@ -2,6 +2,7 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
+import { Input } from "#/components/lang/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
 import { fmtNum } from "#/components/master-table/model";
 import { type CandidateRegion } from "#/takeoff/model";
@@ -52,7 +53,7 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
             key={`${r.view}:${r.region.elementId}`}
             className="flex items-center gap-2 px-2 py-1"
           >
-            <input
+            <Input
               type="checkbox"
               aria-label={`Select ${r.name} in ${r.view}`}
               checked={r.checked}
@@ -66,20 +67,24 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
               {r.region.typeName}
             </span>
             <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
-            <input
-              aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
-              value={r.name}
-              placeholder="zone name"
-              onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
-              className="h-6 min-w-0 flex-1 px-1.5"
-            />
-            <input
-              aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
-              value={r.systemTag}
-              placeholder="system tag"
-              onChange={(e) => patchRow(r.view, r.region.elementId, { systemTag: e.target.value })}
-              className="h-6 w-24 px-1.5"
-            />
+            <div className="min-w-0 flex-1">
+              <Input
+                aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
+                value={r.name}
+                placeholder="zone name"
+                onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
+              />
+            </div>
+            <div className="w-24">
+              <Input
+                aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
+                value={r.systemTag}
+                placeholder="system tag"
+                onChange={(e) =>
+                  patchRow(r.view, r.region.elementId, { systemTag: e.target.value })
+                }
+              />
+            </div>
             {r.region.role === "zoning-region" && (
               <FactChip
                 tone="done"

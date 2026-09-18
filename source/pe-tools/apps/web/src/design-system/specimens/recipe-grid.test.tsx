@@ -16,7 +16,6 @@ import { switcherRecipe } from "#/components/lang/switcher";
 import { actionRecipe } from "#/components/lang/action-button";
 import { dialogRecipe } from "#/components/lang/dialog";
 import { inputGroupRecipe } from "#/components/lang/input-group";
-import { selectRecipe } from "#/components/lang/select";
 import { cardRecipe } from "#/components/lang/card";
 import { comboboxRecipe } from "#/components/lang/combobox";
 import { commandRecipe } from "#/components/lang/command";
@@ -49,7 +48,6 @@ const RECIPES = {
   actionRecipe,
   dialogRecipe,
   inputGroupRecipe,
-  selectRecipe,
   cardRecipe,
   comboboxRecipe,
   commandRecipe,

@@ -15,6 +15,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
+import { Input } from "#/components/lang/input";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -560,8 +561,8 @@ export function InstancesCluster({
                           : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
                       </span>
                       {staged.kind === "start" ? (
-                        <input
-                          className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
+                        <Input
+                          face="mono"
                           aria-label="session name"
                           placeholder="name this session"
                           value={sessionName}

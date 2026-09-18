@@ -9,6 +9,7 @@ import {
 } from "@pe/agent-contracts";
 import { Check, ChevronRight } from "lucide-react";
 import { Textarea } from "#/components/lang/textarea";
+import { Input } from "#/components/lang/input";
 import { ActionButton } from "#/components/lang/action-button";
 import { useWorkbench } from "./provider";
 import { useCurrentThreadView } from "./thread-view";
@@ -484,7 +485,7 @@ function AskUserPrompt({
           <div className="flex min-w-0 flex-col gap-1">
             {question.options.map((option) => (
               <label key={option.label} className="flex items-start gap-2 t-prose">
-                <input
+                <Input
                   type="checkbox"
                   checked={selected.includes(option.label)}
                   onChange={() =>

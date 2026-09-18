@@ -3,6 +3,7 @@ import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-co
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
 import { ActionButton } from "#/components/lang/action-button";
+import { Input } from "#/components/lang/input";
 import {
   FieldOptionPicker,
   FieldOptionSelect,
@@ -102,7 +103,7 @@ export function DefinitionCard({
     <ArtifactFrame
       head={
         <>
-          <input
+          <Input
             value={definition.id}
             disabled={disabled}
             onChange={(event) => patch({ id: event.target.value })}
@@ -195,7 +196,7 @@ export function DefinitionCard({
           />
         </Field>
         <label className="flex items-center gap-1.5 sm:col-span-2">
-          <input
+          <Input
             type="checkbox"
             checked={definition.targetOverride != null}
             disabled={disabled}
@@ -286,7 +287,7 @@ export function DefinitionCard({
               <div key={assignment.id} className="py-1.5">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <label className="flex items-center gap-1.5">
-                    <input
+                    <Input
                       type="checkbox"
                       checked={assignment.enabled}
                       disabled={disabled}

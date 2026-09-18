@@ -5,7 +5,6 @@ import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
 import { cellAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
@@ -95,8 +94,6 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
 export function useFamiliesColumns({
   familyState,
   params,
-  pickedIds,
-  setPickedIds,
   showUncommon,
   totalFamilies,
   cells,
@@ -104,8 +101,6 @@ export function useFamiliesColumns({
 }: {
   familyState: (familyId: number) => Verdict;
   params: ParamColumn[];
-  pickedIds: Set<number>;
-  setPickedIds: FamiliesStore["actions"]["setPickedIds"];
   showUncommon: boolean;
   totalFamilies: number;
   cells: Record<string, FamilyCellState>;
@@ -129,40 +124,6 @@ export function useFamiliesColumns({
        family / type / category says nothing, and a header band that says nothing is noise above
        every scroll. The parameter clusters keep theirs — "built-in" vs "common" is real news. */
     const identity: Column<TypeRow>[] = [
-      {
-        key: "pick",
-        label: "pick",
-        title:
-          "Picked families are what capture files into the pod, one spec member each. Picking changes nothing in Revit — Esc clears the whole set.",
-        /* Wide enough for its own facet trigger — a facet column narrower than its picker clips
-           the word "any" and reads as a rendering bug. */
-        width: "w-16",
-        facet: (row) => (pickedIds.has(row.familyId) ? "picked" : ""),
-        all: "any",
-        cell: (row) => (
-          <Press
-            type="button"
-            title={
-              pickedIds.has(row.familyId)
-                ? `Drop ${row.familyName} from the capture set — the plan and the apply lane are untouched either way.`
-                : `Add ${row.familyName} to the capture set, so capture files it into the pod as a spec member.`
-            }
-            onClick={() =>
-              setPickedIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(row.familyId)) next.delete(row.familyId);
-                else next.add(row.familyId);
-                return next;
-              })
-            }
-            tone="quiet"
-            size="value"
-            state={pickedIds.has(row.familyId) ? "selected" : "rest"}
-          >
-            {pickedIds.has(row.familyId) ? "▪" : "□"}
-          </Press>
-        ),
-      },
       {
         key: "family",
         label: "family",
@@ -271,7 +232,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, pickedIds, familyState, cells, propose]);
+  }, [params, totalFamilies, showUncommon, familyState, cells, propose]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,

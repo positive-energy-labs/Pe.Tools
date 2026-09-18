@@ -32,14 +32,6 @@ import {
   inputGroupRecipe,
 } from "#/components/lang/input-group";
 import { Label, labelRecipe } from "#/components/lang/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  selectRecipe,
-} from "#/components/lang/select";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid } from "./recipe-grid";
@@ -83,7 +75,13 @@ export function UiInputSpecimens() {
         importPath="#/components/lang/input"
         recipe={inputRecipe}
         render={(props) => (
-          <Input surface={props.surface as "field" | "embedded"} placeholder="search params" />
+          <Input
+            type={props.kind === "check" ? "checkbox" : undefined}
+            surface={props.surface as "field" | "embedded"}
+            aria-label={props.kind === "check" ? "include row" : undefined}
+            placeholder="search params"
+            defaultChecked={props.kind === "check" ? true : undefined}
+          />
         )}
       />
       <RecipeGrid
@@ -113,12 +111,6 @@ export function UiInputSpecimens() {
         importPath="#/components/lang/label"
         recipe={labelRecipe}
         render={() => <Label>parameter scope</Label>}
-      />
-      <RecipeGrid
-        name="Select"
-        importPath="#/components/lang/select"
-        recipe={selectRecipe}
-        render={() => <SelectSpecimen />}
       />
       <RecipeGrid
         name="Textarea"
@@ -163,23 +155,5 @@ function ComboboxSpecimen() {
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
-  );
-}
-
-function SelectSpecimen() {
-  const [value, setValue] = useState("doors");
-  return (
-    <Select value={value} onValueChange={(next: string | null) => setValue(next ?? "")}>
-      <SelectTrigger>
-        <SelectValue placeholder="Category" />
-      </SelectTrigger>
-      <SelectContent>
-        {CATEGORY_OPTIONS.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }

@@ -120,21 +120,6 @@ function useFamiliesWorkspaceModel(
     [fixtureFamilies, matrix.data?.families],
   );
 
-  /* Esc drops the table's selection — the one piece of route state a stray click can build up.
-     It is deliberately ONE step and never touches scope, plan, or exclusions: those are
-     commitments, and a commitment should not fall out of the app on a keystroke. */
-  useEffect(() => {
-    if (pickedIds.size === 0) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input,select,textarea,[contenteditable=true]")) return;
-      setPickedIds(new Set());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pickedIds]);
-
   // ── table model ──────────────────────────────────────────────────────────────────────────────
   const { rows, params } = useMemo(() => {
     const params = new Map<string, ParamColumn & { seen: Set<string> }>();
@@ -260,8 +245,6 @@ function useFamiliesWorkspaceModel(
   const { columns, uncommonCount } = useFamiliesColumns({
     familyState,
     params,
-    pickedIds,
-    setPickedIds,
     showUncommon,
     totalFamilies,
     cells,

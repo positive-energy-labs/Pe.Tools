@@ -146,6 +146,7 @@ const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.s
  * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
  * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
  */
+
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
   facts: StateCellProps,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
@@ -14,6 +15,7 @@ import {
   type PRow,
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
+import { keyMeta } from "#/route/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;
@@ -78,17 +80,30 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
   // navigating — and collapsing them all at once would throw away context you did not ask to lose.
-  useEffect(() => {
-    if (drillType == null && inspect == null && binding == null) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (binding != null) setBinding(null);
-      else if (inspect != null) setInspect(null);
-      else setDrillType(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [drillType, inspect, binding]);
+  const unwindKey = useMemo(
+    () => [
+      {
+        hotkey: "Escape" as const,
+        callback: () => {
+          if (binding != null) setBinding(null);
+          else if (inspect != null) setInspect(null);
+          else setDrillType(null);
+        },
+        options: {
+          enabled: drillType != null || inspect != null || binding != null,
+          ignoreInputs: true,
+          meta: keyMeta({
+            name: "close current mode",
+            description: "close the bind picker, inspector, or drill-in",
+            tier: "pane",
+            region: "family workspace",
+          }),
+        },
+      },
+    ],
+    [drillType, inspect, binding, setBinding, setInspect, setDrillType],
+  );
+  useHotkeys(unwindKey);
 
   // Locating scrolls the card into the sidebar. That is the whole payoff of the rail and the
   // corner folds: the table points, the sidebar decides, and nothing covers the table.

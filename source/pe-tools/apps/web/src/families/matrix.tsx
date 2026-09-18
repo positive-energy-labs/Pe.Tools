@@ -1,6 +1,6 @@
 import { EmptyState } from "#/components/lang/empty";
 import { MasterTable } from "#/components/master-table/master-table";
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 
 import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -18,6 +18,7 @@ export function FamiliesMatrix() {
     totalTypes,
     params,
     pickedIds,
+    setPickedIds,
     connected,
     applied,
   } = useFamiliesWorkspace();
@@ -31,6 +32,10 @@ export function FamiliesMatrix() {
         )
         .map((row) => row.key)
     : undefined;
+  const selectedKeys = useMemo(
+    () => new Set(rows.filter((row) => pickedIds.has(row.familyId)).map((row) => row.key)),
+    [pickedIds, rows],
+  );
   return (
     <>
       {fixture && (
@@ -48,6 +53,28 @@ export function FamiliesMatrix() {
         searchPlaceholder="family or type"
         tableState={tableState}
         onTableStateChange={store.actions.setTable}
+        selectedKeys={selectedKeys}
+        onSelectedKeysChange={(keys) => {
+          const next = new Set(pickedIds);
+          const changedFamilies = new Set(
+            rows
+              .filter((row) => keys.has(row.key) !== selectedKeys.has(row.key))
+              .map((row) => row.familyId),
+          );
+          for (const familyId of changedFamilies) {
+            if (
+              rows.some(
+                (row) =>
+                  row.familyId === familyId &&
+                  keys.has(row.key) !== selectedKeys.has(row.key) &&
+                  keys.has(row.key),
+              )
+            )
+              next.add(familyId);
+            else next.delete(familyId);
+          }
+          setPickedIds(next);
+        }}
         chips={chips}
         summary={
           <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 face-mono">

@@ -22,6 +22,12 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
       "the position harness. Every popover-bearing component the app actually ships, mounted nine times at the corners, edges and centre of the viewport. It does not fix flip/clamp/overflow inconsistency — it makes it one visible fact, which is what queues a single popover foundation.",
   },
   {
+    to: "/design-system/compact",
+    name: "compact",
+    purpose:
+      'a lineup for the table\'s COMPACT MODE: three hand tables the census ruled accidents, each on its seed rows, rendered through MasterTable today, through `density="compact"`, and once more as one overreach table. The verdict picks the row the sheet-like consumers migrate onto.',
+  },
+  {
     to: "/design-system/swatch",
     name: "swatch",
     purpose:

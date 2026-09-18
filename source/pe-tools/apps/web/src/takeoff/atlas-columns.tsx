@@ -170,13 +170,8 @@ export function useAtlasColumns({
           <CellSelect
             value={row.room.type}
             onChange={(v) => actions.patch(row.room.guid, { type: v as RoomType })}
-          >
-            {ROOM_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </CellSelect>
+            options={ROOM_TYPES.map((type) => ({ value: type, label: type }))}
+          />
         ),
       },
       {

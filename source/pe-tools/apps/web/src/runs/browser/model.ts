@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
+import { keyMeta } from "#/route/keys";
 import { type StagedItem, useFb } from "../feedback/staging";
 import { type Lens } from "../feedback/tray";
 import {
@@ -169,30 +171,58 @@ export function useRunBrowserModel() {
     };
   }, [prevId, source]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && /input|textarea|select/i.test(t.tagName)) return;
-      if (e.key === "Escape") {
-        setHighlight(null);
-        return;
-      }
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      if (!runs || runs.length === 0) return;
-      e.preventDefault();
+  const moveRun = useCallback(
+    (delta: -1 | 1) => {
+      if (!runs?.length) return;
       setCurId((current) => {
         const idx = Math.max(
           0,
-          runs.findIndex((r) => r.id === current),
+          runs.findIndex((run) => run.id === current),
         );
-        const next =
-          e.key === "ArrowUp" ? Math.max(0, idx - 1) : Math.min(runs.length - 1, idx + 1);
-        return runs[next]?.id ?? current;
+        return runs[Math.max(0, Math.min(runs.length - 1, idx + delta))]?.id ?? current;
       });
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [runs]);
+    },
+    [runs],
+  );
+  const browserKeys = useMemo(
+    () => [
+      {
+        hotkey: "Escape" as const,
+        callback: () => setHighlight(null),
+        options: {
+          enabled: highlight !== null,
+          ignoreInputs: true,
+          meta: keyMeta({
+            name: "clear highlight",
+            description: "clear the highlighted zone",
+            tier: "pane",
+            region: "run browser",
+          }),
+        },
+      },
+      ...(
+        [
+          [-1, "ArrowUp", "previous run"],
+          [1, "ArrowDown", "next run"],
+        ] as const
+      ).map(([delta, hotkey, name]) => ({
+        hotkey,
+        callback: () => moveRun(delta),
+        options: {
+          enabled: Boolean(runs?.length),
+          ignoreInputs: true,
+          meta: keyMeta({
+            name,
+            description: `select the ${name}`,
+            tier: "pane",
+            region: "run browser",
+          }),
+        },
+      })),
+    ],
+    [highlight, moveRun, runs?.length],
+  );
+  useHotkeys(browserKeys);
 
   const pickCur = useCallback((id: string) => {
     setCurId(id);

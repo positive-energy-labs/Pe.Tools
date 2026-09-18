@@ -46,8 +46,6 @@ function Matrix({ inlineClick = false }: { inlineClick?: boolean }) {
   const { columns } = useFamiliesColumns({
     familyState: () => ({ word: "", tone: "mute", note: "" }),
     params: PARAMS,
-    pickedIds: new Set(),
-    setPickedIds: () => {},
     showUncommon: true,
     totalFamilies: 2,
     cells,

@@ -11,6 +11,7 @@ import { Picker } from "#/route/picker";
 import { manifest } from "#/takeoff/manifest";
 import { takeoffReadingHealth } from "#/takeoff/actions";
 import { AdoptRegions, SyncPanel } from "#/takeoff/adopt-panel";
+import { Input } from "#/components/lang/input";
 
 function TakeoffHead({ store }: { store: TakeoffsController }) {
   const ladder = useDocumentLadder(store.handle, store.actions.resetTarget);
@@ -79,9 +80,8 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
       >
         <label className="grid gap-2">
           RHVAC file path
-          <input
+          <Input
             aria-label="RHVAC file path"
-            className="w-full border border-line bg-transparent p-2"
             value={store.r10Path}
             onChange={(event) => store.actions.chooseR10(event.target.value)}
             placeholder="Full path to an .r10 file"

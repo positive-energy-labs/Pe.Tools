@@ -12,6 +12,7 @@ import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
 import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
+import { Input } from "#/components/lang/input";
 
 export function ExportSheet({
   rows,
@@ -74,12 +75,13 @@ export function ExportSheet({
         <div className="grid grid-cols-[1fr_auto] gap-4 pb-2" style={{ borderColor: token("ink") }}>
           <div>
             <div>Positive Energy · custom wood floor grille</div>
-            <input
-              className="mt-1 w-full"
-              placeholder="project / location"
-              value={project}
-              onChange={(e) => onProject(e.target.value)}
-            />
+            <div className="mt-1">
+              <Input
+                placeholder="project / location"
+                value={project}
+                onChange={(e) => onProject(e.target.value)}
+              />
+            </div>
           </div>
           <div>
             <div>{new Date().toISOString().slice(0, 10)}</div>

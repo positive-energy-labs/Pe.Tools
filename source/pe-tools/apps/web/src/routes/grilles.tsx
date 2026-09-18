@@ -71,14 +71,6 @@ function GrillesRoute() {
       setActiveId(id);
       return [...rs, { ...src, id }];
     });
-  const pick = (id: string, on: boolean) =>
-    setPicked((s) => {
-      const n = new Set(s);
-      if (on) n.add(id);
-      else n.delete(id);
-      return n;
-    });
-
   const field = useMemo(() => (active ? enumerate(active) : []), [active]);
 
   const drawing = (
@@ -139,7 +131,7 @@ function GrillesRoute() {
         set={set}
         add={add}
         picked={picked}
-        onPick={pick}
+        onPickedChange={setPicked}
       />
     </Pane>
   );

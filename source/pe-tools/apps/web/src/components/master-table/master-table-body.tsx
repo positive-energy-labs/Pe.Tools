@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -37,6 +38,7 @@ interface MasterRowProps<Row extends RowData> {
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
+  onSelect?: (event: MouseEvent<HTMLTableRowElement>) => void;
   onRowHover?: (row: Row | null) => void;
   /** The columns the children were drawn from: a row's cells redraw when the columns do. */
   columns: unknown;
@@ -49,6 +51,7 @@ function MasterRowView<Row extends RowData>({
   activeRowRef,
   className,
   onRowClick,
+  onSelect,
   onRowHover,
   children,
 }: MasterRowProps<Row>) {
@@ -61,6 +64,7 @@ function MasterRowView<Row extends RowData>({
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
           return;
+        onSelect?.(event);
         onRowClick?.(row);
       }}
     >
@@ -76,6 +80,7 @@ const MasterRow = memo(
     previous.active === next.active &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
+    previous.onSelect === next.onSelect &&
     previous.onRowHover === next.onRowHover &&
     // Cell state often lives in the columns (a route's Work), not the row: without this, a
     // stable row skipped every Work change and a staged cell never showed its mark.
@@ -89,9 +94,12 @@ export function MasterTableBody<Row extends RowData>({
   activeKey,
   rowClassName,
   onRowClick,
+  selectedKeys,
+  onSelect,
   onRowHover,
   gutter,
   gutterWidth,
+  compact,
 }: {
   table: Table<Row>;
   visibleRows: VisibleRow<Row>[];
@@ -99,9 +107,12 @@ export function MasterTableBody<Row extends RowData>({
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   onRowClick?: (row: Row) => void;
+  selectedKeys?: ReadonlySet<string>;
+  onSelect?: (key: string, range: boolean) => void;
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
+  compact: boolean;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   // The td is each cell's keyboard host: one stable ref per cell id, handed to whatever the column
@@ -170,9 +181,11 @@ export function MasterTableBody<Row extends RowData>({
             className={cn(
               "veil h-(--item-h) scroll-mt-12",
               activeKey === key && "on-select",
+              selectedKeys?.has(key) && "on-select",
               rowClassName?.(tableRow.original),
             )}
             onRowClick={onRowClick}
+            onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
             onRowHover={onRowHover}
             columns={columnByKey}
           >
@@ -215,7 +228,10 @@ export function MasterTableBody<Row extends RowData>({
                       className={cn(
                         // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
                         // every list row at 21px (measured, annotation round 2 2026-08-31).
-                        "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                        compact
+                          ? // One clipped mono line: the row holds the 20px rhythm whatever the value.
+                            "hairline-b-inset face-mono max-w-80 truncate p-0 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2"
+                          : "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
                         selection & 2 && "on-select",
                         column.right && "text-right",
                         column.width,
