@@ -18,7 +18,8 @@ public static class HostProtocol {
     // 39: parameter-values unit-aware conversion (value + unit canonical; bare numerals on
     //     measurable doubles rejected as ambiguous; parsedDisplay round-trip echo)
     // 40: model-owned parameter-link detail/apply operations and shared profile language
-    public const int ContractVersion = 40;
+    // 41: revit.context.view-image response gains imageUrl (/view-image/<imageSha256>.png, null iff no registration)
+    public const int ContractVersion = 41;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
