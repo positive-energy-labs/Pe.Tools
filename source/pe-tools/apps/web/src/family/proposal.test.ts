@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vite-plus/test";
 import { cellFromTrichotomy, cellStateLabel } from "#/components/lang/cell";
+import { parameterText } from "#/family/family-model";
 import { proposalCell } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 
@@ -21,7 +22,7 @@ const PROPOSAL: ProtoProposal = {
 };
 
 const read = (proposals: ProtoProposal[], staged: string | null, value: string) =>
-  cellFromTrichotomy(proposalCell(proposals, staged), { value });
+  cellFromTrichotomy(proposalCell(proposals, staged), { value }, parameterText);
 
 describe("family's proposal cell", () => {
   it("a standing proposal is PROPOSED, and carries pea's note and confidence", () => {

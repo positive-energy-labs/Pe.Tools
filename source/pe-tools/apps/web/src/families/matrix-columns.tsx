@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { FamilyCellState } from "@pe/agent-contracts";
+import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
@@ -11,6 +11,7 @@ import { cellAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
+const showFamilyCell = (value: unknown) => familyCellValueSchema.parse(value).value;
 
 export interface TypeRow {
   key: string;
@@ -320,11 +321,11 @@ export function ProposalCell({
   return (
     <span data-proposal={proposal?.by} data-staged={staged ? "" : undefined}>
       <StateCell
-        {...cellFromTrichotomy(cell ?? { proposal: null, staged: null }, {
-          value: shown,
-          note,
-          scale: "row",
-        })}
+        {...cellFromTrichotomy(
+          cell ?? { proposal: null, staged: null },
+          { value: shown, note, scale: "row" },
+          showFamilyCell,
+        )}
         placeholder={proposal || staged ? current : undefined}
         onCommit={(text) => onCommit(text)}
         onNavigate={(direction) => move?.(direction) ?? false}

@@ -116,9 +116,12 @@ test("a counter-proposal renders beside the staged human value", () => {
       onCommit={() => {}}
     />,
   );
-  expect(
-    screen.getAllByDisplayValue("FXMQ20").at(-1)?.closest("[data-proposal]")?.innerHTML,
-  ).toContain("Pea's value is a counter-proposal");
+  const rendered = screen.getAllByDisplayValue("FXMQ20").at(-1)?.closest("[data-proposal]");
+  expect(rendered?.innerHTML).toContain("Pea's value is a counter-proposal");
+  expect(rendered?.querySelector("[title]")?.getAttribute("title")).toContain(
+    "pea proposes FXMQ24",
+  );
+  expect(rendered?.innerHTML).not.toContain("[object Object]");
 });
 
 test("plan takes the staged cell only; the open proposal never reaches the wire", async () => {

@@ -56,13 +56,14 @@ export interface TrichotomyCellLike {
   proposal?:
     | {
         value?: unknown;
+        delete?: true;
         by?: "pea" | "human" | undefined;
         note?: string | null | undefined;
         confidence?: "high" | "low" | null | undefined;
       }
     | null
     | undefined;
-  staged?: { value?: unknown } | null | undefined;
+  staged?: { value?: unknown; delete?: true } | null | undefined;
 }
 
 export interface CellSummary {
