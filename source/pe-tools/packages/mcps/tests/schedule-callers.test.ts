@@ -56,7 +56,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
     );
     // The admission builder returns the succeeded receipt's result; a failure names the id.
     expect(JSON.parse(output.mock.calls.at(-1)![0])).toMatchObject({ applied: 1, failures: [] });
-    expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
+    expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
     expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   } finally {
     output.mockRestore();
@@ -105,5 +105,5 @@ test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only a
       timeoutSeconds: 5,
     }),
   ).toMatchObject({ ok: false });
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(0);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });

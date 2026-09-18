@@ -44,7 +44,7 @@ import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "./scope-store.ts";
-import { expireAsks } from "./thread-state.ts";
+import { endParkedTurn, expireAsks } from "./thread-state.ts";
 export { messageContents } from "./message-contents.ts";
 import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
@@ -87,7 +87,7 @@ const permissionRecordSchema = z
 type PermissionRecord = z.infer<typeof permissionRecordSchema>;
 type RuntimeAccessLevel = NonNullable<PeaRuntimeOptions["accessLevel"]>;
 
-type PeaRuntimeState = Record<string, unknown> & {
+export type PeaRuntimeState = Record<string, unknown> & {
   permissionRules?: unknown;
   yolo?: boolean;
 };
@@ -363,7 +363,8 @@ function installPeaControllerPolicy(
   };
 }
 
-function createPeaSessionAdmission(
+/** Exported for tests: the deterministic harness installs the same admission Pea runs. */
+export function createPeaSessionAdmission(
   session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   scopedThreadId: string | undefined,
@@ -486,6 +487,7 @@ function createPeaSessionAdmission(
     }
   };
 
+  let parkedTurnEnding: Promise<void> | undefined;
   const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
   session.sendSignal = ((input, options) => {
     const turn = turnOf(options);
@@ -521,11 +523,15 @@ function createPeaSessionAdmission(
     return {
       id: signal.id,
       type: signal.type,
-      accepted: assertRunAdmitted().then(() =>
-        session.thread.getId() !== admission[0] || permissionGeneration !== admission[1]
-          ? Promise.reject(new Error("Pea permission thread changed during hydration."))
-          : sendSignal(input, options).accepted,
-      ),
+      // Only an admitted turn ends a parked one, so a refused turn expires nothing.
+      accepted: assertRunAdmitted().then(async () => {
+        if (session.thread.getId() !== admission[0] || permissionGeneration !== admission[1])
+          throw new Error("Pea permission thread changed during hydration.");
+        // A rapid second turn finds nothing parked and waits out the same teardown.
+        parkedTurnEnding = endParkedTurn(session) ?? parkedTurnEnding;
+        await parkedTurnEnding;
+        return sendSignal(input, options).accepted;
+      }),
     };
   }) as typeof session.sendSignal;
 

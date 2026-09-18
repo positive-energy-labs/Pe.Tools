@@ -191,7 +191,9 @@ public static class FamilyReconciler {
             return Same(a, b, units, null);
         });
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
-        Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units);
+        // Revit exports a size table as CRLF rows with six-decimal numbers; the same table authored any other way is not a change.
+        Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units,
+            same: (_, want, have) => FamilyLookupTableCsv.Same(want.Csv, have.Csv));
         Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units);
         Structural(changes, "forms", desired.Forms, current.Forms, units);
         Structural(changes, "nested", desired.Nested, current.Nested, units);

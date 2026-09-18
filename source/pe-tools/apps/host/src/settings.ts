@@ -135,6 +135,13 @@ function parseRunSource(content: string): PodRunSource | undefined {
   }
 }
 
+const outcomes: readonly PodReceipt["outcome"][] = ["Succeeded", "Failed", "Cancelled"];
+const origins: readonly NonNullable<PodReceipt["origin"]>[] = [
+  "SavedMember",
+  "SuppliedDraft",
+  "Operation",
+];
+
 /** The receipt, or the reason it could not be read. A crashed apply leaves that state on disk. */
 function parseReceipt(content: string): PodReceipt | string {
   try {
@@ -145,13 +152,25 @@ function parseReceipt(content: string): PodReceipt | string {
       typeof value.outcome !== "string"
     )
       return "receipt.json is not a run receipt.";
+    if (!outcomes.includes(value.outcome as PodReceipt["outcome"]))
+      return `receipt.json outcome '${value.outcome}' is not ${outcomes.join(", ")}.`;
+    const origin = origins.includes(value.origin as never)
+      ? (value.origin as PodReceipt["origin"])
+      : null;
     return {
       podId: text(value.podId),
-      memberPath: text(value.memberPath),
-      memberSha256: text(value.memberSha256),
+      memberPath: typeof value.memberPath === "string" ? value.memberPath : null,
+      // Only saved bytes carry a member hash; a draft or operation run claims none.
+      memberSha256:
+        origin !== "SuppliedDraft" &&
+        origin !== "Operation" &&
+        typeof value.memberSha256 === "string"
+          ? value.memberSha256
+          : null,
+      origin,
       operation: value.operation,
       planHash: typeof value.planHash === "string" ? value.planHash : null,
-      outcome: value.outcome,
+      outcome: value.outcome as PodReceipt["outcome"],
       outputs: Array.isArray(value.outputs) ? value.outputs.map(text) : [],
       reason: typeof value.reason === "string" ? value.reason : null,
     };

@@ -18,7 +18,7 @@ namespace Pe.Revit.DocumentData.Parameters;
 ///     </para>
 /// </summary>
 public static class ParameterValueApplier {
-    public const int MaxEditsPerCall = 500;
+    public const int MaxEditsPerCall = ParameterValueApplyBounds.MaxEditsPerCall;
     public const string DefaultTransactionName = "Pe Apply Parameter Values";
 
     public static ParameterValueApplyData Apply(Document document, ParameterValueApplyRequest request) {
@@ -38,10 +38,7 @@ public static class ParameterValueApplier {
 
         if (request.DryRun) {
             // Reads and parsing need no transaction; nothing is written.
-            var dryResults = new List<ParameterValueEditResult>(edits.Count);
-            for (var i = 0; i < edits.Count; i++)
-                dryResults.Add(ProcessEdit(document, edits[i], i, dryRun: true));
-
+            var dryResults = ApplyInCurrentTransaction(document, edits, dryRun: true, exactParameterId: false);
             return new ParameterValueApplyData(0, true, dryResults);
         }
 
@@ -54,14 +51,8 @@ public static class ParameterValueApplier {
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
-        var applied = 0;
-        var results = new List<ParameterValueEditResult>(edits.Count);
-        for (var i = 0; i < edits.Count; i++) {
-            var result = ProcessEdit(document, edits[i], i, dryRun: false);
-            if (result.Ok)
-                applied++;
-            results.Add(result);
-        }
+        var results = ApplyInCurrentTransaction(document, edits, dryRun: false, exactParameterId: false).ToList();
+        var applied = results.Count(result => result.Ok);
 
         if (applied > 0)
             sandbox.Complete();
@@ -72,11 +63,24 @@ public static class ParameterValueApplier {
         return new ParameterValueApplyData(applied, false, results);
     }
 
+    internal static IReadOnlyList<ParameterValueEditResult> ApplyInCurrentTransaction(
+        Document document,
+        IReadOnlyList<ParameterValueEdit> edits,
+        bool dryRun,
+        bool exactParameterId
+    ) {
+        var results = new List<ParameterValueEditResult>(edits.Count);
+        for (var i = 0; i < edits.Count; i++)
+            results.Add(ProcessEdit(document, edits[i], i, dryRun, exactParameterId));
+        return results;
+    }
+
     private static ParameterValueEditResult ProcessEdit(
         Document document,
         ParameterValueEdit edit,
         int index,
-        bool dryRun
+        bool dryRun,
+        bool exactParameterId
     ) {
         try {
             if (edit.ParameterId == null && string.IsNullOrWhiteSpace(edit.ParameterName))
@@ -88,7 +92,7 @@ public static class ParameterValueApplier {
                 return new ParameterValueEditResult(index, false,
                     $"Element {edit.ElementId} was not found in the active document.");
 
-            var parameter = ResolveParameter(document, element, edit);
+            var parameter = ResolveParameter(document, element, edit, exactParameterId);
             if (parameter == null)
                 return new ParameterValueEditResult(index, false,
                     $"Parameter '{DescribeParameterReference(edit)}' was not found on element {edit.ElementId}.");
@@ -115,7 +119,7 @@ public static class ParameterValueApplier {
     ///     BuiltInParameter; positive ids match the element's own parameter ids; otherwise the
     ///     ParameterElement's name (or the request's name) falls back to LookupParameter.
     /// </summary>
-    private static Parameter? ResolveParameter(Document document, Element element, ParameterValueEdit edit) {
+    private static Parameter? ResolveParameter(Document document, Element element, ParameterValueEdit edit, bool exactParameterId) {
         var fallbackName = edit.ParameterName;
         if (edit.ParameterId is not { } rawParameterId)
             return LookupByName(element, fallbackName);
@@ -123,9 +127,9 @@ public static class ParameterValueApplier {
         if (rawParameterId < 0) {
             try {
                 return element.get_Parameter((BuiltInParameter)rawParameterId)
-                    ?? LookupByName(element, fallbackName);
+                    ?? (exactParameterId ? null : LookupByName(element, fallbackName));
             } catch {
-                return LookupByName(element, fallbackName);
+                return exactParameterId ? null : LookupByName(element, fallbackName);
             }
         }
 
@@ -134,6 +138,9 @@ public static class ParameterValueApplier {
             .FirstOrDefault(parameter => parameter.Id.Value() == rawParameterId);
         if (exactMatch != null)
             return exactMatch;
+
+        if (exactParameterId)
+            return null;
 
         var parameterElementName = document.GetElement(rawParameterId.ToElementId())?.Name;
         return LookupByName(element, parameterElementName ?? fallbackName);

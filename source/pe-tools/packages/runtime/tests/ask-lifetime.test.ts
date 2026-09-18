@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { createDeterministicRuntime } from "../src/testing.ts";
+import { createPeaSessionAdmission, type PeaRuntimeState } from "../src/pea-runtime.ts";
 import { expireAsks, readThreadState } from "../src/thread-state.ts";
 
-// Expiry by turn end, cancel and host restart; survival across reload. Only the model is fake.
+// Expiry by turn end, new turn, cancel and host restart; survival across reload. Only the model is fake.
 const askUser = {
   toolCall: {
     name: "ask_user" as const,
@@ -80,6 +81,111 @@ test("turn end expires a parked ask and drops its resume data", async () => {
   }
 });
 
+/** Pea's own admission over the harness session, installed after parking so the harness rules parked it. */
+async function admit(
+  runtime: Awaited<ReturnType<typeof createDeterministicRuntime>>,
+  session: Session,
+) {
+  const admission = createPeaSessionAdmission(
+    session as Session<PeaRuntimeState>,
+    "trusted",
+    undefined,
+    runtime.scopes,
+  );
+  await admission.ready;
+  return admission;
+}
+
+/** Teardown slower than any fixed cap, as Pea's own document cleanup on `aborted` can be. */
+function slowTeardown(session: Session) {
+  session.onBeforeAgentEnd(async (event) => {
+    if (event.reason === "aborted") await new Promise((resolve) => setTimeout(resolve, 1500));
+  });
+}
+
+function reasons(session: Session) {
+  const ends: string[] = [];
+  const completes: Array<() => void> = [];
+  session.subscribe((event) => {
+    if (event.type !== "agent_end") return;
+    ends.push(event.reason ?? "");
+    if (event.reason === "complete") completes.shift()?.();
+  });
+  return { ends, complete: () => new Promise<void>((resolve) => completes.push(resolve)) };
+}
+
+test("a new turn expires a parked ask without resuming it, however slow the teardown", async () => {
+  const { runtime, session } = await start([askUser, { text: "fresh turn" }]);
+  try {
+    await park(session, "suspension");
+    const admission = await admit(runtime, session);
+    slowTeardown(session);
+    const resumed: string[] = [];
+    session.subscribe((event) => {
+      if (event.type === "tool_end") resumed.push(event.toolCallId);
+    });
+    const { ends, complete } = reasons(session);
+    const fresh = complete();
+    await session.sendMessage({ content: "never mind" });
+    await fresh;
+
+    // The parked run is cancelled, then the new turn runs whole.
+    expect(ends).toEqual(["aborted", "complete"]);
+    expect(pending(session)).toEqual([]);
+    expect(session.suspensions.has({ toolCallId: call })).toBe(false);
+    expect(resumed).toEqual([]);
+    const state = await readThreadState(runtime, session, "t");
+    expect(JSON.stringify(state.messages)).toContain("fresh turn");
+    expect(state.expiredAsks).toEqual([
+      expect.objectContaining({ toolCallId: call, toolName: "ask_user" }),
+    ]);
+    await admission.close();
+  } finally {
+    await runtime.close?.();
+  }
+}, 15_000);
+
+test("two rapid new turns over a parked ask both wait out the one teardown", async () => {
+  const { runtime, session } = await start([askUser, { text: "first" }, { text: "second" }]);
+  try {
+    await park(session, "suspension");
+    const admission = await admit(runtime, session);
+    slowTeardown(session);
+    const { ends, complete } = reasons(session);
+    const done = complete();
+    await Promise.all([
+      session.sendMessage({ content: "one" }),
+      session.sendMessage({ content: "two" }),
+    ]);
+    await done;
+
+    expect(ends[0]).toBe("aborted");
+    expect(ends).not.toContain("error");
+    expect(ends.filter((reason) => reason === "aborted")).toHaveLength(1);
+    expect(session.suspensions.has({ toolCallId: call })).toBe(false);
+    await admission.close();
+  } finally {
+    await runtime.close?.();
+  }
+}, 15_000);
+
+test("a refused turn never expires a parked ask", async () => {
+  const { runtime, session } = await start([askUser, { text: "never" }]);
+  try {
+    await park(session, "suspension");
+    const admission = await admit(runtime, session);
+    await session.state.set({ yolo: true }); // admission refuses a session whose permissions drifted
+    await expect(session.sendMessage({ content: "refused" })).rejects.toThrow();
+
+    expect(pending(session)).toEqual([call]);
+    expect(session.suspensions.has({ toolCallId: call })).toBe(true);
+    expect((await readThreadState(runtime, session, "t")).expiredAsks).toBeUndefined();
+    await admission.close();
+  } finally {
+    await runtime.close?.();
+  }
+});
+
 test("cancel expires a parked suspension without answering it", async () => {
   const { runtime, session } = await start([askUser, { text: "answered" }]);
   try {
@@ -147,6 +253,28 @@ test("host restart expires the ask; reopening the live session keeps it", async 
     expect(pending(restarted.session)).toEqual([]);
     expect((await readThreadState(restarted.runtime, restarted.session, "t")).expiredAsks).toEqual([
       expect.objectContaining({ toolCallId: call, toolName: "ask_user" }),
+    ]);
+  } finally {
+    await restarted.runtime.close?.();
+  }
+});
+
+test("an ask stays an ask after the approval policy changes", async () => {
+  const first = await start([gated, { text: "done" }]);
+  const { end } = await park(first.session, "gate");
+  first.session.abort();
+  await end;
+  await first.runtime.close?.();
+
+  const restarted = await first.open();
+  try {
+    await restarted.session.permissions.setForTool({
+      toolName: "scenario_approval",
+      policy: "allow",
+    });
+    expect(restarted.session.resolveToolApproval("scenario_approval")).toBe("allow");
+    expect((await readThreadState(restarted.runtime, restarted.session, "t")).expiredAsks).toEqual([
+      expect.objectContaining({ toolCallId: call, toolName: "scenario_approval" }),
     ]);
   } finally {
     await restarted.runtime.close?.();

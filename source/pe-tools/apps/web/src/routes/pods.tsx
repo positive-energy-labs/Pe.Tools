@@ -296,10 +296,13 @@ export function PodsRouteContent({
                               {receipt.operation} · {receipt.outcome}
                             </span>
                             <span className="face-mono t-small text-ink-mute">
-                              {receipt.memberSha256.slice(0, 12)}
-                              {receipt.memberSha256 === member?.sha256
-                                ? " · these bytes"
-                                : " · older bytes"}
+                              {receipt.origin === "SuppliedDraft"
+                                ? "draft · not the saved bytes"
+                                : receipt.origin === "Operation"
+                                  ? "operation input · no member"
+                                  : receipt.memberSha256
+                                    ? `${receipt.memberSha256.slice(0, 12)}${receipt.memberSha256 === member?.sha256 ? " · these bytes" : " · older bytes"}`
+                                    : "source not recorded"}
                             </span>
                             {receipt.outputs?.map((output) => (
                               <span key={output} className="t-small text-ink-2">
