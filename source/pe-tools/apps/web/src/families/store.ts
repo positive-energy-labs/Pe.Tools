@@ -303,20 +303,16 @@ export function useFamiliesStore(
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /**
-       * A typed value stages; Pea's standing proposal remains as a counter. This route's codec:
-       * an emptied cell unstages, and the baseline is the family's current value.
+       * A typed value stages, an emptied one included: empty is a value, so a person can clear a
+       * parameter. Equal to the family's current value, it stages nothing. Pea's standing
+       * proposal remains as a counter.
        */
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
-        transition(
-          address,
-          value.value === ""
-            ? { kind: "unstage" }
-            : {
-                kind: "stage",
-                rung: { value: { familyName: value.familyName, value: value.value } },
-                baseline: { value: { familyName: value.familyName, value: current } },
-              },
-        ),
+        transition(address, {
+          kind: "stage",
+          rung: { value: { familyName: value.familyName, value: value.value } },
+          baseline: { value: { familyName: value.familyName, value: current } },
+        }),
       accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
       /** Deny clears the proposal on screen only; an independently staged value survives. */
       deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),

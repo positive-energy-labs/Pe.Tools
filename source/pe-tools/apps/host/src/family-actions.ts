@@ -13,6 +13,7 @@ import {
   familyDraftRouteState,
   familyStagedPatch,
   memberWork,
+  sameValue,
   stagedEntries,
   transitionPatches,
   parameterLinksRouteState,
@@ -289,6 +290,9 @@ const consumedOf = (
   cells: Object.fromEntries(keys.map((cell) => [cell, cells[cell]!.staged!])),
 });
 
+const workRoute = (consumed: Consumed) =>
+  consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+
 type Prepared =
   | {
       kind: "settings";
@@ -468,6 +472,33 @@ export async function admitFamilyAction(
           throw refused(`Apply must name a succeeded ${planKey} action`);
         if (canonicalRouteInput(plan.destination) !== canonicalRouteInput(admission.destination))
           throw refused("The plan was made for a different document");
+        // A plan applies once. The journal is the record: an earlier apply of this plan that
+        // reached Revit (succeeded, or incomplete after native success) spends it. An unknown
+        // outcome never gets here: the journal refuses new work on the document until it is
+        // recovered from its receipt.
+        const spent = (await owner.list()).find(
+          (row) =>
+            row.id !== admission.id &&
+            row.key === key &&
+            (row.request as { plan?: unknown }).plan === input.plan &&
+            (row.state === "succeeded" || row.state === "incomplete"),
+        );
+        if (spent) throw refused(`This plan already applied (action ${spent.id}); plan again`);
+        // What the person reviewed must still be what is staged at every consumed address.
+        // Proposals may move freely; a staged change means the review no longer describes Work.
+        const consumed = sealed.consumed;
+        if (consumed) {
+          const view = work ? await work.read(consumed.key, workRoute(consumed)) : null;
+          const now = (
+            view?.doc as { cells?: Record<string, { staged?: Rung | null }> } | undefined
+          )?.cells;
+          if (
+            Object.entries(consumed.cells).some(
+              ([cell, rung]) => !sameValue(now?.[cell]?.staged, rung),
+            )
+          )
+            throw refused("The staged cells changed since this plan; plan again");
+        }
         const included = (plan.result as { included: Record<string, string> }).included;
         const stray = Object.keys(input.expectedPlanHashes).filter(
           (id) => included[id] !== input.expectedPlanHashes[id],
@@ -479,6 +510,7 @@ export async function admitFamilyAction(
           process,
           nativeKey: key,
           input: {
+            plan: input.plan,
             specJson: sealed.specJson,
             expectedPlanHashes: input.expectedPlanHashes,
             source: sealed.source,
@@ -797,8 +829,7 @@ async function retire(
   actor: "human" | "agent",
 ) {
   if (!work) throw new ActionIncomplete("Applied; Work was unavailable to retire staged cells", {});
-  const route =
-    consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+  const route = workRoute(consumed);
   // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
   for (let attempt = 0; attempt < 3; attempt++) {
     const view = await work.read(consumed.key, route);

@@ -83,7 +83,10 @@ test("every source projects into one row shape with no hidden tier", () => {
   expect(rows.find((row) => row.key === "op:revit.catalog.loaded-families")?.rank).toBe(0);
   expect(keys).toContain("op:scripting.execute");
   expect(keys).toContain("route:instances");
-  expect(keys).toContain("route:instances.propose");
+  // A route with nothing Pea may write offers no propose door at all (O-2).
+  for (const route of ["instances", "takeoffs", "parameter-links"])
+    expect(keys).not.toContain(`route:${route}.propose`);
+  expect(keys).toContain("route:families.propose");
   // Instances lifecycle is a semantic action behind host admission, not a route command.
   expect(rows.find((row) => row.key === "workflow:instances.start")).toMatchObject({
     kind: "op",
