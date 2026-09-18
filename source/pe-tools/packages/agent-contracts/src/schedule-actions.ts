@@ -20,7 +20,7 @@ export const scheduleActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["schedules", "pods"],
-    executors: ["revit.apply.parameter-values", "pod.run.write"],
+    executors: ["schedule.cells.apply", "pod.run.write"],
     description:
       "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
     input: z.object({ pod: z.string().min(1).optional() }),

@@ -59,14 +59,36 @@ public record ExecuteRevitScriptData(
     PodReceipt? Attribution = null
 );
 
-/// <summary>One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.</summary>
+/// <summary>What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum PodRunOrigin {
+    SavedMember,
+    SuppliedDraft,
+    Operation
+}
+
+/// <summary>A run's settled outcome. Cancelled is its own answer, never a rollback claim.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum PodRunOutcome {
+    Succeeded,
+    Failed,
+    Cancelled
+}
+
+/// <summary>
+///     One run's receipt: its source origin, outcome, and outputs. `PodId` is the pod that stores the run.
+///     `MemberSha256` names saved bytes, so only a <see cref="PodRunOrigin.SavedMember" /> run carries it; a
+///     supplied draft keeps the path it drafts and its own bytes and hash stay in `input.json`; operation input
+///     names no member.
+/// </summary>
 public record PodReceipt(
     string PodId,
-    string MemberPath,
-    string MemberSha256,
+    string? MemberPath,
+    string? MemberSha256,
+    PodRunOrigin Origin,
     string Operation,
     string? PlanHash,
-    string Outcome,
+    PodRunOutcome Outcome,
     List<string> Outputs,
     string? Reason
 ) {
@@ -74,6 +96,12 @@ public record PodReceipt(
 
     /// <summary>A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".</summary>
     public string? Reason { get => this._reason; init => this._reason = value is "" ? null : value; }
+
+    /// <summary>The receipt of a run from a captured composition root; a draft never claims the saved member's hash.</summary>
+    public static PodReceipt ForSource(PodCapturedSourceData root, string operation, string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) =>
+        root.Origin == PodSourceOrigin.SavedMember
+            ? new(root.Id, root.Path, root.Sha256, PodRunOrigin.SavedMember, operation, planHash, outcome, outputs, reason)
+            : new(root.Id, root.Path, null, PodRunOrigin.SuppliedDraft, operation, planHash, outcome, outputs, reason);
 }
 
 public record PodMemberComposeRequest(string Pod, string Path, string? Content = null, PodCapturedSourceData? Source = null);
@@ -117,7 +145,7 @@ public enum ScriptExecutionStatus {
     RuntimeFailed,
     Rejected,
     PolicyRejected,
-    Canceled,
+    Cancelled,
     TimedOut
 }
 

@@ -57,14 +57,20 @@ internal static class ScheduleBindingResolver {
         if (resolved.Count == 0)
             return Blocked(column.ColumnNumber, ScheduleCellBindingBlocker.ParameterNotFound);
 
+        var targets = resolved.Select(item => new ScheduleCellBindingTarget(
+                item.Source.Id.Value(), item.Parameter.Id.Value(),
+                ScheduleCollectorSupport.SafeGet(() => item.Parameter.Definition?.Name) ?? column.FieldName,
+                ToStorageType(item.Parameter.StorageType), item.Parameter.IsReadOnly, item.Parameter.HasValue,
+                GetRawValue(item.Parameter)))
+            .Distinct().OrderBy(item => item.ElementId).ThenBy(item => item.ParameterId).ToList();
         var first = resolved[0].Parameter;
-        var rawValues = resolved.Select(item => GetRawValue(item.Parameter)).ToList();
+        var rawValues = targets.Select(item => item.RawValue).ToList();
         // Deliberately NOT gated on Parameter.UserModifiable: Revit reports it false for writable
         // built-ins (Mark, Type Comments) whose Set() succeeds — proven in ScheduleCellBindingProofTests.
-        var isReadOnly = resolved.All(item => item.Parameter.IsReadOnly);
+        var isReadOnly = targets.All(item => item.IsReadOnly);
         return new ScheduleCellBinding(
             column.ColumnNumber,
-            resolved.Select(item => item.Source.Id.Value()).Distinct().ToList(),
+            targets.Select(item => item.ElementId).Distinct().ToList(),
             ScheduleCollectorSupport.SafeGet(() => first.Definition?.Name) ?? column.FieldName,
             first.Id.Value(),
             ToStorageType(first.StorageType),
@@ -73,6 +79,7 @@ internal static class ScheduleBindingResolver {
                 ?? ScheduleCollectorSupport.NullIfWhiteSpace(first.AsString()),
             IsTypeSource(resolved[0].Source, boundElements),
             !isReadOnly,
+            targets,
             isReadOnly ? ScheduleCellBindingBlocker.ReadOnlyParameter : ScheduleCellBindingBlocker.None,
             HasMixedValues: rawValues.Distinct(StringComparer.Ordinal).Count() > 1
         );
@@ -101,6 +108,7 @@ internal static class ScheduleBindingResolver {
             null,
             IsTypeParameter: false,
             IsEditable: false,
+            Targets: [],
             blocker
         );
 

@@ -21,7 +21,7 @@ public sealed class PodRunInputTests {
             var familyId = document.OwnerFamily.Id.Value();
             var plan = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single();
             var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
-                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null);
+                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null, plan: "plan-action-proof");
             var proof = document.FamilyManager.get_Parameter("Proof");
             Assert.Multiple(() => {
                 Assert.That(result.Receipts.Single().Success, Is.True);
@@ -29,7 +29,7 @@ public sealed class PodRunInputTests {
                 Assert.That(document.FamilyManager.Types.Size, Is.EqualTo(2));
                 Assert.That(document.FamilyManager.Types.Cast<FamilyType>().Select(type => type.AsString(proof)), Is.All.EqualTo("kept"));
             });
-            AssertRun(result.ReceiptPath!, "Succeeded", applySpec, "success");
+            AssertRun(result.ReceiptPath!, "Succeeded", applySpec, "success", "plan-action-proof");
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); }
     }
 
@@ -157,7 +157,7 @@ public sealed class PodRunInputTests {
         return (folder, composition.ToSource(), composition.Composed!);
     }
 
-    private static void AssertRun(string receiptPath, string outcome, string exact, string sample) {
+    private static void AssertRun(string receiptPath, string outcome, string exact, string sample, string? plan = null) {
         var run = Path.GetDirectoryName(receiptPath)!;
         var receipt = JObject.Parse(File.ReadAllText(receiptPath));
         var metadata = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
@@ -167,6 +167,9 @@ public sealed class PodRunInputTests {
             Assert.That(receipt["outputs"]!.Values<string>(), Is.SupersetOf(new[] { "input.json", "effective-input.json", "source/00-input.json", "source/01-base.json" }));
             Assert.That(metadata["operation"]?.Value<string>(), Is.Not.Empty);
             Assert.That(metadata["source"]?["origin"]?.Value<string>(), Is.EqualTo("SavedMember"));
+            Assert.That(receipt["origin"]?.Value<string>(), Is.EqualTo("SavedMember"));
+            Assert.That(metadata["plan"]?["actionId"]?.Value<string>(), Is.EqualTo(plan));
+            Assert.That(metadata["unavailableEvidence"]!.Values<string>(), plan is null ? Is.EqualTo(new[] { "reviewed Work revision" }) : Is.Empty);
             Assert.That(metadata["target"]?["process"]?["processId"]?.Value<int>(), Is.GreaterThan(0));
             Assert.That(File.ReadAllBytes(Path.Combine(run, "effective-input.json")), Is.EqualTo(Encoding.UTF8.GetBytes(exact)));
             Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-input.json")), Is.EqualTo(File.ReadAllBytes(Path.Combine(pod, "settings", "input.json"))));

@@ -33,6 +33,7 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-18: Composition retains the exact consumed root and dependency bytes once; effective JSON is a decoded view and never source-byte authority.
 - 2026-09-18: Family build/apply and schedule apply write immutable `input.json` evidence plus byte-exact `effective-input.json` before native effects, and receipts retain both paths for admitted outcomes. Authored root/dependency bytes and reviewed Work revisions remain owed because these native callers do not receive them.
 - 2026-09-18: Native Family build/apply and Schedule apply receive one `PodComposedSource`: the root bytes and the ordered dependency bytes that one composition read, under their actual pod ids, with origin `SavedMember` or `SuppliedDraft`. `PodRuns.StartComposedRun` checks each SHA-256, stores the run in the root's pod, and writes `input.json`, `effective-input.json`, and `source/NN-*` before any effect. No run rereads a captured root; the saved-root hash recheck is gone. Script runs write the pod bundle or inline text plus the compiled sources and project the same way. After an effect, a failed receipt write returns its reason and keeps the known outcome. Execution chose this shape under the input-in-output ruling; it can be reopened.
+- 2026-09-18: A run receipt names its origin (`SavedMember`, `SuppliedDraft`, or `Operation`) and a typed outcome (`Succeeded`, `Failed`, `Cancelled`). Only a saved member run carries a member SHA-256. A draft run keeps the path it drafts and claims no saved hash. An operation run, such as an inline script or a schedule push, names no member. `pod.runs` returns each receipt's origin, and it refuses an outcome outside the three. A planned family apply names its plan action in `input.json`. Execution chose this shape under the rule against fake provenance (CRUSADE.md:23); it can be reopened.
 
 ## Tried & rejected
 
@@ -46,8 +47,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Owed
 
-- Bind Plan and Apply to one reviewed Work revision (authority). Native run input names it as unavailable evidence until then.
-- Receipts: remove the mandatory `podId`/`memberPath`/`memberSha256` fields from `PodReceipt` so inline and memberless runs get a receipt without a fake member. Source identity already lives in `input.json`, and `pod.runs` returns it. `apps/web/src/routes/pods.tsx` and `route/seeds.ts` read the member fields and need the change too. Until then an inline script run is input-only and `pod.runs` lists it as unresolved.
+- Bind Plan and Apply to one reviewed Work revision (authority). A direct native call with no plan action still names this gap in its run input. The host family apply names its plan once `family-actions.ts` sends `plan`.
+- Pods route: render each run receipt's origin, and show no saved-bytes comparison for a draft or operation run (interaction; the prepared hunk is `crusade-exec-owed-web-receipt.patch`). Accept when the web typecheck passes against the nullable member hash.
 - Effective input is supplied beside the captured source, and no native edge recomposes it from those bytes to prove derivation.
 
 - Publish transform: vendoring in `ScriptPodArchiveService.cs`. Accept when a pod that references `@global/_fields/Header` publishes, imports on a machine with no `global` pod, and composes without error; the vendored file is byte-identical to the source.
@@ -65,4 +66,3 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - Migrate the user's local `OneDrive/Documents/Pe.Tools` to `Pods/<folder>` shape by a one-shot destructive script after committing; the old tree is deleted.
 - Prove actual Family Foundry and Schedules operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
 - Add Git/cloud transport only when its concrete workflow is selected; archive transport is the present carrier.
-- Prove the composed-source run input in a controlled checkout session: `PodRunInputTests` (all four) must pass with root and dependency bytes in each run.

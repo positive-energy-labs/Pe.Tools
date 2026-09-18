@@ -45,6 +45,25 @@ async function readScheduleCapture(
     : scheduleReadingSchema.parse(value);
 }
 
+/** A native schedule.cells.apply answer: one result per request cell, `[row, column, ok, error?]`. */
+export function cellsApplied(cells: [number, number, boolean, string?][], extra: object = {}) {
+  return {
+    appliedCells: cells.filter(([, , ok]) => ok).length,
+    appliedParameterWrites: cells.filter(([, , ok]) => ok).length,
+    dryRun: false,
+    results: cells.map(([rowNumber, columnNumber, ok, error], index) => ({
+      index,
+      rowNumber,
+      columnNumber,
+      ok,
+      error: error ?? null,
+      parameterResults: [{ index: 0, ok }],
+    })),
+    diagnostics: [],
+    ...extra,
+  };
+}
+
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
@@ -104,14 +123,7 @@ export async function setup() {
     pathless = false;
   let hold: Promise<void> | undefined,
     release = () => {};
-  let response: unknown = {
-    applied: 2,
-    dryRun: false,
-    results: [
-      { index: 0, ok: true },
-      { index: 1, ok: true },
-    ],
-  };
+  let response: unknown = cellsApplied([[1, 2, true]]);
   let detail = detailResponse();
   let readCount = 0;
   const sent: { key: string; input: any; session: string; openId: string; id?: string }[] = [];
@@ -155,11 +167,11 @@ export async function setup() {
             };
           if (key === "revit.detail.schedules") {
             readCount++;
-            if (readbackFails && sent.some((s) => s.key === "revit.apply.parameter-values"))
+            if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
               throw Error("readback unavailable");
             return { value: structuredClone(detail) };
           }
-          if (key !== "revit.apply.parameter-values") throw Error(`Unexpected ${key}`);
+          if (key !== "schedule.cells.apply") throw Error(`Unexpected ${key}`);
           await hold;
           if (unknown) throw new BridgeError("lost native reply", 503);
           return { value: structuredClone(response) };
@@ -175,7 +187,7 @@ export async function setup() {
       requestId: id,
       receipt: {
         requestId: id,
-        key: "revit.apply.parameter-values",
+        key: "schedule.cells.apply",
         ...originalProcess,
         verdict: "ok",
       },

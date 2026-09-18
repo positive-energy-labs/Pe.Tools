@@ -14,8 +14,7 @@ public sealed class PodReceiptTests {
             var writer = new ScriptArtifactWriter(pod);
             for (var index = 0; index < 100; index++) writer.WriteText($"{index}.txt", "output");
             Assert.Throws<InvalidOperationException>(() => writer.WriteText("overflow.txt", "output"));
-            var receipt = writer.WriteReceipt(new PodReceipt(
-                "sample", "src/Run.cs", "abc", "scripting.execute", null, "Failed", ["0.txt"], "Validation refused the operation."));
+            var receipt = writer.WriteReceipt(new PodReceipt("sample", "src/Run.cs", "abc", PodRunOrigin.SavedMember, "scripting.execute", null, PodRunOutcome.Failed, ["0.txt"], "Validation refused the operation."));
             var saved = JObject.Parse(File.ReadAllText(receipt.FullPath));
             var runFolder = Path.GetDirectoryName(receipt.FullPath)!;
 
@@ -61,13 +60,13 @@ public sealed class PodReceiptTests {
         try {
             var writer = new ScriptArtifactWriter(pod);
             writer.WriteInput(new { operation = "test" }, [new PodRunInputFile("inline-script", null, "inline", "source/00-inline.csx", [1, 2, 3])]);
-            var run = Path.GetDirectoryName(writer.WriteReceipt(new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null)).FullPath)!;
+            var run = Path.GetDirectoryName(writer.WriteReceipt(new PodReceipt("pod", "member", "sha", PodRunOrigin.SavedMember, "test", null, PodRunOutcome.Failed, [], null)).FullPath)!;
 
             Assert.Multiple(() => {
                 Assert.That(writer.Inputs, Is.EqualTo(new[] { "input.json", "source/00-inline.csx" }));
                 Assert.Throws<ArgumentException>(() => writer.WriteText("source/00-inline.csx", "forged"));
                 Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", [], null), [("input.json", [0])]));
+                    new PodReceipt("pod", "member", "sha", PodRunOrigin.SavedMember, "test", null, PodRunOutcome.Failed, [], null), [("input.json", [0])]));
                 Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-inline.csx")), Is.EqualTo(new byte[] { 1, 2, 3 }));
             });
         } finally {

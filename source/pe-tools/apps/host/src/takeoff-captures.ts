@@ -1,4 +1,20 @@
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
+
+/** The one sentence a surface shows for a retained reading that cannot arm a push. */
+export class StaleScheduleReading extends Error {
+  constructor(readonly id: string) {
+    super(
+      `Schedule reading ${id.slice(0, 12)} lacks the per-target evidence a push needs; re-read the schedule.`,
+    );
+  }
+}
+/** Enough of a retained reading to choose the latest one per subject without trusting the rest. */
+function retainedStamp(value: unknown): { workspaceId: string; capturedAt: string } | null {
+  const v = value as { workspaceId?: unknown; capturedAt?: unknown } | null;
+  return typeof v?.workspaceId === "string" && typeof v.capturedAt === "string"
+    ? { workspaceId: v.workspaceId, capturedAt: v.capturedAt }
+    : null;
+}
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import {
   familyCaptureSchema,
@@ -160,24 +176,36 @@ export class TakeoffCaptures {
     }
     return reading;
   }
+  /**
+   * A retained reading that no longer meets the reading contract (one captured before per-target
+   * cell evidence) refuses; nothing migrates or defaults it, so it can never arm a push.
+   */
   async schedule(id: string): Promise<ScheduleReading> {
     scheduleReadingSchema.shape.id.parse(id);
-    return scheduleReadingSchema.parse(
-      JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8")),
-    );
+    const parsed = scheduleReadingSchema.safeParse(await this.storedSchedule(id));
+    if (!parsed.success) throw new StaleScheduleReading(id);
+    return parsed.data;
   }
+  /** The latest reading of one Work subject; other subjects' readings are never parsed as readings. */
   async scheduleWork(workspaceId: string): Promise<ScheduleReading> {
     const names = await readdir(join(this.directory, "schedules"));
-    const readings = await Promise.all(
+    const stamps = await Promise.all(
       names
         .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
-        .map((name) => this.schedule(name.slice(0, -5))),
+        .map(async (name) => {
+          const id = name.slice(0, -5);
+          const stamp = retainedStamp(await this.storedSchedule(id));
+          return stamp ? { id, ...stamp } : null;
+        }),
     );
-    const latest = readings
-      .filter((reading) => reading.workspaceId === workspaceId)
-      .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))[0];
+    const latest = stamps
+      .filter((stamp) => stamp?.workspaceId === workspaceId)
+      .sort((a, b) => b!.capturedAt.localeCompare(a!.capturedAt))[0];
     if (!latest) throw Error("No retained reading for this Schedule Work");
-    return latest;
+    return this.schedule(latest.id);
+  }
+  private async storedSchedule(id: string): Promise<unknown> {
+    return JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8"));
   }
   async saved(id: string): Promise<TakeoffCapture> {
     takeoffCaptureSchema.shape.id.parse(id);
