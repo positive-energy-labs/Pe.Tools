@@ -2,38 +2,21 @@ using System.Diagnostics;
 
 namespace Pe.App.Host;
 
-/// <summary>
-///     Opens the Pe Tools web app in the user's default browser. Post-squash the web SPA is served by
-///     the TS host itself (same origin as the bridge / <c>/call</c>), so the base URL is the host's
-///     actual bound address from the runtime service file — never the old out-of-process frontend port.
-///     Optional deep-link params (module/root/relative path) are appended as a query string.
-/// </summary>
+/// <summary>Opens the Pe Tools web app, served by the TS host at its bound address, in the default browser.</summary>
 internal static class PeToolsBrowser {
-    public static bool TryLaunch(
-        string? moduleKey = null,
-        string? rootKey = null,
-        string? relativePath = null
-    ) {
+    /// <summary>With a member, opens it on `/pods?pod=&amp;path=`; without one, the app root.</summary>
+    public static bool TryLaunch(PodMemberAddress? member = null) {
         try {
             var baseUrl = TsHostLauncher.ResolveHostBaseUrl().TrimEnd('/');
-            var query = new List<string>();
-
-            if (!string.IsNullOrWhiteSpace(moduleKey))
-                query.Add($"moduleKey={Uri.EscapeDataString(moduleKey)}");
-
-            if (!string.IsNullOrWhiteSpace(rootKey))
-                query.Add($"rootKey={Uri.EscapeDataString(rootKey)}");
-
-            if (!string.IsNullOrWhiteSpace(relativePath))
-                query.Add($"relativePath={Uri.EscapeDataString(relativePath)}");
-
-            var targetUrl = query.Count == 0
+            var target = member is null
                 ? baseUrl
-                : $"{baseUrl}?{string.Join("&", query)}";
-            _ = Process.Start(new ProcessStartInfo(targetUrl) { UseShellExecute = true });
+                : $"{baseUrl}/pods?pod={Uri.EscapeDataString(member.Pod)}&path={Uri.EscapeDataString(member.Path)}";
+            _ = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
             return true;
         } catch {
             return false;
         }
     }
 }
+
+internal sealed record PodMemberAddress(string Pod, string Path);

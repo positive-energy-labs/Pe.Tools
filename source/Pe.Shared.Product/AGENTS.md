@@ -6,63 +6,50 @@ alwaysApply: true
 
 ## Purpose
 
-Product identity and the local paths the product owns for its own mutable and user-authored files. Two questions only:
+Product identity and the local paths the product owns for its mutable and user-authored files:
 
 1. What is this product called by machines and users?
 2. Where do product-owned state, logs, caches, and user-authored documents live?
 
-It is NOT the installed-layout authority. `product.payloads.json` at the repo root is the single source of truth for the installed layout (payload names, entry executables, `bin/`, `shims/`, service ports and routes), and the SDK's `InstalledProduct` reads it. Nothing in this package restates it.
+It is not the installed-layout authority. `product.payloads.json` is the single source of truth for payload names, entry executables, binary/shim shape, service routes, and the SDK-installed layout.
 
 ## Contents
 
-- `ProductIdentity` — vendor name, product name, user-visible name.
-- `ProductPathNames` — names of product-owned directories/files (`state`, `logs`, `cache`, `settings`, `workspaces`, `inline-scripts`, `output`, `Global`, `AGENTS.md`, `README.md`, `pod.json`, `host.log.txt`, `revit.log.txt`).
-- `ProductRuntimeLayout` — the per-user product root plus the state/log/cache trees under it, including the APS token store. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\...` settings, workspaces, inline scripts, output.
+- `ProductIdentity` — vendor, product, and user-visible names.
+- `ProductPathNames` — product-owned state and user-content names.
+- `ProductRuntimeLayout` — LocalAppData state/log/cache trees, including APS tokens. No binary paths.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
 - `ProductPathing` — safe subdirectory resolution and LocalAppData lookup.
-- `ProductRuntimeLane` — `Dev` / `Installed`.
 
 ## Hard Dependency Rule
 
-Pure .NET/BCL. No Revit API, no ASP.NET/host packages, no `HttpClient`, no Newtonsoft or System.Text.Json, no other `Pe.*` project references. The csproj carries zero `PackageReference` entries; keep it that way.
+Pure .NET/BCL. No Revit API, ASP.NET/host packages, `HttpClient`, JSON dependency, or other `Pe.*` project references. Keep the project free of `PackageReference` entries.
 
 ## Transport Boundary
 
-Transport left this package. `HostEndpoint` (service name, health/shutdown paths, `PE_TOOLS_*` env vars, base-URL resolution), `TsHostCallClient`, and the vendored `PeServiceDiscovery` live in `Pe.Shared.HostContracts/Transport` and `.../Vendor`. `HostEndpoint` reads `ProductRuntimeLayout.ForCurrentUser().RootPath` to find SDK service files — that is the only remaining coupling, and it points one way.
+Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`, and the SDK-owned read-only `PeServiceDiscovery` projection. `HostEndpoint` reads only `ProductRuntimeLayout.ForCurrentUser().RootPath`; the dependency points from transport to product identity, never back.
 
 ## Target Local Contract
-
-Product-owned runtime files:
 
 ```text
 %LocalAppData%\Positive Energy\Pe.Tools\
   state\
   logs\
   cache\
-```
 
-(The installer also lays binaries under this root. Their names and shape come from `product.payloads.json`, not from here.)
-
-User-authored files:
-
-```text
 Documents\Pe.Tools\
   AGENTS.md
   README.md
-  settings\<module>\<root>\
-  settings\Global\{settings.json,fragments\,schemas\}
-  workspaces\<slug>\{pod.json?,AGENTS.md,README.md,PeScripts.csproj,src\,.vscode\}
-  inline-scripts\
-  output\
+  preferences.json
+  Pods\<local-folder>\{pod.json,settings\,src\,assets\,output\,AGENTS.md,README.md,PeScripts.csproj,.vscode\}
 ```
 
-Settings are flattened as `settings/<module>/<root>/`; do not reintroduce `settings/<module>/settings/<root>/`.
+The installer also lays binaries under the product root; their names and shape come from `product.payloads.json`, not this package.
 
-Workspace keys are user-facing slugs and must stay single-segment: `default` or lowercase ASCII letters/digits with hyphen separators. No nesting, spaces, dots, rooted paths, path separators, uppercase aliases, or compatibility fallbacks. `pod.json` is the manifest filename because Pods and loose workspaces share this root.
+The local folder is a filesystem address, not pod identity. Authored JSON, scripts, assets, and useful output stay inside that pod folder. Do not add legacy path fallbacks or dual-read/dual-write behavior here.
 
 ## Consumer Guidance
 
-- Ask for intentful paths; do your own IO. Returned paths may not exist.
-- This package never creates directories as a side effect of resolution.
-- Greenfield: no `Documents\Pe.App` / `Documents\Pe.Scripting` fallbacks, no dual-read/dual-write. A one-time migration belongs in an explicit operator flow.
-- Build and installer code that needs installed-layout facts reads `product.payloads.json` directly (see `build/Modules/CreateInstallerModule.cs`). Repo artifact topology belongs to `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.
+- Ask for intentful paths and perform IO at the caller boundary; resolution creates no directories.
+- Build and installer code reads installed-layout facts directly from `product.payloads.json`.
+- Repo artifact topology belongs to `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.

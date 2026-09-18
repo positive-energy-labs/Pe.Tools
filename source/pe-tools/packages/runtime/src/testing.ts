@@ -14,7 +14,12 @@ import { createRuntimeLibSqlStorage } from "./storage/profiles.ts";
 type DeterministicResponse =
   | { text: string; finishDelayMs?: number }
   | { toolCall: { name: "scenario_approval"; input: { value: string } } }
-  | { toolCall: { name: "pe_find" | "pe_read" | "pe_do"; input: Record<string, unknown> } }
+  | {
+      toolCall: {
+        name: "pe_find" | "pe_read" | "pe_do" | "diagram";
+        input: Record<string, unknown>;
+      };
+    }
   | {
       toolCall: {
         name: "ask_user";
@@ -78,6 +83,8 @@ export async function createDeterministicRuntime(options: {
   responses: DeterministicResponse[];
   /** Product tools to expose beside the scenario's own (the three doors, for instance). */
   tools?: ToolsInput;
+  /** Sees every prompt the model is called with, e.g. to prove a tool error reached the next turn. */
+  onPrompt?: (prompt: unknown) => void;
   preseed?: {
     threadId: string;
     messages: { id: string; role: "user" | "assistant"; text: string }[];
@@ -96,7 +103,8 @@ export async function createDeterministicRuntime(options: {
     name: "Scenario Agent",
     instructions: "Answer the user.",
     model: new MastraLanguageModelV2Mock({
-      doStream: async () => {
+      doStream: async (call: { prompt?: unknown }) => {
+        options.onPrompt?.(call.prompt);
         const at = responseAt++;
         const response = options.responses[Math.min(at, options.responses.length - 1)]!;
         return { stream: responseStream(response, at) };

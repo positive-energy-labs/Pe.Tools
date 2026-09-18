@@ -11,11 +11,14 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 ## Critical Entry Points
 
 - `Execution/RevitScriptExecutionService.cs` - normalize -> policy -> resolve -> compile -> load -> instantiate -> execute -> complete.
+- `Pods/ScriptPodPreparationService.cs` - pod capture gated on manifest and entrypoints only; member list, read, create, per-member `Compose`, and `@<id>` resolution by installed manifest id.
+- `Pods/ScriptPodArchiveService.cs` - archive export (vendors foreign fragments into `settings/_vendor/<id>/`) and byte-exact import with `imported.json` provenance.
+- `Pods/PodRuns.cs` - the one run shape: `output/<runId>/` with `receipt.json`, for every apply and every execution.
 - `Transport/ScriptingBridgeMessageHandler.cs` - `ExternalEvent` handoff to the Revit thread.
 - `Bootstrap/ScriptWorkspaceBootstrapService.cs` and `Bootstrap/ScriptFileTemplates.cs` - generated workspace shape and guidance.
 - `References/ScriptReferenceResolver.cs` - script project reference/package resolution.
 - `Execution/ScriptAssemblyLoadService.cs` - runtime assembly map and load context.
-- `Storage/ScriptArtifactWriter.cs` - path-safe CSV/JSON/text artifacts under product output.
+- `Storage/ScriptArtifactWriter.cs` - path-safe CSV/JSON/text artifacts into the run `PodRuns` opens, beside that run's `receipt.json`.
 - `Context/RevitScriptContext.cs` and `Context/PeScriptContainer.cs` - script authoring surface.
 
 ## Validation
@@ -34,16 +37,18 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 | **execution**            | One scripting request returning one final result payload.                                                         |
 | **ReadOnly**             | Default permission mode; runs inside a rollback guard, so document changes are discarded and reported as a warning. |
 | **WriteTransaction**     | Explicit mutation mode; this package opens one host-owned Revit transaction.                                      |
+| **NoTransaction**        | Explicit unguarded mode; the script or called library owns any Revit transaction boundaries and rollback behavior. |
 
 ## Living Memory
 
-- Workspace execution is Pod-only: `pod.json` is validated, the requested source must be a declared entrypoint, and the whole `src/` tree compiles together. A workspace without `pod.json` is rejected with guidance to run `scripting.workspace.bootstrap`.
+- Workspace execution is Pod-only: one captured snapshot is gated (manifest and entrypoints) before admission, the requested source must be a declared entrypoint, and the whole captured `src/` tree compiles together. Never re-read mutable workspace inputs after preparation.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`.
 - `ReadOnly` execution runs inside a document rollback guard: in-guard document changes are rolled back, discarded, and surfaced as a `readonly`-stage warning; only mutations that persist outside the guard fail the run at the `mutation-monitor` stage. `WriteTransaction` requires a writable active document and opens one host-owned transaction. Pod manifests never grant write permission; permission is request-owned.
-- Static policy rejects process/shell, unmanaged interop, and script-owned transactions; there is no ReadOnly semantic mutation blacklist. The rollback guard and document-bound mutation monitor are the ReadOnly guardrails.
+- Static policy always rejects process/shell and unmanaged interop. It rejects script-owned transactions in `ReadOnly` and `WriteTransaction`; `NoTransaction` permits script/library-owned transaction boundaries. There is no ReadOnly semantic mutation blacklist. The rollback guard and document-bound mutation monitor are the ReadOnly guardrails.
 - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. Keep the single Pea scripting surface autonomous; enforce document safety and resource bounds inside this runtime.
-- Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in both permission modes.
+- Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in `ReadOnly` and `WriteTransaction`, and permitted only in explicit `NoTransaction` mode.
 - `WriteLine(...)` is the short diagnostic path. `Artifacts.WriteJson(...)`, `WriteCsv(...)`, and `WriteText(...)` are for durable output.
+- One output convention: an execution writes `output/<runId>/` in the pod it ran from, with `receipt.json` beside its artifacts, through the same `PodRuns` shape every apply uses. An inline snippet acts from no pod, so its run lands in the default pod. The run owns `receipt.json`; a script artifact may not take that name.
 - Inline snippets should stay isolated from broken workspace files and keep writing trace files for visibility.
 - Keep generated workspace docs orienting. Specific operation guidance should come from operation metadata, diagnostics, and examples.
 - Keep host concerns out of this package. HTTP routes, session gating, and host process management belong elsewhere.

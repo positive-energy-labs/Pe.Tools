@@ -12,30 +12,28 @@ namespace Pe.Revit.Tests;
 public sealed class DeploymentRuntimeContractTests {
     [Test]
     public void Authored_and_runtime_paths_split_between_documents_and_local_app_data() {
+        var documents = Path.Combine(Path.GetTempPath(), $"pe-documents-{Guid.NewGuid():N}");
         var localAppData = Path.Combine(Path.GetTempPath(), $"pe-localapp-{Guid.NewGuid():N}");
 
         try {
+            var content = ProductUserContentLayout.ForCurrentUser(documents);
             Assert.That(
-                SettingsStorageLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "settings"), StringComparison.OrdinalIgnoreCase),
-                Is.True
+                content.PreferencesPath,
+                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "preferences.json"))
             );
             Assert.That(
-                ScriptingWorkspaceLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "workspaces"), StringComparison.OrdinalIgnoreCase),
-                Is.True
+                content.Scripting.RootPath,
+                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods"))
             );
             Assert.That(
-                ProductUserContentLayout.ForCurrentUser().InlineScripts.RootPath.EndsWith(Path.Combine("Pe.Tools", "inline-scripts"), StringComparison.OrdinalIgnoreCase),
-                Is.True
+                content.InlineScripts.RootPath,
+                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods", "default", "output", "inline"))
             );
             Assert.That(
-                ProductUserContentLayout.ForCurrentUser().Output.RootPath.EndsWith(Path.Combine("Pe.Tools", "output"), StringComparison.OrdinalIgnoreCase),
-                Is.True
+                content.Output.RootPath,
+                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods", "default", "output"))
             );
             var runtime = ProductRuntimeLayout.ForCurrentUser(localAppData);
-            Assert.That(
-                runtime.RootPath,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools"))
-            );
             Assert.That(
                 runtime.State.RootPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
@@ -52,13 +50,18 @@ public sealed class DeploymentRuntimeContractTests {
                 runtime.Logs.RevitAppLogPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs", "revit.log.txt"))
             );
+            Assert.That(
+                runtime.State.ApsCredentialsPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state", "aps-auth", "credentials.json"))
+            );
         } finally {
+            TryDeleteDirectory(documents);
             TryDeleteDirectory(localAppData);
         }
     }
 
     [Test]
-    public void Scripting_workspace_layout_accepts_only_single_slug_workspace_keys() {
+    public void Scripting_workspace_layout_accepts_local_names_and_refuses_path_escape() {
         var rootPath = Path.Combine(Path.GetTempPath(), $"pe-workspaces-{Guid.NewGuid():N}");
         var layout = new ScriptingWorkspaceLayout(rootPath);
 
@@ -68,92 +71,16 @@ public sealed class DeploymentRuntimeContractTests {
         Assert.That(layout.ResolveWorkspaceRoot("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25")));
         Assert.That(layout.ResolvePodManifestPath("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25", "pod.json")));
 
+        Assert.That(layout.ResolveWorkspaceRoot("Office Standards"), Is.EqualTo(Path.Combine(rootPath, "Office Standards")));
+
         foreach (var invalidWorkspaceKey in new[] {
-            "ConnectorAudit",
-            "connector_audit",
-            "connector audit",
-            "connector.audit",
             "connector/audit",
             "connector\\audit",
-            "connector--audit",
-            "-connector",
-            "connector-",
             "..",
             Path.Combine(rootPath, "connector")
         }) {
             var exception = Assert.Throws<ArgumentException>(() => layout.ResolveWorkspaceRoot(invalidWorkspaceKey));
             Assert.That(exception?.ParamName, Is.EqualTo("workspaceKey"));
-        }
-    }
-
-    [Test]
-    public void Storage_runtime_splits_settings_state_and_output_roots() {
-        var moduleKey = $"TestModule-{Guid.NewGuid():N}";
-        var settingsBasePath = Path.Combine(Path.GetTempPath(), $"pe-settings-{Guid.NewGuid():N}");
-        var moduleStorage = new ModuleStorage(moduleKey, settingsBasePath);
-
-        try {
-            Assert.That(
-                moduleStorage.DirectoryPath,
-                Is.EqualTo(Path.Combine(Path.GetFullPath(settingsBasePath), moduleKey))
-            );
-            Assert.That(
-                moduleStorage.State().DirectoryPath,
-                Is.EqualTo(ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(moduleKey))
-            );
-            Assert.That(
-                moduleStorage.Output().DirectoryPath,
-                Is.EqualTo(ProductUserContentLayout.ForCurrentUser().Output.ResolveModuleOutputPath(moduleKey))
-            );
-            Assert.That(
-                new GlobalStorage(settingsBasePath).Output().DirectoryPath,
-                Is.EqualTo(ProductUserContentLayout.ForCurrentUser().Output.GlobalOutputPath)
-            );
-        } finally {
-            TryDeleteDirectory(settingsBasePath);
-            TryDeleteDirectory(ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(moduleKey));
-            TryDeleteDirectory(ProductUserContentLayout.ForCurrentUser().Output.ResolveModuleOutputPath(moduleKey));
-        }
-    }
-
-    [Test]
-    public void State_storage_exact_dir_migrates_legacy_directory_once() {
-        var rootPath = Path.Combine(Path.GetTempPath(), $"pe-state-migrate-{Guid.NewGuid():N}");
-        var legacyDirectoryPath = Path.Combine(rootPath, "legacy");
-        var destinationDirectoryPath = Path.Combine(rootPath, "destination");
-        Directory.CreateDirectory(Path.Combine(legacyDirectoryPath, "nested"));
-        File.WriteAllText(Path.Combine(legacyDirectoryPath, "nested", "state.json"), "{ \"value\": 1 }");
-
-        try {
-            var storage = StateStorage.ExactDir(destinationDirectoryPath, legacyDirectoryPath);
-
-            Assert.That(storage.DirectoryPath, Is.EqualTo(Path.GetFullPath(destinationDirectoryPath)));
-            Assert.That(
-                File.Exists(Path.Combine(destinationDirectoryPath, "nested", "state.json")),
-                Is.True
-            );
-        } finally {
-            TryDeleteDirectory(rootPath);
-        }
-    }
-
-    [Test]
-    public void State_storage_exact_dir_skips_legacy_copy_when_destination_already_has_content() {
-        var rootPath = Path.Combine(Path.GetTempPath(), $"pe-state-skip-{Guid.NewGuid():N}");
-        var legacyDirectoryPath = Path.Combine(rootPath, "legacy");
-        var destinationDirectoryPath = Path.Combine(rootPath, "destination");
-        Directory.CreateDirectory(legacyDirectoryPath);
-        Directory.CreateDirectory(destinationDirectoryPath);
-        File.WriteAllText(Path.Combine(legacyDirectoryPath, "legacy.json"), "{ \"legacy\": true }");
-        File.WriteAllText(Path.Combine(destinationDirectoryPath, "current.json"), "{ \"current\": true }");
-
-        try {
-            _ = StateStorage.ExactDir(destinationDirectoryPath, legacyDirectoryPath);
-
-            Assert.That(File.Exists(Path.Combine(destinationDirectoryPath, "current.json")), Is.True);
-            Assert.That(File.Exists(Path.Combine(destinationDirectoryPath, "legacy.json")), Is.False);
-        } finally {
-            TryDeleteDirectory(rootPath);
         }
     }
 
@@ -169,7 +96,6 @@ public sealed class DeploymentRuntimeContractTests {
             Is.True
         );
     }
-
 
     [Test]
     public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
@@ -226,7 +152,6 @@ public sealed class DeploymentRuntimeContractTests {
             TryDeleteDirectory(appBase);
         }
     }
-
 
     private static void TryDeleteDirectory(string path) {
         try {
