@@ -4,6 +4,13 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 
 ## Decided
 
+- 2026-09-18: `PreviewFamily` and `ReconcileFamily` share one `FamilyPreparation.Prepare`. Apply stays an operation in `OperationProcessor`, because the queue owns the transaction, single versus bulk, and cancellation. There is no `ApplyFamily` twin. Proof: native attached family-document lane, 4/4 on the refusal and formula scenarios.
+- 2026-09-18: A formula that the destination refuses aborts the whole parameter transfer (`NormalizeParameter.cs`). It is never dropped silently. Proof: fresh R25, red 2/1 then green 3/3. Consequence: the Old_template company migration now refuses families that used to lose formulas.
+- 2026-09-18: Lookup tables reconcile by meaning (`FamilyLookupTableCsv.Same`): exact header and row names in order, numeric cells as numbers, text cells as text. Revit export rewrites CRLF and six-decimal numbers, so text comparison never converged. Proof: native `FamilyLookupTableDiffTests` red 2/5 then green 5/5, and the a-box roundtrip passes.
+- 2026-09-18: A same-name family-to-shared identity change keeps per-type values, formulas, dimension labels, visibility, array labels, nested associations and lookup references. Proof: native `SameNameSharedReplacementTests`, hop 1.
+- 2026-09-18: After an identity-only source migration, the residue baseline stays the pre-migration intent (`FamilyPlan.IsIdentityOnlyMigration`), so a native drop refuses instead of converging. Native did not trigger it; it stays as a guard.
+- 2026-09-18: An identity change of a shared parameter that drives grouped or arrayed elements refuses in preview and apply alike (`identity-change-through-group`). Revit refuses it at commit ("Changes to groups are allowed only in group edit mode"). Group edit mode is not implemented. The Revit refusal is native-proven; the preview-side agreement is compile-only until the next native run.
+
 - 2026-09-15: Family build uses any bound document as execution context; only capture, plan, and apply require a family document. Author-facing placement labels map at the shared JSON contract (`Unhosted` → `OneLevelBased`, `FaceHosted` → `WorkPlaneBased`, `WallHosted` → `OneLevelBasedHosted`) and serialize back to Revit placement tokens.
 - 2026-09-13: Unacknowledged Family input belongs to its exact file Work and survives pane unmounts. Writes serialize against accepted server revisions; refusals retain input and require explicit retry. This buffer survives only the current browser runtime.
 
@@ -34,7 +41,11 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 - Browser acceptance for Family delayed edits, pane remount, save and conflict recovery remains open. Shared-head summaries must use authored Settings Work, not the empty Family Work document.
 
 - Express company-standard closure separately from overlay patches, including the disposition of required nonstandard drivers.
-- Prevent formula-copy failure and deleted type cells from becoming silent convergence; prove refusal or preservation through public native scenarios.
+- Prevent deleted type cells from becoming silent convergence; prove refusal or preservation through a public native scenario.
+- Old_template migration: count and classify the formula-transfer refusals natively, then get a user decision: refuse the family, or keep values and record the dropped formula on the receipt.
+- User decision: support an identity change through grouped or arrayed associations with group edit mode, or keep the refusal. Prove first that the array label alone triggers the Revit refusal.
+- Prove natively the shared-to-family same-name replacement (temporary name, then `RenameParameter`) and the three-hop preservation without the array.
+- Browser acceptance on the project-a cloud model for the identity change, lookup convergence and formula refusal from `/families`.
 - Express and verify mandatory connector pose, hosting, and room-point state independently of optional geometry reconstruction.
 - Broaden the bulk corpus assertions to all required preservation facts; complete portability proof across years, including save/reopen, no-op reapply, rollback and native readback.
 - Settle the PVFY unbalanced two-pole connector policy; the composed-profile test still excludes it. A resolved native constraint receipt is not a general preservation proof.
