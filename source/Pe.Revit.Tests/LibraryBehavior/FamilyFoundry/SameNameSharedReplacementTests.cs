@@ -102,7 +102,7 @@ public sealed class SameNameSharedReplacementTests {
                 Assert.That(observed.ToString(), Is.EqualTo(original.ToString()), $"hop {hop}: native values, formulas or associations changed");
                 var fm = document.FamilyManager;
                 foreach (var name in Replaced) {
-                    var parameter = fm.FindParameter(name);
+                    var parameter = fm.FindParameter(name) ?? throw new AssertionException($"hop {hop}: '{name}' is gone");
                     var wanted = (string?)patch.Patch["parameters"]![name]!["sharedGuid"];
                     Assert.That(parameter.IsShared ? parameter.GUID.ToString() : null, Is.EqualTo(wanted), $"hop {hop}: '{name}' identity");
                 }
