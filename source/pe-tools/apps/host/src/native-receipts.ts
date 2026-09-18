@@ -86,6 +86,8 @@ export async function readNativeReceipt(
   const failed = responseFailure.safeParse(result.response);
   if (!failed.success) return unchanged();
   const { error, statusCode: status, outcome: nativeOutcome } = failed.data;
+  if (receipt.data.verdict === "cancelled" && status === 499)
+    return { step: { ...intent, state: "cancelled", error, status }, evidence };
   // A coarse failed/rejected verdict cannot establish dispatch. Use the native typed outcome only.
   if (
     nativeOutcome &&
