@@ -4,10 +4,8 @@ import {
   buildZones,
   containsEvenOdd,
   decisionRows,
-  readResolutions,
   regionForRoom,
   shoelace,
-  upsertResolution,
   zoneGuid,
   zoneStage,
   type LiveRegion,
@@ -78,40 +76,6 @@ const region = (elementId: number, blob: string, outer = square(0, 0, 10)): Live
 const provenance = (extra = "") =>
   `{"Version":1,"ZoneGuid":"7a4e0000-0000-4000-8000-000000010006","RunId":"r","SourceRoomId":"R01","SourceSqft":70.5${extra}}`;
 
-describe("resolutions on the provenance blob", () => {
-  it("reads the spliced array back out", () => {
-    const blob = provenance(
-      `,"resolutions":[{"subject":"R01","flag":"seedless","verb":"accept","at":"z","runId":"r"}]`,
-    );
-    expect(readResolutions(blob)).toHaveLength(1);
-    expect(readResolutions(blob)[0]!.verb).toBe("accept");
-  });
-
-  it("reads an undecided blob as no decisions, and an unparseable one too", () => {
-    expect(readResolutions(provenance())).toEqual([]);
-    expect(readResolutions("not json")).toEqual([]);
-  });
-
-  it("keeps one decision per (subject, flag) — a later verb replaces the earlier", () => {
-    const first = upsertResolution([], {
-      subject: "R01",
-      flag: "seedless",
-      verb: "accept",
-      at: "a",
-      runId: "r",
-    });
-    const second = upsertResolution(first, {
-      subject: "R01",
-      flag: "seedless",
-      verb: "dismiss",
-      at: "b",
-      runId: "r",
-    });
-    expect(second).toHaveLength(1);
-    expect(second[0]!.verb).toBe("dismiss");
-  });
-});
-
 // ── The decision queue ───────────────────────────────────────────────────────
 
 const run = (over: Partial<PartitionRun> = {}): PartitionRun => ({
@@ -149,17 +113,7 @@ describe("decision queue", () => {
       run({ rooms: [room("R01", ["seedless"])], regions: [region(42, provenance())] }),
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "flag", subject: "R01", elementId: 42, resolved: null });
-  });
-
-  it("shows an already-decided row as decided", () => {
-    const blob = provenance(
-      `,"resolutions":[{"subject":"R01","flag":"seedless","verb":"dismiss","at":"z","runId":"r"}]`,
-    );
-    const rows = decisionRows(
-      run({ rooms: [room("R01", ["seedless"])], regions: [region(42, blob)] }),
-    );
-    expect(rows[0]!.resolved?.verb).toBe("dismiss");
+    expect(rows[0]).toMatchObject({ kind: "flag", subject: "R01", elementId: 42 });
   });
 
   it("raises a region no room claimed as an orphan row", () => {
@@ -194,12 +148,7 @@ describe("decision queue", () => {
 describe("typed snapshot projection", () => {
   it("keeps edited geometry visible while invalidating old measurements and decisions across mixed runs", () => {
     const native: LiveRegion & { roomType: string } = {
-      ...region(
-        43,
-        provenance(
-          ',"flags":["check"],"resolutions":[{"subject":"R01","flag":"check","verb":"accept","at":"then","runId":"old"}]',
-        ),
-      ),
+      ...region(43, provenance(',"flags":["check"]')),
       roomType: "hall",
       analysis: {
         state: "stale",

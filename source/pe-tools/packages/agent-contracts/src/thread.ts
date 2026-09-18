@@ -46,6 +46,13 @@ export interface ExpiredAsk {
   toolName: string;
 }
 
+/** A non-ask call a person's cancel stopped mid-run: the transcript says `cancelled`, not failed. */
+export interface CancelledCall {
+  messageId: string;
+  toolCallId: string;
+  toolName: string;
+}
+
 export type ToolResultSummary =
   | { kind: "array"; items: number }
   | { kind: "object"; keyCount: number; keys: string[] }
@@ -75,6 +82,7 @@ export interface ThreadViewState<
   messages: TMessage[];
   deferredResults?: DeferredToolResultRef[];
   expiredAsks?: ExpiredAsk[];
+  cancelledCalls?: CancelledCall[];
   inspect: TInspect;
   models: { currentId?: string; available: TModel[] };
   permissions: TPermissions;

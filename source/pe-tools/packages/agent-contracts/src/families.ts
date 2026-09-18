@@ -82,10 +82,10 @@ const appliedScopeSchema = z.object({
 });
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 /**
- * One page of families a scope may resolve to. The band's matrix and the host's plan both read the
- * scope at this budget, so they count the same families; a larger scope refuses rather than pages.
+ * One page of the loaded-families catalog a scope may resolve to. The band's matrix and the host's
+ * plan both read it at this budget, so they count the same families; more refuses rather than pages.
  */
-export const FAMILY_SCOPE_LIMIT = 5000;
+export const FAMILY_CATALOG_LIMIT = 5000;
 
 /**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
