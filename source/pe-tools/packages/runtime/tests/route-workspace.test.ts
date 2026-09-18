@@ -350,6 +350,14 @@ test("HTTP authored writes enforce short local revision checks", async () => {
         await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
       ).json(),
     ).toMatchObject({ ok: false, code: "stale_revision" });
+    // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
+    expect(
+      await (await post("/pe/agent/route-state/test-route/start-fresh", {})).json(),
+    ).toMatchObject({ ok: false, error: "start fresh is human-only" });
+    expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
+      ok: false,
+      error: "this route's Work is readable",
+    });
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });
