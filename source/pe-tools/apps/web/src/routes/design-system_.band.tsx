@@ -12,6 +12,7 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
+import { Switch } from "#/components/lang/switch";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -588,16 +589,14 @@ function BandRoute() {
               {event}
             </button>
           ))}
-          <label>
-            <input
-              type="checkbox"
+          <span className="flex items-center gap-1.5">
+            <Switch
+              aria-label="ask expiry"
               checked={fixture.askSurvives}
-              onChange={(event) =>
-                dispatch({ type: "set-ask-survives", value: event.target.checked })
-              }
-            />{" "}
+              onCheckedChange={(value) => dispatch({ type: "set-ask-survives", value })}
+            />
             ask {fixture.askSurvives ? "survives" : "expires"}
-          </label>
+          </span>
           <b>K2</b>
           <button
             type="button"
@@ -637,14 +636,14 @@ function BandRoute() {
             Takeoffs/Instances/Parameter Links model.
           </span>
           <b>K5 conflict</b>
-          <label>
-            <input
-              type="checkbox"
+          <span className="flex items-center gap-1.5">
+            <Switch
+              aria-label="conflict"
               checked={fixture.conflict}
-              onChange={(event) => dispatch({ type: "set-conflict", value: event.target.checked })}
-            />{" "}
+              onCheckedChange={(value) => dispatch({ type: "set-conflict", value })}
+            />
             {fixture.conflict ? "on" : "off"}
-          </label>
+          </span>
         </div>
       </aside>
     </div>
