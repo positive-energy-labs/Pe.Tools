@@ -165,7 +165,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                     document.FamilyManager.get_Parameter("PE_E___NumberOfPoles"), native, out var error), Is.True, error);
                 Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
             }
-            var before = FamilyModelJson.Serialize(current);
+            var before = JToken.Parse(FamilyModelJson.Serialize(current));
             var currentType = document.FamilyManager.CurrentType.Name;
             var modified = document.IsModified;
             var originalPoles = document.FamilyManager.Types.Cast<FamilyType>()
@@ -181,7 +181,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var canonical = document.PreviewFamily(Patch(raw));
             Assert.That(canonical.Changes, Is.Empty);
             Assert.That(canonical.Diagnostics, Is.Empty);
-            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(JToken.DeepEquals(
+                JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), before), Is.True,
+                "Preview must preserve the captured model; JSON object property order is not semantic.");
             Assert.That(document.FamilyManager.CurrentType.Name, Is.EqualTo(currentType));
             Assert.That(document.IsModified, Is.EqualTo(modified));
 
@@ -209,18 +211,23 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     public void Preview_refuses_invalid_units_without_mutation() {
         var document = this.NewFamily("FF invalid unit preview");
         try {
-            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var before = JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel()));
             var patch = FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}""");
             var preview = document.PreviewFamily(patch);
             Assert.That(preview.Diagnostics, Is.Not.Empty);
             var apply = new ReconcileFamily(patch);
-            IReadOnlyList<OperationLog>? logs;
+            Exception? refusal;
             using (var processor = new OperationProcessor(document)) {
                 var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
-                (logs, _) = contexts.Single().OperationLogs;
+                (_, refusal) = contexts.Single().OperationLogs;
             }
-            Assert.That(logs!.SelectMany(log => log.Entries).Any(entry => entry.Status == LogStatus.Error), Is.True);
-            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+            Assert.That(refusal, Is.Not.Null);
+            foreach (var diagnostic in preview.Diagnostics)
+                Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
+            Assert.That(apply.LastReceipt, Is.Null);
+            Assert.That(JToken.DeepEquals(
+                JToken.Parse(FamilyModelJson.Serialize(document.CaptureFamilyModel())), before), Is.True,
+                "Preview must preserve the captured model; JSON object property order is not semantic.");
         } finally { document.Close(false); }
     }
 
@@ -250,14 +257,15 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             parameter["tooltip"] = "replacement is unsupported";
             var preview = document.PreviewFamily(patch, sharedSource: source);
             var apply = new ReconcileFamily(patch, sharedSource: source);
-            IReadOnlyList<OperationLog>? logs;
+            Exception? refusal;
             using (var processor = new OperationProcessor(document)) {
                 var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
-                (logs, _) = contexts.Single().OperationLogs;
+                (_, refusal) = contexts.Single().OperationLogs;
             }
             var diagnostic = preview.Diagnostics.Single();
             Assert.That(diagnostic.Code, Is.EqualTo(FamilyModelDiagnosticCodes.SharedTooltipUnsupported));
-            Assert.That(logs!.Single().Entries.Single().Message, Is.EqualTo($"{diagnostic.Code}: {diagnostic.Message}"));
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
             Assert.That(apply.LastReceipt, Is.Null);
             var preserved = document.CaptureFamilyModel().Parameters[definition.Name!];
             Assert.That((preserved.SharedGuid, preserved.Formula), Is.EqualTo((original.SharedGuid, original.Formula)));
