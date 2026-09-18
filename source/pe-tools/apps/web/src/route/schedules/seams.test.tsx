@@ -110,6 +110,9 @@ test("two authored patches fired without awaiting both land, and a refetch is no
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={f.scope.work}
+        // The document is the thread's; this test pins it instead of standing up a head.
+
+        target={JSON.stringify({ kind: "open", ref: f.b })}
         render={(state) => {
           handle = state;
           connected.push(state.connected);
@@ -184,6 +187,9 @@ test("the original unresolved receipt still blocks apply after the address chang
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={workspaceId}
+        // The document is the thread's; this test pins it instead of standing up a head.
+
+        target={JSON.stringify({ kind: "open", ref: f.b })}
         render={(state) => {
           handle = state;
           return <ScheduleGridWorkspace state={state} />;

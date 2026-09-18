@@ -106,7 +106,12 @@ function PodsRoute() {
     void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }), replace: true });
   // The live demo lane browses the demo owner's pods through the live path.
   return (
-    <PodsRouteContent {...search} thread={thread} demo={frozenDemo() ?? undefined} select={select} />
+    <PodsRouteContent
+      {...search}
+      thread={thread}
+      demo={frozenDemo() ?? undefined}
+      select={select}
+    />
   );
 }
 

@@ -61,3 +61,20 @@ test("the families demo lane mounts without an update-depth loop", async () => {
   const depth = errors.filter((line) => /Maximum update depth/.test(line));
   expect(depth, depth.join("\n")).toEqual([]);
 });
+
+test("with the plan sheet open, the sheet's apply is the one apply button (w8-revit trip 5)", async () => {
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => <FamiliesRouteContent /> }),
+    history: createMemoryHistory({ initialEntries: ["/families?demo=apply"] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  const sheet = await screen.findByRole("region", { name: "Confirmation sheet" });
+  // Every button that would start `families.apply`: the verb row's `apply families`, the staged
+  // band's commit, and the sheet's `apply N rows`. Only the sheet's may exist.
+  const applies = screen
+    .getAllByRole("button")
+    .filter((button) => /^apply (families|\d+ rows?)/.test(button.textContent?.trim() ?? ""));
+  expect(applies.map((button) => button.textContent?.trim())).toHaveLength(1);
+  expect(sheet.contains(applies[0]!)).toBe(true);
+});

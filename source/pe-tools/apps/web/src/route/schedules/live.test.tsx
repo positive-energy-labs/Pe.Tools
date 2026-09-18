@@ -63,6 +63,9 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={f.scope.work}
+        // The document is the thread's; this test pins it instead of standing up a head.
+
+        target={JSON.stringify({ kind: "open", ref: f.b })}
         render={review ? (state) => <ScheduleGridReview state={state} /> : undefined}
       />
     </RegistryContext.Provider>
