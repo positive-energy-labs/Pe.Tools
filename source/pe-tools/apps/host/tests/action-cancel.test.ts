@@ -51,13 +51,17 @@ const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
           Context.empty() as never,
         ),
       );
+    const get = (path: string) =>
+      Effect.promise(async () =>
+        (await web.handler(new Request(`http://host${path}`), Context.empty() as never)).json(),
+      );
     const answer = (requestId: string, response: Record<string, unknown>) =>
       Queue.offer(
         incoming,
         JSON.stringify({ kind: "Response", response: { requestId, metrics, ...response } }),
       );
     try {
-      return yield* body({ owner, outgoing, post, answer, fixture });
+      return yield* body({ owner, outgoing, post, get, answer, fixture });
     } finally {
       yield* Effect.promise(() => web.dispose());
       yield* Effect.promise(() => rm(dir, { recursive: true, force: true }));
@@ -73,6 +77,7 @@ type Harness = {
   owner: ActionJournal;
   outgoing: Queue.Queue<import("@pe/host-contracts/contracts").BridgeFrame>;
   post: (path: string, body: unknown) => Effect.Effect<Response>;
+  get: (path: string) => Effect.Effect<unknown>;
   answer: (requestId: string, response: Record<string, unknown>) => Effect.Effect<boolean>;
   fixture: Awaited<ReturnType<typeof partitionFixture>>;
 };
@@ -102,7 +107,7 @@ test("admission answers before the bridge answers anything", () =>
   ));
 
 test("a cancel reaches the op while it blocks, and the action settles cancelled", () =>
-  lane(({ owner, outgoing, post, answer, fixture }) =>
+  lane(({ owner, outgoing, post, get, answer, fixture }) =>
     Effect.gen(function* () {
       const intent = fixture.intent("cancel-me");
       expect((yield* post("/actions", intent)).status).toBe(202);
@@ -117,6 +122,13 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
       const running = yield* Queue.take(outgoing);
       expect(running.request?.operationKey).toBe("takeoffs.partition");
       const blocked = running.request!.requestId;
+      // The step's input was on disk before its frame reached the wire.
+      const { home } = yield* Effect.promise(() => owner.outputs(intent.id));
+      const exported = JSON.parse(
+        yield* Effect.promise(() => readFile(join(home, "steps", `${blocked}.json`), "utf8")),
+      );
+      expect(exported).toMatchObject({ id: blocked, kind: "native", key: "takeoffs.partition" });
+      expect(JSON.parse(running.request!.payloadJson)).toMatchObject(exported.input);
 
       // Forked because the control waits for Revit's acknowledgement, and in this lane the test
       // IS Revit. In a session the pump answers `op.cancel` without queueing it.
@@ -153,6 +165,21 @@ test("a cancel reaches the op while it blocks, and the action settles cancelled"
       expect(row.state).toBe("cancelled");
       expect(row).toMatchObject({ status: 499 });
       expect(row.steps.at(-1)).toMatchObject({ id: blocked, state: "cancelled", status: 499 });
+      // Cancelled partial work stays discoverable by the original ID; the export claims no outcome.
+      const output = (yield* get(`/actions?output=${intent.id}`)) as {
+        id: string;
+        files: Record<string, unknown>;
+      };
+      expect(output.id).toBe(intent.id);
+      expect(Object.keys(output.files).sort()).toEqual(
+        [
+          "admission.json",
+          "preparation.json",
+          ...row.steps.map((step) => `steps/${step.id}.json`),
+        ].sort(),
+      );
+      expect(output.files["admission.json"]).toEqual(intent);
+      expect(JSON.stringify(output.files)).not.toContain("cancelled");
     }),
   ));
 
