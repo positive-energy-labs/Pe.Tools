@@ -324,6 +324,12 @@
   /* numeric cells right-align on the WRAPPER; the input must follow, not reset to start. */
   text-align: inherit;
 }
+/* An emptied value is a value: its mark draws in the cell's own ink, not placeholder grey. */
+.dl-cell-input[data-empty]::placeholder {
+  color: inherit;
+  font-style: inherit;
+  opacity: 1;
+}
 .dl-cell-input::placeholder {
   color: var(--pe-ink-mute);
   font-style: italic;
