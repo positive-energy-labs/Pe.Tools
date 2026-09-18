@@ -12,7 +12,7 @@ of verbatim zoning-plan pixels are in `LEDGER.md`.
   the keep-list `A_WALL*`, `A_XWALL`, `A_GLAZ` → export via the existing `StampPng`/INKP
   machinery (takeoff-owned view, deleted after export). Verified result: pure wall ink, 1.04%
   coverage, zero annotation/fills/furniture.
-- **Keep-list is a per-firm convention knob** — belongs in `TakeoffOptions` with the above as
+- **Keep-list is a per-firm convention knob** — belongs beside `Pe.Revit.Partition.Knobs` with the above as
   defaults.
 - **Binarization trap**: stripped-DWG lines render anti-aliased mid-gray (~200); the `px > 128`
   ink cutoff (ProjectionSeed.cs) MISSES them. Lower the threshold for this lane, or export at

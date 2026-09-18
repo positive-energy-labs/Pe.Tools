@@ -126,7 +126,7 @@ const markNative = (room: TakeoffRoomShape): TakeoffRoomShape => ({
 });
 
 /**
- * Ambiguity-flag META line payload: `<roomId>:<flag+flag>` (Contracts.cs ToTsv).
+ * Ambiguity-flag META line payload: `<roomId>:<flag+flag>` (committed takeoff TSVs; C# reader: TakeoffTsv.cs).
  * Lenient by design — old TSVs have no flag lines, and a flag naming a room the
  * parser dropped (or an id we've never seen) is silently ignored, matching the
  * "unknown META keys are skipped" contract of the other consumers.

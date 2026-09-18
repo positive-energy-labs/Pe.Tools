@@ -261,7 +261,7 @@ public static class RhvacCandidateBuilder
 
     /// <summary>
     /// Converts parsed level takeoffs into RHVAC rooms. Levels are ordered by elevation; room
-    /// numbers run sequentially across them and Name is "{levelName}:{id}" (the run-takeoff.py
+    /// numbers run sequentially across them and Name is "{levelName}:{id}" (the
     /// convention room-map.json keys against — do not change).
     /// </summary>
     public static List<RhvacRoom> Build(IReadOnlyList<LevelTakeoff> levels, Conventions conventions)
