@@ -14,10 +14,14 @@ public static class ParameterEditPlan {
     /// <param name="Refusal">Resolution failure, when there is one.</param>
     public sealed record Edit(int Group, ParameterValueEdit Value, ParameterTarget? Current, string? Refusal = null);
 
-    /// <param name="Refusals">Per edit: why it will not be written, or null.</param>
-    /// <param name="Writes">One representative edit index per native target write.</param>
-    /// <param name="WriteOf">Per edit: its index into <see cref="Writes" />, or -1 when refused.</param>
-    public sealed record Plan(IReadOnlyList<string?> Refusals, IReadOnlyList<int> Writes, IReadOnlyList<int> WriteOf);
+    /// <summary>One native target write.</summary>
+    /// <param name="Edit">The edit whose value is written (the first by index; all of <see cref="Edits" /> agree).</param>
+    /// <param name="Edits">Every edit this write answers, ascending.</param>
+    public sealed record Write(int Edit, IReadOnlyList<int> Edits);
+
+    /// <param name="Refusals">Per edit: why it will not be written, or null when a <see cref="Write" /> answers it.</param>
+    /// <param name="Writes">One per native target, in order of first edit.</param>
+    public sealed record Plan(IReadOnlyList<string?> Refusals, IReadOnlyList<Write> Writes);
 
     public const string Stale = "Expected target evidence is stale.";
     public const string MissingExpected =
@@ -29,31 +33,27 @@ public static class ParameterEditPlan {
     public static Plan Build(IReadOnlyList<Edit> edits, bool dryRun) {
         var refusals = edits.Select(edit => edit.Refusal ?? Judge(edit, dryRun)).ToArray();
 
-        foreach (var group in edits.Select((edit, index) => (edit.Group, index)).GroupBy(item => item.Group)) {
-            if (group.All(item => refusals[item.index] == null)) continue;
-            foreach (var (_, index) in group) refusals[index] ??= GroupRefused;
+        foreach (var group in Enumerable.Range(0, edits.Count).GroupBy(index => edits[index].Group)) {
+            if (group.All(index => refusals[index] == null)) continue;
+            foreach (var index in group) refusals[index] ??= GroupRefused;
         }
 
         // Connected alias groups: union admission groups that share a native target.
-        var root = edits.Select(edit => edit.Group).Distinct().ToDictionary(group => group, group => group);
-        int Find(int group) => root[group] == group ? group : root[group] = Find(root[group]);
         var live = Enumerable.Range(0, edits.Count).Where(index => refusals[index] == null).ToList();
+        var components = new UnionFind();
         foreach (var byTarget in live.GroupBy(index => Key(edits[index].Current!)))
             foreach (var index in byTarget.Skip(1))
-                root[Find(edits[index].Group)] = Find(edits[byTarget.First()].Group);
-        foreach (var component in live.GroupBy(index => Find(edits[index].Group))) {
+                components.Union(edits[index].Group, edits[byTarget.First()].Group);
+        foreach (var component in live.GroupBy(index => components.Find(edits[index].Group))) {
             if (component.Select(index => Payload(edits[index].Value)).Distinct().Count() <= 1) continue;
             foreach (var index in component) refusals[index] = AliasConflict;
         }
 
-        var writes = new List<int>();
-        var writeOf = Enumerable.Repeat(-1, edits.Count).ToArray();
-        foreach (var byTarget in Enumerable.Range(0, edits.Count).Where(index => refusals[index] == null)
-                     .GroupBy(index => Key(edits[index].Current!))) {
-            foreach (var index in byTarget) writeOf[index] = writes.Count;
-            writes.Add(byTarget.First());
-        }
-        return new Plan(refusals, writes, writeOf);
+        var writes = Enumerable.Range(0, edits.Count).Where(index => refusals[index] == null)
+            .GroupBy(index => Key(edits[index].Current!))
+            .Select(byTarget => new Write(byTarget.First(), byTarget.ToList()))
+            .ToList();
+        return new Plan(refusals, writes);
     }
 
     private static string? Judge(Edit edit, bool dryRun) {
@@ -65,4 +65,15 @@ public static class ParameterEditPlan {
     private static (long, long) Key(ParameterTarget target) => (target.ElementId, target.ParameterId);
 
     private static (string?, string?, bool) Payload(ParameterValueEdit edit) => (edit.Value, edit.Unit, edit.RawInternal);
+
+    private sealed class UnionFind {
+        private readonly Dictionary<int, int> parent = [];
+
+        public int Find(int group) {
+            if (!this.parent.TryGetValue(group, out var up) || up == group) return group;
+            return this.parent[group] = this.Find(up);
+        }
+
+        public void Union(int a, int b) => this.parent[this.Find(a)] = this.Find(b);
+    }
 }
