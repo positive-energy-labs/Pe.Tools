@@ -97,7 +97,7 @@ public sealed class PodRunInputTests {
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); }
     }
 
-    private static Document NewTwoTypeFamily(Autodesk.Revit.ApplicationServices.Application application, string name) {
+    internal static Document NewTwoTypeFamily(Autodesk.Revit.ApplicationServices.Application application, string name) {
         var document = RevitFamilyFixtureHarness.CreateFamilyDocument(application, BuiltInCategory.OST_GenericModel, name);
         using var transaction = new Transaction(document, "Seed input proof");
         transaction.Start();
@@ -140,7 +140,7 @@ public sealed class PodRunInputTests {
     ///     A pod whose member presets its first section from a dependency, so the run must keep the root and the
     ///     dependency bytes. The composed JSON is the effective input every caller passes.
     /// </summary>
-    private static (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
+    internal static (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
         var pods = new ScriptPodPreparationService();
         var id = "input-proof-" + Guid.NewGuid().ToString("N");
         var folder = Path.Combine(pods.PodsRoot, id);
@@ -183,5 +183,5 @@ public sealed class PodRunInputTests {
         }
     }
 
-    private static void DeletePod(string pod) { if (Directory.Exists(pod)) Directory.Delete(pod, true); }
+    internal static void DeletePod(string pod) { if (Directory.Exists(pod)) Directory.Delete(pod, true); }
 }
