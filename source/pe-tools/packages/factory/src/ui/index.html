@@ -283,7 +283,13 @@
             if (!response.ok) input.setCustomValidity((await response.json()).error);
           };
         });
-        const triggers = events.filter((event) => event.kind === "triggered");
+        const triggers = [
+          ...new Map(
+            events
+              .filter((event) => event.kind === "reading")
+              .map((event) => [event.sha, { sha: event.sha }]),
+          ).values(),
+        ];
         document.querySelector("#charts").innerHTML = Object.keys(setpoints).length
           ? Object.entries(setpoints)
               .map(([key, rule]) => chart(key, rule, triggers, state.tip))

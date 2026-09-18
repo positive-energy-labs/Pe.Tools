@@ -218,6 +218,7 @@ const errors = (
   database: DatabaseSync,
   sha: string,
   previous: string | undefined,
+  id = null as string | null,
 ) => {
   const first = database.prepare("SELECT min(seq) seq FROM events WHERE sha = ?").get(sha) as {
     seq: number | null;
@@ -248,9 +249,40 @@ const errors = (
         values[key] = Math.max(0, Number(setpoint.slice(2)) - value);
       else values[key] = 0;
     }
-    append(database, "error", sha, { loop: loopName, values }, loopName);
+    append(
+      database,
+      "error",
+      sha,
+      { loop: loopName, values },
+      loopName,
+      id && `${id}:${loopName}@${sha}`,
+    );
   }
 };
+
+export function backfill(repo: string, count: number, suppliedDatabase?: DatabaseSync) {
+  const config = configAt(repo);
+  const database = suppliedDatabase ?? openDatabase(repo, config);
+  try {
+    const commits = git(
+      repo,
+      "rev-list",
+      "--first-parent",
+      "--reverse",
+      `--max-count=${count}`,
+      config.factory.ref,
+    )
+      .split(/\r?\n/)
+      .filter(Boolean);
+    for (const sha of commits) {
+      const parent = git(repo, "rev-list", "--parents", "-n", "1", sha).split(" ")[1];
+      sense(repo, config, database, sha, parent);
+      errors(config, database, sha, parent, "backfill");
+    }
+  } finally {
+    if (!suppliedDatabase) database.close();
+  }
+}
 
 const mergeRun = (
   repo: string,
@@ -687,6 +719,14 @@ function main() {
   if (repoIndex >= 0 && !args[repoIndex + 1]) throw new Error("--repo requires a path");
   const repo = resolve(repoIndex >= 0 ? args[repoIndex + 1]! : process.cwd());
   const config = configAt(repo);
+  const backfillIndex = args.indexOf("--backfill");
+  if (backfillIndex >= 0) {
+    const count = Number.parseInt(args[backfillIndex + 1] ?? "", 10);
+    if (!Number.isInteger(count) || count < 1)
+      throw new Error("--backfill requires a positive count");
+    backfill(repo, count);
+    return;
+  }
   if (args.includes("--once")) {
     tick(repo);
     return;

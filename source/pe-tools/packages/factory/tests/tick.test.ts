@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { recordVerdict, serve, tick } from "../src/main.ts";
+import { backfill, recordVerdict, serve, tick } from "../src/main.ts";
 
 describe("tick", () => {
   it("triggers, senses, gates, reruns, and merges", async () => {
@@ -202,6 +202,21 @@ describe("tick", () => {
       tick(repo, database);
       expect(git("rev-parse", "main").toString().trim()).toBe(mainBefore);
       expect(existsSync(escapedPath)).toBe(false);
+
+      writeFileSync(
+        join(repo, "factory.toml"),
+        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/backfill.sqlite"\n[sensor.files]\nrun="node {root}/sensor.mjs"\nscope=["**/*","*.txt","factory.toml"]\n[loop.watch]\nsense=["files"]\nsetpoint={"files.n"="down"}\n',
+      );
+      backfill(repo, 3);
+      backfill(repo, 3);
+      const history = new DatabaseSync(join(repo, ".artifacts", "backfill.sqlite"));
+      expect(
+        history.prepare("SELECT count(*) count FROM events WHERE kind = 'reading'").get(),
+      ).toEqual({ count: 3 });
+      expect(
+        history.prepare("SELECT count(*) count FROM events WHERE kind = 'triggered'").get(),
+      ).toEqual({ count: 0 });
+      history.close();
       database.close();
     } finally {
       rmSync(repo, { recursive: true, force: true });
