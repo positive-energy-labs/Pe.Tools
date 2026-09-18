@@ -112,13 +112,8 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
             desired = source.Resolve(afterMigration.Value, patch.Patch);
             desired = FamilyPreparation.ResolveNativeFormulas(desired, doc.Document, formulaCache);
             applyPlan = FamilyReconciler.Reconcile(desired, current, UnitResolvers.Revit(doc.Document), this._patch?.Run, source.GetDefinition, executionOptions: this._executionOptions);
-            // Identity-only migration (every target existed and named no present source; the parameter set is unchanged) moves no value
-            // between parameters. Its pre-migration intent stays the residue baseline, so a native replacement that drops cells, formulas
-            // or associations is residue rather than the new normal. A migration that transfers, creates or removes keeps the re-derived one.
-            var identityOnly = plan.Changes.Where(c => c.Section == "parameters.sources")
-                .All(c => c.Before is IReadOnlyDictionary<string, FamilyModelParameter> { Count: 1 } before && before.ContainsKey(c.Key));
-            if (identityOnly && current.Parameters.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(prepared.Original.Parameters.Keys))
-                desired = prepared.Desired!;
+            // An identity-only migration keeps the pre-migration intent as the residue baseline (FamilyPlan.IsIdentityOnlyMigration).
+            if (plan.IsIdentityOnlyMigration(prepared.Original, current)) desired = prepared.Desired!;
         }
         if (applyPlan.Refusals.Count > 0)
             throw new InvalidOperationException("Source migration left an unsupported requested change.");
