@@ -1,11 +1,11 @@
 {
   "rawTable": {
-    "total": 8,
+    "total": 7,
     "byArea": {
       "data-tables": 1,
       "design-system": 1,
       "lib": 1,
-      "param-tables": 3,
+      "param-tables": 2,
       "runs": 1,
       "workbench": 1
     }
@@ -66,7 +66,7 @@
     }
   },
   "inlineColor": {
-    "total": 82,
+    "total": 80,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -75,7 +75,7 @@
       "host": 3,
       "lab": 8,
       "ops": 14,
-      "param-tables": 5,
+      "param-tables": 3,
       "routes": 1,
       "runs": 27,
       "takeoff": 3,
