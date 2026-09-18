@@ -7,7 +7,7 @@
  * composer's slash menu), and `cell`, which is `CellListSelect`: a table cell that mounts NO
  * popup machinery at rest and opens from its td (R13).
  */
-import { useContext, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { ChevronDown } from "lucide-react";
 
@@ -78,6 +78,21 @@ export function List<T>(props: ListProps<T>) {
   });
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
+  // An owner (the composer's textarea, a free-text input) points at the list and its cursor (R14).
+  const owner = props.owner;
+  const active = collection.inputProps["aria-activedescendant"];
+  useEffect(() => {
+    if (!owner) return;
+    owner.setAttribute("aria-controls", collection.listProps.id);
+    owner.setAttribute("aria-expanded", "true");
+    if (active) owner.setAttribute("aria-activedescendant", active);
+    else owner.removeAttribute("aria-activedescendant");
+    return () => {
+      owner.removeAttribute("aria-activedescendant");
+      owner.removeAttribute("aria-controls");
+      owner.setAttribute("aria-expanded", "false");
+    };
+  }, [owner, active, collection.listProps.id]);
   const render = (row: VisibleRow<T>) => {
     if (row.kind === "head")
       return <RowGroupHead key={row.key} label={row.label} count={row.count} />;

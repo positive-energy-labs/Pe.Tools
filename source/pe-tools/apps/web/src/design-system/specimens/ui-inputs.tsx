@@ -1,15 +1,5 @@
 import { Search } from "lucide-react";
 
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandShortcut,
-  commandRecipe,
-} from "#/components/lang/command";
 import { Input, inputRecipe } from "#/components/lang/input";
 import {
   InputGroup,
@@ -20,35 +10,11 @@ import {
 } from "#/components/lang/input-group";
 import { Label, labelRecipe } from "#/components/lang/label";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
-import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid } from "./recipe-grid";
 
 export function UiInputSpecimens() {
   return (
     <>
-      <RecipeGrid
-        name="Command"
-        importPath="#/components/lang/command"
-        recipe={commandRecipe}
-        render={() => (
-          <div className="h-52 w-72">
-            <Command>
-              <CommandInput placeholder="search" />
-              <CommandList>
-                <CommandEmpty>No results.</CommandEmpty>
-                <CommandGroup heading="categories">
-                  {CATEGORY_OPTIONS.slice(0, 2).map((option, index) => (
-                    <CommandItem key={option.value}>
-                      {option.label}
-                      <CommandShortcut>{index + 1}</CommandShortcut>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </div>
-        )}
-      />
       <RecipeGrid
         name="Input"
         importPath="#/components/lang/input"

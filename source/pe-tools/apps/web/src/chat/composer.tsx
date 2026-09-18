@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -19,10 +18,10 @@ import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft, type WorkbenchAttachment } from "#/workbench/prompt";
 import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
 import { Press } from "#/components/lang/press";
-import { PressContent } from "#/components/anatomy/press-content";
 import { chipRecipe } from "#/components/lang/chip";
+import { filterItems, type Collection } from "#/components/lang/collection";
+import { ListPopup } from "#/components/lang/list-popup";
 import { Thumbnail } from "#/workbench/thumbnail";
-import { cn } from "#/lib/utils";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation";
 
@@ -94,21 +93,18 @@ export function Composer({
     event.preventDefault();
     setDragging(true);
   };
-  const menuId = useId();
-  const [activeCommand, setActiveCommand] = useState(0);
+  const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const [menuDismissed, setMenuDismissed] = useState(false);
+  // The slash menu's keys are the list's (R14); Tab also picks, so the composer reads its cursor.
+  const menu = useRef<Collection<SlashCommand> | null>(null);
 
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat.inspect), [chat.inspect]);
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
-  const matches =
-    slash !== undefined
-      ? commands.filter((command) => command.name.toLowerCase().startsWith(slash))
-      : [];
-  const visibleMatches = matches.slice(0, 6);
-  const activeIndex = activeCommand % Math.max(visibleMatches.length, 1);
-  const selectedCommand = visibleMatches[activeIndex];
   const showMenu =
-    !menuDismissed && slash !== undefined && !text.includes(" ") && visibleMatches.length > 0;
+    !menuDismissed &&
+    slash !== undefined &&
+    !text.includes(" ") &&
+    filterItems(commands, (command) => command.name, "substring", slash).length > 0;
 
   const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
 
@@ -150,25 +146,12 @@ export function Composer({
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (showMenu) {
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      // ↑/↓, Enter and Escape belong to the open list; Tab is the composer's second pick key.
+      if (event.key === "Tab" && !event.shiftKey && menu.current?.cursor) {
         event.preventDefault();
-        const step = event.key === "ArrowDown" ? 1 : -1;
-        setActiveCommand(
-          (current) => (current + step + visibleMatches.length) % visibleMatches.length,
-        );
-        return;
+        menu.current.pick(menu.current.cursor);
       }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setMenuDismissed(true);
-        return;
-      }
-      if ((event.key === "Enter" && !event.shiftKey) || (event.key === "Tab" && !event.shiftKey)) {
-        event.preventDefault();
-        if (selectedCommand) pick(selectedCommand);
-        return;
-      }
+      return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -196,39 +179,29 @@ export function Composer({
       shortcuts={shortcuts}
     >
       <form ref={formRef} onSubmit={submit} className="relative w-full">
-        {showMenu ? (
-          <div
-            id={menuId}
-            role="listbox"
-            aria-label="Commands"
-            className={cn(
-              "hairline-x-faint hairline-y-faint absolute bottom-full mb-2 w-full overflow-hidden rounded-sm",
-              "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
-            )}
-            data-surface="artifact"
-          >
-            {visibleMatches.map((command, index) => (
-              <Press
-                key={command.name}
-                id={`${menuId}-${index}`}
-                type="button"
-                role="option"
-                tabIndex={-1}
-                aria-selected={index === activeIndex}
-                state={index === activeIndex ? "selected" : "rest"}
-                onMouseEnter={() => setActiveCommand(index)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => pick(command)}
-              >
-                <PressContent geometry="baseline">
-                  {/* a slash command is a machine identifier — mono */}
-                  <span className="face-mono text-ink">/{command.name}</span>
-                  <span className="truncate t-small t-upper">{command.description}</span>
-                </PressContent>
-              </Press>
-            ))}
-          </div>
-        ) : null}
+        <ListPopup<SlashCommand>
+          anchor="caret"
+          caret={area}
+          owner={area}
+          open={showMenu}
+          onOpenChange={(open) => (open ? undefined : setMenuDismissed(true))}
+          query={slash ?? ""}
+          onCollection={(collection) => (menu.current = collection)}
+          aria-label="Commands"
+          region="composer"
+          items={commands}
+          keyOf={(command) => command.name}
+          labelOf={(command) => command.name}
+          filter="substring"
+          empty="no skills in this thread"
+          maxHeight="13rem"
+          onPick={pick}
+          row={(command) => ({
+            // a slash command is a machine identifier — mono
+            label: <span className="face-mono">/{command.name}</span>,
+            meta: command.description,
+          })}
+        />
 
         {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
           input reads as a place you write rather than a strip the transcript ran into. */}
@@ -278,11 +251,9 @@ export function Composer({
             <Textarea
               name="input"
               aria-label="Message"
+              ref={setArea}
               aria-autocomplete="list"
               aria-haspopup="listbox"
-              aria-expanded={showMenu}
-              aria-controls={showMenu ? menuId : undefined}
-              aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
               size="compact"
               surface="embedded"
               placeholder="Ask Pea…  ( / for skills )"
@@ -291,7 +262,6 @@ export function Composer({
               value={text}
               onChange={(event) => {
                 setText(event.currentTarget.value);
-                setActiveCommand(0);
                 setMenuDismissed(false);
               }}
               onKeyDown={onKeyDown}

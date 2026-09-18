@@ -1,12 +1,6 @@
 import { Pencil, Plus, Search, X } from "lucide-react";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "#/components/lang/command";
+import { Dialog, DialogContent } from "#/components/lang/dialog";
+import { List } from "#/components/lang/list-popup";
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
@@ -160,8 +154,11 @@ export function ThreadList({
   );
 }
 
-/** Thread picker — shadcn Command palette (Ctrl/Cmd-K). Full search across every thread. */
-export function ThreadPalette({
+type PaletteItem = { kind: "new" } | { kind: "thread"; thread: StoredThreadSummary };
+const NEW: PaletteItem = { kind: "new" };
+
+/** The thread palette (Ctrl/Cmd-K): the one List, fuzzy, in a Dialog. Full search across every thread. */
+export function ThreadDialog({
   threads,
   currentThreadId,
   open,
@@ -180,52 +177,44 @@ export function ThreadPalette({
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const items: PaletteItem[] = [
+    NEW,
+    ...threads.map((thread) => ({ kind: "thread" as const, thread })),
+  ];
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Threads"
-      description="Search threads"
-    >
-      <CommandInput placeholder="Search threads by title…" />
-      <CommandList>
-        <CommandEmpty>No threads match.</CommandEmpty>
-        <CommandItem
-          value="__new__ new thread"
-          onSelect={() => {
-            onNew();
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent pad="none" showCloseButton={false} aria-label="Threads">
+        <List<PaletteItem>
+          aria-label="Threads"
+          region="thread palette"
+          items={items}
+          keyOf={(item) => (item.kind === "new" ? "__new__" : item.thread.id)}
+          labelOf={(item) => (item.kind === "new" ? "New thread" : item.thread.title)}
+          groupOf={(item) => (item.kind === "new" ? undefined : "Recent")}
+          filter="fuzzy"
+          searchPlaceholder="Search threads by title…"
+          empty="no threads yet"
+          noMatch="No threads match."
+          maxHeight="18rem"
+          onPick={(item) => {
+            if (item.kind === "new") onNew();
+            else onSelect(item.thread.id);
             onOpenChange(false);
           }}
-          // keyboard cursor = selection fill, never a hue
-        >
-          <Plus className="size-3.5" />
-          <span className="flex-1">New thread</span>
-          <Kbd mute>⌘K</Kbd>
-        </CommandItem>
-        <CommandGroup heading="Recent">
-          {threads.map((thread) => {
-            const active = thread.id === currentThreadId;
-            return (
-              <CommandItem
-                key={thread.id}
-                value={`${thread.title} ${thread.id}`}
-                onSelect={() => {
-                  onSelect(thread.id);
-                  onOpenChange(false);
-                }}
-              >
-                <ThreadDot active={active} />
-                <span
-                  className={active ? "flex-1 truncate text-ink" : "flex-1 truncate text-ink-2"}
-                >
-                  {thread.title}
-                </span>
-                <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
-              </CommandItem>
-            );
-          })}
-        </CommandGroup>
-      </CommandList>
-    </CommandDialog>
+          onEscape={() => onOpenChange(false)}
+          row={(item) =>
+            item.kind === "new"
+              ? { lead: <Plus />, label: "New thread", meta: <Kbd mute>⌘K</Kbd> }
+              : {
+                  label: item.thread.title,
+                  active: item.thread.id === currentThreadId,
+                  actions: (
+                    <ThreadActions thread={item.thread} onRename={onRename} onDelete={onDelete} />
+                  ),
+                }
+          }
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

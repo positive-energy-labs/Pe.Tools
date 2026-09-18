@@ -1096,7 +1096,6 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/switcher",
   "#/components/lang/action-button",
   "#/components/lang/card",
-  "#/components/lang/command",
   "#/components/lang/dialog",
   "#/components/lang/input",
   "#/components/lang/input-group",

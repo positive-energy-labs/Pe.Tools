@@ -17,7 +17,6 @@ import { actionRecipe } from "#/components/lang/action-button";
 import { dialogRecipe } from "#/components/lang/dialog";
 import { inputGroupRecipe } from "#/components/lang/input-group";
 import { cardRecipe } from "#/components/lang/card";
-import { commandRecipe } from "#/components/lang/command";
 import { inputRecipe } from "#/components/lang/input";
 import { labelRecipe } from "#/components/lang/label";
 import { paneRecipe } from "#/components/lang/pane";
@@ -48,7 +47,6 @@ const RECIPES = {
   dialogRecipe,
   inputGroupRecipe,
   cardRecipe,
-  commandRecipe,
   inputRecipe,
   labelRecipe,
   paneRecipe,
