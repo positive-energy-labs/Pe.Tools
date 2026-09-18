@@ -17,6 +17,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string SharedTooltipUnsupported = "shared-tooltip-unsupported";
     public const string IdentityChangeThroughGroup = "identity-change-through-group";
     public const string FormulaCopyDataType = "formula-copy-data-type";
+    public const string TypeRefsInstance = "type-refs-instance";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";
     public const string UnknownParameter = "unknown-parameter";
@@ -81,9 +82,17 @@ public static class FamilyModelValidator {
             if (p.SharedGuid is { } guid && (p.Shared != true || guid == Guid.Empty)) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedGuid requires shared=true and a nonempty GUID."));
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
             if (p.Value is { } v && p.DataType is { } dt) CheckValue(v, dt, $"{path}.value", nameable, d);
-            if (p.Formula is { } f)
+            if (p.Formula is { } f) {
                 foreach (var tok in FormulaNames(f).Where(t => !nameable.Contains(t)))
                     d.Add(new(FamilyModelDiagnosticCodes.FormulaUnknownName, $"{path}.formula", $"'{tok}' is neither a declared parameter nor a declared built-in. Nearest: {Nearest(tok, nameable)}"));
+                // Revit forbids a type formula from reading an instance parameter (GROUNDING-REVIT.md #4); the web advisory check
+                // (apps/web/src/family/formula.ts, type-refs-instance) defers to this one. Absent isInstance is type, as in Revit and the
+                // web check, except on a shared parameter, whose scope comes from its APS definition at resolution.
+                if (p.IsInstance == false || p.IsInstance is null && p.Shared != true)
+                    foreach (var tok in FormulaNames(f).Distinct(StringComparer.Ordinal)
+                                 .Where(t => m.Parameters.TryGetValue(t, out var read) && read.IsInstance == true))
+                        d.Add(new(FamilyModelDiagnosticCodes.TypeRefsInstance, $"{path}.formula", $"Type parameter '{name}' can't reference instance parameter '{tok}'."));
+            }
         }
         foreach (var (type, cells) in m.Types)
         foreach (var (name, v) in cells) {
