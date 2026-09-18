@@ -5,6 +5,7 @@
 ref = "main"
 poll_seconds = 5
 port = 4747
+host = "127.0.0.1"
 db = ".artifacts/factory/events.sqlite"
 
 # ---- sensors: pure reads of the tree at a commit. A command that prints one flat JSON object of numbers.

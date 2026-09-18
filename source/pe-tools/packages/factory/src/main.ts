@@ -16,7 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import { parse } from "smol-toml";
 
 type Config = {
-  factory: { ref: string; poll_seconds: number; port: number; db: string };
+  factory: { ref: string; poll_seconds: number; port: number; db: string; host?: string };
   sensor: Record<string, { run: string; scope: string[] }>;
   actuator?: Record<string, { run: string; review?: string }>;
   loop: Record<
@@ -880,8 +880,10 @@ async function main() {
   const database = openDatabase(repo, config);
   tick(repo, database);
   const server = serve(repo, database);
-  server.listen(config.factory.port, () =>
-    console.log(`factory listening on http://localhost:${config.factory.port}`),
+  const host = config.factory.host ?? "127.0.0.1";
+  if (!["127.0.0.1", "0.0.0.0"].includes(host)) throw new Error(`invalid factory host: ${host}`);
+  server.listen(config.factory.port, host, () =>
+    console.log(`factory listening on http://${host}:${config.factory.port}`),
   );
   const timer = setInterval(() => {
     try {
