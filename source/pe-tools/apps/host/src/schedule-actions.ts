@@ -36,6 +36,7 @@ import {
   lifetime,
   podContext,
   runPods,
+  writeCaptureRun,
   writeMemberOnce,
   type FamilyActionDependencies,
 } from "./family-actions.ts";
@@ -439,13 +440,16 @@ function admitScheduleSpec(
       const { process } = await lifetime(bridge, target, "project", deps);
       if (key === "schedule.capture") {
         const input = scheduleActions[key].input.parse(admission.input);
+        const at = new Date().toISOString();
         await runPods(deps, podFolder(input.pod, pods));
         return {
           process,
           nativeKey: key,
           input: { scheduleId: input.scheduleId },
           pod: input.pod,
-          path: input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`),
+          at,
+          path:
+            input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
         };
       }
       const { source } = scheduleActions[key].input.parse(admission.input);
@@ -458,6 +462,7 @@ function admitScheduleSpec(
         nativeKey: string;
         input: unknown;
         pod?: string;
+        at?: string;
         path?: string;
       };
       const result = await execution.step(
@@ -478,7 +483,8 @@ function admitScheduleSpec(
       const member = (await execution.step("file", "pod.member.write", request, () =>
         writeMemberOnce(deps, request, pods),
       )) as PodMemberWritten;
-      return { executionContext: target, member };
+      const run = await writeCaptureRun(deps, pods, prepared.at!, member, key);
+      return { executionContext: target, member, run };
     },
     false,
   );

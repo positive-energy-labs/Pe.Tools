@@ -4953,6 +4953,9 @@ export namespace ScriptingExecute {
       planHash?: null | string;
       outcome: string;
       outputs: string[];
+      /**
+       * A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".
+       */
       reason?: null | string;
     }
   }

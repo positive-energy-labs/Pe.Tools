@@ -179,6 +179,20 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Receipt_reason_is_null_on_success_and_the_failure_text_on_failure() {
+        var folder = this.WritePod("Office", "office");
+        // `scripting.execute` joins zero error diagnostics into "" (w6-revit claim 6); the receipt still says null.
+        var succeeded = new PodReceipt("office", "src/Run.cs", "sha", "scripting.execute", null, "Pending", [], null) with { Outcome = "Succeeded", Reason = string.Join("; ", Array.Empty<string>()) };
+        var failed = new PodReceipt("office", "settings/a.json", "sha", "schedule.apply", null, "Failed", [], "Apply Schedule 'A' did not commit.");
+        var saved = (PodReceipt r) => JObject.Parse(File.ReadAllText(PodRuns.WriteReceipt(folder, r, [])))["reason"]!;
+        Assert.Multiple(() => {
+            Assert.That(saved(succeeded).Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(saved(new PodReceipt("office", "settings/a.json", "sha", "schedule.apply", null, "Succeeded", [], "")).Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(saved(failed).Value<string>(), Is.EqualTo("Apply Schedule 'A' did not commit."));
+        });
+    }
+
+    [Test]
     public void Composer_rejects_malformed_directives() {
         foreach (var malformed in new[] { "{\"$preset\":null}", "{\"$preset\":3}", "{\"$include\":[]}", "{\"$include\":\"@local/a\",\"b\":1}" }) {
             var rejected = PodComposer.Compose("settings/main.json", malformed, AlwaysResolve);

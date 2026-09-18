@@ -309,6 +309,19 @@ public enum DataType {
     PipingFlow, PipeSize, DuctSize, HvacVelocity, Slope, Currency, LoadClassification
 }
 
+public static class DataTypes {
+    /// <summary>
+    ///     The token a slot compares by: what the spec measures, not which spec it is. A dimension label or
+    ///     connector size slot needs a length, and Revit measures `SpecTypeId.PipeSize` and
+    ///     `SpecTypeId.DuctSize` in length units (internal feet, `UnitUtils.GetValidUnits` offers feet,
+    ///     inches, millimeters) exactly like `SpecTypeId.Length`. Census of this enum through
+    ///     `ParamOps.Spec` against the Revit spec table: those three are the only length-measured members;
+    ///     every other member measures itself. `DataTypeMeasureCensusTests` in `Pe.Revit.Tests` pins the census
+    ///     against `UnitUtils` in a session.
+    /// </summary>
+    public static DataType Measure(this DataType dt) => dt is DataType.PipeSize or DataType.DuctSize ? DataType.Length : dt;
+}
+
 // ───────────────────────────── datums and planes ─────────────────────────────
 
 /// <summary>

@@ -71,4 +71,19 @@ public sealed class FamilyCaptureAgreesWithValidateTests {
         Assert.That(FamilyModelValidator.Validate(model), Is.Empty);
         Assert.That(JToken.DeepEquals(JObject.Parse(FamilyModelJson.Serialize(model)), JObject.Parse(FamilyModelJson.Serialize(FamilyModelJson.Parse(Fixture(Fixed)).Value!))), Is.True);
     }
+    /// <summary>
+    ///     w6-revit claim 3: the real Air Terminals family from the project-a model
+    ///     (`reports/w6-revit-evidence/33-captured-family-member.json`, sha e2135098…, verbatim) labels its duct
+    ///     dimensions and connector size slots with `DuctSize` parameters. Slots compare by measure, so it plans
+    ///     with no hand edit; a slot still refuses a parameter of another measure.
+    /// </summary>
+    [Test]
+    public void Captured_mep_family_with_duct_size_labels_validates_with_no_hand_edit() {
+        var result = FamilyModelJson.Parse(Fixture("w6-revit-air-terminal.captured.json"));
+        Assert.That(result.Value, Is.Not.Null);
+        Assert.That(result.Diagnostics.Select(d => $"[{d.Code}] {d.Path}: {d.Message}"), Is.Empty);
+        var model = result.Value!;
+        model.Parameters["Duct Width"] = new FamilyModelParameter { DataType = DataType.AirFlow };
+        Assert.That(FamilyModelValidator.Validate(model).Select(d => d.Code), Does.Contain(FamilyModelDiagnosticCodes.LabelTypeMismatch).And.Contain(FamilyModelDiagnosticCodes.DriverDataTypeMismatch));
+    }
 }
