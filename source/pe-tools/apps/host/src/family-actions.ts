@@ -13,6 +13,7 @@ import {
   familyDraftRouteState,
   familyStagedPatch,
   memberWork,
+  sameValue,
   stagedEntries,
   transitionPatches,
   parameterLinksRouteState,
@@ -289,6 +290,9 @@ const consumedOf = (
   cells: Object.fromEntries(keys.map((cell) => [cell, cells[cell]!.staged!])),
 });
 
+const workRoute = (consumed: Consumed) =>
+  consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+
 type Prepared =
   | {
       kind: "settings";
@@ -480,6 +484,21 @@ export async function admitFamilyAction(
             (row.state === "succeeded" || row.state === "incomplete"),
         );
         if (spent) throw refused(`This plan already applied (action ${spent.id}); plan again`);
+        // What the person reviewed must still be what is staged at every consumed address.
+        // Proposals may move freely; a staged change means the review no longer describes Work.
+        const consumed = sealed.consumed;
+        if (consumed) {
+          const view = work ? await work.read(consumed.key, workRoute(consumed)) : null;
+          const now = (
+            view?.doc as { cells?: Record<string, { staged?: Rung | null }> } | undefined
+          )?.cells;
+          if (
+            Object.entries(consumed.cells).some(
+              ([cell, rung]) => !sameValue(now?.[cell]?.staged, rung),
+            )
+          )
+            throw refused("The staged cells changed since this plan; plan again");
+        }
         const included = (plan.result as { included: Record<string, string> }).included;
         const stray = Object.keys(input.expectedPlanHashes).filter(
           (id) => included[id] !== input.expectedPlanHashes[id],
@@ -809,8 +828,7 @@ async function retire(
   actor: "human" | "agent",
 ) {
   if (!work) throw new ActionIncomplete("Applied; Work was unavailable to retire staged cells", {});
-  const route =
-    consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+  const route = workRoute(consumed);
   // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
   for (let attempt = 0; attempt < 3; attempt++) {
     const view = await work.read(consumed.key, route);

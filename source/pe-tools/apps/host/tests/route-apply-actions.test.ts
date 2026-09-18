@@ -974,3 +974,48 @@ test("a plan whose apply outcome is unknown refuses another apply until it is re
   await expect(admit("families.apply", input, revision, "again")).rejects.toThrow(/recover/);
   expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
 });
+
+/* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */
+
+test("a staged cell changed since the plan refuses apply visibly; a Pea proposal alone does not", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });
+  // Pea proposes on a consumed cell: the review still stands.
+  const now = (await env.work.read(scope, "families"))!.revision;
+  const pea = await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["cells", H, "proposal"], value: rung("25") }],
+    now,
+  );
+  expect(pea.ok).toBe(true);
+  // The person changes a consumed cell: what they reviewed is no longer what is staged.
+  await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["cells", W, "staged"], value: rung("11") }],
+    pea.revision!,
+  );
+  const stale = await env.admit("families.apply", apply, revision, "stale");
+  expect(stale.state).toBe("failed");
+  expect((stale as { error?: string }).error).toBe(
+    "The staged cells changed since this plan; plan again",
+  );
+  expect(env.sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
+});
+
+test("a Pea proposal on a consumed cell does not stale the plan", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  const now = (await env.work.read(scope, "families"))!.revision;
+  await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["cells", W, "proposal"], value: rung("12") }],
+    now,
+  );
+  resultOf(await env.admit("families.apply", apply, revision));
+});
