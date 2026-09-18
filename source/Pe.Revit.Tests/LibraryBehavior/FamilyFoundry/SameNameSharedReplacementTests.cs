@@ -22,7 +22,7 @@ public sealed class SameNameSharedReplacementTests {
     // Show: per-type values plus a detail visibility association. Count: per-type values plus the label of a linear array of that nested
     // family. Half Depth is not replaced; its formula references Depth by name. With `lookup`, Depth is also the key of a size table
     // that the unreplaced Looked Up reads.
-    private Document Build(bool lookup = false) {
+    private Document Build(bool lookup = false, bool array = true) {
         var json = JObject.Parse("""
             { "family": { "name": "Same-name shared replacement", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
               "parameters": {
@@ -40,6 +40,7 @@ public sealed class SameNameSharedReplacementTests {
                 "associate": { "_vane length": "param:Depth" } } },
               "arrays": { "vanes": { "member": "vane", "direction": "PlusY", "label": "param:Count", "moveTo": "Last", "spacingPlane": "back" } } }
             """);
+        if (!array) json.Remove("arrays");
         if (lookup) {
             var parameters = (JObject)json["parameters"]!;
             parameters["Looked Up"] = new JObject { ["dataType"] = "Number", ["formula"] = "size_lookup(LookupTableName, \"Out\", 0, Depth)" };
@@ -121,17 +122,61 @@ public sealed class SameNameSharedReplacementTests {
     [TestCase(1, TestName = "Family_to_shared_keeps_values_formulas_and_associations")]
     [TestCase(2, TestName = "Shared_to_other_guid_keeps_values_formulas_and_associations")]
     [TestCase(3, TestName = "Shared_to_family_keeps_values_formulas_and_associations")]
+    // No array: a shared identity change through an arrayed member is refused by preview (below), so the three-hop preservation proof
+    // runs on the same family without the vane array. The single nested vane still carries the Depth association.
     public void Same_name_identity_change_preserves_original(int finalHop) {
         Document? document = null;
         try {
-            document = this.Build();
+            document = this.Build(array: false);
             var original = Observe(document);
             Assert.That(original["labels"]!.Values<string>(), Is.EqualTo(new[] { "Depth" }), "fixture: Depth labels the driving dimension");
             Assert.That(original["visibility"]!.Values<string>(), Is.EqualTo(new[] { "Show", "Show", "Show", "Show" }), "fixture: Show drives every outline curve");
             Assert.That(original["cells"]!["A"]!["Height"]!.Value<double>(), Is.EqualTo(2d), "fixture: Height reads its formula");
-            Assert.That(original["arrays"]!.Values<string>(), Is.EqualTo(new[] { "Count" }), "fixture: Count labels the vane array");
-            Assert.That(original["nested"]!.Values<string>(), Is.Not.Empty.And.All.EqualTo("Depth"), "fixture: every vane associates _vane length to Depth");
+            Assert.That(original["arrays"]!.Values<string>(), Is.Empty, "fixture: no array");
+            Assert.That(original["nested"]!.Values<string>(), Is.EqualTo(new[] { "Depth" }), "fixture: the vane associates _vane length to Depth");
             Hops(document, original, finalHop);
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    [Test]
+    public void Family_to_shared_keeps_array_label_and_arrayed_associations() {
+        Document? document = null;
+        try {
+            document = this.Build();
+            var original = Observe(document);
+            Assert.That(original["arrays"]!.Values<string>(), Is.EqualTo(new[] { "Count" }), "fixture: Count labels the vane array");
+            Assert.That(original["nested"]!.Values<string>(), Has.Count.GreaterThan(1).And.All.EqualTo("Depth"), "fixture: every arrayed vane associates _vane length to Depth");
+            Hops(document, original, 1);
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    // Native (domains-guid hold 2026-09-18): with the array present, apply rolled back at commit with "Changes to groups are allowed only in
+    // group edit mode" after a clean preview. Preview now refuses the same change; apply refuses it with the same diagnostic and changes nothing.
+    [TestCase(2, TestName = "Shared_to_other_guid_through_array_is_refused_by_preview_and_apply")]
+    [TestCase(3, TestName = "Shared_to_family_through_array_is_refused_by_preview_and_apply")]
+    public void Shared_identity_change_through_array_is_refused(int hop) {
+        Document? document = null;
+        try {
+            document = this.Build();
+            Hops(document, Observe(document), 1);
+            var shared = Observe(document);
+            var patch = Hop(hop);
+            Func<Document, FamilySharedParameterSource> source = d => new(d, []);
+            var preview = document.PreviewFamily(patch, sharedSource: source);
+            Assert.That(preview.Diagnostics.Select(d => d.Code), Is.All.EqualTo(FamilyModelDiagnosticCodes.IdentityChangeThroughGroup));
+            Assert.That(preview.Diagnostics.Select(d => d.Path.Split('.')[2]), Is.EquivalentTo(new[] { "Depth", "Count" }),
+                "Depth drives the arrayed vanes' _vane length; Count labels the array");
+            var apply = new ReconcileFamily(patch, sharedSource: source);
+            Exception? refusal;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+                (_, refusal) = contexts.Single().OperationLogs;
+            }
+            Assert.That(refusal, Is.Not.Null);
+            foreach (var diagnostic in preview.Diagnostics)
+                Assert.That(refusal!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), refusal.ToString());
+            Assert.That(apply.LastReceipt, Is.Null);
+            Assert.That(Observe(document).ToString(), Is.EqualTo(shared.ToString()), "a refused identity change leaves the family untouched");
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
 
@@ -143,7 +188,7 @@ public sealed class SameNameSharedReplacementTests {
     public void Same_name_identity_change_preserves_lookup_reference(int finalHop) {
         Document? document = null;
         try {
-            document = this.Build(lookup: true);
+            document = this.Build(lookup: true, array: false);
             var original = Observe(document);
             Assert.That((original["cells"]!["A"]!["Looked Up"]!.Value<double>(), original["cells"]!["B"]!["Looked Up"]!.Value<double>()), Is.EqualTo((10d, 20d)),
                 "fixture: Looked Up reads the table keyed on Depth");
