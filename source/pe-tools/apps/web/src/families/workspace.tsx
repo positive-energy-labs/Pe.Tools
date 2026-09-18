@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { FAMILY_SCOPE_LIMIT, type FfReceipt } from "@pe/agent-contracts";
+import { FAMILY_CATALOG_LIMIT, type FfReceipt } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { Verdict } from "#/components/master-table/model";
@@ -105,7 +105,7 @@ function useFamiliesWorkspaceModel(
         ? {
             filter: applied,
             budget: {
-              maxEntries: FAMILY_SCOPE_LIMIT,
+              maxEntries: FAMILY_CATALOG_LIMIT,
               maxSamplesPerEntry: 1000,
             },
             includeTempPlacement: true,
