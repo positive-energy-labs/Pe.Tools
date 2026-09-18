@@ -66,7 +66,7 @@ export {
 export type { CellStateName, StateCellProps, Unsettled } from "./cell-state";
 
 export function StateCell(props: StateCellProps) {
-  const { value, modelValue, capReason, grounding, confidence, note } = props;
+  const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
   const read = readCell(props);
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
@@ -185,6 +185,9 @@ export function StateCell(props: StateCellProps) {
   // ONE footline, ranked and joined onto a single clamped line rather than stacked.
   const facts: React.ReactNode[] = [];
   if (capReason != null) facts.push(capReason);
+  // SPECIMEN: /design-system/band. A counter fold without its value makes accept/deny illegible
+  // in hoverless compact heads.
+  if (counterValue != null) facts.push(`pea proposes ${counterValue}`);
   if (note != null) facts.push(confidence != null ? `${confidence} confidence — ${note}` : note);
   // A low confidence with nothing else to say still has to say it; silence would read as high.
   else if (confidence === "low") facts.push("low confidence");

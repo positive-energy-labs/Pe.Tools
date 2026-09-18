@@ -1,11 +1,7 @@
-/**
- * /design-system/band — SATELLITE. One proposal fixture is rendered at route and chat-head scale.
- * SPECIMEN DATA: no host, document, persistence, plan, or apply sits behind this page.
- * SIMULATED controls are deliberately alien and do not record a K1-K4 verdict.
- */
-import { useMemo, useState } from "react";
+/** /design-system/band — one reducer-backed proposal fixture at route and chat-head scale. */
+import { useMemo, useReducer } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, X } from "lucide-react";
+import { Check, Undo2, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -21,13 +17,15 @@ import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { Gap } from "#/design-system/exhibit";
+import type { PlanSheet } from "#/route/manifest";
 import { Picker } from "#/route/picker";
+import { PlanSheetView } from "#/route/plan-sheet";
 import { SituationCell } from "#/route/situation";
 
 export const Route = createFileRoute("/design-system_/band")({ component: BandRoute });
 
 type Rung = { value?: string; delete?: true };
-type Item = {
+export type BandItem = {
   key: string;
   param: string;
   current: string | null;
@@ -39,7 +37,7 @@ type Item = {
   };
 };
 
-const SEED: readonly Item[] = [
+export const BAND_SEED: readonly BandItem[] = [
   {
     key: "neckWidth",
     param: "Neck Width",
@@ -91,39 +89,142 @@ const SEED: readonly Item[] = [
   },
 ];
 
-type Fixture = {
-  items: readonly Item[];
+export type BandFixture = {
+  items: readonly BandItem[];
   stage: string;
   askSurvives: boolean;
   askVisible: boolean;
+  records: readonly string[];
   commitMode: "drill" | "sheet";
   draftMode: "today" | "authored";
+  conflict: boolean;
   outcome: string | null;
 };
 
-const INITIAL: Fixture = {
-  items: SEED,
+export const INITIAL_BAND_FIXTURE: BandFixture = {
+  items: BAND_SEED,
   stage: "audit",
   askSurvives: true,
   askVisible: true,
+  records: [],
   commitMode: "drill",
   draftMode: "today",
+  conflict: false,
   outcome: null,
 };
 
-const shown = (item: Item) => {
+export const PLAN_REFUSAL = "another writer changed this Work; plan is refused until you reload";
+export const planRefusal = (fixture: BandFixture) => (fixture.conflict ? PLAN_REFUSAL : null);
+
+type BandAction =
+  | { type: "accept" | "deny" | "unstage"; key: string }
+  | { type: "stage"; key: string; value: string }
+  | { type: "discard" }
+  | { type: "ask-event"; event: string }
+  | { type: "resolve-ask"; verdict: "allowed" | "refused" }
+  | { type: "set-stage"; value: string }
+  | { type: "set-ask-survives"; value: boolean }
+  | { type: "set-commit-mode"; value: BandFixture["commitMode"] }
+  | { type: "set-draft-mode"; value: BandFixture["draftMode"] }
+  | { type: "set-conflict"; value: boolean }
+  | { type: "pea-writes" }
+  | { type: "outcome"; value: string | null };
+
+export function bandFixtureReducer(fixture: BandFixture, action: BandAction): BandFixture {
+  const edit = (key: string, change: (item: BandItem) => BandItem) => ({
+    ...fixture,
+    outcome: null,
+    items: fixture.items.map((item) => (item.key === key ? change(item) : item)),
+  });
+  switch (action.type) {
+    case "accept":
+      return edit(action.key, (item) => ({
+        ...item,
+        cell: {
+          ...item.cell,
+          staged: item.cell.proposal
+            ? { value: item.cell.proposal.value, delete: item.cell.proposal.delete }
+            : null,
+        },
+      }));
+    case "deny":
+      return edit(action.key, (item) => ({ ...item, cell: { ...item.cell, proposal: null } }));
+    case "unstage":
+      return edit(action.key, (item) => ({ ...item, cell: { ...item.cell, staged: null } }));
+    case "stage":
+      return edit(action.key, (item) => ({
+        ...item,
+        cell: { ...item.cell, staged: { value: action.value } },
+      }));
+    case "discard":
+      return {
+        ...fixture,
+        outcome: "all staged edits un-staged",
+        items: fixture.items.map((item) => ({
+          ...item,
+          cell: { ...item.cell, staged: null },
+        })),
+      };
+    case "ask-event":
+      return fixture.askSurvives
+        ? fixture
+        : {
+            ...fixture,
+            askVisible: false,
+            records: [...fixture.records, `family.capture expired when ${action.event}`],
+          };
+    case "resolve-ask":
+      return {
+        ...fixture,
+        askVisible: false,
+        records: [...fixture.records, `family.capture ${action.verdict}`],
+      };
+    case "set-stage":
+      return { ...fixture, stage: action.value };
+    case "set-ask-survives":
+      return { ...fixture, askSurvives: action.value };
+    case "set-commit-mode":
+      return { ...fixture, commitMode: action.value };
+    case "set-draft-mode":
+      return { ...fixture, draftMode: action.value };
+    case "set-conflict":
+      return { ...fixture, conflict: action.value, outcome: null };
+    case "pea-writes":
+      return {
+        ...fixture,
+        items: fixture.items.map((item) =>
+          item.key === "neckWidth"
+            ? { ...item, cell: { ...item.cell, proposal: { value: "12in", by: "pea" } } }
+            : item.key === "throw"
+              ? { ...item, cell: { ...item.cell, proposal: { value: "18ft", by: "pea" } } }
+              : item,
+        ),
+      };
+    case "outcome":
+      return { ...fixture, outcome: action.value };
+  }
+}
+
+const shown = (item: BandItem) => {
   const rung = item.cell.staged ?? item.cell.proposal;
   return rung?.delete ? "DELETE" : (rung?.value ?? item.current ?? "—");
 };
-const open = (item: Item) => item.cell.proposal != null && item.cell.staged == null;
-const contested = (item: Item) =>
+const open = (item: BandItem) => item.cell.proposal != null && item.cell.staged == null;
+const contested = (item: BandItem) =>
   item.cell.proposal != null &&
   item.cell.staged != null &&
   (item.cell.proposal.value !== item.cell.staged.value ||
     item.cell.proposal.delete !== item.cell.staged.delete);
-const changed = (item: Item) => item.cell.proposal != null || item.cell.staged != null;
+const changed = (item: BandItem) => item.cell.proposal != null || item.cell.staged != null;
+const stagedBy = (item: BandItem) =>
+  item.cell.staged != null &&
+  item.cell.proposal != null &&
+  item.cell.staged.value === item.cell.proposal.value &&
+  item.cell.staged.delete === item.cell.proposal.delete
+    ? "Pea"
+    : "you";
 
-function cellProps(item: Item, foot: "inline" | "hover"): StateCellProps {
+function cellProps(item: BandItem, foot: "inline" | "hover"): StateCellProps {
   return cellFromTrichotomy(item.cell, {
     value: shown(item),
     fresh: "fresh",
@@ -134,10 +235,23 @@ function cellProps(item: Item, foot: "inline" | "hover"): StateCellProps {
   });
 }
 
+const PLAN_SHEET: PlanSheet = {
+  entries: [
+    {
+      id: "PE_Supply Diffuser.rfa",
+      name: "PE_Supply Diffuser.rfa",
+      planHash: "simulated-r4",
+      actions: 3,
+      detail: "3 staged family parameter edits",
+      flag: null,
+      warnings: [],
+    },
+  ],
+};
+
 function BandRoute() {
-  const [fixture, setFixture] = useState<Fixture>(INITIAL);
-  const { items } = fixture;
-  const draftItem: Item = {
+  const [fixture, dispatch] = useReducer(bandFixtureReducer, INITIAL_BAND_FIXTURE);
+  const draftItem: BandItem = {
     key: "sharedDraft",
     param: "Shared Draft",
     current: "20in",
@@ -146,43 +260,17 @@ function BandRoute() {
       staged: fixture.draftMode === "authored" ? { value: "20in" } : null,
     },
   };
-  const displayItems = [...items, draftItem];
+  const displayItems = [...fixture.items, draftItem];
   const staged = displayItems.filter((item) => item.cell.staged != null).length;
   const changedItems = displayItems.filter(changed);
+  const chatItems =
+    fixture.draftMode === "authored"
+      ? [draftItem, ...changedItems.filter((item) => item.key !== draftItem.key)]
+      : changedItems;
+  const counter = displayItems.find(contested);
+  const refusal = planRefusal(fixture);
 
-  const edit = (key: string, change: (item: Item) => Item) =>
-    setFixture((value) => ({
-      ...value,
-      outcome: null,
-      items: value.items.map((item) => (item.key === key ? change(item) : item)),
-    }));
-  const accept = (key: string) =>
-    edit(key, (item) => ({
-      ...item,
-      cell: { ...item.cell, staged: item.cell.proposal && { ...item.cell.proposal } },
-    }));
-  const deny = (key: string) =>
-    edit(key, (item) => ({ ...item, cell: { ...item.cell, proposal: null } }));
-  const type = (key: string, value: string) =>
-    edit(key, (item) => ({ ...item, cell: { ...item.cell, staged: { value } } }));
-  const discard = () =>
-    setFixture((value) => ({
-      ...value,
-      outcome: "staged edits discarded",
-      items: value.items.map((item) => ({ ...item, cell: { ...item.cell, staged: null } })),
-    }));
-  const plan = () =>
-    setFixture((value) => ({
-      ...value,
-      outcome:
-        value.commitMode === "drill"
-          ? "SIMULATED · opened /family confirmation"
-          : "SIMULATED · opened confirmation sheet inside the head",
-    }));
-  const askEvent = () =>
-    setFixture((value) => ({ ...value, askVisible: value.askSurvives, outcome: null }));
-
-  const columns = useMemo<Column<Item>[]>(
+  const columns = useMemo<Column<BandItem>[]>(
     () => [
       {
         key: "parameter",
@@ -200,7 +288,11 @@ function BandRoute() {
           <StateCell
             {...cellProps(item, "hover")}
             scale="row"
-            onCommit={item.cap === "locked" ? undefined : (value) => type(item.key, value)}
+            onCommit={
+              item.cap === "locked"
+                ? undefined
+                : (value) => dispatch({ type: "stage", key: item.key, value })
+            }
           />
         ),
       },
@@ -209,20 +301,27 @@ function BandRoute() {
         label: "review",
         width: "w-44",
         cell: (item) =>
-          open(item) || contested(item) ? (
+          item.cell.staged ? (
+            <ActionButton
+              icon={Undo2}
+              label="unstage"
+              reason="Clear the staged value; restore the standing proposal or baseline"
+              onClick={() => dispatch({ type: "unstage", key: item.key })}
+            />
+          ) : open(item) ? (
             <span className="flex gap-1">
               <ActionButton
                 tone="agent"
                 icon={Check}
                 label="accept"
                 reason="Stage Pea's proposal"
-                onClick={() => accept(item.key)}
+                onClick={() => dispatch({ type: "accept", key: item.key })}
               />
               <ActionButton
                 icon={X}
                 label="deny"
                 reason="Clear Pea's proposal"
-                onClick={() => deny(item.key)}
+                onClick={() => dispatch({ type: "deny", key: item.key })}
               />
             </span>
           ) : (
@@ -230,24 +329,45 @@ function BandRoute() {
           ),
       },
     ],
-    [items],
+    [fixture.items, fixture.draftMode],
   );
 
+  const simulate = (label: string) => dispatch({ type: "outcome", value: `SIMULATED · ${label}` });
+  const sheet = (
+    <div className="hairline-t mt-1">
+      <div className="px-2 py-1">
+        <FactChip dashed title="Fixture plan; apply writes nothing.">
+          SIMULATED
+        </FactChip>
+      </div>
+      <PlanSheetView
+        sheet={PLAN_SHEET}
+        excluded={new Set()}
+        included={PLAN_SHEET.entries}
+        apply={() => simulate("apply 1 row")}
+        cancel={() => simulate("confirmation cancelled")}
+        replan={() => simulate("plan refreshed")}
+        refusal={refusal}
+        busy={false}
+      />
+    </div>
+  );
   const work = (body?: React.ReactNode, visible?: boolean) => (
     <WorkBand
       count={staged}
       noun="edit"
       revision={4}
       read="14:02:11 · fresh"
-      conflict
-      discard={discard}
+      conflict={fixture.conflict}
+      discard={() => dispatch({ type: "discard" })}
       commit={{
         label: "plan draft r4 · SIMULATED",
-        reason: "Opens confirmation; this fixture never applies",
-        run: plan,
+        reason: refusal ?? "Opens confirmation; this fixture never applies",
+        disabled: refusal != null,
+        run: () => simulate("opened /family confirmation"),
       }}
-      unresolved={["another writer changed this Work; your last write did not land"]}
-      reload={() => setFixture((value) => ({ ...value, outcome: "SIMULATED · Work reloaded" }))}
+      unresolved={fixture.conflict ? [PLAN_REFUSAL] : []}
+      reload={() => dispatch({ type: "set-conflict", value: false })}
       body={body}
       visible={visible}
     />
@@ -269,7 +389,11 @@ function BandRoute() {
         </div>
       </header>
 
-      <main className="flex flex-col gap-10 pt-8 pb-40">
+      <main className="flex flex-col gap-10 pt-8 pb-48">
+        <p>
+          Work is keyed by document, not thread: another thread on MEP Coordination.rvt shows these
+          same proposals
+        </p>
         <div className="grid gap-8 xl:grid-cols-2">
           <Section label="01 · route scale">
             <ArtifactFrame
@@ -294,7 +418,7 @@ function BandRoute() {
                             { id: "review", label: "Reviewing" },
                           ],
                           picked: (id) => id === fixture.stage,
-                          pick: (stage) => setFixture((value) => ({ ...value, stage })),
+                          pick: (value) => dispatch({ type: "set-stage", value }),
                         },
                       ]}
                     />
@@ -303,6 +427,7 @@ function BandRoute() {
                   <SituationCell io="rw">MEP Coordination.rvt</SituationCell>
                 </p>
                 {work()}
+                {fixture.commitMode === "sheet" ? sheet : null}
               </div>
             </ArtifactFrame>
             <div className="h-[25rem]">
@@ -320,6 +445,13 @@ function BandRoute() {
                 </EmptyState>
               )}
             </div>
+            {counter?.cell.proposal ? (
+              <div className="hairline-t py-1.5 t-prose">
+                <span className="t-small t-upper text-ink-mute">contested</span>{" "}
+                <span>{counter.param}</span> · pea proposes{" "}
+                <span className="face-mono">{counter.cell.proposal.value ?? "DELETE"}</span>
+              </div>
+            ) : null}
           </Section>
 
           <Section label="02 · chat-head scale">
@@ -346,64 +478,83 @@ function BandRoute() {
                               icon={Check}
                               label="allow"
                               reason="Allow this transient tool call"
-                              onClick={() =>
-                                setFixture((value) => ({ ...value, askVisible: false }))
-                              }
+                              onClick={() => dispatch({ type: "resolve-ask", verdict: "allowed" })}
                             />
                             <ActionButton
                               icon={X}
                               label="refuse"
                               reason="Refuse this transient tool call"
-                              onClick={() =>
-                                setFixture((value) => ({ ...value, askVisible: false }))
-                              }
+                              onClick={() => dispatch({ type: "resolve-ask", verdict: "refused" })}
                             />
                           </div>
                         ) : null}
-                        {changedItems.slice(0, 5).map((item) => (
+                        {chatItems.slice(0, 5).map((item) => (
                           <div
                             key={item.key}
                             className="grid grid-cols-[9rem_minmax(0,1fr)_auto] items-baseline gap-3 py-2"
                           >
                             <span>{item.param}</span>
-                            <StateCell {...cellProps(item, "inline")} />
-                            {open(item) || contested(item) ? (
+                            <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+                              <StateCell {...cellProps(item, "inline")} />
+                              {item.cell.staged ? (
+                                <span className="t-small text-ink-2">by {stagedBy(item)}</span>
+                              ) : null}
+                            </span>
+                            {item.cell.staged ? (
+                              <ActionButton
+                                icon={Undo2}
+                                label="unstage"
+                                reason="Clear the staged value; restore the standing proposal or baseline"
+                                onClick={() => dispatch({ type: "unstage", key: item.key })}
+                              />
+                            ) : open(item) ? (
                               <span className="flex gap-1">
                                 <ActionButton
                                   tone="agent"
                                   icon={Check}
                                   label="accept"
                                   reason="Stage Pea's proposal"
-                                  onClick={() => accept(item.key)}
+                                  onClick={() => dispatch({ type: "accept", key: item.key })}
                                 />
                                 <ActionButton
                                   icon={X}
                                   label="deny"
                                   reason="Clear Pea's proposal"
-                                  onClick={() => deny(item.key)}
+                                  onClick={() => dispatch({ type: "deny", key: item.key })}
                                 />
                               </span>
                             ) : null}
                           </div>
                         ))}
-                        {changedItems.length > 5 ? (
-                          <p>… and {changedItems.length - 5} more · open in /family</p>
+                        {chatItems.length > 5 ? (
+                          <p>… and {chatItems.length - 5} more · open in /family</p>
                         ) : null}
                       </div>,
                       true,
                     )
                   : null}
+                {fixture.commitMode === "sheet" ? sheet : null}
                 <ActionButton
                   tone="nav"
                   direction="forward"
                   label="open in /family"
                   reason="Carry this thread to the same Work in Family"
-                  onClick={() =>
-                    setFixture((value) => ({ ...value, outcome: "SIMULATED · /family" }))
-                  }
+                  onClick={() => simulate("/family")}
                 />
               </div>
             </ArtifactFrame>
+            <div className="hairline-t mt-2 py-2 t-prose" aria-label="Stub transcript">
+              <span className="t-small t-upper text-ink-mute">transcript</span>
+              {fixture.records.length ? (
+                fixture.records.map((record, index) => (
+                  <p key={index} className="face-mono text-ink-2">
+                    {record}
+                  </p>
+                ))
+              ) : (
+                <p className="text-ink-mute">no ask record yet</p>
+              )}
+            </div>
           </Section>
         </div>
 
@@ -412,32 +563,29 @@ function BandRoute() {
         ) : null}
 
         <section className="flex flex-col gap-1.5">
-          <span>known gaps</span>
-          {/* GAP (structural proposals): the cell grammar can draw delete, but add-row and rename
-              have no shape. Do not substitute a route-local mark. */}
+          <span>known gaps and owed work</span>
+          {/* GAP (structural proposals): delete has a shape; rename and add-row do not. */}
           <Gap>
             <strong>GAP: structural proposals.</strong> Today&apos;s cell can draw delete. Rename
             and add-row have no language shape yet.
           </Gap>
-          {/* GAP (confirmation): the kit has no confirmation sheet that can be mounted here. */}
-          <Gap>
-            <strong>GAP: confirmation sheet.</strong> K3 changes the simulated outcome because the
-            kit has no confirmation sheet to mount at either scale.
-          </Gap>
+          <p>
+            <strong>Owed:</strong> <code>PlanSheetView</code> may move into <code>lang/</code>.
+          </p>
         </section>
       </main>
 
       <aside className="fixed inset-x-4 bottom-4 z-overlay border-2 border-dashed border-line bg-ground p-3 shadow-xl">
         <div className="flex flex-wrap items-center gap-3 t-small">
           <b>SIMULATED · K1 ask lifecycle</b>
-          {(["leave thread", "reload", "turn ends"] as const).map((label) => (
+          {(["leave thread", "reload", "turn ends"] as const).map((event) => (
             <button
-              key={label}
+              key={event}
               type="button"
               className="border border-line px-2 py-1"
-              onClick={askEvent}
+              onClick={() => dispatch({ type: "ask-event", event })}
             >
-              {label}
+              {event}
             </button>
           ))}
           <label>
@@ -445,7 +593,7 @@ function BandRoute() {
               type="checkbox"
               checked={fixture.askSurvives}
               onChange={(event) =>
-                setFixture((value) => ({ ...value, askSurvives: event.target.checked }))
+                dispatch({ type: "set-ask-survives", value: event.target.checked })
               }
             />{" "}
             ask {fixture.askSurvives ? "survives" : "expires"}
@@ -454,18 +602,7 @@ function BandRoute() {
           <button
             type="button"
             className="border border-line px-2 py-1"
-            onClick={() =>
-              setFixture((value) => ({
-                ...value,
-                items: value.items.map((item) =>
-                  item.key === "neckWidth"
-                    ? { ...item, cell: { ...item.cell, proposal: { value: "12in", by: "pea" } } }
-                    : item.key === "throw"
-                      ? { ...item, cell: { ...item.cell, proposal: { value: "18ft", by: "pea" } } }
-                      : item,
-                ),
-              }))
-            }
+            onClick={() => dispatch({ type: "pea-writes" })}
           >
             Pea writes again
           </button>
@@ -473,10 +610,10 @@ function BandRoute() {
           <select
             value={fixture.commitMode}
             onChange={(event) =>
-              setFixture((value) => ({
-                ...value,
-                commitMode: event.target.value as Fixture["commitMode"],
-              }))
+              dispatch({
+                type: "set-commit-mode",
+                value: event.target.value as BandFixture["commitMode"],
+              })
             }
           >
             <option value="drill">drill-in to confirm</option>
@@ -486,15 +623,28 @@ function BandRoute() {
           <select
             value={fixture.draftMode}
             onChange={(event) =>
-              setFixture((value) => ({
-                ...value,
-                draftMode: event.target.value as Fixture["draftMode"],
-              }))
+              dispatch({
+                type: "set-draft-mode",
+                value: event.target.value as BandFixture["draftMode"],
+              })
             }
           >
             <option value="today">today · indistinguishable</option>
             <option value="authored">pea ink + unsaved square</option>
           </select>
+          <span>
+            Pea wrote this value directly; no proposal, no accept — today&apos;s
+            Takeoffs/Instances/Parameter Links model.
+          </span>
+          <b>K5 conflict</b>
+          <label>
+            <input
+              type="checkbox"
+              checked={fixture.conflict}
+              onChange={(event) => dispatch({ type: "set-conflict", value: event.target.checked })}
+            />{" "}
+            {fixture.conflict ? "on" : "off"}
+          </label>
         </div>
       </aside>
     </div>

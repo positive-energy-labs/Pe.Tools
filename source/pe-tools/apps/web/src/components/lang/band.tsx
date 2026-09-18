@@ -71,17 +71,25 @@ export function WorkBand({
               discard
             </Press>
             {commit ? (
-              <Press
-                frame="line"
-                tone="neutral"
-                size="value"
-                state={commit.disabled || busy ? "disabled" : "rest"}
-                disabled={commit.disabled || busy}
-                title={commit.reason}
-                onClick={commit.run}
-              >
-                {commit.label}
-              </Press>
+              <span className="flex items-baseline gap-2">
+                <Press
+                  frame="line"
+                  tone="neutral"
+                  size="value"
+                  state={commit.disabled || busy ? "disabled" : "rest"}
+                  disabled={commit.disabled || busy}
+                  title={commit.reason}
+                  onClick={commit.run}
+                >
+                  {commit.label}
+                </Press>
+                {commit.disabled ? (
+                  // SPECIMEN: /design-system/band K5. A conflicting Work must say why plan refuses.
+                  <span className="max-w-[36ch] t-small face-mono text-ink-2 italic">
+                    {commit.reason}
+                  </span>
+                ) : null}
+              </span>
             ) : null}
             {showRevision ? (
               <span className="t-small face-mono text-ink-mute">
