@@ -2,7 +2,7 @@
 # Design record: docs/features/factory/LEDGER.md
 
 [factory]
-ref = "main"                 # the ref whose movement is the clock
+ref = "factory"              # proof lane; restored to main in the final round 2 commit
 poll_seconds = 5
 port = 4747
 db = ".artifacts/factory/events.sqlite"
@@ -18,9 +18,27 @@ scope = ["source/**"]
 run = "node {root}/source/pe-tools/packages/factory/sensors/markers.ts"
 scope = ["source/**", "docs/**", ".agents/**", ".claude/**"]
 
+[actuator.fmt]
+run = "vp check --fix source/pe-tools/packages/factory"
+
+[actuator.echo]
+run = "node {root}/source/pe-tools/packages/factory/actuators/echo.ts"
+
 # ---- loops: trigger, sensors, setpoints. Round 1 has no actuators; a loop with no `act` only measures.
 
 [loop.watch]
 on = "merge:main"
 sense = ["loc", "markers"]
 setpoint = { "loc.total" = "down", "markers.shim" = "down", "markers.todo" = "any" }
+
+[loop.format]
+on = "merge:main"
+act = "fmt"
+gate = "auto"
+
+[loop.echo]
+on = "merge:main"
+sense = ["markers"]
+setpoint = { "markers.todo" = "<= 0" }
+act = "echo"
+gate = "human"

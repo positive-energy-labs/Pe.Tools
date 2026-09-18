@@ -49,6 +49,17 @@
       .error {
         color: #c43d3d;
       }
+      button,
+      input {
+        background: transparent;
+        border: 1px solid rgb(29 29 27 / 35%);
+        color: inherit;
+        font: inherit;
+        padding: 5px 8px;
+      }
+      button {
+        cursor: pointer;
+      }
       .chart {
         border-bottom: 1px solid rgb(29 29 27 / 20%);
         margin-block: 20px;
@@ -78,6 +89,10 @@
       <div id="loops">no events yet</div>
     </section>
     <section>
+      <h2>Proposals</h2>
+      <div id="proposals">nothing waiting on you</div>
+    </section>
+    <section>
       <h2>Control charts</h2>
       <div id="charts">no events yet</div>
     </section>
@@ -90,6 +105,7 @@
       const esc = (value) =>
         String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
       const payload = (event) => JSON.parse(event.payload);
+      const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
       const latestValue = (key, seq) => {
         const [sensor, field] = key.split(".");
         return events
@@ -150,6 +166,35 @@
         document.querySelector("#loops").innerHTML = latest.length
           ? `<table><thead><tr><th>loop</th><th>sha</th><th>setpoint</th><th>value</th><th>error</th></tr></thead><tbody>${latest.flatMap((event) => Object.entries(payload(event).values).map(([key, error]) => `<tr><td>${esc(event.loop)}</td><td class="mono">${event.sha.slice(0, 7)}</td><td>${esc(key)}</td><td class="number">${esc(latestValue(key, event.seq) ?? "-")}</td><td class="number ${error > 0 ? "error" : ""}">${error}</td></tr>`)).join("")}</tbody></table>`
           : "no events yet";
+        const runs = new Map();
+        for (const event of events.filter((event) => event.loop && runKinds.has(event.kind))) {
+          const run = `${event.loop}@${event.sha}`;
+          const data = payload(event);
+          runs.set(run, {
+            ...(runs.get(run) || { run, loop: event.loop, sha: event.sha }),
+            kind: event.kind,
+            ...(data.branch ? { branch: data.branch } : {}),
+            ...(data.shortstat ? { shortstat: data.shortstat } : {}),
+          });
+        }
+        const proposals = [...runs.values()].filter((run) => run.kind === "gated");
+        document.querySelector("#proposals").innerHTML = proposals.length
+          ? `<table><thead><tr><th>loop</th><th>sha</th><th>branch</th><th>change</th><th>verdict</th></tr></thead><tbody>${proposals.map((run) => `<tr data-run="${esc(run.run)}"><td>${esc(run.loop)}</td><td class="mono">${run.sha.slice(0, 7)}</td><td class="mono">${esc(run.branch)}</td><td>${esc(run.shortstat)}</td><td><button data-decision="accept">accept</button> <input aria-label="Rejection reason" placeholder="rejection reason" required /> <button data-decision="reject">reject</button></td></tr>`).join("")}</tbody></table>`
+          : "nothing waiting on you";
+        document.querySelectorAll("#proposals button").forEach((button) => {
+          button.onclick = async () => {
+            const row = button.closest("tr");
+            const decision = button.dataset.decision;
+            const input = row.querySelector("input");
+            if (decision === "reject" && !input.reportValidity()) return;
+            const response = await fetch("/verdict", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ run: row.dataset.run, decision, text: input.value }),
+            });
+            if (!response.ok) input.setCustomValidity((await response.json()).error);
+          };
+        });
         const triggers = events.filter((event) => event.kind === "triggered");
         document.querySelector("#charts").innerHTML = Object.keys(setpoints).length
           ? Object.entries(setpoints)

@@ -10,7 +10,11 @@ import { parse } from "smol-toml";
 type Config = {
   factory: { ref: string; poll_seconds: number; port: number; db: string };
   sensor: Record<string, { run: string; scope: string[] }>;
-  loop: Record<string, { sense: string[]; setpoint: Record<string, string> }>;
+  actuator?: Record<string, { run: string }>;
+  loop: Record<
+    string,
+    { sense?: string[]; setpoint?: Record<string, string>; act?: string; gate?: "auto" | "human" }
+  >;
 };
 
 type EventRow = {
@@ -90,7 +94,7 @@ const sense = (
   const changed = previous
     ? git(repo, "diff", "--name-only", previous, sha).split(/\r?\n/).filter(Boolean)
     : [];
-  const sensors = [...new Set(Object.values(config.loop).flatMap((loop) => loop.sense))];
+  const sensors = [...new Set(Object.values(config.loop).flatMap((loop) => loop.sense ?? []))];
   const checkout = join(repo, ".artifacts", "factory", "checkouts", sha.slice(0, 7));
 
   try {
@@ -175,7 +179,7 @@ const errors = (
   };
   for (const [loopName, loop] of Object.entries(config.loop)) {
     const values: Record<string, number | null> = {};
-    for (const [key, setpoint] of Object.entries(loop.setpoint)) {
+    for (const [key, setpoint] of Object.entries(loop.setpoint ?? {})) {
       const dot = key.indexOf(".");
       const sensor = key.slice(0, dot);
       const field = key.slice(dot + 1);
@@ -203,10 +207,193 @@ const errors = (
   }
 };
 
-export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
-  const config = configAt(repo);
-  const database = suppliedDatabase ?? openDatabase(repo, config);
+const mergeRun = (
+  repo: string,
+  config: Config,
+  database: DatabaseSync,
+  loop: string,
+  sha: string,
+  actuator: string,
+  branch: string,
+  worktree: string,
+) => {
+  const fail = (stderr: string) => {
+    append(database, "failed", sha, { actuator, stderr }, loop);
+    return false;
+  };
+  if (git(repo, "rev-parse", "--abbrev-ref", "HEAD") !== config.factory.ref) {
+    return fail("ref not checked out in factory tree");
+  }
+  if (git(repo, "rev-parse", config.factory.ref) !== sha) return fail("ref moved");
   try {
+    git(repo, "merge", "--no-ff", "--no-edit", branch);
+    const merge = git(repo, "rev-parse", "HEAD");
+    append(database, "merged", sha, { merge }, loop);
+    if (existsSync(worktree)) {
+      execFileSync("git", ["-C", repo, "worktree", "remove", "--force", worktree]);
+    }
+    git(repo, "branch", "-D", branch);
+    return true;
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const act = (
+  repo: string,
+  config: Config,
+  database: DatabaseSync,
+  loopName: string,
+  loop: Config["loop"][string],
+  sha: string,
+) => {
+  if (!loop.act) return false;
+  const actuator = config.actuator?.[loop.act];
+  if (!actuator) {
+    append(
+      database,
+      "failed",
+      sha,
+      { actuator: loop.act, stderr: "actuator is not declared" },
+      loopName,
+    );
+    return false;
+  }
+  const runEvents = database
+    .prepare(
+      "SELECT * FROM events WHERE loop = ? AND sha = ? AND kind IN ('acting','proposed','gated','verdict','merged','failed') ORDER BY seq",
+    )
+    .all(loopName, sha) as EventRow[];
+  const last = runEvents.at(-1);
+  const lastPayload = last ? (JSON.parse(last.payload) as Record<string, string>) : {};
+  const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
+  const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
+  if (last?.kind === "verdict" && lastPayload.decision === "accept") {
+    return mergeRun(repo, config, database, loopName, sha, loop.act, branch, worktree);
+  }
+  if (
+    last?.kind !== "verdict" &&
+    runEvents.some((event) => ["proposed", "merged", "failed"].includes(event.kind))
+  ) {
+    return false;
+  }
+  if (last?.kind !== "verdict") {
+    const error = database
+      .prepare(
+        "SELECT payload FROM events WHERE kind = 'error' AND loop = ? AND sha = ? ORDER BY seq DESC LIMIT 1",
+      )
+      .get(loopName, sha) as { payload: string } | undefined;
+    const values = error
+      ? (JSON.parse(error.payload) as { values: Record<string, number | null> }).values
+      : {};
+    if (loop.sense?.length && !Object.values(values).some((value) => value !== null && value > 0)) {
+      return false;
+    }
+  }
+
+  const feedback = last?.kind === "verdict" ? lastPayload.text : "";
+  mkdirSync(dirname(worktree), { recursive: true });
+  try {
+    if (existsSync(worktree)) {
+      git(worktree, "reset", "--hard", sha);
+      git(worktree, "clean", "-fd");
+    } else {
+      git(repo, "worktree", "add", "-B", branch, worktree, sha);
+    }
+    append(database, "acting", sha, { actuator: loop.act, worktree, branch }, loopName);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      FACTORY_FEEDBACK: feedback,
+      FACTORY_LOOP: loopName,
+      FACTORY_ROOT: repo,
+      FACTORY_SHA: sha,
+    };
+    delete env.ANTHROPIC_API_KEY;
+    delete env.ANTHROPIC_AUTH_TOKEN;
+    delete env.OPENAI_API_KEY;
+    const root = `"${repo.replaceAll("\\", "/")}"`;
+    const result = spawnSync(actuator.run.replaceAll("{root}", root), {
+      cwd: worktree,
+      encoding: "utf8",
+      env,
+      shell: true,
+    });
+    if (result.status !== 0) {
+      append(
+        database,
+        "failed",
+        sha,
+        { actuator: loop.act, stderr: result.stderr.trim() || `actuator exited ${result.status}` },
+        loopName,
+      );
+      return false;
+    }
+    if (!git(worktree, "status", "--porcelain")) {
+      append(
+        database,
+        "failed",
+        sha,
+        { actuator: loop.act, stderr: "actuator changed nothing" },
+        loopName,
+      );
+      return false;
+    }
+    git(worktree, "add", "-A");
+    git(worktree, "commit", "-m", `factory: ${loopName} at ${sha.slice(0, 7)}`);
+    const head = git(worktree, "rev-parse", "HEAD");
+    const shortstat = git(worktree, "diff", "--shortstat", `${sha}..${head}`);
+    append(database, "proposed", sha, { branch, head, shortstat }, loopName);
+    if (loop.gate === "human") {
+      append(database, "gated", sha, {}, loopName);
+      return false;
+    }
+    return mergeRun(repo, config, database, loopName, sha, loop.act, branch, worktree);
+  } catch (error) {
+    append(
+      database,
+      "failed",
+      sha,
+      { actuator: loop.act, stderr: error instanceof Error ? error.message : String(error) },
+      loopName,
+    );
+    return false;
+  }
+};
+
+export function recordVerdict(
+  database: DatabaseSync,
+  body: { run: string; decision: "accept" | "reject"; text: string },
+) {
+  const at = body.run.lastIndexOf("@");
+  const loop = body.run.slice(0, at);
+  const sha = body.run.slice(at + 1);
+  if (
+    at < 1 ||
+    !["accept", "reject"].includes(body.decision) ||
+    typeof body.text !== "string" ||
+    (body.decision === "reject" && !body.text.trim())
+  ) {
+    throw new Error("invalid verdict");
+  }
+  const last = database
+    .prepare(
+      "SELECT * FROM events WHERE loop = ? AND sha = ? AND kind IN ('acting','proposed','gated','verdict','merged','failed') ORDER BY seq DESC LIMIT 1",
+    )
+    .get(loop, sha) as EventRow | undefined;
+  if (last?.kind !== "gated") throw new Error("run is not gated");
+  append(database, "verdict", sha, { decision: body.decision, text: body.text }, loop);
+  return database.prepare("SELECT * FROM events ORDER BY seq DESC LIMIT 1").get() as EventRow;
+}
+
+let busy = false;
+
+export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
+  if (busy) return;
+  busy = true;
+  let database: DatabaseSync | undefined;
+  try {
+    const config = configAt(repo);
+    database = suppliedDatabase ?? openDatabase(repo, config);
     const sha = git(repo, "rev-parse", config.factory.ref);
     const latest = database
       .prepare(
@@ -218,13 +405,18 @@ export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
         "SELECT 1 FROM events failed WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events reading WHERE reading.id = json_extract(failed.payload, '$.sensor') || '@' || ?) LIMIT 1",
       )
       .get(sha, sha);
-    if (latest[0]?.sha === sha && !pending) return;
-    const previous = latest[0]?.sha === sha ? latest[1]?.sha : latest[0]?.sha;
-    sense(repo, config, database, sha, previous);
-    errors(config, database, sha, previous);
-    if (latest[0]?.sha !== sha) append(database, "triggered", sha, { ref: config.factory.ref });
+    if (latest[0]?.sha !== sha || pending) {
+      const previous = latest[0]?.sha === sha ? latest[1]?.sha : latest[0]?.sha;
+      sense(repo, config, database, sha, previous);
+      errors(config, database, sha, previous);
+      if (latest[0]?.sha !== sha) append(database, "triggered", sha, { ref: config.factory.ref });
+    }
+    for (const [loopName, loop] of Object.entries(config.loop)) {
+      if (act(repo, config, database, loopName, loop, sha)) break;
+    }
   } finally {
-    if (!suppliedDatabase) database.close();
+    if (!suppliedDatabase) database?.close();
+    busy = false;
   }
 }
 
@@ -250,17 +442,43 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
       ? [{ loop, sha: row.sha, values: (JSON.parse(row.payload) as { values: object }).values }]
       : [];
   });
+  const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
+  const runs = new Map<
+    string,
+    {
+      run: string;
+      loop: string;
+      sha: string;
+      kind: string;
+      branch?: string;
+      shortstat?: string;
+      text?: string;
+    }
+  >();
+  for (const row of rows(database).filter((row) => row.loop && runKinds.has(row.kind))) {
+    const run = `${row.loop}@${row.sha}`;
+    const payload = JSON.parse(row.payload) as Record<string, string>;
+    const current = runs.get(run) ?? { run, loop: row.loop!, sha: row.sha, kind: row.kind };
+    runs.set(run, {
+      ...current,
+      kind: row.kind,
+      ...(payload.branch ? { branch: payload.branch } : {}),
+      ...(payload.shortstat ? { shortstat: payload.shortstat } : {}),
+      ...(row.kind === "verdict" ? { text: payload.text } : {}),
+    });
+  }
   return {
     readings,
     loops,
+    runs: [...runs.values()],
     setpoints: Object.fromEntries(
       Object.entries(config.loop).map(([loop, value]) => [loop, value.setpoint]),
     ),
   };
 };
 
-const sendJson = (response: ServerResponse, value: unknown) => {
-  response.writeHead(200, { "content-type": "application/json" });
+const sendJson = (response: ServerResponse, value: unknown, status = 200) => {
+  response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(value));
 };
 
@@ -268,7 +486,33 @@ const serve = (repo: string, config: Config, database: DatabaseSync) =>
   createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     const since = Math.max(0, Number.parseInt(url.searchParams.get("since") ?? "0", 10) || 0);
-    if (request.method !== "GET") {
+    if (request.method === "POST" && url.pathname === "/verdict") {
+      let body = "";
+      let tooLarge = false;
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        if (!tooLarge) body += chunk;
+        if (body.length > 65_536) tooLarge = true;
+      });
+      request.on("end", () => {
+        if (tooLarge) {
+          sendJson(response, { error: "verdict body is too large" }, 413);
+          return;
+        }
+        try {
+          sendJson(
+            response,
+            recordVerdict(database, JSON.parse(body) as Parameters<typeof recordVerdict>[1]),
+          );
+        } catch (error) {
+          sendJson(
+            response,
+            { error: error instanceof Error ? error.message : String(error) },
+            400,
+          );
+        }
+      });
+    } else if (request.method !== "GET") {
       response.writeHead(405).end();
     } else if (url.pathname === "/") {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });

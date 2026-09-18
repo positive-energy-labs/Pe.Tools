@@ -1,15 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { tick } from "../src/main.ts";
+import { recordVerdict, tick } from "../src/main.ts";
 
 describe("tick", () => {
-  it("triggers and reads once per sha, then reports a rising down error", () => {
+  it("triggers, senses, gates, reruns, and merges", () => {
     const repo = mkdtempSync(join(tmpdir(), "pe factory-"));
     const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args]);
     try {
@@ -83,9 +83,76 @@ describe("tick", () => {
       expect(existsSync(join(repo, ".artifacts", "factory", "checkouts", sha.slice(0, 7)))).toBe(
         false,
       );
+
+      writeFileSync(
+        join(repo, "actuator.mjs"),
+        'import {appendFileSync} from "node:fs"; const auto=process.env.FACTORY_LOOP==="auto"; appendFileSync(auto?"one.txt":"feedback.txt",auto?"x":process.env.FACTORY_FEEDBACK||"first");\n',
+      );
+      writeFileSync(
+        join(repo, "factory.toml"),
+        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[actuator.change]\nrun="node {root}/actuator.mjs"\n[loop.auto]\nact="change"\ngate="auto"\n',
+      );
+      git("add", "actuator.mjs", "factory.toml");
+      git("commit", "-m", "auto loop");
+      const autoSha = git("rev-parse", "HEAD").toString().trim();
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT kind FROM events WHERE loop = 'auto' AND sha = ? AND kind IN ('acting','proposed','merged') ORDER BY seq",
+          )
+          .all(autoSha),
+      ).toEqual([{ kind: "acting" }, { kind: "proposed" }, { kind: "merged" }]);
+      expect(
+        git("rev-list", "--parents", "-n", "1", "main").toString().trim().split(" "),
+      ).toHaveLength(3);
+
+      writeFileSync(
+        join(repo, "factory.toml"),
+        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[actuator.change]\nrun="node {root}/actuator.mjs"\n[loop.human]\nact="change"\ngate="human"\n',
+      );
+      git("add", "factory.toml");
+      git("commit", "-m", "human loop");
+      const humanSha = git("rev-parse", "HEAD").toString().trim();
+      const run = `human@${humanSha}`;
+      tick(repo, database);
+      recordVerdict(database, { run, decision: "reject", text: "say hello instead" });
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT count(*) count FROM events WHERE loop = 'human' AND sha = ? AND kind = 'acting'",
+          )
+          .get(humanSha),
+      ).toEqual({ count: 2 });
+      expect(
+        readFileSync(
+          join(
+            repo,
+            ".artifacts",
+            "factory",
+            "runs",
+            `human-${humanSha.slice(0, 7)}`,
+            "feedback.txt",
+          ),
+          "utf8",
+        ),
+      ).toBe("say hello instead");
+      recordVerdict(database, { run, decision: "accept", text: "accepted" });
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT kind FROM events WHERE loop = 'human' AND sha = ? ORDER BY seq DESC LIMIT 1",
+          )
+          .get(humanSha),
+      ).toEqual({ kind: "merged" });
+      expect(
+        git("rev-list", "--parents", "-n", "1", "main").toString().trim().split(" "),
+      ).toHaveLength(3);
       database.close();
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 });
