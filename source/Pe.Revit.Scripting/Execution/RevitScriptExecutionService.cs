@@ -20,6 +20,7 @@ using Pe.Shared.Scripting.Pods;
 using Pe.Shared.Scripting.Policy;
 using Serilog;
 using System.Reflection;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Execution;
 
@@ -113,6 +114,12 @@ public sealed class RevitScriptExecutionService(
                     ? plan.WorkspaceRoot
                     : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
             revitVersion = plan.RevitVersion;
+            try {
+                outputSink.Artifacts.WriteInput(RunInputMetadata(plan, request), RunInputFiles(plan, request));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
+                AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
+                return CreateResult(ScriptExecutionStatus.Rejected, outputSink, diagnostics, revitVersion, plan.TargetFramework, containerTypeName, executionId);
+            }
             targetFramework = plan.TargetFramework;
             Log.Information(
                 "Revit scripting plan ready: ExecutionId={ExecutionId}, RevitVersion={RevitVersion}, TargetFramework={TargetFramework}, SourceFiles={SourceFileCount}, PermissionMode={PermissionMode}",
@@ -514,6 +521,33 @@ public sealed class RevitScriptExecutionService(
             ));
             return (null, ScriptExecutionStatus.ReferenceResolutionFailed, diagnostics);
         }
+    }
+
+    /// <summary>What the run was asked to do; the consumed source is in `files`. An inline snippet is operation input, never a pod member.</summary>
+    private static object RunInputMetadata(ScriptExecutionPlan plan, ExecuteRevitScriptRequest request) => new {
+        operation = "scripting.execute",
+        plan.ExecutionId,
+        source = plan.Attribution is { } member
+            ? (object)new { kind = "pod-bundle", pod = member.PodId, path = member.MemberPath, sha256 = member.MemberSha256 }
+            : new { kind = "operation", name = request.SourceName },
+        plan.PermissionMode,
+        target = new { document = plan.Document?.Title, plan.RevitVersion, plan.TargetFramework },
+        unavailableEvidence = new[] { "reviewed Work revision" }
+    };
+
+    /// <summary>The authored bytes (the pod bundle, or the inline text), then the normalized sources and project that compiled.</summary>
+    private static List<PodRunInputFile> RunInputFiles(ScriptExecutionPlan plan, ExecuteRevitScriptRequest request) {
+        var pod = plan.Attribution?.PodId;
+        var authored = request.SourceBundle is { } bundle
+            ? bundle.Files.Select((file, index) => new PodRunInputFile("bundle", pod, file.Path,
+                $"source/{index:D2}-{Path.GetFileName(file.Path)}", Convert.FromBase64String(file.BytesBase64)))
+            : [new PodRunInputFile("inline-script", null, request.SourceName ?? "inline", "source/00-inline.csx", Encoding.UTF8.GetBytes(request.ScriptContent!))];
+        return [
+            .. authored,
+            .. plan.SourceSet.Files.Select((file, index) => new PodRunInputFile("effective-source", pod, file.Name,
+                $"effective/{index:D2}-{Path.GetFileName(file.Name)}", Encoding.UTF8.GetBytes(file.Content))),
+            new PodRunInputFile("project", pod, "project.csproj", "effective/project.csproj", Encoding.UTF8.GetBytes(plan.ProjectContent))
+        ];
     }
 
     private ScriptSourceSet MaterializeInlineSnippet(string? scriptContent, string? sourceName, string executionId) {
@@ -1051,7 +1085,7 @@ public sealed class RevitScriptExecutionService(
         var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
             Outcome = status.ToString(),
             Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
-            Outputs = [.. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
+            Outputs = [.. outputSink.Artifacts?.Inputs ?? [], .. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
         };
         var resultArtifacts = artifacts?.ToList() ?? [];
         var resultDiagnostics = diagnostics.ToList();

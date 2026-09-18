@@ -21,7 +21,7 @@
  */
 import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
-import type { RouteStatePatch } from "./route-state.ts";
+import { isRecord, type RouteStatePatch } from "./route-state.ts";
 
 /** Core proposal shape; routes add provenance via `.extend(...)` on the returned object. */
 export function cellProposalSchema<V extends z.ZodType>(value: V) {
@@ -30,6 +30,21 @@ export function cellProposalSchema<V extends z.ZodType>(value: V) {
     note: z.string().nullish(),
     confidence: z.enum(["high", "low"]).nullish(),
   });
+}
+
+/**
+ * A persisted proposal as read. Proposals once carried `by`: `by: "pea"` is derivable (only Pea
+ * proposes) and is dropped on read; any other author refuses, because dropping it would silently
+ * lose who proposed. The refusal reaches the route as its "cannot be opened" sentence.
+ */
+export function persistedProposal<P extends z.ZodType>(proposal: P) {
+  return z.preprocess((input, ctx) => {
+    if (!isRecord(input) || !("by" in input)) return input;
+    if (input.by !== "pea")
+      ctx.addIssue({ code: "custom", message: "a proposal authored by someone other than Pea" });
+    const { by: _, ...rest } = input;
+    return rest;
+  }, proposal);
 }
 
 /** One trichotomy cell: proposal (agent-writable) and the staged presence-object. */
@@ -43,7 +58,7 @@ export function trichotomyCellWithProposal<V extends z.ZodType, P extends z.ZodT
   proposal: P,
 ) {
   return z.object({
-    proposal: proposal.nullish(),
+    proposal: persistedProposal(proposal).nullish(),
     /** Human-promoted value — what commit sends. Pea must never write this (mask-denied). */
     staged: z.object({ value }).nullish(),
   });
@@ -115,7 +130,7 @@ const standing = (cell: TrichotomyCellLike) =>
 export function availableTransitions(
   cell: TrichotomyCellLike,
   actor: Actor,
-  { lock }: { baseline: unknown; lock: string | null },
+  { lock }: { lock: string | null },
 ): TransitionKind[] {
   const open: Record<TransitionKind, boolean> = {
     propose: actor === "pea" && !lock,
@@ -223,28 +238,39 @@ export function fanOut(
   return { patches, covered, skipped };
 }
 
-export interface CellChange {
-  from?: unknown;
-  to: unknown;
-}
 export interface CellGroup {
   path: string[];
+  /** Standing proposals with nothing staged: what the group's accept or deny acts on. */
   proposed: number;
+  /** Cells with a staged value, contested ones included. */
   staged: number;
+  /** Staged cells a different, standing proposal argues with (a subset of `staged`). */
   contested: number;
   locked: number;
-  /** Distinct addresses in the group. */
+  /** Cells with something pending. */
   span: number;
-  digest: { single: CellChange } | { many: { count: number; examples: CellChange[] } };
+  /**
+   * What the group's accept would stage, over its standing, uncontested, unlocked proposals only:
+   * one value (and one baseline, when every baseline agrees), or how many distinct values there
+   * are. Null when no such proposal stands.
+   */
+  digest:
+    | { single: { from?: unknown; to: unknown } }
+    | { many: { count: number; examples: unknown[] } }
+    | null;
 }
 
 // ponytail: three examples per group; widen when Chat's wording asks for more.
 const EXAMPLES = 3;
 
+/** Distinct values, by canonical JSON, in first-seen order. */
+const distinct = (values: unknown[]) => [
+  ...new Map(values.map((value) => [canonicalRouteInput(value), value])).values(),
+];
+
 /**
  * Chat-scale counts, grouped by the route's own address path. Chat shows these and drills into the
- * route; it never lists cells. A cell's change is what it would write: staged if staged, else the
- * proposal. `to` is null for a deletion.
+ * route; it never lists cells. Cells with nothing pending are not counted; a deletion reads null.
  */
 export function summarize(
   cells: Record<string, TrichotomyCellLike>,
@@ -254,36 +280,54 @@ export function summarize(
     lockOf?: (key: string) => string | null;
   },
 ): { groups: CellGroup[] } {
-  const groups = new Map<string, Omit<CellGroup, "digest"> & { changes: CellChange[] }>();
+  type Tally = Omit<CellGroup, "digest"> & { to: unknown[]; from: unknown[] };
+  const groups = new Map<string, Tally>();
   for (const [key, cell] of Object.entries(cells)) {
+    if (cell.proposal == null && cell.staged == null) continue;
     const path = ctx.groupOf(key);
     const id = JSON.stringify(path);
     let group = groups.get(id);
     if (!group) {
-      group = { path, proposed: 0, staged: 0, contested: 0, locked: 0, span: 0, changes: [] };
+      group = { path, proposed: 0, staged: 0, contested: 0, locked: 0, span: 0, to: [], from: [] };
       groups.set(id, group);
     }
+    const open = standing(cell);
+    const locked = Boolean(ctx.lockOf?.(key));
     group.span += 1;
-    if (cell.proposal != null) group.proposed += 1;
-    if (cell.staged != null) group.staged += 1;
-    if (cell.staged != null && standing(cell)) group.contested += 1;
-    if (ctx.lockOf?.(key)) group.locked += 1;
-    const change = cell.staged ?? cell.proposal;
-    if (change == null) continue;
-    const from = ctx.baselineOf(key);
-    group.changes.push({
-      ...(from !== undefined ? { from } : {}),
-      to: change.delete === true ? null : change.value,
-    });
+    if (locked) group.locked += 1;
+    if (cell.staged != null) {
+      group.staged += 1;
+      if (open) group.contested += 1;
+    } else if (open) {
+      group.proposed += 1;
+      if (!locked) {
+        group.to.push(cell.proposal!.delete === true ? null : cell.proposal!.value);
+        group.from.push(ctx.baselineOf(key));
+      }
+    }
   }
   return {
-    groups: [...groups.values()].map(({ changes, ...group }) => ({
-      ...group,
-      digest:
-        changes.length === 1
-          ? { single: changes[0]! }
-          : { many: { count: changes.length, examples: changes.slice(0, EXAMPLES) } },
-    })),
+    groups: [...groups.values()]
+      .filter((group) => group.proposed + group.staged + group.contested + group.locked > 0)
+      .map(({ to, from, ...group }) => {
+        const values = distinct(to);
+        const baselines = distinct(from);
+        return {
+          ...group,
+          digest: !values.length
+            ? null
+            : values.length === 1
+              ? {
+                  single: {
+                    ...(baselines.length === 1 && baselines[0] !== undefined
+                      ? { from: baselines[0] }
+                      : {}),
+                    to: values[0],
+                  },
+                }
+              : { many: { count: values.length, examples: values.slice(0, EXAMPLES) } },
+        };
+      }),
   };
 }
 

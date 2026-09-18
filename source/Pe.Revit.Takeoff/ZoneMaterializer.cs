@@ -18,14 +18,16 @@ public sealed record RegionProvenance(
     public Pe.Revit.Partition.Room? Partition { get; init; }
     public RegionMeasurement? Measurement { get; init; }
 
-    [JsonProperty("resolutions")]
-    public List<TakeoffResolution> Resolutions { get; init; } = [];
-
     [JsonProperty("r10")]
     public TakeoffRhvacLink? Rhvac { get; init; }
 
     [JsonProperty("flags")]
     public List<string> Flags { get; init; } = [];
+
+    // Unknown carrier keys, including legacy `resolutions` (old human dismissals), survive read-modify-write untouched.
+    // Nothing reads them; no migrator, no silent discard.
+    [JsonExtensionData]
+    public IDictionary<string, Newtonsoft.Json.Linq.JToken> Unknown { get; init; } = new Dictionary<string, Newtonsoft.Json.Linq.JToken>();
 
     public string ToJson() => TakeoffJson.Serialize(this);
 

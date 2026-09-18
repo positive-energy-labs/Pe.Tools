@@ -12,7 +12,7 @@
  */
 import { z } from "zod";
 import { type RouteStateSpec } from "./route-state.ts";
-import { trichotomyAgentMask } from "./trichotomy.ts";
+import { persistedProposal, trichotomyAgentMask } from "./trichotomy.ts";
 
 /* ── Field trichotomy — settings keep the shared proposal/staged shape.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
@@ -39,15 +39,15 @@ const settingsProposalSourceSchema = z.object({
   note: z.string().nullish(),
 });
 export const settingsFieldStateSchema = z.object({
-  proposal: settingsFieldEditSchema
-    .extend({
+  proposal: persistedProposal(
+    settingsFieldEditSchema.extend({
       note: z.string().nullish(),
       confidence: z.enum(["high", "low"]).nullish(),
       /** Multi-citation: one value may be grounded by several regions (a table
        * cell AND a figure). Order is presentation order. */
       sources: z.array(settingsProposalSourceSchema).nullish(),
-    })
-    .nullish(),
+    }),
+  ).nullish(),
   staged: settingsFieldEditSchema.nullish(),
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;

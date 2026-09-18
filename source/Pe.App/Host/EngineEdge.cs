@@ -1,6 +1,8 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using Pe.Revit.Global.Services.Document;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using System.IO;
@@ -91,4 +93,31 @@ internal static class EngineEdge {
         handled.Count == 0 ? [] : [("warnings.json", System.Text.Encoding.UTF8.GetBytes(
             Newtonsoft.Json.JsonConvert.SerializeObject(handled.Select(h => new { severity = h.IsError ? "error" : "warning", message = h.Message }),
                 Newtonsoft.Json.Formatting.Indented)))];
+
+    /// <summary>
+    ///     The run's first write, before any effect. Captured bytes that disagree with their hash, or a root pod that
+    ///     does not resolve, refuse the call here and only here: nothing after an effect maps to a refusal.
+    /// </summary>
+    internal static (string Run, List<string> Inputs) StartRun(PodComposedSource source, object metadata, string consumedJson) {
+        try { return PodRuns.StartComposedRun(source, metadata, consumedJson); }
+        catch (InvalidDataException exception) { throw BridgeOperationExceptions.BadRequest(exception.Message); }
+    }
+
+    /// <summary>The document a run acts on, with the tracker's open id when it has one.</summary>
+    internal static object RunTarget(Document document) {
+        var tracked = DocumentTrackerAccessor.Current?.Find(document);
+        return new {
+            kind = document.IsFamilyDocument ? "family-document" : "project-document",
+            openId = tracked?.OpenId(),
+            document.Title,
+            path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
+            process = ProcessEvidence(),
+            unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
+        };
+    }
+
+    internal static object ProcessEvidence() {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
+    }
 }
