@@ -3,7 +3,9 @@ import { scheduleCellKey } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";
-import type { ScheduleRow, Snapshot } from "#/schedule-grid/route";
+import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
+
+type ScheduleRow = Snapshot["rows"][number];
 
 export function useScheduleGridColumns(
   snapshot: Snapshot | null,

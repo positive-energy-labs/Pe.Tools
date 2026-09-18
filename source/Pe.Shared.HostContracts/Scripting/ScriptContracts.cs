@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Scripting;
@@ -30,8 +30,13 @@ public record ExecuteRevitScriptRequest(
     string WorkspaceKey = "default",
     string? SourceName = null,
     ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly,
-    int TimeoutSeconds = 600
+    int TimeoutSeconds = 600,
+    ScriptPodSourceBundle? SourceBundle = null
 );
+
+public record ScriptPodSourceFile(string Path, string BytesBase64);
+
+public record ScriptPodSourceBundle(List<ScriptPodSourceFile> Files);
 
 public record ScriptArtifactData(
     string Name,
@@ -50,86 +55,40 @@ public record ExecuteRevitScriptData(
     string? ContainerTypeName,
     string ExecutionId,
     List<ScriptArtifactData>? Artifacts = null,
-    object? Data = null
+    object? Data = null,
+    PodReceipt? Attribution = null
 );
 
-public record ScriptCancelRequest(
-    string? ExecutionId = null
-);
+/// <summary>One run's receipt: which member (by pod id, path, and SHA-256) produced which outcome and outputs.</summary>
+public record PodReceipt(
+    string PodId,
+    string MemberPath,
+    string MemberSha256,
+    string Operation,
+    string? PlanHash,
+    string Outcome,
+    List<string> Outputs,
+    string? Reason
+) {
+    private readonly string? _reason = Reason is "" ? null : Reason;
 
-public record ScriptCancelData(
-    bool Canceled,
-    string? ExecutionId,
-    string Message
-);
-
-public record ScriptPodImportRequest(
-    string ArchivePath,
-    string? WorkspaceKey = null
-);
-
-public record ScriptPodExportRequest(
-    string WorkspaceKey,
-    string ArchivePath
-);
-
-public record ScriptPodListRequest();
-
-public record ScriptPodListData(
-    string WorkspacesRootPath,
-    List<ScriptPodListItemData> Pods
-);
-
-public record ScriptPodListItemData(
-    string WorkspaceKey,
-    string WorkspaceRootPath,
-    bool IsValid,
-    ScriptPodManifestSummaryData? Manifest,
-    List<ScriptDiagnostic> Diagnostics
-);
-
-public record ScriptPodManifestSummaryData(
-    int SchemaVersion,
-    string Id,
-    string Name,
-    string Version,
-    string? Description,
-    List<ScriptPodEntrypointData> Entrypoints
-);
-
-public record ScriptPodEntrypointData(
-    string Id,
-    string SourcePath,
-    string? Name = null,
-    string? Description = null
-);
-
-public record ScriptPodImportData(
-    ScriptPodTransferStatus Status,
-    string? WorkspaceKey,
-    string? WorkspaceRootPath,
-    string ArchivePath,
-    ScriptPodManifestSummaryData? Manifest,
-    List<string> ArchiveEntries,
-    List<string> GeneratedFiles,
-    List<ScriptDiagnostic> Diagnostics
-);
-
-public record ScriptPodExportData(
-    ScriptPodTransferStatus Status,
-    string? WorkspaceKey,
-    string? WorkspaceRootPath,
-    string ArchivePath,
-    ScriptPodManifestSummaryData? Manifest,
-    List<string> ArchiveEntries,
-    List<ScriptDiagnostic> Diagnostics
-);
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum ScriptPodTransferStatus {
-    Succeeded,
-    Rejected
+    /// <summary>A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".</summary>
+    public string? Reason { get => this._reason; init => this._reason = value is "" ? null : value; }
 }
+
+public record PodMemberComposeRequest(string Pod, string Path, string? Content = null);
+
+public record PodMemberComposeData(string? Composed, List<ScriptDiagnostic> Diagnostics, List<PodDependencyData> Dependencies);
+
+public record PodDependencyData(string Id, string Path, string Sha256);
+
+public record PodExportRequest(string Pod, string ArchivePath);
+
+public record PodExportData(string ArchivePath, List<PodDependencyData> Vendored);
+
+public record PodImportRequest(string ArchivePath, string? Folder = null);
+
+public record PodImportData(string Id, string Folder);
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptExecutionStatus {

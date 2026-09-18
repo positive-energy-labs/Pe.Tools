@@ -18,10 +18,12 @@ using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Failures;
 using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Parameters;
 using Pe.Revit.Takeoff;
 using Pe.Revit.Tasks;
+using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
@@ -45,10 +47,6 @@ internal sealed class RevitDataRequestService {
         RunTakeoff(activeDocument.Value, document =>
             new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document)));
 
-    [Op("takeoffs.views", Does = "Read non-template plan views with the Filled Region count for each view.", Title = "Get Takeoff Views", Finds = ["takeoffs", "views", "plans", "filled-regions"])]
-    private static TakeoffViewsData GetTakeoffViewsCore(NoRequest _, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => new TakeoffViewsData(TakeoffAtlas.Views(document)));
-
     [Op("takeoffs.candidates", Does = "Read Filled Regions and their boundary loops from one named plan view.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded)]
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
@@ -64,21 +62,12 @@ internal sealed class RevitDataRequestService {
             document => TakeoffCarriers.InitializeNext(document, request.Stage),
             "Pe Initialize Takeoff Carrier");
 
-    [Op("takeoffs.prepare-capture", Does = "Prepare the capture views for one Takeoff plan view in one transaction.", Title = "Prepare Takeoff Capture", Finds = ["takeoffs", "capture", "prepare", "views"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.PrepareCapture(document, request), "Pe Prepare Takeoff Capture");
-
-    [Op("takeoffs.detect-capture", Does = "Capture one level, detect room geometry, and write replay evidence without committing Revit changes.", Title = "Detect Takeoff Capture", Finds = ["takeoffs", "capture", "detect", "replay", "rooms"], Cost = OpCost.Expensive)]
-    private static TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.DetectCapture(document, request));
-
-    [Op("takeoffs.partition", Does = "Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.partition", Does = "Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request, ProjectDocument activeDocument) =>
+        // ADR 0011: TakeoffAtlas.Partition calls Pe.Revit.Partition.Verbs.Partition and hands the
+        // PartitionAnswer to ZoneMaterializer. The call cannot live in this file: Pe.Revit.Space
+        // references Pe.Revit.Global, so Global referencing Partition is a project cycle.
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
-
-    [Op("takeoffs.decisions", Does = "Write review decisions to one Room Region provenance blob in one transaction.", Title = "Write Takeoff Decisions", Finds = ["takeoffs", "decisions", "review", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static TakeoffWriteResult WriteTakeoffDecisionsCore(TakeoffDecisionsRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.WriteDecisions(document, request), "Pe Write Takeoff Decisions");
 
     [Op("takeoffs.rhvac-links", Does = "Write RHVAC file and room links to Room Region provenance in one transaction.", Title = "Link Takeoff Rooms to RHVAC", Finds = ["takeoffs", "rhvac", "links", "rooms", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request, ProjectDocument activeDocument) =>
@@ -86,13 +75,6 @@ internal sealed class RevitDataRequestService {
             activeDocument.Value,
             document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
             "Pe Link Takeoff Rooms to RHVAC");
-
-    [Op("takeoffs.room-type", Does = "Write and read back one Room Region room type in one transaction.", Title = "Write Takeoff Room Type", Finds = ["takeoffs", "room-type", "rooms", "parameter"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private static TakeoffRoomTypeData WriteTakeoffRoomTypeCore(TakeoffRoomTypeRequest request, ProjectDocument activeDocument) =>
-        RunTakeoff(
-            activeDocument.Value,
-            document => new TakeoffRoomTypeData(TakeoffAtlas.WriteRoomType(document, request)),
-            "Pe Write Takeoff Room Type");
 
     [Op("revit.apply.parameters-service-cache.refresh", Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
@@ -103,8 +85,9 @@ internal sealed class RevitDataRequestService {
         : ParametersServiceCache.RefreshAsync();
 
     [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }", Thread = OpThread.Revit)]
-    private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request) {
-        var uiApp = RevitUiSession.CurrentUIApplication;
+    private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request, RevitDocument activeDocument) {
+        var document = activeDocument.Value;
+        var uiApp = RequireDocumentUi(document);
 
         if (!string.IsNullOrWhiteSpace(request.CommandId)) {
             var (posted, error) = Lib.Commands.Execute(uiApp, request.CommandId!);
@@ -263,7 +246,7 @@ internal sealed class RevitDataRequestService {
         var document = activeDocument.Value;
 
         try {
-            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, DocShadow.For(document));
+            return SheetDetailCollector.Collect(document, RequireDocumentUi(document).GetActiveView(), request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "SheetDetailsException",
@@ -276,7 +259,7 @@ internal sealed class RevitDataRequestService {
     [Op("revit.matrix.schedule-profiles", Does = "Read schedule profile projections from the active document.", Title = "Get Schedule Profiles Query", Finds = ["schedules", "profiles", "query", "projection", "authored-schedule-shape"], Cost = OpCost.Expensive, Tier = OpTier.Expert, Example = "{ \"query\": { \"kind\": \"CurrentActiveView\" } }")]
     private ScheduleProfilesQueryData GetScheduleProfilesQueryCore(ScheduleProfilesQueryRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        var uiApp = RevitUiSession.CurrentUIApplication;
+        var uiApp = RequireDocumentUi(document);
         if (request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView &&
             uiApp.GetActiveView() is not ViewSchedule) {
             throw BridgeOperationExceptions.Conflict(
@@ -310,7 +293,7 @@ internal sealed class RevitDataRequestService {
     [Op("revit.detail.schedules", Does = "Read schedule rows and field values from the active document.", Title = "Get Schedule Query", Finds = ["schedules", "query", "rows", "values", "detail"], Cost = OpCost.Bounded, Example = "{ \"query\": { \"kind\": \"ScheduleReferences\", \"scheduleIds\": [12345], \"projection\": { \"view\": \"Handles\" }, \"budget\": { \"maxEntries\": 1, \"maxRowsPerEntry\": 0 } } }")]
     private ScheduleQueryData GetScheduleQueryCore(ScheduleQueryRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        var activeScheduleView = RevitUiSession.CurrentUIApplication.GetActiveView() as ViewSchedule;
+        var activeScheduleView = RequireDocumentUi(document).GetActiveView() as ViewSchedule;
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView == null) {
             throw BridgeOperationExceptions.Conflict(
@@ -491,13 +474,11 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.apply.schedule", Does = "Create or update a schedule in one host-owned transaction. Two lanes: 'table' upserts a synthetic data table (a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes); 'profile' creates a regular element-driven schedule from an authored schedule profile. Either lane can also place the schedule on a sheet.", Title = "Apply Schedule", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
+    [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        if ((request.Table == null) == (request.Profile == null)) {
-            throw BridgeOperationExceptions.BadRequest(
-                "Exactly one of 'table' or 'profile' must be set.");
-        }
+        if (request.Table is null)
+            throw BridgeOperationExceptions.BadRequest("'table' is required.");
 
         if (!request.DryRun && document.IsReadOnly) {
             throw BridgeOperationExceptions.Conflict(
@@ -513,26 +494,8 @@ internal sealed class RevitDataRequestService {
             using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Schedule");
             var warnings = new List<string>();
 
-            ScheduleApplyData result;
-            ViewSchedule schedule;
-            if (request.Table != null) {
-                result = DataTableEngine.Apply(document, request.Table, warnings);
-                schedule = (ViewSchedule)document.GetElement(result.Table!.ScheduleId.ToElementId());
-            } else {
-                var creation = ScheduleHelper.CreateSchedule(document, request.Profile!);
-                schedule = creation.Schedule;
-                warnings.AddRange(creation.Warnings);
-                result = new ScheduleApplyData {
-                    Profile = new ScheduleApplyProfileSummary(
-                        creation.ScheduleName,
-                        schedule.Id.Value(),
-                        schedule.UniqueId) {
-                        AppliedFields = creation.AppliedFields.Select(field => field.ParameterName).ToList(),
-                        SkippedFields = creation.SkippedFields
-                    },
-                    Warnings = warnings
-                };
-            }
+            var result = DataTableEngine.Apply(document, request.Table, warnings);
+            var schedule = (ViewSchedule)document.GetElement(result.Table!.ScheduleId.ToElementId());
 
             if (request.Placement != null)
                 result = result with { Placement = DataTableEngine.Place(document, schedule, request.Placement) };
@@ -606,7 +569,7 @@ internal sealed class RevitDataRequestService {
             return ScheduleCoverageCollector.Collect(
                 document,
                 request,
-                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                RequireDocumentUi(document).GetActiveView(),
                 DocShadow.For(document)
             );
         } catch (Exception ex) {
@@ -634,7 +597,7 @@ internal sealed class RevitDataRequestService {
             return ParameterCoverageCollector.Collect(
                 document,
                 request,
-                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
@@ -677,7 +640,7 @@ internal sealed class RevitDataRequestService {
                 document,
                 request,
                 primitives,
-                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
@@ -814,7 +777,7 @@ internal sealed class RevitDataRequestService {
             return ElementContextCollector.Collect(
                 document,
                 request.Query,
-                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
@@ -867,7 +830,7 @@ internal sealed class RevitDataRequestService {
         RevitDocument activeDocument
     ) {
         var document = activeDocument.Value;
-        var activeView = RevitUiSession.CurrentUIApplication.GetActiveView();
+        var activeView = RequireDocumentUi(document).GetActiveView();
         if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
             activeView is not PanelScheduleView) {
             throw BridgeOperationExceptions.Conflict(
@@ -929,10 +892,42 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("family.temporary.acquire", Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static TemporaryDocumentData AcquireTemporaryFamily(TemporaryFamilyAcquireRequest request, ProjectDocument source) {
+        var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
+        var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        var document = source.Value;
+        var trackedSource = tracker.Track(document);
+        var family = document.GetElement(request.FamilyId.ToElementId()) as Family
+            ?? throw new InvalidOperationException("Loaded family was not found in the selected project.");
+        var diagnostics = new List<(bool IsError, string Message)>();
+        var receipt = document.HandleFamilyCopyFailures(family,
+            () => OwnedTemporaryDocuments.Acquire(RevitUiSession.CurrentUIApplication, tracker, request.AcquisitionId,
+                $"{trackedSource.OpenId}:{request.FamilyId}", () => document.EditFamily(family)), diagnostics);
+        return TemporaryResult(session, receipt);
+    }
+
+    [Op("document.temporary.release", Does = "Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back.", Title = "Release Temporary Document", Finds = ["family", "temporary", "release", "cleanup"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Thread = OpThread.Revit)]
+    private static TemporaryDocumentData ReleaseTemporaryDocument(TemporaryDocumentReleaseRequest request) {
+        var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
+        var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
+        return TemporaryResult(session, OwnedTemporaryDocuments.Release(RevitUiSession.CurrentUIApplication, tracker,
+            request.AcquisitionId, request.ReleaseId, request.ExpectedOpenId, request.Discard));
+    }
+
+    [Op("document.temporary.status", Does = "Recover a temporary document by its original acquisitionId without opening it again. SDK op result uses the returned recoveryId.", Title = "Recover Temporary Document", Finds = ["family", "temporary", "recovery", "status"], Thread = OpThread.Revit)]
+    private static TemporaryDocumentData TemporaryDocumentStatus(TemporaryDocumentStatusRequest request) =>
+        TemporaryResult(HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable."),
+            OwnedTemporaryDocuments.Status(request.AcquisitionId));
+
+    private static TemporaryDocumentData TemporaryResult(string session, TemporaryDocumentReceipt receipt) =>
+        new(receipt.AcquisitionId, receipt.Status, receipt.OpenId is { } openId ? new(session, openId) : null,
+            receipt.RecoveryId, receipt.Detail, receipt.RecordedOpenId, receipt.RecordedStatus);
+
     [Op("family.editor.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private FamilyEditorOpenData OpenFamilyEditorCore(FamilyEditorOpenRequest request, ProjectDocument activeDocument) {
-        var uiApp = RevitUiSession.CurrentUIApplication;
         var document = activeDocument.Value;
+        var uiApp = RequireDocumentUi(document);
 
         var family = request.FamilyId is { } familyId
             ? document.GetElement(familyId.ToElementId()) as Family
@@ -1049,7 +1044,7 @@ internal sealed class RevitDataRequestService {
         try {
             return GlanceAttentionCollector.Collect(
                 document,
-                RevitUiSession.CurrentUIApplication.GetActiveView()
+                RequireDocumentUi(document).GetActiveView()
             );
         } catch (BridgeOperationException) {
             throw;
@@ -1066,7 +1061,7 @@ internal sealed class RevitDataRequestService {
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore(NoRequest _, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         try {
-            var uiApp = RevitUiSession.CurrentUIApplication;
+            var uiApp = RequireDocumentUi(document);
             return RevitAgentContextCollector.CollectSummary(
                 document,
                 CreateDocumentSessionContext(),
@@ -1091,7 +1086,7 @@ internal sealed class RevitDataRequestService {
     ) {
         var document = activeDocument.Value;
         try {
-            var uiApp = RevitUiSession.CurrentUIApplication;
+            var uiApp = RequireDocumentUi(document);
             return RevitAgentContextCollector.Resolve(
                 document,
                 uiApp.GetActiveView(),
@@ -1116,7 +1111,7 @@ internal sealed class RevitDataRequestService {
         try {
             return RevitAgentContextCollector.CollectVisibleContext(
                 document,
-                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                RequireDocumentUi(document).GetActiveView(),
                 request
             );
         } catch (Exception ex) {
@@ -1137,7 +1132,7 @@ internal sealed class RevitDataRequestService {
         try {
             return RevitAgentContextCollector.CollectViewRenderingState(
                 document,
-                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                RequireDocumentUi(document).GetActiveView(),
                 request
             );
         } catch (Exception ex) {
@@ -1202,7 +1197,7 @@ internal sealed class RevitDataRequestService {
     private static Element? ResolveCaptureTarget(DbDocument document, RevitViewImageTarget? target) {
         Element? element;
         if (target is null || target.Id is null && string.IsNullOrWhiteSpace(target.UniqueId) && string.IsNullOrWhiteSpace(target.Name)) {
-            element = RevitUiSession.CurrentUIApplication.GetActiveView();
+            element = RequireDocumentUi(document).GetActiveView();
         } else if (target.Id is { } id) {
             element = document.GetElement(id.ToElementId());
         } else if (!string.IsNullOrWhiteSpace(target.UniqueId)) {
@@ -1307,7 +1302,7 @@ internal sealed class RevitDataRequestService {
         if (focus.ElementIds is { Count: > 0 } explicitIds) {
             ids = explicitIds.Select(id => id.ToElementId()).ToList();
         } else if (focus.Selection) {
-            ids = RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
+            ids = RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
             if (ids.Count == 0) throw FocusError("EmptySelection", "Nothing is selected in Revit.");
         } else if (!string.IsNullOrWhiteSpace(focus.ScopeBox)) {
             var scopeBox = new FilteredElementCollector(document)
@@ -1610,6 +1605,13 @@ internal sealed class RevitDataRequestService {
         }
 
         return (request.Filter ?? new LoadedFamiliesFilter()) with { CategoryNames = categoryNames };
+    }
+
+    private static UIApplication RequireDocumentUi(DbDocument document) {
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        if (uiApp.GetActiveDocument()?.Equals(document) != true)
+            throw BridgeOperationExceptions.Conflict("This operation needs the selected document to be active. Activate it and retry.");
+        return uiApp;
     }
 
     private static RevitDocumentSessionContextData CreateDocumentSessionContext() {

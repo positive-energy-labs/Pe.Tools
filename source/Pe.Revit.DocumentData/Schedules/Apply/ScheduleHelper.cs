@@ -241,6 +241,32 @@ public static class ScheduleHelper {
         return MapMatchingInstancesToFamilyIds(placements, matchingInstanceIds);
     }
 
+    /// <summary>Evaluates a schedule filter when every requested field is schedulable; false means at least one field is not.</summary>
+    public static bool TryGetFamilyIdsMatchingFiltersAnyType(
+        Document doc,
+        SharedScheduleProfile profile,
+        IReadOnlyList<TempPlacedSymbolRecord> placements,
+        out List<long> familyIds
+    ) {
+        familyIds = [];
+        if (profile.Filters.Count > 8)
+            throw new InvalidOperationException($"Schedule filter evaluation supports at most 8 filters; '{profile.Name}' requested {profile.Filters.Count}.");
+        var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
+        var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
+        schedule.Definition.IsItemized = true;
+        if (profile.Filters.Any(filter => ScheduleFieldNameValueDomain.ResolveSchedulableField(
+                schedule.Definition, doc, Pe.Shared.RevitData.ParameterReference.FromName(filter.FieldName)) == null))
+            return false;
+
+        ApplyFilterFieldsAndFilters(schedule, profile);
+        if (schedule.Definition.GetFilterCount() != profile.Filters.Count)
+            throw new InvalidOperationException($"Schedule filter evaluation could not apply every filter for '{profile.Name}'.");
+        doc.Regenerate();
+        familyIds = MapMatchingInstancesToFamilyIds(placements,
+            CollectMatchingPlacedInstanceIds(doc, schedule.Id, placements));
+        return true;
+    }
+
     private static List<Family> GetMatchingFamiliesByFilter(
         Document doc,
         SharedScheduleProfile profile,
@@ -290,6 +316,8 @@ public static class ScheduleHelper {
     }
 
     internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, SharedScheduleProfile sourceSpec) {
+        if (sourceSpec.Filters.Count > 8)
+            throw new InvalidOperationException($"Schedule filter evaluation supports at most 8 filters; '{sourceSpec.Name}' requested {sourceSpec.Filters.Count}.");
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, sourceSpec);
 
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
@@ -297,6 +325,8 @@ public static class ScheduleHelper {
         schedule.Definition.IsItemized = true;
 
         ApplyFilterFieldsAndFilters(schedule, sourceSpec);
+        if (schedule.Definition.GetFilterCount() != sourceSpec.Filters.Count)
+            throw new InvalidOperationException($"Schedule filter evaluation could not apply every filter for '{sourceSpec.Name}'.");
         return schedule;
     }
 

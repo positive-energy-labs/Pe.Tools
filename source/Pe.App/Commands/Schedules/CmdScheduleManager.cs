@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
@@ -9,7 +9,6 @@ using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
-using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
@@ -21,6 +20,8 @@ using Color = System.Windows.Media.Color;
 using JsonValidationException = Pe.Revit.SettingsRuntime.Json.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
+using Pe.App.Host;
+using Pe.App.Pods;
 
 namespace Pe.App.Commands.Schedules;
 
@@ -39,21 +40,22 @@ public class CmdScheduleManager : IExternalCommand {
 
         try {
             var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsRegistration.ModuleKey);
-            var profilesStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Profiles);
-            var batchStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Batch);
-
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
                 Doc = doc,
                 UiDoc = uiDoc,
-                Storage = storage,
-                ProfilesStorage = profilesStorage.Settings(),
-                ProfilesDocuments = profilesStorage.Documents()
+                Storage = storage
             };
 
             // Collect items for both tabs
-            var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage.Documents());
-            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage.Settings());
+            var createItems = PodMembers.List(ScheduleManagerSettingsRegistration.Profiles)
+                .Select(entry => new ScheduleListItem(entry.Pod, entry.Member))
+                .OrderByDescending(item => item.LastModified)
+                .ToList();
+            var batchItems = PodMembers.List(ScheduleManagerSettingsRegistration.Batch)
+                .Select(entry => new BatchScheduleListItem(entry.Pod, entry.Member))
+                .OrderByDescending(item => item.LastModified)
+                .ToList();
 
             // Create preview panel with injected preview building logic
             var previewPanel = new SchedulePreviewPanel((item, ct) => {
@@ -63,7 +65,7 @@ public class CmdScheduleManager : IExternalCommand {
                     var createItem = item.GetCreateItem();
                     if (createItem == null || ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
-                    var previewData = this.TryLoadPreviewData(createItem, context.ProfilesStorage);
+                    var previewData = this.TryLoadPreviewData(createItem);
                     if (ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
                     // Update shared UI context only after background work completes.
@@ -112,7 +114,8 @@ public class CmdScheduleManager : IExternalCommand {
                                 Execute = item => this.HandlePlaceSampleFamilies(context, item),
                                 CanExecute = item =>
                                     item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
-                            }
+                            },
+                            OpenInPods()
                         ) { FilterKeySelector = i => i.CategoryName },
                         new TabDefinition<ISchedulePaletteItem>(
                             "Batch",
@@ -127,7 +130,8 @@ public class CmdScheduleManager : IExternalCommand {
                                 Name = "Create Schedules",
                                 Execute = item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
-                            }
+                            },
+                            OpenInPods()
                         ) { FilterKeySelector = i => string.Empty }
                     ]
                 });
@@ -147,15 +151,12 @@ public class CmdScheduleManager : IExternalCommand {
         }
 
         context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context.ProfilesStorage);
+        context.PreviewData = this.TryLoadPreviewData(profileItem);
     }
 
-    private SchedulePreviewData TryLoadPreviewData(
-        ScheduleListItem profileItem,
-        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
-    ) {
+    private SchedulePreviewData TryLoadPreviewData(ScheduleListItem profileItem) {
         try {
-            return this.LoadValidPreviewData(profileItem, profilesStorage);
+            return this.LoadValidPreviewData(profileItem);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (Exception ex) {
@@ -163,11 +164,8 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private SchedulePreviewData LoadValidPreviewData(
-        ScheduleListItem profileItem,
-        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
-    ) {
-        var profile = profilesStorage.ReadRequired(profileItem.TextPrimary);
+    private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem) {
+        var profile = profileItem.Member.Load<SharedScheduleProfile>(profileItem.Pod).Spec;
 
         // Serialize profile to JSON
         var profileJson = JsonConvert.SerializeObject(
@@ -207,12 +205,12 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData BuildBatchPreview(BatchScheduleListItem batchItem) {
         try {
-            var batchSettings = batchItem.LoadBatchSettings();
+            var schedules = batchItem.Schedules();
 
             // Build a summary preview showing all schedules that will be created
             var schedulesList =
-                string.Join("\n", batchSettings.ScheduleFiles.Select((path, idx) => $"{idx + 1}. {path}"));
-            var profileJson = $"Batch will create {batchSettings.ScheduleFiles.Count} schedule(s):\n\n{schedulesList}";
+                string.Join("\n", schedules.Select((member, idx) => $"{idx + 1}. {member.Path}"));
+            var profileJson = $"Batch will create {schedules.Count} schedule(s):\n\n{schedulesList}";
 
             return new SchedulePreviewData {
                 ProfileName = batchItem.TextPrimary,
@@ -253,11 +251,12 @@ public class CmdScheduleManager : IExternalCommand {
         var profileItem = item.GetCreateItem();
         if (profileItem == null) return;
 
+
         // Preview selection already performs schema sync + validation before this action is enabled.
         var hasCurrentValidPreview = ctx.PreviewData?.IsValid == true &&
                                      string.Equals(
-                                         ctx.SelectedProfile?.TextPrimary,
-                                         profileItem.TextPrimary,
+                                         ctx.SelectedProfile?.FilePath,
+                                         profileItem.FilePath,
                                          StringComparison.OrdinalIgnoreCase);
         if (!hasCurrentValidPreview)
             this.BuildPreviewData(profileItem, ctx);
@@ -269,35 +268,19 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        // Load profile fresh for execution
+        // Load the member fresh for execution; the apply edge refuses it if the bytes change underneath.
         SharedScheduleProfile scheduleProfile;
-        try {
-            scheduleProfile = ctx.ProfilesStorage.ReadRequired(ctx.SelectedProfile.TextPrimary);
-        } catch (Exception ex) {
-            new Ballogger()
-                .Add(LogEventLevel.Error, new StackFrame(), ex, true)
-                .Show();
-            return;
-        }
-
         ScheduleCreationResult result;
+        string receiptPath;
         try {
-            using var trans = new Transaction(ctx.Doc, "Create Schedule");
-            _ = trans.Start();
-            result = ctx.Doc.ApplyScheduleProfile(scheduleProfile);
-            _ = trans.Commit();
+            var (spec, _, source) = ctx.SelectedProfile.Member.Load<SharedScheduleProfile>(ctx.SelectedProfile.Pod);
+            scheduleProfile = spec;
+            var applied = ScheduleBridgeOps.ApplySpec(ctx.Doc, spec, source);
+            result = applied.Result;
+            receiptPath = applied.Data.ReceiptPath;
         } catch (Exception ex) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
-                .Show();
-            return;
-        }
-
-        // Write output to storage
-        var outputPath = this.WriteCreationOutput(ctx, result);
-        if (string.IsNullOrEmpty(outputPath)) {
-            new Ballogger()
-                .Add(LogEventLevel.Error, new StackFrame(), "Failed to write creation output")
                 .Show();
             return;
         }
@@ -354,8 +337,8 @@ public class CmdScheduleManager : IExternalCommand {
                 $"View template skipped: {result.SkippedViewTemplate}")
             .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
             .AddIf(hasWarnings, LogEventLevel.Warning, null,
-                string.Join("\n", result.Warnings.Select(w => $"  â€¢ {w}")))
-            .Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
+                string.Join("\n", result.Warnings.Select(w => $"  • {w}")))
+            .Show(() => FileUtils.OpenInDefaultApp(receiptPath), "Open Receipt");
 
 
         // Open the schedule view
@@ -379,7 +362,7 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        var profile = context.ProfilesStorage.ReadRequired(context.SelectedProfile.TextPrimary);
+        var profile = context.SelectedProfile.Member.Load<SharedScheduleProfile>(context.SelectedProfile.Pod).Spec;
 
         // Get families of the schedule's category
         var category = CategoryNamesValueDomain.TryFindCategoryByName(context.Doc, profile.CategoryName);
@@ -424,6 +407,18 @@ public class CmdScheduleManager : IExternalCommand {
             "Schedule Manager");
     }
 
+    /// <summary>The same `/pods?pod=&amp;path=` deep link both Family Foundry palettes carry (w4-revit claim 15).</summary>
+    private static PaletteAction<ISchedulePaletteItem> OpenInPods() => new() {
+        Name = "Open in Pods",
+        Execute = item => {
+            var address = item.GetCreateItem() is { } create ? new PodMemberAddress(create.Pod.Manifest.Id, create.Member.Path)
+                : item.GetBatchItem() is { } batch ? new PodMemberAddress(batch.Pod.Manifest.Id, batch.Member.Path)
+                : null;
+            if (address is not null) _ = PeToolsBrowser.TryLaunch(address);
+        },
+        CanExecute = item => item.GetCreateItem() != null || item.GetBatchItem() != null
+    };
+
     private void HandleOpenFile(ISchedulePaletteItem item) {
         var filePath = item.GetCreateItem()?.FilePath ?? item.GetBatchItem()?.FilePath;
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
@@ -441,40 +436,22 @@ public class CmdScheduleManager : IExternalCommand {
         if (batchItem == null) return;
 
         try {
-            var batchSettings = batchItem.LoadBatchSettings();
             var results = new List<(string profileName, bool success, string errorMessage)>();
             var createdSchedules = new List<string>();
+            var receipts = new List<string>();
 
-            foreach (var scheduleFile in batchSettings.ScheduleFiles) {
+            foreach (var member in batchItem.Schedules()) {
                 try {
-                    // Load the schedule profile
-                    var scheduleFilePath = context.ProfilesDocuments.ResolveDocumentPath(scheduleFile);
-                    if (!File.Exists(scheduleFilePath)) {
-                        results.Add((scheduleFile, false, "File not found"));
-                        _ = this.WriteErrorOutput(context, scheduleFile, "File not found", null, "batch");
-                        continue;
-                    }
-
-                    var scheduleProfile = context.ProfilesStorage.ReadRequired(scheduleFile);
-
-                    // Create the schedule
-                    using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleProfile.Name}");
-                    _ = trans.Start();
-                    var result = context.Doc.ApplyScheduleProfile(scheduleProfile);
-                    _ = trans.Commit();
-
-                    results.Add((scheduleFile, true, string.Empty));
-                    createdSchedules.Add(result.ScheduleName);
-
-                    // Write output for this schedule
-                    _ = this.WriteCreationOutput(context, result, scheduleFile, "batch");
+                    var (spec, _, source) = member.Load<SharedScheduleProfile>(batchItem.Pod);
+                    var applied = ScheduleBridgeOps.ApplySpec(context.Doc, spec, source);
+                    results.Add((member.Path, true, string.Empty));
+                    createdSchedules.Add(applied.Result.ScheduleName);
+                    receipts.Add(applied.Data.ReceiptPath);
                 } catch (Exception ex) {
-                    results.Add((scheduleFile, false, ex.Message));
-                    _ = this.WriteErrorOutput(context, scheduleFile, ex.Message, ex, "batch");
+                    results.Add((member.Path, false, ex.Message));
                 }
             }
 
-            // Show summary balloon
             var balloon = new Ballogger();
             var successCount = results.Count(r => r.success);
             var failCount = results.Count(r => !r.success);
@@ -484,117 +461,19 @@ public class CmdScheduleManager : IExternalCommand {
 
             if (createdSchedules.Any()) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  â€¢ {s}"))}");
+                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  • {s}"))}");
             }
 
             if (failCount > 0) {
                 var failures = results.Where(r => !r.success).ToList();
                 _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  â€¢ {f.profileName}: {f.errorMessage}"))}");
+                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
             }
 
-            var outputPath = context.Storage.Output().SubDir("batch").DirectoryPath;
-            balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output Folder");
+            var runs = receipts.Count > 0 ? Path.GetDirectoryName(Path.GetDirectoryName(receipts[0])!)! : batchItem.Pod.Folder;
+            balloon.Show(() => FileUtils.OpenInDefaultApp(runs), "Open Runs Folder");
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
-        }
-    }
-
-    private string? WriteCreationOutput(ScheduleManagerContext ctx,
-        ScheduleCreationResult result,
-        string? profileName = null,
-        string outputSubDirectory = "create") {
-        try {
-            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
-
-            var outputData = new {
-                result.ScheduleName,
-                result.CategoryName,
-                result.IsItemized,
-                result.FilterBySheetApplied,
-                result.FilterBySheetSkipped,
-                ProfileName = profileName ?? ctx.SelectedProfile?.TextPrimary ?? "Unknown",
-                CreatedAt = DateTime.Now,
-                Summary =
-                    new {
-                        AppliedFieldsCount = result.AppliedFields.Count,
-                        SkippedFieldsCount = result.SkippedFields.Count,
-                        AppliedSortGroupsCount = result.AppliedSortGroups.Count,
-                        SkippedSortGroupsCount = result.SkippedSortGroups.Count,
-                        AppliedFiltersCount = result.AppliedFilters.Count,
-                        SkippedFiltersCount = result.SkippedFilters.Count,
-                        AppliedHeaderGroupsCount = result.AppliedHeaderGroups.Count,
-                        SkippedHeaderGroupsCount = result.SkippedHeaderGroups.Count,
-                        CalculatedFieldsCount = result.SkippedCalculatedFields.Count,
-                        WarningsCount = result.Warnings.Count
-                    },
-                AppliedFields =
-                    result.AppliedFields.Select(f => new {
-                        f.ParameterName,
-                        f.ColumnHeaderOverride,
-                        f.IsHidden,
-                        f.ColumnWidth,
-                        DisplayType = f.DisplayType.ToString()
-                    }).ToList(),
-                SkippedFields = result.SkippedFields.Select(s => new { Reason = s }).ToList(),
-                AppliedSortGroups =
-                    result.AppliedSortGroups.Select(sg => new {
-                        sg.FieldName,
-                        SortOrder = sg.SortOrder.ToString(),
-                        sg.ShowHeader,
-                        sg.ShowFooter,
-                        sg.ShowBlankLine
-                    }).ToList(),
-                SkippedSortGroups = result.SkippedSortGroups.Select(s => new { Reason = s }).ToList(),
-                AppliedFilters =
-                    result.AppliedFilters.Select(f =>
-                        new { f.FieldName, FilterType = f.FilterType.ToString(), f.Value, f.StorageType }).ToList(),
-                SkippedFilters = result.SkippedFilters.Select(s => new { Reason = s }).ToList(),
-                result.AppliedHeaderGroups,
-                SkippedHeaderGroups = result.SkippedHeaderGroups.Select(s => new { Reason = s }).ToList(),
-                CalculatedFields =
-                    result.SkippedCalculatedFields
-                        .Select(f => new { f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField }).ToList(),
-                result.AppliedViewTemplate,
-                result.SkippedViewTemplate,
-                result.Warnings
-            };
-
-            // Prepend timestamp to filename
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            var outputPath = createOutputDir.Json($"{timestamp}_{result.ScheduleName}.json").Write(outputData);
-            return outputPath;
-        } catch (Exception ex) {
-            Log.Error(ex, "Failed to write schedule creation output");
-            return null;
-        }
-    }
-
-    private string? WriteErrorOutput(ScheduleManagerContext ctx,
-        string profileName,
-        string errorMessage,
-        Exception? ex = null,
-        string outputSubDirectory = "create") {
-        try {
-            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
-
-            var outputData = new {
-                ProfileName = profileName,
-                CreatedAt = DateTime.Now,
-                Success = false,
-                ErrorMessage = errorMessage,
-                ExceptionType = ex?.GetType().Name,
-                ex?.StackTrace
-            };
-
-            // Prepend timestamp to filename
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            var safeProfileName = Path.GetFileNameWithoutExtension(profileName);
-            var outputPath = createOutputDir.Json($"{timestamp}_ERROR_{safeProfileName}.json").Write(outputData);
-            return outputPath;
-        } catch (Exception writeEx) {
-            Log.Error(writeEx, "Failed to write schedule error output");
-            return null;
         }
     }
 }
@@ -603,8 +482,6 @@ public class ScheduleManagerContext {
     public required Document Doc { get; init; }
     public required UIDocument UiDoc { get; init; }
     public required ModuleStorage Storage { get; init; }
-    public required ModuleSettingsStorage<SharedScheduleProfile> ProfilesStorage { get; init; }
-    public required ModuleDocumentStorage ProfilesDocuments { get; init; }
 
     // UI state: what's currently selected and displayed
     public ScheduleListItem? SelectedProfile { get; set; }

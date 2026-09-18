@@ -1,42 +1,28 @@
-import { type AppliedScope } from "@pe/agent-contracts";
+import { type AppliedFilter, type DocumentRef } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
-import { FF_PROFILE_MODULE, type FfProjectData } from "#/host/familyfoundry";
-import { fromBridgeSessions, type SessionFacts } from "#/host/target";
 
 export type FamiliesDraft = {
-  placement: AppliedScope["placementScope"];
+  placement: AppliedFilter["placementScope"];
   categories: string[];
   families: string[];
 };
 
 export interface FamiliesHost {
-  sessions(): Promise<SessionFacts[]>;
-  categories(target: string): Promise<string[]>;
-  families(target: string, draft: FamiliesDraft): Promise<string[]>;
-  profiles(): Promise<string[]>;
-  project(target: string, familyIds: number[]): Promise<FfProjectData>;
-  openPath(target: string, path: string): Promise<unknown>;
+  categories(target: DocumentRef): Promise<string[]>;
+  families(target: DocumentRef, draft: FamiliesDraft): Promise<string[]>;
 }
 
 export function createLiveFamiliesHost(): FamiliesHost {
   return {
-    async sessions() {
-      return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
-    },
+    // The filter DTO's `[FieldOptions("category-names")]` domain, not a whole-catalog read.
     async categories(target) {
       const result = await callHostRpc(
-        "revit.catalog.loaded-families",
-        { filter: { placementScope: "AllLoaded" }, budget: { maxEntries: 5000 } },
-        { bridgeSessionId: target || undefined },
+        "revit.catalog.field-options",
+        { sourceKey: "category-names" },
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
       );
-      return [
-        ...new Set(
-          result.families.flatMap((family) =>
-            family.categoryName?.trim() ? [family.categoryName] : [],
-          ),
-        ),
-      ].sort((a, b) => a.localeCompare(b));
+      return result.items.map((item) => item.value).sort((a, b) => a.localeCompare(b));
     },
     async families(target, draft) {
       const result = await callHostRpc(
@@ -48,7 +34,7 @@ export function createLiveFamiliesHost(): FamiliesHost {
           },
           budget: { maxEntries: 5000 },
         },
-        { bridgeSessionId: target || undefined },
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
       );
       return [
         ...new Set(
@@ -58,22 +44,5 @@ export function createLiveFamiliesHost(): FamiliesHost {
         ),
       ].sort((a, b) => a.localeCompare(b));
     },
-    async profiles() {
-      const result = await callHostRpc("settings.tree", {
-        ...FF_PROFILE_MODULE,
-        subDirectory: "",
-        recursive: true,
-        includeFragments: false,
-        includeSchemas: false,
-      });
-      return result.files
-        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
-        .map((entry) => entry.relativePath)
-        .sort((a, b) => a.localeCompare(b));
-    },
-    project: (target, familyIds) =>
-      callHostRpc("familyfoundry.project", { familyIds }, { bridgeSessionId: target || undefined }),
-    openPath: (target, path) =>
-      callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
   };
 }

@@ -12,6 +12,34 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class RevitScriptingPortTests {
     [Test]
+    public void Captured_pod_script_writes_readable_output_and_a_matching_receipt(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        var workspaceKey = "pod-output-proof-" + Guid.NewGuid().ToString("N");
+        var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Assert.That(Directory.Exists(root), Is.False);
+        ScriptPodSourceFile FileBytes(string path, string text) => new(path, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)));
+        var bundle = new ScriptPodSourceBundle([
+            FileBytes("pod.json", """{"schemaVersion":2,"id":"output-proof-lineage","name":"Output proof","version":"1","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}"""),
+            FileBytes("src/Main.cs", """using Pe.Revit.Scripting.Context; public sealed class Main : PeScriptContainer { public override void Execute() { Artifacts.WriteJson("result.json", new { check = "pod-output" }); } }""")
+        ]);
+        try {
+            var result = CreateExecutionService(uiApplication).Execute(document,
+                new ExecuteRevitScriptRequest(SourcePath: "src/Main.cs", WorkspaceKey: workspaceKey,
+                    SourceBundle: bundle), workspaceKey);
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+            var output = result.Artifacts.Single(artifact => artifact.Name == "result.json");
+            var receipt = result.Artifacts.Single(artifact => artifact.Name == "receipt.json");
+            Assert.That(File.ReadAllText(output.FullPath), Does.Contain("pod-output"));
+            Assert.That(Path.GetDirectoryName(output.FullPath), Is.EqualTo(Path.GetDirectoryName(receipt.FullPath)));
+            // The run is output/<runId>/ in this pod, the same shape every apply writes.
+            Assert.That(Path.GetDirectoryName(Path.GetDirectoryName(receipt.FullPath)), Is.EqualTo(Path.Combine(root, "output")));
+            Assert.That(File.ReadAllText(receipt.FullPath), Does.Contain("output-proof-lineage").And.Contain("src/Main.cs").And.Contain("scripting.execute"));
+        } finally {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
     public void Project_generation_preserves_user_references_and_packages() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
@@ -128,9 +156,14 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Workspace_bootstrap_creates_workspace_guidance_files() {
         var workspaceKey = $"test-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var root = Path.Combine(Path.GetTempPath(), $"pe-pod-bootstrap-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "Pods", workspaceKey);
         try {
-            var bootstrapService = new ScriptWorkspaceBootstrapService(CreateProjectGenerator());
+            var bootstrapService = new ScriptWorkspaceBootstrapService(
+                CreateProjectGenerator(),
+                key => Path.Combine(root, "Pods", key),
+                Path.Combine(root, "Pe.Tools")
+            );
             var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
 
             var result = bootstrapService.Bootstrap(
@@ -141,7 +174,7 @@ public sealed class RevitScriptingPortTests {
                 runtimeAssemblyPath
             );
 
-            var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
+            var agentsPath = Path.Combine(workspaceRoot, "AGENTS.md");
             Assert.That(File.Exists(agentsPath), Is.True);
             Assert.That(File.ReadAllText(agentsPath),
                 Does.Contain("Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable."));
@@ -157,9 +190,12 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src/SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
                 Does.Contain("Keep exactly one non-abstract PeScriptContainer per entrypoint file"));
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "settings")), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "assets")), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "output")), Is.True);
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
         } finally {
-            DeleteWorkspace(workspaceRoot);
+            DeleteWorkspace(root);
         }
     }
 
@@ -176,6 +212,7 @@ public sealed class RevitScriptingPortTests {
             runtimeAssemblyPath
         );
 
+        Assert.That(generated, Does.Contain("""<Reference Include="Newtonsoft.Json">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.HostContracts">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.Product">"""));
         Assert.That(generated, Does.Not.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));
@@ -187,11 +224,11 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default");
 
         Assert.That(
-            basePath.EndsWith(Path.Combine("Pe.Tools", "workspaces"), StringComparison.OrdinalIgnoreCase),
+            basePath.EndsWith(Path.Combine("Pe.Tools", "Pods"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
         Assert.That(
-            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "workspaces", "default"),
+            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "Pods", "default"),
                 StringComparison.OrdinalIgnoreCase),
             Is.True
         );
@@ -207,7 +244,7 @@ public sealed class RevitScriptingPortTests {
             Is.EqualTo(Path.Combine(workspaceRoot, "PeScripts.csproj"))
         );
         Assert.That(
-            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "inline-scripts"), StringComparison.OrdinalIgnoreCase),
+            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "Pods", "default", "output", "inline"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
 
@@ -518,7 +555,7 @@ public sealed class RevitScriptingPortTests {
             );
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     public sealed class InlineOverrideScript : PeScriptContainer
@@ -603,7 +640,7 @@ public sealed class RevitScriptingPortTests {
     public void No_container_type_is_rejected_with_authoring_hint(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class NotAContainer
             {
@@ -624,7 +661,7 @@ public sealed class RevitScriptingPortTests {
     public void Inline_comment_containing_container_name_still_wraps_as_execute_body(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             // PeScriptContainer appears in a comment, not as a container declaration.
             WriteLine("wrapped");
@@ -640,7 +677,7 @@ public sealed class RevitScriptingPortTests {
     public void Inline_string_containing_container_name_still_wraps_as_execute_body(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             var text = "PeScriptContainer";
             WriteLine(text);
@@ -656,7 +693,7 @@ public sealed class RevitScriptingPortTests {
     public void Malformed_full_inline_container_is_not_double_wrapped(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class BrokenScript : PeScriptContainer
             {
@@ -676,7 +713,7 @@ public sealed class RevitScriptingPortTests {
     public void Multiple_container_types_are_rejected(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class ScriptA : PeScriptContainer
             {
@@ -704,7 +741,7 @@ public sealed class RevitScriptingPortTests {
     public void Compilation_errors_are_returned_with_authoring_hint(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class BrokenScript : PeScriptContainer
             {
@@ -729,7 +766,7 @@ public sealed class RevitScriptingPortTests {
     public void WriteTransaction_policy_still_rejects_script_owned_transaction(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class TransactionScript : PeScriptContainer
             {
@@ -751,10 +788,51 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
+    public void NoTransaction_executes_script_and_library_owned_transactions(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+
+        var ownedTransaction = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
+            """
+            using var transaction = new Transaction(doc!, "Script owned");
+            WriteLine(transaction.Start().ToString());
+            WriteLine(transaction.RollBack().ToString());
+            """,
+            PermissionMode: ScriptPermissionMode.NoTransaction
+        ), "test-no-transaction-script-owned");
+
+        Assert.That(ownedTransaction.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(ownedTransaction.Output, Does.Contain("Started"));
+        Assert.That(ownedTransaction.Output, Does.Contain("RolledBack"));
+
+        var familyFoundryBuild = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
+            """
+            var model = new Pe.Shared.RevitData.Families.FamilyModel
+            {
+                Family = new Pe.Shared.RevitData.Families.FamilyModelHeader
+                {
+                    Name = "Script FF Build",
+                    Category = Pe.Shared.RevitData.Families.FamilyCategory.GenericModels,
+                    Template = "Generic Model",
+                    Placement = Pe.Shared.RevitData.Families.FamilyModelPlacement.OneLevelBased
+                }
+            };
+            var built = Pe.Revit.FamilyFoundry.Apply.FamilyModelBuild.Build(app.Application, model);
+            try { WriteLine("ff-build-complete"); }
+            finally { _ = built.Document.Close(false); }
+            """,
+            PermissionMode: ScriptPermissionMode.NoTransaction
+        ), "test-no-transaction-family-foundry-build");
+
+        Assert.That(familyFoundryBuild.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(familyFoundryBuild.Output, Does.Contain("ff-build-complete"));
+    }
+
+    [Test]
     public void ReadOnly_policy_allows_harmless_collection(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             """
             public sealed class CollectorScript : PeScriptContainer
             {
@@ -787,7 +865,7 @@ public sealed class RevitScriptingPortTests {
         var before = document.ProjectInformation.Name;
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             "doc!.ProjectInformation.Name = \"__pe_readonly_rollback__\"; WriteLine(doc.ProjectInformation.Name);"
         ), "test-readonly-rollback");
 
@@ -805,7 +883,7 @@ public sealed class RevitScriptingPortTests {
         using var transaction = new Transaction(document, "Block scripting rollback guard");
         _ = transaction.Start();
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             "WriteLine(\"must not run\");"
         ), "test-readonly-guard-unavailable");
 
@@ -820,7 +898,7 @@ public sealed class RevitScriptingPortTests {
         _ = EnsureActiveProjectDocument(uiApplication);
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             "WriteLine(new string('x', 300_000));"
         ), "test-output-limit");
 
@@ -834,7 +912,7 @@ public sealed class RevitScriptingPortTests {
         var service = CreateExecutionService(uiApplication);
         var source = "WriteLine(\"x\"); //" + new string('x', 256 * 1024);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(source), "test-source-limit");
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(source), "test-source-limit");
 
         Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("256 KiB"));
@@ -845,7 +923,7 @@ public sealed class RevitScriptingPortTests {
         _ = EnsureActiveProjectDocument(uiApplication);
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             "Result(new string('x', 1024 * 1024 + 1));"
         ), "test-result-limit");
 
@@ -858,7 +936,7 @@ public sealed class RevitScriptingPortTests {
         _ = EnsureActiveProjectDocument(uiApplication);
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(new ExecuteRevitScriptRequest(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, new ExecuteRevitScriptRequest(
             "Artifacts.WriteText(\"too-large.txt\", new string('x', 10 * 1024 * 1024 + 1));"
         ), "test-artifact-limit");
 
@@ -872,7 +950,7 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     public sealed class InlineScript : PeScriptContainer
@@ -905,7 +983,7 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     using System.Globalization;
@@ -931,7 +1009,7 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     public sealed class DocumentHintScript : PeScriptContainer
@@ -964,7 +1042,7 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     public sealed class BrokenInline : PeScriptContainer
@@ -1012,7 +1090,7 @@ public sealed class RevitScriptingPortTests {
             WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
             var service = CreateExecutionService(uiApplication);
-            var failedResult = service.Execute(
+            var failedResult = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
                     public sealed class BrokenInline : PeScriptContainer
@@ -1027,7 +1105,7 @@ public sealed class RevitScriptingPortTests {
                 ),
                 "test-inline-first"
             );
-            var succeededResult = service.Execute(
+            var succeededResult = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1047,7 +1125,7 @@ public sealed class RevitScriptingPortTests {
     public void Request_without_script_content_or_source_path_is_rejected(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
             new ExecuteRevitScriptRequest(
                 WorkspaceKey: $"test-empty-inline-{Guid.NewGuid():N}"
             ),
@@ -1064,7 +1142,7 @@ public sealed class RevitScriptingPortTests {
     public void Request_with_both_script_content_and_source_path_is_rejected(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
-        var result = service.Execute(
+        var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
             new ExecuteRevitScriptRequest(
                 ScriptContent: "WriteLine(\"inline\");",
                 SourcePath: @"src\SampleScript.cs",
@@ -1087,7 +1165,7 @@ public sealed class RevitScriptingPortTests {
 
         try {
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\Missing.cs",
                     WorkspaceKey: workspaceKey
@@ -1125,7 +1203,7 @@ public sealed class RevitScriptingPortTests {
             );
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1183,7 +1261,7 @@ public sealed class RevitScriptingPortTests {
             WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1226,7 +1304,7 @@ public sealed class RevitScriptingPortTests {
             WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1275,7 +1353,7 @@ public sealed class RevitScriptingPortTests {
             WritePodManifest(workspaceKey, "src/Other.cs");
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1316,7 +1394,7 @@ public sealed class RevitScriptingPortTests {
                 RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
                 $$"""
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "id": "{{workspaceKey}}",
                   "name": "{{workspaceKey}}",
                   "version": "1.0.0",
@@ -1329,7 +1407,7 @@ public sealed class RevitScriptingPortTests {
             );
 
             var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
+            var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
@@ -1348,6 +1426,28 @@ public sealed class RevitScriptingPortTests {
 
     private static ScriptProjectGenerator CreateProjectGenerator() =>
         new(new CsProjReader());
+
+    [Test]
+    public void Explicit_inactive_target_has_no_borrowed_ui_selection_and_closed_target_is_refused(UIApplication uiApplication) {
+        var active = EnsureActiveProjectDocument(uiApplication);
+        var target = uiApplication.Application.NewProjectDocument(UnitSystem.Imperial);
+        var service = CreateExecutionService(uiApplication);
+        try {
+            var result = service.Execute(target, new ExecuteRevitScriptRequest(
+                "Result(new { title = doc!.Title, hasUiDocument = uidoc != null, selectionCount = selection.Count });"),
+                "explicit-inactive-target");
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            var data = Newtonsoft.Json.Linq.JObject.FromObject(result.Data!);
+            Assert.That(data.Value<string>("title"), Is.EqualTo(target.Title));
+            Assert.That(data.Value<bool>("hasUiDocument"), Is.False);
+            Assert.That(data.Value<int>("selectionCount"), Is.Zero);
+            Assert.That(uiApplication.ActiveUIDocument.Document.Equals(active), Is.True);
+        } finally { target.Close(false); }
+        var closed = service.Execute(target, new ExecuteRevitScriptRequest("throw new Exception(\"must not run\");"), "closed-target");
+        Assert.That(closed.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+        Assert.That(closed.Diagnostics.Any(d => d.Message.Contains("lifetime")), Is.True);
+        Assert.That(uiApplication.ActiveUIDocument.Document.Equals(active), Is.True);
+    }
 
     private static RevitScriptExecutionService CreateExecutionService(UIApplication uiApplication) {
         var csProjReader = new CsProjReader();
@@ -1390,7 +1490,7 @@ public sealed class RevitScriptingPortTests {
 
         return $$"""
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "{{workspaceKey}}",
               "name": "{{workspaceKey}}",
               "version": "1.0.0",

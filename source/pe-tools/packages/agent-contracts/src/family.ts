@@ -1,22 +1,30 @@
-/**
- * `route:family` — the sibling slice beside `route:settings` for the /family surface.
- *
- * The settings slice owns the authored family.json document and its field trichotomy;
- * this slice owns everything the family surface needs that is NOT authored truth:
- *   - `doc`: an OCR'd spec sheet (markdown blocks only — geometry stays in the parse
- *     cache, same law as family-types),
- *   - `evidence`: the resolved per-type value/provenance projection Revit returned,
- *     stamped with the Revit document Reading so currency is renderable, never silent.
- *
- * Pea acts on this slice through commands only (empty agent write mask). Proposals
- * against the family live in `route:settings` fields, where the human review
- * lifecycle already exists.
- */
+/** Family UI projections of immutable readings. */
 import { z } from "zod";
-import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
-import { specDocSchema } from "./family-types.ts";
-import { settingsDocumentIdSchema } from "./settings.ts";
-import { readingSchema } from "./reading.ts";
+import {
+  diagnosticSchema,
+  familyExecutionOptionsSchema,
+  ffPlanEntrySchema,
+  ffReceiptSchema,
+  revitDataIssueSchema,
+} from "./families.ts";
+import { routeBindingsSchema } from "./route-state.ts";
+export const specDocBlockSchema = z.object({
+  id: z.string(),
+  page: z.number(),
+  kind: z.string(),
+  md: z.string(),
+});
+export type SpecDocBlock = z.infer<typeof specDocBlockSchema>;
+
+export const specDocSchema = z.object({
+  parseId: z.string().nullish(),
+  fileName: z.string(),
+  blocks: z.array(specDocBlockSchema),
+});
+export type SpecDoc = z.infer<typeof specDocSchema>;
+
+import { podMemberSourceSchema } from "./settings.ts";
+import { observationSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
 
@@ -53,15 +61,32 @@ const familyEvidenceDiagnosticSchema = z.object({
 });
 
 /** Revit evidence carries only the Reading for the document it describes. */
-export const familyEvidenceSchema = z.object({
+const fixtureEvidenceSchema = z.object({
   typeNames: z.array(z.string()),
   parameters: z.array(familyEvidenceParameterSchema),
   diagnostics: z.array(familyEvidenceDiagnosticSchema),
-  reading: readingSchema,
+  reading: observationSchema,
   origin: z.enum(["capture", "build"]),
   familyName: z.string(),
   rfaPath: z.string().nullish(),
 });
+export const familyEvidenceSchema = z.union([
+  z.object({
+    // A capture is scoped by the action's exact document lifetime, never by address: an
+    // Edit Family document has no path until it is saved.
+    observedAt: z.iso.datetime(),
+    familyName: z.string(),
+    modelJson: z.string(),
+    unmodeledCount: z.number(),
+    coverage: z.record(z.string(), z.string()),
+    issues: z.array(revitDataIssueSchema),
+    origin: z.literal("capture"),
+    rfaPath: z.string().nullish(),
+    /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */
+    run: z.string().nullish(),
+  }),
+  fixtureEvidenceSchema,
+]);
 /* ── The document ──────────────────────────────────────────────────────────── */
 
 /** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
@@ -73,47 +98,32 @@ const familyDocImageSchema = z.object({
   category: z.string(),
 });
 
-const familyDocumentSchema = z.object({
+export const familyProjectionSchema = z.object({
   bindings: routeBindingsSchema,
   stage: z.enum(["author", "evidence"]).optional(),
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),
+  plan: z
+    .object({
+      captureId: z.string().optional(),
+      source: podMemberSourceSchema,
+      spec: z.string(),
+      entry: ffPlanEntrySchema,
+      executionOptions: familyExecutionOptionsSchema.optional(),
+    })
+    .nullish(),
+  apply: z
+    .object({ receipts: z.array(ffReceiptSchema), diagnostics: z.array(diagnosticSchema) })
+    .nullish(),
+  build: z
+    .object({
+      reading: observationSchema,
+      familyName: z.string(),
+      outputPath: z.string(),
+      templatePath: z.string(),
+      converged: z.boolean(),
+      residueCount: z.number(),
+    })
+    .nullish(),
 });
-export type FamilyDocument = z.infer<typeof familyDocumentSchema>;
-
-export const familyRouteState = {
-  route: "family",
-  title: "Family",
-  description:
-    "Anatomy, types, and spec grounding for one authored family.json. Authored edits and proposals live in route:settings; this slice carries the spec doc and Revit evidence.",
-  schema: familyDocumentSchema,
-  // Pea never patches this slice directly — doc and evidence arrive via commands.
-  agentWriteMask: [],
-  commands: {
-    parse_spec: {
-      description:
-        "OCR a manufacturer spec sheet / submittal PDF (LlamaParse) by URL and attach its markdown blocks. Then read blocks and write proposals into route:settings fields, citing sources.",
-      input: z.object({ url: z.string().describe("Public URL of the PDF.") }),
-      actor: "any",
-    },
-    capture_evidence: {
-      description:
-        "Capture the family open in the bound Revit session (revit.detail.family-model): stores the resolved per-type evidence projection here and returns the authored modelJson so it can seed or update a settings document. Targets the bound session; pass target to override.",
-      input: z.object({ target: z.string().optional() }),
-      actor: "any",
-      recoversExternal: true,
-    },
-    build_evidence: {
-      description:
-        "Build the saved settings document into an .rfa (revit.apply.family-model) and store the evidence the build returned. Builds the SAVED revision — staged edits must be saved first. Targets the bound session; pass target to override.",
-      input: z.object({
-        documentId: settingsDocumentIdSchema,
-        outputPath: z.string().optional().describe("Defaults to .artifacts/tmp/family/<path>.rfa"),
-        modelDirectory: z.string().optional(),
-        target: z.string().optional(),
-      }),
-      actor: "any",
-      mutatesExternal: true,
-    },
-  },
-} satisfies RouteStateSpec<typeof familyDocumentSchema>;
+export type FamilyDocument = z.infer<typeof familyProjectionSchema>;
