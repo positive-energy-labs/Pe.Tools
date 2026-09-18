@@ -23,15 +23,6 @@ import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { isRecord, type RouteStatePatch } from "./route-state.ts";
 
-/** Core proposal shape; routes add provenance via `.extend(...)` on the returned object. */
-export function cellProposalSchema<V extends z.ZodType>(value: V) {
-  return z.object({
-    value,
-    note: z.string().nullish(),
-    confidence: z.enum(["high", "low"]).nullish(),
-  });
-}
-
 /**
  * A persisted proposal as read. Proposals once carried `by`: `by: "pea"` is derivable (only Pea
  * proposes) and is dropped on read; any other author refuses, because dropping it would silently
@@ -47,21 +38,61 @@ export function persistedProposal<P extends z.ZodType>(proposal: P) {
   }, proposal);
 }
 
-/** One trichotomy cell: proposal (agent-writable) and the staged presence-object. */
-export function trichotomyCellSchema<V extends z.ZodType>(value: V) {
-  return trichotomyCellWithProposal(value, cellProposalSchema(value));
-}
+/*
+ * What a rung writes. Every route sets values, and an empty value is a value. Deleting the
+ * addressed property is opt-in per route, kept only where a shipped consumer stages it (rulings
+ * 2026-09-18 16:00 #3): on a route without it a delete rung is refused by the schema and has no type.
+ */
+const valueRung = <V extends z.ZodType>(value: V) =>
+  z.object({ value, delete: z.never().optional() });
+const deletableRung = <V extends z.ZodType>(value: V) =>
+  z.object({ value: value.optional(), delete: z.literal(true).optional() });
+const oneWrite = (rung: { value?: unknown; delete?: true }) =>
+  (rung.delete === true) !== Object.hasOwn(rung, "value");
+const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly one" };
+const PROPOSAL_META = {
+  note: z.string().nullish(),
+  confidence: z.enum(["high", "low"]).nullish(),
+};
 
-/** Trichotomy cell with a route-extended proposal (e.g. a markdown source ref). */
-export function trichotomyCellWithProposal<V extends z.ZodType, P extends z.ZodType>(
-  value: V,
-  proposal: P,
-) {
+/** One builder per rung shape, so each route's value type survives into its cell type. */
+const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) => {
+  const rung = valueRung(value);
   return z.object({
-    proposal: persistedProposal(proposal).nullish(),
-    /** Human-promoted value — what commit sends. Pea must never write this (mask-denied). */
-    staged: z.object({ value }).nullish(),
+    proposal: persistedProposal(
+      rung.extend(PROPOSAL_META).extend(extra).refine(oneWrite, ONE_WRITE),
+    ).nullish(),
+    /** Human-promoted rung — what commit sends. Pea must never write this (mask-denied). */
+    staged: rung.refine(oneWrite, ONE_WRITE).nullish(),
   });
+};
+const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) => {
+  const rung = deletableRung(value);
+  return z.object({
+    proposal: persistedProposal(
+      rung.extend(PROPOSAL_META).extend(extra).refine(oneWrite, ONE_WRITE),
+    ).nullish(),
+    staged: rung.refine(oneWrite, ONE_WRITE).nullish(),
+  });
+};
+
+/**
+ * The one trichotomy cell: a proposal (agent-writable) and the staged presence-object. A route
+ * opts into `deletable`, and extends the proposal with its own provenance (e.g. `sources`).
+ */
+export function trichotomyCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
+  value: V,
+  options?: { deletable?: false; proposal?: E },
+): ReturnType<typeof valueCell<V, E>>;
+export function trichotomyCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
+  value: V,
+  options: { deletable: true; proposal?: E },
+): ReturnType<typeof deletableCell<V, E>>;
+export function trichotomyCellSchema(
+  value: z.ZodType,
+  { deletable = false, proposal = {} }: { deletable?: boolean; proposal?: z.ZodRawShape } = {},
+) {
+  return deletable ? deletableCell(value, proposal) : valueCell(value, proposal);
 }
 
 /** The mask fragment every trichotomy route grants pea: proposals only. */
