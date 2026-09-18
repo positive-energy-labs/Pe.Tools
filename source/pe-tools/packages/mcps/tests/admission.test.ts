@@ -21,11 +21,19 @@ const operations = [
  * Like the real `/ops` (`apps/host/src/ops-catalog.ts`): native keys only under a session
  * selector, and a session whose bridge does not answer yields a 200 carrying `bridgeCatalogError`.
  */
-function fakeHost(options: { session?: string; bridgeDown?: boolean } = {}) {
+function fakeHost(
+  options: {
+    session?: string;
+    bridgeDown?: boolean;
+    summaryDown?: boolean;
+    prior?: Record<string, unknown>;
+  } = {},
+) {
   const submitted: unknown[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/actions?id=")) return Response.json(options.prior ? [options.prior] : []);
     if (url.endsWith("/ops")) {
       const selected = (init?.headers as Record<string, string> | undefined)?.[
         "x-pe-bridge-session-id"
@@ -43,6 +51,7 @@ function fakeHost(options: { session?: string; bridgeDown?: boolean } = {}) {
       const { key } = JSON.parse(String(init?.body)) as { key: string };
       if (key !== "bridge.sessions.summary")
         throw new Error(`fake host refuses raw dispatch of '${key}' on /call`);
+      if (options.summaryDown) return new Response("boom", { status: 500 });
       return Response.json({ sessionId: options.session ?? null, openDocumentCount: 0 });
     }
     if (url.endsWith("/actions") && init?.method === "POST") {
@@ -329,6 +338,56 @@ test("operations call admits schedule.grid.push as a workflow with its bases", a
         bases: { captureId: "c".repeat(64) },
       },
     ]);
+  } finally {
+    host.restore();
+  }
+});
+
+test("an original action id with no named session replays its receipt's destination, reading no session or catalog", async () => {
+  const destination = { kind: "document", ref: { session: "A", openId: "open-A" } };
+  const host = fakeHost({
+    summaryDown: true,
+    prior: {
+      kind: "operation",
+      id: "original",
+      key: "scripting.execute",
+      actor: "human",
+      destination,
+      request: { scriptContent: "x" },
+      bases: {},
+      steps: [],
+      preparation: { state: "unprepared" },
+      recovery: [],
+      startedAt: new Date(0).toISOString(),
+      publication: { state: "unrequested" },
+      state: "running",
+    },
+  });
+  try {
+    await runCapability(
+      "scripting.execute",
+      { scriptContent: "x" },
+      { hostBaseUrl: "http://host.test", actor: "human", actionId: "original" },
+    );
+    expect(host.submitted).toMatchObject([{ id: "original", destination }]);
+  } finally {
+    host.restore();
+  }
+});
+
+test("a session summary the host fails to answer is a refusal naming the URL", async () => {
+  const host = fakeHost({ summaryDown: true });
+  try {
+    const refusal = await runCapability(
+      "scripting.execute",
+      {},
+      { hostBaseUrl: "http://host.test", actor: "agent" },
+    ).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(Error);
+    expect((refusal as Error).constructor).toBe(Error);
+    expect((refusal as Error).message).toContain("http://host.test/call");
+    expect((refusal as Error).message).toContain("--bridge-session-id");
+    expect(host.submitted).toEqual([]);
   } finally {
     host.restore();
   }
