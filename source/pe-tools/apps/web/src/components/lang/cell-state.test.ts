@@ -18,7 +18,6 @@ describe("cellFromTrichotomy", () => {
       {
         proposal: {
           value: "150 VA",
-          by: "pea",
           note: "from the motor schedule",
           confidence: "low",
         },
@@ -32,7 +31,7 @@ describe("cellFromTrichotomy", () => {
 
   it("stages in pea's ink when the staged value IS pea's proposal", () => {
     const cell = cellFromTrichotomy(
-      { proposal: { value: "150 VA", by: "pea" }, staged: { value: "150 VA" } },
+      { proposal: { value: "150 VA" }, staged: { value: "150 VA" } },
       facts,
     );
     expect(cell.stage).toBe("staged");
@@ -41,7 +40,7 @@ describe("cellFromTrichotomy", () => {
 
   it("stages as yours when the staged value is not what pea proposed", () => {
     const cell = cellFromTrichotomy(
-      { proposal: { value: "150 VA", by: "pea" }, staged: { value: "120 VA" } },
+      { proposal: { value: "150 VA" }, staged: { value: "120 VA" } },
       { value: "120 VA" },
     );
     expect(cell.stagedBy).toBe("you");
@@ -61,7 +60,7 @@ describe("cellFromTrichotomy value equality", () => {
   const facts = { value: "shown" };
   it("treats equal deserialized objects as pea's staged value, not a counter-proposal", () => {
     const cell = cellFromTrichotomy(
-      { proposal: { by: "pea", value: { b: 2, a: [1] } }, staged: { value: { a: [1], b: 2 } } },
+      { proposal: { value: { b: 2, a: [1] } }, staged: { value: { a: [1], b: 2 } } },
       facts,
     );
     expect(cell.stagedBy).toBe("pea");
@@ -69,7 +68,7 @@ describe("cellFromTrichotomy value equality", () => {
   });
   it("words an object counter through the caller's formatter, and JSON by default", () => {
     const rungs = {
-      proposal: { by: "pea" as const, value: { a: 1 } },
+      proposal: { value: { a: 1 } },
       staged: { value: { a: 2 } },
     };
     expect(cellFromTrichotomy(rungs, facts).counterValue).toBe('{"a":1}');
@@ -77,10 +76,25 @@ describe("cellFromTrichotomy value equality", () => {
   });
   it("a delete against a set of the same value is a counter-proposal", () => {
     const cell = cellFromTrichotomy(
-      { proposal: { by: "pea", value: 1, delete: true } as never, staged: { value: 1 } },
+      { proposal: { value: 1, delete: true }, staged: { value: 1 } },
       facts,
     );
     expect(cell.stagedBy).toBe("you");
     expect(cell.counterValue).toBe("delete");
+  });
+});
+
+describe("cellFromTrichotomy authorship without proposal.by", () => {
+  it("reads pea when the staged value equals the standing proposal, you otherwise", () => {
+    const facts = { value: "x" };
+    expect(
+      cellFromTrichotomy({ proposal: { value: "a" }, staged: { value: "a" } }, facts).stagedBy,
+    ).toBe("pea");
+    expect(
+      cellFromTrichotomy({ proposal: { value: "a" }, staged: { value: "b" } }, facts).stagedBy,
+    ).toBe("you");
+    expect(cellFromTrichotomy({ proposal: null, staged: { value: "b" } }, facts).stagedBy).toBe(
+      "you",
+    );
   });
 });

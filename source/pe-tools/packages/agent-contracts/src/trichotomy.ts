@@ -81,9 +81,6 @@ export interface Rung {
 export interface TrichotomyCellLike {
   proposal?:
     | (Rung & {
-        // Compile bridge only: `by` is gone from every schema. Interaction's `stagedBy` reader
-        // replaces the last reader (`cellFromTrichotomy`) in the same wave, then this goes.
-        by?: "pea" | "human" | undefined;
         note?: string | null | undefined;
         confidence?: "high" | "low" | null | undefined;
       })
