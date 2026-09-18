@@ -45,6 +45,7 @@ public sealed class ScheduleCellBindingProofTests {
                         Assert.That(binding.IsEditable, Is.True, binding.ToString());
                         Assert.That(binding.Targets, Has.Count.EqualTo(1));
                         Assert.That(binding.Targets[0].ParameterId, Is.Not.Zero);
+                        Assert.That(binding.Targets[0].HasValue, Is.True);
                     }
 
                     // Type column: every row resolves to the SAME shared type element — one write
@@ -125,6 +126,16 @@ public sealed class ScheduleCellBindingProofTests {
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, missing, "NOPE")]));
                 Assert.That(missingResult.Results.Single().Error, Does.Contain("missing canonical target evidence"));
+
+                var wrongParameterId = typeA.Targets.Single().ParameterId;
+                var invalidExactId = mark with {
+                    ParameterId = wrongParameterId,
+                    Targets = [mark.Targets.Single() with { ParameterId = wrongParameterId }]
+                };
+                var invalidIdResult = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                    entry.ScheduleId, entry.ScheduleUniqueId,
+                    [new(rows[0].RowNumber, mark.ColumnNumber, invalidExactId, "NO-FUZZY-FALLBACK")]));
+                Assert.That(invalidIdResult.Results.Single().Error, Does.Contain("stale"));
 
                 var beforeCancel = projectDocument.GetElement(mark.Targets.Single().ElementId.ToElementId())
                     .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString();
