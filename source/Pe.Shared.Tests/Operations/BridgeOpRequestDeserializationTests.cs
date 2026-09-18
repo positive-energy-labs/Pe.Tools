@@ -142,7 +142,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     [Test]
     public async Task An_unset_target_read_from_a_response_round_trips_into_a_reviewed_cell() {
         var response = Newtonsoft.Json.JsonConvert.SerializeObject(
-            new ScheduleCellBindingTarget(7, -1001203, "Mark", Pe.Shared.RevitData.RequestedParameterStorageType.String, false, false, null),
+            new Pe.Shared.RevitData.ParameterTarget(7, -1001203, "Mark", Pe.Shared.RevitData.RequestedParameterStorageType.String, false, false, null),
             new Newtonsoft.Json.JsonSerializerSettings {
                 NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
                 ContractResolver = new Newtonsoft.Json.Serialization.DefaultContractResolver {

@@ -444,36 +444,6 @@ internal sealed class RevitDataRequestService {
         return new FamilyEditorApplyData(applied, results);
     }
 
-    [Op("revit.apply.parameter-values", Does = "Apply parameter values to project elements in one host-owned transaction, redeeming binding handles (target element id + parameter id) returned by revit.detail.schedules projection.includeBindings.", Title = "Apply Parameter Values", Finds = ["parameters", "apply", "mutation", "elements", "schedule-bindings", "binding-handles", "cell-edit", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"edits\": [{ \"elementId\": 12345, \"parameterId\": -1010106, \"value\": \"AHU-1\" }, { \"elementId\": 67890, \"parameterId\": -1002501, \"value\": \"Roof unit\" }] }")]
-    private ParameterValueApplyData ApplyParameterValuesCore(ParameterValueApplyRequest request, RevitDocument activeDocument) {
-        var document = activeDocument.Value;
-        if (!request.DryRun && document.IsReadOnly) {
-            throw BridgeOperationExceptions.Conflict(
-                "Active document is read-only.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$",
-                        "ParameterValueApplyDocumentReadOnly",
-                        "Active document is read-only.",
-                        "Open a writable document and retry, or use dryRun=true to preview."
-                    )
-                ]
-            );
-        }
-
-        try {
-            return ParameterValueApplier.Apply(document, request);
-        } catch (BridgeOperationException) {
-            throw;
-        } catch (Exception ex) {
-            throw BridgeOperationExceptions.Unexpected(
-                "ParameterValueApplyException",
-                ex,
-                "Verify the active document is writable and the edits reference valid binding handles, then retry."
-            );
-        }
-    }
-
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
