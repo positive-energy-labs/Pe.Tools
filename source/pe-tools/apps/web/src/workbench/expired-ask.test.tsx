@@ -146,3 +146,53 @@ test("a cancelled call is the runtime's record line: a word, no tag, no button; 
     ),
   ]).toEqual([marker]);
 });
+
+test("the status mark draws the call's real state: a parked ask waits, an errored ask is err", () => {
+  const erroredAsk = {
+    ...askCall,
+    id: "a2",
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: "tool-invocation",
+          toolInvocation: {
+            state: "result",
+            toolCallId: "ask-2",
+            toolName: "ask_user",
+            args: {},
+            result: {
+              isError: true,
+              content: "Failed to ask user: selectionMode requires options.",
+            },
+          },
+        },
+      ],
+    },
+  } as unknown as MastraDBMessage;
+  const state: ChatState = {
+    ...emptyChatState(),
+    messages: [erroredAsk, askCall],
+    display: {
+      isRunning: false,
+      pendingSuspensions: {
+        "ask-1": {
+          toolCallId: "ask-1",
+          toolName: "ask_user",
+          suspendPayload: { question: "Which?" },
+        },
+      },
+    } as unknown as ChatState["display"],
+  };
+  const { container } = mount(state);
+  const mark = (id: string) =>
+    container.querySelector(`[data-tool-id='${id}'] [data-annotation='tool-marker'] > .ml-auto`)!
+      .textContent;
+  expect(mark("ask-1")).toBe("wait");
+  expect(mark("ask-2")).toBe("err");
+  const [errored] = selectToolCalls(state);
+  expect(errored).toMatchObject({
+    status: "failed",
+    error: "Failed to ask user: selectionMode requires options.",
+  });
+});

@@ -26,6 +26,7 @@ import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
   APPROVAL_OPTIONS,
+  isParkedAsk,
   selectApprovals,
   selectRunStatus,
   selectToolCalls,
@@ -279,7 +280,7 @@ export function ComposerHead({
               ) : null;
             })()}
             <span className="t-small text-ink-2">{approval.kind}</span>
-            {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
+            {isParkedAsk(approval) ? (
               <span className="text-ink-2">answer it in the stream</span>
             ) : (
               APPROVAL_OPTIONS.map((option) => {

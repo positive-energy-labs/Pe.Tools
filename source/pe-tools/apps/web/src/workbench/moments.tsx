@@ -364,7 +364,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
             className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
             data-tone={failed ? "caution" : running ? undefined : "done"}
           >
-            {failed ? "err" : running ? "run" : "ok"}
+            {failed ? "err" : approval ? "wait" : running ? "run" : "ok"}
           </span>
         )}
       </div>
