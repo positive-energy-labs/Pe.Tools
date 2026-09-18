@@ -8,7 +8,6 @@ using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Pods;
-using Pe.Revit.Global.Services.Document;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
 using Pe.Revit.SettingsRuntime.Modules;
@@ -17,7 +16,6 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using System.IO;
-using System.Diagnostics;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Host;
@@ -36,12 +34,9 @@ internal static class ScheduleBridgeOps {
     private static Task<ScheduleSpecApplyData> Apply(ScheduleSpecApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             try {
-                var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(request.SpecJson, request.SpecJson, $"{request.Source.Root.Id}:{request.Source.Root.Path}");
-                return ApplySpec(document.Value, spec, request.SpecJson, request.Source).Data;
+                return ApplySpec(document.Value, request.SpecJson, request.Source).Data;
             } catch (JsonValidationException exception) {
                 throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, exception.ValidationErrors));
-            } catch (InvalidDataException exception) {
-                throw BridgeOperationExceptions.BadRequest(exception.Message);
             }
         }, cancellationToken);
 
@@ -52,15 +47,20 @@ internal static class ScheduleBridgeOps {
         return spec.ToString(Formatting.Indented);
     }
 
-    /// <summary>The one apply edge for bridge op and palette: new schedule, then the run in the source pod.</summary>
-    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, SharedScheduleProfile spec, string specJson, PodComposedSource composed) {
+    /// <summary>
+    ///     The one apply edge for bridge op and palette: new schedule, then the run in the source pod. The profile is
+    ///     read here from the exact JSON the run records, so the recorded input is what the engine consumed.
+    /// </summary>
+    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, string specJson, PodComposedSource composed) {
+        var source = composed.Root;
+        var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
+            System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(source.BytesBase64)), specJson, $"{source.Id}:{source.Path}");
         EngineEdge.RequireReachableCentral(document);
-        var (run, inputOutputs) = PodRuns.StartComposedRun(composed, new {
+        var (run, inputOutputs) = EngineEdge.StartRun(composed, new {
             operation = "schedule.apply",
-            target = DocumentTarget(document),
+            target = EngineEdge.RunTarget(document),
             unavailableEvidence = new[] { "reviewed Work revision" }
         }, specJson);
-        var source = composed.Root;
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
@@ -95,23 +95,6 @@ internal static class ScheduleBridgeOps {
             [("result.json", resultJson), .. EngineEdge.WarningsOutput(handled)]);
         return (new ScheduleSpecApplyData(result.Schedule.Id.Value(), result.ScheduleName, result.AppliedFields.Count, skipped,
             unsaved is null ? result.Warnings : [.. result.Warnings, unsaved], receiptPath), result);
-    }
-
-    private static object DocumentTarget(Document document) {
-        var tracked = DocumentTrackerAccessor.Current?.Find(document);
-        return new {
-            kind = "project-document",
-            openId = tracked?.OpenId(),
-            document.Title,
-            path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
-            process = ProcessEvidence(),
-            unavailableEvidence = tracked is null ? new[] { "document tracker openId" } : Array.Empty<string>()
-        };
-    }
-
-    private static object ProcessEvidence() {
-        using var process = Process.GetCurrentProcess();
-        return new { processId = process.Id, processStartUtc = process.StartTime.ToUniversalTime() };
     }
 
     private static object ResultReport(ScheduleCreationResult result) => new {

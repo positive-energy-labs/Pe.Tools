@@ -3,9 +3,7 @@ using Newtonsoft.Json.Linq;
 using Pe.App.Host;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Scripting.Pods;
-using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.RevitData.Schedules;
 using System.Text;
 
 namespace Pe.Revit.Tests;
@@ -88,8 +86,7 @@ public sealed class PodRunInputTests {
         Document? document = null;
         try {
             document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
-            var profile = ModuleSettingsStorage<ScheduleProfile>.ReadPrepared(composed, composed, "input-proof:settings/input.json");
-            var applied = ScheduleBridgeOps.ApplySpec(document, profile, composed, source);
+            var applied = ScheduleBridgeOps.ApplySpec(document, composed, source);
             var schedule = document.GetElement(new ElementId(applied.Data.ScheduleId)) as ViewSchedule;
             Assert.Multiple(() => {
                 Assert.That(schedule, Is.Not.Null);

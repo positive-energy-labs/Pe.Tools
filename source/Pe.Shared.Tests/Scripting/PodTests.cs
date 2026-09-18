@@ -295,6 +295,31 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Output_read_that_fails_after_the_effect_leaves_the_outcome_standing() {
+        var office = this.WritePod("Office", "office");
+        var run = PodRuns.NewRunFolder(office);
+        // The family apply edge passes its artifact reads lazily; the first one fails here, after the effect.
+        IEnumerable<(string, byte[])> Outputs() {
+            yield return ("apply.json", [1]);
+            throw new FileNotFoundException("artifact vanished");
+        }
+
+        var (path, unsaved) = PodRuns.SettleReceiptIn(run, new PodReceipt("office", "settings/a.json", "sha", "family.apply", null, "Succeeded", [], null), Outputs());
+
+        Assert.That(path, Is.Null);
+        Assert.That(unsaved, Does.Contain("artifact vanished"));
+    }
+
+    [Test]
+    public void Output_named_like_the_receipt_is_refused_in_any_case() {
+        var office = this.WritePod("Office", "office");
+        var run = PodRuns.NewRunFolder(office);
+        foreach (var name in new[] { "receipt.json", "Receipt.json", "RECEIPT.JSON" })
+            Assert.Throws<ArgumentException>(() => PodRuns.WriteReceiptIn(run,
+                new PodReceipt("office", "settings/a.json", "sha", "family.apply", null, "Succeeded", [], null), [(name, [1])]), name);
+    }
+
+    [Test]
     public void Run_receipt_lands_in_the_pod_output_with_its_outputs() {
         var folder = this.WritePod("Office", "office");
 

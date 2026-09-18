@@ -111,7 +111,7 @@ public static class PodRuns {
         _ = Directory.CreateDirectory(runFolder);
         var written = new List<string>();
         foreach (var (name, bytes) in outputs) {
-            if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || name == "receipt.json")
+            if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || string.Equals(name, "receipt.json", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException($"Run output name must be a plain file name other than receipt.json: '{name}'.", nameof(outputs));
             var outputPath = Path.Combine(runFolder, name);
             using (var stream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
