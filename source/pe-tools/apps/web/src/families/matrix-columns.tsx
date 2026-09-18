@@ -1,9 +1,13 @@
 import { useMemo } from "react";
+import type { FamilyCellEdit } from "@pe/agent-contracts";
 import { ReadCell } from "#/components/master-table/cells";
+import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
+import { at } from "#/families/staged";
 import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
@@ -46,8 +50,24 @@ const CLUSTER_ORDER: Record<Cluster, number> = {
   "project-only": 3,
 };
 
+/**
+ * Whether a patch can express a change to this cell — the one thing that decides if it is editable.
+ * A patch writes `types.<typeName>.<parameter>` on the family document, so an unresolved parameter
+ * (not on this family), a project binding (the value lives on instances, not in the family) and a
+ * formula-driven parameter (the family computes it) are all outside what a patch can say.
+ */
+export function patchable(row: TypeRow, key: string): boolean {
+  const scope = row.scopes[key];
+  return (
+    Boolean(scope) &&
+    scope !== "Unresolved" &&
+    scope !== "ProjectBindingOnly" &&
+    row.formulas[key] !== "Present"
+  );
+}
+
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
-function cellReason(row: TypeRow, key: string): string {
+function cellReason(row: TypeRow, key: string, instance: boolean): string {
   const scope = row.scopes[key];
   if (!scope || scope === "Unresolved")
     return "This parameter does not exist on this family, so there is nothing to read and nothing a profile could change here.";
@@ -55,9 +75,12 @@ function cellReason(row: TypeRow, key: string): string {
     return "Bound at the PROJECT, not owned by the family. The value lives on placed instances; editing the family will not move it.";
   if (row.formulas[key] === "Present")
     return "Driven by a formula inside the family — the number shown is what the formula resolved to for this type, not an authored value.";
-  return row.values[key]
-    ? `Authored value for this type: ${row.values[key]}. Read-only here — /families audits the fleet; edit one family in /family.`
-    : "The parameter exists on this family but this type carries no value for it.";
+  const what = instance
+    ? `the INSTANCE DEFAULT this type hands every instance placed from it`
+    : `this type's authored value`;
+  return `Type "${row.typeName}" of ${row.familyName}: ${what}${
+    row.values[key] ? ` — currently ${row.values[key]}` : " — currently blank"
+  }. Type to propose a value; yours and Pea's wait for accept or deny in the proposals band. Plan generates the spec from accepted values only.`;
 }
 
 // ── plan lens ───────────────────────────────────────────────────────────────────────────────────
@@ -75,6 +98,9 @@ export function useFamiliesColumns({
   setPickedIds,
   showUncommon,
   totalFamilies,
+  edits,
+  accepted,
+  propose,
 }: {
   familyState: (familyId: number) => Verdict;
   params: ParamColumn[];
@@ -82,6 +108,9 @@ export function useFamiliesColumns({
   setPickedIds: FamiliesStore["actions"]["setPickedIds"];
   showUncommon: boolean;
   totalFamilies: number;
+  edits: readonly FamilyCellEdit[];
+  accepted: readonly FamilyCellEdit[];
+  propose: FamiliesStore["actions"]["propose"];
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -208,10 +237,28 @@ export function useFamiliesColumns({
           const scopeOf = row.scopes[col.key];
           const value = row.values[col.key] ?? "";
           const unresolved = !scopeOf || scopeOf === "Unresolved";
+          const reason = cellReason(row, col.key, col.isInstance);
+          if (patchable(row, col.key)) {
+            const cell = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+            return (
+              <ProposalCell
+                current={value}
+                reason={reason}
+                proposal={at(edits, cell)}
+                accepted={at(accepted, cell)}
+                onCommit={(next) =>
+                  void propose(
+                    { ...cell, familyName: row.familyName, value: next, by: "human" },
+                    value,
+                  )
+                }
+              />
+            );
+          }
           return (
             <ReadCell
               value={unresolved ? "" : value || "—"}
-              reason={cellReason(row, col.key)}
+              reason={reason}
               /* A project binding and a formula are FACTS about where a value lives, not
                  alarms — they get quiet ink and spend no meaning role. Formula-driven was
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
@@ -229,7 +276,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, pickedIds, familyState]);
+  }, [params, totalFamilies, showUncommon, pickedIds, familyState, edits, accepted, propose]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,
@@ -237,4 +284,55 @@ export function useFamiliesColumns({
   );
 
   return { columns, uncommonCount };
+}
+
+/**
+ * One editable parameter cell in the house proposal language: the proposal on the cell is the
+ * trichotomy's `proposal` (Pea's or a person's, told apart by `by`) and the person's accept is
+ * its `staged`, read through the one reader `cellFromTrichotomy`. At row scale the prior value and
+ * the author ride the title; accept and deny sit in the proposals band beside the table.
+ */
+export function ProposalCell({
+  current,
+  reason,
+  proposal,
+  accepted,
+  onCommit,
+}: {
+  current: string;
+  reason: string;
+  proposal: FamilyCellEdit | undefined;
+  accepted: FamilyCellEdit | undefined;
+  onCommit: (text: string) => void;
+}) {
+  const move = useCellNavigation();
+  const shown = accepted?.value ?? proposal?.value ?? current;
+  const author = (by: FamilyCellEdit["by"]) => (by === "pea" ? "Pea" : "you");
+  const note = proposal
+    ? `${author(proposal.by)} proposed ${current || "(blank)"} → ${proposal.value}${
+        accepted?.value === proposal.value
+          ? "; accepted — plan will include it"
+          : accepted
+            ? `; you accepted ${accepted.value}, so Pea's value is a counter-proposal`
+            : "; open — accept or deny it in the proposals band"
+      }. Nothing has reached Revit.`
+    : accepted
+      ? `You accepted ${current || "(blank)"} → ${accepted.value}. Nothing has reached Revit.`
+      : reason;
+  return (
+    <span data-proposal={proposal?.by} data-accepted={accepted ? "" : undefined}>
+      <StateCell
+        {...cellFromTrichotomy(
+          {
+            proposal: proposal ? { value: proposal.value, by: proposal.by } : null,
+            staged: accepted ? { value: accepted.value } : null,
+          },
+          { value: shown, note, scale: "row" },
+        )}
+        placeholder={proposal || accepted ? current : undefined}
+        onCommit={(text) => onCommit(text)}
+        onNavigate={(direction) => move?.(direction) ?? false}
+      />
+    </span>
+  );
 }

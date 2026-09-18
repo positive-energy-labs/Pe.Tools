@@ -95,6 +95,8 @@ export const familyActions = {
       "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     input: z.object({
       source: podMemberSourceSchema,
+      /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
+      familyIds: z.array(z.number().int()).nonempty().optional(),
       excludedIds: z.array(z.number().int()).default([]),
       executionOptions: familyExecutionOptionsSchema.optional(),
     }),

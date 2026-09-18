@@ -152,6 +152,12 @@ export interface PlanEntry {
   /** Why this row cannot be applied (a refusal, or nothing to do); null = applicable. */
   flag: string | null;
   warnings: readonly string[];
+  /**
+   * The saved member this row was planned from, when the sheet's rows come from more than one —
+   * a staged audit generates one member per subject, so apply has to send each row's hashes back
+   * to the member that produced them.
+   */
+  source?: MemberSource;
 }
 
 /** The plan apply confirms (dogma law 9), as the plan workflow returned it. */
@@ -239,6 +245,20 @@ export interface EntityRouteDef<W, R extends string, P> {
   apply: SemanticActionKey;
   /** Present = apply is a confirmation over this plan. */
   plan?: ApplyPlan<W, R, P>;
+  /**
+   * Present = the audit stages edits of its own, and plan generates the spec from them AT THAT
+   * MOMENT rather than reading a member the person saved (dogma law 10 still holds: the generated
+   * member is the saved content, and the run receipt names it). With staged edits the route owns
+   * both halves of the confirmation; with none it falls back to `plan` over the page's member.
+   */
+  staged?: {
+    count: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => number;
+    plan: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => Promise<PlanSheet>;
+    apply: (
+      ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+      included: readonly PlanEntry[],
+    ) => Promise<void>;
+  };
   /**
    * What the route needs bound before it reads anything; default `project`. The verbs need what
    * their host workflow's contract says (`family.apply` needs a family document).
@@ -367,6 +387,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
   audit: Pick<RouteManifest<W, R, P, A>, "work" | "readings" | "page" | "actions" | "seeds"> = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
+  const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
+  /** How many edits the audit has staged; 0 = the verbs read the page's saved member instead. */
+  const stagedCount = (ctx: EntityCtx) => staged?.count(ctx as never) ?? 0;
   const sheetView = (ctx: EntityCtx) => sheetOf(def as never, ctx as never);
   const sourceOf = (ctx: EntityCtx): MemberSource => {
     const member = memberOf(ctx);
@@ -406,6 +429,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
       def.onCaptured?.(result, ctx as never);
     },
   };
+  /** A sheet planned from staged work names each row's generated member; apply sends those. */
+  const stagedSheet = (ctx: EntityCtx) =>
+    Boolean(staged && sheetView(ctx)?.sheet.entries.some((entry) => entry.source));
   const planVerb: RouteAction<unknown, string, EntityPage, never> = {
     label: "plan",
     says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
@@ -413,9 +439,17 @@ export function entityRoute<W, const R extends string, P extends object, const A
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
-    ready: savedSpec,
+    count: (ctx) => stagedCount(ctx) || null,
+    ready: (ctx) => {
+      // Staged work IS the spec: plan files it as new members, so nothing is open yet.
+      if (stagedCount(ctx))
+        return ctx.page.pod ? null : "choose the pod the generated spec lands in";
+      return plan ? savedSpec(ctx) : "nothing is staged to plan";
+    },
     run: async (ctx) => {
-      const sheet = await plan!.read(ctx as never, sourceOf(ctx));
+      const sheet = stagedCount(ctx)
+        ? await staged!.plan(ctx as never)
+        : await plan!.read(ctx as never, sourceOf(ctx));
       ctx.setPage({ stage: "apply", confirming: true, sheet });
     },
   };
@@ -424,25 +458,26 @@ export function entityRoute<W, const R extends string, P extends object, const A
     ...semanticActionFacts(def.apply),
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
-    count: (ctx) => (plan ? sheetView(ctx)?.included.length || null : null),
+    count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
     ready: (ctx) => {
-      const missing = savedSpec(ctx);
-      if (missing || !plan) return missing;
+      // A staged sheet carries its own generated member per row; the page's member is not sent.
+      const missing = stagedSheet(ctx) ? null : savedSpec(ctx);
+      if (missing || !(plan || staged)) return missing;
       if (!ctx.page.confirming) return "plan first";
       const view = sheetView(ctx);
       if (!view) return "the plan no longer describes this spec; plan again";
       return view.included.length ? null : "no included row has changes to apply";
     },
     run: async (ctx) => {
-      const source = sourceOf(ctx);
-      if (!plan) {
+      if (!plan && !staged) {
         // The host composes the saved bytes, refuses if they moved, and files the run receipt.
-        await workflow(def.apply, { source }, ctx);
+        await workflow(def.apply, { source: sourceOf(ctx) }, ctx);
         return;
       }
       const view = sheetView(ctx);
       if (!view) throw Error("plan first");
-      await plan.apply(ctx as never, view.included, source);
+      if (stagedSheet(ctx)) await staged!.apply(ctx as never, view.included);
+      else await plan!.apply(ctx as never, view.included, sourceOf(ctx));
       ctx.setPage({ confirming: false, sheet: null });
     },
   };
@@ -465,7 +500,12 @@ export function entityRoute<W, const R extends string, P extends object, const A
     page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
       P & EntityPage
     >,
-    actions: { ...audit.actions, capture, ...(plan ? { plan: planVerb } : {}), apply } as never,
+    actions: {
+      ...audit.actions,
+      capture,
+      ...(plan || staged ? { plan: planVerb } : {}),
+      apply,
+    } as never,
     seeds: audit.seeds as never,
   });
 }

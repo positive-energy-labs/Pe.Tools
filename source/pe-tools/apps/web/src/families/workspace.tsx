@@ -35,6 +35,8 @@ function useFamiliesWorkspaceModel(
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = store.applied;
+  const edits = store.edits;
+  const accepted = store.accepted;
   const plan = store.plan;
   const excludedIds = new Set(store.excludedIds);
   const pickedIds = store.pickedIds;
@@ -236,7 +238,15 @@ function useFamiliesWorkspaceModel(
     setPickedIds,
     showUncommon,
     totalFamilies,
+    edits,
+    accepted,
+    propose: store.actions.propose,
   });
+
+  const acceptedFamilies = useMemo(
+    () => new Set(accepted.map((edit) => edit.familyId)).size,
+    [accepted],
+  );
 
   const chips = useTableChips({
     categories:
@@ -262,6 +272,14 @@ function useFamiliesWorkspaceModel(
         ? {
             label: `capture · ${pickedIds.size} picked · esc`,
             onClear: () => setPickedIds(new Set()),
+          }
+        : null,
+    // Accepted cells are what plan will generate: countable here, denied whole in one press.
+    staged:
+      accepted.length > 0
+        ? {
+            label: `accepted · ${accepted.length} cell${accepted.length === 1 ? "" : "s"} · ${acceptedFamilies} famil${acceptedFamilies === 1 ? "y" : "ies"}`,
+            onClear: () => void store.actions.deny(accepted),
           }
         : null,
   });
@@ -292,6 +310,8 @@ function useFamiliesWorkspaceModel(
     target,
     scope,
     draft,
+    edits,
+    accepted,
     placement,
     draftCategories,
     pickedFamilies,

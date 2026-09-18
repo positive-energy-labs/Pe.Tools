@@ -253,7 +253,12 @@ type Prepared =
        * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` resolves to
        * family ids before the native plan; null is one family document, which plans exactly one family.
        */
-      planned?: { scope: AppliedFilter | null; excludedIds: readonly number[] };
+      planned?: {
+        scope: AppliedFilter | null;
+        excludedIds: readonly number[];
+        /** A subset of the scope the caller names (one generated member's family); absent = all. */
+        familyIds?: readonly number[];
+      };
     }
   | {
       kind: "capture";
@@ -381,7 +386,11 @@ export async function admitFamilyAction(
             specJson: await familySpec(deps, input.source, pods),
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
           },
-          planned: { scope, excludedIds: input.excludedIds },
+          planned: {
+            scope,
+            excludedIds: input.excludedIds,
+            ...(input.familyIds ? { familyIds: input.familyIds } : {}),
+          },
         };
       }
       if (key === "families.apply") {
@@ -539,7 +548,12 @@ export async function admitFamilyAction(
       if (prepared.kind === "native") {
         const scope = prepared.planned?.scope;
         // The target resolves to family ids once, here; the engine plans exactly those ids.
-        const familyIds = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
+        const resolved = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
+        // A caller naming ids narrows the scope; it never widens it.
+        const outside = prepared.planned?.familyIds?.filter((id) => !resolved?.includes(id)) ?? [];
+        if (outside.length)
+          throw refused(`Families ${outside.join(", ")} are outside the reviewed scope`);
+        const familyIds = prepared.planned?.familyIds ?? resolved;
         const result = await native(
           prepared.nativeKey,
           familyIds ? { ...(prepared.input as object), familyIds } : prepared.input,

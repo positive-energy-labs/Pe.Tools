@@ -113,10 +113,15 @@ type FamiliesSeed = Seed<
   FamiliesPage & Partial<EntityPage>
 >;
 
-const seed = (title: string, page: Partial<EntityPage>, readings = {}): FamiliesSeed => ({
+const seed = (
+  title: string,
+  page: Partial<EntityPage>,
+  readings = {},
+  doc: FamiliesRouteDocument = work,
+): FamiliesSeed => ({
   title,
   target: { kind: "document", ref: TARGET },
-  work,
+  work: doc,
   readings: {
     receipts: [],
     inventory: { sessions: [] },
@@ -126,7 +131,40 @@ const seed = (title: string, page: Partial<EntityPage>, readings = {}): Families
   page: { pod: POD.id, ...page } as never,
 });
 
-/** `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan. */
+/**
+ * The editable table in the proposal language: Pea proposed one cell and a person accepted it; a
+ * person proposed another that nobody has accepted yet. Nothing has reached Revit and no file
+ * exists — plan generates one patch member per family from the ACCEPTED cell only.
+ */
+const peaModel = {
+  familyId: 3101,
+  familyName: "Fan Coil Unit - Ducted",
+  typeName: "FCU-1",
+  parameter: "PE_G___Model",
+  value: "FXMQ20",
+  by: "pea",
+} as const;
+const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
+  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
+  excludedIds: [],
+  edits: [
+    peaModel,
+    {
+      familyId: 3102,
+      familyName: "Heat Pump - Split",
+      typeName: "HP-1",
+      parameter: "PE_G___Manufacturer",
+      value: "Mitsubishi",
+      by: "human",
+    },
+  ],
+  accepted: [peaModel],
+});
+
+/**
+ * `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan;
+ * `?demo=edit` shows the table with one accepted and one open cell proposal.
+ */
 export const FAMILIES_SEEDS = {
   capture: seed("two families picked for capture into the demo pod", {
     stage: "capture",
@@ -138,4 +176,10 @@ export const FAMILIES_SEEDS = {
     confirming: true,
     sheet: { entries: plan.map(ffPlanRow) },
   }),
+  edit: seed(
+    "two cell proposals across two families, one accepted; plan generates the spec from the accepted one",
+    { stage: "apply" },
+    {},
+    staged,
+  ),
 };

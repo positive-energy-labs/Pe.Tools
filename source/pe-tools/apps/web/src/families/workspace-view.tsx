@@ -2,7 +2,11 @@ import { Pane } from "#/components/lang/pane";
 import { FamiliesMatrix } from "#/families/matrix";
 import { familiesSpec } from "#/families/manifest";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
-import { FamiliesCaptureBand, FamiliesReceiptsBand } from "#/families/readout-bands";
+import {
+  FamiliesCaptureBand,
+  FamiliesProposalsBand,
+  FamiliesReceiptsBand,
+} from "#/families/readout-bands";
 import { FamiliesFilterBand } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { EntityRouteView } from "#/route/entity";
@@ -63,6 +67,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       <div className="flex size-full min-h-0 min-w-0 flex-col">
         <div data-slot="readout-band" className="shrink-0 py-1.5">
           <FamiliesFilterBand />
+          <FamiliesProposalsBand />
           <FamiliesCaptureBand />
           <FamiliesReceiptsBand />
         </div>
