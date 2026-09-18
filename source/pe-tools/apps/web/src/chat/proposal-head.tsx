@@ -5,7 +5,7 @@
  * transitions the route draws on each cell. Every exit opens the route in Chat's plugin pane.
  * It never lists cells and never draws a confirmation sheet.
  */
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import { fanOut, summarize, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
 
@@ -165,6 +165,16 @@ function WorkLine({ work }: { work: HeadWork }) {
 function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
   const [outcomes, setOutcomes] = useState<ReadonlyMap<string, FanOutOutcome>>(new Map());
   const more = groups.length - GROUP_ROWS;
+  // One pass over the Work's pending cells per change, not one per group per render.
+  const keysOf = useMemo(() => {
+    const byLabel = new Map<string, string[]>();
+    for (const [key, cell] of Object.entries(work.cells)) {
+      if (!pending(cell)) continue;
+      const label = String(work.groupOf(key)[0]);
+      byLabel.set(label, [...(byLabel.get(label) ?? []), key]);
+    }
+    return byLabel;
+  }, [work.cells, work.groupOf]);
   return (
     <div className="flex flex-col pl-4">
       {groups.slice(0, GROUP_ROWS).map((group) => {
@@ -174,6 +184,7 @@ function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
             key={label}
             work={work}
             group={group}
+            keys={keysOf.get(label) ?? NO_KEYS}
             outcome={outcomes.get(label)}
             done={(outcome) => setOutcomes(new Map(outcomes).set(label, outcome))}
           />
@@ -188,26 +199,33 @@ function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
   );
 }
 
+const NO_KEYS: string[] = [];
+
 function GroupRow({
   work,
   group,
+  keys,
   outcome,
   done,
 }: {
   work: HeadWork;
   group: CellGroup;
+  keys: string[];
   outcome: FanOutOutcome | undefined;
   done: (outcome: FanOutOutcome) => void;
 }) {
   const show = work.show ?? showDefault;
   const label = String(group.path[0]);
-  const keys = Object.keys(work.cells).filter(
-    (key) => pending(work.cells[key]!) && String(work.groupOf(key)[0]) === label,
-  );
-  // `{k}` is what this render would cover; the press writes exactly that, bound to this revision.
-  const ctx = { cellsPath: [work.wire.segment], actor: "human" as const, lockOf: work.wire.lockOf };
-  const acceptK = fanOut(work.cells, keys, "accept", ctx).covered.length;
-  const denyK = fanOut(work.cells, keys, "deny", ctx).covered.length;
+  // `{k}` is what the press would cover over these cells, bound to this revision. The dry runs
+  // are memoized: they rerun only when the cells, the group's keys or the locks move.
+  const { segment, lockOf } = work.wire;
+  const { acceptK, denyK } = useMemo(() => {
+    const ctx = { cellsPath: [segment], actor: "human" as const, lockOf };
+    return {
+      acceptK: fanOut(work.cells, keys, "accept", ctx).covered.length,
+      denyK: fanOut(work.cells, keys, "deny", ctx).covered.length,
+    };
+  }, [work.cells, keys, segment, lockOf]);
   const to = (value: unknown) => (value === null ? "delete" : show(value));
   const digest = group.digest;
   const body =

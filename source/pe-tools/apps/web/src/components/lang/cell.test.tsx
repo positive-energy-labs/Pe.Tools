@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { StateCell, type CellTransition } from "#/components/lang/cell";
+import { MasterTable } from "#/components/master-table/master-table";
 
 afterEach(cleanup);
 
@@ -13,18 +14,19 @@ const t = (
   out: Awaited<ReturnType<CellTransition["run"]>> = null,
 ): CellTransition => ({ kind, run: vi.fn(async () => out) });
 
-const inTable = (node: React.ReactNode) =>
-  render(
-    <table>
-      <tbody>
-        <tr>
-          <td data-master-cell="" tabIndex={0}>
-            {node}
-          </td>
-        </tr>
-      </tbody>
-    </table>,
+/** Row scale inside the real MasterTable: one row, one column drawing the cell. */
+const inTable = (node: React.ReactNode) => {
+  const view = render(
+    <MasterTable
+      rows={[{ key: "r" }]}
+      columns={[{ key: "c", label: "c", cell: () => node }]}
+      rowKey={(row) => row.key}
+      scopeLabel="cells"
+    />,
   );
+  return { ...view, cell: within(view.container.querySelector<HTMLElement>(".dl-cell")!) };
+};
+const gridcell = () => document.querySelector<HTMLElement>('td[role="gridcell"]')!;
 
 test("row scale adds no height: its verbs are an absolute overlay inside the one clipped line", () => {
   const { container } = inTable(
@@ -40,8 +42,10 @@ test("row scale adds no height: its verbs are an absolute overlay inside the one
 });
 
 test("the cell draws exactly the kinds it is given, in order, at both scales", () => {
-  inTable(<StateCell value="10in" scale="row" transitions={[t("unstage"), t("accept")]} />);
-  expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+  const { cell } = inTable(
+    <StateCell value="10in" scale="row" transitions={[t("unstage"), t("accept")]} />,
+  );
+  expect(cell.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
     "unstage",
     "accept",
   ]);
@@ -55,8 +59,8 @@ test("the cell draws exactly the kinds it is given, in order, at both scales", (
 
 test("a refused run keeps the value and says why beside the cell", async () => {
   const deny = t("deny", { code: "stale-revision", message: "another writer landed first" });
-  inTable(<StateCell value="10in" scale="row" transitions={[deny]} />);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "deny" })));
+  const { cell } = inTable(<StateCell value="10in" scale="row" transitions={[deny]} />);
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "deny" })));
   expect(deny.run).toHaveBeenCalledOnce();
   expect(screen.getByText("another writer landed first").className).toBe("dl-refuse");
   expect(screen.getByText("10in")).toBeTruthy();
@@ -68,20 +72,20 @@ test("a run in flight marks the cell busy and inerts its verbs", async () => {
     kind: "accept",
     run: () => new Promise<void>((resolve) => (land = resolve)),
   };
-  const { container } = inTable(<StateCell value="10in" scale="row" transitions={[accept]} />);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "accept" })));
+  const { container, cell } = inTable(
+    <StateCell value="10in" scale="row" transitions={[accept]} />,
+  );
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "accept" })));
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBe("true");
-  expect(screen.getByRole("button", { name: "accept" }).hasAttribute("disabled")).toBe(true);
+  expect(cell.getByRole("button", { name: "accept" }).hasAttribute("disabled")).toBe(true);
   await act(async () => land());
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
-test("a focused table cell fires a / d / u through the hotkey registry", async () => {
+test("inside MasterTable, a focused cell fires a / d / u through the hotkey registry", async () => {
   const [accept, deny, unstage] = [t("accept"), t("deny"), t("unstage")];
-  const { container } = inTable(
-    <StateCell value="10in" scale="row" transitions={[accept, deny, unstage]} />,
-  );
-  const td = container.querySelector<HTMLElement>("td")!;
+  inTable(<StateCell value="10in" scale="row" transitions={[accept, deny, unstage]} />);
+  const td = gridcell();
   await act(async () => td.focus());
   await act(async () => fireEvent.keyDown(td, { key: "d", code: "KeyD" }));
   await act(async () => fireEvent.keyDown(td, { key: "u", code: "KeyU" }));
@@ -96,8 +100,8 @@ test("Escape in the input restores the value and hands focus back to the td, whe
   const { container } = inTable(
     <StateCell value="10in" scale="row" onCommit={commit} transitions={[accept]} />,
   );
-  const td = container.querySelector<HTMLElement>("td")!;
-  const input = container.querySelector("input")!;
+  const td = gridcell();
+  const input = container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
   await act(async () => input.focus());
   fireEvent.change(input, { target: { value: "12in" } });
   await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
@@ -114,4 +118,37 @@ test("an aggregate's refusal draws in the same note on each covered cell", () =>
   cleanup();
   render(<StateCell value="10in" refused="moved since you looked" />);
   expect(screen.getByText("moved since you looked").className).toBe("dl-refuse");
+});
+
+test("with no table around it, a card-scale field is its own host: a / d / u on the field", async () => {
+  const [accept, deny] = [t("accept"), t("deny")];
+  const { container } = render(<StateCell value="10in" transitions={[accept, deny]} />);
+  const field = container.firstElementChild as HTMLElement;
+  expect(field.tabIndex).toBe(0);
+  await act(async () => field.focus());
+  await act(async () => fireEvent.keyDown(field, { key: "d", code: "KeyD" }));
+  await act(async () => fireEvent.keyDown(field, { key: "a", code: "KeyA" }));
+  expect(deny.run).toHaveBeenCalledOnce();
+  expect(accept.run).toHaveBeenCalledOnce();
+});
+
+test("with no table around it, Escape returns to the cell itself, where u unstages", async () => {
+  const unstage = t("unstage");
+  const { container } = render(
+    <StateCell value="10in" scale="row" onCommit={vi.fn()} transitions={[unstage]} />,
+  );
+  const cell = container.querySelector<HTMLElement>(".dl-cell")!;
+  const input = cell.querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "12in" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
+  expect(input.value).toBe("10in");
+  expect(document.activeElement).toBe(cell);
+  await act(async () => fireEvent.keyDown(cell, { key: "u", code: "KeyU" }));
+  expect(unstage.run).toHaveBeenCalledOnce();
+});
+
+test("a cell with no verbs takes no tab stop of its own", () => {
+  const { container } = render(<StateCell value="10in" />);
+  expect((container.firstElementChild as HTMLElement).hasAttribute("tabindex")).toBe(false);
 });

@@ -152,6 +152,12 @@ function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
   );
 }
 
+/** A matrix address's group path: parameter › family › type. */
+const matrixGroupOf = (key: string) => {
+  const [type, parameter] = key.split("::") as [string, string];
+  return [parameter, MATRIX.find((row) => row.key === type)?.family ?? "", type];
+};
+
 /** The matrix as the Chat head reads it: the same cells, wire and group path as the table. */
 export const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): HeadWork => ({
   id: "families:MEP Coordination.rvt",
@@ -159,10 +165,7 @@ export const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): Hea
   subject: "MEP Coordination.rvt",
   cells: matrix.cells,
   wire: matrix.wire,
-  groupOf: (key) => {
-    const [type, parameter] = key.split("::") as [string, string];
-    return [parameter, MATRIX.find((row) => row.key === type)?.family ?? "", type];
-  },
+  groupOf: matrixGroupOf,
   commit: {
     word: "plan",
     run: () => say("SIMULATED · the Families pane opens unscoped and plans"),

@@ -29,7 +29,15 @@
  *   1 uneditable owns the body · 2 pea's proposal owns it otherwise · 3 the squiggle slot ·
  *   4 unsaved composes on top · 5 citation never contends.
  */
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type RefObject,
+} from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { Check, Undo2, X, type LucideIcon } from "lucide-react";
 
@@ -41,8 +49,8 @@ import "./lang.css";
 
 export const stateCellRecipe = tv({
   slots: {
-    wrapper: "",
-    base: "dl-cell",
+    wrapper: "focus-visible:outline focus-visible:outline-line-2",
+    base: "dl-cell focus-visible:outline focus-visible:outline-line-2",
     line: "dl-cell-line",
     input: "dl-cell-input",
     unsettled: "dl-sq",
@@ -124,6 +132,12 @@ function CellKeys({
   return null;
 }
 
+/**
+ * The element that owns a hosted cell's keyboard focus, provided by whatever hosts the cell:
+ * MasterTable hands each cell its td. Absent, the cell is its own host.
+ */
+export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
+
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
   const read = readCell(props);
@@ -149,12 +163,17 @@ export function StateCell(props: StateCellProps) {
       setRefusal(out ? out.message : null);
     });
   };
-  // Row scale: the td that owns focus. Keys register only while it (or its input) holds focus.
-  const rowRef = useRef<HTMLSpanElement | null>(null);
+  // The cell's keyboard host: whatever hosts the cell provides one (MasterTable its td); a cell
+  // hosted by nothing is its own host, focusable at any scale. Keys register only while it (or
+  // its input) holds focus; Escape from the input hands focus back to it.
+  const provided = useContext(CellHost);
+  const rootRef = useRef<HTMLSpanElement | null>(null);
   const [focusHost, setFocusHost] = useState<HTMLElement | null>(null);
   const hasTransitions = transitions.length > 0;
+  const ownHost = provided == null && hasTransitions;
+  const keyHost = () => provided?.current ?? (ownHost ? rootRef.current : null);
   useEffect(() => {
-    const host = rowRef.current?.closest<HTMLElement>("[data-master-cell]");
+    const host = keyHost();
     if (!hasTransitions || !host) return;
     const on = () => setFocusHost(host);
     const off = (e: FocusEvent) => {
@@ -167,7 +186,12 @@ export function StateCell(props: StateCellProps) {
       host.removeEventListener("focusin", on);
       host.removeEventListener("focusout", off);
     };
-  }, [hasTransitions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyHost reads refs, identified by these
+  }, [hasTransitions, provided]);
+  const keys =
+    focusHost != null && hasTransitions ? (
+      <CellKeys target={focusHost} transitions={transitions} fire={fire} />
+    ) : null;
 
   const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
@@ -211,7 +235,8 @@ export function StateCell(props: StateCellProps) {
     };
     return (
       <span
-        ref={rowRef}
+        ref={rootRef}
+        tabIndex={ownHost ? 0 : undefined}
         className={slots.base()}
         data-scale="row"
         data-focus={focusHost != null ? "" : undefined}
@@ -251,8 +276,8 @@ export function StateCell(props: StateCellProps) {
               } else if (e.key === "Escape") {
                 e.currentTarget.value = initial.current;
                 // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
-                const td = e.currentTarget.closest<HTMLElement>("[data-master-cell]");
-                if (td) td.focus();
+                const host = keyHost();
+                if (host) host.focus();
                 else e.currentTarget.blur();
               }
             }}
@@ -288,9 +313,7 @@ export function StateCell(props: StateCellProps) {
             })}
           </span>
         ) : null}
-        {focusHost != null && hasTransitions ? (
-          <CellKeys target={focusHost} transitions={transitions} fire={fire} />
-        ) : null}
+        {keys}
         {refusalNote != null ? (
           <button
             type="button"
@@ -329,6 +352,8 @@ export function StateCell(props: StateCellProps) {
   const hoverFoot = props.foot === "hover";
   return (
     <span
+      ref={rootRef}
+      tabIndex={ownHost ? 0 : undefined}
       className={slots.wrapper()}
       aria-busy={pending || undefined}
       onClick={locate}
@@ -379,6 +404,7 @@ export function StateCell(props: StateCellProps) {
           </button>
         ) : null}
       </span>
+      {keys}
       {facts.length > 0 && !hoverFoot ? (
         <span className={slots.foot()}>
           {facts.map((f, i) => (

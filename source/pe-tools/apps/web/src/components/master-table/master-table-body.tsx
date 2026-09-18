@@ -1,6 +1,16 @@
-import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createRef,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
+import { CellHost } from "#/components/lang/cell";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
 import {
@@ -94,6 +104,14 @@ export function MasterTableBody<Row extends RowData>({
   gutterWidth: number;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+  // The td is each cell's keyboard host: one stable ref per cell id, handed to whatever the column
+  // draws (a StateCell registers its verbs on it). ponytail: never pruned; ids are bounded by rows.
+  const hosts = useRef(new Map<string, RefObject<HTMLTableCellElement | null>>());
+  const hostOf = (id: string) => {
+    let ref = hosts.current.get(id);
+    if (!ref) hosts.current.set(id, (ref = createRef<HTMLTableCellElement>()));
+    return ref;
+  };
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
@@ -172,6 +190,7 @@ export function MasterTableBody<Row extends RowData>({
                 >
                   {(selection) => (
                     <td
+                      ref={hostOf(cell.id)}
                       role="gridcell"
                       tabIndex={
                         selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
@@ -209,11 +228,13 @@ export function MasterTableBody<Row extends RowData>({
                           moveFrom(document.activeElement, direction, true)
                         }
                       >
-                        {/* The column's own renderer, called, never `FlexRender`: TanStack
+                        <CellHost.Provider value={hostOf(cell.id)}>
+                          {/* The column's own renderer, called, never `FlexRender`: TanStack
                             renders a def's `cell` as a component TYPE, and the def is rebuilt
                             whenever the columns are, so every cell remounted on each Work change
                             and a half-typed value (and focus) vanished with its input (O8-c). */}
-                        {column.cell(tableRow.original)}
+                          {column.cell(tableRow.original)}
+                        </CellHost.Provider>
                       </CellNavigationProvider>
                     </td>
                   )}
