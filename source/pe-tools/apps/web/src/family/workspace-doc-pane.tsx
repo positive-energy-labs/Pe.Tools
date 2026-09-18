@@ -1,4 +1,5 @@
-import { parameterText, paramSpec } from "#/family/family-model";
+import { settingsFieldPointer } from "@pe/agent-contracts";
+import { parameterSection, parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
@@ -34,16 +35,15 @@ export function FamilyWorkspaceDocPane() {
     inspect,
     setInspect,
     cardRefs,
-    proposalState,
     proposalsAt,
     openProposals,
     locate,
     rows,
     consumers,
     say,
-    accept,
-    deny,
-    reopen,
+    transitionsAt,
+    wire,
+    fields,
     editAuthored,
     editLiteral,
     litBlocks,
@@ -135,6 +135,17 @@ export function FamilyWorkspaceDocPane() {
     const drives = consumers.get(name) ?? [];
     const blocks = world.grounding[name] ?? [];
     const family = proposalsAt(name, null);
+    const model = lane.document?.model;
+    // The field the family value stands on: pea's proposal, else where typing would stage it.
+    const familyKey =
+      family[0]?.id ??
+      (model
+        ? settingsFieldPointer([
+            parameterSection(model, name),
+            name,
+            isFormula(authored) ? "formula" : "value",
+          ])
+        : null);
     return (
       <>
         <p className="t-small face-mono mb-1.5 text-ink-2">
@@ -171,6 +182,7 @@ export function FamilyWorkspaceDocPane() {
               parameterText,
             )}
             onLocate={family[0] ? () => locate(family[0]!) : undefined}
+            transitions={familyKey ? transitionsAt(familyKey) : undefined}
             note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
@@ -353,7 +365,8 @@ export function FamilyWorkspaceDocPane() {
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
-                state={proposalState(proposal)}
+                wire={wire}
+                cell={fields[proposal.id] ?? {}}
                 // A card lights either because it is the one you located, or because its whole ROW
                 // is the one you located — the two-proposal case has to light both cards or the
                 // count on the rail would be pointing at something the sidebar refuses to show.
@@ -363,9 +376,6 @@ export function FamilyWorkspaceDocPane() {
                   null
                 }
                 specFileName={world.spec?.fileName ?? null}
-                onAccept={() => accept(proposal)}
-                onDeny={() => deny(proposal)}
-                onReopen={() => reopen(proposal)}
                 onHover={(on) => {
                   setFocus(on ? { kind: "param", id: proposal.param } : null);
                   setFocusedProposal(on ? proposal.id : null);

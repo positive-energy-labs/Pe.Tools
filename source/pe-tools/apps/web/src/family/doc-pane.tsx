@@ -1,3 +1,4 @@
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { token } from "#/lib/token";
 /**
  * /family — the doc sidebar's contents: the spec in two modes, and pea's proposal cards.
@@ -7,14 +8,14 @@ import { token } from "#/lib/token";
  * camera: it draws where the blocks sit on the page, not what they say, which is the one question
  * the text mode cannot answer. It announces itself as a stand-in rather than pretending.
  *
- * PROPOSALS DOCK ON TOP OF IT, so the decision is always beside the spec text that justifies it —
- * the whole reason the table's rail and folds only ever LOCATE and never decide.
+ * PROPOSALS DOCK ON TOP OF IT, so a proposal's cell and its verbs sit beside the spec text that
+ * justifies it.
  */
 import { EmptyState } from "#/components/lang/empty";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
+import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { Switcher } from "#/components/lang/switcher";
 import { hashOf } from "#/family/model";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
@@ -194,78 +195,34 @@ export function SpecSheet({
   );
 }
 
+/**
+ * One pea proposal beside the spec text that justifies it. Its verbs are the cell's own: the card
+ * draws the same Work field as a `ReviewRow`, so accepting here is the table cell's accept.
+ */
 export function ProposalCard({
   proposal,
-  state,
+  wire,
+  cell,
   focused,
   blockMd,
   specFileName,
-  onAccept,
-  onDeny,
-  onReopen,
   onHover,
   register,
 }: {
   proposal: ProtoProposal;
+  wire: CellWire;
+  /** The Work field the proposal stands on. */
+  cell: TrichotomyCellLike;
   /** Named so the citation line can say WHICH document it read from. */
   specFileName?: string | null;
-  /** The proposal's place in the ONE lifecycle, derived from the draft by `proposalState`. */
-  state: "open" | "taken" | "cleared";
   focused: boolean;
   blockMd: string | null;
-  onAccept: () => void;
-  onDeny: () => void;
-  onReopen: () => void;
   onHover: (on: boolean) => void;
   register: (node: HTMLDivElement | null) => void;
 }) {
   const target = proposal.typeName
     ? `${proposal.param} · ${proposal.typeName}`
     : `${proposal.param} · family value`;
-
-  // A settled proposal collapses to one line rather than disappearing: the sidebar keeps the
-  // record that a claim was made and answered, and the citation link stays hoverable. TWO
-  // outcomes, not four — `accepted`, `denied` and `superseded` were three names for two facts.
-  if (state !== "open") {
-    const settled =
-      state === "taken"
-        ? {
-            mark: "✓",
-            word: "accepted · staged",
-            colour: token("done"),
-            note: `Accepted — the draft now stages ${proposal.proposed} for ${target}, and the cell wears PEA's square because the staged value is the one pea argued for. The proposal was never persisted; only the value it argued for is in the draft, and its citation is still live. Saving is what writes it.`,
-          }
-        : {
-            mark: "—",
-            word: "cleared",
-            colour: token("ink-mute"),
-            // MUTED, never `--pe-done`: nothing of pea's was adopted. Denying and being beaten to
-            // the cell are ONE outcome — the proposal is gone and the cell shows the real value.
-            note: `Cleared — either you denied it or you typed your own value into ${target} first. Pea's ${proposal.proposed} no longer stands, the cell shows the real value again, and nothing was written. The grounding citation is untouched, because where a number came from is a separate fact from what pea read. Re-open puts the proposal back.`,
-          };
-    return (
-      <div
-        ref={register}
-        onMouseEnter={() => onHover(true)}
-        onMouseLeave={() => onHover(false)}
-        className="hairline-b flex items-baseline gap-1 py-0.5 t-small face-mono last:border-b-0"
-        title={settled.note}
-        style={{ color: settled.colour }}
-      >
-        <span>{settled.mark}</span>
-        <span className="truncate">{target}</span>
-        <span className="ml-auto shrink-0 text-ink-2">{settled.word}</span>
-        {state === "cleared" && (
-          <ActionButton
-            label="re-open"
-            onClick={onReopen}
-            reason={`Put pea's reading of ${target} back on the table. Clearing it was page state, not a decision written anywhere, so this is a plain undo — the cell wears its fold again and accept and deny come back.`}
-          />
-        )}
-      </div>
-    );
-  }
-
   return (
     <div
       ref={register}
@@ -281,12 +238,15 @@ export function ProposalCard({
           : "transparent",
         transition: "background var(--motion-control)",
       }}
-      title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="t-small face-mono text-ink-2">{target}</div>
-      <div className="t-small t-upper text-ink">
-        {proposal.current ?? "—"} → {proposal.proposed}
-      </div>
+      <ReviewRow
+        wire={wire}
+        address={proposal.id}
+        label={<span className="t-small face-mono text-ink-2">{target}</span>}
+        cell={cell}
+        // The note is the card's paragraph below; the cell keeps its facts on hover.
+        facts={{ value: proposal.proposed, foot: "hover" }}
+      />
       <p className="mt-0.5 text-ink">{proposal.note}</p>
       {blockMd && (
         <p
@@ -296,23 +256,6 @@ export function ProposalCard({
           {blockMd}
         </p>
       )}
-      {/* Both verbs are page-scoped ACTS, and accept deliberately so: it STAGES the value into the
-          draft, where the unsaved square then says the file has not moved. `accept` wears the
-          AGENT tone because it adopts pea's reading; `deny` is an ordinary safe verb. Only
-          `save profile` crosses out of the page, and it is not on this sidebar. */}
-      <div className="mt-1 flex gap-1">
-        <ActionButton
-          label="accept"
-          tone="agent"
-          onClick={onAccept}
-          reason={`Write ${proposal.proposed} into the table for ${target}. You will see it land in the cell — that IS the accept; the profile then reads unsaved until you save it.`}
-        />
-        <ActionButton
-          label="deny"
-          onClick={onDeny}
-          reason="Clear the proposal. It stops standing, the cell goes back to showing the profile's real value and draws nothing, and the profile is unchanged. The card collapses to one line carrying a re-open verb, so the sidebar still records that it was answered and the denial is undoable."
-        />
-      </div>
     </div>
   );
 }

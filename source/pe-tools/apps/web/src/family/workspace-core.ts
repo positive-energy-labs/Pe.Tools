@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
+import { reviewTransitions } from "#/components/lang/band";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
@@ -116,24 +117,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * behind the staged value, because that is the only evidence that the square is pea's ink. */
   const stands = (entry: ProtoProposal): boolean => !draft.cleared.includes(entry.id);
 
-  /**
-   * WHAT BECAME OF PEA'S READING — derived from the draft, never remembered.
-   *   cleared — denied, or beaten by your own edit. Gone; the cell shows the real value.
-   *   taken   — the draft now STAGES exactly what it argued for. That is what accept does, and
-   *             typing the same number yourself is indistinguishable, which is honest.
-   *   open    — still owed a decision.
-   */
-  const proposalState = (entry: ProtoProposal): "open" | "taken" | "cleared" => {
-    if (!stands(entry)) return "cleared";
-    const value = entry.typeName
-      ? draft.types[entry.typeName]?.[entry.param]
-      : draft.authored[entry.param];
-    const disk = entry.typeName
-      ? saved.types[entry.typeName]?.[entry.param]
-      : saved.authored[entry.param];
-    return value === entry.proposed && value !== disk ? "taken" : "open";
-  };
-
   /** Every standing proposal aimed at exactly one cell: a type override, or the family-level
    * value. A list, not a single one — a cell may be argued about twice, and hiding the second
    * would be the surface lying about how much is outstanding. */
@@ -209,39 +192,12 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
 
   // ── verbs ─────────────────────────────────────────────────────────────────────────────────────
 
-  const accept = (proposal: ProtoProposal) => {
-    setDraft((previous) => {
-      const next = structuredClone(previous);
-      if (proposal.typeName) {
-        next.types[proposal.typeName] = {
-          ...next.types[proposal.typeName],
-          [proposal.param]: proposal.proposed,
-        };
-      } else {
-        next.authored[proposal.param] = proposal.proposed;
-      }
-      next.dirty = true;
-      return next;
-    });
-    say(`accepted ${proposal.param} = ${proposal.proposed}`);
-  };
-
-  /** DENY CLEARS. There is no denied state to draw: the proposal stops standing, so the cell goes
-   * back to showing the real value and draws nothing. The card keeps a one-line record with a
-   * re-open verb, which is the whole undo — the proposal itself never left this page. */
-  const deny = (proposal: ProtoProposal) => {
-    setDraft((previous) => ({ ...previous, cleared: [...previous.cleared, proposal.id] }));
-    say(`denied — the proposal is gone and ${proposal.param} shows its real value again`);
-  };
-
-  /** Put a cleared proposal back. Page-scoped view state, not a cell state. */
-  const reopen = (proposal: ProtoProposal) => {
-    setDraft((previous) => ({
-      ...previous,
-      cleared: previous.cleared.filter((id) => id !== proposal.id),
-    }));
-    say(`re-opened pea's reading of ${proposal.param}`);
-  };
+  /**
+   * A drawn cell's verbs: exactly the contract's transitions on the Work field it stands on. Accept
+   * and deny are the cell's own; nothing on this page assembles them.
+   */
+  const transitionsAt = (key: string) =>
+    reviewTransitions(store.wire, key, store.fields[key] ?? {});
 
   /**
    * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every proposal aimed at
@@ -549,7 +505,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     setBinding,
     cardRefs,
     say,
-    proposalState,
     proposalsAt,
     proposalsOn,
     openProposals,
@@ -559,9 +514,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     ghostCount,
     driftCells,
     unsavedCount,
-    accept,
-    deny,
-    reopen,
+    transitionsAt,
+    wire: store.wire,
+    fields: store.fields,
     sever,
     editAuthored,
     editOverride,

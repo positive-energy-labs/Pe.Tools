@@ -1,15 +1,28 @@
 import { useMemo } from "react";
 import { scheduleCellKey } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { StateCell, type StateCellProps } from "#/components/lang/cell";
+import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 
 type ScheduleRow = Snapshot["rows"][number];
+type Binding = ScheduleRow["bindings"][number];
+
+/** Why a schedule cell refuses writes, or null when its parameter binding takes them. */
+export const scheduleLock = (binding: Binding | undefined): string | null =>
+  binding == null
+    ? "no parameter behind this cell — the row is unbound here"
+    : binding.isEditable === true && binding.blocker === "None"
+      ? null
+      : binding.blocker !== "None"
+        ? `blocked: ${binding.blocker}`
+        : "read-only — this parameter cannot be written from a schedule";
 
 export function useScheduleGridColumns(
   snapshot: Snapshot | null,
   cells: ScheduleGridDocument["cells"],
+  wire: CellWire,
   stageEdit: (key: string, value: string) => string | void,
 ) {
   return useMemo<Column<ScheduleRow>[]>(() => {
@@ -55,34 +68,26 @@ export function useScheduleGridColumns(
               : undefined,
           title: kindNote || "Schedule column — values write through the cell's parameter binding.",
           search: (row) => row.values[columnIndex] ?? "",
-          state: (row): StateCellProps => {
+          state: (row) => {
             const key = scheduleCellKey(row.rowNumber, column.columnNumber);
             const binding = row.bindings.find(
               (candidate) => candidate.columnNumber === column.columnNumber,
             );
-            const cell = cells[key];
-            const isStaged = cell?.staged != null;
-            const isProposal = !isStaged && cell?.proposal != null;
+            const cell = cells[key] ?? {};
+            const isStaged = cell.staged != null;
+            const isProposal = !isStaged && cell.proposal != null;
             const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
             const shown = isStaged
-              ? (cell?.staged?.value ?? "")
+              ? (cell.staged?.value ?? "")
               : isProposal
-                ? String(cell?.proposal?.value ?? "")
+                ? String(cell.proposal?.value ?? "")
                 : current;
-            const editable = binding?.isEditable === true && binding.blocker === "None";
-            const capReason =
-              binding == null
-                ? "no parameter behind this cell — the row is unbound here"
-                : editable
-                  ? undefined
-                  : binding.blocker !== "None"
-                    ? `blocked: ${binding.blocker}`
-                    : "read-only — this parameter cannot be written from a schedule";
+            const lock = scheduleLock(binding);
             const note =
               [
                 (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
                 isProposal
-                  ? cell?.proposal?.note
+                  ? cell.proposal?.note
                     ? `pea: ${cell.proposal.note}`
                     : "pea proposed this"
                   : null,
@@ -97,18 +102,19 @@ export function useScheduleGridColumns(
                 .filter(Boolean)
                 .join(" · ") || undefined;
             return {
-              value: shown,
-              stage: isStaged ? "staged" : isProposal ? "proposed" : "clean",
-              stagedBy: "you",
-              cap: binding == null ? "nohome" : editable ? "editable" : "locked",
-              capReason,
-              note,
-              onCommit: editable ? (text) => stageEdit(key, text) : undefined,
+              ...cellFromTrichotomy(cell, {
+                value: shown,
+                cap: binding == null ? "nohome" : lock ? "locked" : "editable",
+                capReason: lock ?? undefined,
+                note,
+                onCommit: lock ? undefined : (text) => stageEdit(key, text),
+              }),
+              transitions: reviewTransitions(wire, key, cell),
             };
           },
         };
       }),
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit closes over `cells`, listed
-  }, [snapshot, cells]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and wire close over `cells` and the revision, listed
+  }, [snapshot, cells, wire.revision]);
 }

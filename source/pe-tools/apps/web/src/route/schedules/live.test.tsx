@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
@@ -92,9 +92,11 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
   expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);
-  // The proposal is approved where it lives: the route's own pending strip, the view Chat hosts.
-  await screen.findByRole("button", { name: "approve" });
-  fireEvent.click(screen.getByRole("button", { name: "approve" }));
+  // The proposal is accepted where it lives: the grid cell's own contract transition.
+  const proposed = (await screen.findByDisplayValue("180 VA")).closest<HTMLElement>(
+    "[data-master-cell]",
+  )!;
+  fireEvent.click(within(proposed).getByRole("button", { name: "accept" }));
   await vi.waitFor(async () =>
     expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
   );
