@@ -170,7 +170,7 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
       read<{ text: string; struck: string[] } | null>(`(() => {
         const want = [...${JSON.stringify(row)}, ${JSON.stringify(param)}];
         const band = document.querySelector('section[aria-label="proposals"]');
-        const el = band && [...band.children].find((r) => r.getClientRects().length && want.every((w) => (r.firstElementChild?.innerText ?? "").includes(w)));
+        const el = band && [...band.children].find((r) => r.getClientRects().length && want.every((w) => (r.firstElementChild?.innerText ?? "").toLowerCase().includes(w.toLowerCase())));
         if (!el) return null;
         const struck = [...el.querySelectorAll("*")]
           .filter((e) => e.childElementCount === 0 && getComputedStyle(e).textDecorationLine.includes("line-through"))
@@ -261,12 +261,15 @@ const center = (el: string) => `(() => {
   return r.width && r.height ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
 })()`;
 
-/** The <td> at (row, column): under the header titled `column`, in the row holding every `row` word. */
+/**
+ * The <td> at (row, column): under the header titled `column`, in the row holding every `row` word.
+ * innerText is CSS-transformed (headers render uppercase), so both compare case-insensitively.
+ */
 const cellOf = (row: string[], column: string) => `(() => {
-  const th = [...document.querySelectorAll("thead th")].find((th) => th.getClientRects().length && th.innerText.trim().split(/\\s*\\n/)[0] === ${JSON.stringify(column)});
+  const th = [...document.querySelectorAll("thead th")].find((th) => th.getClientRects().length && th.innerText.trim().split(/\\s*\\n/)[0].toLowerCase() === ${JSON.stringify(column.toLowerCase())});
   const grid = th?.closest("table");
   if (!grid) return null;
-  const tr = [...grid.querySelectorAll("tbody tr")].find((tr) => ${JSON.stringify(row)}.every((w) => [...tr.children].some((td) => td.innerText.trim() === w)));
+  const tr = [...grid.querySelectorAll("tbody tr")].find((tr) => ${JSON.stringify(row)}.every((w) => [...tr.children].some((td) => td.innerText.trim().toLowerCase() === w.toLowerCase())));
   if (!tr) return null;
   const h = th.getBoundingClientRect(), x = h.left + h.width / 2;
   return [...tr.children].find((td) => { const r = td.getBoundingClientRect(); return r.left <= x && x <= r.right; }) ?? null;
@@ -344,15 +347,23 @@ export const revit = {
   },
 };
 
-/** Fails as PRECONDITION (not ASSERT) when the route has no Revit bridge: the slot is not held. */
-export async function requireRevit(page: Page) {
-  await page.until(
-    async () => /FAMILIES IN SCOPE/i.test(await page.text()),
-    "the families pane",
-    60_000,
-  );
-  if (/BRIDGE IS DISCONNECTED/i.test(await page.text()))
-    throw new Error("PRECONDITION: no Revit bridge; this journey runs in the joint-hold slot");
+/**
+ * Waits for the route to bind a Revit session. The first paint reads "the bridge is disconnected"
+ * even when it is connected, so only a bounded wait without a bound state is a PRECONDITION (no
+ * slot). Bound = the LOG's `target session-… › <openId>` line, or the families pane with no
+ * disconnected line (the chat plugin pane may not draw the LOG).
+ */
+export async function requireRevit(page: Page, ms = 60_000) {
+  const bound = async () => {
+    const text = await page.text();
+    return (
+      /target session-\S+ › \S+/.test(text) ||
+      (/FAMILIES IN SCOPE/i.test(text) && !/BRIDGE IS DISCONNECTED/i.test(text))
+    );
+  };
+  await page.until(bound, "the route to bind a Revit session", ms).catch(() => {
+    throw new Error(`PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`);
+  });
 }
 
 /** A chip's label: the visible combobox named `name` in the composer (Model, Access). */

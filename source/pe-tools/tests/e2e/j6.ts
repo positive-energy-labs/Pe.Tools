@@ -3,7 +3,7 @@
 // Work document seeded for it by exec-proof. E2E_TARGET = that document's Address.
 // J6b: `E2E_PART=b` after the host is stopped: a failed read must not offer `start fresh`.
 // Red break: drop the UNREADABLE_WORK gate on startFresh (route/use-route.ts) → J6b shows it.
-import { expectText, journey, WEB } from "./cdp.ts";
+import { expectText, journey, requireRevit, WEB } from "./cdp.ts";
 
 const TARGET = process.env.E2E_TARGET ?? "";
 const PART = process.env.E2E_PART ?? "a";
@@ -37,15 +37,8 @@ await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {
 
   // The seed is consumed by any "start fresh" (journeys' live J6 took project-a' real row), so its
   // absence is a missing precondition (README: seeding an old-shape Work), never a product FAIL.
-  await page
-    .until(
-      async () => /BRIDGE IS DISCONNECTED|cannot be opened here/i.test(await page.text()),
-      "the Work refusal (or the disconnected-bridge line)",
-      60_000,
-    )
-    .catch(() => {});
-  if (/BRIDGE IS DISCONNECTED/.test(await page.text()))
-    throw new Error("PRECONDITION: no Revit bridge; J6 runs in the joint-hold slot");
+  await requireRevit(page);
+  await page.waitText(REFUSAL, 30_000).catch(() => {});
   if (!(await page.text()).includes(REFUSAL))
     throw new Error("PRECONDITION: no old-shape Work seeded");
 
