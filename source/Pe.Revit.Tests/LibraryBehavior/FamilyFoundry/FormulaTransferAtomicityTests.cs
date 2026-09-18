@@ -138,7 +138,8 @@ public sealed class FormulaTransferAtomicityTests {
         var document = this.NewFamily("FF formula voltage", "\"208/230V\"", createTarget: true,
             sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.ElectricalPotential);
         try {
-            var note = "formula `\"208/230V\"` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceElectrical";
+            var unit = LabelUtils.GetLabelForUnit(document.GetUnits().GetFormatOptions(SpecTypeId.ElectricalPotential).GetUnitTypeId());
+            var note = $"formula `\"208/230V\"` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceElectrical (unitless numbers read as {unit})";
             var (error, converged, preview, receipt) = ReconcileWithPreview(document, "ElectricalPotential", "CoerceElectrical");
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(converged, Is.True);
@@ -149,6 +150,33 @@ public sealed class FormulaTransferAtomicityTests {
             Assert.That(target.Formula, Is.Null.Or.Empty);
             foreach (var type in manager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B"))
                 Assert.That(UnitUtils.ConvertFromInternalUnits(type.AsDouble(target)!.Value, UnitTypeId.Volts), Is.EqualTo(208d).Within(1e-9), type.Name);
+        } finally { document.Close(false); }
+    }
+
+    // Review 2026-09-18 (preview/apply parity): a value the strategy cannot coerce refuses at PREVIEW, naming the value and the type, and
+    // apply refuses with the same diagnostic before any effect.
+    [Test]
+    public void Voltage_text_the_strategy_cannot_read_refuses_at_preview_naming_value_and_type() {
+        var document = this.NewFamily("FF formula voltage unreadable", "\"N/A\"", createTarget: true,
+            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.ElectricalPotential);
+        try {
+            var before = Snapshot(document);
+            var patch = Patch("ElectricalPotential", "CoerceElectrical", "Source");
+            var preview = document.PreviewFamily(patch);
+            var refusals = preview.Diagnostics.Where(d => d.Code == FamilyModelDiagnosticCodes.FormulaCopyDataType).ToList();
+            Assert.That(refusals.Select(d => d.Message), Has.Some.Contains("CoerceElectrical cannot coerce 'N/A' in type 'A'"));
+            Assert.That(refusals.Select(d => d.Message), Has.Some.Contains("CoerceElectrical cannot coerce 'N/A' in type 'B'"));
+            var operation = new ReconcileFamily(patch);
+            Exception? error;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                (_, error) = contexts.Single().OperationLogs;
+            }
+            Assert.That(error, Is.Not.Null);
+            foreach (var diagnostic in preview.Diagnostics)
+                Assert.That(error!.ToString(), Does.Contain($"{diagnostic.Code}: {diagnostic.Message}"), error.ToString());
+            Assert.That(operation.LastReceipt, Is.Null);
+            Assert.That(Snapshot(document), Is.EqualTo(before), "a refused transfer changes nothing");
         } finally { document.Close(false); }
     }
 

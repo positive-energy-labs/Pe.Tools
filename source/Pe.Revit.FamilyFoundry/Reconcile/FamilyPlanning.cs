@@ -122,8 +122,8 @@ internal static class FamilyPreparation {
     /// <summary>
     ///     Source cleanup (NormalizeParamSources → TransferAndRemoveParameter) carries each removed source's formula to its destination. Across a
     ///     data-type change it never copies it (user ruling R1): a unit-aware mapping strategy evaluates it per type instead, named here as a run
-    ///     effect, and any other strategy refuses here, before any effect. FamilyFormulaCopy is the rule both sides read; apply also checks each
-    ///     value against the strategy's own CanMap, which this spec-level preview cannot see.
+    ///     effect, and any other strategy refuses here, before any effect. FamilyFormulaCopy is the rule both sides read, including the per-type
+    ///     value gate, so a value the strategy cannot coerce refuses here, naming the value and the type.
     /// </summary>
     private static (List<string> Effects, List<FamilyModelDiagnostic> Refusals) FormulaCopyAcrossDataTypes(
         Document document, FamilyModel desired, FamilyPlan plan, JObject authored) {
@@ -144,11 +144,16 @@ internal static class FamilyPreparation {
                 if (fm.FindParameter(name) is not { } from || from.IsBuiltInParameter() || string.IsNullOrEmpty(from.Formula)) continue;
                 var fromSpec = from.Definition.GetDataType();
                 if (fromSpec == targetSpec || target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
-                if (FamilyFormulaCopy.AcrossDataTypes(strategy, fromSpec, targetSpec) is null)
-                    refusals.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.FormulaCopyDataType, $"$.parameters.{change.Key}.wasNamed",
-                        FamilyFormulaCopy.Refusal(document.Title, from.Formula, name, fromSpec, from.IsInstance, change.Key, targetSpec,
-                            target?.IsInstance ?? wanted.IsInstance ?? false, FamilyFormulaCopy.NoUnitAwareStrategy(strategy))));
-                else effects.Add(FamilyFormulaCopy.EvaluatedNote(from.Formula, name, change.Key, strategy));
+                string Refusal(string reason) => FamilyFormulaCopy.Refusal(document.Title, from.Formula, name, fromSpec, from.IsInstance,
+                    change.Key, targetSpec, target?.IsInstance ?? wanted.IsInstance ?? false, reason);
+                // The same two gates apply reads: data types and strategy, then every type's source value.
+                var reasons = FamilyFormulaCopy.AcrossDataTypes(strategy, fromSpec, targetSpec) is null
+                    ? [FamilyFormulaCopy.NoUnitAwareStrategy(strategy)]
+                    : FamilyFormulaCopy.ValueRefusals(new FamilyDocument(document), from, strategy).ToList();
+                if (reasons.Count > 0)
+                    refusals.AddRange(reasons.Select(reason => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.FormulaCopyDataType,
+                        $"$.parameters.{change.Key}.wasNamed", Refusal(reason))));
+                else effects.Add(FamilyFormulaCopy.EvaluatedNote(document, from.Formula, name, change.Key, targetSpec, strategy));
             }
         }
         return (effects, refusals);

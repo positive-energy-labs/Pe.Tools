@@ -2,6 +2,7 @@ using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Extensions.FamDocument.SetValue;
+using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
@@ -104,6 +105,8 @@ public static class FamilyDocumentNormalizeParameter {
                 if (source.Definition.GetDataType() != target.Definition.GetDataType()) {
                     var coercion = FamilyFormulaCopy.AcrossDataTypes(strategy, source.Definition.GetDataType(), target.Definition.GetDataType())
                                    ?? throw new InvalidOperationException(Refusal(FamilyFormulaCopy.NoUnitAwareStrategy(strategy)));
+                    if (FamilyFormulaCopy.ValueRefusals(document, source, strategy).FirstOrDefault() is { } valueRefusal)
+                        throw new InvalidOperationException(Refusal(valueRefusal));
                     foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
                         if (fm.CurrentType != type) fm.CurrentType = type;
                         var context = CoercionContext.FromParam(document, source, target);
@@ -113,11 +116,12 @@ public static class FamilyDocumentNormalizeParameter {
                         var (_, error) = coercion.Map(context);
                         if (error is not null) throw new InvalidOperationException(Refusal($"{strategy} failed in type '{type.Name}': {error.Message}"), error);
                     }
-                    note = FamilyFormulaCopy.EvaluatedNote(formula, sourceName, target.Definition.Name, strategy);
+                    note = FamilyFormulaCopy.EvaluatedNote(document.Document, formula, sourceName, target.Definition.Name, target.Definition.GetDataType(), strategy);
                 } else {
                     try { fm.SetFormula(target, formula); }
                     catch (Autodesk.Revit.Exceptions.ApplicationException exception) {
-                        throw new InvalidOperationException(Refusal(exception.Message), exception);
+                        var chain = source.IsInstance && !target.IsInstance ? $"; reads {FamilyFormulaCopy.Chain(fm.Parameters, formula)}" : "";
+                        throw new InvalidOperationException(Refusal(exception.Message + chain), exception);
                     }
                 }
             }
@@ -175,8 +179,36 @@ public static class FamilyFormulaCopy {
     public static string NoUnitAwareStrategy(string strategy) =>
         $"data types differ and mapping strategy '{strategy}' does not convert through units (Revit would re-read bare numbers in project units)";
 
-    public static string EvaluatedNote(string formula, string source, string target, string strategy) =>
-        $"formula `{formula}` on '{source}' not copied to '{target}'; per-type values evaluated and coerced by {strategy}";
+    /// <summary>
+    ///     Names an evaluated coercion. CoerceElectrical reads a bare number in the destination's display unit (ComputeTargetUnitType), so the
+    ///     note says which unit it assumed.
+    /// </summary>
+    public static string EvaluatedNote(Document document, string formula, string source, string target, ForgeTypeId targetSpec, string strategy) =>
+        $"formula `{formula}` on '{source}' not copied to '{target}'; per-type values evaluated and coerced by {strategy}" +
+        (strategy == "CoerceElectrical" ? $" (unitless numbers read as {LabelUtils.GetLabelForUnit(document.GetUnits().GetFormatOptions(targetSpec).GetUnitTypeId())})" : "");
+
+    /// <summary>
+    ///     The per-value half of the gate, evaluated on every type's source value (the same read apply's CoercionContext makes). Only
+    ///     CoerceElectrical depends on the value (its CanMap extracts a number); CoerceMeasurableToNumber decides on data types alone.
+    /// </summary>
+    public static IEnumerable<string> ValueRefusals(FamilyDocument document, FamilyParameter source, string strategy) =>
+        strategy != "CoerceElectrical" ? [] :
+        document.FamilyManager.Types.Cast<FamilyType>()
+            .Select(type => (type.Name, Value: document.GetValue(type, source)))
+            .Where(item => item.Value is not null && !Regexes.TryExtractDouble(item.Value.ToString(), out _))
+            .Select(item => $"{strategy} cannot coerce '{item.Value}' in type '{item.Name}'");
+
+    /// <summary>What a formula reads, recursively: `name (instance|type) = formula` or `= value`, cycle-guarded and depth-capped.</summary>
+    public static string Chain(FamilyParameterSet parameters, string formula, int depth = 0, HashSet<long>? seen = null) {
+        seen ??= [];
+        var parts = new List<string>();
+        foreach (var read in parameters.GetReferencedIn(formula)) {
+            var head = $"{read.Definition.Name} ({(read.IsInstance ? "instance" : "type")})";
+            if (!seen.Add(read.Id.Value()) || depth >= 4) { parts.Add(head + " …"); continue; }
+            parts.Add(string.IsNullOrEmpty(read.Formula) ? head + " = value" : $"{head} = `{read.Formula}` [{Chain(parameters, read.Formula, depth + 1, seen)}]");
+        }
+        return parts.Count == 0 ? "nothing" : string.Join("; ", parts);
+    }
 
     /// <summary>
     ///     The unit-aware strategy that may carry values from <paramref name="sourceSpec" /> to <paramref name="targetSpec" />, or null.
