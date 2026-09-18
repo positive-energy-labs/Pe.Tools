@@ -106,3 +106,41 @@ for (const [spec, saved] of [
     expect(JSON.stringify(state.get(`${workKey(scope)}\0${spec.route}`))).toBe(bytes);
   });
 }
+
+test("/family: a human-authored proposal refuses in the sentence and stays; Pea's by is derivable", async () => {
+  const scope: WorkKey = { route: "family", target };
+  const saved = (by: string) => ({
+    version: 1,
+    revision: 2,
+    doc: { reading: "{}", cells: { "/a": { proposal: { value: 1, by }, staged: null } } },
+  });
+  const state = new Map<string, unknown>();
+  const setState = vi.fn(async () => {});
+  const module = new RouteWorkspace({
+    registrations: [
+      { spec: familyDraftRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+    ],
+    store: { getState: async () => structuredClone(state.get("doc")), setState },
+  });
+
+  const bytes = JSON.stringify(saved("human"));
+  state.set("doc", JSON.parse(bytes));
+  await expect(module.read(scope, "family")).rejects.toThrow(UNREADABLE_WORK);
+  expect(
+    await module.apply(
+      scope,
+      "family",
+      "agent",
+      [{ path: ["cells", "/b", "proposal"], value: { value: 2 } }],
+      2,
+    ),
+  ).toMatchObject({ ok: false, error: UNREADABLE_WORK });
+  expect(setState).not.toHaveBeenCalled();
+  expect(JSON.stringify(state.get("doc"))).toBe(bytes);
+
+  state.set("doc", saved("pea"));
+  expect((await module.read(scope, "family"))!.doc).toEqual({
+    reading: "{}",
+    cells: { "/a": { proposal: { value: 1 }, staged: null } },
+  });
+});

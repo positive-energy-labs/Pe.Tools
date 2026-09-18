@@ -21,7 +21,7 @@
  */
 import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
-import type { RouteStatePatch } from "./route-state.ts";
+import { isRecord, type RouteStatePatch } from "./route-state.ts";
 
 /** Core proposal shape; routes add provenance via `.extend(...)` on the returned object. */
 export function cellProposalSchema<V extends z.ZodType>(value: V) {
@@ -30,6 +30,21 @@ export function cellProposalSchema<V extends z.ZodType>(value: V) {
     note: z.string().nullish(),
     confidence: z.enum(["high", "low"]).nullish(),
   });
+}
+
+/**
+ * A persisted proposal as read. Proposals once carried `by`: `by: "pea"` is derivable (only Pea
+ * proposes) and is dropped on read; any other author refuses, because dropping it would silently
+ * lose who proposed. The refusal reaches the route as its "cannot be opened" sentence.
+ */
+export function persistedProposal<P extends z.ZodType>(proposal: P) {
+  return z.preprocess((input, ctx) => {
+    if (!isRecord(input) || !("by" in input)) return input;
+    if (input.by !== "pea")
+      ctx.addIssue({ code: "custom", message: "a proposal authored by someone other than Pea" });
+    const { by: _, ...rest } = input;
+    return rest;
+  }, proposal);
 }
 
 /** One trichotomy cell: proposal (agent-writable) and the staged presence-object. */
@@ -43,7 +58,7 @@ export function trichotomyCellWithProposal<V extends z.ZodType, P extends z.ZodT
   proposal: P,
 ) {
   return z.object({
-    proposal: proposal.nullish(),
+    proposal: persistedProposal(proposal).nullish(),
     /** Human-promoted value — what commit sends. Pea must never write this (mask-denied). */
     staged: z.object({ value }).nullish(),
   });
@@ -118,7 +133,7 @@ const standing = (cell: TrichotomyCellLike) =>
 export function availableTransitions(
   cell: TrichotomyCellLike,
   actor: Actor,
-  { lock }: { baseline: unknown; lock: string | null },
+  { lock }: { lock: string | null },
 ): TransitionKind[] {
   const open: Record<TransitionKind, boolean> = {
     propose: actor === "pea" && !lock,

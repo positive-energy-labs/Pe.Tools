@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
+import { settingsFieldStateSchema } from "./settings.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import {
   availableTransitions,
@@ -41,9 +42,7 @@ describe("availableTransitions: every kind × state", () => {
   for (const [name, { cell, lock }] of Object.entries(states))
     for (const actor of ["pea", "human"] as const)
       it(`${name} · ${actor}`, () => {
-        expect(availableTransitions(cell, actor, { baseline: undefined, lock })).toEqual(
-          expected[name]![actor],
-        );
+        expect(availableTransitions(cell, actor, { lock })).toEqual(expected[name]![actor]);
       });
 });
 
@@ -175,10 +174,18 @@ describe("pea mask", () => {
       ).toMatchObject({ ok: false, kind: "refused" });
   });
 
-  it("the schema no longer carries proposal.by", () => {
-    expect(cellSchema.parse({ proposal: { value: "x", by: "pea" } }).proposal).toEqual({
-      value: "x",
-    });
+  it.each([
+    ["the core cell", cellSchema],
+    ["a settings field", settingsFieldStateSchema],
+  ] as const)("%s drops a derivable by:'pea' on read", (_, schema) => {
+    expect(schema.parse({ proposal: { value: "x", by: "pea" } }).proposal).toEqual({ value: "x" });
+  });
+
+  it.each([
+    ["the core cell", cellSchema],
+    ["a settings field", settingsFieldStateSchema],
+  ] as const)("%s refuses a by:'human' proposal rather than lose its author", (_, schema) => {
+    expect(schema.safeParse({ proposal: { value: "x", by: "human" } }).success).toBe(false);
   });
 });
 
@@ -208,9 +215,7 @@ describe("fanOut", () => {
   });
 
   it("a single accept on a contested key still lands", () => {
-    expect(
-      availableTransitions(cells.mine!, "human", { baseline: undefined, lock: null }),
-    ).toContain("accept");
+    expect(availableTransitions(cells.mine!, "human", { lock: null })).toContain("accept");
     expect(transitionPatches(["cells"], "mine", cells.mine!, { kind: "accept" })).toEqual([
       { path: ["cells", "mine", "staged"], value: { value: "pea" } },
     ]);
