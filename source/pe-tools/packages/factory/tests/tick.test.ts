@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -150,6 +150,49 @@ describe("tick", () => {
       expect(
         git("rev-list", "--parents", "-n", "1", "main").toString().trim().split(" "),
       ).toHaveLength(3);
+
+      writeFileSync(join(repo, "wait.txt"), "wait\n");
+      git("add", "wait.txt");
+      git("commit", "-m", "wait for verdict");
+      const staleSha = git("rev-parse", "HEAD").toString().trim();
+      const staleRun = `human@${staleSha}`;
+      tick(repo, database);
+      writeFileSync(join(repo, "moved.txt"), "moved\n");
+      git("add", "moved.txt");
+      git("commit", "-m", "move ref");
+      recordVerdict(database, { run: staleRun, decision: "accept", text: "accepted" });
+      tick(repo, database);
+      const staleFailure = database
+        .prepare(
+          "SELECT payload FROM events WHERE loop = 'human' AND sha = ? ORDER BY seq DESC LIMIT 1",
+        )
+        .get(staleSha) as { payload: string };
+      expect(JSON.parse(staleFailure.payload)).toEqual({ actuator: "change", stderr: "ref moved" });
+      expect(
+        existsSync(join(repo, ".artifacts", "factory", "runs", `human-${staleSha.slice(0, 7)}`)),
+      ).toBe(false);
+      expect(git("branch", "--list", `factory/human/${staleSha.slice(0, 7)}`).toString()).toBe("");
+
+      git("branch", "target");
+      const targetSha = git("rev-parse", "target").toString().trim();
+      writeFileSync(
+        join(repo, "factory.toml"),
+        '[factory]\nref="target"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[actuator.change]\nrun="node {root}/actuator.mjs"\n[loop.escape]\nact="change"\ngate="auto"\n',
+      );
+      git("add", "factory.toml");
+      git("commit", "-m", "target another ref");
+      const mainBefore = git("rev-parse", "main").toString().trim();
+      const escapedPath = join(
+        repo,
+        ".artifacts",
+        "factory",
+        "runs",
+        `escape-${targetSha.slice(0, 7)}`,
+      );
+      mkdirSync(escapedPath, { recursive: true });
+      tick(repo, database);
+      expect(git("rev-parse", "main").toString().trim()).toBe(mainBefore);
+      expect(existsSync(escapedPath)).toBe(false);
       database.close();
     } finally {
       rmSync(repo, { recursive: true, force: true });

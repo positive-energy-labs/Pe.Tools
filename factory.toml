@@ -19,7 +19,7 @@ run = "node {root}/source/pe-tools/packages/factory/sensors/markers.ts"
 scope = ["source/**", "docs/**", ".agents/**", ".claude/**"]
 
 [actuator.fmt]
-run = "vp check --fix source/pe-tools/packages/factory"
+run = "node {root}/source/pe-tools/node_modules/.pnpm/node_modules/oxfmt/dist/cli.js source/pe-tools/packages/factory"
 
 [actuator.echo]
 run = "node {root}/source/pe-tools/packages/factory/actuators/echo.ts"

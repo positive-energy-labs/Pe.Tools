@@ -1,7 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+} from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
-import { dirname, join, matchesGlob, resolve } from "node:path";
+import { dirname, join, matchesGlob, normalize, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
@@ -39,6 +47,37 @@ const schema = `CREATE TABLE IF NOT EXISTS events(
 
 const git = (repo: string, ...args: string[]) =>
   execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+
+const samePath = (left: string, right: string) =>
+  normalize(resolve(left)).toLowerCase() === normalize(resolve(right)).toLowerCase();
+
+const isRunWorktree = (worktree: string) => {
+  try {
+    return samePath(git(worktree, "rev-parse", "--show-toplevel"), worktree);
+  } catch {
+    return false;
+  }
+};
+
+const requireRunWorktree = (worktree: string) => {
+  if (!isRunWorktree(worktree)) throw new Error("run worktree escaped its path");
+};
+
+const cleanupRun = (repo: string, branch: string, worktree: string) => {
+  try {
+    if (existsSync(worktree)) {
+      execFileSync("git", ["-C", repo, "worktree", "remove", "--force", worktree]);
+    }
+  } catch {
+    rmSync(worktree, { recursive: true, force: true });
+  }
+  try {
+    git(repo, "worktree", "prune");
+    git(repo, "branch", "-D", branch);
+  } catch {
+    // Cleanup never changes the recorded run outcome.
+  }
+};
 
 const configAt = (repo: string) =>
   parse(readFileSync(join(repo, "factory.toml"), "utf8")) as Config;
@@ -219,6 +258,7 @@ const mergeRun = (
 ) => {
   const fail = (stderr: string) => {
     append(database, "failed", sha, { actuator, stderr }, loop);
+    cleanupRun(repo, branch, worktree);
     return false;
   };
   if (git(repo, "rev-parse", "--abbrev-ref", "HEAD") !== config.factory.ref) {
@@ -227,16 +267,18 @@ const mergeRun = (
   if (git(repo, "rev-parse", config.factory.ref) !== sha) return fail("ref moved");
   try {
     git(repo, "merge", "--no-ff", "--no-edit", branch);
-    const merge = git(repo, "rev-parse", "HEAD");
-    append(database, "merged", sha, { merge }, loop);
-    if (existsSync(worktree)) {
-      execFileSync("git", ["-C", repo, "worktree", "remove", "--force", worktree]);
-    }
-    git(repo, "branch", "-D", branch);
-    return true;
   } catch (error) {
+    try {
+      git(repo, "merge", "--abort");
+    } catch {
+      // Git has no merge to abort when it failed before writing merge state.
+    }
     return fail(error instanceof Error ? error.message : String(error));
   }
+  const merge = git(repo, "rev-parse", "HEAD");
+  append(database, "merged", sha, { merge }, loop);
+  cleanupRun(repo, branch, worktree);
+  return true;
 };
 
 const act = (
@@ -248,16 +290,16 @@ const act = (
   sha: string,
 ) => {
   if (!loop.act) return false;
+  const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
+  const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
+  const fail = (actuator: string, stderr: string) => {
+    append(database, "failed", sha, { actuator, stderr }, loopName);
+    cleanupRun(repo, branch, worktree);
+    return false;
+  };
   const actuator = config.actuator?.[loop.act];
   if (!actuator) {
-    append(
-      database,
-      "failed",
-      sha,
-      { actuator: loop.act, stderr: "actuator is not declared" },
-      loopName,
-    );
-    return false;
+    return fail(loop.act, "actuator is not declared");
   }
   const runEvents = database
     .prepare(
@@ -266,8 +308,6 @@ const act = (
     .all(loopName, sha) as EventRow[];
   const last = runEvents.at(-1);
   const lastPayload = last ? (JSON.parse(last.payload) as Record<string, string>) : {};
-  const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
-  const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
   if (last?.kind === "verdict" && lastPayload.decision === "accept") {
     return mergeRun(repo, config, database, loopName, sha, loop.act, branch, worktree);
   }
@@ -294,12 +334,19 @@ const act = (
   const feedback = last?.kind === "verdict" ? lastPayload.text : "";
   mkdirSync(dirname(worktree), { recursive: true });
   try {
-    if (existsSync(worktree)) {
+    const reuse = existsSync(worktree) && isRunWorktree(worktree);
+    if (existsSync(worktree) && !reuse) {
+      rmSync(worktree, { recursive: true, force: true });
+      git(repo, "worktree", "prune");
+    }
+    if (reuse) {
+      requireRunWorktree(worktree);
       git(worktree, "reset", "--hard", sha);
       git(worktree, "clean", "-fd");
     } else {
       git(repo, "worktree", "add", "-B", branch, worktree, sha);
     }
+    requireRunWorktree(worktree);
     append(database, "acting", sha, { actuator: loop.act, worktree, branch }, loopName);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -319,26 +366,14 @@ const act = (
       shell: true,
     });
     if (result.status !== 0) {
-      append(
-        database,
-        "failed",
-        sha,
-        { actuator: loop.act, stderr: result.stderr.trim() || `actuator exited ${result.status}` },
-        loopName,
-      );
-      return false;
+      return fail(loop.act, result.stderr.trim() || `actuator exited ${result.status}`);
     }
     if (!git(worktree, "status", "--porcelain")) {
-      append(
-        database,
-        "failed",
-        sha,
-        { actuator: loop.act, stderr: "actuator changed nothing" },
-        loopName,
-      );
-      return false;
+      return fail(loop.act, "actuator changed nothing");
     }
+    requireRunWorktree(worktree);
     git(worktree, "add", "-A");
+    requireRunWorktree(worktree);
     git(worktree, "commit", "-m", `factory: ${loopName} at ${sha.slice(0, 7)}`);
     const head = git(worktree, "rev-parse", "HEAD");
     const shortstat = git(worktree, "diff", "--shortstat", `${sha}..${head}`);
@@ -349,14 +384,7 @@ const act = (
     }
     return mergeRun(repo, config, database, loopName, sha, loop.act, branch, worktree);
   } catch (error) {
-    append(
-      database,
-      "failed",
-      sha,
-      { actuator: loop.act, stderr: error instanceof Error ? error.message : String(error) },
-      loopName,
-    );
-    return false;
+    return fail(loop.act, error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -385,11 +413,19 @@ export function recordVerdict(
   return database.prepare("SELECT * FROM events ORDER BY seq DESC LIMIT 1").get() as EventRow;
 }
 
-let busy = false;
-
 export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
-  if (busy) return;
-  busy = true;
+  const lock = join(repo, ".artifacts", "factory", "tick.lock");
+  mkdirSync(dirname(lock), { recursive: true });
+  let lockFile: number;
+  try {
+    lockFile = openSync(lock, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      console.log("factory tick skipped: lock held");
+      return;
+    }
+    throw error;
+  }
   let database: DatabaseSync | undefined;
   try {
     const config = configAt(repo);
@@ -414,9 +450,27 @@ export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
     for (const [loopName, loop] of Object.entries(config.loop)) {
       if (act(repo, config, database, loopName, loop, sha)) break;
     }
+    const accepted = database
+      .prepare(
+        "SELECT verdict.loop, verdict.sha, (SELECT json_extract(acting.payload, '$.actuator') FROM events acting WHERE acting.loop = verdict.loop AND acting.sha = verdict.sha AND acting.kind = 'acting' ORDER BY acting.seq DESC LIMIT 1) actuator FROM events verdict WHERE verdict.kind = 'verdict' AND json_extract(verdict.payload, '$.decision') = 'accept' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.loop = verdict.loop AND later.sha = verdict.sha AND later.seq > verdict.seq AND later.kind IN ('acting','proposed','gated','verdict','merged','failed')) ORDER BY verdict.seq",
+      )
+      .all() as { loop: string; sha: string; actuator: string }[];
+    for (const run of accepted) {
+      mergeRun(
+        repo,
+        config,
+        database,
+        run.loop,
+        run.sha,
+        run.actuator,
+        `factory/${run.loop}/${run.sha.slice(0, 7)}`,
+        join(repo, ".artifacts", "factory", "runs", `${run.loop}-${run.sha.slice(0, 7)}`),
+      );
+    }
   } finally {
     if (!suppliedDatabase) database?.close();
-    busy = false;
+    closeSync(lockFile);
+    unlinkSync(lock);
   }
 }
 
