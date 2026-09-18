@@ -51,7 +51,9 @@ public static class PodRuns {
             if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || name == "receipt.json")
                 throw new ArgumentException($"Run output name must be a plain file name other than receipt.json: '{name}'.", nameof(outputs));
             var outputPath = Path.Combine(runFolder, name);
-            if (name is "input.json" or "effective-input.json" && File.Exists(outputPath))
+            if ((string.Equals(name, "input.json", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(name, "effective-input.json", StringComparison.OrdinalIgnoreCase))
+                && File.Exists(outputPath))
                 throw new IOException($"Run input '{name}' is immutable.");
             File.WriteAllBytes(outputPath, bytes);
             written.Add(name);

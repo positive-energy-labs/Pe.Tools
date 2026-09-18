@@ -70,6 +70,12 @@ public sealed class PodReceiptTests {
                 Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
                     new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
                     [("effective-input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
+                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
+                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
+                    [("Input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
+                Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
+                    new PodReceipt("pod", "member", "sha", "test", null, "Failed", outputs, null),
+                    [("Effective-Input.json", System.Text.Encoding.UTF8.GetBytes("changed"))]));
             });
         } finally {
             if (Directory.Exists(pod)) Directory.Delete(pod, true);
