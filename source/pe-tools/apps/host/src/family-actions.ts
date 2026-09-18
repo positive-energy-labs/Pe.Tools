@@ -167,6 +167,11 @@ export const capturePath = (entity: string, name: string, at = new Date()) =>
   `settings/${entity}/${name.replace(/[^\w.-]+/g, "-")}-${at.toISOString().replace(/[:.]/g, "-")}.json`;
 
 /** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
+/**
+ * A capture run's receipt. A receipt's member fields name what the run consumed; a capture consumed
+ * Revit (origin Operation), so they are null. The member it wrote is its product: the run lists it
+ * as `written-member.json` beside its other outputs.
+ */
 export const writeCaptureRun = (
   deps: PodDependencies,
   pods: PodContext,
@@ -174,35 +179,38 @@ export const writeCaptureRun = (
   written: PodMemberWritten,
   operation: string,
   outputs: Readonly<Record<string, string>> = {},
-) =>
-  runPods(
+) => {
+  const files = {
+    ...outputs,
+    "written-member.json": `${JSON.stringify({ path: written.path, sha256: written.sha256 }, null, 2)}\n`,
+  };
+  return runPods(
     deps,
     writeRun(
       written.pod,
       `${at.replace(/[:.]/g, "-")}-${digest(written.path).slice(0, 8)}`,
       {
-        ...outputs,
+        ...files,
         "receipt.json": `${JSON.stringify(
           {
             podId: written.pod,
-            memberPath: written.path,
-            memberSha256: written.sha256,
-            // A native capture's input was Revit, not a member's bytes (PodRunOrigin).
+            memberPath: null,
+            memberSha256: null,
             origin: "Operation",
             operation,
             planHash: null,
             outcome: "Succeeded",
-            outputs: Object.keys(outputs),
+            outputs: Object.keys(files),
             reason: null,
           },
           null,
           2,
-        )}
-`,
+        )}\n`,
       },
       pods,
     ),
   );
+};
 
 export async function current(
   bridge: RevitBridge["Service"],
