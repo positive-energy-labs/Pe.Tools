@@ -1,11 +1,12 @@
 import { Input } from "#/components/lang/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "#/components/lang/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  useComboboxAnchor,
+} from "#/components/lang/combobox";
 import { Switch } from "#/components/lang/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
@@ -24,6 +25,7 @@ export function ScalarField({
   isRequired,
   placeholder,
 }: ResolvedFieldRendererProps) {
+  const selectAnchor = useComboboxAnchor();
   const field = useSettingsField(path);
   const optionsState = useFieldOptions({
     node: effectiveNodeRef,
@@ -53,18 +55,32 @@ export function ScalarField({
       />
       <div className="min-w-0">
         {shouldRenderSelect ? (
-          <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
-            <SelectTrigger id={path} face="mono">
-              <SelectValue placeholder="Select an option" />
-            </SelectTrigger>
-            <SelectContent>
-              {sanitizedItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            items={sanitizedItems}
+            value={
+              sanitizedItems.find((item) => item.value === primitiveInputValue(field.value)) ?? null
+            }
+            onValueChange={(item: (typeof sanitizedItems)[number] | null) =>
+              item && field.change(item.value)
+            }
+            itemToStringLabel={(item: (typeof sanitizedItems)[number]) => item.label}
+          >
+            <div ref={selectAnchor} className="flex">
+              <ComboboxTrigger id={path} fill>
+                {sanitizedItems.find((item) => item.value === primitiveInputValue(field.value))
+                  ?.label ?? "Select an option"}
+              </ComboboxTrigger>
+            </div>
+            <ComboboxContent anchor={selectAnchor}>
+              <ComboboxList>
+                {(item: (typeof sanitizedItems)[number]) => (
+                  <ComboboxItem key={item.value} value={item}>
+                    {item.label}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         ) : isBoolean ? (
           <div className="flex h-7 items-center gap-2">
             <Switch

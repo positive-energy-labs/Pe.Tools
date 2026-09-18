@@ -32,14 +32,6 @@ import {
   inputGroupRecipe,
 } from "#/components/lang/input-group";
 import { Label, labelRecipe } from "#/components/lang/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  selectRecipe,
-} from "#/components/lang/select";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { RecipeGrid } from "./recipe-grid";
@@ -121,12 +113,6 @@ export function UiInputSpecimens() {
         render={() => <Label>parameter scope</Label>}
       />
       <RecipeGrid
-        name="Select"
-        importPath="#/components/lang/select"
-        recipe={selectRecipe}
-        render={() => <SelectSpecimen />}
-      />
-      <RecipeGrid
         name="Textarea"
         importPath="#/components/lang/textarea"
         recipe={textareaRecipe}
@@ -169,23 +155,5 @@ function ComboboxSpecimen() {
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
-  );
-}
-
-function SelectSpecimen() {
-  const [value, setValue] = useState("doors");
-  return (
-    <Select value={value} onValueChange={(next: string | null) => setValue(next ?? "")}>
-      <SelectTrigger>
-        <SelectValue placeholder="Category" />
-      </SelectTrigger>
-      <SelectContent>
-        {CATEGORY_OPTIONS.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }

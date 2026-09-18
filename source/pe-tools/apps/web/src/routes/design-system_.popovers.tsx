@@ -35,13 +35,6 @@ import {
   ComboboxTrigger,
   useComboboxAnchor,
 } from "#/components/lang/combobox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "#/components/lang/select";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { cn } from "#/lib/utils";
@@ -149,26 +142,6 @@ function PickerChipSpecimen() {
   );
 }
 
-function SelectSpecimen() {
-  const [value, setValue] = useState<string>("doors");
-  return (
-    <div className="w-36">
-      <Select value={value} onValueChange={(next: string | null) => setValue(next ?? "")}>
-        <SelectTrigger>
-          <SelectValue placeholder="Category" />
-        </SelectTrigger>
-        <SelectContent>
-          {CATEGORY_OPTIONS.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
 function FieldSelectSpecimen() {
   const [value, setValue] = useState<string | undefined>(undefined);
   return (
@@ -219,19 +192,6 @@ const SPECIMENS: readonly Specimen[] = [
       "the trigger uses the shared quiet Press while the facet filter is a bare `ComboboxTrigger`: the same control still has two trigger identities.",
     ],
     render: () => <PickerChipSpecimen />,
-  },
-  {
-    id: "select",
-    name: "ui/select",
-    consumers:
-      "routes/pods.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
-    shape: "Base UI Select · trigger-width popup · bottom/start with collision fit",
-    defects: [
-      "FIXED — Select keeps the trigger's width while Combobox adds a readable floor only for narrow single-value triggers.",
-      "FIXED — `alignItemWithTrigger={false}` gives Select the same anchored bottom/start positioning law as Combobox.",
-      "FIXED — the popup uses the shared artifact, ink, and line tokens in both themes.",
-    ],
-    render: () => <SelectSpecimen />,
   },
   {
     id: "field",

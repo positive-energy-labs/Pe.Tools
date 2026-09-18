@@ -1,12 +1,13 @@
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "#/components/lang/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  useComboboxAnchor,
+} from "#/components/lang/combobox";
 import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -24,8 +25,12 @@ const PLACEMENT_NOTES: Record<LoadedFamilyPlacement, string> = {
   [LoadedFamilyPlacement.UnplacedOnly]:
     "Only families with no placed instance — the loaded-but-unused tail, usually the purge conversation.",
 };
+const PLACEMENT_OPTIONS = (Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacement[]).map(
+  (value) => ({ value, label: PLACEMENT_LABELS[value], note: PLACEMENT_NOTES[value] }),
+);
 
 export function FamiliesFilterBand() {
+  const placementAnchor = useComboboxAnchor();
   const {
     fixture,
     placement,
@@ -49,25 +54,33 @@ export function FamiliesFilterBand() {
           </span>
         </SectionLabel>
         <div className="face-mono w-32">
-          <Select
-            items={PLACEMENT_LABELS}
-            value={placement}
-            onValueChange={(value: LoadedFamilyPlacement | null) => value && setPlacement(value)}
+          <Combobox
+            items={PLACEMENT_OPTIONS}
+            value={PLACEMENT_OPTIONS.find((option) => option.value === placement) ?? null}
+            onValueChange={(option: (typeof PLACEMENT_OPTIONS)[number] | null) =>
+              option && setPlacement(option.value)
+            }
+            itemToStringLabel={(option: (typeof PLACEMENT_OPTIONS)[number]) => option.label}
           >
-            <SelectTrigger
-              aria-label="placement filter"
-              title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacement[]).map((value) => (
-                <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
-                  {PLACEMENT_LABELS[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div ref={placementAnchor} className="flex">
+              <ComboboxTrigger
+                fill
+                aria-label="placement filter"
+                title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
+              >
+                {PLACEMENT_LABELS[placement]}
+              </ComboboxTrigger>
+            </div>
+            <ComboboxContent anchor={placementAnchor}>
+              <ComboboxList>
+                {(option: (typeof PLACEMENT_OPTIONS)[number]) => (
+                  <ComboboxItem key={option.value} value={option} title={option.note}>
+                    {option.label}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         </div>
         {categoryFeed.state === "loading" ? (
           <div className="min-w-0 flex-1">
